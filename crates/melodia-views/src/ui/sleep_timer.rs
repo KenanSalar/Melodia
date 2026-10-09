@@ -32,6 +32,7 @@ use tokio_util::sync::CancellationToken;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_app::tasks::TaskSpawner;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::types::PlaybackStatus;
 use melodia_ui::{AppWindow, Player};
 
@@ -204,7 +205,7 @@ fn spawn_countdown(
             return;
         }
         if let Err(e) = library::playback::player_pause(&ctx) {
-            log::warn!("sleep timer pause: {e}");
+            log::warn!("sleep timer pause: {}", describe(&e));
         }
         let _ = weak.upgrade_in_event_loop(move |ui| {
             if token.is_cancelled() {

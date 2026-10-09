@@ -1,15 +1,13 @@
 //! Internal data structures + constants used by the Artists grid and
 //! Artist Detail submodules. Mirrors `src/ui/albums/state.rs`.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::ui::row_match::Needle;
+use crate::ui::track_detail::DetailCache;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
-use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// An artist's pre-lowercased `name`, computed once per `fetch_grid` so
 /// the name sort allocates nothing. Positionally aligned with
@@ -59,32 +57,11 @@ pub(super) struct ArtistGridState {
     pub index_cache: Mutex<Option<GridIndexCache>>,
 }
 
-/// Detail-side state — the currently-open artist's cached track list +
-/// album sub-section + filter needle + applied-selection shadow.
-///
-/// `tracks` and `albums` are the unfiltered canonical lists; the per-
-/// keystroke filter walk runs over these in memory (no DB round-trip)
-/// and re-stamps the Slint `tracks` / `albums` models with the filtered
-/// subsets. `filter` is the live needle, folded by `set_filter` through
-/// `ui::row_match::fold_needle` (never a bare `to_lowercase`, which would
-/// still build and silently drop accent parity on this one view) —
-/// mirroring the Slint `ArtistDetail.filter` property so a refresh while
-/// the user has a filter typed re-applies the filter to fresh data
-/// without round-tripping through the UI thread.
+/// Detail-side state: the shared track cache plus the Albums strip only this detail has.
 pub(super) struct ArtistDetailState {
-    /// Displayed (filter-applied) track rows, kept in lockstep with the
-    /// Slint `tracks` model so the generic selection/sort logic — which
-    /// maps id ↔ row-index through this cache — stays valid.
-    pub tracks: Mutex<Vec<RsTrackListRow>>,
-    /// Canonical full track set for this artist, in display-sort order.
-    /// `apply_filtered_detail` re-derives `tracks` by walking this
-    /// through the current filter. Equal to `tracks` when no filter is
-    /// active.
-    pub all_tracks: Mutex<Vec<RsTrackListRow>>,
+    pub cache: DetailCache,
+    /// The artist's albums, unfiltered: the filter pass narrows the strip from this.
     pub albums: Mutex<Vec<AlbumStats>>,
-    pub artist_id: Mutex<i64>,
-    pub filter: Mutex<Needle>,
-    pub applied_selection: Mutex<HashSet<i32>>,
 }
 
 /// How many leading (name-sorted) artists' covers `fetch_grid` prewarms.

@@ -3,6 +3,7 @@
 
 use melodia_app::services;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_core::utils;
 use melodia_platform::services::platform::single_instance::RESPAWN_ENV;
 use melodia_ui::{AppWindow, Nav};
@@ -50,7 +51,7 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
         ui::window_chrome::geometry::snapshot_into(settings);
     });
     if let Err(e) = flushed {
-        log::warn!("save_state_on_exit: settings.json: {e}");
+        log::warn!("save_state_on_exit: settings.json: {}", describe(&e));
     }
 
     // Column widths and visibility into views.json. `ui::track_columns` clamps
@@ -66,10 +67,10 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
             // state nothing reads.
             vs.view_sort.remove(ui::track_list_view::view_id::RECENTLY_PLAYED);
             if let Err(e) = services::view_state::write_view_state(&state.paths, &vs) {
-                log::warn!("save_state_on_exit: write views.json: {e}");
+                log::warn!("save_state_on_exit: write views.json: {}", describe(&e));
             }
         }
-        Err(e) => log::warn!("save_state_on_exit: read views.json: {e}"),
+        Err(e) => log::warn!("save_state_on_exit: read views.json: {}", describe(&e)),
     }
 
     if let Some((track_id, position_ms)) = track_data
@@ -79,11 +80,11 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
             i64::try_from(position_ms).unwrap_or(i64::MAX),
         ))
     {
-        log::warn!("save_state_on_exit: update_last_position {track_id}: {e}");
+        log::warn!("save_state_on_exit: update_last_position {track_id}: {}", describe(&e));
     }
 
     if let Err(e) = utils::atomic_file::write_json_sync(&state.paths.queue_path, &persistable) {
-        log::warn!("save_state_on_exit: write queue.json: {e}");
+        log::warn!("save_state_on_exit: write queue.json: {}", describe(&e));
     }
 }
 
@@ -123,7 +124,7 @@ pub fn drop_runtime_in_background(runtime: tokio::runtime::Runtime) {
         drop(runtime);
     });
     if let Err(e) = res {
-        log::warn!("could not spawn runtime-drop thread: {e}");
+        log::warn!("could not spawn runtime-drop thread: {}", describe(&e));
     }
 }
 
@@ -161,14 +162,15 @@ pub fn respawn_if_requested() {
         // replaces this process in place and never resumes here.
         let err = std::process::Command::new(&exe).exec();
         log::warn!(
-            "respawn exec failed for {}: {err}; falling back to detached spawn",
-            exe.display()
+            "respawn exec failed for {}: {}; falling back to detached spawn",
+            exe.display(),
+            describe(&err)
         );
     }
 
     // Only on exec failure, or on a non-Unix target.
     if let Err(e) = spawn_detached(&exe) {
-        log::warn!("respawn spawn failed for {}: {e}", exe.display());
+        log::warn!("respawn spawn failed for {}: {}", exe.display(), describe(&e));
     }
 }
 

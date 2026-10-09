@@ -173,7 +173,10 @@ pub fn set_verbose(on: bool) {
             log::info!("verbose logging {}", if on { "enabled" } else { "disabled" });
         }
         // Unreachable while the spec test passes; keeping the level beats dropping to the floor.
-        Err(e) => log::warn!("verbose logging: could not parse the spec '{spec}': {e}"),
+        Err(e) => log::warn!(
+            "verbose logging: could not parse the spec '{spec}': {}",
+            melodia_core::error::describe(&e)
+        ),
     }
 }
 

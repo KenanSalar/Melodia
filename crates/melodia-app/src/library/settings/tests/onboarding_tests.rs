@@ -10,7 +10,7 @@ use crate::services::settings::ONBOARDING_VERSION;
 use crate::state::fixtures::{seeded_root, seeded_root_with};
 use melodia_core::error::AppError;
 
-use super::write_onboarding_seen;
+use super::set_onboarding_seen;
 
 /// The fresh-install path: `0` on disk, the card shown, and the revision stamped on dismissal.
 #[test]
@@ -18,7 +18,7 @@ fn dismissing_the_card_persists_the_current_revision() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
     assert_eq!(services::settings::read_settings(&paths)?.onboarding.onboarding_version, 0);
 
-    write_onboarding_seen(&paths)?;
+    set_onboarding_seen(&paths)?;
 
     let settings = services::settings::read_settings(&paths)?;
     assert_eq!(settings.onboarding.onboarding_version, ONBOARDING_VERSION);
@@ -38,7 +38,7 @@ fn stamping_the_revision_leaves_the_neighbouring_settings_alone() -> Result<(), 
         s.radio.radio_enabled = true;
     })?;
 
-    write_onboarding_seen(&paths)?;
+    set_onboarding_seen(&paths)?;
 
     let settings = services::settings::read_settings(&paths)?;
     assert_eq!(settings.theme_id, "material3");
@@ -57,7 +57,7 @@ fn stamping_an_already_seen_install_is_idempotent() -> Result<(), AppError> {
         s.onboarding.onboarding_version = ONBOARDING_VERSION;
     })?;
 
-    write_onboarding_seen(&paths)?;
+    set_onboarding_seen(&paths)?;
 
     assert_eq!(
         services::settings::read_settings(&paths)?.onboarding.onboarding_version,

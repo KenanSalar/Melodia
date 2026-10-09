@@ -752,3 +752,47 @@ async fn ingest_stores_file_hash() -> Result<(), AppError> {
     assert_eq!(stored_hash.0.as_deref(), Some(hash.as_str()));
     Ok(())
 }
+
+// === What a scan's chunks add up to ===
+
+fn chunk(inserted: u32, moved: u32, updated: u32) -> queries::ingest::IngestResult {
+    queries::ingest::IngestResult {
+        inserted_count: inserted,
+        moved_count: moved,
+        updated_count: updated,
+        inserted_track_ids: Vec::new(),
+    }
+}
+
+/// `any` is what a stopped scan still owes the roll-ups and the recalc for, and
+/// `rewrote_existing` is what keeps a cancelled import from being withdrawn with tracks the
+/// library held before it.
+#[test]
+fn what_the_chunks_wrote_decides_the_last_write_and_the_withdraw() {
+    let cases = [
+        // (inserted, moved, updated), then (any, rewrote_existing)
+        ((0, 0, 0), (false, false)),
+        ((3, 0, 0), (true, false)),
+        ((0, 1, 0), (true, true)),
+        ((0, 0, 1), (true, true)),
+    ];
+
+    for ((inserted, moved, updated), expected) in cases {
+        let mut ingested = queries::ingest::Ingested::new(false);
+        ingested.add(&chunk(inserted, moved, updated));
+        let decided = (ingested.any(), ingested.rewrote_existing());
+        assert_eq!(decided, expected, "inserted {inserted}, moved {moved}, updated {updated}");
+    }
+}
+
+/// A rewrite in an early chunk must still keep the import, however many chunks after it only
+/// inserted.
+#[test]
+fn the_counts_sum_across_chunks() {
+    let mut ingested = queries::ingest::Ingested::new(true);
+
+    ingested.add(&chunk(2, 1, 0));
+    ingested.add(&chunk(3, 0, 0));
+
+    assert_eq!((ingested.inserted, ingested.rewrote_existing()), (5, true));
+}

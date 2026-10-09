@@ -19,7 +19,7 @@ use melodia_core::entities::album::ReleaseTagRow;
 use melodia_core::entities::artist::{ArtistCredit, JOIN_PHRASES};
 use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::tags::ArtworkEdit;
+use melodia_core::entities::tags::{ArtworkEdit, RoleCreditEdit};
 use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, Dialog, Settings, TagEditor};
@@ -29,7 +29,7 @@ use super::credits::{rows_from_credit, write_credit_rows};
 use super::fold::{
     bpm_key, common_by, common_str, common_value, fmt_bpm, fmt_int, fmt_size, int_key,
 };
-use super::form::{CREDIT_ALBUM_ARTIST, CREDIT_ARTIST, FormState, ListFields};
+use super::form::{CREDIT_ALBUM_ARTIST, CREDIT_ARTIST, CREDIT_FIELD_COUNT, FormState, ListFields};
 use super::lists::{common_roles, write_genre_rows, write_role_rows};
 use super::session::TagSession;
 
@@ -54,11 +54,11 @@ pub(super) fn wire_request_edit(
         let s = state.clone();
         let session = session.clone();
         let _ = slint::spawn_local(Compat::new(async move {
-            let rows = match library::tags::get_tag_edit_rows(&s, &ids).await {
+            let rows = match library::tags::get_tag_edit_rows(&s.db, &ids).await {
                 Ok(rows) if !rows.is_empty() => rows,
                 Ok(_) => return,
                 Err(e) => {
-                    log::warn!("tag edit fetch: {e}");
+                    log::warn!("tag edit fetch: {}", describe(&e));
                     return;
                 }
             };
@@ -79,13 +79,17 @@ pub(super) fn wire_request_edit(
                         (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])
                     }
                     Err(e) => {
-                        log::warn!("tag edit: reading {} failed: {e}", rows[0].file_path);
+                        log::warn!(
+                            "tag edit: reading {} failed: {}",
+                            rows[0].file_path,
+                            describe(&e)
+                        );
                         (String::new(), vec![<(ArtistCredit, ArtistCredit)>::default()])
                     }
                 }
             } else {
                 let by_id =
-                    or_logged(library::tags::get_tag_edit_credits(&s, &ids).await, "credits");
+                    or_logged(library::tags::get_tag_edit_credits(&s.db, &ids).await, "credits");
                 (String::new(), by_row(&rows, &by_id))
             };
 
@@ -118,18 +122,22 @@ pub(super) fn wire_request_edit(
 
             // Always from the database, single selection included — argued at
             // `library::tags::get_tag_edit_role_credits`.
-            let roles_by_id =
-                or_logged(library::tags::get_tag_edit_role_credits(&s, &ids).await, "role credits");
+            let roles_by_id = or_logged(
+                library::tags::get_tag_edit_role_credits(&s.db, &ids).await,
+                "role credits",
+            );
             let roles: Vec<RoleCredits> = by_row(&rows, &roles_by_id);
 
             let genres_by_id =
-                or_logged(library::tags::get_tag_edit_genres(&s, &ids).await, "genres");
+                or_logged(library::tags::get_tag_edit_genres(&s.db, &ids).await, "genres");
             let genre_lists: Vec<GenreList> = by_row(&rows, &genres_by_id);
 
             // Release-level tags live on `albums`, so the Details tab reads them through the album
             // each selected track sits on.
-            let release =
-                or_logged(library::tags::get_tag_edit_release_tags(&s, &ids).await, "release tags");
+            let release = or_logged(
+                library::tags::get_tag_edit_release_tags(&s.db, &ids).await,
+                "release tags",
+            );
 
             let Some(ui) = weak.upgrade() else { return };
             if !claim.holds(&ui) {
@@ -190,39 +198,94 @@ struct Fetched {
     cover: Option<SharedPixelBuffer<Rgb8Pixel>>,
 }
 
+/// What every `field!` writes through: the global, the ‹multiple values› sentinel, and the
+/// baseline being recorded.
+struct Form<'a> {
+    te: &'a TagEditor<'a>,
+    sentinel: SharedString,
+    originals: FormState,
+}
+
+/// Set one field: value + placeholder (the ‹multiple values› sentinel iff the
+/// selection disagrees) + record the populated string as the diff baseline.
+///
+/// The leading field name is what pairs this with `read_text_fields` — the commit reads the
+/// same name back, so the two can't drift the way an index into a shared array could.
+macro_rules! field {
+    ($form:expr, $name:ident, $val:expr, $set:ident, $set_ph:ident) => {{
+        let (value, disagrees) = $val;
+        $form.te.$set(SharedString::from(value.as_str()));
+        $form.te.$set_ph(placeholder(disagrees, &$form.sentinel));
+        $form.originals.text.$name = value;
+    }};
+}
+
+/// A `TagEditRow` string column, folded to the value the whole selection agrees on.
+macro_rules! shared {
+    ($rows:expr, $field:ident) => {
+        common_str($rows.iter().map(|r| r.$field.as_deref().unwrap_or_default()))
+    };
+}
+
+/// A `TagEditRow` whole-number column, folded the same way.
+macro_rules! int {
+    ($rows:expr, $field:ident) => {
+        common_by($rows.iter().map(|r| r.$field), int_key, fmt_int)
+    };
+}
+
+/// A release-level column, read off the album the selection sits on rather than off `tracks`.
+macro_rules! release {
+    ($release:expr, $field:ident) => {
+        common_str($release.iter().map(|r| r.$field.as_str()))
+    };
+}
+
 /// Fill the `TagEditor` global from the fetched rows and record the snapshot.
 fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched) {
     let Fetched { rows, credits, roles, genre_lists, release, lyrics, resident, cover } = fetched;
-    let (rows, credits, roles, release) =
-        (rows.as_slice(), credits.as_slice(), roles.as_slice(), release.as_slice());
-
     let te = ui.global::<TagEditor>();
-    let sentinel = ui.global::<Settings>().invoke_tag_multiple_values();
+    let mut form = Form {
+        te: &te,
+        sentinel: ui.global::<Settings>().invoke_tag_multiple_values(),
+        originals: FormState::default(),
+    };
 
-    let mut originals = FormState::default();
+    let tags = fill_tags_tab(&mut form, &rows, &credits, &genre_lists);
+    let role_edit = fill_credits_tab(ui, &form, &roles);
+    fill_details_tab(&mut form, &rows, &release);
+    fill_lyrics_tab(&mut form, lyrics);
 
-    // Set one field: value + placeholder (the ‹multiple values› sentinel iff the
-    // selection disagrees) + record the populated string as the diff baseline.
-    //
-    // The leading field name is what pairs this with `read_text_fields` — the commit reads the
-    // same name back, so the two can't drift the way an index into a shared array could.
-    macro_rules! field {
-        ($name:ident, $val:expr, $set:ident, $set_ph:ident) => {{
-            let (value, disagrees) = $val;
-            te.$set(SharedString::from(value.as_str()));
-            te.$set_ph(placeholder(disagrees, &sentinel));
-            originals.text.$name = value;
-        }};
-    }
+    finalize_populate(
+        &te,
+        session,
+        &rows,
+        Baseline {
+            originals: form.originals,
+            lists: ListFields { credits: tags.credits, genres: tags.genres, roles: role_edit },
+            join_phrases: tags.join_phrases,
+        },
+        resident,
+        cover,
+    );
+}
 
-    /// A `TagEditRow` string column, folded to the value the whole selection agrees on.
-    macro_rules! shared {
-        ($field:ident) => {
-            common_str(rows.iter().map(|r| r.$field.as_deref().unwrap_or_default()))
-        };
-    }
+/// What the Tags tab hands the baseline beyond its text fields.
+struct TagsTab {
+    credits: [ArtistCredit; CREDIT_FIELD_COUNT],
+    genres: GenreList,
+    join_phrases: Vec<(String, String)>,
+}
 
+fn fill_tags_tab(
+    form: &mut Form<'_>,
+    rows: &[TagEditRow],
+    credits: &[(ArtistCredit, ArtistCredit)],
+    genre_lists: &[GenreList],
+) -> TagsTab {
+    let te = form.te;
     field!(
+        form,
         title,
         common_str(rows.iter().map(|r| r.title.as_str())),
         set_title,
@@ -243,161 +306,153 @@ fn populate(ui: &AppWindow, session: &Rc<RefCell<TagSession>>, fetched: Fetched)
     te.set_join_phrases(ModelRc::new(VecModel::from(
         phrases.iter().map(|(label, _)| SharedString::from(label.as_str())).collect::<Vec<_>>(),
     )));
-    write_credit_rows(&te, CREDIT_ARTIST, artist_rows);
-    write_credit_rows(&te, CREDIT_ALBUM_ARTIST, album_artist_rows);
-    te.set_artist_placeholder(placeholder(artist_disagrees, &sentinel));
-    te.set_album_artist_placeholder(placeholder(album_artist_disagrees, &sentinel));
+    write_credit_rows(te, CREDIT_ARTIST, artist_rows);
+    write_credit_rows(te, CREDIT_ALBUM_ARTIST, album_artist_rows);
+    te.set_artist_placeholder(placeholder(artist_disagrees, &form.sentinel));
+    te.set_album_artist_placeholder(placeholder(album_artist_disagrees, &form.sentinel));
     te.set_artist_preview(opt_shared(artist.line()));
     te.set_album_artist_preview(opt_shared(album_artist.line()));
-    field!(album, shared!(album), set_album, set_album_placeholder);
+    field!(form, album, shared!(rows, album), set_album, set_album_placeholder);
     // The genre list, one row per name. The rows themselves are the baseline, so nothing is
     // recorded in `originals.text`.
     let (genres, genres_disagree) = common_value(genre_lists.iter());
-    write_genre_rows(&te, &genres);
-    te.set_genre_placeholder(placeholder(genres_disagree, &sentinel));
+    write_genre_rows(te, &genres);
+    te.set_genre_placeholder(placeholder(genres_disagree, &form.sentinel));
+    field!(form, year, int!(rows, year), set_year, set_year_placeholder);
     field!(
-        year,
-        common_by(rows.iter().map(|r| r.year), int_key, fmt_int),
-        set_year,
-        set_year_placeholder
-    );
-    field!(
+        form,
         original_year,
-        common_by(rows.iter().map(|r| r.original_year), int_key, fmt_int),
+        int!(rows, original_year),
         set_original_year,
         set_original_year_placeholder
     );
     field!(
+        form,
         track_number,
-        common_by(rows.iter().map(|r| r.track_number), int_key, fmt_int),
+        int!(rows, track_number),
         set_track_number,
         set_track_number_placeholder
     );
     field!(
+        form,
         track_total,
-        common_by(rows.iter().map(|r| r.track_total), int_key, fmt_int),
+        int!(rows, track_total),
         set_track_total,
         set_track_total_placeholder
     );
     field!(
+        form,
         disc_number,
-        common_by(rows.iter().map(|r| r.disc_number), int_key, fmt_int),
+        int!(rows, disc_number),
         set_disc_number,
         set_disc_number_placeholder
     );
+    field!(form, disc_total, int!(rows, disc_total), set_disc_total, set_disc_total_placeholder);
+    field!(form, comment, shared!(rows, comment), set_comment, set_comment_placeholder);
     field!(
-        disc_total,
-        common_by(rows.iter().map(|r| r.disc_total), int_key, fmt_int),
-        set_disc_total,
-        set_disc_total_placeholder
-    );
-    field!(comment, shared!(comment), set_comment, set_comment_placeholder);
-    field!(
+        form,
         bpm,
         common_by(rows.iter().map(|r| r.bpm), bpm_key, fmt_bpm),
         set_bpm,
         set_bpm_placeholder
     );
 
-    // The role credits, a list of rows per role. Structural like the genres and the two artist
-    // credits, so the sentinel is per role: one selection can agree on the composer and disagree
-    // on the producer.
-    //
-    // The sentinel rides the edit's own scope rather than a mask beside it — a role the form
-    // cannot answer for is exactly the one that shows the hint, so one answer serves both.
+    TagsTab { credits: [artist, album_artist], genres, join_phrases: phrases }
+}
+
+/// The role credits, a list of rows per role. Structural like the genres and the two artist
+/// credits, so the sentinel is per role: one selection can agree on the composer and disagree
+/// on the producer.
+///
+/// The sentinel rides the edit's own scope rather than a mask beside it — a role the form
+/// cannot answer for is exactly the one that shows the hint, so one answer serves both.
+fn fill_credits_tab(ui: &AppWindow, form: &Form<'_>, roles: &[RoleCredits]) -> RoleCreditEdit {
     let role_edit = common_roles(roles);
     write_role_rows(ui, role_edit.credits());
-    te.set_role_placeholders(ModelRc::new(VecModel::from(
+    form.te.set_role_placeholders(ModelRc::new(VecModel::from(
         role_edit
             .answered()
             .iter()
-            .map(|answered| placeholder(!answered, &sentinel))
+            .map(|answered| placeholder(!answered, &form.sentinel))
             .collect::<Vec<_>>(),
     )));
+    role_edit
+}
 
-    field!(subtitle, shared!(subtitle), set_subtitle, set_subtitle_placeholder);
-    field!(disc_subtitle, shared!(disc_subtitle), set_disc_subtitle, set_disc_subtitle_placeholder);
-    field!(grouping, shared!(grouping), set_grouping, set_grouping_placeholder);
-    field!(work, shared!(work), set_work, set_work_placeholder);
-    field!(movement, shared!(movement), set_movement, set_movement_placeholder);
+fn fill_details_tab(form: &mut Form<'_>, rows: &[TagEditRow], release: &[ReleaseTagRow]) {
+    field!(form, subtitle, shared!(rows, subtitle), set_subtitle, set_subtitle_placeholder);
     field!(
+        form,
+        disc_subtitle,
+        shared!(rows, disc_subtitle),
+        set_disc_subtitle,
+        set_disc_subtitle_placeholder
+    );
+    field!(form, grouping, shared!(rows, grouping), set_grouping, set_grouping_placeholder);
+    field!(form, work, shared!(rows, work), set_work, set_work_placeholder);
+    field!(form, movement, shared!(rows, movement), set_movement, set_movement_placeholder);
+    field!(
+        form,
         movement_number,
-        common_by(rows.iter().map(|r| r.movement_number), int_key, fmt_int),
+        int!(rows, movement_number),
         set_movement_number,
         set_movement_number_placeholder
     );
     field!(
+        form,
         movement_total,
-        common_by(rows.iter().map(|r| r.movement_total), int_key, fmt_int),
+        int!(rows, movement_total),
         set_movement_total,
         set_movement_total_placeholder
     );
-    field!(initial_key, shared!(initial_key), set_initial_key, set_initial_key_placeholder);
-    field!(mood, shared!(mood), set_mood, set_mood_placeholder);
-    field!(language, shared!(language), set_language, set_language_placeholder);
-    field!(isrc, shared!(isrc), set_isrc, set_isrc_placeholder);
-    field!(copyright, shared!(copyright), set_copyright, set_copyright_placeholder);
-
-    // Release-level, read off the album the selection sits on rather than off `tracks`.
     field!(
-        label,
-        common_str(release.iter().map(|r| r.label.as_str())),
-        set_label,
-        set_label_placeholder
+        form,
+        initial_key,
+        shared!(rows, initial_key),
+        set_initial_key,
+        set_initial_key_placeholder
     );
+    field!(form, mood, shared!(rows, mood), set_mood, set_mood_placeholder);
+    field!(form, language, shared!(rows, language), set_language, set_language_placeholder);
+    field!(form, isrc, shared!(rows, isrc), set_isrc, set_isrc_placeholder);
+    field!(form, copyright, shared!(rows, copyright), set_copyright, set_copyright_placeholder);
+
+    field!(form, label, release!(release, label), set_label, set_label_placeholder);
     field!(
+        form,
         catalog_number,
-        common_str(release.iter().map(|r| r.catalog_number.as_str())),
+        release!(release, catalog_number),
         set_catalog_number,
         set_catalog_number_placeholder
     );
+    field!(form, barcode, release!(release, barcode), set_barcode, set_barcode_placeholder);
+    field!(form, media, release!(release, media), set_media, set_media_placeholder);
     field!(
-        barcode,
-        common_str(release.iter().map(|r| r.barcode.as_str())),
-        set_barcode,
-        set_barcode_placeholder
-    );
-    field!(
-        media,
-        common_str(release.iter().map(|r| r.media.as_str())),
-        set_media,
-        set_media_placeholder
-    );
-    field!(
+        form,
         release_type,
-        common_str(release.iter().map(|r| r.release_type.as_str())),
+        release!(release, release_type),
         set_release_type,
         set_release_type_placeholder
     );
     field!(
+        form,
         release_country,
-        common_str(release.iter().map(|r| r.release_country.as_str())),
+        release!(release, release_country),
         set_release_country,
         set_release_country_placeholder
     );
 
     // A switch has no ‹multiple values› state to show, so a selection that disagrees starts off
     // and an untouched switch stays `Keep` — nothing is written unless the user moves it.
-    originals.compilation = release.iter().all(|r| r.is_compilation) && !release.is_empty();
-    te.set_compilation(originals.compilation);
+    form.originals.compilation = release.iter().all(|r| r.is_compilation) && !release.is_empty();
+    form.te.set_compilation(form.originals.compilation);
+}
 
-    // Lyrics (single selection only; multi mode leaves it "" ⇒ Keep).
-    te.set_lyrics(SharedString::from(lyrics.as_str()));
-    te.set_lyrics_placeholder(SharedString::default());
-    originals.text.lyrics = lyrics;
-
-    finalize_populate(
-        &te,
-        session,
-        rows,
-        Baseline {
-            originals,
-            lists: ListFields { credits: [artist, album_artist], genres, roles: role_edit },
-            join_phrases: phrases,
-        },
-        resident,
-        cover,
-    );
+/// Single selection only; multi mode leaves it "" ⇒ Keep.
+fn fill_lyrics_tab(form: &mut Form<'_>, lyrics: String) {
+    form.te.set_lyrics(SharedString::from(lyrics.as_str()));
+    form.te.set_lyrics_placeholder(SharedString::default());
+    form.originals.text.lyrics = lyrics;
 }
 
 /// Everything the commit diffs against, as it was the moment the dialog opened.

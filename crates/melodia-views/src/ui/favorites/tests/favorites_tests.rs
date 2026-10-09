@@ -410,8 +410,8 @@ fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
 #[test]
 fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
     let pick = SUBVIEWS
-        .split_once("g.on_tab_changed(move |tab| {")
-        .and_then(|(_, rest)| rest.split_once("\n        });"))
+        .split_once("fn wire_tab_changed(")
+        .and_then(|(_, rest)| rest.split_once("\n}"))
         .map(|(body, _)| body)
         .unwrap_or_default();
 

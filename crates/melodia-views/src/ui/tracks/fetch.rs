@@ -32,7 +32,7 @@ pub async fn fetch_and_apply(
     // Fetched in the query's fixed `sort_key` order — display order is derived
     // entirely in memory below, so the cold fetch and a later header-click
     // re-sort share the one `compute_track_order` code path.
-    let rows = library::tracks::get_tracks(state).await?;
+    let rows = library::tracks::get_tracks(&state.db).await?;
 
     // Consumes `rows`: each DB row's strings are freed as its converted row
     // is built, so the peak never holds the library's text twice.

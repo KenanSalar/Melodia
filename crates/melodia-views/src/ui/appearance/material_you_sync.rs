@@ -13,6 +13,7 @@ use slint::ComponentHandle;
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
 use melodia_artwork::media::image::material_you::SchemeStyle;
+use melodia_core::error::describe;
 use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState};
 use melodia_ui::{AppWindow, Settings};
 
@@ -101,8 +102,9 @@ pub(super) fn wire_color_style_changed(
         let persisted_accent_for_blocking = persisted_accent.clone();
         s.runtime.spawn_blocking(move || {
             let mut all_persists_ok = true;
-            if let Err(e) = library::settings::set_dynamic_color_style(&s_clone, style_owned) {
-                log::warn!("persist material3 colour style: {e}");
+            if let Err(e) = library::settings::set_dynamic_color_style(&s_clone.paths, style_owned)
+            {
+                log::warn!("persist material3 colour style: {}", describe(&e));
                 all_persists_ok = false;
             }
 
@@ -127,12 +129,12 @@ pub(super) fn wire_color_style_changed(
                     new_accent
                 };
                 if let Err(e) = library::settings::set_appearance(
-                    &s_clone,
+                    &s_clone.paths,
                     theme_id.to_owned(),
                     variant_id,
                     resolved_accent,
                 ) {
-                    log::warn!("persist material3 accent: {e}");
+                    log::warn!("persist material3 accent: {}", describe(&e));
                     all_persists_ok = false;
                 }
             }

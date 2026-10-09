@@ -14,6 +14,8 @@
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
+use melodia_core::error::describe;
+
 use crate::media::image::image_decode::{FilterType, MAX_SOURCE_DIM, decode_capped};
 
 use super::{
@@ -140,7 +142,7 @@ pub fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> Option<S
     let tmp = match stage_in(artwork_dir) {
         Ok(t) => t,
         Err(e) => {
-            log::warn!("Failed to create composite tempfile: {e}");
+            log::warn!("Failed to create composite tempfile: {}", describe(&e));
             return None;
         }
     };
@@ -149,11 +151,11 @@ pub fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> Option<S
         let encoder =
             image::codecs::jpeg::JpegEncoder::new_with_quality(&mut hashing, STORE_JPEG_QUALITY);
         if let Err(e) = image::DynamicImage::ImageRgb8(canvas).write_with_encoder(encoder) {
-            log::warn!("Failed to encode composite JPEG: {e}");
+            log::warn!("Failed to encode composite JPEG: {}", describe(&e));
             return None;
         }
         if let Err(e) = hashing.flush() {
-            log::warn!("Failed to flush composite JPEG: {e}");
+            log::warn!("Failed to flush composite JPEG: {}", describe(&e));
             return None;
         }
         hashing.hasher.finalize().to_hex()[..HASH_HEX_LEN].to_string()
@@ -162,7 +164,7 @@ pub fn compose_artwork(source_paths: &[PathBuf], artwork_dir: &Path) -> Option<S
     let file_path = artwork_dir.join(&filename);
 
     if let Err(e) = persist_unless_exists(tmp, &file_path) {
-        log::warn!("Failed to write composite artwork {}: {}", file_path.display(), e);
+        log::warn!("Failed to write composite artwork {}: {}", file_path.display(), describe(&e));
         return None;
     }
     Some(file_path.to_string_lossy().into_owned())

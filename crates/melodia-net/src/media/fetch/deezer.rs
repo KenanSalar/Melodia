@@ -1,7 +1,5 @@
 use std::borrow::Cow;
-use std::path::Path;
 
-use melodia_artwork::media::image::artwork;
 use melodia_core::error::AppError;
 
 #[derive(serde::Deserialize)]
@@ -103,7 +101,7 @@ const MAX_SEARCH_BYTES: u64 = 512 * 1024;
 /// can point one at a local server, the doors spelling this.
 ///
 /// The image download does **not** go through it: what it validates is a URL the API handed back,
-/// against the host allowlist in [`download_and_cache_artist_image`].
+/// against the host allowlist in [`download_artist_image`].
 const API_BASE: &str = "https://api.deezer.com";
 
 /// Read and classify a search response.
@@ -221,16 +219,14 @@ fn quotable(value: &str) -> Cow<'_, str> {
 /// Maximum image download size (5 MB).
 const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
 
-/// Downloads an artist image from a URL and caches it in the artists directory.
-/// Returns the absolute path to the cached image, or None if download fails.
+/// Downloads an artist image the search handed back.
 ///
-/// Validates that the URL uses HTTPS and points to a Deezer CDN domain,
-/// and enforces a size limit to prevent unbounded memory allocation.
-pub async fn download_and_cache_artist_image(
+/// Refuses anything but HTTPS on a Deezer CDN domain, and reads the body under a size limit so
+/// a host can't make it allocate without bound.
+pub async fn download_artist_image(
     client: &reqwest::Client,
     image_url: &str,
-    artists_dir: &Path,
-) -> Result<Option<String>, AppError> {
+) -> Result<Vec<u8>, AppError> {
     // Validate URL scheme and domain
     let parsed =
         reqwest::Url::parse(image_url).map_err(|e| AppError::network("Invalid image URL", e))?;
@@ -260,18 +256,7 @@ pub async fn download_and_cache_artist_image(
     // Streamed under the cap rather than `bytes()`-ed and measured afterwards: the header check
     // above is only as good as the header, and a host that omits or understates it had already
     // been allocated in full by the time the old check could refuse it.
-    let bytes =
-        crate::services::net::read_capped(response, "Artist image", MAX_IMAGE_BYTES).await?;
-
-    // Through the shared store so an artist image is bounded and deduplicated exactly as a cover
-    // is. Deezer serves these at a fixed 250 px, so the bounds don't fire today — what matters is
-    // that the two directories can't drift into two size policies.
-    let dir = artists_dir.to_path_buf();
-    let stored = tokio::task::spawn_blocking(move || artwork::store_image(&bytes, "jpg", &dir))
-        .await
-        .map_err(AppError::io_source)?;
-
-    Ok(stored)
+    crate::services::net::read_capped(response, "Artist image", MAX_IMAGE_BYTES).await
 }
 
 #[cfg(test)]

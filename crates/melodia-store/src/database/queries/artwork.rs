@@ -3,7 +3,7 @@ use std::path::Path;
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, placeholders, queries};
 use melodia_core::error::AppError;
 
 /// Every column that points into the artwork stores, as `(table, column)`.
@@ -97,10 +97,10 @@ pub async fn referenced_library_paths(db: &DbPool) -> Result<Vec<String>, AppErr
 /// A track also loses its `date_modified`, the lever `tasks::tag_backfill` pulls, so the
 /// next scan reads it as changed and extracts its cover again. A custom playlist image has no
 /// source to come back from, so the playlist falls back to its automatic thumbnail.
-pub async fn forget_paths(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    missing: &[String],
-) -> Result<u64, AppError> {
+///
+/// The cover roll-ups run in the same transaction, so a cover another of an album's tracks still
+/// holds is back before the scan that follows starts rather than after it.
+pub async fn forget_paths(db: &DbPool, missing: &[String]) -> Result<u64, AppError> {
     const FORGETS: [(&str, &str, &str); 4] = [
         ("tracks", "artwork_path", "artwork_path = NULL, date_modified = NULL"),
         ("albums", "artwork_path", "artwork_path = NULL"),
@@ -108,6 +108,7 @@ pub async fn forget_paths(
         ("playlists", "thumbnail_path", "thumbnail_path = NULL, custom_thumbnail = FALSE"),
     ];
 
+    let mut tx = db.write().begin().await?;
     let mut touched = 0;
     for chunk in missing.chunks(MAX_BINDS_PER_STATEMENT) {
         let list = placeholders(chunk.len());
@@ -117,9 +118,11 @@ pub async fn forget_paths(
             for path in chunk {
                 query = query.bind(path);
             }
-            touched += query.execute(&mut **tx).await?.rows_affected();
+            touched += query.execute(&mut *tx).await?.rows_affected();
         }
     }
+    queries::scan::roll_up_covers(&mut tx).await?;
+    tx.commit().await?;
     Ok(touched)
 }
 

@@ -689,7 +689,7 @@ fn spawn_feed(ctx: FeedContext) {
     if let Err(e) =
         std::thread::Builder::new().name("radio-buffer".to_owned()).spawn(move || feed_loop(ctx))
     {
-        log::error!("Could not start the radio buffer thread: {e}");
+        log::error!("Could not start the radio buffer thread: {}", describe(&e));
         // Nothing will ever fill the ring, so let the source end rather than play silence forever.
         shared.finish();
     }

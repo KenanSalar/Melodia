@@ -5,7 +5,6 @@
 
 use crate::services;
 use crate::services::settings::SupportFlags;
-use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
@@ -38,13 +37,7 @@ pub fn count_launch(flags: &mut SupportFlags) -> bool {
 /// `mark_support_prompt_seen` lands `PROMPT_DELAY` later in this process, so the only
 /// writer that can race the read below is a second one, which a process-local `static`
 /// doesn't reach either way.
-pub fn record_launch(state: &AppState) -> Result<bool, AppError> {
-    record_launch_at(&state.paths)
-}
-
-/// [`record_launch`]'s body, narrowed to the one field of `AppState` it reaches so the pair above
-/// can be driven against a real file rather than asserted positionally in source text.
-fn record_launch_at(paths: &Paths) -> Result<bool, AppError> {
+pub fn record_launch(paths: &Paths) -> Result<bool, AppError> {
     if services::settings::read_settings(paths)?.support.support_prompt_seen {
         return Ok(false);
     }
@@ -57,8 +50,8 @@ fn record_launch_at(paths: &Paths) -> Result<bool, AppError> {
 /// Called immediately before the toast is raised, never on click or dismiss: a
 /// dismissed toast must not return next launch, and a session that ends before the
 /// toast is due must not have spent it.
-pub fn mark_support_prompt_seen(state: &AppState) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, |settings| {
+pub fn mark_support_prompt_seen(paths: &Paths) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, |settings| {
         settings.support.support_prompt_seen = true;
     })
 }

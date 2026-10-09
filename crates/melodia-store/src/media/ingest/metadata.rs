@@ -237,53 +237,11 @@ fn extract(
     // on the hot scan path.
     let file_name = || path.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown").to_owned();
 
-    let fs_meta = std::fs::metadata(path);
-    let file_size = fs_meta.as_ref().map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
-
-    // Derived from the `Metadata` already in hand — `extract_date_modified` would
-    // `stat` the file a second time. This is exactly what
-    // `date_modified_from_metadata` exists for; `scanner::track_is_current` is the
-    // other caller that already holds one.
-    let date_modified = fs_meta.as_ref().ok().and_then(date_modified_from_metadata);
-
+    let (file_size, date_modified) = file_stat(path);
     let file_hash = compute_file_hash(path)?;
-
     let scope = if skip_artwork { TagScope::NoArtwork } else { TagScope::Full };
-    let tagged_file = match read_tags(path, scope) {
-        Ok(tagged) => Some(tagged),
-        Err(e) => match on_unreadable {
-            OnUnreadableTags::Fail => return Err(e),
-            OnUnreadableTags::FilenameRow => {
-                log::debug!(
-                    "{}; keeping a filename-derived row",
-                    melodia_core::error::describe(&e)
-                );
-                None
-            }
-        },
-    };
-
-    let properties = tagged_file.as_ref().map(TaggedFile::properties);
-
-    let duration_ms = match properties {
-        Some(props) => i64::try_from(props.duration().as_millis()).unwrap_or(i64::MAX),
-        // Lofty reports duration off the parse that just failed, so the decoder is the
-        // only thing left that knows. Still `0` where it can't say either.
-        None => melodia_audio::player::source::file_decode::probe_duration(path)
-            .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
-    };
-
-    let bitrate = properties
-        .and_then(|props| props.overall_bitrate().or(props.audio_bitrate()))
-        .map(|br| i32::try_from(br).unwrap_or(i32::MAX));
-    let channels = properties.and_then(FileProperties::channels).map(i32::from);
-    let sample_rate = properties
-        .and_then(FileProperties::sample_rate)
-        .map(|rate| i32::try_from(rate).unwrap_or(i32::MAX));
-    let bit_depth = properties.and_then(FileProperties::bit_depth).map(i32::from);
-
-    // Determine codec from file type
-    let codec = tagged_file.as_ref().map(|tagged| format!("{:?}", tagged.file_type()));
+    let tagged_file = open_tags(path, scope, on_unreadable)?;
+    let audio = AudioProperties::read(path, tagged_file.as_ref());
 
     // Try to read tags - check all tag types and pick the first one with data
     let tag =
@@ -343,14 +301,7 @@ fn extract(
         original_date: originally_released.map(|ts| ts.to_string()),
         original_year: originally_released.map(|ts| i32::from(ts.year)),
         comment: text(tag, ItemKey::Comment),
-        // `ItemKey::Bpm` has NO ID3v2 mapping — MP3 / WAV / AIFF keep BPM in `TBPM`, which lofty
-        // exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it on every ID3v2 file,
-        // including the ones `tag_writer`'s BPM write puts there. Prefer the decimal key (Vorbis
-        // `BPM`, MP4 freeform); fall back to the integer.
-        bpm: text(tag, ItemKey::Bpm)
-            .or_else(|| text(tag, ItemKey::IntegerBpm))
-            .and_then(|s| s.parse::<f64>().ok())
-            .filter(|v| v.is_finite()),
+        bpm: read_bpm(tag),
         initial_key: text(tag, ItemKey::InitialKey),
         mood: text(tag, ItemKey::Mood),
         grouping: text(tag, ItemKey::ContentGroup),
@@ -364,37 +315,129 @@ fn extract(
         musicbrainz_track_id: text(tag, ItemKey::MusicBrainzRecordingId),
         musicbrainz_release_id: text(tag, ItemKey::MusicBrainzReleaseId),
         musicbrainz_release_track_id: text(tag, ItemKey::MusicBrainzTrackId),
-        // Opus carries `R128_*_GAIN` where everything else carries `REPLAYGAIN_*`, and read as
-        // untagged it would play at unity against a normalised library. `REPLAYGAIN_*` wins where
-        // both are present: it is already written against the reference the columns mean, so it
-        // owes no conversion. Neither peak has an R128 counterpart — R128 defines none — and the
-        // prevent-clipping path already treats a peak it doesn't know as no ceiling.
-        replaygain_track_gain: text(tag, ItemKey::ReplayGainTrackGain)
-            .as_deref()
-            .and_then(parse_replaygain_gain)
-            .or_else(|| text(tag, ItemKey::R128TrackGain).as_deref().and_then(parse_r128_gain)),
-        replaygain_track_peak: text(tag, ItemKey::ReplayGainTrackPeak)
-            .as_deref()
-            .and_then(parse_replaygain_peak),
-        replaygain_album_gain: text(tag, ItemKey::ReplayGainAlbumGain)
-            .as_deref()
-            .and_then(parse_replaygain_gain)
-            .or_else(|| text(tag, ItemKey::R128AlbumGain).as_deref().and_then(parse_r128_gain)),
-        replaygain_album_peak: text(tag, ItemKey::ReplayGainAlbumPeak)
-            .as_deref()
-            .and_then(parse_replaygain_peak),
+        replaygain_track_gain: replaygain_gain(
+            tag,
+            ItemKey::ReplayGainTrackGain,
+            ItemKey::R128TrackGain,
+        ),
+        replaygain_track_peak: replaygain_peak(tag, ItemKey::ReplayGainTrackPeak),
+        replaygain_album_gain: replaygain_gain(
+            tag,
+            ItemKey::ReplayGainAlbumGain,
+            ItemKey::R128AlbumGain,
+        ),
+        replaygain_album_peak: replaygain_peak(tag, ItemKey::ReplayGainAlbumPeak),
         rating,
-        duration_ms,
-        codec,
-        bitrate,
-        channels,
-        sample_rate,
-        bit_depth,
+        duration_ms: audio.duration_ms,
+        codec: audio.codec,
+        bitrate: audio.bitrate,
+        channels: audio.channels,
+        sample_rate: audio.sample_rate,
+        bit_depth: audio.bit_depth,
         file_size,
         file_hash,
         date_modified,
         artwork_path,
     })
+}
+
+/// The file's size and its stored mtime string, off one `stat`.
+///
+/// Derived from the `Metadata` already in hand — `extract_date_modified` would
+/// `stat` the file a second time. This is exactly what
+/// `date_modified_from_metadata` exists for; `scanner::track_is_current` is the
+/// other caller that already holds one.
+fn file_stat(path: &Path) -> (i64, Option<String>) {
+    let fs_meta = std::fs::metadata(path);
+    let file_size = fs_meta.as_ref().map_or(0, |m| i64::try_from(m.len()).unwrap_or(i64::MAX));
+    let date_modified = fs_meta.as_ref().ok().and_then(date_modified_from_metadata);
+    (file_size, date_modified)
+}
+
+/// The parsed file, or `None` where the tags won't parse and the caller keeps a filename row.
+fn open_tags(
+    path: &Path,
+    scope: TagScope,
+    on_unreadable: OnUnreadableTags,
+) -> Result<Option<TaggedFile>, AppError> {
+    match read_tags(path, scope) {
+        Ok(tagged) => Ok(Some(tagged)),
+        Err(e) => match on_unreadable {
+            OnUnreadableTags::Fail => Err(e),
+            OnUnreadableTags::FilenameRow => {
+                log::debug!(
+                    "{}; keeping a filename-derived row",
+                    melodia_core::error::describe(&e)
+                );
+                Ok(None)
+            }
+        },
+    }
+}
+
+/// What the stream is rather than what its tags say.
+struct AudioProperties {
+    duration_ms: i64,
+    codec: Option<String>,
+    bitrate: Option<i32>,
+    channels: Option<i32>,
+    sample_rate: Option<i32>,
+    bit_depth: Option<i32>,
+}
+
+impl AudioProperties {
+    fn read(path: &Path, tagged_file: Option<&TaggedFile>) -> Self {
+        let properties = tagged_file.map(TaggedFile::properties);
+        let duration_ms = match properties {
+            Some(props) => i64::try_from(props.duration().as_millis()).unwrap_or(i64::MAX),
+            // Lofty reports duration off the parse that just failed, so the decoder is the
+            // only thing left that knows. Still `0` where it can't say either.
+            None => melodia_audio::player::source::file_decode::probe_duration(path)
+                .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
+        };
+        Self {
+            duration_ms,
+            codec: tagged_file.map(|tagged| format!("{:?}", tagged.file_type())),
+            bitrate: properties
+                .and_then(|props| props.overall_bitrate().or(props.audio_bitrate()))
+                .map(|br| i32::try_from(br).unwrap_or(i32::MAX)),
+            channels: properties.and_then(FileProperties::channels).map(i32::from),
+            sample_rate: properties
+                .and_then(FileProperties::sample_rate)
+                .map(|rate| i32::try_from(rate).unwrap_or(i32::MAX)),
+            bit_depth: properties.and_then(FileProperties::bit_depth).map(i32::from),
+        }
+    }
+}
+
+/// `ItemKey::Bpm` has NO `ID3v2` mapping — MP3 / WAV / AIFF keep BPM in `TBPM`, which lofty
+/// exposes as `IntegerBpm`. Reading only `Bpm` therefore misses it on every `ID3v2` file,
+/// including the ones `tag_writer`'s BPM write puts there. Prefer the decimal key (Vorbis
+/// `BPM`, MP4 freeform); fall back to the integer.
+fn read_bpm(tag: Option<&Tag>) -> Option<f64> {
+    text(tag, ItemKey::Bpm)
+        .or_else(|| text(tag, ItemKey::IntegerBpm))
+        .and_then(|s| s.parse::<f64>().ok())
+        .filter(|v| v.is_finite())
+}
+
+/// A `ReplayGain` gain, or its `R128` counterpart restated against the same reference.
+///
+/// Opus carries `R128_*_GAIN` where everything else carries `REPLAYGAIN_*`, and read as
+/// untagged it would play at unity against a normalised library. `REPLAYGAIN_*` wins where
+/// both are present: it is already written against the reference the columns mean, so it
+/// owes no conversion.
+fn replaygain_gain(tag: Option<&Tag>, replaygain: ItemKey, r128: ItemKey) -> Option<f64> {
+    text(tag, replaygain)
+        .as_deref()
+        .and_then(parse_replaygain_gain)
+        .or_else(|| text(tag, r128).as_deref().and_then(parse_r128_gain))
+}
+
+/// Neither peak has an R128 counterpart — R128 defines none — and the prevent-clipping path
+/// already treats a peak it doesn't know as no ceiling.
+fn replaygain_peak(tag: Option<&Tag>, key: ItemKey) -> Option<f64> {
+    text(tag, key).as_deref().and_then(parse_replaygain_peak)
 }
 
 /// One tag value, trimmed, `None` when absent or blank.

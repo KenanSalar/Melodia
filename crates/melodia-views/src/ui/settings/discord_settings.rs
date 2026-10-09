@@ -15,6 +15,7 @@ use slint::ComponentHandle;
 
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::entities::integrations::DiscordFlags;
 use melodia_core::error::AppError;
 use melodia_integrations::services::integrations::discord::DiscordStatus;
@@ -40,13 +41,13 @@ fn paint_status(ui: &AppWindow, status: DiscordStatus) {
 /// waiting for the next player-state change — the detector reacts only to the
 /// `view_model` watch, which a settings toggle doesn't otherwise disturb. The
 /// disabled→enabled edge resets the detector's dedupe, so this republish paints.
-/// Mirrors the Windows SMTC-attach flush in `main.rs`.
+/// Mirrors the Windows SMTC-attach flush in boot's `install_ui`.
 fn discord_toggle_binding(
     state: &AppState,
     label: &'static str,
     nudge_detector: bool,
     set_field: fn(&mut DiscordFlags, bool),
-    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    persist: fn(&Paths, bool) -> Result<(), AppError>,
 ) -> impl FnMut(bool) + 'static {
     let state = state.clone();
     move |on| {
@@ -60,7 +61,7 @@ fn discord_toggle_binding(
                 |_: &mut melodia_engine::player::engine::state::PlayerState| {},
             );
         }
-        state.persist_blocking(label, move |s| persist(s, on));
+        state.persist_blocking(label, move |paths| persist(paths, on));
     }
 }
 

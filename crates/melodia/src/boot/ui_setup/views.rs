@@ -5,12 +5,13 @@ use std::sync::Arc;
 use melodia_app::services;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Nav};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
-/// The per-view handles `install_views` hands back for the wiring `main()` still
-/// owns: the initial fetches, the playlist and station import/export pills
+/// The per-view handles `install_views` hands back for the wiring
+/// [`super::install_ui`] owns: the initial fetches, the playlist and station import/export pills
 /// (which need the notifications stack), and the `cover_thumbs` consumers.
 ///
 /// Only handles a *caller* reads live here. `BrowseUi` / `FavoritesUi` /
@@ -176,6 +177,7 @@ pub fn install_views(
         albums: &albums_ui,
         artists: &artists_ui,
         genres: &genres_ui,
+        playlists: &playlists_ui,
         search: &search_ui,
     };
     ui::callbacks::wire_now_playing_favorite(app, state, row_flags);
@@ -209,7 +211,7 @@ pub fn install_views(
     // buffers in place, so the cards keep painting what they had until each replacement lands.
     app.global::<melodia_ui::WindowChrome>().on_display_changed(retune.clone());
     if let Err(e) = slint::invoke_from_event_loop(retune) {
-        log::warn!("Failed to schedule cover-cache display tuning: {e}");
+        log::warn!("Failed to schedule cover-cache display tuning: {}", describe(&e));
     }
 
     // The four handles not returned are deliberately dropped here — see
@@ -218,15 +220,14 @@ pub fn install_views(
 }
 
 /// Every Settings section, plus the notifications stack. The updater's Slint
-/// state seeds here too; its daily-check task and callbacks wire from `main()`
-/// once the `AppState` clones and tokio handle are in scope.
+/// state seeds here too; its daily-check task and callbacks wire later in
+/// [`super::install_ui`], beside the onboarding card that defers the task.
 pub fn install_library_settings_and_friends(
     app: &AppWindow,
     state: &AppState,
 ) -> Result<std::rc::Rc<ui::shell::notifications::NotificationsUi>, melodia_core::error::AppError> {
-    ui::settings::library_settings::install(app, state).map_err(|e| {
-        melodia_core::error::AppError::Window(format!("library_settings install: {e}"))
-    })?;
+    ui::settings::library_settings::install(app, state)
+        .map_err(|e| melodia_core::error::AppError::io("library_settings install", e))?;
     ui::callbacks::wire_library_settings(app, state);
     ui::settings::playback_settings::install_playback_settings(app, state);
     ui::settings::signal_path::install(app, state);
@@ -261,7 +262,7 @@ pub fn install_library_settings_and_friends(
         if let Err(e) = ui::locale_refresh::on_locale_changed(state, app.as_weak(), move |ui| {
             notifications.refresh_for_locale(ui);
         }) {
-            log::warn!("notifications locale refresher: {e}");
+            log::warn!("notifications locale refresher: {}", describe(&e));
         }
     }
     Ok(notifications)

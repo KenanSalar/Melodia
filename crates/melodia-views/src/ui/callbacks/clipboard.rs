@@ -40,7 +40,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
             };
             let ids = collect_nonzero_track_ids(&ids);
             spawn_copy(&state, &weak, "copy tracks", move |state| async move {
-                track_lines(&state, &ids, field).await
+                track_lines(&state.db, &ids, field).await
             });
         });
     }
@@ -57,7 +57,7 @@ pub fn wire(ui: &AppWindow, state: &AppState) {
             };
             let ids: Vec<i64> = ids.iter().map(i64::from).collect();
             spawn_copy(&state, &weak, "copy cards", move |state| async move {
-                entity_lines(&state, kind, &ids, field).await
+                entity_lines(&state.db, kind, &ids, field).await
             });
         });
     }

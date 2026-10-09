@@ -396,8 +396,7 @@ fn a_superseded_filter_build_does_not_reach_the_grid() {
     const TRACKLIST: &str = include_str!("../callbacks/tracklist.rs");
     const APPLY: &str = include_str!("../grid/apply.rs");
 
-    let filter = block_body(TRACKLIST, "g.on_filter_changed(move |text| {", "\n        });")
-        .unwrap_or_default();
+    let filter = block_body(TRACKLIST, "fn wire_filter(", "\n}").unwrap_or_default();
     assert!(
         filter.contains("apply_filtered_grid_settled(&ru, &weak, generation)"),
         "the keystroke must defer the Most Played walk — `apply_filtered_grid_now` puts an \

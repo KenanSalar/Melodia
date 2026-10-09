@@ -1,14 +1,13 @@
-//! Read-side helpers consumed by the scanner and the file-event
-//! processor: exists-by-path, folder resolution by path prefix, and bulk
-//! pre-reads that gate the parallel scan's per-file work. Move detection
-//! resolves hashes in batch via `batch_lookup_by_hash` / the reconcile
-//! pre-pass — there is no per-file hash lookup anymore.
+//! Read-side helpers consumed by the scan and the watcher batch:
+//! exists-by-path, folder resolution by path prefix, and bulk pre-reads
+//! that gate the parallel scan's per-file work. Move detection resolves its
+//! hashes in one batch, through `track::lowest_id_by_hash_on`.
 
 use melodia_core::entities::scan::ExistingTrackSummary;
 use melodia_core::error::AppError;
 
 /// Check if a track with the given file path already exists.
-pub async fn track_exists_by_path(
+pub(crate) async fn track_exists_by_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
 ) -> Result<bool, AppError> {
@@ -36,7 +35,7 @@ pub async fn track_exists_by_path(
 /// `std::path::absolute` doesn't normalise those), a folder that is a drive or filesystem
 /// root and so already ends in a separator, and a case difference on a filesystem that
 /// doesn't care about one, `SQLite` comparing bytes.
-pub async fn find_folder_for_path(
+pub(crate) async fn find_folder_for_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {
@@ -53,7 +52,7 @@ pub async fn find_folder_for_path(
 
 /// Get all track file paths for a given folder.
 /// Used for orphan detection during scans and startup verification.
-pub async fn get_all_track_paths_for_folder(
+pub(crate) async fn get_all_track_paths_for_folder(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     folder_id: i64,
 ) -> Result<Vec<String>, AppError> {
@@ -87,7 +86,7 @@ pub async fn get_existing_track_summaries_for_folder(
 }
 
 /// Get a track's ID by its file path. Returns None if not found.
-pub async fn get_track_id_by_path(
+pub(crate) async fn get_track_id_by_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
 ) -> Result<Option<i64>, AppError> {

@@ -2,13 +2,9 @@
 //!
 //! Five callbacks:
 //!
-//! - `Updater.check()` — manual "Check for Updates" button. Same flow
-//!   as the daily task but triggered by the user; doesn't push a toast
-//!   (the user is already on the Settings page watching the state
-//!   transition). On a `not_modified` / `up_to_date` result, the
-//!   "You're up to date!" row paints; on `Available` the
-//!   "Version X Available" row appears with the Install + Skip buttons.
-//!   Backend lives in [`check`].
+//! - `Updater.check()` — manual "Check for Updates" button. The daily
+//!   task's check (`services::updater::run_check`), plus a visible error
+//!   and toast when it fails. Backend lives in [`check`].
 //! - `Updater.install()` — fires `services::updater::download_and_install`
 //!   on the tokio runtime. Progress writes flow back through
 //!   `upgrade_in_event_loop`. On success → `Updater.restart-needed=true`
@@ -28,8 +24,9 @@
 //!   "up to date" state.
 //! - `Updater.auto-check-changed(bool)` — persists the toggle.
 //!
-//! The [`paint`] submodule holds the shared UI-thread painters both the
-//! check and install backends call back through.
+//! The [`paint`] submodule holds the shared UI-thread painters the check and
+//! install backends call back through, the daily task reaching them via
+//! [`check_painter`].
 
 mod check;
 mod install;
@@ -44,10 +41,12 @@ use crate::ui::shell::notifications::NotificationsUi;
 use melodia_app::library;
 use melodia_app::services::updater::UpdaterEvent;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, MelodiaUpdater};
+use melodia_core::error::describe;
+use melodia_ui::{AppWindow, MelodiaUpdater, NotificationKind};
 
 use check::spawn_manual_check;
 use install::spawn_install;
+pub use paint::check_painter;
 
 /// Wire the five `Updater.*` callbacks on the `Updater` global. Must
 /// be called after `ui::settings::updater_settings::install` (which seeds the
@@ -103,9 +102,9 @@ pub fn wire(
             let state_for_disk = state.clone();
             state.runtime.spawn_blocking(move || {
                 if let Err(e) =
-                    library::settings::updates::set_skipped_release(&state_for_disk, version)
+                    library::settings::updates::set_skipped_release(&state_for_disk.paths, version)
                 {
-                    log::warn!("updater: set_skipped_release: {e}");
+                    log::warn!("updater: set_skipped_release: {}", describe(&e));
                 }
             });
             // Repaint the Settings → Updates panel to the "up to
@@ -117,7 +116,7 @@ pub fn wire(
                 g.set_update_available(false);
                 g.set_up_to_date(true);
             }
-            notifications.dismiss_by_kind("install-update");
+            notifications.dismiss_by_kind(NotificationKind::InstallUpdate);
         });
     }
 
@@ -129,28 +128,12 @@ pub fn wire(
             state.runtime.spawn_blocking(move || {
                 // Kicked inside the write and only on `Ok(())`: the loop re-reads the file on
                 // waking, so a kick over a failed write would wake it onto the old answer.
-                match library::settings::updates::set_auto_check_enabled(&state_for_disk, on) {
+                match library::settings::updates::set_auto_check_enabled(&state_for_disk.paths, on)
+                {
                     Ok(()) => state_for_disk.auto_check_changed.bump(),
-                    Err(e) => log::warn!("updater: set_auto_check_enabled: {e}"),
+                    Err(e) => log::warn!("updater: set_auto_check_enabled: {}", describe(&e)),
                 }
             });
         });
     }
-}
-
-/// The cached `If-None-Match` `ETag` from the last successful manifest fetch,
-/// or `None` when no usable tag is on disk.
-fn read_etag(state: &AppState) -> Option<String> {
-    melodia_app::services::settings::read_settings(&state.paths)
-        .ok()
-        .map(|s| s.updates.last_manifest_etag)
-        .filter(|tag| !tag.is_empty())
-}
-
-/// The release version the user explicitly skipped, or an empty string.
-fn current_skipped_release(state: &AppState) -> String {
-    melodia_app::services::settings::read_settings(&state.paths)
-        .ok()
-        .map(|s| s.updates.skipped_release)
-        .unwrap_or_default()
 }

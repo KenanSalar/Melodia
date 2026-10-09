@@ -25,6 +25,7 @@ use melodia_app::state::AppState;
 #[cfg(target_os = "linux")]
 use melodia_app::state::Signal;
 use melodia_app::tasks::TaskSpawner;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 use melodia_platform::services::platform::tray::{
@@ -117,7 +118,7 @@ pub fn hide_window(ui: &AppWindow) {
     }
     match window.hide() {
         Ok(()) => set_window_visible(ui, false),
-        Err(e) => log::warn!("tray: failed to hide the window: {e}"),
+        Err(e) => log::warn!("tray: failed to hide the window: {}", describe(&e)),
     }
 }
 
@@ -138,7 +139,7 @@ fn show_window(ui: &AppWindow) {
 
     let geom = if let Some(g) = from_tray_hide {
         if let Err(e) = window.show() {
-            log::warn!("tray: failed to show the window: {e}");
+            log::warn!("tray: failed to show the window: {}", describe(&e));
             return;
         }
         g
@@ -147,11 +148,11 @@ fn show_window(ui: &AppWindow) {
         // recreate losing both otherwise.
         let g = (window.size(), window.position());
         if let Err(e) = window.hide() {
-            log::warn!("tray: hide-for-restore failed: {e}");
+            log::warn!("tray: hide-for-restore failed: {}", describe(&e));
             return;
         }
         if let Err(e) = window.show() {
-            log::warn!("tray: failed to show the window: {e}");
+            log::warn!("tray: failed to show the window: {}", describe(&e));
             return;
         }
         g
@@ -212,7 +213,7 @@ fn reschedule_geometry_restore(
 }
 
 /// Create the tray and spawn the action receiver and state subscriber. Call once during
-/// startup, before `app.run()`.
+/// startup, before `app.show()`.
 pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     let (tx, rx) = tokio::sync::mpsc::channel::<TrayAction>(TRAY_ACTION_CHANNEL_CAP);
     spawn_action_receiver(spawner, state, ui.as_weak(), rx);
@@ -232,7 +233,7 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         // `tray-icon` wants the UI thread with the event loop already running, so defer
-        // the way `main.rs` defers the SMTC attach.
+        // the way boot defers the SMTC attach.
         let sinks = state.sinks.clone();
         let weak = ui.as_weak();
         if let Err(e) = slint::invoke_from_event_loop(move || {
@@ -246,7 +247,7 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
                 log::info!("tray: not active — close-to-tray will fall back to quitting");
             }
         }) {
-            log::warn!("tray: failed to schedule creation: {e}");
+            log::warn!("tray: failed to schedule creation: {}", describe(&e));
         }
     }
 }
@@ -315,16 +316,16 @@ fn dispatch_action(
         TrayAction::ShowHideWindow => {
             let weak = ui_weak.clone();
             if let Err(e) = slint::invoke_from_event_loop(move || toggle_window(&weak)) {
-                log::warn!("tray: show/hide invoke failed: {e}");
+                log::warn!("tray: show/hide invoke failed: {}", describe(&e));
             }
         }
         TrayAction::Quit => {
             if let Err(e) = slint::invoke_from_event_loop(|| {
                 if let Err(e) = slint::quit_event_loop() {
-                    log::warn!("tray: quit_event_loop: {e}");
+                    log::warn!("tray: quit_event_loop: {}", describe(&e));
                 }
             }) {
-                log::warn!("tray: quit invoke failed: {e}");
+                log::warn!("tray: quit invoke failed: {}", describe(&e));
             }
         }
     }
@@ -427,6 +428,6 @@ fn spawn_state_subscriber_local(
         log::debug!("tray: state subscriber stopped");
     }));
     if let Err(e) = res {
-        log::warn!("tray: state subscriber failed to spawn: {e}");
+        log::warn!("tray: state subscriber failed to spawn: {}", describe(&e));
     }
 }

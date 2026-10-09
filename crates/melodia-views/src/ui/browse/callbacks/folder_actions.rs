@@ -99,7 +99,7 @@ fn spawn_with_folder_tracks<Fut>(
     let path = path.to_string();
     let state = state.clone();
     state.runtime.clone().spawn(async move {
-        match library::browse::folder_track_ids(&state, &path).await {
+        match library::browse::folder_track_ids(&state.db, &path).await {
             Ok(ids) if ids.is_empty() => log::debug!("{label}: no tracks under {path}"),
             Ok(ids) => act(state, ids).await,
             Err(e) => log::warn!("{label}: {}", describe(&e)),

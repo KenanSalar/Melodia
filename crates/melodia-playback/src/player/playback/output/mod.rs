@@ -217,7 +217,8 @@ impl AudioOutput {
     ///
     /// # Errors
     ///
-    /// [`AppError::Player`] when there is no device, or no config it offers can be opened.
+    /// [`AppError::Player`] when there is no device, and [`device::open`]'s failure when no config
+    /// it offers can be opened.
     pub fn open(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
         let (mut output, target) = Self::unopened(voices, health)?;
         output.stream = Some(Stream::Shared(device::open(&target, &output.feed, None)?));
@@ -230,7 +231,8 @@ impl AudioOutput {
     ///
     /// # Errors
     ///
-    /// [`AppError::Player`] when there is no device, as for [`Self::open`].
+    /// [`AppError::Player`] when there is no device, and `Io` when it cannot name its own default
+    /// config.
     pub fn open_parked(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
         let (mut output, _) = Self::unopened(voices, health)?;
         output.park();
@@ -288,8 +290,8 @@ impl AudioOutput {
     ///
     /// # Errors
     ///
-    /// [`AppError::Player`] when there is no device to open, or it refuses every config. Where the
-    /// fallback also failed, the error is the request's own.
+    /// [`AppError::Player`] when there is no device to open, and [`device::open`]'s failure when it
+    /// refuses every config. Where the fallback also failed, the error is the request's own.
     pub fn reopen(&mut self, request: OutputRequest) -> Result<Negotiated, AppError> {
         self.status.reopening.store(true, Ordering::Relaxed);
         let reopened = self.replace_stream(request);

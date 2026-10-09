@@ -241,7 +241,7 @@ const STATS_TRIGGERS: [(&str, &str); 9] = [
 ///
 /// Safe inside a transaction — `SQLite` DDL is transactional, so a rollback
 /// restores the triggers automatically.
-pub async fn disable_stats_triggers(
+pub(crate) async fn disable_stats_triggers(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
     for (name, _) in STATS_TRIGGERS {
@@ -254,7 +254,7 @@ pub async fn disable_stats_triggers(
 }
 
 /// Recreate the stats-maintenance triggers dropped by [`disable_stats_triggers`].
-pub async fn enable_stats_triggers(
+pub(crate) async fn enable_stats_triggers(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
     for (_, sql) in STATS_TRIGGERS {
@@ -267,7 +267,7 @@ pub async fn enable_stats_triggers(
 /// `album_count`) on artists, albums, and genres from scratch.
 ///
 /// Run this after a bulk ingest with triggers disabled.
-pub async fn recalculate_all_stats(
+pub(crate) async fn recalculate_all_stats(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
     // Artists: all three off the credit tables, which is where "how many" now lives.

@@ -19,7 +19,7 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
+use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
 use crate::ui::radio::{RadioUi, browse, covers, detail, facets, kept};
 use melodia_app::state::AppState;
 use melodia_app::tasks::TaskSpawner;
@@ -83,8 +83,8 @@ fn leave(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
         // over — hence the two shared globals going with the images, through the same pair every
         // detail close takes. The seats are deliberately still set here, and
         // `hero_chips::is_open` reads the nav index beside them for exactly that reason.
-        release_hero_slots!(g);
-        release_shared_hero!(ui);
+        release_hero_slots(&g);
+        release_shared_hero(ui);
         // Every seat's decoded hero, since each holds one so a tab move can repaint in its own
         // tick, and those are exactly the buffers the tier below is being cleared of.
         // `detail::rewarm_hero` is what the enter rebuilds them with.

@@ -45,6 +45,7 @@ use melodia_app::services::view_state;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
+use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow,
     BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
@@ -295,7 +296,7 @@ fn seed_from_settings(
     let browse_clone = browse_ui.clone();
     state.runtime.spawn(async move {
         if let Err(e) = fetch_and_apply(&state_clone, &browse_clone, weak, initial_path).await {
-            log::warn!("browse seed_from_settings fetch failed: {e}");
+            log::warn!("browse seed_from_settings fetch failed: {}", describe(&e));
         }
     });
 }

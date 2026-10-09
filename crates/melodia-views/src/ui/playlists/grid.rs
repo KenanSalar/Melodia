@@ -61,7 +61,7 @@ async fn fetch_grid_inner(
     weak: Weak<AppWindow>,
     kind: RefreshKind,
 ) -> AppResult<()> {
-    let mut playlists = library::playlists::get_playlists(state).await?;
+    let mut playlists = library::playlists::get_playlists(&state.db).await?;
 
     // On a `StatsOnly` refresh only the stat-dependent smart rows can have moved, so the rest
     // carry their previous counts forward from the prior grid data (one `Arc` clone up front).
@@ -99,7 +99,7 @@ async fn fetch_grid_inner(
         }
     }
 
-    library::smart_playlists::recount(state, &mut playlists, &to_count).await;
+    library::smart_playlists::recount(&state.db, &mut playlists, &to_count).await;
 
     let data = Arc::new(GridData::new(playlists));
     {

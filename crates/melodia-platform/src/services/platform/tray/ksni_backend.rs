@@ -6,6 +6,8 @@ use ksni::menu::{MenuItem, StandardItem};
 use ksni::{Icon, ToolTip};
 use tokio::sync::mpsc;
 
+use melodia_core::error::describe;
+
 use super::{TrayAction, TraySnapshot};
 
 /// ksni [`Tray`](ksni::Tray) implementation. Holds the latest render snapshot
@@ -30,7 +32,7 @@ impl MelodiaTray {
             enabled,
             activate: Box::new(move |t: &mut Self| {
                 if let Err(e) = t.action_tx.try_send(action) {
-                    log::warn!("tray: dropped {action:?} (channel full): {e}");
+                    log::warn!("tray: dropped {action:?} (channel full): {}", describe(&e));
                 }
             }),
             ..Default::default()
@@ -64,7 +66,7 @@ impl ksni::Tray for MelodiaTray {
     /// Left-click on the icon toggles the main window.
     fn activate(&mut self, _x: i32, _y: i32) {
         if let Err(e) = self.action_tx.try_send(TrayAction::ShowHideWindow) {
-            log::warn!("tray: dropped activate (channel full): {e}");
+            log::warn!("tray: dropped activate (channel full): {}", describe(&e));
         }
     }
 
@@ -167,8 +169,9 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>, on_light_panel: bool) -> Option
         }
         Err(e) => {
             log::info!(
-                "System tray unavailable ({e}) — running without a tray icon. \
-                 On GNOME this needs the AppIndicator extension."
+                "System tray unavailable ({}) — running without a tray icon. \
+                 On GNOME this needs the AppIndicator extension.",
+                describe(&e)
             );
             None
         }

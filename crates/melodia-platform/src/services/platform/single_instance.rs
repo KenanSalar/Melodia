@@ -28,6 +28,7 @@ use interprocess::local_socket::{GenericNamespaced, ListenerOptions, Name, Strea
 /// depending on `interprocess` itself.
 pub use interprocess::local_socket::Listener;
 
+use melodia_core::error::describe;
 use melodia_core::utils::audio_ext::is_audio_extension;
 
 /// Checked against the *declared* length before a buffer is sized for it, so a
@@ -167,7 +168,10 @@ pub fn serve(listener: Listener, on_launch: impl Fn(Vec<String>) + Send + Sync +
         .spawn(move || accept_loop(&listener, on_launch));
 
     if let Err(e) = spawned {
-        log::warn!("single_instance: no accept thread, forwarded launches will be dropped: {e}");
+        log::warn!(
+            "single_instance: no accept thread, forwarded launches will be dropped: {}",
+            describe(&e)
+        );
     }
 }
 
@@ -184,7 +188,7 @@ fn accept_loop(listener: &Listener, on_launch: impl Fn(Vec<String>) + Send + Syn
             }
             Err(e) => {
                 consecutive_failures += 1;
-                log::warn!("single_instance: accept failed: {e}");
+                log::warn!("single_instance: accept failed: {}", describe(&e));
                 if consecutive_failures >= MAX_CONSECUTIVE_ACCEPT_FAILURES {
                     log::error!(
                         "single_instance: no longer accepting; further launches will open a second window"
@@ -223,7 +227,7 @@ where
         let on_launch = Arc::clone(on_launch);
         std::thread::Builder::new().name("melodia-read".to_owned()).spawn(move || {
             let paths = read_payload(stream).unwrap_or_else(|e| {
-                log::warn!("single_instance: forwarded launch unreadable: {e}");
+                log::warn!("single_instance: forwarded launch unreadable: {}", describe(&e));
                 Vec::new()
             });
             // The read is what the cap counts; `on_launch` only schedules.
@@ -234,7 +238,7 @@ where
 
     // The slot went into the closure, which a failed spawn drops for us.
     if let Err(e) = reader {
-        log::warn!("single_instance: no reader thread: {e}");
+        log::warn!("single_instance: no reader thread: {}", describe(&e));
         on_launch(Vec::new());
     }
 }

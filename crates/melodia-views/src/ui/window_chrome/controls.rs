@@ -4,12 +4,15 @@
 //! Callback dispatch guarantees the UI thread, so the winit calls are safe directly
 //! without an event-loop hop. The persistence work goes to the tokio runtime.
 
+use std::sync::Arc;
+
 use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
 use melodia_app::state::AppState;
-use melodia_core::error::AppError;
+use melodia_core::config::Paths;
+use melodia_core::error::{AppError, describe};
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 use melodia_ui::AppWindow;
 
@@ -73,7 +76,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
                         crate::ui::shell::tray_bridge::hide_window(&ui);
                     }
                 }) {
-                    log::warn!("close-to-tray: schedule hide: {e}");
+                    log::warn!("close-to-tray: schedule hide: {}", describe(&e));
                 }
                 return;
             }
@@ -81,7 +84,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
             // hiding the only visible window doesn't reliably end the loop, leaving
             // the process alive with no UI. `quit_event_loop()` is explicit.
             if let Err(e) = slint::quit_event_loop() {
-                log::warn!("close-window: quit_event_loop: {e}");
+                log::warn!("close-window: quit_event_loop: {}", describe(&e));
             }
         });
     }
@@ -112,7 +115,7 @@ pub(super) fn wire(app: &AppWindow, state: &AppState) {
                 if let Err(e) =
                     melodia_app::library::window::set_always_on_top(&state_inner, new).await
                 {
-                    log::warn!("set_always_on_top: {e}");
+                    log::warn!("set_always_on_top: {}", describe(&e));
                     let _ = weak.upgrade_in_event_loop(move |ui| {
                         ui.global::<melodia_ui::WindowChrome>().set_always_on_top_active(!new);
                         // Applied through winit above, so roll the OS-level state back
@@ -164,16 +167,16 @@ fn restart_toggle(
     app: &AppWindow,
     state: &AppState,
     setting: &'static str,
-    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    persist: fn(&Paths, bool) -> Result<(), AppError>,
 ) -> impl Fn() + 'static {
     let weak = app.as_weak();
-    let state = state.clone();
+    let paths = Arc::clone(&state.paths);
     move || {
         let Some(ui) = weak.upgrade() else { return };
         let on = ui.global::<melodia_ui::Dialog>().get_target_id() == 1;
 
-        if let Err(e) = persist(&state, on) {
-            log::warn!("persist {setting} failed: {e}");
+        if let Err(e) = persist(&paths, on) {
+            log::warn!("persist {setting} failed: {}", describe(&e));
             return;
         }
 

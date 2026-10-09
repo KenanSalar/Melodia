@@ -1,13 +1,15 @@
 use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use parking_lot::Mutex;
 
+use melodia_artwork::media::image::artwork;
 use melodia_core::config::Paths;
-use melodia_core::error::AppResult;
 use melodia_core::error::describe;
+use melodia_core::error::{AppError, AppResult};
 use melodia_net::media::fetch::deezer::{self, DeezerAnswer};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
@@ -179,7 +181,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
                     }
                 };
 
-                match deezer::download_and_cache_artist_image(&client, &url, &dir).await {
+                match download_and_store(&client, &url, dir).await {
                     Ok(Some(path)) => (id, name, FetchOutcome::Cached(path)),
                     // A found URL that yielded no cacheable image could be a
                     // CDN hiccup — treat as transient so a later scan retries.
@@ -217,7 +219,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
                     refused += 1;
                     refusal.get_or_insert(reason);
                 }
-                Err(e) => log::error!("Artist image fetch task failed: {e}"),
+                Err(e) => log::error!("Artist image fetch task failed: {}", describe(&e)),
             }
         }
 
@@ -239,6 +241,22 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
     // Fetched images land in the DB but nothing signals the UI, so a grid
     // that's already painted won't pick them up until its next refresh.
     Ok(PassOutcome { fetched: fetched_count, halted })
+}
+
+/// Download one artist image into the artists store, returning where it landed.
+///
+/// Through the shared store so an artist image is bounded and deduplicated exactly as a cover is.
+/// Deezer serves these at a fixed 250 px, so the bounds don't fire today; what matters is that the
+/// two directories can't drift into two size policies.
+async fn download_and_store(
+    client: &reqwest::Client,
+    url: &str,
+    dir: PathBuf,
+) -> AppResult<Option<String>> {
+    let bytes = deezer::download_artist_image(client, url).await?;
+    tokio::task::spawn_blocking(move || artwork::store_image(&bytes, "jpg", &dir))
+        .await
+        .map_err(AppError::io_source)
 }
 
 /// Spawn a background task to fetch artist images. Fire-and-forget.

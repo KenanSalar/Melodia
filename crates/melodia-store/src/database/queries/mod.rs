@@ -18,5 +18,5 @@ pub mod track;
 // Only types are part of the public contract. Functions are reached via their
 // containing submodule (e.g. `queries::track::get_track_by_id`) so the call
 // site documents which area of the schema it touches and renames stay local.
-pub use ingest::{FolderResolution, IngestResult};
+pub use ingest::IngestResult;
 pub use scan::ResolvedIds;

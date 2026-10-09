@@ -1,11 +1,8 @@
-use std::path::Path;
-
 use melodia_testkit::http::{TestResponse, TestServer};
 
 use super::{
-    DeezerAlbumSearchResponse, DeezerAnswer, DeezerSearchResponse, classify,
-    download_and_cache_artist_image, halts_a_batch, quotable, search_album_cover_at,
-    search_artist_image_url_at,
+    DeezerAlbumSearchResponse, DeezerAnswer, DeezerSearchResponse, classify, download_artist_image,
+    halts_a_batch, quotable, search_album_cover_at, search_artist_image_url_at,
 };
 use melodia_core::error::AppError;
 
@@ -222,7 +219,7 @@ async fn an_image_url_off_a_host_deezer_does_not_own_is_refused() -> TestResult 
         "https://deezer.com.example/a.jpg",
         "https://notdzcdn.net/a.jpg",
     ] {
-        let refused = download_and_cache_artist_image(&client, elsewhere, Path::new("/")).await;
+        let refused = download_artist_image(&client, elsewhere).await;
 
         let Err(AppError::Network { msg, .. }) = refused else {
             return Err(AppError::Validation(format!("{elsewhere} was accepted")));
@@ -234,12 +231,9 @@ async fn an_image_url_off_a_host_deezer_does_not_own_is_refused() -> TestResult 
 
 #[tokio::test]
 async fn an_image_url_that_is_not_https_is_refused() -> TestResult {
-    let refused = download_and_cache_artist_image(
-        &reqwest::Client::new(),
-        "http://e-cdns-images.dzcdn.net/a.jpg",
-        Path::new("/"),
-    )
-    .await;
+    let refused =
+        download_artist_image(&reqwest::Client::new(), "http://e-cdns-images.dzcdn.net/a.jpg")
+            .await;
 
     let Err(AppError::Network { msg, .. }) = refused else {
         return Err(AppError::Validation(format!("a plaintext URL was accepted: {refused:?}")));

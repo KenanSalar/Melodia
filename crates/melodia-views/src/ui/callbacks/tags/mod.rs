@@ -18,7 +18,7 @@
 //! lives in an `Rc<RefCell<_>>` and the completion toast needs the `Rc<NotificationsUi>` — both
 //! `!Send`, so the work must stay on the UI thread. `async_compat::Compat` supplies the tokio
 //! reactor for the awaited sqlx / `spawn_blocking` calls, exactly as `ui::playlists::wire_files`
-//! does. Wired from `main.rs` after the notifications stack exists, for the same reason.
+//! does. Wired from boot's `install_ui` after the notifications stack exists, for the same reason.
 
 mod artwork;
 mod commit;
@@ -42,7 +42,7 @@ use melodia_ui::{AppWindow, TagEditor};
 use session::TagSession;
 
 /// Wire every `TagEditor` callback. Needs `Rc<NotificationsUi>` for the Save completion toast, so
-/// it is called from `main.rs` after the notifications stack exists (same constraint as
+/// it is called from boot's `install_ui` after the notifications stack exists (same constraint as
 /// `ui::playlists::wire_files`).
 pub fn wire_tags(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     let session: Rc<RefCell<TagSession>> = Rc::new(RefCell::new(TagSession::default()));

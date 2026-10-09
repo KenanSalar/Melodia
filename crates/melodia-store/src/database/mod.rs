@@ -8,7 +8,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use melodia_core::config::Paths;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 /// Bind-variable budget for one statement, divided by a query's columns-per-row to size its chunks.
 ///
@@ -73,7 +73,7 @@ pub(crate) fn case_by_id(rows: usize) -> String {
 ///
 /// Each item binds exactly one placeholder. **Not** for a tuple-IN clause — the
 /// chunk size assumes one bind per item and would bust the cap.
-pub async fn chunked_in_query<T, B>(
+pub(crate) async fn chunked_in_query<T, B>(
     pool: &SqlitePool,
     items: &[B],
     build_sql: impl Fn(&str) -> String,
@@ -141,10 +141,10 @@ impl DbPool {
     /// that did the work.
     pub async fn close(&self) {
         if let Err(e) = sqlx::query("PRAGMA optimize").execute(&self.write).await {
-            log::warn!("db close: PRAGMA optimize: {e}");
+            log::warn!("db close: PRAGMA optimize: {}", describe(&e));
         }
         if let Err(e) = sqlx::query(FTS_OPTIMIZE).execute(&self.write).await {
-            log::warn!("db close: fts5 optimize: {e}");
+            log::warn!("db close: fts5 optimize: {}", describe(&e));
         }
         self.write.close().await;
         self.read.close().await;

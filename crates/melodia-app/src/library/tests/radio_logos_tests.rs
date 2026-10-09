@@ -272,8 +272,8 @@ async fn an_outcome_is_recorded_as_the_arm_it_was_given() -> Result<(), Box<dyn 
     let db = DbPool::test_pool().await?;
     let logo = StoredLogo { path: "radio-logos/ab/abcd.png".to_owned(), bytes: 1_024 };
 
-    record_outcome(&db, "https://live.example/logo.png", Some(&logo)).await;
-    record_outcome(&db, DEAD_HOST, None).await;
+    record_logo_outcome(&db, "https://live.example/logo.png", Some(&logo)).await;
+    record_logo_outcome(&db, DEAD_HOST, None).await;
 
     let hit = answer_for(&db, "https://live.example/logo.png").await?;
     assert!(matches!(&hit, Some(answer) if answer.artwork_path.as_deref() == Some(&logo.path)));

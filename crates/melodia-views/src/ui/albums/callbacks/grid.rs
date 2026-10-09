@@ -12,6 +12,7 @@ use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AlbumDetail, Albums, AppWindow};
 
 /// Wire the `Albums` grid callbacks. See [`super::wire`].
@@ -126,11 +127,11 @@ pub(super) fn wire(
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
                 if let Err(e) = library::settings::set_last_detail_id(
-                    &s_disk,
+                    &s_disk.paths,
                     crate::ui::track_list_view::view_id::ALBUM_DETAIL,
                     Some(id),
                 ) {
-                    log::warn!("albums::open_album persist: {e}");
+                    log::warn!("albums::open_album persist: {}", describe(&e));
                 }
             });
         });

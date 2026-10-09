@@ -1,34 +1,19 @@
-use super::{KOFI_URL, SUPPORT_TOAST_KIND};
+use super::KOFI_URL;
 
-const DISPATCHER: &str = include_str!("../../../../melodia-ui/ui/globals/updater.slint");
+const ROUTER: &str = include_str!("../shell/notifications.rs");
 const SECTION: &str = include_str!("../../../../melodia-ui/ui/views/settings/about-section.slint");
 
-/// The routing key Rust pushes and the branch that answers it are one string split
-/// across two languages, so nothing but a scan can hold them together. A mismatch is
-/// silent in the worst way: `notification-stack.slint` gates the action button on a
-/// non-empty label alone, so the toast renders complete and the click falls off the end
-/// of a dispatcher that has no `else`.
-#[test]
-fn the_toast_kind_matches_its_dispatcher_branch() {
-    let branch = format!("kind == \"{SUPPORT_TOAST_KIND}\"");
-    assert!(
-        DISPATCHER.contains(&branch),
-        "no `{branch}` branch in the Notifications.action dispatcher — the support \
-         toast's action button would render and do nothing"
-    );
-}
-
-/// The branch is only worth having if it reaches the callback the About card's own
+/// The toast's action is only worth having if it reaches the callback the About card's own
 /// button reaches; otherwise the toast opens nothing.
 #[test]
-fn the_support_branch_and_the_card_open_the_same_page() {
-    let (_, after_branch) =
-        DISPATCHER.split_once(&format!("kind == \"{SUPPORT_TOAST_KIND}\"")).unwrap_or_default();
-    let body = after_branch.split_once('}').map(|(body, _)| body).unwrap_or_default();
+fn the_support_toast_and_the_card_open_the_same_page() {
+    let (_, after_arm) =
+        ROUTER.split_once("NotificationKind::SupportMelodia =>").unwrap_or_default();
+    let arm = after_arm.split_once('\n').map(|(arm, _)| arm).unwrap_or_default();
 
     assert!(
-        body.contains("Settings.open-kofi()"),
-        "the support branch must call the same callback the card's button does"
+        arm.contains("invoke_open_kofi()"),
+        "the support arm must call the same callback the card's button does"
     );
     assert!(
         SECTION.contains("Settings.open-kofi()"),

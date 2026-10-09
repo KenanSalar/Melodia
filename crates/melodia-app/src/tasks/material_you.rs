@@ -13,7 +13,7 @@
 //!    `SeedCache` so prev/next/prev round-trips don't re-quantize the
 //!    same artwork.
 //! 4. Writes `(Palette, accent_hex)` back into `os_state.material_you`
-//!    and triggers a repaint via `slint::invoke_from_event_loop`.
+//!    and hands the result to `repaint_tx` for the UI thread to paint.
 //!
 //! Both inputs are `tokio::sync::watch` receivers, so concurrent bursts
 //! of clicks (e.g. user mashing the variant chip) auto-coalesce — the
@@ -33,6 +33,7 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_artwork::media::image::material_you::{
     SchemeStyle, SeedCache, extract_source_argb_from_rgb8, generate_palette,
 };
+use melodia_core::error::describe;
 use melodia_core::themes::{Palette, SystemColorState};
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 
@@ -85,19 +86,19 @@ struct AppearanceSnapshot {
 /// failed read so the caller can retain its previous snapshot (transient
 /// failure) or bail until the next kick (no snapshot yet).
 async fn read_appearance(state: &AppState) -> Option<AppearanceSnapshot> {
-    let state = state.clone();
-    match tokio::task::spawn_blocking(move || library::settings::get_settings(&state)).await {
+    let paths = Arc::clone(&state.paths);
+    match tokio::task::spawn_blocking(move || library::settings::get_settings(&paths)).await {
         Ok(Ok(s)) => Some(AppearanceSnapshot {
             theme_id: s.theme_id,
             dynamic_color_style: s.dynamic_color_style,
             theme_variant: s.theme_variant,
         }),
         Ok(Err(e)) => {
-            log::warn!("material_you: read settings: {e}");
+            log::warn!("material_you: read settings: {}", describe(&e));
             None
         }
         Err(e) => {
-            log::warn!("material_you: settings read join: {e}");
+            log::warn!("material_you: settings read join: {}", describe(&e));
             None
         }
     }
@@ -264,7 +265,7 @@ async fn react(
     let (returned_cache, palette) = match blocking_result {
         Ok(v) => v,
         Err(e) => {
-            log::warn!("material_you: spawn_blocking join: {e}");
+            log::warn!("material_you: spawn_blocking join: {}", describe(&e));
             return;
         }
     };
@@ -306,7 +307,7 @@ fn publish_repaint(
         // Only fails when every receiver has dropped, i.e. the UI is
         // tearing down. Logged at debug because it's the normal
         // shutdown path.
-        log::debug!("material_you: repaint subscriber dropped: {e}");
+        log::debug!("material_you: repaint subscriber dropped: {}", describe(&e));
     }
 }
 

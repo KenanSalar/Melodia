@@ -18,8 +18,8 @@ export enum DragRegion { none, titlebar, miniplayer }
 // shortcuts that bypass our buttons. **Window dragging and resizing are not handled inside Slint** — a
 // `TouchArea` calling `drag_window()` leaks its mouse grab and wedges the window; Rust intercepts
 // the press at the winit layer. `restart-app` persists then respawns for the titlebar toggle;
-// `restart-tray` and `restart-backdrop` mirror it so the startup gates each reads
-// once — `main.rs`'s tray install, and `boot::ui_setup::apply_backdrop_style` — re-evaluate.
+// `restart-tray` and `restart-backdrop` mirror it, so the gate each reads once at startup
+// re-evaluates: `install_ui`'s tray install and `boot::ui_setup::chrome::apply_backdrop_style`.
 export global WindowChrome {
     in property <bool> is-maximized;
 

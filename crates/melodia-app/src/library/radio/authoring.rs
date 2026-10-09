@@ -30,8 +30,8 @@ async fn probe_station(state: &AppState, stream_url: &str) -> Result<StationFact
 /// The user's own text wins, then whatever the server calls itself, and the host last — a row
 /// titled with a full stream URL is unreadable in a card and sorts under `https`.
 ///
-/// Shared with [`super::radio_files`] so a station typed in and one imported from a nameless
-/// playlist entry end up called the same thing.
+/// Shared with [`crate::library::radio_files`] so a station typed in and one imported from a
+/// nameless playlist entry end up called the same thing.
 pub(in crate::library) fn resolve_station_name(
     typed: &str,
     from_stream: Option<&str>,
@@ -109,8 +109,8 @@ pub async fn add_custom_station(
         hls: facts.hls,
     };
 
-    let id = save_station(state, &station).await?;
-    set_favorite(state, id, true).await?;
+    let id = save_station(&state.db, &station).await?;
+    set_favorite(&state.db, id, true).await?;
     if let Some(logo_url) = facts.logo_url.as_deref() {
         adopt_logo(state, id, logo_url).await;
     }
@@ -224,7 +224,7 @@ pub async fn update_custom_station(
     stream_url: &str,
     name: &str,
 ) -> Result<(), AppError> {
-    let existing = get_station(state, id).await?;
+    let existing = get_station(&state.db, id).await?;
     ensure_editable(&existing)?;
     let moved = existing.stream_url != stream_url;
 
@@ -263,7 +263,7 @@ pub async fn update_custom_station(
 /// favicon host.
 async fn adopt_logo(state: &AppState, id: i64, logo_url: &str) {
     if let Some(path) = ask_logo_url(state, &AnswerSeed::unseeded(), logo_url).await {
-        adopted(state, id, path).await;
+        adopted(&state.db, id, path).await;
     }
 }
 

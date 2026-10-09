@@ -4,7 +4,7 @@
 //! other hero draws it from one. Composing that collage **once** is what collapses the
 //! difference: past [`compose_hero_pair`] each is an ordinary single-artwork hero and
 //! reuses the detail path whole — `apply_detail_artwork`, `write_crossfade_slot`,
-//! `release_hero_slots!`. What is left here is the composition and the guard deciding
+//! `release_hero_slots`. What is left here is the composition and the guard deciding
 //! whether to redo it.
 
 use std::path::PathBuf;
@@ -16,6 +16,7 @@ use crate::ui::detail_artwork::DetailPair;
 use crate::ui::util::COVER_SIZE;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::artwork::compose_cover;
+use melodia_core::error::describe;
 
 /// [`compose_hero_pair`] on the blocking pool.
 ///
@@ -30,7 +31,7 @@ pub(crate) async fn compose_off_thread(
     match state.runtime.spawn_blocking(move || compose_hero_pair(&paths, blur)).await {
         Ok(pair) => Some(pair),
         Err(e) => {
-            log::warn!("curated hero compose: {e}");
+            log::warn!("curated hero compose: {}", describe(&e));
             None
         }
     }

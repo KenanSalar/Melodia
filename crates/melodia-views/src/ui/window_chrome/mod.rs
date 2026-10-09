@@ -3,7 +3,7 @@
 //! winit (via Slint's `unstable-winit-030` accessor).
 //!
 //! Seven reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
-//! `AppWindow::new()` and `app.run()`, where `main.rs` calls [`install`], so the window maps
+//! `AppWindow::new()` and `app.show()`, where boot calls [`install`], so the window maps
 //! with its frame decided rather than swapping it on screen), the
 //! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
 //! [`drag_region`], [`resize_grab`], [`resize_release`]), the Slint tick a Win32 drag parks
@@ -48,7 +48,7 @@ use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
 use melodia_app::state::AppState;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 #[cfg(target_os = "linux")]
 use melodia_platform::services::platform::always_on_top;
@@ -60,7 +60,7 @@ use melodia_ui::{AppWindow, Theme};
 /// leaves two windows on screen while the old process tears down its runtime.
 static RESPAWN_AFTER_EXIT: AtomicBool = AtomicBool::new(false);
 
-/// Read by `main()` after `app.run()` returns.
+/// Read by `shutdown::respawn_if_requested` once the event loop has returned.
 pub fn should_respawn_after_exit() -> bool {
     RESPAWN_AFTER_EXIT.load(Ordering::SeqCst)
 }
@@ -102,7 +102,7 @@ pub fn respawn_target() -> Option<PathBuf> {
     match melodia_core::utils::exe::current_exe() {
         Ok(exe) => Some(exe),
         Err(e) => {
-            log::warn!("respawn: executable lookup failed: {e}");
+            log::warn!("respawn: executable lookup failed: {}", describe(&e));
             None
         }
     }
@@ -135,7 +135,7 @@ pub fn request_respawn_and_quit() {
         // Nothing reads the flag while the loop runs, but an ordinary window close later
         // in the session would, and relaunching out of that is not what was asked for.
         RESPAWN_AFTER_EXIT.store(false, Ordering::SeqCst);
-        log::warn!("restart: quit_event_loop: {e}");
+        log::warn!("restart: quit_event_loop: {}", describe(&e));
     }
 }
 
@@ -145,9 +145,9 @@ pub fn request_respawn_and_quit() {
 /// Win32 — impossible on a Windows build, but the API surface stays honest.
 ///
 /// The two consumers are one layer apart and neither may hold this hop: souvlaki's SMTC attach in
-/// `main`, and `dwm_titlebar` through `ui::appearance::theme_apply`, which the split keeps off
-/// every Slint name. It sat in both for a while, byte-identical, which is what a private copy of
-/// an accessor hop turns into.
+/// `boot::ui_setup::install`, and `dwm_titlebar` through `ui::appearance::theme_apply`, which the
+/// split keeps off every Slint name. It sat in both for a while, byte-identical, which is what a
+/// private copy of an accessor hop turns into.
 ///
 /// Fetched per call rather than cached: Slint's `with_winit_window` accessor only borrows for the
 /// closure's duration.
@@ -165,9 +165,9 @@ pub fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
 }
 
 /// Hydrate `Theme.use-native-titlebar` from the persisted setting and wire the
-/// `WindowChrome` callbacks. Must run between `AppWindow::new()` and `app.run()`.
+/// `WindowChrome` callbacks. Must run between `AppWindow::new()` and `app.show()`.
 pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
-    let settings = melodia_app::library::settings::get_settings(state)?;
+    let settings = melodia_app::library::settings::get_settings(&state.paths)?;
     let use_native = settings.window.use_native_titlebar;
 
     app.global::<Theme>().set_use_native_titlebar(use_native);
@@ -211,10 +211,10 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
                 let Some(ui) = weak.upgrade() else { return };
                 match ui.window().winit_window().await {
                     Ok(window) => window.set_window_level(WindowLevel::AlwaysOnTop),
-                    Err(e) => log::warn!("startup always_on_top re-apply: {e}"),
+                    Err(e) => log::warn!("startup always_on_top re-apply: {}", describe(&e)),
                 }
             }) {
-                log::warn!("startup always_on_top re-apply: schedule: {e}");
+                log::warn!("startup always_on_top re-apply: schedule: {}", describe(&e));
             }
         }
         #[cfg(target_os = "linux")]
@@ -233,11 +233,11 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
                     // be mapped by the compositor first.
                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                     if let Err(e) = always_on_top::apply(method, data_dir, true).await {
-                        log::warn!("startup always_on_top re-apply: {e}");
+                        log::warn!("startup always_on_top re-apply: {}", describe(&e));
                     }
                 }
                 if let Err(e) = always_on_top::watch_changes(method, data_dir, reports).await {
-                    log::warn!("always_on_top watch: {e}");
+                    log::warn!("always_on_top watch: {}", describe(&e));
                 }
             });
         }
@@ -268,14 +268,15 @@ fn follow_reported_pin(
                 }
                 chrome.set_always_on_top_active(pinned);
             }
-            if let Err(e) = melodia_app::library::window::record_always_on_top(&state, pinned).await
+            if let Err(e) =
+                melodia_app::library::window::record_always_on_top(&state.paths, pinned).await
             {
-                log::warn!("record always_on_top: {e}");
+                log::warn!("record always_on_top: {}", describe(&e));
             }
         }
     }));
     if let Err(e) = followed {
-        log::warn!("always_on_top follower: spawn_local: {e}");
+        log::warn!("always_on_top follower: spawn_local: {}", describe(&e));
     }
 }
 

@@ -31,7 +31,7 @@ use tokio::sync::{Notify, watch};
 use melodia_core::config::Paths;
 use melodia_core::entities::integrations::ScrobbleFlags;
 use melodia_core::entities::track::ScrobbleRow;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_net::services::net::build_http_client;
 use providers::lastfm;
 use providers::listenbrainz;
@@ -177,9 +177,7 @@ impl ScrobbleService {
         let path = self.creds_path.clone();
         match tokio::task::spawn_blocking(move || credentials::save(&path, &snapshot)).await {
             Ok(result) => result,
-            Err(e) => {
-                Err(AppError::io_other(format!("scrobble credential persist task panicked: {e}")))
-            }
+            Err(e) => Err(AppError::io("scrobble credential persist task panicked", e)),
         }
     }
 
@@ -226,7 +224,7 @@ impl ScrobbleService {
         let path = self.queue_path.clone();
         match tokio::task::spawn_blocking(move || snapshot.save(&path)).await {
             Ok(result) => result,
-            Err(e) => Err(AppError::io_other(format!("scrobble queue persist task panicked: {e}"))),
+            Err(e) => Err(AppError::io("scrobble queue persist task panicked", e)),
         }
     }
 
@@ -378,8 +376,7 @@ impl ScrobbleService {
         };
 
         if let Some(creds) = lastfm_creds
-            && let (Some(api_key), Some(secret)) =
-                (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
+            && let Some((api_key, secret)) = lastfm::keys()
         {
             let client = self.client();
             let track = track.clone();
@@ -388,7 +385,7 @@ impl ScrobbleService {
                     lastfm::update_now_playing(&client, api_key, secret, &creds.session_key, &track)
                         .await
                 {
-                    log::debug!("Last.fm now-playing failed: {e}");
+                    log::debug!("Last.fm now-playing failed: {}", describe(&e));
                 }
             });
         }
@@ -400,7 +397,7 @@ impl ScrobbleService {
                 if let Err(e) =
                     listenbrainz::submit_playing_now(&client, &base, &creds.token, &track).await
                 {
-                    log::debug!("ListenBrainz now-playing failed: {e}");
+                    log::debug!("ListenBrainz now-playing failed: {}", describe(&e));
                 }
             });
         }

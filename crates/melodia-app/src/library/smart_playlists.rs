@@ -8,34 +8,34 @@ use melodia_core::entities::playlist::{Playlist, PlaylistStats};
 use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::entities::track::TrackListRow;
 use melodia_core::error::{AppError, describe};
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 /// Resolve a smart playlist's current membership from its criteria (ordered and
 /// capped per the criteria's optional limit).
 pub async fn evaluate(
-    state: &AppState,
+    db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Vec<TrackListRow>, AppError> {
-    queries::smart_playlist::get_smart_playlist_tracks(&state.db, criteria).await
+    queries::smart_playlist::get_smart_playlist_tracks(db, criteria).await
 }
 
 /// `(track_count, total_duration_ms)` for a smart playlist, whose stats can't come from the
 /// `playlist_items` triggers.
-pub async fn count(state: &AppState, criteria: &SmartCriteria) -> Result<(i64, i64), AppError> {
-    queries::smart_playlist::count_smart_playlist(&state.db, criteria).await
+pub async fn count(db: &DbPool, criteria: &SmartCriteria) -> Result<(i64, i64), AppError> {
+    queries::smart_playlist::count_smart_playlist(db, criteria).await
 }
 
 /// Replaces the stats of the smart playlists at `rows` with what their rules match now, the
 /// stored ones being the junction triggers' and so always 0. A row whose count fails keeps its
 /// stats and is logged.
-pub async fn recount(state: &AppState, playlists: &mut [PlaylistStats], rows: &[usize]) {
+pub async fn recount(db: &DbPool, playlists: &mut [PlaylistStats], rows: &[usize]) {
     // WAL lets these run side by side across the read pool.
     let parsed: Vec<(usize, SmartCriteria)> = rows
         .iter()
         .map(|&i| (i, SmartCriteria::from_json_opt(playlists[i].smart_criteria.as_deref())))
         .collect();
     let counts = futures_util::future::join_all(
-        parsed.iter().map(|(i, criteria)| async move { (*i, count(state, criteria).await) }),
+        parsed.iter().map(|(i, criteria)| async move { (*i, count(db, criteria).await) }),
     )
     .await;
     for (i, result) in counts {
@@ -51,10 +51,9 @@ pub async fn recount(state: &AppState, playlists: &mut [PlaylistStats], rows: &[
     }
 }
 
-/// Serialize a rule set to the JSON stored in `playlists.smart_criteria`,
-/// mapping a serializer failure to a validation error.
+/// Serialize a rule set to the JSON stored in `playlists.smart_criteria`.
 fn criteria_to_json(criteria: &SmartCriteria) -> Result<String, AppError> {
-    criteria.to_json().map_err(|e| AppError::Validation(format!("serialize smart_criteria: {e}")))
+    criteria.to_json().map_err(|e| AppError::io("serialize smart_criteria", e))
 }
 
 /// Persist a new smart playlist and bump `library_changed` so the grid

@@ -1,12 +1,10 @@
 //! `Tracks.*` callbacks: [`lifecycle`] (the section gate's shadow and the deferred
-//! re-fetch behind it), [`tracklist`] (the list itself — sort, filter, play, queue,
-//! favorite, rating, selection) and [`columns`] (column-visibility persistence).
+//! re-fetch behind it) and [`tracklist`] (the list itself — sort, filter, play, queue,
+//! favorite, rating, selection, columns).
 //!
-//! The same three-file shape as the four sibling library tabs. What Songs has no
-//! equivalent of is a `grid`/`detail` pair — it is one surface, so the middle file is
-//! the whole view.
+//! What Songs has no equivalent of beside the four sibling library tabs is a
+//! `grid`/`detail` pair — it is one surface, so [`tracklist`] is the whole view.
 
-mod columns;
 mod lifecycle;
 mod tracklist;
 
@@ -31,5 +29,4 @@ pub(super) fn wire(
 ) {
     lifecycle::wire(ui, state, tracks_ui);
     tracklist::wire(ui, state, view_state, tracks_ui);
-    columns::wire(ui, state);
 }

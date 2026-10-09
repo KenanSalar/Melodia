@@ -16,6 +16,7 @@ use slint::ComponentHandle;
 use crate::ui::settings_bind::shadow_toggle;
 use melodia_app::library;
 use melodia_app::state::{AppState, SharedFlag};
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, Lyrics, Settings};
 
@@ -98,7 +99,7 @@ fn mirrored(
     state: &AppState,
     shadow: &SharedFlag,
     label: &'static str,
-    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    persist: fn(&Paths, bool) -> Result<(), AppError>,
     mirror: fn(&AppWindow, bool),
 ) -> impl Fn(bool) + 'static {
     let persist = shadow_toggle(state, shadow, label, persist);

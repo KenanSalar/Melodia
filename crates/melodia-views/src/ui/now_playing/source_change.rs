@@ -26,6 +26,7 @@ use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackSummary;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Player, TrackMetaRow};
 
 thread_local! {
@@ -200,11 +201,11 @@ async fn fetch_track_meta(state: &AppState, track: Option<&Arc<TrackSummary>>) -
         return TrackMetaRow::default();
     };
 
-    match library::tracks::get_track_meta(state, track.id).await {
+    match library::tracks::get_track_meta(&state.db, track.id).await {
         Ok(Some(meta)) => to_slint_track_meta(&meta),
         Ok(None) => TrackMetaRow::default(),
         Err(e) => {
-            log::warn!("ui::now_playing get_track_meta({}): {e}", track.id);
+            log::warn!("ui::now_playing get_track_meta({}): {}", track.id, describe(&e));
             TrackMetaRow::default()
         }
     }
@@ -238,7 +239,7 @@ async fn decode_artwork_for(
         }
         Ok(None) => empty,
         Err(e) => {
-            log::warn!("ui::now_playing artwork task join: {e}");
+            log::warn!("ui::now_playing artwork task join: {}", describe(&e));
             empty
         }
     }

@@ -5,8 +5,8 @@
 //! row actions every tab shares in [`stations`], and the section's own arrivals and departures in
 //! [`lifecycle`].
 //!
-//! [`files`] is the exception and wires from `main()`, its toasts needing a stack that does not
-//! exist at install time.
+//! [`files`] is the exception and wires from boot's `install_ui`, its toasts needing a stack that
+//! does not exist at install time.
 
 mod browse;
 mod detail;
@@ -25,6 +25,7 @@ use crate::ui::view_tag;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Radio};
 
 use super::{RadioTab, RadioUi, filter, tab_from_index};
@@ -43,8 +44,8 @@ fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
     let persist = Arc::clone(persist);
     state.runtime.spawn_blocking(move || {
         persist.write_if_current(tab, || {
-            if let Err(e) = library::settings::set_radio_tab(&s, tab) {
-                log::warn!("radio::set_radio_tab: {e}");
+            if let Err(e) = library::settings::set_radio_tab(&s.paths, tab) {
+                log::warn!("radio::set_radio_tab: {}", describe(&e));
             }
         });
     });

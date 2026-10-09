@@ -9,6 +9,7 @@ use super::apply::apply_filtered_grid;
 use crate::ui::recently_played::RecentlyPlayedUi;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
 /// Fetch the library's played tracks and apply them (filtered). Returns `()` —
@@ -17,9 +18,11 @@ use melodia_ui::AppWindow;
 pub async fn refresh_grid(state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     // Logged before the guard below, not at the store — a query that failed is
     // worth a line whether or not anyone is still looking at the view.
-    let most_played = library::recently_played::get_most_played(state)
+    let most_played = library::recently_played::get_most_played(&state.db)
         .await
-        .inspect_err(|e| log::warn!("recently_played::refresh_grid most_played: {e}"))
+        .inspect_err(|e| {
+            log::warn!("recently_played::refresh_grid most_played: {}", describe(e));
+        })
         .ok();
 
     // **A run that stores nothing owes the tick back.** The tab pick consumes the

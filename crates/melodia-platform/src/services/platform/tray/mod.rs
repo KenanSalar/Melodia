@@ -114,7 +114,10 @@ fn decode_icon() -> Option<(u32, u32, Vec<u8>)> {
             Some((w, h, rgba.into_raw()))
         }
         Err(e) => {
-            log::warn!("tray: failed to decode embedded icon: {e}");
+            log::warn!(
+                "tray: failed to decode embedded icon: {}",
+                melodia_core::error::describe(&e)
+            );
             None
         }
     }

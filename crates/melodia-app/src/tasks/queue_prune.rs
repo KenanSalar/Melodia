@@ -12,11 +12,9 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use sqlx::FromRow;
-
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_engine::player::engine::actions::emit_and_execute;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
@@ -24,13 +22,7 @@ use melodia_engine::player::engine::state::{
     PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
 };
 use melodia_engine::player::engine::types::PlaybackSource;
-use melodia_store::database::DbPool;
-
-/// `chunked_in_query` row shape for `SELECT id FROM tracks WHERE id IN (…)`.
-#[derive(FromRow)]
-struct IdRow {
-    id: i64,
-}
+use melodia_store::database::{DbPool, queries};
 
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let db = state.db.clone();
@@ -48,7 +40,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                         break;
                     }
                     if let Err(e) = reconcile_once(&db, &player_state, &sinks, &engine).await {
-                        log::warn!("queue_prune reconcile failed: {e}");
+                        log::warn!("queue_prune reconcile failed: {}", describe(&e));
                     }
                 }
             }
@@ -82,14 +74,8 @@ async fn reconcile_once(
         return Ok(());
     }
 
-    // Step 2: ask the DB which of those ids still exist. The chunked helper
-    // splits a very long queue so each statement stays inside the bind budget.
-    let surviving_rows: Vec<IdRow> =
-        melodia_store::database::chunked_in_query(db.read(), &queued_ids, |placeholders| {
-            format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
-        })
-        .await?;
-    let surviving: HashSet<i64> = surviving_rows.into_iter().map(|r| r.id).collect();
+    // Step 2: ask the DB which of those ids still exist.
+    let surviving = queries::track::existing_ids(db, &queued_ids).await?;
 
     // Step 3: compute the casualties. The snapshot can hold the same id
     // more than once (a track queued twice) — the set is the right shape

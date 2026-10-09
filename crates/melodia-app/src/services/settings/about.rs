@@ -5,12 +5,13 @@ use serde::{Deserialize, Serialize};
 
 /// Auto-updater state persisted between launches.
 ///
-/// `last_check_unix` and `last_manifest_etag` drive the daily-check loop's
-/// elapsed gate and `If-None-Match` short-circuit; `consecutive_failures` is
-/// what lengthens its re-arm against flaky-network thrash. `skipped_release` is
-/// set *only* by the "Skip this version" affordance — dismissing the toast
-/// deliberately doesn't, since a dismissed toast returns next launch while a
-/// skipped version stays suppressed until a strictly-newer one lands.
+/// `last_known_release` and `last_manifest_etag` describe one manifest, the last
+/// one read in full, and are only ever replaced together. `last_check_unix` drives
+/// the daily loop's elapsed gate and `consecutive_failures` lengthens its re-arm
+/// against flaky-network thrash. `skipped_release` is set *only* by the "Skip this
+/// version" affordance. Dismissing the toast deliberately doesn't, since a dismissed
+/// update returns at the next daily check while a skipped one stays quiet until a
+/// strictly newer release lands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateFlags {
@@ -23,21 +24,30 @@ pub struct UpdateFlags {
 }
 
 impl UpdateFlags {
-    /// A manifest fetch that came back. `latest_version` is `None` on a `304`, where the cached
-    /// value is still the most recent thing seen and overwriting it would lose it.
-    pub fn record_success(
-        &mut self,
-        now_unix: i64,
-        latest_version: Option<String>,
-        etag: Option<String>,
-    ) {
+    /// A manifest read in full. A response without a tag clears the old one rather than keeping
+    /// it, since a tag left beside another manifest's version would let a `304` vouch for a
+    /// manifest this file no longer describes.
+    pub fn record_fetch(&mut self, now_unix: i64, version: String, etag: Option<String>) {
+        self.record_reachable(now_unix);
+        self.last_known_release = version;
+        self.last_manifest_etag = etag.unwrap_or_default();
+    }
+
+    /// A `304`: the stored manifest is still the published one.
+    pub fn record_not_modified(&mut self, now_unix: i64) {
+        self.record_reachable(now_unix);
+    }
+
+    fn record_reachable(&mut self, now_unix: i64) {
         self.last_check_unix = now_unix;
         self.consecutive_failures = 0;
-        if let Some(version) = latest_version {
-            self.last_known_release = version;
-        }
-        if let Some(tag) = etag {
-            self.last_manifest_etag = tag;
+    }
+
+    /// Clears a skip a check judged spent, unless the user has picked another since that check
+    /// read it.
+    pub fn forget_skip(&mut self, spent: &str) {
+        if self.skipped_release == spent {
+            self.skipped_release.clear();
         }
     }
 

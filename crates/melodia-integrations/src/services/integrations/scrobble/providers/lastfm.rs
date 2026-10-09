@@ -21,8 +21,8 @@ use crate::services::integrations::scrobble::credentials::LastfmCredentials;
 use crate::services::integrations::scrobble::model::ScrobbleTrack;
 use melodia_core::error::AppError;
 
-pub const LASTFM_API_KEY: Option<&str> = non_empty_env(option_env!("LASTFM_API_KEY"));
-pub const LASTFM_SHARED_SECRET: Option<&str> = non_empty_env(option_env!("LASTFM_SHARED_SECRET"));
+const LASTFM_API_KEY: Option<&str> = non_empty_env(option_env!("LASTFM_API_KEY"));
+const LASTFM_SHARED_SECRET: Option<&str> = non_empty_env(option_env!("LASTFM_SHARED_SECRET"));
 
 /// Treat a present-but-empty compile-time env var as absent. CI wires
 /// `env: LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}` unconditionally, and a
@@ -55,7 +55,13 @@ const RESPONSE_MAX_BYTES: u64 = 256 * 1024;
 /// Gates the Last.fm setter / UI / detector so a keyless build ships
 /// ListenBrainz-only.
 pub fn is_configured() -> bool {
-    LASTFM_API_KEY.is_some() && LASTFM_SHARED_SECRET.is_some()
+    keys().is_some()
+}
+
+/// The app key and shared secret this build shipped, `None` unless it shipped both. Every signed
+/// call takes the pair, so a caller asks for it whole.
+pub fn keys() -> Option<(&'static str, &'static str)> {
+    Some((LASTFM_API_KEY?, LASTFM_SHARED_SECRET?))
 }
 
 /// A Last.fm API call's outcome, classified so the submitter can pick a policy.

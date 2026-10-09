@@ -13,6 +13,7 @@ use crate::ui::row_match::{self, Needle};
 use crate::ui::tab_bar::clamp_tab;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Nav, NavEnterFrom, SettingsPage};
 
 /// This page's `Nav.selected-index`, spelled once in Rust. The map itself is `globals/nav.slint`'s.
@@ -86,7 +87,7 @@ pub fn open_on(ui: &AppWindow, tab: SettingsTab) {
 }
 
 /// Seed the active tab from `views.json`. Call from
-/// `boot::ui_setup::hydrate_ui_from_settings`, which already has the view state loaded.
+/// `boot::ui_setup::hydrate::hydrate_ui_from_settings`, which already has the view state loaded.
 pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
     let page = ui.global::<SettingsPage>();
     let clamped = clamp_tab(persisted_tab, page.get_tab_count());
@@ -135,8 +136,8 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         let persist = Arc::clone(&persist);
         s.runtime.spawn_blocking(move || {
             persist.write_if_current(tab, || {
-                if let Err(e) = library::settings::set_settings_tab(&s_disk, tab) {
-                    log::warn!("settings_page: set_settings_tab({tab}): {e}");
+                if let Err(e) = library::settings::set_settings_tab(&s_disk.paths, tab) {
+                    log::warn!("settings_page: set_settings_tab({tab}): {}", describe(&e));
                 }
             });
         });

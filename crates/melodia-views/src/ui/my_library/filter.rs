@@ -29,10 +29,10 @@ use melodia_ui::{
 
 /// Run a body against whichever global `$surface` names.
 ///
-/// The five tabs and their four details are nine distinct Slint-generated types with no
-/// trait between them, so the *dispatch* can't be a function; everything each arm then
-/// does is identical, which is what the callback body absorbs. Two callbacks rather than
-/// one, for the module doc's contract split.
+/// The five tabs and their four details are nine distinct Slint-generated types, and a
+/// `match` whose arms bind different types stays a macro whatever traits those types
+/// share; everything each arm then does is identical, which is what the callback body
+/// absorbs. Two callbacks rather than one, for the module doc's contract split.
 macro_rules! on_mounted_surface {
     ($ui:expr, $surface:expr, |$g:ident| $grid:expr, |$d:ident| $detail:expr $(,)?) => {{
         let ui = $ui;

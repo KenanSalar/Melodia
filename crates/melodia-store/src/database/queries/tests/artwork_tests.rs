@@ -202,9 +202,7 @@ const MISSING: &str = "/data/artwork/33fb807d1f1b7cbb.jpg";
 const PRESENT: &str = "/data/artwork/4cccaf4d4b4cea11.jpg";
 
 async fn forget(db: &DbPool, missing: &str) -> Result<(), AppError> {
-    let mut tx = db.write().begin().await?;
-    queries::artwork::forget_paths(&mut tx, &[missing.to_owned()]).await?;
-    tx.commit().await?;
+    queries::artwork::forget_paths(db, &[missing.to_owned()]).await?;
     Ok(())
 }
 

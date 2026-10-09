@@ -21,6 +21,7 @@ use tokio::sync::watch;
 
 use ipc::Command;
 use melodia_core::entities::integrations::DiscordFlags;
+use melodia_core::error::describe;
 use model::Presence;
 
 /// The Discord application id — **public** (it ships in every presence payload),
@@ -203,7 +204,7 @@ impl DiscordPresenceService {
             .spawn(move || ipc::run_worker(&rx, &status))
         {
             Ok(_handle) => *worker = Some(tx),
-            Err(e) => log::warn!("discord: could not spawn worker thread: {e}"),
+            Err(e) => log::warn!("discord: could not spawn worker thread: {}", describe(&e)),
         }
     }
 

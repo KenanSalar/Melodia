@@ -8,7 +8,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
+use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::NAV_RECENTLY_PLAYED;
 use crate::ui::recently_played::{
@@ -16,6 +16,7 @@ use crate::ui::recently_played::{
 };
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
     TrackListRow as UiTrackListRow,
@@ -51,7 +52,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // models so their `SharedString`s drop on the same tick as the
                 // LRU release below.
                 let g = ui.global::<RecentlyPlayed>();
-                release_hero_slots!(g);
+                release_hero_slots(&g);
                 // Unconditional, on the same tick as the wipe — see the
                 // matching call in `favorites/lifecycle.rs`.
                 ru.forget_mosaic();
@@ -62,7 +63,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // Six heroes share one colour set and one chip row, so hand
                 // both back rather than leaving this banner's solve and this
                 // view's counts for the next hero to paint under.
-                release_shared_hero!(ui);
+                release_shared_hero(&ui);
                 // Rewind both counts to "not fetched yet" on the same tick
                 // as the models they number, for the reason the folds are reset
                 // beside their caches: a count that outlives its model is the
@@ -106,9 +107,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     // `library_changed` is bumped by scans / imports / favorite toggles;
     // `stats_changed` after every play-count flush (which writes both this
     // view's ordering keys — `last_played` for Songs, `play_count` for Most
-    // Played). So it is the second subscriber to `stats_changed` (Favorites is
-    // the first). Visible ⇒ refetch grid + tracks in place; hidden ⇒ mark dirty
-    // for the next enter.
+    // Played), so it listens to `stats_changed` as Favorites and Playlists
+    // do. Visible ⇒ refetch grid + tracks in place; hidden ⇒ mark dirty
+    // for the next enter. Its own loop for Favorites' reason: it selects over
+    // both channels, and `ui::signal::on_signal` takes one.
     {
         let s = state.clone();
         let ru = rp_ui.clone();
@@ -116,8 +118,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         let mut library_rx = state.library_changed.subscribe();
         let mut stats_rx = state.stats_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
-            library_rx.mark_unchanged();
-            stats_rx.mark_unchanged();
             loop {
                 // Both senders live in `AppState` for the process lifetime, so
                 // an `Err` only happens during teardown — exit the loop.
@@ -194,6 +194,6 @@ async fn kick_full_refresh(
         recently_played_ui_mod::refresh_tracks(state, rp_ui, weak).await
     };
     if let Err(e) = t {
-        log::warn!("recently_played::refresh_tracks: {e}");
+        log::warn!("recently_played::refresh_tracks: {}", describe(&e));
     }
 }

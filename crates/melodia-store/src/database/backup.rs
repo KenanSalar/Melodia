@@ -26,7 +26,7 @@ use std::path::{Path, PathBuf};
 use sqlx::AssertSqlSafe;
 use sqlx::sqlite::SqlitePool;
 
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 /// How many backups survive a [`maintain`] sweep.
 ///
@@ -101,19 +101,13 @@ pub(super) async fn create(
     // file for the same reason: the boot stops here, and a bare `io::Error` would leave `main`
     // reporting an errno with no path in it, on a desktop launch with no terminal to print to.
     std::fs::create_dir_all(backups_dir).map_err(|e| {
-        AppError::io_other(format!(
-            "Could not create the backup directory {}: {e}",
-            backups_dir.display()
-        ))
+        AppError::io(format!("Could not create the backup directory {}", backups_dir.display()), e)
     })?;
 
     let tmp_path = backups_dir.join(tmp_file_name(version));
     if tmp_path.exists() {
         std::fs::remove_file(&tmp_path).map_err(|e| {
-            AppError::io_other(format!(
-                "Could not clear the staged backup at {}: {e}",
-                tmp_path.display()
-            ))
+            AppError::io(format!("Could not clear the staged backup at {}", tmp_path.display()), e)
         })?;
     }
 
@@ -122,7 +116,7 @@ pub(super) async fn create(
     let escaped = tmp_path.display().to_string().replace('\'', "''");
     sqlx::raw_sql(AssertSqlSafe(format!("VACUUM INTO '{escaped}'"))).execute(pool).await?;
     std::fs::rename(&tmp_path, &final_path).map_err(|e| {
-        AppError::io_other(format!("Could not publish the backup as {}: {e}", final_path.display()))
+        AppError::io(format!("Could not publish the backup as {}", final_path.display()), e)
     })?;
 
     log::info!("Database backup created at {}", final_path.display());
@@ -178,7 +172,11 @@ fn adopt_legacy(data_dir: &Path, backups_dir: &Path) {
                 log::info!("Dropped legacy backup {name} — v{version} is already under retention");
             }
             (Err(e), _) => {
-                log::warn!("Could not retire the legacy backup {}: {e}", source.display());
+                log::warn!(
+                    "Could not retire the legacy backup {}: {}",
+                    source.display(),
+                    describe(&e)
+                );
             }
         }
     }
@@ -200,7 +198,7 @@ fn prune(backups_dir: &Path) {
         // A staged copy is never restorable, so it goes whatever the count is.
         if tmp_version_of(name).is_some() {
             if let Err(e) = std::fs::remove_file(entry.path()) {
-                log::warn!("Could not clear the staged backup {name}: {e}");
+                log::warn!("Could not clear the staged backup {name}: {}", describe(&e));
             }
             continue;
         }
@@ -217,7 +215,7 @@ fn prune(backups_dir: &Path) {
     for (_, path) in &backups[..backups.len() - MAX_BACKUPS] {
         match std::fs::remove_file(path) {
             Ok(()) => log::info!("Retired old database backup {}", path.display()),
-            Err(e) => log::warn!("Could not retire {}: {e}", path.display()),
+            Err(e) => log::warn!("Could not retire {}: {}", path.display(), describe(&e)),
         }
     }
 }

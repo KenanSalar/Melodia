@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::media::ingest::scan_pool::ScanPool;
@@ -19,7 +19,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let db = state.db.clone();
     spawner.spawn(async move {
         if let Err(e) = hash_unhashed_tracks(&db).await {
-            log::warn!("Background hashing failed: {e}");
+            log::warn!("Background hashing failed: {}", describe(&e));
         }
     });
     log::info!("Retroactive hash task started");
@@ -56,7 +56,7 @@ async fn hash_unhashed_tracks(db: &DbPool) -> AppResult<()> {
                     {
                         Ok(h) => h,
                         Err(e) => {
-                            log::warn!("Failed to hash {path_str}: {e}");
+                            log::warn!("Failed to hash {path_str}: {}", describe(&e));
                             return None;
                         }
                     };

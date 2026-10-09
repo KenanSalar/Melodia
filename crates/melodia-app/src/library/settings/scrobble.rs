@@ -5,36 +5,36 @@
 //! [`super::replaygain`].
 
 use crate::services;
-use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
 /// Persist the Last.fm scrobbling toggle. Defaults to `false` on first launch.
-pub fn set_scrobble_lastfm_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_scrobble_lastfm_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.scrobble.lastfm_enabled = enabled;
     })
 }
 
 /// Persist the `ListenBrainz` scrobbling toggle. Defaults to `false` on first launch.
-pub fn set_scrobble_listenbrainz_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_scrobble_listenbrainz_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.scrobble.listenbrainz_enabled = enabled;
     })
 }
 
 /// Persist the Last.fm love↔favorite sync toggle. Defaults to `false`.
-pub fn set_scrobble_lastfm_love_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_scrobble_lastfm_love_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.scrobble.lastfm_love_enabled = enabled;
     })
 }
 
 /// Persist the `ListenBrainz` love↔favorite sync toggle. Defaults to `false`.
 pub fn set_scrobble_listenbrainz_love_enabled(
-    state: &AppState,
+    paths: &Paths,
     enabled: bool,
 ) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.scrobble.listenbrainz_love_enabled = enabled;
     })
 }

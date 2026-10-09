@@ -1,6 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
-import { Dialog } from "../../globals/dialog.slint";
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { LibrarySettings } from "../../globals/library-settings.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
@@ -103,7 +103,7 @@ export component LibrarySection inherits Rectangle {
                     // Confirmed, so a stray click can't cascade-delete every
                     // track in the folder; the `Dialog` dispatcher routes the
                     // accept back to `remove-folder`.
-                    Dialog.kind = "remove-folder";
+                    Dialog.kind = DialogKind.remove-folder;
                     Dialog.target-id = row.id;
                     Dialog.title = @tr("Remove Folder?");
                     // Translators: `{}` is the absolute path of the folder being removed

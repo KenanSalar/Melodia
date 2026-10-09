@@ -14,7 +14,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
-use crate::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult, describe};
 
 /// Read JSON from `path`, falling back to `T::default()` on a missing file. The sync variant, for
 /// startup before the runtime exists.
@@ -61,7 +61,7 @@ fn parse_resetting_unreadable<T: DeserializeOwned + Default>(content: &str, path
             return T::default();
         }
         Err(e) => {
-            log::warn!("Failed to parse {}, using defaults: {e}", path.display());
+            log::warn!("Failed to parse {}, using defaults: {}", path.display(), describe(&e));
             return T::default();
         }
     };

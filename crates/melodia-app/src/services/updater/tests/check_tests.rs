@@ -1,6 +1,6 @@
 use melodia_core::error::AppError;
 
-use super::{CheckOutcome, classify_manifest};
+use super::{Verdict, classify_manifest};
 use crate::services::updater::manifest::{
     LatestManifest, PlatformAsset, SUPPORTED_MANIFEST_SCHEMA,
 };
@@ -27,38 +27,27 @@ fn manifest(version: &str, schema: u32, platforms: &[&str]) -> LatestManifest {
     }
 }
 
-/// A strong tag, the only kind the resume protocol keeps.
-const ETAG: &str = r#""abc123""#;
-
 /// The mechanism by which an older client refuses a manifest it cannot read. Getting it backwards
 /// means either refusing every valid manifest or acting on one whose shape it is guessing at.
 #[test]
-fn a_schema_past_the_supported_one_is_refused_and_the_etag_kept() -> Result<(), AppError> {
-    let outcome = classify_manifest(
-        manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA + 1, &[TARGET]),
-        Some(ETAG.to_owned()),
+fn a_schema_past_the_supported_one_is_refused() -> Result<(), AppError> {
+    let verdict = classify_manifest(
+        &manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA + 1, &[TARGET]),
         "0.2.0",
         Some(TARGET),
     )?;
-
-    let CheckOutcome::UnsupportedSchema { schema, etag: cached } = outcome else {
-        return Err(AppError::Validation(format!("expected UnsupportedSchema, got {outcome:?}")));
-    };
-    assert_eq!(schema, SUPPORTED_MANIFEST_SCHEMA + 1);
-    // Cached on the refusing path so the JSON parse isn't re-paid every six hours.
-    assert_eq!(cached.as_deref(), Some(ETAG));
+    assert!(matches!(verdict, Verdict::UnsupportedSchema), "got {verdict:?}");
     Ok(())
 }
 
 #[test]
 fn the_supported_schema_itself_proceeds() -> Result<(), AppError> {
-    let outcome = classify_manifest(
-        manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA, &[TARGET]),
-        Some(ETAG.to_owned()),
+    let verdict = classify_manifest(
+        &manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA, &[TARGET]),
         "0.2.0",
         Some(TARGET),
     )?;
-    assert!(matches!(outcome, CheckOutcome::Available { .. }), "got {outcome:?}");
+    assert!(matches!(verdict, Verdict::Available(_)), "got {verdict:?}");
     Ok(())
 }
 
@@ -67,45 +56,35 @@ fn the_supported_schema_itself_proceeds() -> Result<(), AppError> {
 /// caller but only one of them tells the user to upgrade out of band.
 #[test]
 fn the_schema_gate_runs_before_the_semver_gate() -> Result<(), AppError> {
-    let outcome = classify_manifest(
-        manifest("0.1.0", SUPPORTED_MANIFEST_SCHEMA + 1, &[TARGET]),
-        Some(ETAG.to_owned()),
+    let verdict = classify_manifest(
+        &manifest("0.1.0", SUPPORTED_MANIFEST_SCHEMA + 1, &[TARGET]),
         "0.2.0",
         Some(TARGET),
     )?;
-    assert!(matches!(outcome, CheckOutcome::UnsupportedSchema { .. }), "got {outcome:?}");
+    assert!(matches!(verdict, Verdict::UnsupportedSchema), "got {verdict:?}");
     Ok(())
 }
 
 #[test]
 fn a_version_that_is_not_an_upgrade_is_up_to_date() -> Result<(), AppError> {
     for candidate in ["0.2.0", "0.1.9"] {
-        let outcome = classify_manifest(
-            manifest(candidate, SUPPORTED_MANIFEST_SCHEMA, &[TARGET]),
-            Some(ETAG.to_owned()),
+        let verdict = classify_manifest(
+            &manifest(candidate, SUPPORTED_MANIFEST_SCHEMA, &[TARGET]),
             "0.2.0",
             Some(TARGET),
         )?;
-        assert!(matches!(outcome, CheckOutcome::UpToDate), "{candidate}: got {outcome:?}");
+        assert!(matches!(verdict, Verdict::UpToDate), "{candidate}: got {verdict:?}");
     }
     Ok(())
 }
 
 /// An unpackaged host: Melodia runs, but no release asset can be named for it. Nothing to install
-/// rather than a failure, and the etag is still worth keeping.
+/// rather than a failure.
 #[test]
 fn a_host_with_no_target_key_has_no_asset_to_offer() -> Result<(), AppError> {
-    let outcome = classify_manifest(
-        manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA, &[TARGET]),
-        Some(ETAG.to_owned()),
-        "0.2.0",
-        None,
-    )?;
-
-    let CheckOutcome::NoAssetForTarget { etag: cached } = outcome else {
-        return Err(AppError::Validation(format!("expected NoAssetForTarget, got {outcome:?}")));
-    };
-    assert_eq!(cached.as_deref(), Some(ETAG));
+    let verdict =
+        classify_manifest(&manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA, &[TARGET]), "0.2.0", None)?;
+    assert!(matches!(verdict, Verdict::NoAssetForTarget), "got {verdict:?}");
     Ok(())
 }
 
@@ -114,15 +93,14 @@ fn a_host_with_no_target_key_has_no_asset_to_offer() -> Result<(), AppError> {
 /// silent no-op, so it reaches the user as a failed update instead of an indefinite "up to date".
 #[test]
 fn a_known_key_missing_from_the_manifest_is_an_error() -> Result<(), AppError> {
-    let outcome = classify_manifest(
-        manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA, &["linux-x86_64-deb"]),
-        Some(ETAG.to_owned()),
+    let verdict = classify_manifest(
+        &manifest("0.3.0", SUPPORTED_MANIFEST_SCHEMA, &["linux-x86_64-deb"]),
         "0.2.0",
         Some(TARGET),
     );
 
-    let Err(AppError::Validation(msg)) = outcome else {
-        return Err(AppError::Validation(format!("expected a Validation error, got {outcome:?}")));
+    let Err(AppError::Validation(msg)) = verdict else {
+        return Err(AppError::Validation(format!("expected a Validation error, got {verdict:?}")));
     };
     assert!(msg.contains(TARGET), "the message must name the key that was missing: {msg}");
     Ok(())
@@ -136,14 +114,12 @@ fn an_upgrade_resolves_the_asset_for_the_running_target() -> Result<(), AppError
         PlatformAsset { url: "https://example.test/other".into(), ..asset() },
     );
 
-    let outcome = classify_manifest(with_two, Some(ETAG.to_owned()), "0.2.0", Some(TARGET))?;
+    let verdict = classify_manifest(&with_two, "0.2.0", Some(TARGET))?;
 
-    let CheckOutcome::Available { manifest, asset: picked, etag: cached } = outcome else {
-        return Err(AppError::Validation(format!("expected Available, got {outcome:?}")));
+    let Verdict::Available(picked) = verdict else {
+        return Err(AppError::Validation(format!("expected Available, got {verdict:?}")));
     };
-    assert_eq!(manifest.version, "0.3.0");
     assert_eq!(picked.url, asset().url, "the asset must be the running target's, not the first");
-    assert_eq!(cached.as_deref(), Some(ETAG));
     Ok(())
 }
 
@@ -151,11 +127,10 @@ fn an_upgrade_resolves_the_asset_for_the_running_target() -> Result<(), AppError
 /// hard error. Falling back to "up to date" would strand a client on a typo in the release job.
 #[test]
 fn an_unparseable_manifest_version_is_an_error() {
-    let outcome = classify_manifest(
-        manifest("v0.3.0", SUPPORTED_MANIFEST_SCHEMA, &[TARGET]),
-        Some(ETAG.to_owned()),
+    let verdict = classify_manifest(
+        &manifest("v0.3.0", SUPPORTED_MANIFEST_SCHEMA, &[TARGET]),
         "0.2.0",
         Some(TARGET),
     );
-    assert!(matches!(outcome, Err(AppError::Validation(_))), "got {outcome:?}");
+    assert!(matches!(verdict, Err(AppError::Validation(_))), "got {verdict:?}");
 }

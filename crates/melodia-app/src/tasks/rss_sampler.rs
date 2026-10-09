@@ -9,14 +9,11 @@
 //!
 //! Off by default to avoid log noise; no-op on non-Linux (no `/proc`).
 //! Cheap when enabled — one ~4 KiB pseudo-file read + a handful of Slint
-//! property reads per tick. Runs on the UI thread via `slint::spawn_local`,
-//! which is what lets the tag be read off the `Nav` / `AlbumDetail` /
-//! `ArtistDetail` / `GenreDetail` globals without an atomic-shadow plumbing
-//! pass through `ui/*`.
+//! property reads per tick.
 //!
-//! **The tag arrives as a closure**, so this module names no `ui::` type and
-//! `tasks/` keeps its no-`ui::*` rule whole; `main.rs` supplies
-//! `ui::view_tag::format_view` over the weak handle.
+//! **The loop is handed back, not spawned**: its tag reads Slint globals, so
+//! it belongs on the UI thread, and this crate names no Slint. The caller runs
+//! it there under a tokio context.
 //!
 //! Sample output (INFO level):
 //!
@@ -35,31 +32,30 @@
 use std::time::Duration;
 
 #[cfg(target_os = "linux")]
-use async_compat::Compat;
-
-#[cfg(target_os = "linux")]
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
 
-/// Env-var gate so the sampler only runs in diagnostic sessions. Anything
-/// non-empty enables (`MELODIA_RSS_SAMPLE=1`, `=on`, …); unset or empty
-/// keeps the task entirely unspawned. Called once at startup with a closure
-/// that reads the current view tag on the UI thread and answers `None` once
-/// the window is gone, which is what ends the loop.
-pub fn install(view_tag: impl Fn() -> Option<String> + 'static) {
+/// The sampler loop, or `None` outside a diagnostic session. Anything
+/// non-empty in `MELODIA_RSS_SAMPLE` enables it (`=1`, `=on`, …). `view_tag`
+/// reads the current view on the UI thread and answers `None` once the window
+/// is gone, which is what ends the loop.
+pub fn sampler(
+    view_tag: impl Fn() -> Option<String> + 'static,
+) -> Option<impl Future<Output = ()>> {
     if std::env::var_os("MELODIA_RSS_SAMPLE").is_none_or(|v| v.is_empty()) {
-        return;
+        return None;
     }
 
     #[cfg(target_os = "linux")]
     {
         log::info!("[MEM] sampler enabled (interval {} ms)", SAMPLE_INTERVAL.as_millis());
-        let _ = slint::spawn_local(Compat::new(run(view_tag)));
+        Some(run(view_tag))
     }
 
     #[cfg(not(target_os = "linux"))]
     {
         let _ = view_tag;
         log::info!("[MEM] sampler env set but no /proc on this platform — skipped");
+        None::<std::future::Ready<()>>
     }
 }
 

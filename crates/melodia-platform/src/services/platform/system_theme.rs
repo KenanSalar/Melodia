@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use tokio::sync::watch;
 use zbus::MatchRule;
 
+use melodia_core::error::describe;
 use melodia_core::themes::is_light_hex;
 use melodia_core::themes::kde::KdeColorPalette;
 
@@ -97,7 +98,7 @@ fn query_portal_color_scheme_blocking() -> Option<u32> {
 pub fn spawn_color_watcher(state_tx: watch::Sender<melodia_core::themes::SystemColorState>) {
     tokio::task::spawn_blocking(move || {
         if let Err(e) = watch_color_changes(&state_tx) {
-            log::warn!("System theme watcher stopped: {e}");
+            log::warn!("System theme watcher stopped: {}", describe(&*e));
         }
     });
 }

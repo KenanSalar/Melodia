@@ -30,12 +30,12 @@ use rayon::prelude::*;
 use crate::library::settings::folders::{NestedFolder, folders_inside};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
-use finish::Ingested;
 use melodia_core::entities::folder::Folder;
 use melodia_core::entities::scan::{ExistingTrackSummary, ScannedFile};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
-use melodia_store::database::queries;
+use melodia_store::database::queries::ingest::Ingested;
+use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{
     MediaWalk, ScanObserver, collect_media_files, scan_files_parallel, track_is_current,
@@ -174,7 +174,7 @@ async fn scan_one(
     if !Path::new(&folder.path).exists() {
         return Err(AppError::scanner_msg(format!("Folder does not exist: {}", folder.path)));
     }
-    let scope = Arc::new(ScanScope::of(state, &folder).await?);
+    let scope = Arc::new(ScanScope::of(&state.db, &folder).await?);
 
     // Read-side pre-load through the read pool (before the writer tx opens):
     // size + mtime for every track already in this folder. Doesn't contend
@@ -215,13 +215,11 @@ async fn scan_one(
     // --- Stage 1: parse and ingest a chunk at a time, each chunk in a write
     // transaction of its own. The single writer connection frees between
     // chunks, so interactive writes (favorite toggles, play-count flushes,
-    // position saves) don't queue behind a multi-minute first scan. Each
-    // chunk is self-consistent: stats triggers are dropped and recreated
-    // INSIDE its transaction, so a crash never leaves them missing — the
-    // stats merely lag until the final recalc below, which is invisible to
-    // the UI because `library_changed` is bumped only after the final
-    // commit. A crash between chunks leaves committed tracks behind; the
-    // next scan's size+mtime gate makes the re-run a cheap no-op over them.
+    // position saves) don't queue behind a multi-minute first scan. Lagging
+    // stats are invisible to the UI because `library_changed` is bumped only
+    // after the final commit. A crash between chunks leaves committed tracks
+    // behind; the next scan's size+mtime gate makes the re-run a cheap no-op
+    // over them.
     //
     // A cancel mid-read leaves the rest of that chunk unread, and what was
     // read is still written: a stop costs at most this one transaction.
@@ -238,37 +236,29 @@ async fn scan_one(
             continue;
         }
 
-        let mut tx = state.db.write().begin().await?;
-        if ingested.is_bulk() {
-            queries::stats::disable_stats_triggers(&mut tx).await?;
-        }
-        let result = queries::ingest::ingest_scanned_files(
-            &mut tx,
+        let result = queries::ingest::commit_scan_chunk(
+            &state.db,
             &scanned_files,
-            &queries::FolderResolution::Fixed(folder.id),
+            folder.id,
             &scan_timestamp,
-            true,
             &pool,
+            &ingested,
         )
         .await?;
-        if ingested.is_bulk() {
-            queries::stats::enable_stats_triggers(&mut tx).await?;
-        }
-        tx.commit().await?;
         ingested.add(&result);
     }
     drop(pool);
 
-    // --- Stage 2. `finish::commit_final` argues what a stopped scan still owes.
+    // --- Stage 2. `queries::scan::commit_scan` argues what a stopped scan still owes.
     if !run.try_begin_finishing() {
         if ingested.any() {
-            finish::commit_final(state, &folder, None, &ingested).await?;
+            queries::scan::commit_scan(&state.db, &folder, None, &ingested).await?;
             state.library_changed.bump();
         }
         return Ok(ScanOutcome::Stopped { rewrote_existing: ingested.rewrote_existing() });
     }
-    finish::commit_final(state, &folder, Some(walk), &ingested).await?;
-    finish::absorb_nested(state, &folder, &scope.nested).await?;
+    queries::scan::commit_scan(&state.db, &folder, Some(walk), &ingested).await?;
+    finish::absorb_nested(&state.db, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
     state.library_changed.bump();
 
@@ -283,8 +273,8 @@ struct ScanScope {
 
 impl ScanScope {
     /// On the blocking pool, since telling which folders are nested costs a stat apiece.
-    async fn of(state: &AppState, folder: &Folder) -> Result<Self, AppError> {
-        let folders = queries::folder::get_all_folders(&state.db).await?;
+    async fn of(db: &DbPool, folder: &Folder) -> Result<Self, AppError> {
+        let folders = queries::folder::get_all_folders(db).await?;
         let root = PathBuf::from(&folder.path);
         tokio::task::spawn_blocking(move || {
             let nested = folders_inside(&root, &folders);

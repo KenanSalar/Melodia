@@ -15,18 +15,12 @@ use slint::ComponentHandle;
 use crate::ui::launcher;
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
 use melodia_app::state::AppState;
-use melodia_core::error::AppError;
-use melodia_ui::{AppWindow, Settings};
+use melodia_core::error::{AppError, describe};
+use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Settings};
 
 /// A literal rather than a manifest field — Cargo has no `funding` key to read it out
 /// of, unlike `about.rs`'s `CARGO_PKG_REPOSITORY`.
 const KOFI_URL: &str = "https://ko-fi.com/kenansalar";
-
-/// Routes the toast's action button, and must match the `kind ==` arm in the
-/// `Notifications.action` dispatcher — a mismatch still paints the button,
-/// `notification-stack.slint` gating only on a non-empty action label, and clicking it
-/// falls off the end of a dispatcher with no `else`.
-const SUPPORT_TOAST_KIND: &str = "support-melodia";
 
 /// How long into the qualifying launch the toast waits. Long enough that it lands on
 /// someone using the app rather than on someone who just opened it.
@@ -73,17 +67,17 @@ fn schedule_prompt(
         let counting = state.clone();
         let due = state
             .runtime
-            .spawn_blocking(move || melodia_app::library::settings::record_launch(&counting))
+            .spawn_blocking(move || melodia_app::library::settings::record_launch(&counting.paths))
             .await;
         match due {
             Ok(Ok(true)) => {}
             Ok(Ok(false)) => return,
             Ok(Err(e)) => {
-                log::warn!("support prompt: counting this launch failed: {e}");
+                log::warn!("support prompt: counting this launch failed: {}", describe(&e));
                 return;
             }
             Err(e) => {
-                log::warn!("support prompt: launch-count task join failed: {e}");
+                log::warn!("support prompt: launch-count task join failed: {}", describe(&e));
                 return;
             }
         }
@@ -98,17 +92,22 @@ fn schedule_prompt(
 
         // Sticky, for the crash notice's reason: this fires once ever, so a notice the
         // user was looking away for is a notice that did nothing.
-        notifications.show_localized(&ui, "info", SUPPORT_TOAST_KIND, |ui| {
-            let g = ui.global::<Settings>();
-            RowText {
-                title: g.invoke_support_prompt_title(),
-                message: g.invoke_support_prompt_message(),
-                action_label: g.invoke_support_prompt_action_label(),
-            }
-        });
+        notifications.show_localized(
+            &ui,
+            NotificationVariant::Info,
+            NotificationKind::SupportMelodia,
+            |ui| {
+                let g = ui.global::<Settings>();
+                RowText {
+                    title: g.invoke_support_prompt_title(),
+                    message: g.invoke_support_prompt_message(),
+                    action_label: g.invoke_support_prompt_action_label(),
+                }
+            },
+        );
     }))
     .map(|_| ())
-    .map_err(|e| AppError::Window(format!("support prompt: {e}")))
+    .map_err(|e| AppError::io("support prompt", e))
 }
 
 #[cfg(test)]

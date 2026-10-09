@@ -20,6 +20,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::state::Signal;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::describe;
 use melodia_core::utils::now_rfc3339;
 use melodia_core::utils::play_counts::{self, PlayCountEvent};
 use melodia_store::database::{DbPool, queries};
@@ -103,13 +104,13 @@ async fn flush(
         let increments: Vec<(i64, u32)> = plays.drain().collect();
         match queries::track::add_play_counts(db, &increments, &now_rfc3339()).await {
             Ok(()) => play_flush_ok = true,
-            Err(e) => log::warn!("Failed to flush play counts: {e}"),
+            Err(e) => log::warn!("Failed to flush play counts: {}", describe(&e)),
         }
     }
     if !skips.is_empty() {
         let increments: Vec<(i64, u32)> = skips.drain().collect();
         if let Err(e) = queries::track::add_skip_counts(db, &increments).await {
-            log::warn!("Failed to flush skip counts: {e}");
+            log::warn!("Failed to flush skip counts: {}", describe(&e));
         }
     }
     // Bump only on a successful play-count flush — the Favorites hero

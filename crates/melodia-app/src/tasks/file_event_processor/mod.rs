@@ -19,6 +19,7 @@ use tokio::time::{Duration, Instant};
 
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::describe;
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_store::media::ingest::watcher::FileEvent;
 
@@ -32,7 +33,7 @@ use reconcile::process_batch;
 /// `classify_event` calls that a `Created`; backends reporting the rename as a plain modification
 /// land on the other arm. A real `Renamed` is never ours, both its sides being audio. Suppressing
 /// the `Created` is not cosmetic: `reconcile` extracts metadata for created paths too, so the echo
-/// costs a re-hash, a lofty parse and an artwork extract before `handle_created` drops all three.
+/// costs a re-hash, a lofty parse and an artwork extract before `apply_watch_batch` drops all three.
 ///
 /// `take_recent` consumes the entry, so a path is suppressed at most once per
 /// write. See [`SelfWrites`] for the accepted trades.
@@ -123,7 +124,9 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState, mut rx: mpsc::Receiver<Fil
                     // commit so we don't leave orphan rows behind.
                     match process_batch(&state.db, &state.paths, &state.cover_cache, batch).await {
                         Ok(()) => state.library_changed.bump(),
-                        Err(e) => log::error!("File event batch processing failed: {e}"),
+                        Err(e) => {
+                            log::error!("File event batch processing failed: {}", describe(&e));
+                        }
                     }
                 }
             }

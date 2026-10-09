@@ -101,7 +101,7 @@ pub async fn get_albums_by_artist(
 /// overwrites an existing cover — the tag-edit orchestrator needs to replace
 /// an album's art when the user edits embedded artwork. Tx-scoped so it lands
 /// in the same transaction as the per-track metadata refresh.
-pub async fn set_album_artwork(
+pub(crate) async fn set_album_artwork(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     album_ids: &[i64],
     artwork_path: Option<&str>,
@@ -132,7 +132,7 @@ pub async fn set_album_artwork(
 ///
 /// One statement with a flag per column rather than assembled SET clauses: the column names stay
 /// literals, and a `false` flag leaves the column reading itself.
-pub async fn clear_release_tags(
+pub(crate) async fn clear_release_tags(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     album_ids: &[i64],
     cleared: tags::ClearedReleaseTags,

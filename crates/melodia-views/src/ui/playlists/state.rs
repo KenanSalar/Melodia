@@ -1,15 +1,13 @@
 //! Internal data structures + constants used by the Playlists grid and
 //! Playlist Detail submodules.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::ui::row_match::Needle;
+use crate::ui::track_detail::DetailCache;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::smart_criteria::SmartCriteria;
-use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// A playlist's pre-lowercased name, computed once per `fetch_grid` so the
 /// name sort allocates nothing. Positionally aligned with
@@ -92,18 +90,9 @@ pub(super) struct PlaylistGridState {
     pub index_cache: Mutex<Option<GridIndexCache>>,
 }
 
-/// Detail-side state — the currently-open playlist's cached track list.
+/// Detail-side state: the shared track cache plus the curated order only this detail has.
 pub(super) struct PlaylistDetailState {
-    /// Tracks in current display order (after the user's sort) — the
-    /// **displayed** (filter-applied) subset, kept in lockstep with the
-    /// Slint `tracks` model so the generic selection/sort logic stays
-    /// valid. Mirrors `AlbumDetailState::tracks`.
-    pub tracks: Mutex<Vec<RsTrackListRow>>,
-    /// Canonical full track set for this playlist, in display-sort order.
-    /// `tracks` holds only the displayed subset; `apply_filtered_detail`
-    /// re-derives `tracks` by walking this through the current filter.
-    /// Equal to `tracks` whenever no filter is active.
-    pub all_tracks: Mutex<Vec<RsTrackListRow>>,
+    pub cache: DetailCache,
     /// Track ids in CANONICAL position (insertion / drag-reorder) order.
     /// Drag-reorder mutates this **optimistically** before the DB write
     /// lands, so the `"position"` sort can rebuild `tracks` from this
@@ -111,19 +100,6 @@ pub(super) struct PlaylistDetailState {
     /// `playlist_items.position` column on disk modulo the in-flight
     /// optimistic write.
     pub position_order: Mutex<Vec<i64>>,
-    /// Playlist id currently shown in the detail view (`-1` = none).
-    pub playlist_id: Mutex<i64>,
-    /// Selection set currently *stamped* onto the Slint row model — same
-    /// diff-and-write-back contract as `AlbumDetailState::applied_selection`.
-    pub applied_selection: Mutex<HashSet<i32>>,
-    /// Live filter needle, folded by `set_filter` through
-    /// `ui::row_match::fold_needle` — never a bare `to_lowercase`, which
-    /// would still build and silently drop accent parity on this one view.
-    /// Mirrors `PlaylistDetail.filter`.
-    /// Lets the re-fetch path (`refresh_detail`) re-apply the filter to
-    /// fresh data without round-tripping the UI thread for the property
-    /// read. Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.
-    pub filter: Mutex<Needle>,
 }
 
 /// How many leading playlists' covers `fetch_grid` prewarms before the

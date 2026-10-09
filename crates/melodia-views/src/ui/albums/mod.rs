@@ -7,17 +7,14 @@
 //! is what makes the `ListView` virtualize, and each on-screen card pulls its
 //! cover through `request-cover` rather than carrying a decoded image.
 //!
-//! The detail's cached `Vec<TrackListRow>` lets `play-row`, `select-row` and
-//! `shuffle-album` recover ids and re-sort in memory without round-tripping the
-//! Slint model — `BrowseUi::last_files`' shape.
+//! The detail's rows sit in a [`DetailCache`], so play-row, selection and a
+//! re-sort recover ids without reading the Slint model back.
 
 mod callbacks;
 mod detail;
 mod grid;
-mod selection;
 mod state;
 
-use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -26,8 +23,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
-use crate::ui::row_match::Needle;
-use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
+use crate::ui::section_state::{SectionState, impl_section_state_helpers};
+use crate::ui::track_detail::DetailCache;
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -37,7 +34,7 @@ use melodia_ui::{
     TrackListRow as UiTrackListRow,
 };
 
-use state::{AlbumDetailState, AlbumGridState, GridData};
+use state::{AlbumGridState, GridData};
 
 #[cfg(test)]
 use grid::compute_indices;
@@ -52,14 +49,9 @@ pub use detail::{open_album_with, seed_detail_from_settings};
 pub use grid::fetch_grid;
 
 // `pub(super)` is `pub(in crate::ui)` here, which is exactly the reach these
-// need: this slice's own `callbacks/`, plus the cross-slice `apply_detail_row_*`
-// mirrors and the drill in `callbacks::cross_tab_nav`.
-pub(super) use detail::{
-    apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
-    open_album, refresh_detail, resort_detail, set_filter,
-};
+// need: this slice's own `callbacks/` and the drill in `callbacks::cross_tab_nav`.
+pub(super) use detail::{open_album, refresh_detail};
 pub(super) use grid::rebuild_grid;
-pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// Install the Albums grid + detail models, build the handle, and wire every
 /// `Albums.*` / `AlbumDetail.*` callback to it.
@@ -83,7 +75,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
 /// so each lives in its own sub-struct.
 pub struct AlbumsUi {
     grid: AlbumGridState,
-    detail: AlbumDetailState,
+    detail: DetailCache,
     /// The shared row tier, for the detail `TrackList`'s artwork column. The grid's cards draw
     /// from `ui::grid_prewarm::tier()`, which no view holds.
     cover_thumbs: Arc<CoverThumbs>,
@@ -101,13 +93,7 @@ impl AlbumsUi {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
                 index_cache: Mutex::new(None),
             },
-            detail: AlbumDetailState {
-                tracks: Mutex::new(Vec::new()),
-                all_tracks: Mutex::new(Vec::new()),
-                album_id: Mutex::new(-1),
-                applied_selection: Mutex::new(HashSet::new()),
-                filter: Mutex::new(Needle::default()),
-            },
+            detail: DetailCache::default(),
             cover_thumbs,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
@@ -142,9 +128,7 @@ impl AlbumsUi {
             }
             *self.grid.data.lock() = Arc::new(GridData::new(Vec::new()));
             *self.grid.index_cache.lock() = None;
-            self.detail.tracks.lock().clear();
-            self.detail.all_tracks.lock().clear();
-            self.detail.applied_selection.lock().clear();
+            self.detail.release_rows();
         }
         melodia_platform::services::platform::allocator::trim();
     }
@@ -174,12 +158,11 @@ impl AlbumsUi {
 
     /// Album id currently open in the detail view (`-1` = grid).
     pub fn detail_album_id(&self) -> i64 {
-        *self.detail.album_id.lock()
+        self.detail.id()
     }
 }
 
 impl_section_state_helpers!(AlbumsUi);
-impl_detail_row_cache!(AlbumsUi);
 
 /// Hand the two globals their empty `VecModel`s. Later updates find them by
 /// downcasting back.

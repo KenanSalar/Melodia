@@ -5,7 +5,6 @@ use std::rc::Rc;
 use slint::{Model, SharedString, VecModel};
 
 use super::*;
-use melodia_ui::NotificationRow;
 
 /// Build a `NotificationsUi` outside of an `AppWindow`. The Slint global
 /// wiring in `install()` is purely about pushing the same `VecModel` into
@@ -19,22 +18,22 @@ fn make_ui() -> NotificationsUi {
     }
 }
 
-fn make_params(kind: &str) -> NotificationParams {
+fn make_params(kind: NotificationKind) -> NotificationParams {
     NotificationParams {
-        variant: SharedString::from("warning"),
+        variant: NotificationVariant::Warning,
         title: SharedString::from("Title"),
         message: SharedString::from("Message"),
         action_label: SharedString::default(),
-        action_kind: SharedString::from(kind),
+        kind,
     }
 }
 
 #[test]
 fn show_appends_a_row_and_returns_monotonic_id() {
     let ui = make_ui();
-    let id0 = ui.show(make_params("a"));
-    let id1 = ui.show(make_params("b"));
-    let id2 = ui.show(make_params("c"));
+    let id0 = ui.show(make_params(NotificationKind::None));
+    let id1 = ui.show(make_params(NotificationKind::None));
+    let id2 = ui.show(make_params(NotificationKind::None));
     assert_eq!(id0, 0);
     assert_eq!(id1, 1);
     assert_eq!(id2, 2);
@@ -44,9 +43,9 @@ fn show_appends_a_row_and_returns_monotonic_id() {
 #[test]
 fn dismiss_removes_only_the_matching_row() {
     let ui = make_ui();
-    let id0 = ui.show(make_params("a"));
-    let id1 = ui.show(make_params("b"));
-    let id2 = ui.show(make_params("c"));
+    let id0 = ui.show(make_params(NotificationKind::None));
+    let id1 = ui.show(make_params(NotificationKind::None));
+    let id2 = ui.show(make_params(NotificationKind::None));
 
     ui.dismiss(id1);
 
@@ -58,7 +57,7 @@ fn dismiss_removes_only_the_matching_row() {
 #[test]
 fn dismiss_unknown_id_is_noop() {
     let ui = make_ui();
-    ui.show(make_params("a"));
+    ui.show(make_params(NotificationKind::None));
     ui.dismiss(999);
     assert_eq!(ui.rows.row_count(), 1);
 }
@@ -66,25 +65,23 @@ fn dismiss_unknown_id_is_noop() {
 #[test]
 fn dismiss_by_kind_removes_every_matching_row() {
     let ui = make_ui();
-    ui.show(make_params("watcher-disabled"));
-    ui.show(make_params("update-available"));
-    ui.show(make_params("watcher-disabled"));
-    ui.show(make_params("install-failed"));
+    ui.show(make_params(NotificationKind::WatcherDisabled));
+    ui.show(make_params(NotificationKind::InstallUpdate));
+    ui.show(make_params(NotificationKind::WatcherDisabled));
+    ui.show(make_params(NotificationKind::UpdateFailed));
 
-    ui.dismiss_by_kind("watcher-disabled");
+    ui.dismiss_by_kind(NotificationKind::WatcherDisabled);
 
-    assert_eq!(ui.rows.row_count(), 2);
-    let kinds: Vec<String> =
-        ui.rows.iter().map(|r: NotificationRow| r.action_kind.to_string()).collect();
-    assert_eq!(kinds, vec!["update-available", "install-failed"]);
+    let kinds: Vec<NotificationKind> = ui.rows.iter().map(|r: NotificationRow| r.kind).collect();
+    assert_eq!(kinds, [NotificationKind::InstallUpdate, NotificationKind::UpdateFailed]);
 }
 
 #[test]
 fn dismiss_by_kind_no_match_is_noop() {
     let ui = make_ui();
-    ui.show(make_params("a"));
-    ui.show(make_params("b"));
-    ui.dismiss_by_kind("c");
+    ui.show(make_params(NotificationKind::InstallUpdate));
+    ui.show(make_params(NotificationKind::UpdateFailed));
+    ui.dismiss_by_kind(NotificationKind::WatcherDisabled);
     assert_eq!(ui.rows.row_count(), 2);
 }
 
@@ -94,7 +91,7 @@ fn max_visible_evicts_oldest_on_overflow() {
     // while the newest lands at the back.
     let ui = make_ui();
     let total = super::MAX_VISIBLE + 1;
-    let ids: Vec<i32> = (0..total).map(|_| ui.show(make_params("x"))).collect();
+    let ids: Vec<i32> = (0..total).map(|_| ui.show(make_params(NotificationKind::None))).collect();
 
     assert_eq!(ui.rows.row_count(), super::MAX_VISIBLE);
     let live_ids: Vec<i32> = ui.rows.iter().map(|r: NotificationRow| r.id).collect();
@@ -111,7 +108,7 @@ fn stub_recipe() -> Relabel {
 }
 
 /// Push a row and register a recipe against it, the two halves `show_localized` pairs.
-fn show_with_recipe(ui: &NotificationsUi, kind: &str) -> i32 {
+fn show_with_recipe(ui: &NotificationsUi, kind: NotificationKind) -> i32 {
     let id = ui.show(make_params(kind));
     ui.recipes.borrow_mut().insert(id, stub_recipe());
     id
@@ -124,8 +121,8 @@ fn show_with_recipe(ui: &NotificationsUi, kind: &str) -> i32 {
 #[test]
 fn dismiss_drops_the_rows_recipe() {
     let ui = make_ui();
-    let kept = show_with_recipe(&ui, "a");
-    let gone = show_with_recipe(&ui, "b");
+    let kept = show_with_recipe(&ui, NotificationKind::None);
+    let gone = show_with_recipe(&ui, NotificationKind::None);
 
     ui.dismiss(gone);
 
@@ -136,11 +133,11 @@ fn dismiss_drops_the_rows_recipe() {
 #[test]
 fn dismiss_by_kind_drops_every_matching_recipe() {
     let ui = make_ui();
-    show_with_recipe(&ui, "watcher-disabled");
-    let kept = show_with_recipe(&ui, "install-update");
-    show_with_recipe(&ui, "watcher-disabled");
+    show_with_recipe(&ui, NotificationKind::WatcherDisabled);
+    let kept = show_with_recipe(&ui, NotificationKind::InstallUpdate);
+    show_with_recipe(&ui, NotificationKind::WatcherDisabled);
 
-    ui.dismiss_by_kind("watcher-disabled");
+    ui.dismiss_by_kind(NotificationKind::WatcherDisabled);
 
     assert_eq!(ui.recipes.borrow().len(), 1);
     assert!(ui.recipes.borrow().contains_key(&kept));
@@ -149,7 +146,8 @@ fn dismiss_by_kind_drops_every_matching_recipe() {
 #[test]
 fn the_cap_eviction_drops_the_evicted_rows_recipe() {
     let ui = make_ui();
-    let ids: Vec<i32> = (0..=super::MAX_VISIBLE).map(|_| show_with_recipe(&ui, "x")).collect();
+    let ids: Vec<i32> =
+        (0..=super::MAX_VISIBLE).map(|_| show_with_recipe(&ui, NotificationKind::None)).collect();
 
     assert_eq!(ui.recipes.borrow().len(), super::MAX_VISIBLE);
     assert!(!ui.recipes.borrow().contains_key(&ids[0]));
@@ -170,8 +168,8 @@ fn a_whole_completion_toasts_success_and_a_partial_one_warns() {
     ui.show_completion(Completion::Complete, "Imported".into(), "3 playlists".into());
     ui.show_completion(Completion::Partial, "Imported".into(), "2 of 3 playlists".into());
 
-    let variants: Vec<String> = ui.rows.iter().map(|row| row.variant.to_string()).collect();
-    assert_eq!(variants, ["success", "warning"]);
+    let variants: Vec<NotificationVariant> = ui.rows.iter().map(|row| row.variant).collect();
+    assert_eq!(variants, [NotificationVariant::Success, NotificationVariant::Warning]);
 }
 
 /// A row pushed without a recipe — every `show_auto_dismiss` — must stay untouched by the
@@ -179,7 +177,7 @@ fn a_whole_completion_toasts_success_and_a_partial_one_warns() {
 #[test]
 fn a_row_with_no_recipe_registers_none() {
     let ui = make_ui();
-    ui.show(make_params("a"));
+    ui.show(make_params(NotificationKind::None));
 
     assert!(ui.recipes.borrow().is_empty());
 }

@@ -71,8 +71,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   where a *broken* one stays settled.
 
 - **`stats_changed` vs `library_changed`.** Play-count flushes bump the stats channel only;
-  its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and
-  Recently-Played (ordered by `last_played`, written on the same flush). Everything structural —
+  its three subscribers are Favorites (hero mosaic + Most Played rank by `play_count`),
+  Recently-Played (ordered by `last_played`, written on the same flush) and Playlists, for the
+  smart lists whose rules read play stats. Everything structural —
   scans, watcher, imports, favorite toggles — stays on `library_changed`.
 
 - **No folder is added on its own.** A fresh install starts empty, and the welcome card's first
@@ -112,11 +113,13 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   **watcher paths**: `update_track_location` (re-point on move/rename) writes mtime but **not**
   size or hash, so a mtime re-read at write time would land beside the *previous* scan's size, and
   an in-place tag edit that didn't change the size would then read as current to `track_is_current`
-  forever. Hence `handle_created` and `handle_renamed` both take the mtime off the
-  `ExtractedMetadata` the batch already extracted (an older mtime only fails toward a re-parse, the
-  safe direction), and `retroactive_hash` gets its mtime from the same `fs::metadata` that proved
-  the file exists. `extract_date_modified(path)` is the fallback for the one caller with nothing in
-  hand: `handle_renamed` when extraction failed or the renamed-to file vanished.
+  on every later scan. Hence a watcher batch re-points with the mtime off the `ExtractedMetadata` it already
+  extracted (an older mtime only fails toward a re-parse, the safe direction), argued on
+  `queries::scan::WatchedChange::Renamed`, and `retroactive_hash` gets its mtime from the same
+  `fs::metadata` that proved the file exists. `extract_date_modified(path)` is the fallback for the
+  one case with nothing in hand, a rename whose extraction failed or whose target vanished, and the
+  reconcile task resolves it before the batch reaches the store, so nothing inside the write
+  transaction `stat`s a file.
 
 ## Query shape
 
@@ -127,9 +130,10 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   projections) are wrapped in `sqlx::AssertSqlSafe(sql)` at the query call site (sqlx 0.9
   `SqlSafeStr`) — data never rides in the string, only through `.bind()`.
 
-- **Track projections by use case**, each with a `*_columns()` helper: `TrackSummary` (17 cols;
-  queue/NP/playback, incl. 4 ReplayGain + `rating`); `TrackListRow` (20; lists incl. Files/Browse,
-  which render through the shared `TrackList` so there is no narrower browse slice; incl.
+- **Track projections by use case**, each with a column list in `queries::track::columns`:
+  `TrackSummary` (17 cols; queue/NP/playback, incl. 4 ReplayGain + `rating`); `TrackListRow` (20;
+  lists incl. Files/Browse, which render through the shared `TrackList` so there is no narrower
+  browse slice; incl.
   `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36; Edit-Tags dialog — the only production
   by-id multi-fetch, every single-valued tag column + the technical Summary cols); `PlaylistExportRow` (5;
   `file_path`/`file_hash`/`title`/`artist`/`duration_ms`, M3U8 export only); `Track` (60; scan
@@ -202,14 +206,14 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   field + emits, so the NP star updates from a list-row edit — it re-checks the id under the emit
   lock, safe against a mid-write track change. Rating **never changes list membership**, so every
   surface is optimistic (`flip_rating`/`apply_row_rating`, detail siblings), wired via
-  `wire_row_flag!`; Search is excluded on purpose and stays non-optimistic. NP parity via
-  `wire_now_playing_rating`.
+  `wire_row_flag!`; Search included, having no `library_changed` subscriber to fall back on. NP
+  parity via `wire_now_playing_rating`.
 
 ## Write-through to files
 
 - **Tag editing = "Edit Track Information", write-through the scan pipeline**
   (`crates/melodia-app/src/library/tags.rs::apply_tag_edit`, `crates/melodia-store/src/media/ingest/tag_writer.rs`). Right-click rows → **Edit
-  Tags…** (`Dialog.kind == "edit-tags"`); **batch is the point** — **touched-tracking is a
+  Tags…** (`DialogKind.edit-tags`); **batch is the point** — **touched-tracking is a
   Rust-side diff against a populate-time snapshot** (Keep/Clear/Set), so only changed fields write.
   **Lyrics live in the file, not the DB** (single-track tab only), though the tab is no longer their
   only reader: `library::lyrics` resolves a sidecar, this tag and a fetched-sheet store for the Now

@@ -17,7 +17,7 @@ use std::time::Duration;
 use lru::LruCache;
 use parking_lot::Mutex;
 
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 /// Bounded well inside the memory rules — 64 recently-played albums' URLs.
 const ARTWORK_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(64) {
@@ -60,7 +60,7 @@ async fn run_lookup(
         Ok(Ok(Some(url))) => Lookup::Found(url),
         Ok(Ok(None)) => Lookup::Miss,
         Ok(Err(e)) => {
-            log::debug!("discord: {provider} cover lookup failed: {e}");
+            log::debug!("discord: {provider} cover lookup failed: {}", describe(&e));
             Lookup::Unavailable
         }
         Err(_) => {

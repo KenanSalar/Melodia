@@ -32,6 +32,7 @@ use crate::ui::nav_transition;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{
     AlbumDetail, Albums, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
     NavEnterFrom, PlaylistDetail, Queue, RecentlyPlayed, Search, Tracks,
@@ -97,10 +98,9 @@ pub fn wire_cross_tab_nav(
 ) {
     let weak = ui.as_weak();
 
-    // One trio per global, spelled once. A `macro_rules!` rather than a helper fn because
-    // the generated globals are unrelated types sharing only their accessor *names* —
-    // there is no trait to be generic over, which is why `ui::list_selection`'s
-    // `impl_row_selection_view!` has the same shape.
+    // One trio per global, spelled once. A `macro_rules!` rather than a generic fn: these
+    // nine globals, `Tracks`, `Browse` and `Queue` among them, share these three setters and
+    // nothing else, so a trait for them would need an impl macro of its own and save nothing.
     macro_rules! wire_go_to {
         ($($global:ident),+ $(,)?) => {
             $({
@@ -208,16 +208,18 @@ pub(in crate::ui) fn open_album_cross_tab(
         )
         .await
         {
-            log::warn!("{log_tag}({album_id}): {e}");
+            log::warn!("{log_tag}({album_id}): {}", describe(&e));
         }
     });
 
     let s_disk = state.clone();
     state.runtime.spawn_blocking(move || {
-        if let Err(e) =
-            library::settings::set_last_detail_id(&s_disk, view_id::ALBUM_DETAIL, Some(album_id))
-        {
-            log::warn!("{log_tag} persist: {e}");
+        if let Err(e) = library::settings::set_last_detail_id(
+            &s_disk.paths,
+            view_id::ALBUM_DETAIL,
+            Some(album_id),
+        ) {
+            log::warn!("{log_tag} persist: {}", describe(&e));
         }
     });
 }
@@ -253,16 +255,18 @@ pub(in crate::ui) fn open_artist_cross_tab(
         )
         .await
         {
-            log::warn!("{log_tag}({artist_id}): {e}");
+            log::warn!("{log_tag}({artist_id}): {}", describe(&e));
         }
     });
 
     let s_disk = state.clone();
     state.runtime.spawn_blocking(move || {
-        if let Err(e) =
-            library::settings::set_last_detail_id(&s_disk, view_id::ARTIST_DETAIL, Some(artist_id))
-        {
-            log::warn!("{log_tag} persist: {e}");
+        if let Err(e) = library::settings::set_last_detail_id(
+            &s_disk.paths,
+            view_id::ARTIST_DETAIL,
+            Some(artist_id),
+        ) {
+            log::warn!("{log_tag} persist: {}", describe(&e));
         }
     });
 }
@@ -304,16 +308,18 @@ fn make_go_to_genre(
             )
             .await
             {
-                log::warn!("cross_tab_nav::go_to_genre({id}): {e}");
+                log::warn!("cross_tab_nav::go_to_genre({id}): {}", describe(&e));
             }
         });
 
         let s_disk = s.clone();
         s.runtime.spawn_blocking(move || {
-            if let Err(e) =
-                library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, Some(id))
-            {
-                log::warn!("cross_tab_nav::go_to_genre persist: {e}");
+            if let Err(e) = library::settings::set_last_detail_id(
+                &s_disk.paths,
+                view_id::GENRE_DETAIL,
+                Some(id),
+            ) {
+                log::warn!("cross_tab_nav::go_to_genre persist: {}", describe(&e));
             }
         });
     }

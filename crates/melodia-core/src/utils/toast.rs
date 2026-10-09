@@ -4,7 +4,7 @@
 //! directly, `NotificationsUi` being `Rc`. So this owns a `OnceLock`
 //! [`UnboundedSender`](tokio::sync::mpsc::UnboundedSender) any thread can push a
 //! [`ToastRequest`] onto, drained by the UI-thread consumer
-//! `boot::ui_setup::install_toast_bridge` installs.
+//! `boot::ui_setup::subscribers::install_toast_bridge` installs.
 //!
 //! It holds no `ui::*` types, which is what preserves the layering rule that `tasks`
 //! never imports `ui` — the producer side is UI-free and localization happens entirely

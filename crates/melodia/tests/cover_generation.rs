@@ -23,7 +23,7 @@ use melodia_testkit::{
 /// none, the dialog's slot is a one-shot property write — so a scheduled cover there would be a
 /// placeholder nothing ever replaces.
 const BLOCKING_LOOKUP_SITES: [&str; 2] =
-    ["ui/artists/callbacks/cross_tab.rs", "ui/playlists/callbacks/dialog.rs"];
+    ["ui/artists/callbacks/cross_tab.rs", "ui/playlists/callbacks/artwork.rs"];
 
 /// A floor under the lookup walk, standing in for the self-check this pin carried while it lived
 /// inside the corpus it walks: it skipped itself and asserted it still spelled the needle. Out

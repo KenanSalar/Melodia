@@ -1,8 +1,4 @@
-//! Tests for the shipped browse walk, driven through [`list_directory`] itself.
-//!
-//! They used to drive a local copy of the canonicalize + `is_dir` ladder, because the entry point
-//! took an `&AppState`. The copy carried no library-folder guard, so the half of the walk that
-//! decides whether a path may be browsed at all was never run.
+//! Tests for the shipped browse walk, driven through [`browse_directory`] itself.
 
 use std::path::Path;
 
@@ -30,7 +26,7 @@ fn resolved(dir: &Path) -> Result<PathBuf, AppError> {
 }
 
 async fn browse(db: &DbPool, dir: &Path, folders: &[Folder]) -> Result<BrowseResult, AppError> {
-    list_directory(db, dir.to_string_lossy().into_owned(), folders).await
+    browse_directory(db, dir.to_string_lossy().into_owned(), folders).await
 }
 
 #[tokio::test]

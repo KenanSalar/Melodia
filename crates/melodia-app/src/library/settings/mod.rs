@@ -80,10 +80,7 @@ pub use scrobble::{
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
 };
 pub use support::{mark_support_prompt_seen, record_launch};
-pub use updates::{
-    record_check_failure, record_check_success, reset_skipped_release, set_auto_check_enabled,
-    set_skipped_release,
-};
+pub use updates::{set_auto_check_enabled, set_skipped_release};
 pub use view::{
     get_view_sort, set_artist_albums_collapsed, set_browse_path, set_browse_view_mode,
     set_favorites_tab, set_last_detail_id, set_last_nav_index, set_locale, set_my_library_tab,
@@ -93,18 +90,18 @@ pub use view::{
 pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 
 use crate::services::{self, settings::SettingsData, view_state::ViewStateData};
-use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
-pub fn get_settings(state: &AppState) -> Result<SettingsData, AppError> {
-    services::settings::read_settings(&state.paths)
+pub fn get_settings(paths: &Paths) -> Result<SettingsData, AppError> {
+    services::settings::read_settings(paths)
 }
 
 /// Read the per-view UI state from `views.json`. Sibling of
 /// [`get_settings`]; a missing / unreadable file falls back to
 /// [`ViewStateData::default`].
-pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
-    services::view_state::read_view_state(&state.paths)
+pub fn get_view_state(paths: &Paths) -> Result<ViewStateData, AppError> {
+    services::view_state::read_view_state(paths)
 }
 
 #[cfg(target_os = "linux")]

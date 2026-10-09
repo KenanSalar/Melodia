@@ -8,18 +8,16 @@
 mod boot;
 mod shutdown;
 
-use std::sync::Arc;
-
+use melodia_app::services::settings::SettingsData;
 use melodia_app::state::AppState;
 use melodia_app::{library, services, tasks};
 use melodia_core::config::Paths;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils;
 use melodia_platform::services::platform;
 use melodia_ui::AppWindow;
 use melodia_views::ui;
 use slint::ComponentHandle;
-use tokio::sync::watch;
 
 /// Rayon's global pool, where jpeg-decoder runs its passes for every JPEG decoded outside a pool.
 /// Two keeps a cover decode parallel without a worker per core idling from the first decode to
@@ -59,35 +57,7 @@ fn main() -> AppResult<()> {
         return Ok(());
     }
 
-    // Reap the rollback snapshot `swap_in_place` keeps on AppImage / tarball
-    // installs — reaching this launch proves the new binary works. Linux-only;
-    // msiexec never leaves an `.old` at the install target.
-    #[cfg(target_os = "linux")]
-    {
-        if let Ok(stale) = services::updater::install_target_old() {
-            let _ = std::fs::remove_file(stale);
-        }
-    }
-    // Ahead of the logger and the runtime builder, both of which allocate; the
-    // module argues the numbers.
-    platform::allocator::pin_arenas_and_thresholds();
-
-    // Give PipeWire's ALSA-compat layer a clean stream name: CPAL opens the
-    // default ALSA PCM, which PipeWire turns into a node auto-named
-    // `alsa_playback.<prgname>` and EasyEffects and pavucontrol show verbatim.
-    // pipewire-alsa reads this when the PCM opens; ignored on bare ALSA. Before
-    // any thread spawns, so `AppState::init`'s device inherits it.
-    #[cfg(target_os = "linux")]
-    #[allow(unsafe_code, reason = "env::set_var is unsafe in Rust 2024")]
-    // SAFETY: `set_var` requires that no other thread is reading or writing the
-    // environment. Nothing has spawned one yet — the logger, the runtime and
-    // Slint all come later.
-    unsafe {
-        std::env::set_var(
-            "PIPEWIRE_ALSA",
-            "{ application.name = \"Melodia\" node.name = \"Melodia\" }",
-        );
-    }
+    prepare_process();
 
     // Ahead of the logger, whose file sink needs somewhere to write. A failure
     // here has no logger to reach and never will — it means no data directory.
@@ -109,53 +79,11 @@ fn main() -> AppResult<()> {
         }
     };
 
-    // Infallible: a log file that can't be opened degrades to stderr rather
-    // than stopping the boot. See `platform::logging::install`.
-    // An unparseable settings file is no reason to start louder; it surfaces later through
-    // `AppState::init`'s own read.
-    let verbose_logging = services::settings::read_settings(&paths)
-        .is_ok_and(|settings| settings.diagnostics.verbose_logging);
-    platform::logging::install(&paths, verbose_logging);
-    // Before the runtime and before Slint, so boot panics are covered too.
-    platform::crash_report::install_hook(&paths.logs_dir);
-    log::info!("Melodia starting");
-    // Which root this boot landed on is the one startup fact nothing downstream can infer: a dev
-    // build and `MELODIA_DATA_DIR` both move it. The diagnostics bundle carries it as a field of
-    // its own; this is the copy a live tail has.
-    log::info!("data directory: {}", utils::redact::redact_home(&paths.data_dir.to_string_lossy()));
-    // The claim happened before there was anywhere to say this.
-    if let Some(e) = unenforced_reason {
-        log::warn!(
-            "single_instance: not enforced ({e}); a second launch will open a second window"
-        );
-    }
-
-    // Two workers: the async work is event-driven (queries, watch publishes,
-    // position ticks, media-control events) and CPU-bound work goes to Rayon
-    // or `spawn_blocking`, neither of which draws on this pool. The `num_cpus`
-    // default leaves 6+ idle threads on a desktop, each with a 2 MB stack.
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(2)
-        // A burst ceiling, not an idle-cost one — blocking threads spawn on
-        // demand and get reaped, so tokio's 512 default never sits resident.
-        // `system_theme::spawn_color_watcher` is the one permanent tenant.
-        .max_blocking_threads(32)
-        .enable_all()
-        .thread_name("melodia-bg")
-        .build()
-        .map_err(|e| AppError::Settings(format!("tokio runtime: {e}")))?;
-
-    // Ahead of the first decode: rayon fixes the global pool's shape at first use.
-    if let Err(e) = rayon::ThreadPoolBuilder::new()
-        .num_threads(GLOBAL_RAYON_THREADS)
-        .thread_name(|i| format!("rayon-{i}"))
-        .build_global()
-    {
-        log::warn!("rayon global pool: {e}; rayon will size its own");
-    }
+    install_diagnostics(&paths, unenforced_reason);
+    let runtime = build_runtime()?;
 
     // Slint's a11y/D-Bus thread looks up a tokio reactor from UI-thread tasks,
-    // so the guard has to stay alive for the entire `app.run()` window.
+    // so the guard has to stay alive for as long as the event loop runs.
     let runtime_guard = runtime.enter();
 
     let (state, channels) = runtime.block_on(AppState::init(paths, runtime.handle().clone()))?;
@@ -171,9 +99,9 @@ fn main() -> AppResult<()> {
 
     // Read `settings.json` and `views.json` once and reuse them everywhere.
     let startup_settings: Option<services::settings::SettingsData> =
-        library::settings::get_settings(&state).ok();
+        library::settings::get_settings(&state.paths).ok();
     let startup_view_state: Option<services::view_state::ViewStateData> =
-        library::settings::get_view_state(&state).ok();
+        library::settings::get_view_state(&state.paths).ok();
 
     // Files on the command line replace the restored queue and play, so resume
     // would only be visible for the moment it takes them to land.
@@ -185,326 +113,21 @@ fn main() -> AppResult<()> {
 
     boot::tasks::spawn_resume_watching(&spawner, &state);
 
-    // Maximized rides the winit `WindowAttributes` hook — Slint exposes no API
-    // for it, and the hook creates the window already-maximized with no flash.
-    // Size and position come after `AppWindow::new()`, via `geometry::restore`.
-    let geometry = startup_settings.as_ref().map_or_else(
-        ui::window_chrome::geometry::PersistedGeometry::fallback,
-        ui::window_chrome::geometry::PersistedGeometry::from_settings,
-    );
-    let restore_maximized = geometry.maximized;
-    let backend = slint::BackendSelector::new()
-        .backend_name("winit".into())
-        .with_winit_window_attributes_hook(move |attrs| {
-            let attrs = if restore_maximized { attrs.with_maximized(true) } else { attrs };
-            // Pin the window identity so the compositor resolves our icon and
-            // label. X11 matches `WM_CLASS` against the desktop file's
-            // `StartupWMClass=Melodia`, falling back to the binary basename when
-            // empty. Wayland clients can't set an icon at all — the compositor
-            // matches `app_id` to a desktop file of the *same basename* and
-            // reads its `Icon=` — so that half must be the reverse-DNS id we
-            // install under, or KWin shows the generic placeholder.
-            #[cfg(target_os = "linux")]
-            let attrs = {
-                use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
-                use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
-                let attrs = WindowAttributesExtX11::with_name(attrs, "Melodia", "Melodia");
-                WindowAttributesExtWayland::with_name(
-                    attrs,
-                    "com.github.kenansalar.melodia",
-                    "com.github.kenansalar.melodia",
-                )
-            };
-            attrs
-        });
-    // Counts the loop's `NewEvents`, which is how the pump tells a Win32 drag's modal loop apart.
-    #[cfg(target_os = "windows")]
-    let backend =
-        backend.with_winit_custom_application_handler(ui::window_chrome::parked_loop::LoopTicks);
-    backend.select().map_err(|e| AppError::Window(format!("backend selector: {e}")))?;
-
-    let app = AppWindow::new().map_err(|e| AppError::Window(e.to_string()))?;
-
-    // After `AppWindow::new()` (the adapter must exist) and before `app.run()`
-    // (the window must not be shown). `set_size` sets winit's
-    // `has_explicit_size`, which stops Slint snapping the window to its
-    // content-preferred size on first show.
-    ui::window_chrome::geometry::restore(
-        &app,
-        geometry,
-        startup_settings.as_ref().and_then(|s| s.full_player_geometry),
-    );
-
-    boot::ui_setup::install_locale(&app, &state, startup_settings.as_ref());
-    boot::ui_setup::install_app_chrome(&app, &state);
-    // Ahead of `install_views`, which builds the artwork tiers this decides the shape of.
-    if boot::ui_setup::apply_backdrop_style(&app, startup_settings.as_ref()) {
-        boot::ui_setup::install_backdrop_dither(&app);
-    }
-    let views = boot::ui_setup::install_views(&app, &state, startup_view_state.as_ref());
-    let notifications = boot::ui_setup::install_library_settings_and_friends(&app, &state)?;
-
-    // These three wire here rather than inside their slices because their
-    // completion toasts need the `Rc<NotificationsUi>`.
-    ui::playlists::wire_files(&app, &state, &views.playlists_ui, &notifications);
-    ui::radio::wire_files(&app, &state, &views.radio_ui, &notifications);
-    ui::callbacks::wire_tags(&app, &state, &notifications);
-
-    let appearance_handles = match ui::appearance::install(&app, &state) {
-        Ok(h) => Some(h),
-        Err(e) => {
-            log::warn!("appearance::install: {e}");
-            None
-        }
-    };
-
-    // After `appearance::install`, whose kick channel it subscribes to.
-    if let Some(h) = &appearance_handles {
-        tasks::material_you::spawn(
-            &spawner,
-            state.clone(),
-            h.os_state.clone(),
-            state.sinks.view_model.subscribe(),
-            h.kick.subscribe(),
-            h.repaint_tx.clone(),
-            views.cover_thumbs.clone(),
-        );
-    }
-
-    boot::ui_setup::hydrate_ui_from_settings(
+    let app = open_window(startup_settings.as_ref())?;
+    boot::ui_setup::install_ui(
         &app,
         &state,
+        &spawner,
         startup_settings.as_ref(),
         startup_view_state.as_ref(),
-    );
-
-    let weak = app.as_weak();
-    ui::shell::bridge::spawn_view_model_subscriber(
-        weak.clone(),
-        &state.sinks,
-        views.cover_thumbs.clone(),
-        state.runtime.clone(),
-    )
-    .map_err(|e| AppError::Window(format!("view-model subscriber: {e}")))?;
-    ui::shell::bridge::spawn_queue_subscriber(weak.clone(), &state.sinks)
-        .map_err(|e| AppError::Window(format!("queue subscriber: {e}")))?;
-    ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx)
-        .map_err(|e| AppError::Window(format!("position subscriber: {e}")))?;
-    // Reads the same view model as the first of those, for the ICY titles a station announces.
-    // Beside them rather than inside `radio::install`, so every subscription to a player channel
-    // is spawned in one place.
-    ui::radio::install_history(weak.clone(), &views.radio_ui, &state.sinks)
-        .map_err(|e| AppError::Window(format!("station history subscriber: {e}")))?;
-
-    match ui::queue_sheet::install(&app, &state, &views.cover_thumbs) {
-        Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
-        Err(e) => log::warn!("queue_sheet::install: {e}"),
-    }
-
-    // Now Playing owns its own small `(cover, blur)` tier, separate from
-    // `cover_thumbs`.
-    let np_artwork = Arc::new(ui::now_playing_artwork::NowPlayingArtwork::new(
-        ui::now_playing_artwork::blur_spec(&app),
-    ));
-    let np_state = match ui::now_playing::install(&app, &state, &views.cover_thumbs, &np_artwork) {
-        Ok(s) => Some(s),
-        Err(e) => {
-            log::warn!("now_playing::install: {e}");
-            None
-        }
-    };
-    // Needs `np_state` for the up-next subscriber gate; without it the gate
-    // would flip nothing visible.
-    if let Some(ref np_state) = np_state
-        && let Err(e) = ui::shell::mini_player::install(&app, &state, np_state)
-    {
-        log::warn!("mini_player::install: {e}");
-    }
-
-    boot::ui_setup::seed_initial_view_model(&app, &state, &views.cover_thumbs);
-
-    boot::ui_setup::spawn_initial_tracks_fetch(
-        &state,
-        &views.tracks_ui,
-        startup_view_state.as_ref(),
-        weak.clone(),
-    );
-    boot::ui_setup::spawn_initial_albums_fetch(&state, &views.albums_ui, weak.clone());
-    boot::ui_setup::spawn_initial_artists_fetch(&state, &views.artists_ui, weak.clone());
-    boot::ui_setup::spawn_initial_genres_fetch(&state, &views.genres_ui, weak.clone());
-    boot::ui_setup::spawn_initial_playlists_fetch(&state, &views.playlists_ui, weak.clone());
-
-    boot::ui_setup::install_library_changed_refresher(&state, &views.tracks_ui, weak.clone())?;
-    boot::ui_setup::install_rescan_notice_subscriber(&state, weak.clone(), notifications.clone())?;
-    boot::ui_setup::install_audio_device_lost_subscriber(
-        &state,
-        weak.clone(),
-        notifications.clone(),
+        file_open_listener,
     )?;
-    boot::ui_setup::install_artwork_restore_subscriber(
-        &state,
-        weak.clone(),
-        notifications.clone(),
-    )?;
-
-    // The Ko-fi link, plus the one-time support toast a few minutes into
-    // whichever early launch is the fifth. Counts this launch either way.
-    ui::support::install(&app, &state, notifications.clone())?;
-
-    boot::ui_setup::install_toast_bridge(weak.clone(), notifications.clone())?;
-
-    // No-op unless `MELODIA_RSS_SAMPLE` is set. The tag is read here rather than
-    // inside the sampler so `tasks/` names nothing under `ui::`; it runs on the UI
-    // thread, so the Nav / *Detail globals need no atomic shadow.
-    let tag_weak = weak.clone();
-    tasks::rss_sampler::install(move || {
-        tag_weak.upgrade().map(|ui| ui::view_tag::format_view(&ui))
-    });
-
-    // One `watch` carries backend events from the daily task and the `Updater.*`
-    // callbacks to the UI-thread subscriber that toasts them. The daily task
-    // spawns only where the install path is user-writable; system-managed
-    // installs go through the OS package manager instead.
-    let (updater_event_tx, updater_event_rx) =
-        watch::channel::<Option<services::updater::UpdaterEvent>>(None);
-    ui::settings::updater_settings::install_event_subscriber(
-        weak.clone(),
-        notifications.clone(),
-        updater_event_rx,
-    );
-    ui::callbacks::wire_updater(&app, &state, &notifications, &updater_event_tx);
-
-    // The first-run card, opened only if this install hasn't seen the current revision. After
-    // `hydrate_ui_from_settings`, so a deep link out of it isn't racing the boot's own nav and tab
-    // writes, and before `app.show()`, like everything else that seeds a Slint property.
-    //
-    // The two surfaces that would otherwise land on top of it wait in this closure: the first
-    // thirty seconds shouldn't be three stacked surfaces. Held rather than skipped — the crash
-    // notice consumes its marker as it fires — and it runs immediately on every launch that opens
-    // no card. Deferring a *daily* check by the length of a welcome card costs nothing. The Ko-fi
-    // prompt can't collide, being spent on the fifth launch behind a two-minute delay.
-    let deferred_spawner = spawner.clone();
-    let deferred_state = state.clone();
-    let deferred_weak = weak.clone();
-    let deferred_notifications = notifications.clone();
-    ui::onboarding::install(&app, &state, startup_settings.as_ref(), move || {
-        if let Some(ui) = deferred_weak.upgrade() {
-            ui::settings::diagnostics::notify_previous_crash(
-                &ui,
-                &deferred_state,
-                &deferred_notifications,
-            );
-        }
-
-        // Only the install shape gates the spawn — those two can't change while the process
-        // lives. The auto-check switch is read per tick instead, the welcome card and
-        // Settings ▸ Updates both offering it after this point.
-        if services::updater::is_available() && !platform::install_kind::is_system_install() {
-            tasks::updater_daily::spawn(
-                &deferred_spawner,
-                deferred_state.clone(),
-                deferred_weak.clone(),
-                updater_event_tx,
-            );
-        } else {
-            log::info!(
-                "updater_daily: not spawning (available={}, system_managed={})",
-                services::updater::is_available(),
-                platform::install_kind::is_system_install()
-            );
-        }
-    });
-
-    // Independent of the daily check: the in-attempt prune only fires on the
-    // next install click, so a cancelled install leaves a verified package in
-    // the staging dir forever for a user who never clicks again. The grace
-    // matches `updater_daily::STARTUP_DELAY`, giving the launch scan and
-    // DB pre-fetch first claim on the disk.
-    runtime.spawn(async {
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
-        services::updater::prune_stale_staging().await;
-    });
-
-    // Tarball installs only — RPM/DEB own those files through their manifests
-    // and AppImage bundles them. The BLAKE3 compare means the common case is a
-    // stat plus a 3 KB hash and no write. Gating rationale in the module.
-    #[cfg(target_os = "linux")]
-    runtime.spawn_blocking(|| {
-        if let Err(e) = platform::desktop_integration::refresh_user_install() {
-            log::warn!("desktop_integration: refresh failed: {e}");
-        }
-    });
-
-    // Restart-gated through the `restart-tray` Dialog, so this startup read is
-    // the single gate; off, there is no D-Bus connection, ksni thread or
-    // receiver task at all. `install` is cross-platform — Linux creates the
-    // StatusNotifierItem eagerly, Win/mac defer onto the event loop.
-    if startup_settings.as_ref().is_some_and(|s| s.tray.tray_enabled) {
-        ui::shell::tray_bridge::install(&spawner, &state, &app);
-    }
-
-    // Answer the launches queued on the socket claimed back at boot — here
-    // rather than beside the claim, a forwarded track needing a window to raise.
-    if let Some(listener) = file_open_listener {
-        boot::tasks::serve_file_opens(&state, &app, listener);
-    }
-
-    // SMTC needs a real `HWND`, which exists only once the window is shown, so
-    // `AppState::init` left the handle inert (souvlaki panics on a null one).
-    // Posting to the event loop runs this on the first iteration, past the show.
-    #[cfg(target_os = "windows")]
-    if let Some(mc) = state.media_controls.clone() {
-        let weak = app.as_weak();
-        let player_state = state.player_state.clone();
-        let sinks = state.sinks.clone();
-        if let Err(e) = slint::invoke_from_event_loop(move || {
-            let Some(app) = weak.upgrade() else { return };
-            match ui::window_chrome::win32_hwnd(&app) {
-                Some(hwnd) => {
-                    if mc.attach_smtc(hwnd) {
-                        // `sync()` no-op'd while the controls were inert, so the
-                        // OS panel is still empty.
-                        melodia_engine::player::engine::state::with_state_emit(
-                            &player_state,
-                            &sinks,
-                            |_| {},
-                        );
-                    }
-                }
-                None => {
-                    log::warn!("Win32 HWND unavailable after window show; SMTC disabled");
-                }
-            }
-        }) {
-            log::warn!("Failed to schedule Windows SMTC attach: {e}");
-        }
-    }
-
-    // Boot's `theme_apply::apply` ran inside `appearance::install`, where the DWM
-    // hook no-op'd with no HWND yet. By the time this one-shot fires the window
-    // is up and `Theme.mantle` carries the resolved palette; every later change
-    // drives DWM from `write_palette`.
-    //
-    // The same closure pushes the embedded icon onto the winit window — the
-    // taskbar reads it out of the EXE directly, but the *caption* icon comes
-    // from the WNDCLASS, which winit registers with `hIcon: 0`.
-    #[cfg(target_os = "windows")]
-    {
-        let weak = app.as_weak();
-        if let Err(e) = slint::invoke_from_event_loop(move || {
-            let Some(app) = weak.upgrade() else { return };
-            install_window_icon(&app);
-            ui::appearance::theme_apply::reapply_from_theme(&app);
-        }) {
-            log::warn!("Failed to schedule Windows titlebar polish: {e}");
-        }
-    }
 
     // Not `app.run()`: its loop terminates as soon as the last window is
     // *hidden*, which close-to-tray does. This is Slint's documented tray
     // pattern, returning only on `quit_event_loop()`.
-    app.show().map_err(|e| AppError::Window(e.to_string()))?;
-    slint::run_event_loop_until_quit().map_err(|e| AppError::Window(e.to_string()))?;
+    app.show().map_err(|e| AppError::io("show window", e))?;
+    slint::run_event_loop_until_quit().map_err(|e| AppError::io("event loop", e))?;
 
     log::info!("Melodia shutting down — flushing player state");
     shutdown::save_state_on_exit(&app, &state, &runtime);
@@ -548,25 +171,147 @@ fn main() -> AppResult<()> {
     std::process::exit(0);
 }
 
-/// Push the embedded EXE icon onto the winit window. Windows auto-binds it to
-/// the taskbar but not the caption, whose WNDCLASS winit registers with
-/// `hIcon: 0`. A failure just leaves the generic icon.
-#[cfg(target_os = "windows")]
-fn install_window_icon(app: &AppWindow) {
-    use slint::winit_030::WinitWindowAccessor;
-    use slint::winit_030::winit::platform::windows::IconExtWindows;
-    use slint::winit_030::winit::window::Icon;
-
-    match Icon::from_resource(1, None) {
-        Ok(icon) => {
-            app.window().with_winit_window(|w| {
-                w.set_window_icon(Some(icon));
-            });
-        }
-        Err(e) => {
-            log::warn!("Failed to load Melodia icon from EXE resource (ordinal 1): {e}");
+/// What has to happen before the first thread starts or the first arena is created.
+fn prepare_process() {
+    // Reap the rollback snapshot `swap_in_place` keeps on AppImage / tarball
+    // installs — reaching this launch proves the new binary works. Linux-only;
+    // msiexec never leaves an `.old` at the install target.
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(stale) = services::updater::install_target_old() {
+            let _ = std::fs::remove_file(stale);
         }
     }
+    // Ahead of the logger and the runtime builder, both of which allocate; the
+    // module argues the numbers.
+    platform::allocator::pin_arenas_and_thresholds();
+
+    // Give PipeWire's ALSA-compat layer a clean stream name: CPAL opens the
+    // default ALSA PCM, which PipeWire turns into a node auto-named
+    // `alsa_playback.<prgname>` and EasyEffects and pavucontrol show verbatim.
+    // pipewire-alsa reads this when the PCM opens; ignored on bare ALSA. Before
+    // any thread spawns, so `AppState::init`'s device inherits it.
+    #[cfg(target_os = "linux")]
+    #[allow(unsafe_code, reason = "env::set_var is unsafe in Rust 2024")]
+    // SAFETY: `set_var` requires that no other thread is reading or writing the
+    // environment. Nothing has spawned one yet — the logger, the runtime and
+    // Slint all come later.
+    unsafe {
+        std::env::set_var(
+            "PIPEWIRE_ALSA",
+            "{ application.name = \"Melodia\" node.name = \"Melodia\" }",
+        );
+    }
+}
+
+/// The rolling log and the crash hook, then the startup facts only this launch knows.
+fn install_diagnostics(paths: &Paths, unenforced_reason: Option<std::io::Error>) {
+    // Infallible: a log file that can't be opened degrades to stderr rather
+    // than stopping the boot. See `platform::logging::install`.
+    // An unparseable settings file is no reason to start louder; it surfaces later through
+    // `AppState::init`'s own read.
+    let verbose_logging = services::settings::read_settings(paths)
+        .is_ok_and(|settings| settings.diagnostics.verbose_logging);
+    platform::logging::install(paths, verbose_logging);
+    // Before the runtime and before Slint, so boot panics are covered too.
+    platform::crash_report::install_hook(&paths.logs_dir);
+    log::info!("Melodia starting");
+    // Which root this boot landed on is the one startup fact nothing downstream can infer: a dev
+    // build and `MELODIA_DATA_DIR` both move it. The diagnostics bundle carries it as a field of
+    // its own; this is the copy a live tail has.
+    log::info!("data directory: {}", utils::redact::redact_home(&paths.data_dir.to_string_lossy()));
+    // The claim happened before there was anywhere to say this.
+    if let Some(e) = unenforced_reason {
+        log::warn!(
+            "single_instance: not enforced ({}); a second launch will open a second window",
+            describe(&e)
+        );
+    }
+}
+
+/// The tokio runtime, and rayon's global pool beside it.
+fn build_runtime() -> AppResult<tokio::runtime::Runtime> {
+    // Two workers: the async work is event-driven (queries, watch publishes,
+    // position ticks, media-control events) and CPU-bound work goes to Rayon
+    // or `spawn_blocking`, neither of which draws on this pool. The `num_cpus`
+    // default leaves 6+ idle threads on a desktop, each with a 2 MB stack.
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        // A burst ceiling, not an idle-cost one — blocking threads spawn on
+        // demand and get reaped, so tokio's 512 default never sits resident.
+        // `system_theme::spawn_color_watcher` is the one permanent tenant.
+        .max_blocking_threads(32)
+        .enable_all()
+        .thread_name("melodia-bg")
+        .build()
+        .map_err(|e| AppError::io("tokio runtime", e))?;
+
+    // Ahead of the first decode: rayon fixes the global pool's shape at first use.
+    if let Err(e) = rayon::ThreadPoolBuilder::new()
+        .num_threads(GLOBAL_RAYON_THREADS)
+        .thread_name(|i| format!("rayon-{i}"))
+        .build_global()
+    {
+        log::warn!("rayon global pool: {}; rayon will size its own", describe(&e));
+    }
+    Ok(runtime)
+}
+
+/// The main window on the winit backend, at the persisted geometry and not yet shown.
+fn open_window(settings: Option<&SettingsData>) -> AppResult<AppWindow> {
+    // Maximized rides the winit `WindowAttributes` hook — Slint exposes no API
+    // for it, and the hook creates the window already-maximized with no flash.
+    // Size and position come after `AppWindow::new()`, via `geometry::restore`.
+    let geometry = settings.map_or_else(
+        ui::window_chrome::geometry::PersistedGeometry::fallback,
+        ui::window_chrome::geometry::PersistedGeometry::from_settings,
+    );
+    select_backend(geometry.maximized)?;
+
+    let app = AppWindow::new().map_err(|e| AppError::io("main window", e))?;
+
+    // After `AppWindow::new()` (the adapter must exist) and before `app.show()`
+    // (the window must not be shown). `set_size` sets winit's
+    // `has_explicit_size`, which stops Slint snapping the window to its
+    // content-preferred size on first show.
+    ui::window_chrome::geometry::restore(
+        &app,
+        geometry,
+        settings.and_then(|s| s.full_player_geometry),
+    );
+    Ok(app)
+}
+
+fn select_backend(restore_maximized: bool) -> AppResult<()> {
+    let backend = slint::BackendSelector::new()
+        .backend_name("winit".into())
+        .with_winit_window_attributes_hook(move |attrs| {
+            let attrs = if restore_maximized { attrs.with_maximized(true) } else { attrs };
+            // Pin the window identity so the compositor resolves our icon and
+            // label. X11 matches `WM_CLASS` against the desktop file's
+            // `StartupWMClass=Melodia`, falling back to the binary basename when
+            // empty. Wayland clients can't set an icon at all — the compositor
+            // matches `app_id` to a desktop file of the *same basename* and
+            // reads its `Icon=` — so that half must be the reverse-DNS id we
+            // install under, or KWin shows the generic placeholder.
+            #[cfg(target_os = "linux")]
+            let attrs = {
+                use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;
+                use slint::winit_030::winit::platform::x11::WindowAttributesExtX11;
+                let attrs = WindowAttributesExtX11::with_name(attrs, "Melodia", "Melodia");
+                WindowAttributesExtWayland::with_name(
+                    attrs,
+                    "com.github.kenansalar.melodia",
+                    "com.github.kenansalar.melodia",
+                )
+            };
+            attrs
+        });
+    // Counts the loop's `NewEvents`, which is how the pump tells a Win32 drag's modal loop apart.
+    #[cfg(target_os = "windows")]
+    let backend =
+        backend.with_winit_custom_application_handler(ui::window_chrome::parked_loop::LoopTicks);
+    backend.select().map_err(|e| AppError::io("backend selector", e))
 }
 
 #[cfg(test)]

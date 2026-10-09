@@ -7,7 +7,7 @@
 [![Platforms](https://img.shields.io/badge/platforms-Linux%20%C2%B7%20Windows-success.svg)](#installation)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust%20%2B%20Slint-orange.svg)](https://www.rust-lang.org/)
 
-Melodia is a Slint rewrite of a former Tauri + SolidJS application. Dropping the embedded WebKitGTK browser engine took the real-world footprint from a combined **~900 MB** to 87 MiB idle on Linux (PSS) and 105 MiB on Windows (commit); the [full numbers](#footprint) are below.
+There is no embedded browser engine underneath the UI, which keeps the memory footprint small; [Footprint](#footprint) has the measured numbers and the setup behind them.
 
 ---
 
@@ -243,7 +243,7 @@ gh attestation verify <file> --repo KenanSalar/Melodia
 
 [Rust](https://rustup.rs/) **1.97.0**, edition 2024, pinned by `rust-toolchain.toml` and installed by
 rustup on its own. Linux additionally needs the development packages for Slint's FemtoVG renderer
-(no WebKitGTK); macOS and Windows need nothing extra.
+(no WebKitGTK); Windows needs nothing extra.
 
 ```bash
 # Debian/Ubuntu

@@ -49,7 +49,7 @@ pub(super) fn watch_os_state(
             crate::ui::shell::tray_bridge::refresh_icon();
         }
     })) {
-        log::warn!("system theme subscriber spawn_local: {e}");
+        log::warn!("system theme subscriber spawn_local: {}", melodia_core::error::describe(&e));
     }
 }
 
@@ -108,10 +108,13 @@ fn apply_reading(
     kick.bump();
 
     // Read from disk rather than shadowed: this runs on a desktop event, not per frame.
-    let settings = match library::settings::get_settings(state) {
+    let settings = match library::settings::get_settings(&state.paths) {
         Ok(settings) => settings,
         Err(e) => {
-            log::warn!("system theme repaint: read settings: {e}");
+            log::warn!(
+                "system theme repaint: read settings: {}",
+                melodia_core::error::describe(&e)
+            );
             return;
         }
     };

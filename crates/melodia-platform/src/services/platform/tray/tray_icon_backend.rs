@@ -14,6 +14,8 @@ use tokio::sync::mpsc;
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
+use melodia_core::error::describe;
+
 use super::{TrayAction, TraySnapshot};
 
 // Stable menu-item ids — `muda` delivers `MenuEvent { id }` globally, so the
@@ -69,7 +71,7 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
         &show_hide_item,
         &quit_item,
     ]) {
-        log::warn!("tray: failed to build menu: {e}");
+        log::warn!("tray: failed to build menu: {}", describe(&e));
         return false;
     }
 
@@ -82,7 +84,7 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
     let tray = match builder.build() {
         Ok(tray) => tray,
         Err(e) => {
-            log::warn!("System tray unavailable: {e}");
+            log::warn!("System tray unavailable: {}", describe(&e));
             return false;
         }
     };
@@ -99,7 +101,7 @@ pub fn init(action_tx: mpsc::Sender<TrayAction>) -> bool {
             _ => return,
         };
         if let Err(e) = action_tx.try_send(action) {
-            log::warn!("tray: dropped {action:?} (channel full): {e}");
+            log::warn!("tray: dropped {action:?} (channel full): {}", describe(&e));
         }
     }));
 
@@ -129,7 +131,7 @@ pub fn refresh_icon() {
         let Some(icon) = icon_for(on_light_taskbar) else { return };
         match state.tray.set_icon(Some(icon)) {
             Ok(()) => state.on_light_taskbar = on_light_taskbar,
-            Err(e) => log::debug!("tray: set_icon failed: {e}"),
+            Err(e) => log::debug!("tray: set_icon failed: {}", describe(&e)),
         }
     });
 }
@@ -143,7 +145,7 @@ fn icon_for(on_light_taskbar: bool) -> Option<Icon> {
     match Icon::from_rgba(rgba, width, height) {
         Ok(icon) => Some(icon),
         Err(e) => {
-            log::warn!("tray: embedded icon rejected: {e}");
+            log::warn!("tray: embedded icon rejected: {}", describe(&e));
             None
         }
     }
@@ -171,7 +173,7 @@ pub fn update(snapshot: &TraySnapshot) {
         state.next_item.set_enabled(snapshot.has_next);
         state.prev_item.set_enabled(snapshot.has_previous);
         if let Err(e) = state.tray.set_tooltip(Some(snapshot.tooltip())) {
-            log::debug!("tray: set_tooltip failed: {e}");
+            log::debug!("tray: set_tooltip failed: {}", describe(&e));
         }
     });
 }

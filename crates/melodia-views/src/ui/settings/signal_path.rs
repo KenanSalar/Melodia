@@ -17,11 +17,6 @@ use melodia_playback::player::playback::output::OutputFormat;
 use melodia_playback::player::playback::output::claim::FallbackReason;
 use melodia_ui::{AppWindow, Equalizer, ReplayGain, Settings, SignalPathUi};
 
-/// The refused claim's toast kind, one string with its branch in the `Notifications.action`
-/// dispatcher (`globals/updater.slint`). A mismatch still paints the Details button, which then
-/// does nothing.
-pub const REFUSAL_TOAST_KIND: &str = "exclusive-refused";
-
 pub fn install(ui: &AppWindow, state: &AppState) {
     let mut rx = state.signal_path_tx.subscribe();
     paint(ui, rx.borrow_and_update().as_ref());
@@ -46,9 +41,9 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         let ctx = state.playback_ctx();
         // One task, the live half first: the persist writes the volume the live half left, and
         // reading the output can wait out a reopen.
-        state.persist_blocking("persist bit-perfect reset", move |state| {
+        state.persist_blocking("persist bit-perfect reset", move |paths| {
             let volume = library::playback::player_make_bit_perfect(&ctx);
-            library::settings::reset_for_bit_perfect(state, volume)
+            library::settings::reset_for_bit_perfect(paths, volume)
         });
         if let Some(ui) = weak.upgrade() {
             show_bit_perfect_reset(&ui);

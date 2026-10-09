@@ -169,9 +169,8 @@ export global Settings {
     // nothing about the claim, so a toggle applies at once and reopens nothing.
     in-out property <bool> output-release-paused: false;
     callback output-release-paused-changed(bool);
-    // Lands on the Playback tab, where the signal path reads in full: the quality chip's click and
-    // the refused claim's toast action. Here rather than on `SignalPathUi` because the toast's
-    // dispatcher already reaches this global and no sibling.
+    // Lands on the Playback tab, where the signal path reads in full: the quality chip, its
+    // overflow-menu row and the refused claim's toast action.
     callback open-signal-path();
     // The silence a reopen onto a new rate writes first, for the DACs that mute while they relock.
     // The drag only moves the readout: nothing hears the value until the next rate change, so it
@@ -377,9 +376,8 @@ export global Settings {
         return @tr("Some cover art was missing. Melodia is restoring it from your music files.");
     }
 
-    // The updater's three toasts. "Available" carries the `install-update` action kind
-    // and dispatches `Updater.install()`; "installed" carries `update-restart` and
-    // respawns the binary; "failed" is action-less and surfaces the error in its body.
+    // The updater's three toasts. "Available" and "installed" carry an action, Install and
+    // Restart; "failed" has none and surfaces the error in its body.
     pure callback update-available-title() -> string;
     update-available-title => {
         return @tr("Update available");

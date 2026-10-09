@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::handlers::{
     PlaybackMonitorContext, PlaybackSnapshot, SnapshotSink, spawn_playback_monitor,
 };
@@ -46,7 +47,7 @@ async fn persist(db: &DbPool, queue_path: &Path, snapshot: PlaybackSnapshot) {
         )
         .await
     {
-        log::warn!("periodic save: update_last_position {track_id}: {e}");
+        log::warn!("periodic save: update_last_position {track_id}: {}", describe(&e));
     }
 
     let path: PathBuf = queue_path.to_path_buf();
@@ -57,8 +58,8 @@ async fn persist(db: &DbPool, queue_path: &Path, snapshot: PlaybackSnapshot) {
     .await;
     match join {
         Ok(Ok(())) => {}
-        Ok(Err(e)) => log::warn!("periodic save: write queue.json: {e}"),
-        Err(e) => log::warn!("periodic save: spawn_blocking: {e}"),
+        Ok(Err(e)) => log::warn!("periodic save: write queue.json: {}", describe(&e)),
+        Err(e) => log::warn!("periodic save: spawn_blocking: {}", describe(&e)),
     }
 }
 

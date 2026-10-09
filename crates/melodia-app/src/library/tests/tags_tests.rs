@@ -198,7 +198,7 @@ async fn set_genre(
     Ok(row)
 }
 
-/// A rating write reaches `run_commit` on a single click, so both whole-table passes are gated
+/// A rating write reaches `commit_retag` on a single click, so both whole-table passes are gated
 /// off it. What that gate has to be worth: an orphan left by something else survives, and the
 /// re-extract it also skips does not take the cover with it.
 #[tokio::test]

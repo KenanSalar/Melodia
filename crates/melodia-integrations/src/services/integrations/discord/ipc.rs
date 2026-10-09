@@ -22,6 +22,8 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 
+use melodia_core::error::describe;
+
 use super::model::Presence;
 use super::{DISCORD_APP_ID, StatusCell, payload};
 
@@ -105,7 +107,7 @@ pub(crate) fn run_worker(rx: &mpsc::Receiver<Command>, status: &Arc<StatusCell>)
         };
 
         if let Err(e) = handshake(&mut conn) {
-            log::debug!("discord: handshake failed: {e}");
+            log::debug!("discord: handshake failed: {}", describe(&e));
             match wait_and_backoff(rx, status, &mut backoff, &mut desired, &mut enabled) {
                 WaitOutcome::Exit => return,
                 WaitOutcome::Continue => continue,
@@ -120,7 +122,7 @@ pub(crate) fn run_worker(rx: &mpsc::Receiver<Command>, status: &Arc<StatusCell>)
         if let Some(presence) = &desired {
             let body = payload::set_activity_json(presence, pid, &next_nonce(pid, &mut nonce));
             if let Err(e) = send_frame_and_ack(&mut conn, &body) {
-                log::debug!("discord: re-apply failed: {e}");
+                log::debug!("discord: re-apply failed: {}", describe(&e));
                 status.set_connected(false);
                 continue;
             }
@@ -165,7 +167,7 @@ fn serve(
                 None => payload::clear_activity_json(pid, &next_nonce(pid, nonce)),
             };
             if let Err(e) = send_frame_and_ack(conn, &body) {
-                log::debug!("discord: send failed: {e}");
+                log::debug!("discord: send failed: {}", describe(&e));
                 return ServeOutcome::Disconnected;
             }
             last_sent.clone_from(desired);

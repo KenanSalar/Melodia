@@ -1,13 +1,8 @@
-//! Narrow dependency slices of [`AppState`]. Functions that only need a
-//! subset of the global state should accept one of these instead of
-//! `&AppState` so the dependency surface is explicit at the function
-//! boundary — easier to read, easier to test in isolation.
+//! [`PlaybackContext`], the one dependency slice of [`AppState`], taken by `library::playback::*`.
 //!
-//! Currently exposes [`PlaybackContext`]; further per-domain contexts
-//! (queue, library) are intentionally not introduced — those modules
-//! touch most of `AppState` anyway and narrowing produces wide
-//! impl-with-one-call structs, the over-abstraction the
-//! `rust-performance` rules call out.
+//! No second context exists. Elsewhere in `library` a function reading only `paths` or only `db`
+//! takes that field and the rest take the whole state, and a struct between the two would only
+//! rename one of them.
 //!
 //! `PlaybackContext` owns its `Arc`s rather than borrowing from
 //! `AppState`. Each field is already `Arc`-backed under the hood, so a

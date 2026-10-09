@@ -13,8 +13,9 @@ doctest = false
 
 # Names every crate below it, which is what makes it the app layer rather than another tier: the
 # question it answers is what to do, and every answer needs a database, a socket, a decoder or the
-# OS. What it must not name is `melodia-views`, and `lib.rs` re-exports nothing, so the crates
-# absent from views' own table stay unreachable rather than arriving through here.
+# OS. What it must not name is `melodia-views` or `melodia-ui`, the second because a `.slint` edit
+# would then rebuild this crate. `lib.rs` re-exports nothing, so the crates absent from views' own
+# table stay unreachable rather than arriving through here.
 [dependencies]
 melodia-core = { path = "../melodia-core" }
 melodia-artwork = { path = "../melodia-artwork" }
@@ -26,15 +27,10 @@ melodia-playback = { path = "../melodia-playback" }
 melodia-engine = { path = "../melodia-engine" }
 melodia-store = { path = "../melodia-store" }
 melodia-integrations = { path = "../melodia-integrations" }
-# `tasks::updater_daily` drives the in-app updater banner, which is a Slint global.
-melodia-ui = { path = "../melodia-ui" }
 
-slint.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
-async-compat.workspace = true
 parking_lot.workspace = true
-sqlx.workspace = true
 lofty.workspace = true
 rand.workspace = true
 rayon.workspace = true
@@ -69,6 +65,9 @@ windows-sys.workspace = true
 melodia-testkit = { path = "../melodia-testkit" }
 tokio = { workspace = true, features = ["test-util"] }
 tempfile.workspace = true
+# The suites seed rows and read them back. Production code reaches the database through
+# `melodia-store` alone, so it can't name this.
+sqlx.workspace = true
 
 [lints]
 workspace = true

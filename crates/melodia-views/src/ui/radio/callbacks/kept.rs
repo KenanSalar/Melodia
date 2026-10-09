@@ -1,7 +1,7 @@
 //! The kept tabs' own wiring: the sort, the add / edit form, and remove.
 //!
 //! Import and export are not here — their completion toasts need the notifications stack, which
-//! does not exist yet when a slice installs, so they wire from `main()` through
+//! does not exist yet when a slice installs, so they wire from boot's `install_ui` through
 //! [`super::files`], the shape `ui::playlists::wire_files` already uses.
 
 use std::sync::Arc;
@@ -17,7 +17,7 @@ use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
-use melodia_ui::{AppWindow, CardSelection, Dialog, Radio, RadioForm};
+use melodia_ui::{AppWindow, CardSelection, Dialog, DialogKind, Radio, RadioForm};
 
 pub(super) fn wire(
     ui: &AppWindow,
@@ -113,8 +113,8 @@ fn remove(
     state.runtime.spawn(async move {
         for id in ids {
             let removed = match from {
-                RemoveFrom::Favorites => library::radio::remove_from_favorites(&s, id).await,
-                RemoveFrom::Recent => library::radio::remove_from_recent(&s, id).await,
+                RemoveFrom::Favorites => library::radio::remove_from_favorites(&s.db, id).await,
+                RemoveFrom::Recent => library::radio::remove_from_recent(&s.db, id).await,
             };
             if let Err(e) = removed {
                 log::warn!("radio: station removal failed: {}", melodia_core::error::describe(&e));
@@ -179,7 +179,7 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
         dialog.set_confirm_label(form.invoke_save_label());
         dialog.set_cancel_label(form.invoke_cancel_label());
         dialog.set_destructive(false);
-        dialog.set_kind(SharedString::from("edit-station"));
+        dialog.set_kind(DialogKind::EditStation);
         dialog.set_target_id(crate::ui::util::clamp_i64_to_i32(station.id));
         dialog.set_open(true);
     });

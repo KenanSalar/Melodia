@@ -204,9 +204,9 @@ fn set_kept_favorites(
 /// nothing can reach, and `set_favorite` alone leaves it there for good.
 async fn set_kept_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(), AppError> {
     if favorite {
-        library::radio::set_favorite(state, id, true).await
+        library::radio::set_favorite(&state.db, id, true).await
     } else {
-        library::radio::remove_from_favorites(state, id).await
+        library::radio::remove_from_favorites(&state.db, id).await
     }
 }
 
@@ -269,6 +269,6 @@ async fn set_browsed_favorite(
     logo: Option<&str>,
     wanted: bool,
 ) -> Result<(), AppError> {
-    let id = library::radio::set_directory_favorite(state, station, wanted, logo).await?;
-    if wanted { Ok(()) } else { library::radio::delete_if_unlisted(state, id).await }
+    let id = library::radio::set_directory_favorite(&state.db, station, wanted, logo).await?;
+    if wanted { Ok(()) } else { library::radio::delete_if_unlisted(&state.db, id).await }
 }

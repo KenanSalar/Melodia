@@ -223,7 +223,7 @@ async fn reclaim_if_returned(engine: &Arc<PlaybackEngine>) {
         }
         Ok(Ok(None)) => {}
         Ok(Err(e)) => log::debug!("audio: reclaiming the chosen device failed: {}", describe(&e)),
-        Err(e) => log::debug!("audio: the reclaim check did not finish: {e}"),
+        Err(e) => log::debug!("audio: the reclaim check did not finish: {}", describe(&e)),
     }
 }
 

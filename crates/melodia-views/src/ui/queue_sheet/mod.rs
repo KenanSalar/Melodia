@@ -45,7 +45,7 @@ pub(super) struct ShadowEntry {
 }
 
 /// Public handle returned by [`install`]. Surfaces the `is_open`
-/// atomic to `main.rs` so it can be forwarded into
+/// atomic to boot so it can be forwarded into
 /// `window_chrome::set_queue_sheet_open` for the winit `DroppedFile`
 /// filter.
 pub struct QueueSheetHandles {

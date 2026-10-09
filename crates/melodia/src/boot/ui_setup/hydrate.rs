@@ -5,6 +5,7 @@ use std::sync::Arc;
 use melodia_app::services;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, ArtistDetail, MiniPlayer, Nav, Player};
 use melodia_views::ui;
 use slint::ComponentHandle;
@@ -67,7 +68,7 @@ pub fn seed_initial_view_model(
 /// Apply every UI-visible persisted section to the Slint globals — sidebar
 /// geometry from `settings.json`, per-view columns and collapse state from
 /// `views.json`. Missing entries leave the defaults, which is first-launch
-/// behaviour. A `None` snapshot re-reads from disk; `main()` passes what it
+/// behaviour. A `None` snapshot re-reads from disk; boot passes what `main()`
 /// already read to avoid a second parse.
 pub fn hydrate_ui_from_settings(
     app: &AppWindow,
@@ -81,7 +82,7 @@ pub fn hydrate_ui_from_settings(
     } else {
         owned_view_state =
             services::view_state::read_view_state(&state.paths).unwrap_or_else(|e| {
-                log::warn!("hydrate_ui_from_settings: read view state failed: {e}");
+                log::warn!("hydrate_ui_from_settings: read view state failed: {}", describe(&e));
                 services::view_state::ViewStateData::default()
             });
         &owned_view_state
@@ -99,7 +100,7 @@ pub fn hydrate_ui_from_settings(
                 &owned_settings
             }
             Err(e) => {
-                log::warn!("hydrate_ui_from_settings: read settings failed: {e}");
+                log::warn!("hydrate_ui_from_settings: read settings failed: {}", describe(&e));
                 return;
             }
         },
@@ -169,7 +170,7 @@ pub fn spawn_initial_tracks_fetch(
         if let Err(e) =
             ui::tracks::fetch_and_apply(&s, &tu, weak, sort_field, sort_dir, String::new()).await
         {
-            log::warn!("initial tracks fetch: {e}");
+            log::warn!("initial tracks fetch: {}", describe(&e));
         }
     });
 }
@@ -177,10 +178,10 @@ pub fn spawn_initial_tracks_fetch(
 /// Kick off an entity grid's initial fetch so its cards are populated by the
 /// time the user navigates to it.
 ///
-/// A macro rather than a generic `fn` for the reason `impl_detail_view_helpers!`
-/// is one: the four `*Ui` types share no trait, and each `fetch_grid` is a free
-/// function in its own module. Tracks is deliberately not among them, resolving a
-/// persisted sort and calling `fetch_and_apply` instead.
+/// A macro rather than a generic `fn` because each `fetch_grid` is a free function in
+/// its own module, and no trait the four `*Ui` types share carries it. Tracks is
+/// deliberately not among them, resolving a persisted sort and calling
+/// `fetch_and_apply` instead.
 macro_rules! initial_grid_fetch {
     ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty, $label:literal) => {
         $(#[$doc])*
@@ -189,7 +190,11 @@ macro_rules! initial_grid_fetch {
             let h = handle.clone();
             state.runtime.spawn(async move {
                 if let Err(e) = ui::$module::fetch_grid(&s, &h, weak).await {
-                    log::warn!("initial {} fetch: {e}", $label);
+                    log::warn!(
+                        "initial {} fetch: {}",
+                        $label,
+                        melodia_core::error::describe(&e)
+                    );
                 }
             });
         }

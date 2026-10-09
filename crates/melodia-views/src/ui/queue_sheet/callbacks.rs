@@ -15,6 +15,7 @@ use super::{ShadowEntry, push_selection};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::state::{PlayerAction, lock_state, with_state_emit};
 use melodia_ui::{AppWindow, Queue, QueueRow};
 
@@ -62,7 +63,7 @@ fn wire_transport(ui: &AppWindow, state: &AppState, shadow: &Arc<Mutex<Vec<Shado
             let s_inner = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::queue::queue_move(&s_inner, from, to) {
-                    log::warn!("queue_move({from},{to}): {e}");
+                    log::warn!("queue_move({from},{to}): {}", describe(&e));
                 }
             });
         });
@@ -77,7 +78,7 @@ fn wire_transport(ui: &AppWindow, state: &AppState, shadow: &Arc<Mutex<Vec<Shado
             let s_inner = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::queue::queue_remove(&s_inner, idx) {
-                    log::warn!("queue_remove({idx}): {e}");
+                    log::warn!("queue_remove({idx}): {}", describe(&e));
                 }
             });
         });
@@ -99,7 +100,7 @@ fn wire_transport(ui: &AppWindow, state: &AppState, shadow: &Arc<Mutex<Vec<Shado
             let s_inner = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::queue::queue_remove_batch(&s_inner, &indices) {
-                    log::warn!("queue_remove_batch({indices:?}): {e}");
+                    log::warn!("queue_remove_batch({indices:?}): {}", describe(&e));
                 }
             });
         });
@@ -114,7 +115,7 @@ fn wire_transport(ui: &AppWindow, state: &AppState, shadow: &Arc<Mutex<Vec<Shado
             let s_inner = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::queue::queue_skip_to_index(&s_inner, idx) {
-                    log::warn!("queue_skip_to_index({idx}): {e}");
+                    log::warn!("queue_skip_to_index({idx}): {}", describe(&e));
                 }
             });
         });
@@ -126,7 +127,7 @@ fn wire_transport(ui: &AppWindow, state: &AppState, shadow: &Arc<Mutex<Vec<Shado
             let s_inner = s.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) = library::queue::queue_clear(&s_inner) {
-                    log::warn!("queue_clear: {e}");
+                    log::warn!("queue_clear: {}", describe(&e));
                 }
             });
         });
@@ -166,7 +167,7 @@ fn wire_favorite(ui: &AppWindow, state: &AppState) {
         s.runtime.clone().spawn(async move {
             let count = ids.len();
             if let Err(e) = library::favorites::set_favorite(&s_inner, ids.clone(), fav).await {
-                log::warn!("queue toggle_row_favorite({count} tracks, {fav}): {e}");
+                log::warn!("queue toggle_row_favorite({count} tracks, {fav}): {}", describe(&e));
                 return;
             }
             let marked: HashSet<i64> = ids.iter().copied().collect();

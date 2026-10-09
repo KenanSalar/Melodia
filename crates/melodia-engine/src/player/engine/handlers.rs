@@ -46,8 +46,8 @@ const PRELOAD_LEAD_MS: u64 = 1500;
 /// while something is playing, and `main.rs`'s shutdown hook writes the authoritative one on
 /// a clean exit.
 ///
-/// Measured in playback rather than wall time, the counter below sitting past every arm of the
-/// loop that skips a tick.
+/// Measured in playback rather than wall time: a poll that skips its tick returns
+/// `Poll::Skipped`, which the counter never sees.
 const SAVE_INTERVAL_MS: u64 = 30_000;
 
 /// Polls spanning [`SAVE_INTERVAL_MS`]. Derived rather than spelled, so the interval its own
@@ -365,26 +365,10 @@ pub struct PlaybackMonitorContext {
 /// Spawns a single background task that handles position polling,
 /// gapless transition detection, and end-of-stream detection.
 pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext) {
-    let PlaybackMonitorContext {
-        shutdown_token,
-        player_state,
-        engine,
-        sinks,
-        position_tx,
-        signal_path_tx,
-        save,
-    } = ctx;
+    let shutdown_token = ctx.shutdown_token.clone();
+    let mut monitor = Monitor::new(ctx);
     tracker.spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(POLL_INTERVAL_MS));
-
-        let mut save_tick_counter: u64 = 0;
-        let mut publish = SecondGate::default();
-        let mut pause_watch = PauseWatch::default();
-
-        // Last ICY title generation reconciled into `PlayerState`. Generations are process-wide
-        // tickets starting at 1, so this holds across stations and `0` means nothing seen yet.
-        let mut last_title_generation: u64 = 0;
-
         loop {
             tokio::select! {
                 biased;
@@ -394,163 +378,219 @@ pub fn spawn_playback_monitor(tracker: &TaskTracker, ctx: PlaybackMonitorContext
                 }
                 _ = interval.tick() => {}
             }
-
-            // Every read below takes the decks lock, which a reopen holds across a device open, and
-            // waiting for it would block a runtime worker as long. The next tick reads the new stream.
-            if engine.output_reopening() {
-                continue;
-            }
-
-            // Ahead of the not-playing short circuit below, because a stop is what retires the
-            // most sources at once and it lands on exactly the ticks that circuit skips.
-            engine.collect_spent();
-
-            // Quick check: skip tick when not playing (lock-free via atomic mirror)
-            let status = player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed);
-            let is_playing = status == PlaybackStatus::Playing as u8;
-            let paused = status == PlaybackStatus::Paused as u8;
-            let release_due = pause_watch.due(paused && engine.holds_releasable_claim());
-
-            if !is_playing {
-                if release_due {
-                    release_paused_track(&engine, &player_state, &sinks);
-                }
-                // A pause keeps the last path: nothing pulls the source, so it could not be
-                // re-read anyway. One whose device went back has none left to describe.
-                if status == PlaybackStatus::Stopped as u8 || (paused && engine.output_parked()) {
-                    publish_signal_path(&signal_path_tx, None);
-                }
-                continue;
-            }
-
-            // Single lock acquisition to avoid TOCTOU between gapless and EOS checks
-            match engine.check_playback_state() {
-                PlaybackCheck::GaplessTransition => {
-                    emit_and_execute(&*engine, &player_state, &sinks, |state| {
-                        let mut actions = Vec::with_capacity(2);
-
-                        // Update play count for the track that just finished
-                        if let Some(track) = state.current_track() {
-                            actions.push(PlayerAction::UpdatePlayCount(track.id));
-                        }
-
-                        // Advance queue — update state only (the deck is already playing).
-                        // The next gapless preload is staged later, by the `Playing`
-                        // branch, when this new current track approaches its own end.
-                        if let Some(track) = state.queue.advance().cloned() {
-                            state.position_ms = 0;
-                            state.duration_ms =
-                                u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
-                            state.source = Some(PlaybackSource::Track(track));
-                        }
-
-                        actions
-                    });
-                }
-                PlaybackCheck::EndOfStream => {
-                    // A station's deck drains for exactly one reason — its feed thread spent the
-                    // reconnect budget — and `is_finished` is that reason. Anything else is a deck
-                    // caught in the instant between `play_stream` publishing the cell and
-                    // appending the source, where an empty deck means "not yet", not "over".
-                    let live = engine.stream_shared();
-                    if live.as_deref().is_some_and(|s| !s.is_finished()) {
-                        continue;
-                    }
-                    if live.is_some() {
-                        notify_station_ended(&player_state);
-                    }
-                    // Advance the queue (or, if the sleep-timer's "End of current
-                    // track" mode is armed, disarm it and stop instead). See
-                    // `PlayerState::build_end_of_stream_actions`.
-                    emit_and_execute(
-                        &*engine,
-                        &player_state,
-                        &sinks,
-                        PlayerState::build_end_of_stream_actions,
-                    );
-                }
-                PlaybackCheck::Playing => {
-                    // Normal tick: update position with lightweight event.
-                    // Query the backend BEFORE locking PlayerState to avoid a
-                    // nested lock — `evaluate_playing_tick` takes these as inputs.
-                    let xf = engine.crossfade_settings();
-                    // Ahead of the positions, which a first open of the next file would leave stale.
-                    let next_needs_reopen = next_needs_reopen(&engine, &player_state, xf);
-                    let backend = BackendSnapshot {
-                        position_ms: engine.query_heard_position(),
-                        pulled_ms: engine.query_position(),
-                        already_preloaded: engine.is_gapless_preloaded(),
-                        crossfading: engine.is_crossfading(),
-                        xf,
-                        next_needs_reopen,
-                    };
-                    let crossfading = backend.crossfading;
-                    let (decided, transport) = {
-                        let mut state = lock_state(&player_state);
-                        let transport = Transport {
-                            volume: state.volume,
-                            muted: state.is_muted,
-                            speed: state.playback_speed,
-                            crossfading,
-                        };
-                        (evaluate_playing_tick(&mut state, backend), transport)
-                    };
-                    publish_signal_path(&signal_path_tx, engine.signal_path(transport));
-                    let Some(PlayingTick { tick, late_preload, crossfade: crossfade_now }) =
-                        decided
-                    else {
-                        continue;
-                    };
-
-                    if publish.admits(tick.position_ms) {
-                        let _ = position_tx.send(Some(tick.clone()));
-                    }
-                    if let Some(mc) = sinks.media_controls.as_ref() {
-                        mc.update_position(tick.position_ms);
-                    }
-
-                    if let Some(stream) = engine.stream_shared() {
-                        reconcile_live_stream(
-                            &stream,
-                            &player_state,
-                            &sinks,
-                            &mut last_title_generation,
-                        );
-                    }
-
-                    if let Some(decision) = crossfade_now {
-                        // Advance the queue and start the incoming track on the
-                        // idle deck in one serialized step. `emit_and_execute`
-                        // re-reads the queue *and* re-verifies the status, the
-                        // current track and the position under the exec lock, so
-                        // anything that landed since the decision above can't be
-                        // clobbered.
-                        emit_and_execute(&*engine, &player_state, &sinks, |state| {
-                            state.build_crossfade_actions(decision)
-                        });
-                    } else if let Some((path, rg)) = late_preload {
-                        engine.preload_gapless(Some(&path), rg);
-                    }
-                }
-            }
-
-            // Below every arm that skips a tick, so the cadence counts playback rather than wall
-            // time. Snapshots under the state lock and awaits the sink inline — the monitor task
-            // itself is tracked by `tracker`, so an in-flight save completes before shutdown
-            // wins on the next select.
-            save_tick_counter = (save_tick_counter + 1) % SAVE_EVERY_N_TICKS;
-            if save_tick_counter == 0 {
-                let snapshot = {
-                    let state = lock_state(&player_state);
-                    PlaybackSnapshot {
-                        track: state.current_track().map(|t| (t.id, state.position_ms)),
-                        playback: state.to_persisted(),
-                    }
-                };
-                save(snapshot).await;
+            if monitor.poll() == Poll::Counted {
+                monitor.count_toward_save().await;
             }
         }
     });
+}
+
+/// Whether a poll counts toward the save cadence, which counts playback rather than wall time.
+#[derive(PartialEq, Eq)]
+enum Poll {
+    Counted,
+    Skipped,
+}
+
+/// The monitor's handles, and what it carries from one poll to the next.
+struct Monitor {
+    player_state: Arc<PlayerStateHandle>,
+    engine: Arc<PlaybackEngine>,
+    sinks: Arc<PlayerSinks>,
+    position_tx: watch::Sender<Option<PositionTick>>,
+    signal_path_tx: watch::Sender<Option<SignalPath>>,
+    save: SnapshotSink,
+    save_tick_counter: u64,
+    publish: SecondGate,
+    pause_watch: PauseWatch,
+    /// Last ICY title generation reconciled into `PlayerState`. Generations are process-wide
+    /// tickets starting at 1, so this holds across stations and `0` means nothing seen yet.
+    last_title_generation: u64,
+}
+
+impl Monitor {
+    fn new(ctx: PlaybackMonitorContext) -> Self {
+        Self {
+            player_state: ctx.player_state,
+            engine: ctx.engine,
+            sinks: ctx.sinks,
+            position_tx: ctx.position_tx,
+            signal_path_tx: ctx.signal_path_tx,
+            save: ctx.save,
+            save_tick_counter: 0,
+            publish: SecondGate::default(),
+            pause_watch: PauseWatch::default(),
+            last_title_generation: 0,
+        }
+    }
+
+    fn poll(&mut self) -> Poll {
+        // Every read below takes the decks lock, which a reopen holds across a device open, and
+        // waiting for it would block a runtime worker as long. The next tick reads the new stream.
+        if self.engine.output_reopening() {
+            return Poll::Skipped;
+        }
+
+        // Ahead of the not-playing short circuit below, because a stop is what retires the
+        // most sources at once and it lands on exactly the ticks that circuit skips.
+        self.engine.collect_spent();
+
+        // Quick check: skip tick when not playing (lock-free via atomic mirror)
+        let status = self.player_state.status_atomic.load(std::sync::atomic::Ordering::Relaxed);
+        let paused = status == PlaybackStatus::Paused as u8;
+        let release_due = self.pause_watch.due(paused && self.engine.holds_releasable_claim());
+
+        if status != PlaybackStatus::Playing as u8 {
+            if release_due {
+                release_paused_track(&self.engine, &self.player_state, &self.sinks);
+            }
+            // A pause keeps the last path: nothing pulls the source, so it could not be
+            // re-read anyway. One whose device went back has none left to describe.
+            if status == PlaybackStatus::Stopped as u8 || (paused && self.engine.output_parked()) {
+                publish_signal_path(&self.signal_path_tx, None);
+            }
+            return Poll::Skipped;
+        }
+
+        // Single lock acquisition to avoid TOCTOU between gapless and EOS checks
+        match self.engine.check_playback_state() {
+            PlaybackCheck::GaplessTransition => {
+                self.advance_gapless();
+                Poll::Counted
+            }
+            PlaybackCheck::EndOfStream => self.end_of_stream(),
+            PlaybackCheck::Playing => self.playing(),
+        }
+    }
+
+    fn advance_gapless(&self) {
+        emit_and_execute(&*self.engine, &self.player_state, &self.sinks, |state| {
+            let mut actions = Vec::with_capacity(2);
+
+            // Update play count for the track that just finished
+            if let Some(track) = state.current_track() {
+                actions.push(PlayerAction::UpdatePlayCount(track.id));
+            }
+
+            // Advance queue — update state only (the deck is already playing).
+            // The next gapless preload is staged later, by the `Playing`
+            // branch, when this new current track approaches its own end.
+            if let Some(track) = state.queue.advance().cloned() {
+                state.position_ms = 0;
+                state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
+                state.source = Some(PlaybackSource::Track(track));
+            }
+
+            actions
+        });
+    }
+
+    fn end_of_stream(&self) -> Poll {
+        // A station's deck drains for exactly one reason — its feed thread spent the
+        // reconnect budget — and `is_finished` is that reason. Anything else is a deck
+        // caught in the instant between `play_stream` publishing the cell and
+        // appending the source, where an empty deck means "not yet", not "over".
+        let live = self.engine.stream_shared();
+        if live.as_deref().is_some_and(|s| !s.is_finished()) {
+            return Poll::Skipped;
+        }
+        if live.is_some() {
+            notify_station_ended(&self.player_state);
+        }
+        // Advance the queue (or, if the sleep-timer's "End of current
+        // track" mode is armed, disarm it and stop instead). See
+        // `PlayerState::build_end_of_stream_actions`.
+        emit_and_execute(
+            &*self.engine,
+            &self.player_state,
+            &self.sinks,
+            PlayerState::build_end_of_stream_actions,
+        );
+        Poll::Counted
+    }
+
+    /// Normal tick: update position with lightweight event.
+    fn playing(&mut self) -> Poll {
+        let backend = self.read_backend();
+        let (decided, transport) = {
+            let mut state = lock_state(&self.player_state);
+            let transport = Transport {
+                volume: state.volume,
+                muted: state.is_muted,
+                speed: state.playback_speed,
+                crossfading: backend.crossfading,
+            };
+            (evaluate_playing_tick(&mut state, backend), transport)
+        };
+        publish_signal_path(&self.signal_path_tx, self.engine.signal_path(transport));
+        let Some(PlayingTick { tick, late_preload, crossfade }) = decided else {
+            return Poll::Skipped;
+        };
+
+        if self.publish.admits(tick.position_ms) {
+            let _ = self.position_tx.send(Some(tick.clone()));
+        }
+        if let Some(mc) = self.sinks.media_controls.as_ref() {
+            mc.update_position(tick.position_ms);
+        }
+        if let Some(stream) = self.engine.stream_shared() {
+            reconcile_live_stream(
+                &stream,
+                &self.player_state,
+                &self.sinks,
+                &mut self.last_title_generation,
+            );
+        }
+
+        if let Some(decision) = crossfade {
+            // Advance the queue and start the incoming track on the
+            // idle deck in one serialized step. `emit_and_execute`
+            // re-reads the queue *and* re-verifies the status, the
+            // current track and the position under the exec lock, so
+            // anything that landed since the decision above can't be
+            // clobbered.
+            emit_and_execute(&*self.engine, &self.player_state, &self.sinks, |state| {
+                state.build_crossfade_actions(decision)
+            });
+        } else if let Some((path, rg)) = late_preload {
+            self.engine.preload_gapless(Some(&path), rg);
+        }
+        Poll::Counted
+    }
+
+    /// Queried BEFORE locking `PlayerState` to avoid a nested lock — `evaluate_playing_tick`
+    /// takes this as an input.
+    fn read_backend(&self) -> BackendSnapshot {
+        let xf = self.engine.crossfade_settings();
+        // Ahead of the positions, which a first open of the next file would leave stale.
+        let next_needs_reopen = next_needs_reopen(&self.engine, &self.player_state, xf);
+        BackendSnapshot {
+            position_ms: self.engine.query_heard_position(),
+            pulled_ms: self.engine.query_position(),
+            already_preloaded: self.engine.is_gapless_preloaded(),
+            crossfading: self.engine.is_crossfading(),
+            xf,
+            next_needs_reopen,
+        }
+    }
+
+    /// Snapshots under the state lock and awaits the sink inline — the monitor task
+    /// itself is tracked by `tracker`, so an in-flight save completes before shutdown
+    /// wins on the next select.
+    async fn count_toward_save(&mut self) {
+        self.save_tick_counter = (self.save_tick_counter + 1) % SAVE_EVERY_N_TICKS;
+        if self.save_tick_counter != 0 {
+            return;
+        }
+        let snapshot = {
+            let state = lock_state(&self.player_state);
+            PlaybackSnapshot {
+                track: state.current_track().map(|t| (t.id, state.position_ms)),
+                playback: state.to_persisted(),
+            }
+        };
+        (self.save)(snapshot).await;
+    }
 }
 
 /// Take a long-paused track off the deck so its exclusive device goes back, leaving it paused

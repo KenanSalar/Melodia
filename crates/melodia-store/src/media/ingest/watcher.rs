@@ -6,7 +6,7 @@ use notify::{EventKind, RecursiveMode};
 use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
 use tokio::sync::mpsc;
 
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::audio_ext::is_audio_extension;
 
 /// Classified file system event sent through the mpsc channel to the event processor.
@@ -57,7 +57,10 @@ impl FolderWatcher {
                                 "Watcher queue overflow flag set — requesting full library rescan"
                             );
                             if let Err(e) = tx.blocking_send(FileEvent::RescanNeeded) {
-                                log::warn!("File event channel closed (shutdown?): {e}");
+                                log::warn!(
+                                    "File event channel closed (shutdown?): {}",
+                                    describe(&e)
+                                );
                             }
                             return;
                         }
@@ -67,14 +70,17 @@ impl FolderWatcher {
                                 // consumer is slow rather than silently dropping events;
                                 // failure means the receiver was dropped (i.e. shutdown).
                                 if let Err(e) = tx.blocking_send(file_event) {
-                                    log::warn!("File event channel closed (shutdown?): {e}");
+                                    log::warn!(
+                                        "File event channel closed (shutdown?): {}",
+                                        describe(&e)
+                                    );
                                 }
                             }
                         }
                     }
                     Err(errors) => {
                         for error in errors {
-                            log::warn!("Watch error: {error:?}");
+                            log::warn!("Watch error: {}", describe(&error));
                         }
                     }
                 }
@@ -102,7 +108,7 @@ impl FolderWatcher {
             // A root whose directory vanished has already lost its watch.
             match debouncer.unwatch(root) {
                 Ok(()) => log::info!("Stopped watching folder: {}", root.display()),
-                Err(e) => log::debug!("Failed to unwatch {}: {}", root.display(), e),
+                Err(e) => log::debug!("Failed to unwatch {}: {}", root.display(), describe(&e)),
             }
             false
         });
@@ -116,7 +122,7 @@ impl FolderWatcher {
                     log::info!("Watching folder: {}", path.display());
                     self.roots.push(path.clone());
                 }
-                Err(e) => log::warn!("Failed to watch {}: {}", path.display(), e),
+                Err(e) => log::warn!("Failed to watch {}: {}", path.display(), describe(&e)),
             }
         }
     }

@@ -4,7 +4,7 @@
 //! paints either way, and only the *section it boots into* behaves wrongly.
 
 const UI_SETUP: &str = include_str!("../ui_setup/views.rs");
-const MAIN: &str = include_str!("../../main.rs");
+const INSTALL: &str = include_str!("../ui_setup/install.rs");
 
 /// The persisted nav index has to reach `Nav.selected-index` before any
 /// `wire_*` runs.
@@ -45,7 +45,7 @@ fn the_persisted_nav_index_is_hydrated_before_any_view_is_wired() {
 
 /// The backdrop setting has to reach `Theme.aurora-backdrop` before `install_views`.
 ///
-/// Unlike its two siblings the anchors are in `main.rs`, the flag being raised there rather
+/// Unlike its two siblings the anchors are in `install.rs`, the flag being raised there rather
 /// than inside `install_views` — the call it has to precede. `install_views` builds the three
 /// `DetailArtwork` tiers, whose `BlurSpec` is decided from this flag, then seeds all four
 /// detail views, whose fetches reach `ui::backdrop::kind`. Raise it later and the tiers blur
@@ -55,13 +55,13 @@ fn the_persisted_nav_index_is_hydrated_before_any_view_is_wired() {
 /// `hydrate_ui_from_settings`, where every other `settings.json`-to-Slint apply lives.
 #[test]
 fn the_backdrop_setting_is_hydrated_before_the_views_are_installed() {
-    let hydrations = MAIN.matches("apply_backdrop_style(").count();
-    assert_eq!(hydrations, 1, "expected exactly one backdrop-style hydration site in `main`");
-    let installs = MAIN.matches("install_views(").count();
+    let hydrations = INSTALL.matches("apply_backdrop_style(").count();
+    assert_eq!(hydrations, 1, "expected exactly one backdrop-style hydration site in `install_ui`");
+    let installs = INSTALL.matches("install_views(").count();
     assert_eq!(installs, 1, "boot no longer calls `install_views`");
 
-    let hydrate = MAIN.find("apply_backdrop_style(").unwrap_or(usize::MAX);
-    let install_views = MAIN.find("install_views(").unwrap_or(0);
+    let hydrate = INSTALL.find("apply_backdrop_style(").unwrap_or(usize::MAX);
+    let install_views = INSTALL.find("install_views(").unwrap_or(0);
     assert!(
         hydrate < install_views,
         "the persisted backdrop style must be raised before `install_views`: the artwork \

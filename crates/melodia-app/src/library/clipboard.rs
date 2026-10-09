@@ -17,10 +17,9 @@
 use std::collections::HashMap;
 
 use crate::library::entity_tracks::EntityKind;
-use crate::state::AppState;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 /// What sits between a credit and a name on one line: what a stream announces, and what a search
 /// box takes.
@@ -105,12 +104,8 @@ pub struct StationText<'a> {
 /// # Errors
 ///
 /// Propagates the lookup's database error.
-pub async fn track_lines(
-    state: &AppState,
-    ids: &[i64],
-    field: TrackField,
-) -> Result<String, AppError> {
-    let tracks = queries::track::get_track_summaries_by_ids(&state.db, ids).await?;
+pub async fn track_lines(db: &DbPool, ids: &[i64], field: TrackField) -> Result<String, AppError> {
+    let tracks = queries::track::get_track_summaries_by_ids(db, ids).await?;
     Ok(join_lines(tracks.iter().filter_map(|track| track_line(track, field))))
 }
 
@@ -121,12 +116,12 @@ pub async fn track_lines(
 ///
 /// Propagates the lookup's database error.
 pub async fn entity_lines(
-    state: &AppState,
+    db: &DbPool,
     kind: EntityKind,
     ids: &[i64],
     field: EntityField,
 ) -> Result<String, AppError> {
-    let labels = entity_labels(state, kind, ids).await?;
+    let labels = entity_labels(db, kind, ids).await?;
     Ok(lines_in_order(ids, labels, field))
 }
 
@@ -145,11 +140,10 @@ struct EntityLabel {
 }
 
 async fn entity_labels(
-    state: &AppState,
+    db: &DbPool,
     kind: EntityKind,
     ids: &[i64],
 ) -> Result<HashMap<i64, EntityLabel>, AppError> {
-    let db = &state.db;
     let labels = match kind {
         EntityKind::Album => queries::entity_labels::album_labels(db, ids)
             .await?

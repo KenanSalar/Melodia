@@ -24,7 +24,7 @@ use slint::ComponentHandle;
 mod callbacks;
 mod music_folder;
 
-/// Work `main` hands over to run once the card is gone, or immediately if it never opens.
+/// Work boot hands over to run once the card is gone, or immediately if it never opens.
 ///
 /// The first thirty seconds shouldn't be three stacked surfaces, so the update toast and the crash
 /// notice wait behind the card. **Deferred, not suppressed**: the crash notice consumes its marker

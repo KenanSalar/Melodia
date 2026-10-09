@@ -59,23 +59,6 @@ const TRACK_INSERT_COLUMN_COUNT: usize = column_count(TRACK_INSERT_COLUMNS);
 /// rating beside them binds because it does.
 const LITERAL_DEFAULTS: usize = 5;
 
-/// Update a track's artwork if it is currently missing.
-pub async fn update_track_artwork_if_missing(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    file_path: &str,
-    artwork_path: &str,
-) -> Result<(), AppError> {
-    sqlx::query(
-        "UPDATE tracks SET artwork_path = ?
-         WHERE file_path = ? AND (artwork_path IS NULL OR artwork_path = '')",
-    )
-    .bind(artwork_path)
-    .bind(file_path)
-    .execute(&mut **tx)
-    .await?;
-    Ok(())
-}
-
 /// Somewhere a track's columns can be bound, in order.
 ///
 /// The single-row INSERT chains `Query::bind` and the multi-row one chains `Separated::push_bind`,
@@ -188,7 +171,7 @@ fn sort_source(meta: &ExtractedMetadata) -> &str {
 /// caller can collect inserted IDs without a follow-up `SELECT … WHERE
 /// file_path IN (…)` round-trip.
 /// `now` should be a pre-computed RFC3339 timestamp so all tracks in a batch share the same `date_added`.
-pub async fn insert_track(
+pub(crate) async fn insert_track(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
     file_name: &str,
@@ -250,7 +233,7 @@ pub const INSERT_CHUNK_ROWS: usize =
 /// output order as unspecified, so ids are mapped back via the returned
 /// `file_path` (a UNIQUE column) rather than by position. Callers rely
 /// on that ordering: the `DnD` import queues tracks in drop order.
-pub async fn insert_tracks_batch(
+pub(crate) async fn insert_tracks_batch(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     rows: &[NewTrackRow<'_>],
     now: &str,
@@ -307,7 +290,7 @@ pub async fn insert_tracks_batch(
 /// Returns `false` when no row with `track_id` exists — callers holding a
 /// candidate id resolved *before* the transaction opened must treat that
 /// as "the row vanished in-tx" and fall back to inserting.
-pub async fn update_track_location(
+pub(crate) async fn update_track_location(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
     new_path: &str,
@@ -345,7 +328,7 @@ pub async fn update_track_location(
 /// the tag and a cleared row being indistinguishable from an untouched one. Deliberate, on the
 /// same reading of "tag-backed field" as the title above it, and the price of the column not
 /// being able to say "the user meant zero".
-pub async fn update_track_metadata(
+pub(crate) async fn update_track_metadata(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
     meta: &melodia_core::entities::scan::ExtractedMetadata,
@@ -397,7 +380,7 @@ pub async fn update_track_metadata(
 /// a cover, and each lookup is one `idx_tracks_album_id` seek already in `id` order. Don't fold it
 /// back into a window over `tracks`: `SQLite` answers a correlated read of a materialized CTE by
 /// scanning it once per album written, and a first scan writes nearly every album.
-pub async fn update_album_artwork_from_tracks(
+pub(crate) async fn update_album_artwork_from_tracks(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
     sqlx::query(
@@ -427,7 +410,9 @@ pub async fn update_album_artwork_from_tracks(
 /// One call for a pass that can change which cover a playlisted track holds: refreshing only the
 /// albums leaves a playlist naming a cover none of its tracks hold, which keeps the file
 /// referenced and out of the artwork sweep's reach.
-pub async fn roll_up_covers(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), AppError> {
+pub(crate) async fn roll_up_covers(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> Result<(), AppError> {
     update_album_artwork_from_tracks(tx).await?;
     crate::database::queries::playlist::refresh_automatic_thumbnails(tx).await
 }
@@ -452,7 +437,9 @@ pub async fn roll_up_covers(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Res
 /// `albums_credits_cleanup` and the count is already down, or with `stats::recalculate_all_stats`
 /// behind it, which sets the same column from the same subquery. A recompute here is one of those
 /// twice and the other for nothing, over every artist row.
-pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Result<(), AppError> {
+pub(crate) async fn prune_orphans(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+) -> Result<(), AppError> {
     sqlx::query(
         "DELETE FROM albums \
          WHERE NOT EXISTS (SELECT 1 FROM tracks WHERE tracks.album_id = albums.id)",
@@ -486,7 +473,7 @@ pub async fn prune_orphans(tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>) -> Resu
 
 /// Delete a single track by file path.
 /// The `tracks_stats_delete` trigger fires automatically, keeping stats correct.
-pub async fn delete_track_by_path(
+pub(crate) async fn delete_track_by_path(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_path: &str,
 ) -> Result<bool, AppError> {
@@ -499,7 +486,7 @@ pub async fn delete_track_by_path(
 
 /// Batch-delete tracks by file paths, chunked at [`MAX_BINDS_PER_STATEMENT`].
 /// Returns the total number of rows deleted.
-pub async fn delete_tracks_by_paths_batch(
+pub(crate) async fn delete_tracks_by_paths_batch(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     file_paths: &[String],
 ) -> Result<u64, AppError> {

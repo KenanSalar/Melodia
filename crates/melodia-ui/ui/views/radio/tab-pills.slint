@@ -1,7 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { Radio } from "../../globals/radio.slint";
 import { RadioForm } from "../../globals/dialog-forms.slint";
-import { Dialog } from "../../globals/dialog.slint";
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { ActionPill, PillButton, PillDivider } from "../../components/action-pill.slint";
 import { MenuItem } from "../../components/context-menu.slint";
 import { PillOverflowMenu } from "../../components/pill-overflow-menu.slint";
@@ -147,7 +147,7 @@ export component RadioTabPills inherits Rectangle {
                         Dialog.confirm-label = @tr("Add");
                         Dialog.cancel-label = @tr("Cancel");
                         Dialog.destructive = false;
-                        Dialog.kind = "add-station";
+                        Dialog.kind = DialogKind.add-station;
                         Dialog.target-id = -1;
                         Dialog.open = true;
                     }

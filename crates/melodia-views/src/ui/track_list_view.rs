@@ -15,7 +15,7 @@
 
 use std::collections::HashSet;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, ModelRc, SharedString};
 
 use crate::ui::callbacks::macros::spawn_blocking_logged;
 use melodia_app::library;
@@ -70,6 +70,15 @@ pub trait TrackListColumnState {
     }
 }
 
+/// The callbacks every track list's global declares alike, for the wiring
+/// [`crate::ui::callbacks::track_list`] writes once for all of them. Method names stay apart from
+/// the generated accessors, as [`crate::ui::list_selection::RowSelectionView`]'s do.
+pub trait TrackListActions {
+    fn bind_play_next(&self, f: impl FnMut(ModelRc<i32>) + 'static);
+    fn bind_add_to_queue(&self, f: impl FnMut(ModelRc<i32>) + 'static);
+    fn bind_toggle_column(&self, f: impl FnMut(SharedString) + 'static);
+}
+
 /// Persist the visible columns after the toggle popup flipped one. The popup has already
 /// repainted, so what is left is the write.
 pub fn persist_visible<T: TrackListColumnState>(state: &AppState, h: &T) {
@@ -79,7 +88,7 @@ pub fn persist_visible<T: TrackListColumnState>(state: &AppState, h: &T) {
     spawn_blocking_logged!(
         s,
         "track_list_view::persist_visible",
-        library::settings::update_view_columns(&s, view_id.to_owned(), columns)
+        library::settings::update_view_columns(&s.paths, view_id.to_owned(), columns)
     );
 }
 
@@ -179,10 +188,10 @@ macro_rules! locked_column {
     };
 }
 
-/// Generate the [`TrackListColumnState`] impl for every listed Slint global, plus [`hydrate_all`]
-/// and [`snapshot_all`] over the same list. `hidden` names the toggleable columns a first launch
-/// hides, and a detail view's `locked = <column>` is excluded from the persisted set and forced
-/// off on hydrate.
+/// Generate the [`TrackListColumnState`] and [`TrackListActions`] impls for every listed Slint
+/// global, plus [`hydrate_all`] and [`snapshot_all`] over the same list. `hidden` names the
+/// toggleable columns a first launch hides, and a detail view's `locked = <column>` is excluded
+/// from the persisted set and forced off on hydrate.
 macro_rules! track_list_views {
     ($(
         $global:ident => $view_id:ident, hidden = [$($hidden:ident),*] $(, locked = $locked:ident)?;
@@ -199,6 +208,20 @@ macro_rules! track_list_views {
 
                 fn write_columns(&self, columns: TrackColumns) {
                     self.set_track_columns(columns);
+                }
+            }
+
+            impl TrackListActions for $global<'_> {
+                fn bind_play_next(&self, f: impl FnMut(ModelRc<i32>) + 'static) {
+                    self.on_play_next(f);
+                }
+
+                fn bind_add_to_queue(&self, f: impl FnMut(ModelRc<i32>) + 'static) {
+                    self.on_add_to_queue(f);
+                }
+
+                fn bind_toggle_column(&self, f: impl FnMut(SharedString) + 'static) {
+                    self.on_toggle_column(f);
                 }
             }
         )*

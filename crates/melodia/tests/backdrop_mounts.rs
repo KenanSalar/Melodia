@@ -18,10 +18,11 @@ const SITES: [&str; 2] =
 /// Each site mounts each stack exactly once, behind the branch of the setting that paints it.
 ///
 /// **A branch rather than a transparent loser**, safe only because the condition cannot move:
-/// `Theme.aurora-backdrop` is an `in` property written once by `boot::ui_setup::apply_backdrop_style`
-/// ahead of `install_views` and `app.show()`. What it buys is that the hidden arm stops painting —
-/// `Brush::is_transparent()` answers `false` for *every* gradient whatever its stop alphas, so a
-/// stack faded to nothing still has its path tessellated and the whole surface filled every frame.
+/// `Theme.aurora-backdrop` is an `in` property written once by
+/// `boot::ui_setup::chrome::apply_backdrop_style` ahead of `install_views` and `app.show()`. What
+/// it buys is that the hidden arm stops painting — `Brush::is_transparent()` answers `false` for
+/// *every* gradient whatever its stop alphas, so a stack faded to nothing still has its path
+/// tessellated and the whole surface filled every frame.
 ///
 /// So what a site can get wrong is the sign: an arm behind the *other* branch reads perfectly and
 /// paints the wrong backdrop under the setting the author wasn't on. The local `aurora-shown`

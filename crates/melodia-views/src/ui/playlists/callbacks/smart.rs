@@ -1,5 +1,5 @@
-//! Smart-playlist rule-builder (`Dialog.kind == "smart-playlist-editor"`,
-//! `SmartEditor` global) wiring.
+//! Smart-playlist rule-builder (`DialogKind::SmartPlaylistEditor`, `SmartEditor` global)
+//! wiring.
 //!
 //! The `rules` model is a Rust-owned `VecModel<SmartRuleRow>` installed here.
 //! Each editor mutation (`add-rule` / `remove-rule` / `set-rule-*`) rewrites the
@@ -19,6 +19,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
+use super::optional_text;
 use crate::ui::callbacks::DialogClaim;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::util::clamp_i64_to_i32;
@@ -31,173 +32,178 @@ use melodia_ui::{AppWindow, Dialog, SmartEditor, SmartRuleRow};
 /// Wire the Smart-Playlist editor callbacks + install its rules model. See
 /// [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    let se = ui.global::<SmartEditor>();
-
     // Install the Rust-owned rules model (starts with one blank rule so a fresh
     // "New Smart Playlist" isn't empty).
-    se.set_rules(ModelRc::new(VecModel::from(vec![default_rule_row()])));
+    ui.global::<SmartEditor>().set_rules(ModelRc::new(VecModel::from(vec![default_rule_row()])));
 
+    wire_add_rule(ui);
+    wire_remove_rule(ui);
+    wire_set_rule_field(ui);
+    wire_set_rule_op(ui);
+    wire_set_rule_value(ui);
+    wire_request_new(ui);
+    wire_request_edit(ui, state);
+    wire_commit(ui, state, playlists_ui);
+}
+
+fn wire_add_rule(ui: &AppWindow) {
     let weak = ui.as_weak();
+    ui.global::<SmartEditor>().on_add_rule(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        with_rules_model(&ui, |vm| vm.push(default_rule_row()));
+    });
+}
 
-    // add-rule.
-    {
-        let weak = weak.clone();
-        se.on_add_rule(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            with_rules_model(&ui, |vm| vm.push(default_rule_row()));
+fn wire_remove_rule(ui: &AppWindow) {
+    let weak = ui.as_weak();
+    ui.global::<SmartEditor>().on_remove_rule(move |row| {
+        let Some(ui) = weak.upgrade() else { return };
+        with_rules_model(&ui, |vm| {
+            if let Ok(ri) = usize::try_from(row)
+                && ri < vm.row_count()
+            {
+                vm.remove(ri);
+            }
         });
-    }
+    });
+}
 
-    // remove-rule.
-    {
+/// Reset the operator to this field-kind's first, then recompute the codes
+/// (clearing the value only if the input kind changed).
+fn wire_set_rule_field(ui: &AppWindow) {
+    let weak = ui.as_weak();
+    ui.global::<SmartEditor>().on_set_rule_field(move |row, field_idx| {
+        let Some(ui) = weak.upgrade() else { return };
+        patch_rule_row(&ui, row, |old| {
+            let field = field_at(field_idx);
+            let op = first_op(field.value_type());
+            rebuilt_row(field, field_idx, op, 0, &old)
+        });
+    });
+}
+
+/// Recompute the input kind for the new operator.
+fn wire_set_rule_op(ui: &AppWindow) {
+    let weak = ui.as_weak();
+    ui.global::<SmartEditor>().on_set_rule_op(move |row, op_idx| {
+        let Some(ui) = weak.upgrade() else { return };
+        patch_rule_row(&ui, row, |old| {
+            let field = field_at(old.field_index);
+            let op = op_at(field.value_type(), op_idx);
+            rebuilt_row(field, old.field_index, op, op_idx, &old)
+        });
+    });
+}
+
+/// Mirror the input into the model (commit reads it back).
+fn wire_set_rule_value(ui: &AppWindow) {
+    let weak = ui.as_weak();
+    ui.global::<SmartEditor>().on_set_rule_value(move |row, text| {
+        let Some(ui) = weak.upgrade() else { return };
+        patch_rule_row(&ui, row, |old| SmartRuleRow { value_text: text, ..old });
+    });
+}
+
+/// Populate a fresh (default) editor and open on a fresh tick.
+fn wire_request_new(ui: &AppWindow) {
+    let weak = ui.as_weak();
+    ui.global::<SmartEditor>().on_request_new(move || {
         let weak = weak.clone();
-        se.on_remove_rule(move |row| {
+        let _ = slint::invoke_from_event_loop(move || {
             let Some(ui) = weak.upgrade() else { return };
-            with_rules_model(&ui, |vm| {
-                if let Ok(ri) = usize::try_from(row)
-                    && ri < vm.row_count()
-                {
-                    vm.remove(ri);
+            open_editor(&ui, "", "", &sc::SmartCriteria::default(), -1);
+        });
+    });
+}
+
+/// Load the playlist's criteria, populate, open on a fresh tick (the
+/// `upgrade_in_event_loop` lands on the next UI tick).
+fn wire_request_edit(ui: &AppWindow, state: &AppState) {
+    let weak = ui.as_weak();
+    let state = state.clone();
+    ui.global::<SmartEditor>().on_request_edit(move |playlist_id| {
+        let id = i64::from(playlist_id);
+        let Some(claim) = DialogClaim::take_from(&weak) else { return };
+        let s = state.clone();
+        let weak = weak.clone();
+        s.runtime.clone().spawn(async move {
+            let detail = match library::playlists::get_playlist_detail(&s.db, id).await {
+                Ok(p) => p,
+                Err(e) => {
+                    log::warn!("smart edit fetch {id}: {}", describe(&e));
+                    return;
                 }
-            });
-        });
-    }
-
-    // set-rule-field — reset the operator to this field-kind's first, then
-    // recompute the codes (clearing the value only if the input kind changed).
-    {
-        let weak = weak.clone();
-        se.on_set_rule_field(move |row, field_idx| {
-            let Some(ui) = weak.upgrade() else { return };
-            patch_rule_row(&ui, row, |old| {
-                let field = field_at(field_idx);
-                let op = first_op(field.value_type());
-                rebuilt_row(field, field_idx, op, 0, &old)
-            });
-        });
-    }
-
-    // set-rule-op — recompute the input kind for the new operator.
-    {
-        let weak = weak.clone();
-        se.on_set_rule_op(move |row, op_idx| {
-            let Some(ui) = weak.upgrade() else { return };
-            patch_rule_row(&ui, row, |old| {
-                let field = field_at(old.field_index);
-                let op = op_at(field.value_type(), op_idx);
-                rebuilt_row(field, old.field_index, op, op_idx, &old)
-            });
-        });
-    }
-
-    // set-rule-value — mirror the input into the model (commit reads it back).
-    {
-        let weak = weak.clone();
-        se.on_set_rule_value(move |row, text| {
-            let Some(ui) = weak.upgrade() else { return };
-            patch_rule_row(&ui, row, |old| SmartRuleRow { value_text: text, ..old });
-        });
-    }
-
-    // request-new — populate a fresh (default) editor and open on a fresh tick.
-    {
-        let weak = weak.clone();
-        se.on_request_new(move || {
-            let weak = weak.clone();
-            let _ = slint::invoke_from_event_loop(move || {
-                let Some(ui) = weak.upgrade() else { return };
-                populate_editor(&ui, "", "", &sc::SmartCriteria::default(), -1);
-                ui.global::<Dialog>().set_open(true);
-            });
-        });
-    }
-
-    // request-edit — load the playlist's criteria, populate, open on a fresh
-    // tick (the `upgrade_in_event_loop` lands on the next UI tick).
-    {
-        let weak = weak.clone();
-        let state = state.clone();
-        se.on_request_edit(move |playlist_id| {
-            let id = i64::from(playlist_id);
-            let Some(claim) = DialogClaim::take_from(&weak) else { return };
-            let s = state.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                let detail = match library::playlists::get_playlist_detail(&s, id).await {
-                    Ok(p) => p,
-                    Err(e) => {
-                        log::warn!("smart edit fetch {id}: {}", describe(&e));
-                        return;
-                    }
-                };
-                let name = detail.name;
-                let description = detail.description.unwrap_or_default();
-                let criteria = sc::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
-                let _ = weak.upgrade_in_event_loop(move |ui| {
-                    if !claim.holds(&ui) {
-                        return;
-                    }
-                    populate_editor(&ui, &name, &description, &criteria, id);
-                    ui.global::<Dialog>().set_open(true);
-                });
-            });
-        });
-    }
-
-    // commit — reconstruct the criteria and create / update.
-    {
-        let weak = weak.clone();
-        let state = state.clone();
-        let playlists_ui = playlists_ui.clone();
-        se.on_commit(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let Some(draft) = collect_criteria(&ui) else {
-                return;
             };
-            let CriteriaDraft { name, description, criteria, target_id } = draft;
-
-            let s = state.clone();
-            let pu = playlists_ui.clone();
-            let weak = weak.clone();
-            s.runtime.clone().spawn(async move {
-                if target_id < 0 {
-                    match library::smart_playlists::create_smart_playlist(
-                        &s,
-                        name.clone(),
-                        description,
-                        &criteria,
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                                log::warn!("smart create refetch: {}", describe(&e));
-                            }
-                            log::info!("smart playlist created: {name:?}");
-                        }
-                        Err(e) => {
-                            log::warn!("create smart playlist {name:?}: {}", describe(&e));
-                        }
-                    }
-                } else {
-                    // Name / description are user-owned too — update them along
-                    // with the criteria. `update_smart_criteria` bumps
-                    // `library_changed`, so the grid + open detail refresh.
-                    if let Err(e) =
-                        library::playlists::update_playlist(&s, target_id, name, description, None)
-                            .await
-                    {
-                        log::warn!("update smart playlist meta {target_id}: {}", describe(&e));
-                    }
-                    if let Err(e) =
-                        library::smart_playlists::update_smart_criteria(&s, target_id, &criteria)
-                            .await
-                    {
-                        log::warn!("update smart criteria {target_id}: {}", describe(&e));
-                    }
+            let name = detail.name;
+            let description = detail.description.unwrap_or_default();
+            let criteria = sc::SmartCriteria::from_json_opt(detail.smart_criteria.as_deref());
+            let _ = weak.upgrade_in_event_loop(move |ui| {
+                if !claim.holds(&ui) {
+                    return;
                 }
+                open_editor(&ui, &name, &description, &criteria, id);
             });
         });
+    });
+}
+
+/// Reconstruct the criteria and create / update.
+fn wire_commit(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let playlists_ui = playlists_ui.clone();
+    ui.global::<SmartEditor>().on_commit(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let Some(draft) = collect_criteria(&ui) else {
+            return;
+        };
+        let s = state.clone();
+        let pu = playlists_ui.clone();
+        let weak = weak.clone();
+        s.runtime.clone().spawn(async move {
+            if draft.target_id < 0 {
+                create_smart(&s, &pu, weak, draft).await;
+            } else {
+                update_smart(&s, draft).await;
+            }
+        });
+    });
+}
+
+async fn create_smart(
+    s: &AppState,
+    pu: &Arc<PlaylistsUi>,
+    weak: slint::Weak<AppWindow>,
+    draft: CriteriaDraft,
+) {
+    let CriteriaDraft { name, description, criteria, .. } = draft;
+    match library::smart_playlists::create_smart_playlist(s, name.clone(), description, &criteria)
+        .await
+    {
+        Ok(_) => {
+            if let Err(e) = playlists_ui_mod::fetch_grid(s, pu, weak).await {
+                log::warn!("smart create refetch: {}", describe(&e));
+            }
+            log::info!("smart playlist created: {name:?}");
+        }
+        Err(e) => {
+            log::warn!("create smart playlist {name:?}: {}", describe(&e));
+        }
+    }
+}
+
+/// Name / description are user-owned too — update them along with the
+/// criteria. `update_smart_criteria` bumps `library_changed`, so the grid +
+/// open detail refresh.
+async fn update_smart(s: &AppState, draft: CriteriaDraft) {
+    let CriteriaDraft { name, description, criteria, target_id } = draft;
+    if let Err(e) =
+        library::playlists::update_playlist(&s.db, target_id, name, description, None).await
+    {
+        log::warn!("update smart playlist meta {target_id}: {}", describe(&e));
+    }
+    if let Err(e) = library::smart_playlists::update_smart_criteria(s, target_id, &criteria).await {
+        log::warn!("update smart criteria {target_id}: {}", describe(&e));
     }
 }
 
@@ -324,8 +330,7 @@ fn collect_criteria(ui: &AppWindow) -> Option<CriteriaDraft> {
     if name.is_empty() {
         return None;
     }
-    let description = se.get_description().trim().to_owned();
-    let description = (!description.is_empty()).then_some(description);
+    let description = optional_text(&se.get_description());
     let limit = se.get_limit_enabled().then(|| sc::SmartLimit {
         count: se
             .get_limit_count_text()
@@ -352,9 +357,9 @@ fn collect_criteria(ui: &AppWindow) -> Option<CriteriaDraft> {
 }
 
 /// Populate every `SmartEditor` global + the rules model from a criteria and
-/// target id (`-1` = create). Shared by `request-new` and `request-edit`; the
-/// caller opens the dialog afterwards.
-fn populate_editor(
+/// target id (`-1` = create), then open the dialog. Shared by `request-new` and
+/// `request-edit`.
+fn open_editor(
     ui: &AppWindow,
     name: &str,
     description: &str,
@@ -382,4 +387,5 @@ fn populate_editor(
         }
         vm.set_vec(rows);
     });
+    ui.global::<Dialog>().set_open(true);
 }

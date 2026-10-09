@@ -1,14 +1,11 @@
-//! Internal data structures + constants used by the Albums grid and
-//! Album Detail submodules.
+//! The Albums grid's data structures and constants. The detail's are
+//! [`crate::ui::track_detail::DetailCache`].
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::ui::row_match::Needle;
 use melodia_core::entities::album::AlbumStats;
-use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// An album's pre-lowercased name + artist, computed once per `fetch_grid`
 /// so the name / artist sorts allocate nothing. Positionally aligned with
@@ -73,38 +70,6 @@ pub(super) struct AlbumGridState {
     /// to re-chunk. `None` until the first rebuild and after every
     /// `fetch_grid`.
     pub index_cache: Mutex<Option<GridIndexCache>>,
-}
-
-/// Detail-side state — the currently-open album's cached track list.
-pub(super) struct AlbumDetailState {
-    /// Cached detail track rows — the **displayed** (filter-applied)
-    /// subset, kept in lockstep with the Slint `tracks` model so the
-    /// generic selection/sort logic (which maps id ↔ row-index through
-    /// this cache) stays valid. `play-row` / `select-row` /
-    /// `shuffle-album` / the in-memory re-sort read this without
-    /// round-tripping the Slint model — mirrors `BrowseUi::last_files`.
-    pub tracks: Mutex<Vec<RsTrackListRow>>,
-    /// Canonical full track set for this album, in display-sort order.
-    /// `tracks` holds only the displayed subset; `apply_filtered_detail`
-    /// re-derives `tracks` by walking this through the current filter.
-    /// Equal to `tracks` whenever no filter is active.
-    pub all_tracks: Mutex<Vec<RsTrackListRow>>,
-    /// Album id currently shown in the detail view (`-1` = none). Lets the
-    /// library-changed subscriber decide whether to refresh the detail.
-    pub album_id: Mutex<i64>,
-    /// The selection set currently *stamped* onto the Slint row model.
-    /// `apply_selection_to_rows` diffs the desired selection against this
-    /// and only re-writes the rows whose membership flipped — O(changed),
-    /// not O(rows). Reset to empty whenever the row model is rebuilt fresh.
-    pub applied_selection: Mutex<HashSet<i32>>,
-    /// Live filter needle, folded by `set_filter` through
-    /// `ui::row_match::fold_needle` — never a bare `to_lowercase`, which
-    /// would still build and silently drop accent parity on this one view.
-    /// Mirrors `AlbumDetail.filter`. Lets
-    /// the re-fetch path (`refresh_detail`) re-apply the filter to fresh
-    /// data without round-tripping the UI thread for the property read.
-    /// Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.
-    pub filter: Mutex<Needle>,
 }
 
 /// How many leading (name-sorted) albums' covers `fetch_grid` prewarms

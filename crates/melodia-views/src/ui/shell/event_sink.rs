@@ -6,6 +6,7 @@
 
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::event_sink::{EventSink, PlayerEvent};
 
 pub struct SlintEventSink {
@@ -35,7 +36,7 @@ impl EventSink for SlintEventSink {
                 }
             };
             if let Err(e) = r {
-                log::warn!("media controls -> library error: {e}");
+                log::warn!("media controls -> library error: {}", describe(&e));
             }
         });
     }

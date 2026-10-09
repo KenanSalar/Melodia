@@ -16,6 +16,7 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 use crate::ui::artwork_cache::{ArtworkCache, ArtworkPair, BlurSpec, CachedArtwork};
 use crate::ui::backdrop::BackdropSample;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 
 /// Landscape, and lighter than the Now Playing tier's wash: the hero region
 /// paints full content-panel width by a band `Theme.hero-artwork` tall, and
@@ -103,7 +104,7 @@ pub(crate) async fn decode_detail_pair(
         Ok(Some(pair)) => pair.into(),
         Ok(None) => DetailPair::default(),
         Err(e) => {
-            log::warn!("detail artwork decode: {e}");
+            log::warn!("detail artwork decode: {}", describe(&e));
             DetailPair::default()
         }
     }

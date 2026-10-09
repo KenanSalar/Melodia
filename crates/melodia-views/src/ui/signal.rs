@@ -1,7 +1,7 @@
 //! Running a closure on the UI thread every time a [`Signal`] moves.
 //!
-//! The subscribe-and-spawn loop is the whole of what the four subscribers share and none of what
-//! they differ on, so what each does with the tick is all that stays at the call site.
+//! The subscribe-and-spawn loop is the whole of what its subscribers share and none of what they
+//! differ on, so what each does with the tick is all that stays at the call site.
 //!
 //! `changed()` marks the value seen on its own, so there is deliberately no `borrow_and_update`
 //! here: the counter is a tick, not a payload, and nothing downstream reads it.
@@ -39,5 +39,5 @@ where
         }
     }))
     .map(|_| ())
-    .map_err(|e| AppError::Window(format!("{label} subscriber: {e}")))
+    .map_err(|e| AppError::io(format!("{label} subscriber"), e))
 }

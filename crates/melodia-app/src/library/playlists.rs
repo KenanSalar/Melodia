@@ -12,47 +12,42 @@ use melodia_store::database::{DbPool, queries};
 
 /// Creates a playlist already holding `track_ids`, and returns its id.
 pub async fn create_playlist(
-    state: &AppState,
+    db: &DbPool,
     name: String,
     description: Option<String>,
     track_ids: Vec<i64>,
 ) -> Result<i64, AppError> {
-    queries::playlist::create_playlist_with_tracks(
-        &state.db,
-        &name,
-        description.as_deref(),
-        &track_ids,
-    )
-    .await
+    queries::playlist::create_playlist_with_tracks(db, &name, description.as_deref(), &track_ids)
+        .await
 }
 
-pub async fn get_playlists(state: &AppState) -> Result<Vec<playlist::PlaylistStats>, AppError> {
-    queries::playlist::get_all_playlists(&state.db).await
+pub async fn get_playlists(db: &DbPool) -> Result<Vec<playlist::PlaylistStats>, AppError> {
+    queries::playlist::get_all_playlists(db).await
 }
 
 pub async fn get_playlist_detail(
-    state: &AppState,
+    db: &DbPool,
     id: i64,
 ) -> Result<playlist::PlaylistStats, AppError> {
-    queries::playlist::get_playlist_by_id(&state.db, id).await
+    queries::playlist::get_playlist_by_id(db, id).await
 }
 
 pub async fn get_playlist_tracks(
-    state: &AppState,
+    db: &DbPool,
     playlist_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::playlist::get_playlist_tracks_for_list(&state.db, playlist_id).await
+    queries::playlist::get_playlist_tracks_for_list(db, playlist_id).await
 }
 
 pub async fn update_playlist(
-    state: &AppState,
+    db: &DbPool,
     id: i64,
     name: String,
     description: Option<String>,
     clear_thumbnail: Option<bool>,
 ) -> Result<playlist::Playlist, AppError> {
     queries::playlist::update_playlist(
-        &state.db,
+        db,
         id,
         &name,
         description.as_deref(),
@@ -63,43 +58,43 @@ pub async fn update_playlist(
 
 /// Drop one or more playlists. The single-card arm passes a one-element slice rather than
 /// keeping a second spelling of the same statement.
-pub async fn delete_playlists(state: &AppState, ids: &[i64]) -> Result<(), AppError> {
-    queries::playlist::delete_playlists(&state.db, ids).await
+pub async fn delete_playlists(db: &DbPool, ids: &[i64]) -> Result<(), AppError> {
+    queries::playlist::delete_playlists(db, ids).await
 }
 
 pub async fn add_to_playlist(
-    state: &AppState,
+    db: &DbPool,
     playlist_id: i64,
     track_ids: Vec<i64>,
 ) -> Result<(), AppError> {
-    queries::playlist::add_tracks_to_playlist(&state.db, playlist_id, &track_ids).await
+    queries::playlist::add_tracks_to_playlist(db, playlist_id, &track_ids).await
 }
 
 /// For the Add-to-Playlist picker dialog: per-playlist count of how many
 /// of the given `track_ids` are already in that playlist. Playlists with
 /// zero overlap are omitted from the map.
 pub async fn count_tracks_in_playlists_for_selection(
-    state: &AppState,
+    db: &DbPool,
     track_ids: Vec<i64>,
 ) -> Result<HashMap<i64, i64>, AppError> {
-    queries::playlist::count_tracks_in_playlists_for_selection(&state.db, &track_ids).await
+    queries::playlist::count_tracks_in_playlists_for_selection(db, &track_ids).await
 }
 
 pub async fn remove_tracks_from_playlist_batch(
-    state: &AppState,
+    db: &DbPool,
     playlist_id: i64,
     track_ids: Vec<i64>,
 ) -> Result<(), AppError> {
-    queries::playlist::remove_tracks_from_playlist_batch(&state.db, playlist_id, &track_ids).await
+    queries::playlist::remove_tracks_from_playlist_batch(db, playlist_id, &track_ids).await
 }
 
 pub async fn reorder_playlist(
-    state: &AppState,
+    db: &DbPool,
     playlist_id: i64,
     from: i32,
     to: i32,
 ) -> Result<(), AppError> {
-    queries::playlist::reorder_playlist_track(&state.db, playlist_id, from, to).await
+    queries::playlist::reorder_playlist_track(db, playlist_id, from, to).await
 }
 
 /// How many distinct covers the Edit-Artwork mosaic picker offers.
@@ -113,11 +108,10 @@ pub async fn reorder_playlist(
 const MOSAIC_CANDIDATE_LIMIT: i64 = 60;
 
 pub async fn get_playlist_artwork_paths(
-    state: &AppState,
+    db: &DbPool,
     playlist_id: i64,
 ) -> Result<Vec<String>, AppError> {
-    queries::playlist::get_playlist_artwork_paths(&state.db, playlist_id, MOSAIC_CANDIDATE_LIMIT)
-        .await
+    queries::playlist::get_playlist_artwork_paths(db, playlist_id, MOSAIC_CANDIDATE_LIMIT).await
 }
 
 pub async fn set_playlist_thumbnail(

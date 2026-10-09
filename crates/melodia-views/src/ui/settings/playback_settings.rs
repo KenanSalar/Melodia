@@ -21,6 +21,7 @@ use crate::ui::settings_bind::toggle_binding;
 use melodia_app::library;
 use melodia_app::services::settings;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_playback::player::playback::crossfade;
 use melodia_ui::{AppWindow, Settings};
 
@@ -73,10 +74,10 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         // `with_state_emit`, so the bar's flag and the monitor's gate both refresh
         // before this callback returns.
         if let Err(e) = library::playback::player_set_gapless(&state_clone.playback_ctx(), on) {
-            log::warn!("player_set_gapless runtime apply: {e}");
+            log::warn!("player_set_gapless runtime apply: {}", describe(&e));
         }
-        state_clone.persist_blocking("persist gapless_playback", move |s| {
-            library::settings::set_gapless_playback(s, on)
+        state_clone.persist_blocking("persist gapless_playback", move |paths| {
+            library::settings::set_gapless_playback(paths, on)
         });
     });
 
@@ -85,8 +86,8 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
         // The runtime effect is already reactive off the global, so only the disk
         // write happens here.
         let token = play_button_anim_token_from_idx(idx).to_owned();
-        state_anim.persist_blocking("persist play_button_animation", move |s| {
-            library::settings::set_play_button_animation(s, token)
+        state_anim.persist_blocking("persist play_button_animation", move |paths| {
+            library::settings::set_play_button_animation(paths, token)
         });
     });
 
@@ -94,8 +95,8 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
     ui.global::<Settings>().on_resume_on_startup_changed(move |on| {
         // Single-phase: the flag is consulted only at the next startup, and the
         // two-way binding already updated the property before this fired.
-        state_resume.persist_blocking("persist resume_on_startup", move |s| {
-            library::settings::set_resume_on_startup(s, on)
+        state_resume.persist_blocking("persist resume_on_startup", move |paths| {
+            library::settings::set_resume_on_startup(paths, on)
         });
     });
 
@@ -149,8 +150,8 @@ fn install_crossfade_callbacks(ui: &AppWindow, state: &AppState) {
     let state_commit = state.clone();
     g.on_crossfade_duration_committed(move |secs| {
         let ms = crossfade::secs_to_crossfade_ms(secs);
-        state_commit.persist_blocking("persist crossfade_duration_ms", move |s| {
-            library::settings::set_crossfade_duration_ms(s, ms)
+        state_commit.persist_blocking("persist crossfade_duration_ms", move |paths| {
+            library::settings::set_crossfade_duration_ms(paths, ms)
         });
     });
 }

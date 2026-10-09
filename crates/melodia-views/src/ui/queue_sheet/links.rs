@@ -17,6 +17,7 @@ use crate::ui::model_patch::patch_rows_where;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackLinks;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Queue, QueueRow};
 
 /// Track id → its FK trio, for every queue row resolved so far this open.
@@ -98,10 +99,10 @@ pub(super) fn fetch_missing(
     let cache = cache.clone();
     let is_open = is_open.clone();
     state.runtime.clone().spawn(async move {
-        let links = match library::tracks::get_track_links(&state, &missing).await {
+        let links = match library::tracks::get_track_links(&state.db, &missing).await {
             Ok(links) => links,
             Err(e) => {
-                log::warn!("queue sheet: track links for {} rows: {e}", missing.len());
+                log::warn!("queue sheet: track links for {} rows: {}", missing.len(), describe(&e));
                 // Hand the claims back, so the next rebuild is the retry.
                 let mut guard = cache.lock();
                 for id in &missing {

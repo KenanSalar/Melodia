@@ -14,10 +14,13 @@ pub(in crate::ui) mod card_actions;
 pub(in crate::ui) mod card_selection;
 mod clipboard;
 pub(in crate::ui) mod cross_tab_nav;
+mod dialog_closed;
 pub(in crate::ui) mod index_persist;
 mod library_settings;
 mod now_playing;
 mod tags;
+pub(in crate::ui) mod track_detail;
+pub(in crate::ui) mod track_list;
 mod updater;
 
 use std::sync::Arc;
@@ -29,6 +32,7 @@ use melodia_app::library;
 use melodia_app::services::settings::{SortDir, ViewSort};
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, Nav, Player};
 
 use index_persist::IndexPersist;
@@ -38,7 +42,7 @@ pub use cross_tab_nav::wire_cross_tab_nav;
 pub use library_settings::wire_library_settings;
 pub use now_playing::{RowFlagHandles, wire_now_playing_favorite, wire_now_playing_rating};
 pub use tags::wire_tags;
-pub use updater::wire as wire_updater;
+pub use updater::{check_painter, wire as wire_updater};
 
 /// A Slint `[int]` callback param as `Vec<i64>`, for every track-row context-menu callback
 /// — single-row mode emits a 1-element array, multi-select the whole view selection.
@@ -128,11 +132,11 @@ pub(super) fn spawn_play_then_shuffle(state: &AppState, tag: &'static str, ids: 
         if let Err(e) =
             library::playback::player_play_tracks(&state.playback_ctx(), ids, Some(start)).await
         {
-            log::warn!("{tag} play: {e}");
+            log::warn!("{tag} play: {}", describe(&e));
             return;
         }
         if let Err(e) = library::queue::queue_set_shuffle(&state, true) {
-            log::warn!("{tag} shuffle: {e}");
+            log::warn!("{tag} shuffle: {}", describe(&e));
         }
     });
 }
@@ -153,9 +157,9 @@ pub(super) fn next_sort(cur_field: &str, cur_dir: &str, clicked: &str) -> (Strin
 ///
 /// A *synthetic* order — one no column header can ask for — is otherwise unreachable the
 /// moment anything else is clicked, and the sort persists across restarts. Playlist Detail
-/// is the only caller: `"position"` is what drag-to-reorder is gated on, so one click on
-/// Title used to retire reordering for good. Nothing paints the third state, no header
-/// cell matching the natural field.
+/// is the only view naming one (`TrackDetail::NATURAL_SORT`): `"position"` is what
+/// drag-to-reorder is gated on, so one click on Title used to retire reordering for good.
+/// Nothing paints the third state, no header cell matching the natural field.
 pub(super) fn next_sort_with_natural(
     cur_field: &str,
     cur_dir: &str,
@@ -183,8 +187,8 @@ pub(super) fn persist_view_sort(
     let s = state.clone();
     let sort = ViewSort { field, dir };
     state.runtime.spawn_blocking(move || {
-        if let Err(e) = library::settings::set_view_sort(&s, view_id.to_owned(), sort) {
-            log::warn!("{view_id}::set_view_sort: {e}");
+        if let Err(e) = library::settings::set_view_sort(&s.paths, view_id.to_owned(), sort) {
+            log::warn!("{view_id}::set_view_sort: {}", describe(&e));
         }
     });
 }
@@ -206,19 +210,32 @@ pub fn persisted_sort<'a>(
     view_state?.view_sort.get(view_id)
 }
 
-/// Wire every Slint `Player.*` callback to its `library::*` counterpart.
-/// Call once after constructing `AppWindow`.
+/// Wire every Slint `Player.*` callback to its `library::*` counterpart, and every callback that
+/// answers to no single view. Call once after constructing `AppWindow`.
 pub fn wire_all(ui: &AppWindow, state: &AppState) {
-    let player = ui.global::<Player>();
-    let ui_weak = ui.as_weak();
-
     // The two card-grid globals: selection state shared across every grid, and the actions its
     // right-click menu fires. Here rather than in a view slice because no one grid owns them.
     card_selection::wire(ui);
     card_actions::wire(ui, state);
     // Every row and card menu's Copy entries, answering to no single view for the same reason.
     clipboard::wire(ui, state);
+    dialog_closed::wire(ui, state);
 
+    let player = ui.global::<Player>();
+    wire_transport(&player, state);
+    wire_seek(ui, state);
+    wire_set_volume(&player, state);
+    wire_set_playback_speed(&player, state);
+    // Player.toggle-favorite is wired in `wire_now_playing_favorite` (called
+    // after every per-view wire fn) so it can fan the change into all three
+    // surfaces that hold a per-row `is_favorite` (Tracks, Browse, AlbumDetail).
+
+    wire_persist_selected_index(ui, state);
+    wire_reveal_in_folder(ui, state);
+}
+
+/// Play/pause, next, previous, stop, the volume commit, mute, shuffle and repeat.
+fn wire_transport(player: &Player<'_>, state: &AppState) {
     wire_sync_pb!(
         player,
         on_play_pause,
@@ -245,104 +262,100 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
         library::queue::queue_toggle_shuffle
     );
     wire_sync!(player, on_cycle_repeat, state, "cycle_repeat", library::queue::queue_cycle_repeat);
+}
 
-    // seek: hold the slider at the requested position until the backend reports a
-    // matching update (`Player.seek_pending_ms`).
-    {
-        let s = state.clone();
-        let weak = ui_weak.clone();
-        player.on_seek(move |position_ms| {
-            if let Some(ui) = weak.upgrade() {
-                ui.global::<Player>().set_seek_pending_ms(position_ms.max(0));
-            }
-            let s = s.clone();
-            let pos = u64::try_from(position_ms.max(0)).unwrap_or(0);
-            spawn_logged_sync!(s, "seek", library::playback::player_seek(&s.playback_ctx(), pos));
-        });
-    }
+/// Hold the slider at the requested position until the backend reports a
+/// matching update (`Player.seek_pending_ms`).
+fn wire_seek(ui: &AppWindow, state: &AppState) {
+    let s = state.clone();
+    let weak = ui.as_weak();
+    ui.global::<Player>().on_seek(move |position_ms| {
+        if let Some(ui) = weak.upgrade() {
+            ui.global::<Player>().set_seek_pending_ms(position_ms.max(0));
+        }
+        let s = s.clone();
+        let pos = u64::try_from(position_ms.max(0)).unwrap_or(0);
+        spawn_logged_sync!(s, "seek", library::playback::player_seek(&s.playback_ctx(), pos));
+    });
+}
 
-    // set_volume: clamp + cast before dispatch.
-    {
-        let s = state.clone();
-        player.on_set_volume(move |level| {
-            let s = s.clone();
-            // Negative → 0 (try_from fails); then cap at the volume ceiling.
-            let vol = u32::try_from(level)
-                .unwrap_or(0)
-                .min(melodia_engine::player::engine::state::MAX_VOLUME);
-            spawn_logged_sync!(
-                s,
-                "set_volume",
-                library::playback::player_set_volume(&s.playback_ctx(), vol)
-            );
-        });
-    }
+/// Clamp + cast before dispatch.
+fn wire_set_volume(player: &Player<'_>, state: &AppState) {
+    let s = state.clone();
+    player.on_set_volume(move |level| {
+        let s = s.clone();
+        // Negative → 0 (try_from fails); then cap at the volume ceiling.
+        let vol = u32::try_from(level)
+            .unwrap_or(0)
+            .min(melodia_engine::player::engine::state::MAX_VOLUME);
+        spawn_logged_sync!(
+            s,
+            "set_volume",
+            library::playback::player_set_volume(&s.playback_ctx(), vol)
+        );
+    });
+}
 
-    // set_playback_speed: apply to the live player *and* persist, speed surviving restarts
-    // as repeat, shuffle and volume do.
-    {
-        let s = state.clone();
-        player.on_set_playback_speed(move |speed| {
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                "set_playback_speed",
-                library::playback::player_set_playback_speed_committed(
-                    &s.playback_ctx(),
-                    f64::from(speed)
-                )
-            );
-        });
-    }
+/// Apply to the live player *and* persist, speed surviving restarts as repeat,
+/// shuffle and volume do.
+fn wire_set_playback_speed(player: &Player<'_>, state: &AppState) {
+    let s = state.clone();
+    player.on_set_playback_speed(move |speed| {
+        let s = s.clone();
+        spawn_logged!(
+            s,
+            "set_playback_speed",
+            library::playback::player_set_playback_speed_committed(
+                &s.playback_ctx(),
+                f64::from(speed)
+            )
+        );
+    });
+}
 
-    // Player.toggle-favorite is wired in `wire_now_playing_favorite` (called
-    // after every per-view wire fn) so it can fan the change into all three
-    // surfaces that hold a per-row `is_favorite` (Tracks, Browse, AlbumDetail).
-
-    // Nav.persist-selected-index: fired after every sidebar click. Persists
-    // `last_nav_index` on the blocking pool and records a history entry so Mouse-4/5 can
-    // walk back through tab switches. `record_current` reads on the UI thread ahead of any
-    // disk hop, off the post-click index and detail id, so the entry is what the user is
-    // about to see.
+/// Fired after every sidebar click. Persists `last_nav_index` on the blocking
+/// pool and records a history entry so Mouse-4/5 can walk back through tab
+/// switches. `record_current` reads on the UI thread ahead of any disk hop, off
+/// the post-click index and detail id, so the entry is what the user is about to
+/// see.
+fn wire_persist_selected_index(ui: &AppWindow, state: &AppState) {
     let nav = ui.global::<Nav>();
-    {
-        let s = state.clone();
-        let ui_weak = ui_weak.clone();
-        // `Nav.persist-selected-index` can fire twice in one tick — `nav_history::replay`
-        // closes the departing detail first, and a close restores a cross-section origin.
-        let persist = Arc::new(IndexPersist::new(nav.get_selected_index()));
-        nav.on_persist_selected_index(move |idx| {
-            if let Some(ui) = ui_weak.upgrade() {
-                crate::ui::nav_history::record_current(&ui);
-            }
-            persist.publish(idx);
-            // Spelled out rather than through `spawn_blocking_logged!`, which takes a
-            // string *literal*: a failure has to name the section it dropped.
-            let s_disk = s.clone();
-            let persist = Arc::clone(&persist);
-            s.runtime.spawn_blocking(move || {
-                persist.write_if_current(idx, || {
-                    if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {
-                        log::warn!("nav: set_last_nav_index({idx}): {e}");
-                    }
-                });
-            });
-        });
-    }
-
-    // Nav.reveal-in-folder: "Open Containing Folder", in every track-row context menu.
-    {
-        let s = state.clone();
-        nav.on_reveal_in_folder(move |track_id| {
-            let s = s.clone();
-            let id = i64::from(track_id);
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::tracks::reveal_in_file_manager(&s, id).await {
-                    log::warn!("nav: reveal_in_folder({id}): {e}");
+    let s = state.clone();
+    let ui_weak = ui.as_weak();
+    // `Nav.persist-selected-index` can fire twice in one tick — `nav_history::replay`
+    // closes the departing detail first, and a close restores a cross-section origin.
+    let persist = Arc::new(IndexPersist::new(nav.get_selected_index()));
+    nav.on_persist_selected_index(move |idx| {
+        if let Some(ui) = ui_weak.upgrade() {
+            crate::ui::nav_history::record_current(&ui);
+        }
+        persist.publish(idx);
+        // Spelled out rather than through `spawn_blocking_logged!`, which takes a
+        // string *literal*: a failure has to name the section it dropped.
+        let s_disk = s.clone();
+        let persist = Arc::clone(&persist);
+        s.runtime.spawn_blocking(move || {
+            persist.write_if_current(idx, || {
+                if let Err(e) = library::settings::set_last_nav_index(&s_disk.paths, idx) {
+                    log::warn!("nav: set_last_nav_index({idx}): {}", describe(&e));
                 }
             });
         });
-    }
+    });
+}
+
+/// "Open Containing Folder", in every track-row context menu.
+fn wire_reveal_in_folder(ui: &AppWindow, state: &AppState) {
+    let s = state.clone();
+    ui.global::<Nav>().on_reveal_in_folder(move |track_id| {
+        let s = s.clone();
+        let id = i64::from(track_id);
+        s.runtime.clone().spawn(async move {
+            if let Err(e) = library::tracks::reveal_in_file_manager(&s.db, id).await {
+                log::warn!("nav: reveal_in_folder({id}): {}", describe(&e));
+            }
+        });
+    });
 }
 
 #[cfg(test)]

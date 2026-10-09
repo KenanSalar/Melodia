@@ -19,6 +19,7 @@ use tokio_util::sync::CancellationToken;
 use crate::state::{AppState, SharedFlag};
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::track::ScrobbleRow;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick};
 use melodia_integrations::services::integrations::scrobble::detector::{DetectorState, Effect};
 use melodia_integrations::services::integrations::scrobble::live_detector::{
@@ -138,7 +139,7 @@ async fn process_effects(
                 if let Some(row) = fetch_row(db, track_id, last_row).await
                     && let Err(e) = service.enqueue_scrobble(&row, timestamp).await
                 {
-                    log::warn!("Failed to enqueue scrobble for track {track_id}: {e}");
+                    log::warn!("Failed to enqueue scrobble for track {track_id}: {}", describe(&e));
                 }
             }
         }
@@ -152,7 +153,7 @@ async fn process_live_effects(effects: Vec<LiveEffect>, service: &ScrobbleServic
             LiveEffect::NowPlaying(track) => service.update_now_playing(track),
             LiveEffect::Scrobble { track, timestamp } => {
                 if let Err(e) = service.enqueue_track(track, timestamp).await {
-                    log::warn!("Failed to enqueue a radio scrobble: {e}");
+                    log::warn!("Failed to enqueue a radio scrobble: {}", describe(&e));
                 }
             }
         }
@@ -178,7 +179,7 @@ async fn fetch_row(
         }
         Ok(None) => None,
         Err(e) => {
-            log::warn!("Failed to load scrobble row for track {track_id}: {e}");
+            log::warn!("Failed to load scrobble row for track {track_id}: {}", describe(&e));
             None
         }
     }

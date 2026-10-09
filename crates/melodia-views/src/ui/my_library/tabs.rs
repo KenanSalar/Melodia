@@ -124,8 +124,7 @@ pub fn detail_id_for(ui: &AppWindow, tab: MyLibraryTab) -> Option<i64> {
 ///
 /// Two askers stay off it, both answering a *different* question about the same globals:
 /// `hero_chips::my_library_owner` wants the `ChipOwner` a published row was stamped with,
-/// not always the mounted tab's, and `tasks::rss_sampler::my_library_tag` a diagnostic
-/// string.
+/// not always the mounted tab's, and `ui::view_tag::my_library_tag` a diagnostic string.
 pub fn mounted_surface(ui: &AppWindow) -> MountedSurface {
     let tab = {
         let g = ui.global::<MyLibrary>();

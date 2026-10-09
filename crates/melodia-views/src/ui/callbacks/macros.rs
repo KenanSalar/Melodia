@@ -4,8 +4,11 @@
 /// Spawn `$fut` on `$state`'s runtime, logging any error with `$label`. The caller must
 /// already have a local binding `$state` (typically `let s = s.clone();` at closure entry)
 /// so `$fut`'s `&s` token resolves to the moved-in clone.
+///
+/// `$label` is any `Display` expression, evaluated only on failure, so a generic caller can
+/// pass a `format_args!` naming its view.
 macro_rules! spawn_logged {
-    ($state:ident, $label:literal, $fut:expr) => {{
+    ($state:ident, $label:expr, $fut:expr) => {{
         $state.runtime.clone().spawn(async move {
             if let Err(e) = $fut.await {
                 log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
@@ -44,9 +47,7 @@ macro_rules! spawn_blocking_logged {
     ($state:ident, $label:literal, $expr:expr) => {{
         // Before the spawn, so a write that hangs still says what it was.
         log::debug!("view state: {}", $label);
-        // `.clone()` first: `$expr` usually moves the state it borrows `runtime` from,
-        // and a bare `$state.runtime.spawn_blocking(…)` holds that borrow across the move.
-        $state.runtime.clone().spawn_blocking(move || {
+        $state.runtime.spawn_blocking(move || {
             if let Err(e) = $expr {
                 log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
             }
@@ -109,10 +110,10 @@ macro_rules! wire_sync_pb {
 /// and a multi-select batch share one path.
 ///
 /// `captures:` lists the local bindings `after` needs, each cloned once into the callback
-/// and once per invocation.
+/// and once per invocation. `$label` is `spawn_logged!`'s.
 macro_rules! wire_row_flag {
     (
-        $target:expr, $method:ident, $state:expr, $label:literal,
+        $target:expr, $method:ident, $state:expr, $label:expr,
         $setter:path, $collect:path,
         captures: [$($cap:ident),* $(,)?],
         after: |$ids:ident, $val:ident| $after:block
@@ -138,69 +139,7 @@ macro_rules! wire_row_flag {
     }};
 }
 
-/// Reset one detail global's hero-Image properties and clear `has-blur`, so the backing
-/// `SharedPixelBuffer` Arcs release and `FemtoVG` can reclaim the GPU textures. A macro
-/// rather than a `fn` because the three detail globals are distinct generated types with
-/// no trait between them.
-///
-/// Reach for [`release_detail_hero_images`] unless you are handing back several globals at
-/// once and want the two shared resets run once — My Library's deferred hero teardown is
-/// the only such caller.
-macro_rules! release_hero_slots {
-    ($g:expr) => {{
-        let detail = &$g;
-        detail.set_cover(::slint::Image::default());
-        detail.set_blur_img_a(::slint::Image::default());
-        detail.set_blur_img_b(::slint::Image::default());
-        detail.set_has_blur(false);
-    }};
-}
-
-/// The two shared resets every hero teardown owes, on their own.
-///
-/// Six heroes share one `HeroBackdrop` solve and one `HeroChips` row, so a teardown
-/// leaving either behind paints the departing hero's colours and counts under the *next*
-/// one. [`release_detail_hero_images`] is this plus the image slots; this bare pair is for
-/// the heroes with none to hand back — Genre Detail's hashed gradient, and the two mosaic
-/// pages whose tiles belong to their own tier.
-///
-/// **On My Library a section leave is not a teardown, and the two halves stop short of one
-/// at different points.** The *colour set* belongs to the page rather than a tab, so
-/// [`crate::ui::my_library::the_band_is_up`] holds it until the page itself is left — the
-/// same question `apply_detail_artwork` asks on the way in, covering the two cases a
-/// hand-off gate missed: the band *collapsing* over a hero whose colours it is still
-/// painting, and a tab re-entered onto a detail whose banner comes back with it.
-///
-/// The *chip row* stops one step earlier, at [`crate::ui::hero_chips::clear_if_stale`],
-/// and the asymmetry is the point: a colour held across a hand-off is the outgoing hero's
-/// *tone*, where a count held across it is its *facts* under the incoming title.
-macro_rules! release_shared_hero {
-    ($ui:expr) => {{
-        if !$crate::ui::my_library::the_band_is_up(&$ui) {
-            $crate::ui::hero_backdrop::reset(&$ui);
-        }
-        $crate::ui::hero_chips::clear_if_stale(&$ui);
-    }};
-}
-
-/// [`release_hero_slots`] for one detail global, plus [`release_shared_hero`].
-///
-/// **The slots ride the same page-level gate the colour set does**, for the reason the
-/// detail id gives: nothing clears one on a tab leave, so `AlbumDetail.album-id >= 0`
-/// still means "this banner is in the globals" and picking that tab again morphs it back
-/// open ahead of the re-fetch — emptying `cover` here leaves that morph painting
-/// `ArtworkImage`'s fallback glyph. Every path that genuinely closes a detail writes `-1`
-/// first, and `release_collapsed_hero` hands the slots back once the band has shrunk.
-macro_rules! release_detail_hero_images {
-    ($ui:expr, $g:expr) => {{
-        if !$crate::ui::my_library::the_band_is_up(&$ui) {
-            $crate::ui::callbacks::macros::release_hero_slots!($g);
-        }
-        $crate::ui::callbacks::macros::release_shared_hero!($ui);
-    }};
-}
-
 pub(in crate::ui) use {
-    release_detail_hero_images, release_hero_slots, release_shared_hero, spawn_blocking_logged,
-    spawn_logged, spawn_logged_sync, wire_pb, wire_row_flag, wire_sync, wire_sync_pb,
+    spawn_blocking_logged, spawn_logged, spawn_logged_sync, wire_pb, wire_row_flag, wire_sync,
+    wire_sync_pb,
 };

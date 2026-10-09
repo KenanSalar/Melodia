@@ -21,7 +21,6 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local, NaiveDateTime};
 
-use crate::state::AppState;
 use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::atomic_file;
@@ -122,16 +121,10 @@ pub fn suggested_archive_name(now: DateTime<Local>) -> String {
 /// No collision suffix: the path came out of a save dialog, which has already asked before
 /// overwriting.
 pub async fn export_playlist_to_file(
-    state: &AppState,
+    db: &DbPool,
     playlist_id: i64,
     dest: &Path,
 ) -> Result<(), AppError> {
-    write_playlist(&state.db, playlist_id, dest).await
-}
-
-/// [`export_playlist_to_file`]'s body, narrowed to what it actually reaches so the tests can drive
-/// it off a bare pool.
-async fn write_playlist(db: &DbPool, playlist_id: i64, dest: &Path) -> Result<(), AppError> {
     let (_, text) = prepare_export(db, playlist_id).await?;
     atomic_file::write_text(dest.to_path_buf(), text).await
 }
@@ -143,15 +136,14 @@ async fn write_playlist(db: &DbPool, playlist_id: i64, dest: &Path) -> Result<()
 /// the archive with ` (2)`, ` (3)`, … suffixes. Playlists holding more text than
 /// [`archive::MAX_TEXT_BYTES`] write nothing at all, import being bound to refuse the archive.
 pub async fn export_playlists_to_archive(
-    state: &AppState,
+    db: &DbPool,
     playlist_ids: &[i64],
     dest: &Path,
 ) -> Result<ExportOutcome, AppError> {
-    write_archive(&state.db, playlist_ids, dest, Local::now().naive_local()).await
+    write_archive(db, playlist_ids, dest, Local::now().naive_local()).await
 }
 
-/// [`export_playlists_to_archive`]'s body, narrowed the same way [`write_playlist`] is, with the
-/// instant its entries are dated passed in.
+/// [`export_playlists_to_archive`]'s body, with the instant its entries are dated passed in.
 async fn write_archive(
     db: &DbPool,
     playlist_ids: &[i64],
@@ -210,10 +202,10 @@ async fn prepare_export(db: &DbPool, playlist_id: i64) -> Result<(String, String
 
 /// Import every playlist in each of `paths`, each into a NEW playlist, totalled for the completion
 /// toast. A file that fails whole counts as one failure, so the files beside it still land.
-pub async fn import_playlists_from_files(state: &AppState, paths: &[PathBuf]) -> ImportFileResult {
+pub async fn import_playlists_from_files(db: &DbPool, paths: &[PathBuf]) -> ImportFileResult {
     let mut total = ImportFileResult::default();
     for path in paths {
-        match import_playlists_from_file(&state.db, path).await {
+        match import_playlists_from_file(db, path).await {
             Ok(file) => total.merge(&file),
             Err(e) => {
                 log::warn!("playlist import: {}: {}", path.display(), describe(&e));

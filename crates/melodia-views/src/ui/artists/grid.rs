@@ -24,7 +24,7 @@ pub async fn fetch_grid(
     artists_ui: &Arc<ArtistsUi>,
     weak: Weak<AppWindow>,
 ) -> AppResult<()> {
-    let artists = library::artists::get_artists(state).await?;
+    let artists = library::artists::get_artists(&state.db).await?;
     let data = Arc::new(GridData::new(artists));
     // See `ui::albums::grid::fetch_grid` for the gate rationale.
     {

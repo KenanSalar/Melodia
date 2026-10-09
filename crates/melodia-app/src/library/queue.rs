@@ -287,14 +287,14 @@ fn set_repeat(
 /// `wire_sync!` spawn returns immediately. A failed write only logs: the
 /// in-memory state already changed and persistence is best-effort.
 fn persist_shuffle(state: &AppState, enabled: bool) {
-    state.persist_blocking("persist shuffle_enabled", move |state| {
-        mutate_settings(&state.paths, |s| s.queue.shuffle_enabled = enabled)
+    state.persist_blocking("persist shuffle_enabled", move |paths| {
+        mutate_settings(paths, |s| s.queue.shuffle_enabled = enabled)
     });
 }
 
 fn persist_repeat(state: &AppState, mode: RepeatMode) {
-    state.persist_blocking("persist repeat_mode", move |state| {
-        mutate_settings(&state.paths, |s| s.queue.repeat_mode = mode)
+    state.persist_blocking("persist repeat_mode", move |paths| {
+        mutate_settings(paths, |s| s.queue.repeat_mode = mode)
     });
 }
 
@@ -379,7 +379,7 @@ async fn plan_restore(
         })
     })
     .await
-    .map_err(|e| AppError::Settings(format!("restore_persisted_playback join: {e}")))??;
+    .map_err(|e| AppError::io("restore_persisted_playback join", e))??;
 
     Ok(RestorePlan { persisted, summaries, station, repeat_mode, shuffle_enabled })
 }

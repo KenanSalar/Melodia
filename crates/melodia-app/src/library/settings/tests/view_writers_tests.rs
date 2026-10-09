@@ -7,7 +7,7 @@
 //! happen, and a nav index past the last section lands the next boot somewhere unselectable.
 
 use super::{
-    read_view_sort, write_last_detail_id, write_last_nav_index, write_locale, write_overflow_button,
+    get_view_sort, set_last_detail_id, set_last_nav_index, set_locale, set_overflow_button,
 };
 use crate::services;
 use crate::state::fixtures::seeded_root;
@@ -21,7 +21,7 @@ fn an_unsupported_locale_is_refused_and_never_written() -> Result<(), AppError> 
     let (_tmp, paths) = seeded_root()?;
     let before = services::settings::read_settings(&paths)?.locale;
 
-    let refused = write_locale(&paths, "xx-YZ".to_owned());
+    let refused = set_locale(&paths, "xx-YZ".to_owned());
 
     assert!(matches!(refused, Err(AppError::Validation(_))));
     assert_eq!(services::settings::read_settings(&paths)?.locale, before);
@@ -35,7 +35,7 @@ fn a_bundled_locale_is_persisted() -> Result<(), AppError> {
         unreachable!("the app ships more than one locale")
     };
 
-    write_locale(&paths, code.to_owned())?;
+    set_locale(&paths, code.to_owned())?;
 
     assert_eq!(services::settings::read_settings(&paths)?.locale, code);
     Ok(())
@@ -48,8 +48,8 @@ fn a_bundled_locale_is_persisted() -> Result<(), AppError> {
 fn toggling_an_overflow_button_never_duplicates_it() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_overflow_button(&paths, "shuffle".to_owned(), true)?;
-    write_overflow_button(&paths, "shuffle".to_owned(), true)?;
+    set_overflow_button(&paths, "shuffle".to_owned(), true)?;
+    set_overflow_button(&paths, "shuffle".to_owned(), true)?;
 
     let buttons = services::settings::read_settings(&paths)?.overflow_buttons;
     assert_eq!(buttons.iter().filter(|id| *id == "shuffle").count(), 1);
@@ -59,9 +59,9 @@ fn toggling_an_overflow_button_never_duplicates_it() -> Result<(), AppError> {
 #[test]
 fn turning_an_overflow_button_off_removes_it() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
-    write_overflow_button(&paths, "shuffle".to_owned(), true)?;
+    set_overflow_button(&paths, "shuffle".to_owned(), true)?;
 
-    write_overflow_button(&paths, "shuffle".to_owned(), false)?;
+    set_overflow_button(&paths, "shuffle".to_owned(), false)?;
 
     let buttons = services::settings::read_settings(&paths)?.overflow_buttons;
     assert!(!buttons.iter().any(|id| id == "shuffle"));
@@ -76,10 +76,10 @@ fn a_nav_index_outside_the_range_is_clamped_before_it_is_written() -> Result<(),
     let (_tmp, paths) = seeded_root()?;
     let top = services::view_state::MAX_NAV_INDEX;
 
-    write_last_nav_index(&paths, top + 1)?;
+    set_last_nav_index(&paths, top + 1)?;
     assert_eq!(services::view_state::read_view_state(&paths)?.last_nav_index, top);
 
-    write_last_nav_index(&paths, -3)?;
+    set_last_nav_index(&paths, -3)?;
     assert_eq!(services::view_state::read_view_state(&paths)?.last_nav_index, 0);
     Ok(())
 }
@@ -90,13 +90,13 @@ fn a_nav_index_outside_the_range_is_clamped_before_it_is_written() -> Result<(),
 fn closing_a_detail_drops_its_entry_rather_than_keeping_one() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_last_detail_id(&paths, "album-detail", Some(7))?;
+    set_last_detail_id(&paths, "album-detail", Some(7))?;
     assert_eq!(
         services::view_state::read_view_state(&paths)?.last_detail_ids.get("album-detail"),
         Some(&7),
     );
 
-    write_last_detail_id(&paths, "album-detail", None)?;
+    set_last_detail_id(&paths, "album-detail", None)?;
     assert!(
         !services::view_state::read_view_state(&paths)?
             .last_detail_ids
@@ -111,7 +111,7 @@ fn closing_a_detail_drops_its_entry_rather_than_keeping_one() -> Result<(), AppE
 fn a_view_with_no_persisted_sort_answers_none() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    assert!(read_view_sort(&paths, "tracks").is_none());
+    assert!(get_view_sort(&paths, "tracks").is_none());
     Ok(())
 }
 
@@ -126,7 +126,7 @@ fn a_persisted_sort_comes_back_for_its_own_view_only() -> Result<(), AppError> {
         s.view_sort.insert("tracks".to_owned(), sort.clone());
     })?;
 
-    assert_eq!(read_view_sort(&paths, "tracks").map(|s| s.field), Some("album".to_owned()));
-    assert!(read_view_sort(&paths, "browse").is_none());
+    assert_eq!(get_view_sort(&paths, "tracks").map(|s| s.field), Some("album".to_owned()));
+    assert!(get_view_sort(&paths, "browse").is_none());
     Ok(())
 }

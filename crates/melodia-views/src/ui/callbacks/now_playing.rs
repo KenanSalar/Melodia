@@ -1,24 +1,26 @@
 //! `Player.toggle-favorite` and `Player.set-current-rating` fan-out into
-//! Tracks / Browse / `AlbumDetail` / `ArtistDetail` / `GenreDetail` / Search rows.
+//! Tracks / Browse / the four detail views / Search rows.
 
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Global as _};
 
-use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
-use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
+use crate::ui::albums::AlbumsUi;
+use crate::ui::artists::ArtistsUi;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
-use crate::ui::genres::{self as genres_ui_mod, GenresUi};
+use crate::ui::genres::GenresUi;
+use crate::ui::playlists::PlaylistsUi;
 use crate::ui::search::{self as search_ui_mod, SearchUi};
+use crate::ui::track_detail::DetailRows;
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Player};
+use melodia_core::error::describe;
+use melodia_ui::{AlbumDetail, AppWindow, ArtistDetail, GenreDetail, Player, PlaylistDetail};
 
-/// The six view-side surfaces holding a per-row `is_favorite` / `rating`,
-/// bundled so the two Now-Playing fan-outs clone one handle instead of seven.
-/// Each `apply_*` helper walks its `VecModel` and silently no-ops when the
-/// id isn't present, so mirroring into all six on every change is safe.
+/// The view-side surfaces holding a per-row `is_favorite` / `rating`, bundled so the two
+/// Now-Playing fan-outs clone one handle. Each patch no-ops where the id isn't listed, so
+/// mirroring into all of them on every change is safe.
 ///
 /// Search is here because the bar's heart is on screen while its results are, and it is the
 /// one surface with no `library_changed` subscriber to correct a missed patch later.
@@ -26,9 +28,10 @@ use melodia_ui::{AppWindow, Player};
 struct CurrentTrackMirrors {
     tracks: Arc<TracksUi>,
     browse: Arc<BrowseUi>,
-    albums: Arc<AlbumsUi>,
-    artists: Arc<ArtistsUi>,
-    genres: Arc<GenresUi>,
+    albums: DetailRows<AlbumsUi>,
+    artists: DetailRows<ArtistsUi>,
+    genres: DetailRows<GenresUi>,
+    playlists: DetailRows<PlaylistsUi>,
     search: Arc<SearchUi>,
     weak: slint::Weak<AppWindow>,
 }
@@ -39,12 +42,10 @@ impl CurrentTrackMirrors {
         tracks_ui_mod::apply_row_favorite(&self.weak, id, fav);
         self.browse.flip_favorite(id, fav);
         browse_ui_mod::apply_row_favorite(&self.weak, id, fav);
-        self.albums.flip_detail_favorite(id, fav);
-        albums_ui_mod::apply_detail_row_favorite(&self.weak, id, fav);
-        self.artists.flip_detail_favorite(id, fav);
-        artists_ui_mod::apply_detail_row_favorite(&self.weak, id, fav);
-        self.genres.flip_detail_favorite(id, fav);
-        genres_ui_mod::apply_detail_row_favorite(&self.weak, id, fav);
+        self.albums.mirror_favorite(id, fav);
+        self.artists.mirror_favorite(id, fav);
+        self.genres.mirror_favorite(id, fav);
+        self.playlists.mirror_favorite(id, fav);
         self.search.flip_favorite(id, fav);
         search_ui_mod::apply_row_favorite(&self.weak, id, fav);
     }
@@ -54,12 +55,10 @@ impl CurrentTrackMirrors {
         tracks_ui_mod::apply_row_rating(&self.weak, id, rating);
         self.browse.flip_rating(id, rating);
         browse_ui_mod::apply_row_rating(&self.weak, id, rating);
-        self.albums.flip_detail_rating(id, rating);
-        albums_ui_mod::apply_detail_row_rating(&self.weak, id, rating);
-        self.artists.flip_detail_rating(id, rating);
-        artists_ui_mod::apply_detail_row_rating(&self.weak, id, rating);
-        self.genres.flip_detail_rating(id, rating);
-        genres_ui_mod::apply_detail_row_rating(&self.weak, id, rating);
+        self.albums.mirror_rating(id, rating);
+        self.artists.mirror_rating(id, rating);
+        self.genres.mirror_rating(id, rating);
+        self.playlists.mirror_rating(id, rating);
         self.search.flip_rating(id, rating);
         search_ui_mod::apply_row_rating(&self.weak, id, rating);
     }
@@ -69,16 +68,17 @@ fn mirrors(ui: &AppWindow, handles: RowFlagHandles<'_>) -> CurrentTrackMirrors {
     CurrentTrackMirrors {
         tracks: handles.tracks.clone(),
         browse: handles.browse.clone(),
-        albums: handles.albums.clone(),
-        artists: handles.artists.clone(),
-        genres: handles.genres.clone(),
+        albums: DetailRows::new(handles.albums, ui.global::<AlbumDetail>().as_weak()),
+        artists: DetailRows::new(handles.artists, ui.global::<ArtistDetail>().as_weak()),
+        genres: DetailRows::new(handles.genres, ui.global::<GenreDetail>().as_weak()),
+        playlists: DetailRows::new(handles.playlists, ui.global::<PlaylistDetail>().as_weak()),
         search: handles.search.clone(),
         weak: ui.as_weak(),
     }
 }
 
-/// The six handles both fan-outs take, borrowed rather than cloned — a parameter list this
-/// long reads as an ordering nobody can check at the call site.
+/// The handles both fan-outs take, borrowed rather than cloned — a parameter list this long
+/// reads as an ordering nobody can check at the call site.
 #[derive(Clone, Copy)]
 pub struct RowFlagHandles<'a> {
     pub tracks: &'a Arc<TracksUi>,
@@ -86,6 +86,7 @@ pub struct RowFlagHandles<'a> {
     pub albums: &'a Arc<AlbumsUi>,
     pub artists: &'a Arc<ArtistsUi>,
     pub genres: &'a Arc<GenresUi>,
+    pub playlists: &'a Arc<PlaylistsUi>,
     pub search: &'a Arc<SearchUi>,
 }
 
@@ -106,7 +107,7 @@ pub fn wire_now_playing_favorite(ui: &AppWindow, state: &AppState, handles: RowF
             match library::favorites::toggle_current_favorite(&s).await {
                 Ok(Some((id, fav))) => m.mirror_favorite(id, fav),
                 Ok(None) => {}
-                Err(e) => log::warn!("toggle_favorite: {e}"),
+                Err(e) => log::warn!("toggle_favorite: {}", describe(&e)),
             }
         });
     });
@@ -128,7 +129,7 @@ pub fn wire_now_playing_rating(ui: &AppWindow, state: &AppState, handles: RowFla
             match library::ratings::set_current_rating(&s, rating).await {
                 Ok(Some((id, rating))) => m.mirror_rating(id, rating),
                 Ok(None) => {}
-                Err(e) => log::warn!("set_current_rating: {e}"),
+                Err(e) => log::warn!("set_current_rating: {}", describe(&e)),
             }
         });
     });

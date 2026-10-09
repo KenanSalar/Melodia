@@ -358,7 +358,7 @@ pub async fn commit_player_settings(ctx: &PlaybackContext) -> Result<(), AppErro
         })
     })
     .await
-    .map_err(|e| AppError::Settings(format!("commit_player_settings join: {e}")))?
+    .map_err(|e| AppError::io("commit_player_settings join", e))?
 }
 
 pub fn player_set_playback_speed(ctx: &PlaybackContext, speed: f64) -> Result<(), AppError> {

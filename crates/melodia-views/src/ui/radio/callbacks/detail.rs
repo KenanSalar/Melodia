@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
+use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::utils::toast::{self, ToastKind};
@@ -79,11 +79,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
             if g.get_detail_open() {
                 return;
             }
-            // Not `release_detail_hero_images!`: its slot gate asks whether *My Library's* band
+            // Not `release_detail_hero_images`: its slot gate asks whether *My Library's* band
             // is up, which for a Radio collapse is a question about another page. The pair
             // underneath it is the same.
-            release_hero_slots!(g);
-            release_shared_hero!(ui);
+            release_hero_slots(&g);
+            release_shared_hero(&ui);
         });
     }
 

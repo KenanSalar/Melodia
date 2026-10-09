@@ -10,22 +10,36 @@
 //! builds, boots, plays and exits with any of them reversed. What breaks is a memory cap that
 //! silently stops applying, a forwarding launch that opens a log file it does not own, and a
 //! bug report missing the tail of the session it was filed about.
+//!
+//! The order is read off `main`'s own body, and which stage holds a call off that stage's body.
+//! An offset across the whole file would compare where the stage functions are *defined*.
+
+use melodia_testkit::{block_after, strip_line_comments};
 
 const MAIN: &str = include_str!("../main.rs");
 
-/// The offset of `needle` in `main.rs`, having first pinned that there is exactly one of it.
+/// The body of `fn <name>` in `main.rs`, comments stripped so prose naming a call can't stand
+/// in for it.
+fn body_of(name: &str) -> String {
+    let src = strip_line_comments(MAIN);
+    let body = block_after(&src, &format!("fn {name}(")).to_owned();
+    assert!(!body.is_empty(), "no `fn {name}` with a body in main.rs; the pins below read it");
+    body
+}
+
+/// The offset of `needle` in `body`, having first pinned that there is exactly one of it.
 ///
 /// The count assert is what keeps the ordering assert honest: a renamed or deleted anchor would
 /// otherwise make `find` answer `None` and the comparison pass or fail for a reason that has
 /// nothing to do with the order. `unwrap_or` rather than `unwrap` because the crate denies it,
 /// and neither default is reachable past the assert above.
-fn offset_of(needle: &str) -> usize {
+fn offset_in(body: &str, needle: &str) -> usize {
     assert_eq!(
-        MAIN.matches(needle).count(),
+        body.matches(needle).count(),
         1,
-        "expected exactly one `{needle}` in main.rs; the pins below read its position"
+        "expected exactly one `{needle}`; the pins below read its position"
     );
-    MAIN.find(needle).unwrap_or(usize::MAX)
+    body.find(needle).unwrap_or(usize::MAX)
 }
 
 /// `mallopt(M_ARENA_MAX, 2)` binds only the arenas glibc has not created yet, so it has to run
@@ -39,9 +53,22 @@ fn offset_of(needle: &str) -> usize {
 /// as a bug.
 #[test]
 fn the_arena_cap_is_taken_before_anything_allocates_on_a_thread_of_its_own() {
-    let cap = offset_of("pin_arenas_and_thresholds(");
-    let logger = offset_of("logging::install(");
-    let runtime = offset_of("tokio::runtime::Builder::new_multi_thread(");
+    // Once in the file as well as once in its stage, or a second call written straight into
+    // `main` would run ahead of the stage order below without failing it.
+    let file = strip_line_comments(MAIN);
+    for (stage, call) in [
+        ("prepare_process", "pin_arenas_and_thresholds("),
+        ("install_diagnostics", "logging::install("),
+        ("build_runtime", "tokio::runtime::Builder::new_multi_thread("),
+    ] {
+        offset_in(&file, call);
+        offset_in(&body_of(stage), call);
+    }
+
+    let main = body_of("main");
+    let cap = offset_in(&main, "prepare_process(");
+    let logger = offset_in(&main, "install_diagnostics(");
+    let runtime = offset_in(&main, "build_runtime(");
 
     assert!(
         cap < logger,
@@ -66,8 +93,9 @@ fn the_arena_cap_is_taken_before_anything_allocates_on_a_thread_of_its_own() {
 /// already gone wrong.
 #[test]
 fn the_instance_claim_is_settled_before_the_shared_log_is_opened() {
-    let claim = offset_of("single_instance::claim(");
-    let logger = offset_of("logging::install(");
+    let main = body_of("main");
+    let claim = offset_in(&main, "single_instance::claim(");
+    let logger = offset_in(&main, "install_diagnostics(");
 
     assert!(
         claim < logger,
@@ -92,8 +120,9 @@ fn the_backend_handler_is_the_parked_loop_tick_counter() {
 /// is never installed, and the count stands still exactly as if it were missing.
 #[test]
 fn the_tick_counter_is_handed_over_before_the_backend_is_selected() {
-    let install = offset_of("with_winit_custom_application_handler(");
-    let select = offset_of("backend.select()");
+    let selection = body_of("select_backend");
+    let install = offset_in(&selection, "with_winit_custom_application_handler(");
+    let select = offset_in(&selection, "backend.select()");
 
     assert!(install < select, "the tick counter is added to the builder after `select()`");
 }
@@ -106,9 +135,10 @@ fn the_tick_counter_is_handed_over_before_the_backend_is_selected() {
 /// volume having moved on its own, and nothing in the log says why.
 #[test]
 fn the_output_is_closed_before_either_way_out_of_main() {
-    let close = offset_of("close_output(");
-    let respawn = offset_of("respawn_if_requested(");
-    let exit = offset_of("std::process::exit(0);");
+    let main = body_of("main");
+    let close = offset_in(&main, "close_output(");
+    let respawn = offset_in(&main, "respawn_if_requested(");
+    let exit = offset_in(&main, "std::process::exit(0);");
 
     assert!(close < respawn, "`exec` replaces the image with the claim and the device level held");
     assert!(close < exit, "`process::exit` runs no destructor that would hand the device back");
@@ -123,9 +153,10 @@ fn the_output_is_closed_before_either_way_out_of_main() {
 /// survives, so the file looks normal and reads as though the session simply stopped.
 #[test]
 fn the_log_is_flushed_before_either_way_out_of_main() {
-    let flush = offset_of("logging::flush(");
-    let respawn = offset_of("respawn_if_requested(");
-    let exit = offset_of("std::process::exit(0);");
+    let main = body_of("main");
+    let flush = offset_in(&main, "logging::flush(");
+    let respawn = offset_in(&main, "respawn_if_requested(");
+    let exit = offset_in(&main, "std::process::exit(0);");
 
     assert!(flush < respawn, "`exec` replaces the image and never returns to flush anything");
     assert!(flush < exit, "`process::exit` runs no destructor that would flush the buffer");

@@ -68,7 +68,7 @@ fn wire_dismiss(ui: &AppWindow, state: &AppState, deferred: Rc<super::DeferredOn
             if let Some(ui) = weak.upgrade() {
                 ui.global::<Onboarding>().set_mounted(false);
             }
-            // The surfaces `main` held back so the card wasn't one of three at once.
+            // The surfaces boot held back so the card wasn't one of three at once.
             deferred.run();
         });
     });

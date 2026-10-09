@@ -32,8 +32,8 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
             if !on && let Some(app) = weak.upgrade() {
                 crate::ui::radio::disable(&app, &s);
             }
-            s.persist_blocking("set_radio_enabled", move |st| {
-                library::settings::set_radio_enabled(st, on)
+            s.persist_blocking("set_radio_enabled", move |paths| {
+                library::settings::set_radio_enabled(paths, on)
             });
         });
     }
@@ -54,8 +54,8 @@ pub fn install_radio(ui: &AppWindow, state: &AppState) {
             if let Some(app) = weak.upgrade() {
                 crate::ui::radio::forget_facets(&app);
             }
-            s.persist_blocking("set_radio_hide_segmented", move |st| {
-                library::settings::set_radio_hide_segmented(st, hide)
+            s.persist_blocking("set_radio_hide_segmented", move |paths| {
+                library::settings::set_radio_hide_segmented(paths, hide)
             });
         });
     }

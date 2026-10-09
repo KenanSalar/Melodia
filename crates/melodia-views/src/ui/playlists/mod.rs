@@ -11,11 +11,10 @@
 //!   `updated_at DESC` order and rebuilt on every `fetch_grid`.
 //!
 //! * `PlaylistDetail` — the full playlist detail view. `open_playlist`
-//!   fetches the header + track list; the cached `Vec<TrackListRow>` in
-//!   `PlaylistsUi::detail.tracks` (mirroring `AlbumsUi::detail`) plus the
-//!   canonical position-order id list let `play-row`, `select-row`,
-//!   `resort_detail`, drag-reorder, and the `"position"` sort recover
-//!   indices without round-tripping the Slint model.
+//!   fetches the header + track list; the rows in a [`DetailCache`] plus the
+//!   canonical position-order id list let `play-row`, selection,
+//!   drag-reorder and the `"position"` sort recover indices without reading
+//!   the Slint model back.
 //!
 //! Cross-thread layout mirrors `albums.rs`: `PlaylistsUi` is `Send + Sync`,
 //! cloned into callbacks / tokio tasks; Slint properties and models are
@@ -25,10 +24,8 @@
 mod callbacks;
 mod detail;
 mod grid;
-mod selection;
 mod state;
 
-use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -37,8 +34,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
-use crate::ui::row_match::Needle;
-use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
+use crate::ui::section_state::{SectionState, impl_section_state_helpers};
+use crate::ui::track_detail::DetailCache;
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -60,26 +57,20 @@ use grid::compute_indices;
 pub use detail::{open_playlist_with, seed_detail_from_settings};
 pub use grid::fetch_grid;
 
-// Reached only from this slice's own `callbacks/`, which used to live two
-// modules away, plus the cross-slice `apply_detail_row_*` mirrors in
-// `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
-// exactly that reach.
+// Reached from this slice's own `callbacks/`. `pub(super)` is `pub(in crate::ui)`
+// here, one notch wider than that.
 pub(super) use detail::{
-    POSITION_FIELD, apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail,
-    apply_optimistic_reorder, clear_detail, open_playlist, refresh_detail, resort_detail,
-    rollback_reorder, set_filter,
+    apply_optimistic_reorder, open_playlist, refresh_detail, rollback_reorder,
 };
 pub(super) use grid::{fetch_grid_stats, rebuild_grid};
-pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
-/// The M3U8 import / export wiring, kept out of [`install`] because it needs
-/// the `Rc<NotificationsUi>` for its completion toasts and that is created
-/// after the per-view wiring runs. `main.rs` calls it once the stack exists.
+/// The M3U8 import / export and Add-to-Playlist wiring, kept out of [`install`] because each
+/// needs the `Rc<NotificationsUi>` for its completion toasts and that is created after the
+/// per-view wiring runs. Boot's `install_ui` calls it once the stack exists.
 pub use callbacks::wire_files;
 
 /// Install the Playlists grid + detail models, build the handle, and wire every
-/// `Playlists.*` / `PlaylistDetail.*` callback to it — except the file
-/// import/export pair, which is [`wire_files`].
+/// `Playlists.*` / `PlaylistDetail.*` callback to it, bar the ones [`wire_files`] holds.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
@@ -116,12 +107,8 @@ impl PlaylistsUi {
                 index_cache: Mutex::new(None),
             },
             detail: PlaylistDetailState {
-                tracks: Mutex::new(Vec::new()),
-                all_tracks: Mutex::new(Vec::new()),
+                cache: DetailCache::default(),
                 position_order: Mutex::new(Vec::new()),
-                playlist_id: Mutex::new(-1),
-                applied_selection: Mutex::new(HashSet::new()),
-                filter: Mutex::new(Needle::default()),
             },
             cover_thumbs,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
@@ -148,10 +135,8 @@ impl PlaylistsUi {
             }
             *self.grid.data.lock() = Arc::new(GridData::new(Vec::new()));
             *self.grid.index_cache.lock() = None;
-            self.detail.tracks.lock().clear();
-            self.detail.all_tracks.lock().clear();
+            self.detail.cache.release_rows();
             self.detail.position_order.lock().clear();
-            self.detail.applied_selection.lock().clear();
         }
         melodia_platform::services::platform::allocator::trim();
     }
@@ -179,7 +164,7 @@ impl PlaylistsUi {
 
     /// Playlist id currently open in the detail view (`-1` = grid).
     pub fn detail_playlist_id(&self) -> i64 {
-        *self.detail.playlist_id.lock()
+        self.detail.cache.id()
     }
 
     /// Whether the cached grid holds any smart playlist whose criteria depend on
@@ -258,7 +243,6 @@ pub fn to_slint_playlist_row(p: &PlaylistStats) -> UiPlaylistRow {
 }
 
 impl_section_state_helpers!(PlaylistsUi);
-impl_detail_row_cache!(PlaylistsUi);
 
 // `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {

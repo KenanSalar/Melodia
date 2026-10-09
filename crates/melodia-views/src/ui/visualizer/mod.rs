@@ -1,6 +1,6 @@
 //! Wire the Now-Playing audio visualizer to Rust.
 //!
-//! Seeds the `Visualizer` global from `settings.json` and owns the four callbacks; the
+//! Seeds the `Visualizer` global from `settings.json` and owns its callbacks; the
 //! per-frame analysis is [`frame`]. The contract spanning this directory, the `.slint`
 //! strip and both style pickers is `.claude/rules/visualizer.md`.
 //!
@@ -34,7 +34,7 @@ use melodia_app::state::AppState;
 use melodia_playback::player::playback::spectrum::{
     self, BarAnchor, FFT_SIZE, NUM_BANDS, SpectrumAnalyzer, StripGeometry,
 };
-use melodia_playback::player::playback::visualizer::RING_CAP;
+use melodia_playback::player::playback::visualizer::{RING_CAP, VisualizerShared};
 use melodia_playback::player::playback::waveform::{self, MAX_COLUMNS, WaveformAnalyzer};
 use melodia_ui::{AppWindow, Visualizer};
 
@@ -69,6 +69,76 @@ impl Session {
     fn new(style: usize) -> Self {
         Self { figure: Figure::for_style(style), frames: FrameWatch::new() }
     }
+
+    /// One frame. Nothing here allocates except the one `SharedString` the trace has to be
+    /// handed to Slint as.
+    fn advance(
+        &mut self,
+        viz: &VisualizerShared,
+        style: usize,
+        playing: bool,
+        strip_width: f32,
+    ) -> Frame {
+        if !self.figure.draws(style) {
+            self.figure = Figure::for_style(style);
+        }
+
+        // Computed rather than returned early on: the decay path below still has to run, so
+        // `idle` stays truthful and the Timer can stop.
+        let painting = self.frames.painting(pulse::frames());
+        let analyzing = playing && painting && tray_bridge::is_window_visible();
+
+        // The steady-state writer of the arm state, so pause, minimise and hide-to-tray all
+        // silence the producer as well as the analysis. Arming *discards* the rings, so the
+        // drawing ramps back in from silence rather than resuming on a stale shape.
+        viz.set_enabled(analyzing);
+
+        // Not `sample_rate()`: the tap sits above the deck's converter, which is where speed
+        // is applied. Zero is the "draw nothing new" signal both styles decay on.
+        let rate = if analyzing { viz.analysis_rate() } else { 0 };
+
+        let (idle, wave_path, bars_moved) = match &mut self.figure {
+            Figure::Trace { analyzer, path } => {
+                let idle = frame::waveform(viz, analyzer, path, rate, strip_width);
+                (idle, Some(SharedString::from(path.as_str())), false)
+            }
+            Figure::Bars { analyzer, settled, .. } => {
+                let idle = frame::bars(viz, analyzer, rate);
+                // Settled bands draw every bar on its floor, the same figure frame after frame,
+                // so a run of them redraws once. A redraw every tick is a repaint `pulse`
+                // would count, and a strip playing silence would never go dormant.
+                let moved = !(idle && *settled);
+                *settled = idle;
+                (idle, None, moved)
+            }
+        };
+        // Settled with nothing arriving to unsettle it: the tick is only still here to watch
+        // for frames, which it can do far more slowly.
+        Frame { idle, dormant: idle && !painting, wave_path, bars_moved }
+    }
+}
+
+/// What one tick leaves for the `Visualizer` global.
+struct Frame {
+    idle: bool,
+    dormant: bool,
+    /// The trace's figure, when the trace is the mounted style.
+    wave_path: Option<SharedString>,
+    bars_moved: bool,
+}
+
+/// Only the mounted style's half — the other one's consumer isn't in the tree to read it. The
+/// two flags are value-compared by `Property::set`, so writing them every tick costs a
+/// comparison rather than a repaint.
+fn publish_frame(global: &Visualizer, frame: Frame) {
+    if let Some(path) = frame.wave_path {
+        global.set_wave_path(path);
+    }
+    if frame.bars_moved {
+        global.set_bars_generation(global.get_bars_generation().wrapping_add(1));
+    }
+    global.set_idle(frame.idle);
+    global.set_dormant(frame.dormant);
 }
 
 /// The analyzer one style draws with and the path string it writes into. Only the shown kind is
@@ -209,6 +279,10 @@ fn resting_wave_path() -> String {
     path
 }
 
+/// Shared between the tick that builds it and the `set-active` that drops it. Both run on the UI
+/// thread, and the tick's borrow never outlives one frame.
+type SessionSlot = Rc<RefCell<Option<Session>>>;
+
 pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // `enabled` only decides whether the strip mounts — the tap stays disarmed until `set-active`
     // says a mounted strip is on screen, so an unreadable file can't leave the two out of step.
@@ -218,10 +292,7 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // A shadow rather than a read off the global, which would clone a `SharedString` out of a
     // Slint property every tick.
     let style: Rc<Cell<usize>> = Rc::new(Cell::new(selected));
-
-    // Shared between the tick that builds it and the `set-active` that drops it. Both run on the UI
-    // thread, and the tick's borrow never outlives one frame.
-    let session: Rc<RefCell<Option<Session>>> = Rc::new(RefCell::new(None));
+    let session: SessionSlot = Rc::new(RefCell::new(None));
 
     let viz_global = ui.global::<Visualizer>();
     viz_global.set_enabled(flags.viz_enabled);
@@ -232,166 +303,123 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     // show an empty trace. The bars need no seed, asking for their figure as they mount.
     publish_resting(&viz_global);
 
-    // tick — one frame. Nothing here allocates except the one `SharedString` the trace has to be
-    // handed to Slint as.
-    {
-        let viz = state.engine.visualizer();
-        let style = style.clone();
-        let session = session.clone();
-        let weak = ui.as_weak();
+    wire_tick(ui, state, &style, &session);
+    wire_bars_figure(ui, &session);
+    wire_set_active(ui, state, &session);
+    wire_window_hidden(ui, state);
+    wire_set_enabled(ui, state);
+    wire_set_style(ui, state, &style);
+}
 
-        viz_global.on_tick(move |playing, strip_width| {
-            let style = style.get();
+fn wire_tick(ui: &AppWindow, state: &AppState, style: &Rc<Cell<usize>>, session: &SessionSlot) {
+    let viz = state.engine.visualizer();
+    let style = style.clone();
+    let session = session.clone();
+    let weak = ui.as_weak();
+    ui.global::<Visualizer>().on_tick(move |playing, strip_width| {
+        let style = style.get();
+        let frame = {
             let mut slot = session.borrow_mut();
             // The one construction site, so no mount ordering can leave the tick without buffers
             // however `set-active` and the strip interleave.
             let session = slot.get_or_insert_with(|| Session::new(style));
-            if !session.figure.draws(style) {
-                session.figure = Figure::for_style(style);
-            }
+            session.advance(&viz, style, playing, strip_width)
+        };
+        // Past the borrow: `bars-figure` borrows the same cell whenever Slint asks for the bars.
+        if let Some(ui) = weak.upgrade() {
+            publish_frame(&ui.global::<Visualizer>(), frame);
+        }
+    });
+}
 
-            // Computed rather than returned early on: the decay path below still has to run, so
-            // `idle` stays truthful and the Timer can stop.
-            let painting = session.frames.painting(pulse::frames());
-            let analyzing = playing && painting && tray_bridge::is_window_visible();
+/// The bars for the levels the last tick left, laid out on the strip as Slint has it now, so a
+/// relayout at rest re-snaps them with no tick to ask. The generation is only the token that
+/// re-runs the binding.
+fn wire_bars_figure(ui: &AppWindow, session: &SessionSlot) {
+    let session = session.clone();
+    let weak = ui.as_weak();
+    ui.global::<Visualizer>().on_bars_figure(move |_generation, style_idx, x, y, width, height| {
+        // `.slint` has no way to spell the scale factor, and the bars need it to find the
+        // window's device pixels under the strip.
+        let scale = weak.upgrade().map_or(1.0, |ui| ui.window().scale_factor());
+        let strip = StripGeometry { x, y, width, height, scale };
+        let anchor = bar_anchor(style_index_from_i32(style_idx));
+        let mut slot = session.borrow_mut();
+        if let Some(Session { figure: Figure::Bars { analyzer, path, .. }, .. }) = slot.as_mut() {
+            spectrum::write_bar_path(analyzer.levels(), strip, anchor, path);
+            return SharedString::from(path.as_str());
+        }
+        // No session before the first tick, and a trace one until a tick replaces it: the bars
+        // at rest either way.
+        let mut path = String::new();
+        spectrum::write_bar_path(&RESTING_LEVELS, strip, anchor, &mut path);
+        SharedString::from(path.as_str())
+    });
+}
 
-            // The steady-state writer of the arm state, so pause, minimise and hide-to-tray all
-            // silence the producer as well as the analysis. Arming *discards* the rings, so the
-            // drawing ramps back in from silence rather than resuming on a stale shape.
-            viz.set_enabled(analyzing);
-
-            // Not `sample_rate()`: the tap sits above the deck's converter, which is where speed
-            // is applied. Zero is the "draw nothing new" signal both styles decay on.
-            let rate = if analyzing { viz.analysis_rate() } else { 0 };
-
-            let (idle, wave_path, bars_moved) = match &mut session.figure {
-                Figure::Trace { analyzer, path } => {
-                    let idle = frame::waveform(&viz, analyzer, path, rate, strip_width);
-                    (idle, Some(SharedString::from(path.as_str())), false)
-                }
-                Figure::Bars { analyzer, settled, .. } => {
-                    let idle = frame::bars(&viz, analyzer, rate);
-                    // Settled bands draw every bar on its floor, the same figure frame after frame,
-                    // so a run of them redraws once. A redraw every tick is a repaint `pulse`
-                    // would count, and a strip playing silence would never go dormant.
-                    let moved = !(idle && *settled);
-                    *settled = idle;
-                    (idle, None, moved)
-                }
-            };
-            // Settled with nothing arriving to unsettle it: the tick is only still here to watch
-            // for frames, which it can do far more slowly.
-            let dormant = idle && !painting;
-            // `bars-figure` borrows the same cell whenever Slint asks for the bars.
-            drop(slot);
-
+/// The mount boundary. Unmounting the strip stops `tick`, so something outside it has to disarm
+/// the tap on the way out; on the way in it arms optimistically and the next tick refines it. The
+/// session's buffers leave with it, being the feature's resident footprint.
+fn wire_set_active(ui: &AppWindow, state: &AppState, session: &SessionSlot) {
+    let viz = state.engine.visualizer();
+    let session = session.clone();
+    let weak = ui.as_weak();
+    ui.global::<Visualizer>().on_set_active(move |active| {
+        viz.set_enabled(active && tray_bridge::is_window_visible());
+        if active {
+            // The frame counter isn't free — see `pulse` — so it waits here for a strip that
+            // will actually read it.
             if let Some(ui) = weak.upgrade() {
-                let global = ui.global::<Visualizer>();
-                // Only the mounted style's half — the other one's consumer isn't in the tree to
-                // read it. The two flags are value-compared by `Property::set`, so writing them
-                // every tick costs a comparison rather than a repaint.
-                if let Some(path) = wave_path {
-                    global.set_wave_path(path);
-                }
-                if bars_moved {
-                    global.set_bars_generation(global.get_bars_generation().wrapping_add(1));
-                }
-                global.set_idle(idle);
-                global.set_dormant(dormant);
+                pulse::install(&ui);
             }
-        });
-    }
+            return;
+        }
+        *session.borrow_mut() = None;
+        // A strip remounting over a paused player never ticks, so hand back the rest a fresh
+        // `Session` shadows — or the next open comes up on the frame this one ended on.
+        if let Some(ui) = weak.upgrade() {
+            publish_resting(&ui.global::<Visualizer>());
+        }
+    });
+}
 
-    // bars-figure — the bars for the levels the last tick left, laid out on the strip as Slint has
-    // it now, so a relayout at rest re-snaps them with no tick to ask. The generation is only the
-    // token that re-runs the binding.
-    {
-        let session = session.clone();
-        let weak = ui.as_weak();
-        viz_global.on_bars_figure(move |_generation, style_idx, x, y, width, height| {
-            // `.slint` has no way to spell the scale factor, and the bars need it to find the
-            // window's device pixels under the strip.
-            let scale = weak.upgrade().map_or(1.0, |ui| ui.window().scale_factor());
-            let strip = StripGeometry { x, y, width, height, scale };
-            let anchor = bar_anchor(style_index_from_i32(style_idx));
-            let mut slot = session.borrow_mut();
-            if let Some(Session { figure: Figure::Bars { analyzer, path, .. }, .. }) = slot.as_mut()
-            {
-                spectrum::write_bar_path(analyzer.levels(), strip, anchor, path);
-                return SharedString::from(path.as_str());
-            }
-            // No session before the first tick, and a trace one until a tick replaces it: the bars
-            // at rest either way.
-            let mut path = String::new();
-            spectrum::write_bar_path(&RESTING_LEVELS, strip, anchor, &mut path);
-            SharedString::from(path.as_str())
-        });
-    }
+/// The third writer, and why the tick isn't enough alone. `window-shown` gates the strip's Timer,
+/// so a hide landing on an already-settled drawing stops it in the same pass as it drops the gate:
+/// `Timer::stop` takes effect at once and the disarming tick never runs.
+fn wire_window_hidden(ui: &AppWindow, state: &AppState) {
+    let viz = state.engine.visualizer();
+    ui.global::<Visualizer>().on_window_hidden(move || viz.set_enabled(false));
+}
 
-    // set-active — the mount boundary. Unmounting the strip stops `tick`, so something outside it
-    // has to disarm the tap on the way out; on the way in it arms optimistically and the next tick
-    // refines it. The session's buffers leave with it, being the feature's resident footprint.
-    {
-        let viz = state.engine.visualizer();
-        let session = session.clone();
-        let weak = ui.as_weak();
-        viz_global.on_set_active(move |active| {
-            viz.set_enabled(active && tray_bridge::is_window_visible());
-            if active {
-                // The frame counter isn't free — see `pulse` — so it waits here for a strip that
-                // will actually read it.
-                if let Some(ui) = weak.upgrade() {
-                    pulse::install(&ui);
-                }
-                return;
-            }
-            *session.borrow_mut() = None;
-            // A strip remounting over a paused player never ticks, so hand back the rest a fresh
-            // `Session` shadows — or the next open comes up on the frame this one ended on.
-            if let Some(ui) = weak.upgrade() {
-                publish_resting(&ui.global::<Visualizer>());
-            }
+/// Persist only. Flipping the setting moves `AppWindow.watched-viz-active`, so arming here too
+/// would arm the tap for a view that isn't open. No write-back to `enabled` either: the
+/// Settings → Playback toggle two-way binds it, so it has already landed.
+fn wire_set_enabled(ui: &AppWindow, state: &AppState) {
+    let state = state.clone();
+    ui.global::<Visualizer>().on_set_enabled(move |on| {
+        state.persist_blocking("persist viz_enabled", move |paths| {
+            library::settings::set_visualizer_enabled(paths, on)
         });
-    }
+    });
+}
 
-    // window-hidden — the third writer, and why the tick isn't enough alone. `window-shown` gates
-    // the strip's Timer, so a hide landing on an already-settled drawing stops it in the same pass
-    // as it drops the gate: `Timer::stop` takes effect at once and the disarming tick never runs.
-    {
-        let viz = state.engine.visualizer();
-        viz_global.on_window_hidden(move || viz.set_enabled(false));
-    }
-
-    // set-enabled — persist only. Flipping the setting moves `AppWindow.watched-viz-active`, so
-    // arming here too would arm the tap for a view that isn't open. No write-back to `enabled`
-    // either: the Settings → Playback toggle two-way binds it, so it has already landed.
-    {
-        let state = state.clone();
-        viz_global.on_set_enabled(move |on| {
-            state.persist_blocking("persist viz_enabled", move |s| {
-                library::settings::set_visualizer_enabled(s, on)
-            });
+/// The chips two-way bind `style-idx`, so that half has landed; the key is what the strip mounts
+/// on, and the shadow what the tick reads.
+fn wire_set_style(ui: &AppWindow, state: &AppState, style: &Rc<Cell<usize>>) {
+    let state = state.clone();
+    let style = style.clone();
+    let weak = ui.as_weak();
+    ui.global::<Visualizer>().on_set_style(move |index| {
+        let picked = style_index_from_i32(index);
+        style.set(picked);
+        if let Some(ui) = weak.upgrade() {
+            publish_style(&ui.global::<Visualizer>(), picked);
+        }
+        let key = STYLES[picked].to_owned();
+        state.persist_blocking("persist viz_style", move |paths| {
+            library::settings::set_visualizer_style(paths, key)
         });
-    }
-
-    // set-style — the chips two-way bind `style-idx`, so that half has landed; the key is what the
-    // strip mounts on, and the shadow what the tick reads.
-    {
-        let state = state.clone();
-        let style = style.clone();
-        let weak = ui.as_weak();
-        viz_global.on_set_style(move |index| {
-            let picked = style_index_from_i32(index);
-            style.set(picked);
-            if let Some(ui) = weak.upgrade() {
-                publish_style(&ui.global::<Visualizer>(), picked);
-            }
-            let key = STYLES[picked].to_owned();
-            state.persist_blocking("persist viz_style", move |s| {
-                library::settings::set_visualizer_style(s, key)
-            });
-        });
-    }
+    });
 }
 
 #[cfg(test)]

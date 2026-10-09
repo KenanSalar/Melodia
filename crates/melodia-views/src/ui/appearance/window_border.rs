@@ -94,8 +94,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_window_border_shown_changed(move |shown| {
         let border = if shown { WindowBorder::Shown } else { WindowBorder::Hidden };
-        s.persist_blocking("persist window_border", move |state| {
-            library::window::set_window_border(state, border)
+        s.persist_blocking("persist window_border", move |paths| {
+            library::window::set_window_border(paths, border)
         });
     });
 
@@ -118,8 +118,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
 
         // Ahead of the write, so a palette change landing before it commits re-resolves this pick.
         COLOR_ID.with_borrow_mut(|id| color_id.clone_into(id));
-        s.persist_blocking("persist window_border_color", move |state| {
-            library::window::set_window_border_color(state, color_id.to_owned())
+        s.persist_blocking("persist window_border_color", move |paths| {
+            library::window::set_window_border_color(paths, color_id.to_owned())
         });
     });
 }

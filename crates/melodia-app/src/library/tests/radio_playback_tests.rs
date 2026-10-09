@@ -13,7 +13,7 @@ use melodia_engine::player::engine::fixtures::test_station;
 use melodia_engine::player::engine::types::RadioNowPlaying;
 use melodia_store::database::{DbPool, queries};
 
-use super::{click_uuid, keep_directory_station, keep_station, record_probed_codec};
+use super::{click_uuid, keep_station, record_probed_codec, set_directory_favorite};
 
 /// One browse result. Spelled out rather than defaulted: `DirectoryStation` has no `Default`, a
 /// station with no uuid and no URL being one nothing may keep.
@@ -79,7 +79,7 @@ async fn a_re_import_carrying_a_logo_re_points_the_row() -> Result<(), AppError>
 async fn releasing_a_browsed_station_still_leaves_its_row() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
 
-    let id = keep_directory_station(&db, &browsed("uuid-1"), false, None).await?;
+    let id = set_directory_favorite(&db, &browsed("uuid-1"), false, None).await?;
 
     let station = queries::radio::get_station_by_id(&db, id).await?;
     assert!(!station.is_favorite, "the star is what the caller asked to clear");

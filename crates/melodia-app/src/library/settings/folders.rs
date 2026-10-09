@@ -122,17 +122,17 @@ pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
-pub async fn get_folders(state: &AppState) -> Result<Vec<folder::Folder>, AppError> {
-    queries::folder::get_all_folders(&state.db).await
+pub async fn get_folders(db: &DbPool) -> Result<Vec<folder::Folder>, AppError> {
+    queries::folder::get_all_folders(db).await
 }
 
 /// The platform's own Music folder, when adding it wouldn't be refused, for the welcome card to
 /// offer in one click.
-pub async fn suggested_music_folder(state: &AppState) -> Result<Option<PathBuf>, AppError> {
+pub async fn suggested_music_folder(db: &DbPool) -> Result<Option<PathBuf>, AppError> {
     let Some(music_dir) = dirs::audio_dir() else {
         return Ok(None);
     };
-    let existing = queries::folder::get_all_folders(&state.db).await?;
+    let existing = queries::folder::get_all_folders(db).await?;
     let addable = validate_folder_path(&music_dir, &existing).is_ok();
     Ok(addable.then_some(music_dir))
 }

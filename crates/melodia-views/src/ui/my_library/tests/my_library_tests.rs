@@ -642,11 +642,22 @@ fn the_pill_row_follows_the_body_router() {
 
 /// The four `on_close_detail` handlers, which used to own the hero teardown.
 const CLOSE_HANDLERS: [(&str, &str); 4] = [
-    ("album", include_str!("../../albums/callbacks/detail.rs")),
-    ("artist", include_str!("../../artists/callbacks/detail.rs")),
-    ("genre", include_str!("../../genres/callbacks/detail.rs")),
-    ("playlist", include_str!("../../playlists/callbacks/detail.rs")),
+    ("albums/callbacks/detail", include_str!("../../albums/callbacks/detail.rs")),
+    ("artists/callbacks/detail", include_str!("../../artists/callbacks/detail.rs")),
+    ("genres/callbacks/detail", include_str!("../../genres/callbacks/detail.rs")),
+    ("playlists/callbacks/detail", include_str!("../../playlists/callbacks/detail.rs")),
 ];
+
+/// Where the four closes' common tail lives.
+const SHARED_CLOSE: &str = include_str!("../../callbacks/track_detail.rs");
+
+/// The comment-stripped body of the item `head` opens, up to the column-zero brace closing it.
+fn fn_body(src: &str, head: &str) -> String {
+    code(src)
+        .split_once(head)
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or(String::new(), |(body, _)| body.to_owned())
+}
 
 /// **The band's hero reads a latched arm; everything else reads the live one.**
 ///
@@ -798,18 +809,18 @@ fn the_count_line_holds_the_sentence_it_is_collapsing_out_of() {
 /// hero instead of handing it back.
 #[test]
 fn no_close_detail_hands_the_hero_back() {
-    for (name, src) in CLOSE_HANDLERS {
-        let handler = code(src)
-            .split_once("on_close_detail(move ||")
-            .and_then(|(_, rest)| rest.split_once("\n        });"))
-            .map_or(String::new(), |(body, _)| body.to_owned());
-        assert!(!handler.is_empty(), "{name}/detail.rs no longer wires `on_close_detail`");
+    // Each view's own close, then the tail all four share.
+    let mut closes: Vec<(&str, String)> =
+        CLOSE_HANDLERS.iter().map(|&(name, src)| (name, fn_body(src, "fn wire_close("))).collect();
+    closes.push(("callbacks/track_detail", fn_body(SHARED_CLOSE, "fn forget_closed")));
 
-        for banned in ["release_detail_hero_images!", "hero_backdrop::reset", "hero_chips::clear"] {
+    for (name, body) in closes {
+        assert!(!body.is_empty(), "{name}: the close is no longer where this pin reads it");
+        for banned in ["release_detail_hero_images", "hero_backdrop::reset", "hero_chips::clear"] {
             assert!(
-                !handler.contains(banned),
-                "{name}/detail.rs must not run `{banned}` on close: every hero fact is a ternary \
-                 over the id it clears one line earlier, so the band would collapse a placeholder. \
+                !body.contains(banned),
+                "{name}: a close must not run `{banned}`: every hero fact is a ternary over the \
+                 id it clears one line earlier, so the band would collapse a placeholder. \
                  `MyLibrary.hero-collapsed` owns this now.",
             );
         }
@@ -1069,30 +1080,36 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
 
     // A path that skips the hook and can still open something has to land the navigation
     // itself, or the press does nothing at all — a Mouse-4 into a deleted playlist being
-    // the reachable case. There are two per detail: the missing-handle bail before the
-    // spawn and the failed open after it.
-    //
-    // The two used to be told apart by which handle each read, one taking the caller's
-    // `state` and the other its clone; neither reads one now. What still separates them is
-    // that only the bail returns, so the role split is read off what follows the call
-    // rather than off the call itself — trimmed, the four match arms sitting a level deeper
-    // than Radio's.
-    let lands_pending = "land_pending(pending, &fallback);";
+    // the reachable case. There are two: the missing-handle bail before the spawn and the
+    // failed open after it, both in the one `spawn_open` every detail goes through. Only
+    // the bail returns, so the role split is read off what follows each call.
+    let dispatch = NAV_HISTORY
+        .split_once("fn spawn_open_detail(")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
     assert_eq!(
-        NAV_HISTORY.matches(lands_pending).count(),
-        WALKABLE_DETAILS * 2,
-        "every path in `spawn_open_detail` that can still open something must land the \
-         pending navigation",
+        dispatch.matches("spawn_open(state, handle,").count(),
+        WALKABLE_DETAILS,
+        "every walkable detail must open through `spawn_open`, which is what lands the \
+         pending navigation on the paths that miss the hook",
     );
-    let bails = NAV_HISTORY
-        .split(lands_pending)
-        .skip(1)
-        .filter(|rest| rest.trim_start().starts_with("return;"))
-        .count();
+    let lands_pending = "land_pending(pending, &fallback);";
+    let open = NAV_HISTORY
+        .split_once("fn spawn_open<")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
     assert_eq!(
-        bails, WALKABLE_DETAILS,
-        "the missing-handle bails in `spawn_open_detail` must each land the pending \
-         navigation before returning",
+        open.matches(lands_pending).count(),
+        2,
+        "`spawn_open` must land the pending navigation on both paths that can still open \
+         something",
+    );
+    let bails =
+        open.split(lands_pending).skip(1).filter(|rest| rest.trim_start().starts_with("return;"));
+    assert_eq!(
+        bails.count(),
+        1,
+        "the missing-handle bail must land the pending navigation before returning",
     );
 }
 

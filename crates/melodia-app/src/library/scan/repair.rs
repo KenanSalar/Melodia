@@ -42,9 +42,6 @@ impl Drop for RestoreNotice {
 /// Re-points every library reference the current store still holds and clears the rest,
 /// answering with the notice to hold while the scan puts the cleared covers back, or `None` when
 /// nothing was cleared.
-///
-/// The album and playlist roll-ups run in the clearing transaction, so a cover that still exists on
-/// another of an album's tracks is back before the scan starts rather than after it.
 pub(super) async fn forget_missing(
     db: &DbPool,
     paths: &Paths,
@@ -59,10 +56,7 @@ pub(super) async fn forget_missing(
         return Ok(None);
     }
 
-    let mut tx = db.write().begin().await?;
-    let cleared = queries::artwork::forget_paths(&mut tx, &gone).await?;
-    queries::scan::roll_up_covers(&mut tx).await?;
-    tx.commit().await?;
+    let cleared = queries::artwork::forget_paths(db, &gone).await?;
 
     log::info!(
         "Artwork store is missing {} file(s); cleared {cleared} reference(s) to restore",

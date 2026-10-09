@@ -4,7 +4,6 @@
 //! can't race over the read-mutate-write window.
 
 use crate::services::{self, settings::ThemePreference};
-use crate::state::AppState;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
@@ -17,13 +16,7 @@ use melodia_core::error::AppError;
 /// missing and falling back to defaults. Distinct from [`set_appearance`],
 /// which records a pick the user just made — this writes what an earlier build
 /// never did, and no-ops once it has.
-pub fn seed_theme_preference(state: &AppState) -> Result<(), AppError> {
-    seed_preference(&state.paths)
-}
-
-/// [`seed_theme_preference`]'s body, narrowed to the one field of `AppState` it reaches so the
-/// no-op guard and the Material You arm can be driven without one.
-fn seed_preference(paths: &Paths) -> Result<(), AppError> {
+pub fn seed_theme_preference(paths: &Paths) -> Result<(), AppError> {
     services::settings::mutate_settings_if(paths, |settings| {
         if settings.theme_preferences.contains_key(&settings.theme_id) {
             return false;
@@ -46,16 +39,6 @@ fn seed_preference(paths: &Paths) -> Result<(), AppError> {
 /// burst of accent / variant clicks can't lose updates. A Material You pick
 /// keeps the theme's last real accent, as [`ThemePreference::new`] argues.
 pub fn set_appearance(
-    state: &AppState,
-    theme_id: String,
-    theme_variant: String,
-    accent_color: String,
-) -> Result<(), AppError> {
-    write_appearance(&state.paths, theme_id, theme_variant, accent_color)
-}
-
-/// [`set_appearance`]'s body, narrowed so the accent the Material You arm preserves can be driven.
-fn write_appearance(
     paths: &Paths,
     theme_id: String,
     theme_variant: String,
@@ -76,8 +59,8 @@ fn write_appearance(
 /// `vibrant` / …). Drives the Material You generator in
 /// `tasks::material_you`. Setting "none" disables dynamic colour and
 /// restores the static M3 palette.
-pub fn set_dynamic_color_style(state: &AppState, style: String) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_dynamic_color_style(paths: &Paths, style: String) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.dynamic_color_style = style;
     })
 }
@@ -86,8 +69,8 @@ pub fn set_dynamic_color_style(state: &AppState, style: String) -> Result<(), Ap
 /// The runtime gate (focus event → `Theme.window-focused` write) lives
 /// in `melodia-views`' `ui/window_chrome/`'s winit filter; this helper only commits
 /// the new value to disk so the next process boot picks it up.
-pub fn set_match_unfocused_to_system_bg(state: &AppState, on: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_match_unfocused_to_system_bg(paths: &Paths, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.layout.match_unfocused_to_system_bg = on;
     })
 }
@@ -99,9 +82,9 @@ pub fn set_match_unfocused_to_system_bg(state: &AppState, on: bool) -> Result<()
 /// in `melodia-views`' `ui/appearance/`'s `wire_corner_radius_changed` *before* this
 /// async persist, so the UI repaints immediately even when the disk
 /// write hasn't completed.
-pub fn set_corner_radius(state: &AppState, px: u32) -> Result<(), AppError> {
+pub fn set_corner_radius(paths: &Paths, px: u32) -> Result<(), AppError> {
     let clamped = px.min(crate::services::settings::MAX_CORNER_RADIUS);
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.corner_radius = clamped;
     })
 }

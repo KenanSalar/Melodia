@@ -341,7 +341,7 @@ pub(super) fn equals_needle(
 /// most of that remainder answers with nothing playable. Naming a *filter* for what it holds beats
 /// naming it for what the directory could not work out, which reads beside `MP3` and `AAC+` as a
 /// value that failed to load. Per station the generalisation is unnecessary and is not made —
-/// [`super::rows::display_codec`] has the row's own `hls` flag to go on.
+/// `rows::display_codec` has the row's own `hls` flag to go on.
 pub(super) const SEGMENTED_CODEC_LABEL: &str = "HLS";
 
 /// Borrowed for every real format, so only the handful of entries that need rewriting allocate.

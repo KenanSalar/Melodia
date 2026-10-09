@@ -46,7 +46,7 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
         "expected exactly the silence fixture to ingest"
     );
 
-    let tracks = library::tracks::get_tracks(&state).await?;
+    let tracks = library::tracks::get_tracks(&state.db).await?;
     assert_eq!(tracks.len(), 1, "exactly one track should be in DB");
 
     let row = &tracks[0];

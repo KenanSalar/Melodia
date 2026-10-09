@@ -122,7 +122,7 @@ optional.
 |---|---|---|
 | `system_install`, `linux_pkg`, `probe`, `target`, `version` | **ungated** | pure detection/metadata; called by `main.rs` + `updater_settings::install` |
 | `event`, `state` | **gated** | update-only data types; gating keeps them out of the feature-off binary and avoids a broken doc link (event→install) |
-| `check`, `github`, `manifest`, `minisign`, `install`, `asset_cache` | **gated** | network / crypto / swap (these pull `reqwest` stream + `minisign-verify`) |
+| `check`, `run`, `github`, `manifest`, `minisign`, `install`, `asset_cache` | **gated** | network / crypto / swap (these pull `reqwest` stream + `minisign-verify`) |
 
 *(A `test_support` submodule used to sit in this table. It held the env-var mutex the
 ungated detection tests take, and the row said to keep it `#[cfg(test)]`-only rather than
@@ -140,8 +140,9 @@ but don't re-add the submodule when working through this plan.)*
 
 `mod.rs` re-exports:
 - **Ungated:** `pub use system_install::is_system_install;`
-- **Gated** (`#[cfg(feature = "self-update")]`): `check::{CheckOutcome, check_for_update}`,
-  `event::{FailureKind, UpdaterEvent}`, `install::{download_and_install, prune_stale_staging}`.
+- **Gated** (`#[cfg(feature = "self-update")]`): `check::{Checked, Verdict, check_for_update}`,
+  `run::{Finding, PanelPaint, run_check}`, `event::{FailureKind, UpdaterEvent}`,
+  `install::{download_and_install, prune_stale_staging}`.
 
 `pub mod updater;` in `crates/melodia-app/src/services/mod.rs` stays — only its active submodules
 are gated internally.
@@ -151,26 +152,30 @@ are gated internally.
 `crates/melodia/src/main.rs`
 - **Keep ungated:** the `--version` literal-first branch (forward-compat
   contract; it only prints, never calls into the gated install path).
-- **[fix] Gate the `.old` reaper** at `crates/melodia/src/main.rs:79-84` — it calls
+- **[fix] Gate the `.old` reaper** in `prepare_process()` — it calls
   `install_target_old()`, now gated. Change `#[cfg(target_os = "linux")]` to
   `#[cfg(all(target_os = "linux", feature = "self-update"))]`. (A feature-off
   build never produces a `.old`, so reaping it is moot anyway.)
-- **Gate** (`#[cfg(feature = "self-update")]`) the updater block at
-  ~`crates/melodia/src/main.rs:394-437`:
-  - `updater_event_tx/rx` channel
-  - `ui::updater_settings::install_event_subscriber(...)`
-  - `ui::callbacks::wire_updater(...)`
-  - the `updater_daily::spawn(...)` gate (incl. the `else` log branch)
-  - the `prune_stale_staging()` boot task at ~`:434-437`
+
+`crates/melodia/src/boot/ui_setup/install.rs`
+- **Gate** (`#[cfg(feature = "self-update")]`) the updater sites, which are not one block:
+  - in `install_updater_and_onboarding`, the `updater_event_tx/rx` channel,
+    `ui::settings::updater_settings::install_event_subscriber(...)` and
+    `ui::callbacks::wire_updater(...)`
+  - the `updater_daily::spawn(...)` gate (incl. the `else` log branch). It sits inside
+    `ui::onboarding::install`'s deferred closure, after the crash notice, which stays: gate the
+    `if`/`else` alone, plus the `deferred_spawner` and `updater_event_tx` captures only it uses.
+  - the `prune_stale_staging()` boot task in `install_platform_hooks`
 
 `crates/melodia-app/src/tasks/mod.rs`
-- Gate `pub mod updater_daily;` (`crates/melodia-app/src/tasks/mod.rs:22`).
+- Gate `pub mod updater_daily;`.
 
 `crates/melodia-views/src/ui/callbacks/mod.rs`
-- Gate `mod updater;` (line 25) and `pub use updater::wire as wire_updater;`
-  (line 52). The `crates/melodia-views/src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`,
-  `paint.rs`, `mod.rs`) is referenced **only** via `wire_updater` (verified — no
-  other module imports it), so gating the whole dir is clean.
+- Gate `mod updater;` and `pub use updater::{check_painter, wire as wire_updater};`. The
+  `crates/melodia-views/src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`, `paint.rs`,
+  `mod.rs`) is reached only through those two names: `wire_updater` and the `check_painter`
+  handed to `updater_daily::spawn`, both among the `install.rs` sites gated above, so gating the
+  whole dir is clean.
 
 `crates/melodia-views/src/ui/settings/updater_settings.rs`
 - **`install()` stays ungated** — it seeds `MelodiaUpdater.current-version`

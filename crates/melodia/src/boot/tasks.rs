@@ -7,6 +7,7 @@ use slint::ComponentHandle;
 
 use melodia_app::state::{AppState, StartupChannels};
 use melodia_app::{library, services, tasks};
+use melodia_core::error::describe;
 use melodia_core::utils;
 use melodia_engine::player::engine::event_sink::EventSink;
 use melodia_integrations::services::integrations;
@@ -78,7 +79,7 @@ pub fn spawn_background_tasks(
 /// Restore the persisted queue and the station over it from disk (best-effort; missing file is OK).
 pub fn restore_persisted_playback(runtime: &tokio::runtime::Runtime, state: &AppState) {
     if let Err(e) = runtime.block_on(library::queue::restore_persisted_playback(state)) {
-        log::warn!("Failed to restore persisted playback: {e}");
+        log::warn!("Failed to restore persisted playback: {}", describe(&e));
     }
 }
 
@@ -103,7 +104,7 @@ pub fn maybe_resume_on_startup(
         s.source.is_some()
     };
     if has_source && let Err(e) = library::playback::player_play(&state.playback_ctx()) {
-        log::warn!("resume_on_startup: player_play failed: {e}");
+        log::warn!("resume_on_startup: player_play failed: {}", describe(&e));
     }
 }
 
@@ -123,7 +124,7 @@ pub fn open_startup_files(
     // Too early to toast: that bridge installs with the UI and drops rather
     // than queues what arrives before it.
     if let Err(e) = runtime.block_on(library::queue::open_files(state, paths)) {
-        log::warn!("Failed to open the files given on the command line: {e}");
+        log::warn!("Failed to open the files given on the command line: {}", describe(&e));
     }
 }
 
@@ -148,7 +149,7 @@ pub fn serve_file_opens(
         let state = state.clone();
         state.runtime.clone().spawn(async move {
             if let Err(e) = library::queue::open_files(&state, paths).await {
-                log::warn!("Failed to open forwarded files: {e}");
+                log::warn!("Failed to open forwarded files: {}", describe(&e));
                 utils::toast::notify(utils::toast::ToastKind::OperationFailed, e.to_string());
             }
         });
@@ -161,7 +162,7 @@ pub fn spawn_resume_watching(spawner: &tasks::TaskSpawner, state: &AppState) {
     let state_for_init = state.clone();
     spawner.spawn(async move {
         if let Err(e) = tasks::resume_watching::run(&state_for_init).await {
-            log::warn!("Resuming folder watching failed: {e}");
+            log::warn!("Resuming folder watching failed: {}", describe(&e));
         }
     });
 }

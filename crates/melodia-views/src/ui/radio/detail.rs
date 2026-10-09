@@ -23,22 +23,18 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Weak};
 
 use crate::ui::detail_artwork::{DetailPair, decode_detail_pair};
-use crate::ui::detail_view::impl_detail_view_helpers;
+use crate::ui::detail_view::apply_detail_artwork;
 use crate::ui::hero_chips::{self, StationFacts};
 use crate::ui::track_list_view::view_id;
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{DirectoryStation, RadioStation};
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_ui::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
 
 use super::tabs::{RadioTab, mounted_tab, section_is_up};
 use super::{RadioUi, browse, kept, rows};
-
-// `apply_detail_artwork` — the cover and hero-blur write. `artwork_only` because this detail's
-// list is bare titles rather than a `TrackList`, so there is no `tracks` model to swap.
-impl_detail_view_helpers!(artwork_only Radio);
 
 /// What identifies a station across the fetch that opens its page.
 ///
@@ -384,7 +380,7 @@ async fn resolve(
         if let Some(kept) = kept_from_cache(radio_ui, station.id) {
             return Ok(StationSource::Kept(kept));
         }
-        return Ok(StationSource::Kept(library::radio::get_station(state, station.id).await?));
+        return Ok(StationSource::Kept(library::radio::get_station(&state.db, station.id).await?));
     }
     browse::resolve(radio_ui, &station.uuid)
         .map(|(found, logo)| StationSource::Browsed(found, logo))
@@ -524,9 +520,10 @@ pub fn persist_seat(state: &AppState, ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
         if latest != named {
             return;
         }
-        if let Err(e) = library::settings::set_last_detail_id(&state, view_id::RADIO_DETAIL, named)
+        if let Err(e) =
+            library::settings::set_last_detail_id(&state.paths, view_id::RADIO_DETAIL, named)
         {
-            log::warn!("radio: persist station detail: {e}");
+            log::warn!("radio: persist station detail: {}", describe(&e));
         }
     });
 }
@@ -701,7 +698,7 @@ pub fn rewarm_hero(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
 /// browsed station is a directory answer with a shelf life, so a restart lands on the tab root
 /// rather than on a page rebuilt from a cache that no longer exists.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
-    let named = library::settings::get_view_state(state)
+    let named = library::settings::get_view_state(&state.paths)
         .ok()
         .and_then(|vs| vs.last_detail_ids.get(view_id::RADIO_DETAIL).copied());
     // Seeded **before** the liveness filter, so the shadow says what the file says: an id whose

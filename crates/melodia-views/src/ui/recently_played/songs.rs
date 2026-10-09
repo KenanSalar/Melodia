@@ -43,7 +43,7 @@ pub async fn refresh_tracks(
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &Weak<AppWindow>,
 ) -> AppResult<()> {
-    let rows = library::recently_played::get_recently_played(state).await?;
+    let rows = library::recently_played::get_recently_played(&state.db).await?;
 
     // A leave that landed while the query was in flight has already cleared `tracks_all` and
     // emptied the model, so everything below would undo that teardown behind a view nobody can

@@ -183,9 +183,10 @@ silently miss the other.
   they are unreachable — and the pick persists. Not cosmetic where something is *gated* on that
   order: one click on Title retired Playlist Detail's drag-to-reorder for the whole install.
   **`next_sort_with_natural` is the cycle** (ascending → descending → natural) and Playlist Detail
-  is the only caller; nothing paints the third state, no header cell matching, which is the honest
-  reading of "unsorted". Reach for it only where the order is one the user can leave and come back
-  to; where the order *is* the page, `sortable: false` is the answer instead.
+  is the only view naming a natural order, through `TrackDetail::NATURAL_SORT`; nothing paints
+  the third state, no header cell matching, which is the honest reading of "unsorted". Reach for
+  it only where the order is one the user can leave and come back to; where the order *is* the
+  page, `sortable: false` is the answer instead.
 
 - **`SortPillRow`** — the `TabBar` shape (parallel `labels`/`fields` + `request-sort`), at all four
   pill rows; every other sortable surface goes through a `TrackList` column header. Pills carry
@@ -354,7 +355,7 @@ three components that answer it, and each argues its geometry at its own file.
   **Which is also why the setting is restart-gated rather than live**: the two arms publish
   unrelated tiers, so a flip mid-session leaves one stack painting the other's colours, and the
   artwork tiers decide at construction whether to build a blurred half at all
-  (`boot::ui_setup::apply_backdrop_style` raises the flag ahead of `install_views` for that
+  (`boot::ui_setup::chrome::apply_backdrop_style` raises the flag ahead of `install_views` for that
   reason; `boot::tests::ui_setup_tests` pins the order).
   **Producing the `BackdropSample` is the decoder's job, never the publisher's** — it runs in
   whichever `spawn_blocking` already decoded the cover, the quantize being the heaviest thing on
@@ -385,14 +386,14 @@ three components that answer it, and each argues its geometry at its own file.
   mounted**: each stack sits behind its own branch of that property, the two conditions each
   other's negation.
   **The branch is safe because the condition is a process constant**: `Theme.aurora-backdrop` is an
-  `in` property written once by `boot::ui_setup::apply_backdrop_style`, ahead of `install_views` and
-  `app.show()`, so no frame sees it move and neither leaf carries a `changed` tracker. The pair was
-  mounted unconditionally with the loser painted transparent for as long as an art-less track could
-  move the arm with the view on screen — that term is gone, and **a transparent loser was never the
-  free option it reads as**: `Brush::is_transparent()` (`i-slint-core/graphics/brush.rs`) answers
-  `false` for every gradient whatever its stop alphas, and femtovg's `draw_rectangle` tessellates
-  the path before `brush_to_paint` looks at it, so a stack faded to nothing still filled the whole
-  surface every frame — four of them on the blur arm.
+  `in` property written once by `boot::ui_setup::chrome::apply_backdrop_style`, ahead of
+  `install_views` and `app.show()`, so no frame sees it move and neither leaf carries a `changed`
+  tracker. The pair was mounted unconditionally with the loser painted transparent for as long as
+  an art-less track could move the arm with the view on screen — that term is gone, and **a
+  transparent loser was never the free option it reads as**: `Brush::is_transparent()`
+  (`i-slint-core/graphics/brush.rs`) answers `false` for every gradient whatever its stop alphas,
+  and femtovg's `draw_rectangle` tessellates the path before `brush_to_paint` looks at it, so a
+  stack faded to nothing still filled the whole surface every frame — four of them on the blur arm.
   What the gate does **not** retire is `shown`: the mounted stack still drains to its idle colours
   through it (below), which is why each stack's `shown: false` arm stays a *gradient of the same
   shape* — `Brush::interpolate` blends stop-for-stop and only between matching types, so
@@ -614,6 +615,16 @@ three components that answer it, and each argues its geometry at its own file.
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
+- **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
+  `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
+  rows in a `DetailCache`. A fifth detail implements both traits rather than copying a
+  `callbacks/detail.rs`.
+
+- **All nine track lists share Play Next, Add to Queue and the column toggle**, written once in
+  `callbacks::track_list` over `track_list_view::TrackListActions`, which `track_list_views!`
+  implements beside the column state, plus the `play-row` tail as `play_displayed`. A list
+  supplies only what differs: its id source, and Browse its non-zero id filter.
+
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
   `player_play_tracks(ids, start)`. The eight Play All pills made that same call pinned to
@@ -680,7 +691,7 @@ three components that answer it, and each argues its geometry at its own file.
   data-agnostic. Both commit through the `Dialog.accepted` dispatcher gated on a selected count;
   Add-to-Playlist disables fully-contained playlists and counts only enabled rows. Toggles and
   commit live in `files/export.rs` and `files/add_picker.rs` (commit needs
-  `Rc<NotificationsUi>`). Export opens from `export.rs`, Add-to-Playlist from `dialog.rs`.
+  `Rc<NotificationsUi>`). Each opens from its own file too.
 
 - **A raise that crosses an `await` owes a `DialogClaim`, and `Dialog.open` is not one.** Six
   openers deliberately leave `open` false while Rust fetches the body, so through that whole window
@@ -701,9 +712,11 @@ three components that answer it, and each argues its geometry at its own file.
   skip, nothing being able to overtake it; bumping one is not. `dialog_openers.rs` walks for both
   triggers.
 
-- **Notifications stack** mirrors `Dialog`'s `kind`-routing — a new action is one branch plus one
-  `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
-  the iter var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
+- **Notifications stack** routes a row's `NotificationKind` through
+  `ui::shell::notifications::run_action`, a Rust `match` rather than a Slint dispatcher like
+  `Dialog`'s (the function argues why). A new action is one arm plus one `show_localized(…)` call.
+  Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as the iter var), and
+  translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
 
 - **Backend-thread toasts via `utils::toast`.** `NotificationsUi` is `Rc`, so failures on tokio
   workers surface through a neutral `OnceLock<UnboundedSender<…>>` — no-op when uninstalled,
@@ -953,11 +966,11 @@ three components that answer it, and each argues its geometry at its own file.
 
 ## Releasing what the UI pins
 
-- **Detail-close releases global Image properties.** `release_detail_hero_images!` resets `cover` +
-  `blur-img-a/b`, clears `has-blur`, and re-solves the two shared globals, alongside `clear_detail`
-  + `release_detail_artwork`. Without it `SharedPixelBuffer` Arcs pin the cover tile and **both**
-  blur slots, on the heap and again as Mesa textures. It runs on each view's **section leave**,
-  gated per the hero-teardown rules above.
+- **Detail-close releases global Image properties.** `detail_view::release_detail_hero_images`
+  resets `cover` + `blur-img-a/b`, clears `has-blur`, and re-solves the two shared globals,
+  alongside `clear_detail` + `release_detail_artwork`. Without it `SharedPixelBuffer` Arcs pin the
+  cover tile and **both** blur slots, on the heap and again as Mesa textures. It runs on each
+  view's **section leave**, gated per the hero-teardown rules above.
 
 - **A close doesn't run it, and that is the contract the morph forced.** Every fact the band paints
   is a ternary over the detail id, so clearing on the frame the id does leaves the band spending
@@ -975,7 +988,7 @@ three components that answer it, and each argues its geometry at its own file.
   registration in the tree. It does both halves: `invoke_closed_teardown()` (the Slint side;
   restore `confirm-label` to `"OK"`, don't clear to `""`), then `current_artwork` **and**
   `TagEditor.cover` reset to `Image::default()` — the two `image`-typed globals, which have no
-  Slint default literal — plus `heap_trim::trim`. **The teardown is a `public function`, not a
+  Slint default literal — plus `allocator::trim`. **The teardown is a `public function`, not a
   callback body**: a callback has a single handler slot, so a default `closed => { … }` body is
   installed at construction and then silently replaced by the Rust `on_closed`.
   `CompositeScroll.reset()` takes this shape for the same reason. Do **not** clear in

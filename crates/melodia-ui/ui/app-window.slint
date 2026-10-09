@@ -16,7 +16,7 @@ import { Artists, ArtistDetail } from "globals/artists.slint";
 import { Equalizer, ReplayGain, Visualizer } from "globals/audio.slint";
 import { Favorites, RecentlyPlayed } from "globals/curated.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "globals/dialog-forms.slint";
-import { Dialog } from "globals/dialog.slint";
+import { Dialog, DialogKind } from "globals/dialog.slint";
 import { Genres, GenreDetail } from "globals/genres.slint";
 import { HeroBackdrop } from "globals/hero-backdrop.slint";
 import { HeroChips } from "globals/hero-chips.slint";
@@ -39,7 +39,8 @@ import { DragRegion, WindowChrome, MiniPlayer, CompositeScroll, PopupHighlight }
 import { SignalPathUi } from "globals/signal-path.slint";
 import { Tracks, Browse, RowCovers } from "globals/tracks.slint";
 import { TrackColumnSizing } from "globals/track-columns.slint";
-import { MelodiaUpdater, Notifications } from "globals/updater.slint";
+import { MelodiaUpdater } from "globals/updater.slint";
+import { Notifications } from "globals/notifications.slint";
 import { Wrap } from "globals/wrap.slint";
 import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow,
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
@@ -149,7 +150,7 @@ export component AppWindow inherits Window {
         }
     }
 
-    // `window_chrome::install` hydrates `Theme.use-native-titlebar` before `app.run()`, so the
+    // `window_chrome::install` hydrates `Theme.use-native-titlebar` before `app.show()`, so the
     // window maps with the right frame; Slint applies later flips live. Dropping the OS frame also
     // drops its resize edges, which `ResizeRing` restores along this band, as wide as the margins it
     // covers so they resize the way the frame's borders did.
@@ -264,12 +265,12 @@ export component AppWindow inherits Window {
         shortcut-scope.grab-focus();
     }
 
-    // Every dialog body mounts under `if Dialog.kind == "…"` and `closed-teardown()` clears `kind`,
+    // Every dialog body mounts under an `if` on `Dialog.kind` and `closed-teardown()` clears it,
     // so a focused LabeledInput dies with the body as a filter does above. Ungated on purpose: the
     // bodies never autofocus, so regrabbing on *open* takes the keyboard off whatever SearchBar
     // held it. Safe where `focus()` from `init` isn't — a `changed` handler runs from
     // `run_change_handlers`, outside the property evaluator's recursion guard.
-    property <string> watched-dialog-kind: Dialog.kind;
+    property <DialogKind> watched-dialog-kind: Dialog.kind;
     changed watched-dialog-kind => {
         shortcut-scope.grab-focus();
     }

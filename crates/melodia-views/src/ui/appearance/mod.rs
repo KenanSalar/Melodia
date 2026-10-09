@@ -25,6 +25,7 @@ use tokio::sync::watch;
 
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
+use melodia_core::error::describe;
 use melodia_core::themes::{self, SystemColorState, ThemeDef};
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use melodia_platform::services::platform;
@@ -33,7 +34,7 @@ use melodia_ui::{AppWindow, Settings};
 pub use install::install;
 pub use repaint::{apply_and_seed, repaint_from_settings};
 
-/// Handles returned by [`fn@install`] so `main.rs` can wire the Material You
+/// Handles returned by [`fn@install`] so boot can wire the Material You
 /// coordinator (`tasks::material_you`) without `appearance` having to
 /// reach across into the player view-model channel itself.
 pub struct AppearanceHandles {
@@ -90,7 +91,7 @@ pub(super) fn seed_theme_names(ui: &AppWindow) {
 /// static accent has been recorded yet — callers fall back to the
 /// theme's `default_accent`.
 pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Option<String> {
-    library::settings::get_settings(state)
+    library::settings::get_settings(&state.paths)
         .ok()
         .and_then(|s| s.last_static_accent(theme_id).map(str::to_owned))
 }
@@ -121,8 +122,8 @@ pub(super) fn persist(state: &AppState, theme_id: &str, variant_id: &str, accent
     let theme_id = theme_id.to_owned();
     let variant_id = variant_id.to_owned();
     let accent_id = accent_id.to_owned();
-    state.persist_blocking("persist appearance", move |s| {
-        library::settings::set_appearance(s, theme_id, variant_id, accent_id)
+    state.persist_blocking("persist appearance", move |paths| {
+        library::settings::set_appearance(paths, theme_id, variant_id, accent_id)
     });
 }
 
@@ -139,17 +140,18 @@ pub(super) fn persist_and_kick(
     accent_id: &str,
     kick: &Signal,
 ) {
-    let s = state.clone();
+    let paths = Arc::clone(&state.paths);
     let theme_id = theme_id.to_owned();
     let variant_id = variant_id.to_owned();
     let accent_id = accent_id.to_owned();
     let kick = kick.clone();
     state.runtime.spawn_blocking(move || {
-        match library::settings::set_appearance(&s, theme_id, variant_id, accent_id) {
+        match library::settings::set_appearance(&paths, theme_id, variant_id, accent_id) {
             Ok(()) => kick.bump(),
             Err(e) => log::warn!(
-                "persist appearance: {e}; suppressing Material You kick (disk write failed, \
-                 coordinator would observe stale settings)"
+                "persist appearance: {}; suppressing Material You kick (disk write failed, \
+                 coordinator would observe stale settings)",
+                describe(&e)
             ),
         }
     });

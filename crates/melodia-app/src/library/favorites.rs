@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::state::{AppState, Signal};
 use melodia_core::entities::{artist, track};
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_engine::player::engine::event_sink::PlayerSinks;
 use melodia_engine::player::engine::state::{
@@ -101,12 +101,12 @@ impl FavoriteWrite {
         let rows = match queries::track::get_scrobble_rows_by_ids(&self.db, ids).await {
             Ok(rows) => rows,
             Err(e) => {
-                log::warn!("love-sync lookup failed for {} track(s): {e}", ids.len());
+                log::warn!("love-sync lookup failed for {} track(s): {}", ids.len(), describe(&e));
                 return;
             }
         };
         if let Err(e) = self.scrobble.enqueue_loves(&rows, loved).await {
-            log::warn!("love-sync enqueue failed: {e}");
+            log::warn!("love-sync enqueue failed: {}", describe(&e));
         }
     }
 }
@@ -153,7 +153,7 @@ async fn queue_favorite_loves(
     let rows = match queries::track::get_favorite_scrobble_rows(db).await {
         Ok(rows) => rows,
         Err(e) => {
-            log::warn!("love backfill: favorites fetch failed: {e}");
+            log::warn!("love backfill: favorites fetch failed: {}", describe(&e));
             return None;
         }
     };
@@ -164,7 +164,7 @@ async fn queue_favorite_loves(
     let queued = match scrobble.backfill_loves(&rows, target).await {
         Ok(n) => n,
         Err(e) => {
-            log::warn!("love backfill: enqueue failed: {e}");
+            log::warn!("love backfill: enqueue failed: {}", describe(&e));
             return None;
         }
     };
@@ -194,26 +194,24 @@ fn provider_name(target: LoveTarget) -> &'static str {
     }
 }
 
-pub async fn get_favorite_tracks(state: &AppState) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_favorite_tracks_for_list(&state.db).await
+pub async fn get_favorite_tracks(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
+    queries::track::get_favorite_tracks_for_list(db).await
 }
 
-pub async fn get_favorite_stats(state: &AppState) -> Result<track::FavoriteStats, AppError> {
-    queries::track::get_favorite_stats(&state.db).await
+pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
+    queries::track::get_favorite_stats(db).await
 }
 
-pub async fn get_favorite_artists(
-    state: &AppState,
-) -> Result<Vec<artist::FavoriteArtist>, AppError> {
-    queries::artist::get_favorite_artists(&state.db).await
+pub async fn get_favorite_artists(db: &DbPool) -> Result<Vec<artist::FavoriteArtist>, AppError> {
+    queries::artist::get_favorite_artists(db).await
 }
 
 /// Favorite tracks ranked by play count — the whole set, since the Most Played
 /// tab is a virtualized grid and has no reason to truncate.
 pub async fn get_most_played_favorites(
-    state: &AppState,
+    db: &DbPool,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    queries::track::get_most_played_favorites(&state.db).await
+    queries::track::get_most_played_favorites(db).await
 }
 
 #[cfg(test)]

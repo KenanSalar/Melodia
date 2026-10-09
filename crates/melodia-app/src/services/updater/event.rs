@@ -1,9 +1,8 @@
 //! Backend → UI cross-thread event type.
 //!
-//! Constructed on tokio workers by `tasks::updater_daily` and the `Updater.install` /
-//! `Updater.check` callbacks, drained by a UI-thread subscriber in
-//! `ui::settings::updater_settings` that turns each variant into a
-//! `NotificationsUi::show` plus the matching `Updater.*` global writes.
+//! Constructed on tokio workers by both update checks and the `Updater.install`
+//! callback, drained by a UI-thread subscriber in
+//! `ui::settings::updater_settings` that turns each variant into a toast.
 //!
 //! A typed channel rather than poking the UI from the task, `NotificationsUi` being
 //! `Rc`-backed where the task is `Send + 'static`. The variants deliberately carry no
@@ -13,15 +12,15 @@
 #[derive(Debug, Clone)]
 pub enum UpdaterEvent {
     /// A strictly-newer version that hasn't been skipped. Becomes an "Update
-    /// available" toast with `kind = "install-update"`, so the dispatcher in
-    /// `globals/updater.slint` fires `Updater.install()` on tap.
+    /// available" toast of kind `InstallUpdate`, whose button fires
+    /// `MelodiaUpdater.install()`.
     ///
     /// `critical` mirrors the manifest flag and hides "Skip this version". Dismissing
-    /// the toast still works — it re-appears next session; only the permanent skip is
-    /// suppressed.
+    /// the toast still works: it returns at the next daily check, and only the
+    /// permanent skip is suppressed.
     Available { version: String, notes_short: String, critical: bool },
     /// `download_and_install` finished and atomically swapped the live binary.
-    /// Becomes the "Update installed — Restart" toast, `kind = "update-restart"`.
+    /// Becomes the "Update installed — Restart" toast, of kind `UpdateRestart`.
     Installed,
     /// Any error path. Becomes an "Update failed" toast with a per-category message;
     /// the raw error string stays log-only, so callers classify through

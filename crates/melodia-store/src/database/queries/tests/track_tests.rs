@@ -572,7 +572,7 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
     //
     // One of them carries `''` instead: the scan path treats an empty
     // artwork_path as "no cover" in the same breath as NULL
-    // (`scan::mutations::update_track_artwork_if_missing`), so it is a value
+    // (`ingest::flush_artwork_backfill`), so it is a value
     // that reaches this table — and it must not take a slot it can't paint.
     sqlx::query("UPDATE tracks SET artwork_path = '' WHERE title = 'Alpha'")
         .execute(db.write())
@@ -1242,4 +1242,46 @@ fn a_folder_name_cannot_smuggle_a_like_wildcard() {
             "folder {dir:?}"
         );
     }
+}
+
+async fn still_dated(db: &DbPool) -> Result<i64, AppError> {
+    let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tracks WHERE date_modified IS NOT NULL")
+        .fetch_one(db.read())
+        .await?;
+    Ok(row.0)
+}
+
+/// The column means "the mtime the stored row was parsed from", so NULL is honestly unknown —
+/// `track_is_current` compares it to the file's own and a missing value cannot match one.
+#[tokio::test]
+async fn the_stale_pass_blanks_every_mtime_and_answers_with_what_it_moved() -> Result<(), AppError>
+{
+    let db = seed_db().await?;
+    assert_eq!(still_dated(&db).await?, 3);
+
+    assert_eq!(queries::track::mark_every_track_stale(&db).await?, 3);
+
+    assert_eq!(still_dated(&db).await?, 0);
+    Ok(())
+}
+
+/// **The tag backfill's retry costs one more UPDATE and nothing else.** A second pass finds
+/// nothing to blank, so the sweep's `OnFailure::Retry` cannot put the library back in the queue on
+/// every launch — and `backfill`'s own early return is what reads this zero.
+#[tokio::test]
+async fn a_second_stale_pass_finds_nothing_left_to_mark() -> Result<(), AppError> {
+    let db = seed_db().await?;
+
+    queries::track::mark_every_track_stale(&db).await?;
+
+    assert_eq!(queries::track::mark_every_track_stale(&db).await?, 0);
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_empty_library_marks_nothing_stale() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+
+    assert_eq!(queries::track::mark_every_track_stale(&db).await?, 0);
+    Ok(())
 }

@@ -26,6 +26,8 @@ use slint::winit_030::winit::event::StartCause;
 use slint::winit_030::winit::event_loop::ActiveEventLoop;
 use slint::winit_030::{CustomApplicationHandler, EventResult};
 
+use melodia_core::error::describe;
+
 /// The longest one heartbeat sleeps, a frame at 60 Hz. A paint-driven pump can start a timer due
 /// sooner than the one the thread is already sleeping toward, and a sleeping thread can't be told.
 const PARKED_TICK_CAP: Duration = Duration::from_millis(16);
@@ -136,7 +138,7 @@ fn spawn_heartbeat() -> Option<Sender<Duration>> {
     match spawned {
         Ok(_) => Some(tx),
         Err(e) => {
-            log::warn!("parked loop: heartbeat thread: {e}");
+            log::warn!("parked loop: heartbeat thread: {}", describe(&e));
             None
         }
     }

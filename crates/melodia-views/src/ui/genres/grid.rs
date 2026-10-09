@@ -34,7 +34,7 @@ pub async fn fetch_grid(
     genres_ui: &Arc<GenresUi>,
     weak: Weak<AppWindow>,
 ) -> AppResult<()> {
-    let genres = library::genres::get_genres(state).await?;
+    let genres = library::genres::get_genres(&state.db).await?;
     let data = Arc::new(GridData::new(genres));
     // See `ui::albums::grid::fetch_grid` for the gate rationale.
     {

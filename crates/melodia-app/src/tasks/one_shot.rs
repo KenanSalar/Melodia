@@ -83,8 +83,8 @@ where
             return;
         }
 
-        state.persist_blocking(sweep.marker, move |state| {
-            services::settings::mutate_settings(&state.paths, |settings| {
+        state.persist_blocking(sweep.marker, move |paths| {
+            services::settings::mutate_settings(paths, |settings| {
                 (sweep.mark)(&mut settings.library);
             })
         });

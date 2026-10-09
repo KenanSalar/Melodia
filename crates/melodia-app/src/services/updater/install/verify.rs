@@ -125,9 +125,10 @@ pub(super) fn attempt_post_swap_rollback(target: &Path) {
                 target.display()
             ),
             Err(e) => log::warn!(
-                "updater: rollback failed: could not rename {} → {}: {e}",
+                "updater: rollback failed: could not rename {} → {}: {}",
                 old.display(),
-                target.display()
+                target.display(),
+                melodia_core::error::describe(&e)
             ),
         }
     }

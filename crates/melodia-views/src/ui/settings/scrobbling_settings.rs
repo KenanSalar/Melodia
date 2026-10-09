@@ -25,8 +25,9 @@ use crate::ui::launcher;
 use crate::ui::util::opt_shared;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::entities::integrations::ScrobbleFlags;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_integrations::services::integrations::scrobble::providers::{lastfm, listenbrainz};
 use melodia_integrations::services::integrations::scrobble::{
@@ -83,7 +84,7 @@ fn scrobble_toggle_binding(
     state: &AppState,
     label: &'static str,
     set_field: fn(&mut ScrobbleFlags, bool),
-    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    persist: fn(&Paths, bool) -> Result<(), AppError>,
     on_enable: Option<fn(&AppState)>,
 ) -> impl FnMut(bool) + 'static {
     let state = state.clone();
@@ -94,7 +95,7 @@ fn scrobble_toggle_binding(
         if on && let Some(effect) = on_enable {
             effect(&state);
         }
-        state.persist_blocking(label, move |s| persist(s, on));
+        state.persist_blocking(label, move |paths| persist(paths, on));
     }
 }
 
@@ -129,7 +130,7 @@ where
         let disconnect = disconnect.clone();
         rt.spawn(async move {
             if let Err(e) = disconnect(scrobble).await {
-                log::warn!("{provider} disconnect: {e}");
+                log::warn!("{provider} disconnect: {}", describe(&e));
                 toast::notify(ToastKind::OperationFailed, format!("{provider}: {e}"));
             }
         });
@@ -245,148 +246,167 @@ fn wire_disconnect(ui: &AppWindow, state: &AppState) {
 /// (the status watch repaints the row) and the dialog closes; on failure an
 /// inline localized error is shown and the dialog stays open.
 fn wire_login_flows(ui: &AppWindow, state: &AppState) {
-    let scrobble_ui = ui.global::<ScrobbleUi>();
+    wire_listenbrainz_verify(ui, state);
+    wire_lastfm_open_auth(ui, state);
+    wire_lastfm_finish(ui, state);
+}
 
-    // ---- ListenBrainz: validate a pasted token ----
-    {
+/// `ListenBrainz`: validate a pasted token.
+fn wire_listenbrainz_verify(ui: &AppWindow, state: &AppState) {
+    let state = state.clone();
+    let weak = ui.as_weak();
+    ui.global::<ScrobbleUi>().on_listenbrainz_verify(move |token| {
+        let token = token.trim().to_owned();
+        if token.is_empty() {
+            return;
+        }
+        begin_busy(&weak);
+        let rt = state.runtime.clone();
         let state = state.clone();
-        let weak = ui.as_weak();
-        scrobble_ui.on_listenbrainz_verify(move |token| {
-            let token = token.trim().to_owned();
-            if token.is_empty() {
-                return;
+        let weak = weak.clone();
+        rt.spawn(async move {
+            match listenbrainz::validate_token(
+                state.http_client(),
+                listenbrainz::LB_API_BASE,
+                &token,
+            )
+            .await
+            {
+                Ok(v) if v.valid => {
+                    let credentials = ListenBrainzCredentials {
+                        token,
+                        username: v.user_name.unwrap_or_default(),
+                    };
+                    let saved =
+                        state.scrobble.set_listenbrainz_credentials(Some(credentials)).await;
+                    connected_or_save_failed(&weak, &state, LoveTarget::ListenBrainz, saved);
+                }
+                Ok(_) => show_inline_error(&weak, InlineError::InvalidToken),
+                Err(e) => network_failed(&weak, "ListenBrainz", &e),
             }
-            begin_busy(&weak);
-            let rt = state.runtime.clone();
-            let state = state.clone();
-            let weak = weak.clone();
-            rt.spawn(async move {
-                match listenbrainz::validate_token(
-                    state.http_client(),
-                    listenbrainz::LB_API_BASE,
-                    &token,
-                )
-                .await
-                {
-                    Ok(v) if v.valid => {
-                        let credentials = ListenBrainzCredentials {
-                            token,
-                            username: v.user_name.unwrap_or_default(),
-                        };
-                        match state.scrobble.set_listenbrainz_credentials(Some(credentials)).await {
-                            Ok(()) => finish_connected(&weak, &state, LoveTarget::ListenBrainz),
-                            Err(e) => save_failed(&weak, "ListenBrainz", &e),
-                        }
-                    }
-                    Ok(_) => {
-                        let _ = weak.upgrade_in_event_loop(|ui| {
-                            let su = ui.global::<ScrobbleUi>();
-                            su.set_error(su.invoke_err_invalid_token());
-                            su.set_busy(false);
-                        });
-                    }
-                    Err(e) => network_failed(&weak, "ListenBrainz", &e),
-                }
-            });
         });
-    }
+    });
+}
 
-    // ---- Last.fm step 0: fetch a token + open the approval page ----
-    {
+/// Last.fm step 0: fetch a token + open the approval page.
+fn wire_lastfm_open_auth(ui: &AppWindow, state: &AppState) {
+    let state = state.clone();
+    let weak = ui.as_weak();
+    ui.global::<ScrobbleUi>().on_lastfm_open_auth(move || {
+        let Some((api_key, secret)) = lastfm::keys() else {
+            return;
+        };
+        begin_busy(&weak);
+        let rt = state.runtime.clone();
         let state = state.clone();
-        let weak = ui.as_weak();
-        scrobble_ui.on_lastfm_open_auth(move || {
-            let (Some(api_key), Some(secret)) =
-                (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
-            else {
-                return;
-            };
-            begin_busy(&weak);
-            let rt = state.runtime.clone();
-            let state = state.clone();
-            let weak = weak.clone();
-            rt.spawn(async move {
-                match lastfm::get_token(state.http_client(), api_key, secret).await {
-                    Ok(token) => {
-                        let url = format!(
-                            "https://www.last.fm/api/auth/?api_key={api_key}&token={token}"
-                        );
-                        launcher::open_target(url, "Last.fm auth").await;
-                        let _ = weak.upgrade_in_event_loop(move |ui| {
-                            let su = ui.global::<ScrobbleUi>();
-                            su.set_lastfm_token(token.into());
-                            su.set_lastfm_step(1);
-                            su.set_busy(false);
-                        });
-                    }
-                    Err(e) => network_failed(&weak, "Last.fm", &e),
+        let weak = weak.clone();
+        rt.spawn(async move {
+            match lastfm::get_token(state.http_client(), api_key, secret).await {
+                Ok(token) => {
+                    let url =
+                        format!("https://www.last.fm/api/auth/?api_key={api_key}&token={token}");
+                    launcher::open_target(url, "Last.fm auth").await;
+                    let _ = weak.upgrade_in_event_loop(move |ui| {
+                        let su = ui.global::<ScrobbleUi>();
+                        su.set_lastfm_token(token.into());
+                        su.set_lastfm_step(1);
+                        su.set_busy(false);
+                    });
                 }
-            });
-        });
-    }
-
-    // ---- Last.fm step 1: exchange the approved token for a session ----
-    {
-        let state = state.clone();
-        let weak = ui.as_weak();
-        scrobble_ui.on_lastfm_finish(move |token| {
-            let (Some(api_key), Some(secret)) =
-                (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
-            else {
-                return;
-            };
-            let token = token.to_string();
-            if token.is_empty() {
-                return;
+                Err(e) => network_failed(&weak, "Last.fm", &e),
             }
-            begin_busy(&weak);
-            let rt = state.runtime.clone();
-            let state = state.clone();
-            let weak = weak.clone();
-            rt.spawn(async move {
-                match lastfm::get_session(state.http_client(), api_key, secret, &token).await {
-                    Ok(credentials) => {
-                        match state.scrobble.set_lastfm_credentials(Some(credentials)).await {
-                            Ok(()) => finish_connected(&weak, &state, LoveTarget::Lastfm),
-                            Err(e) => save_failed(&weak, "Last.fm", &e),
-                        }
-                    }
-                    // Usually "not approved yet" — surface inline, keep the
-                    // dialog open so the user can approve and click Finish again.
-                    Err(e) => {
-                        log::info!("Last.fm get_session failed: {e}");
-                        let _ = weak.upgrade_in_event_loop(|ui| {
-                            let su = ui.global::<ScrobbleUi>();
-                            su.set_error(su.invoke_err_not_authorized());
-                            su.set_busy(false);
-                        });
-                    }
-                }
-            });
         });
+    });
+}
+
+/// Last.fm step 1: exchange the approved token for a session.
+fn wire_lastfm_finish(ui: &AppWindow, state: &AppState) {
+    let state = state.clone();
+    let weak = ui.as_weak();
+    ui.global::<ScrobbleUi>().on_lastfm_finish(move |token| {
+        let Some((api_key, secret)) = lastfm::keys() else {
+            return;
+        };
+        let token = token.to_string();
+        if token.is_empty() {
+            return;
+        }
+        begin_busy(&weak);
+        let rt = state.runtime.clone();
+        let state = state.clone();
+        let weak = weak.clone();
+        rt.spawn(async move {
+            match lastfm::get_session(state.http_client(), api_key, secret, &token).await {
+                Ok(credentials) => {
+                    let saved = state.scrobble.set_lastfm_credentials(Some(credentials)).await;
+                    connected_or_save_failed(&weak, &state, LoveTarget::Lastfm, saved);
+                }
+                // Usually "not approved yet" — surface inline, keep the
+                // dialog open so the user can approve and click Finish again.
+                Err(e) => {
+                    log::info!("Last.fm get_session failed: {}", describe(&e));
+                    show_inline_error(&weak, InlineError::NotAuthorized);
+                }
+            }
+        });
+    });
+}
+
+/// The credential a provider just issued has been written, or failed to be.
+fn connected_or_save_failed(
+    weak: &slint::Weak<AppWindow>,
+    state: &AppState,
+    target: LoveTarget,
+    saved: Result<(), AppError>,
+) {
+    match saved {
+        Ok(()) => finish_connected(weak, state, target),
+        Err(e) => {
+            let provider = match target {
+                LoveTarget::Lastfm => "Last.fm",
+                LoveTarget::ListenBrainz => "ListenBrainz",
+            };
+            save_failed(weak, provider, &e);
+        }
     }
 }
 
 /// Report a transport-level connect failure: toast + inline "couldn't reach the
 /// service" line, clear busy, keep the dialog open.
-fn network_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::fmt::Display) {
-    log::info!("{provider} connect failed: {error}");
+fn network_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::error::Error) {
+    log::info!("{provider} connect failed: {}", describe(error));
     toast::notify(ToastKind::OperationFailed, format!("{provider}: {error}"));
-    let _ = weak.upgrade_in_event_loop(|ui| {
-        let su = ui.global::<ScrobbleUi>();
-        su.set_error(su.invoke_err_network());
-        su.set_busy(false);
-    });
+    show_inline_error(weak, InlineError::Network);
 }
 
 /// Report a credential-persist failure after a successful auth: toast + inline
 /// "couldn't save" line, clear busy, keep the dialog open.
-fn save_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::fmt::Display) {
-    log::warn!("{provider} connect: save failed: {error}");
+fn save_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::error::Error) {
+    log::warn!("{provider} connect: save failed: {}", describe(error));
     toast::notify(ToastKind::OperationFailed, format!("{provider}: {error}"));
-    let _ = weak.upgrade_in_event_loop(|ui| {
+    show_inline_error(weak, InlineError::SaveFailed);
+}
+
+/// The connect dialog's inline errors, each a localized line on `ScrobbleUi`.
+#[derive(Clone, Copy)]
+enum InlineError {
+    InvalidToken,
+    NotAuthorized,
+    Network,
+    SaveFailed,
+}
+
+/// Show `error` inline, with busy cleared and the dialog left open.
+fn show_inline_error(weak: &slint::Weak<AppWindow>, error: InlineError) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
         let su = ui.global::<ScrobbleUi>();
-        su.set_error(su.invoke_err_save_failed());
+        let message = match error {
+            InlineError::InvalidToken => su.invoke_err_invalid_token(),
+            InlineError::NotAuthorized => su.invoke_err_not_authorized(),
+            InlineError::Network => su.invoke_err_network(),
+            InlineError::SaveFailed => su.invoke_err_save_failed(),
+        };
+        su.set_error(message);
         su.set_busy(false);
     });
 }

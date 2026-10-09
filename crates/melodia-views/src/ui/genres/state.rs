@@ -1,15 +1,11 @@
-//! Internal data structures used by the Genres grid and Genre Detail submodules. Mirror of
-//! `src/ui/albums/state.rs` minus everything related to cover thumbnails, genres having no
-//! artwork: no LRU to size and no `(cover, blur)` pair to pass between threads.
-
-use std::collections::HashSet;
+//! The Genres grid's data structures. Mirror of `src/ui/albums/state.rs` minus everything
+//! related to cover thumbnails, genres having no artwork. The detail's are
+//! [`crate::ui::track_detail::DetailCache`].
 
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-use crate::ui::row_match::Needle;
 use melodia_core::entities::genre::GenreStats;
-use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 
 /// A genre's pre-lowercased name, computed once per `fetch_grid` so the name sort allocates
 /// nothing. Positionally aligned with [`GridData::genres`]. One field, unlike `AlbumSortKey` —
@@ -60,31 +56,4 @@ pub(super) struct GenreGridState {
     /// Last filter+sort result, so a `columns-changed` rebuild only needs to re-chunk. `None`
     /// until the first rebuild and after every `fetch_grid`.
     pub index_cache: Mutex<Option<GridIndexCache>>,
-}
-
-/// Detail-side state — the currently-open genre's cached track list.
-pub(super) struct GenreDetailState {
-    /// Cached detail track rows — the **displayed**, filter-applied subset, kept in lockstep with
-    /// the Slint `tracks` model so the generic selection/sort logic stays valid. Mirrors
-    /// `AlbumDetailState::tracks`.
-    pub tracks: Mutex<Vec<RsTrackListRow>>,
-    /// Canonical full track set for this genre, in display-sort order. `apply_filtered_detail`
-    /// re-derives `tracks` by walking this through the current filter, so the two are equal
-    /// whenever no filter is active.
-    pub all_tracks: Mutex<Vec<RsTrackListRow>>,
-    /// Genre id currently shown in the detail view (`-1` = none), so the library-changed
-    /// subscriber can decide whether to refresh it.
-    pub genre_id: Mutex<i64>,
-    /// The selection set currently *stamped* onto the Slint row model. `apply_selection_to_rows`
-    /// diffs the desired selection against this and re-writes only the rows whose membership
-    /// flipped. Reset to empty whenever the row model is rebuilt fresh.
-    pub applied_selection: Mutex<HashSet<i32>>,
-    /// Live filter needle, folded by `set_filter` through
-    /// `ui::row_match::fold_needle` — never a bare `to_lowercase`, which
-    /// would still build and silently drop accent parity on this one view.
-    /// Mirrors `GenreDetail.filter`. Lets
-    /// the re-fetch path (`refresh_detail`) re-apply the filter to fresh
-    /// data without round-tripping the UI thread for the property read.
-    /// Cleared on fresh-open. Mirrors `ArtistDetailState::filter`.
-    pub filter: Mutex<Needle>,
 }

@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::path::Path;
 
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_core::utils::play_counts::{PlayCountEvent, try_send};
 
 use super::backend::PlayerBackend;
@@ -83,7 +83,7 @@ pub fn execute_actions<B: PlayerBackend>(
                 // `Path::exists`, and nothing to auto-skip onto — a station is one source, not a
                 // position in a queue.
                 if let Err(e) = engine.play_stream(generation, volume) {
-                    log::error!("Failed to start the radio stream: {e}");
+                    log::error!("Failed to start the radio stream: {}", describe(&e));
                     engine.stop();
                     enqueue_station_failure(&mut pending, player_state, sinks, generation);
                 }
@@ -216,7 +216,7 @@ fn start_or_skip<B: PlayerBackend>(
         return;
     }
     if let Err(e) = start() {
-        log::error!("Failed to {} {file_path}: {e}", mode.verb());
+        log::error!("Failed to {} {file_path}: {}", mode.verb(), describe(&e));
         toast_playback_failed(file_path);
         if mode.stops_on_failure() {
             engine.stop();

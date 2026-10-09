@@ -13,6 +13,7 @@ use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::callbacks::macros::spawn_blocking_logged;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Browse};
 
 /// Fetch `path` and apply it to the view, logging a failure under `label`.
@@ -32,7 +33,7 @@ fn spawn_fetch(
     let weak = weak.clone();
     state.runtime.spawn(async move {
         if let Err(e) = browse_ui_mod::fetch_and_apply(&s, &bu, weak, path).await {
-            log::warn!("{label}: {e}");
+            log::warn!("{label}: {}", describe(&e));
         }
     });
 }
@@ -44,7 +45,7 @@ fn persist_path(state: &AppState, path: Option<String>) {
     spawn_blocking_logged!(
         s,
         "browse::set_browse_path",
-        library::settings::set_browse_path(&s, path)
+        library::settings::set_browse_path(&s.paths, path)
     );
 }
 

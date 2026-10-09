@@ -9,6 +9,7 @@ use slint::ComponentHandle;
 use crate::ui::search::{SearchUi, fetch::push_recent_rows_to_slint};
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Search};
 
 /// Wire the recent-pick / recent-remove / recent-clear callbacks.
@@ -45,7 +46,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
                         (*su.state().recent.lock()).clone_from(&rows);
                         push_recent_rows_to_slint(&weak, rows);
                     }
-                    Err(e) => log::warn!("search::remove_history: {e}"),
+                    Err(e) => log::warn!("search::remove_history: {}", describe(&e)),
                 }
             });
         });
@@ -64,7 +65,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
                         (*su.state().recent.lock()).clone_from(&rows);
                         push_recent_rows_to_slint(&weak, rows);
                     }
-                    Err(e) => log::warn!("search::clear_history: {e}"),
+                    Err(e) => log::warn!("search::clear_history: {}", describe(&e)),
                 }
             });
         });

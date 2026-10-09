@@ -13,6 +13,7 @@ use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use crate::ui::queue_sheet::to_slint_queue_row;
 use crate::ui::util::len_as_i32;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_engine::player::engine::state::QueueViewModel;
 use melodia_ui::{AppWindow, Nav, NowPlaying, QueueRow};
 
@@ -167,7 +168,7 @@ pub(super) fn wire_now_playing_open(
                     .await;
             }));
             if let Err(e) = res {
-                log::warn!("ui::now_playing open-seed task spawn_local: {e}");
+                log::warn!("ui::now_playing open-seed task spawn_local: {}", describe(&e));
             }
         }
 

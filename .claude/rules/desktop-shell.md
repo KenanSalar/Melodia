@@ -73,9 +73,9 @@ the OS owns has to be attached late or not at all on at least one platform.
   `NewEvents` between two pumps, so the ordinary loop never wakes for it. A new drag-reachable winit
   arm is where a third pump site would go.
 
-- **The Native Title Bar toggle restarts** via `Dialog` `"restart-titlebar"` →
+- **The Native Title Bar toggle restarts** via `DialogKind.restart-titlebar` →
   `window_chrome::request_respawn_and_quit`; hydrate `Theme.use-native-titlebar` *before*
-  `app.run()` so the window maps with the right frame. Slint applies `no-frame` live, so the frame
+  `app.show()` so the window maps with the right frame. Slint applies `no-frame` live, so the frame
   is not what the restart is for; `window_chrome`'s module doc says what is.
 
 - **Under the native title bar the miniplayer drops the frame**, through `app-window.slint`'s
@@ -123,10 +123,10 @@ the OS owns has to be attached late or not at all on at least one platform.
   by `restore`'s guard against a hand-edited size. The restore caption keeps its own higher floor,
   which has to clear the miniplayer's exit edge.
 
-- **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
-  `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
-  `BlurSpec` at all, so `boot::ui_setup::apply_backdrop_style` raises it ahead of `install_views`
-  rather than in `hydrate_ui_from_settings`. Same three-part shape as the tray's:
+- **`DialogKind.restart-backdrop` is the third of these and the one whose deadline is earlier than
+  `app.show()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
+  `BlurSpec` at all, so `boot::ui_setup::chrome::apply_backdrop_style` raises it ahead of
+  `install_views` rather than in `hydrate_ui_from_settings`. Same three-part shape as the tray's:
   `WindowChrome.restart-backdrop()` → `controls.rs::on_restart_backdrop`
   (`library::window::set_aurora_backdrop` + `request_respawn_and_quit`). Why it can't be live is
   `.claude/rules/ui-patterns.md`'s.
@@ -277,8 +277,8 @@ The other way paths arrive from outside, and the one that can arrive before ther
   `MediaPlayer`. Bounded `mpsc` (cap 32) decouples the callback thread from `PlayerState`,
   `EventSink` from Slint. **Windows SMTC deferred** — souvlaki panics on a null
   `HWND` and no OS window exists at `AppState::init`, so `init_media_controls()` leaves Windows
-  inert; `main()` posts a one-shot post-show `invoke_from_event_loop` grabbing the `HWND` and
-  calling `MediaControlsHandle::attach_smtc`, a newly-attached `true` triggering a no-op
+  inert; `boot::ui_setup::install` posts a one-shot post-show `invoke_from_event_loop` grabbing
+  the `HWND` and calling `MediaControlsHandle::attach_smtc`, a newly-attached `true` triggering a no-op
   `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly; `event_tx`
   retained Windows-only for the late rewire.
 
@@ -289,8 +289,8 @@ The other way paths arrive from outside, and the one that can arrive before ther
   a `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred,
   and dropped by `tray_bridge::shutdown()` before `process::exit` or the icon ghosts**. No SNI host
   → `init_tray` `None`/`false`, tray-less still usable; labels English-only.
-  `TrayFlags.tray_enabled` (default on) gates `tray_bridge::install` from `main.rs`; flipping it is
-  restart-gated through `restart-tray` `Dialog` → `WindowChrome.restart-tray()` →
+  `TrayFlags.tray_enabled` (default on) gates `tray_bridge::install` from
+  `boot::ui_setup::install`; flipping it is restart-gated through `DialogKind.restart-tray` → `WindowChrome.restart-tray()` →
   `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `request_respawn_and_quit`,
   which may decline — above).
 

@@ -1,5 +1,6 @@
 //! `Genres.*` / `GenreDetail.*` callbacks: [`grid`] (the tile grid — client-side
-//! filter / sort, drill-in), [`detail`] (play, queue, favorite, sort) and
+//! filter / sort, drill-in), [`detail`] (close-detail, plus the set every detail
+//! shares) and
 //! [`lifecycle`] (section enter/leave caches plus the `library_changed` re-fetch
 //! subscriber).
 //!

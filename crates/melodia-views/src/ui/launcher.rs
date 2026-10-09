@@ -13,6 +13,8 @@
 
 use std::ffi::OsStr;
 
+use melodia_core::error::describe;
+
 /// Open `target` with the desktop's default handler, off the current thread. `label`
 /// prefixes both failure logs; name the action rather than the module.
 pub async fn open_target<T>(target: T, label: &'static str)
@@ -21,7 +23,7 @@ where
 {
     match tokio::task::spawn_blocking(move || open::that_detached(target)).await {
         Ok(Ok(())) => {}
-        Ok(Err(e)) => log::warn!("{label}: open::that_detached failed: {e}"),
-        Err(e) => log::warn!("{label}: launch task join failed: {e}"),
+        Ok(Err(e)) => log::warn!("{label}: open::that_detached failed: {}", describe(&e)),
+        Err(e) => log::warn!("{label}: launch task join failed: {}", describe(&e)),
     }
 }

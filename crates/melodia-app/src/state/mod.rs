@@ -18,7 +18,7 @@ use crate::services::search_history::SearchHistoryState;
 use crate::services::settings;
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::config::Paths;
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::{AppError, AppResult, describe};
 use melodia_core::utils::self_writes::SelfWrites;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_engine::player::engine::event_sink::{MediaControlsSync, PlayerEvent, PlayerSinks};
@@ -181,7 +181,7 @@ impl AppState {
     pub async fn init(paths: Paths, runtime: Handle) -> AppResult<(Self, StartupChannels)> {
         // Ahead of the output, which opens differently under exclusive output.
         let settings = settings::read_settings(&paths).unwrap_or_else(|e| {
-            log::warn!("Failed to read settings on startup: {e}; using defaults");
+            log::warn!("Failed to read settings on startup: {}; using defaults", describe(&e));
             settings::SettingsData::default()
         });
 
@@ -312,16 +312,16 @@ impl AppState {
     pub fn persist_blocking(
         &self,
         label: &'static str,
-        f: impl FnOnce(&AppState) -> Result<(), AppError> + Send + 'static,
+        f: impl FnOnce(&Paths) -> Result<(), AppError> + Send + 'static,
     ) {
         // `label` already names the setting, so one line here covers every
         // caller — including the three settings-row helpers that pass one
         // through. On the way in, so a write that hangs still says what it was.
         log::debug!("settings: {label}");
-        let s = self.clone();
+        let paths = Arc::clone(&self.paths);
         self.runtime.spawn_blocking(move || {
-            if let Err(e) = f(&s) {
-                log::warn!("{label}: {e}");
+            if let Err(e) = f(&paths) {
+                log::warn!("{label}: {}", describe(&e));
             }
         });
     }

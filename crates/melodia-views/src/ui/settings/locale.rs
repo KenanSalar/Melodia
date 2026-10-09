@@ -8,7 +8,7 @@
 //! [`melodia_core::entities::locale::SUPPORTED_LOCALES`] and seeds the index from the persisted
 //! code; `wire_language_changed` resolves a click back to a code, calls
 //! `select_bundled_translation` synchronously, updates the [`PersistedLocale`] shadow
-//! and spawns the disk write. `main.rs` makes the same call once before `app.run()`, so
+//! and spawns the disk write. Boot makes the same call once before `app.show()`, so
 //! the first frame already paints in the persisted language.
 //!
 //! Native-name labels are always rendered in their own script, never translated — the
@@ -22,6 +22,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Settings};
 
 /// Native-name labels for [`SUPPORTED_LOCALES`], index for index, in alphabetical order so a
@@ -60,11 +61,11 @@ type PersistedLocale = Arc<parking_lot::Mutex<String>>;
 
 /// Hydrate the language lists, seed `language-idx` from the persisted locale, and wire
 /// the change callback. **After** `AppWindow::new()`, so the global is mounted, and
-/// **before** `app.run()`.
+/// **before** `app.show()`.
 pub fn install_locale(ui: &AppWindow, state: &AppState) {
-    let persisted = library::settings::get_settings(state).map_or_else(
+    let persisted = library::settings::get_settings(&state.paths).map_or_else(
         |e| {
-            log::warn!("locale: read settings failed: {e}");
+            log::warn!("locale: read settings failed: {}", describe(&e));
             DEFAULT_LOCALE.to_owned()
         },
         |s| s.locale,
@@ -107,7 +108,7 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         // paint. Idempotent and cheap; no need to short-circuit on equal
         // current value.
         if let Err(e) = slint::select_bundled_translation(code) {
-            log::warn!("select_bundled_translation({code}): {e:?}");
+            log::warn!("select_bundled_translation({code}): {}", describe(&e));
         }
 
         // The switch above reaches every live `@tr` binding and nothing Rust rendered
@@ -129,7 +130,9 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         code.clone_into(&mut *shadow.lock());
 
         let code_owned = code.to_owned();
-        s.persist_blocking("persist locale", move |s| library::settings::set_locale(s, code_owned));
+        s.persist_blocking("persist locale", move |paths| {
+            library::settings::set_locale(paths, code_owned)
+        });
     });
 }
 

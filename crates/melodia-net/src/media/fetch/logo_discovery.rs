@@ -5,7 +5,7 @@
 //! usually still points at one from its own `<head>`. This finds that pointer and hands it on.
 //!
 //! **A URL, not a second download path.** What comes back goes through
-//! [`super::station_logo::fetch`] exactly as a directory-supplied `favicon_url` would, so the
+//! `library::radio::fetch_logo` exactly as a directory-supplied `favicon_url` would, so the
 //! scheme guard, the byte caps, the size floor and the tile composition all apply unchanged.
 //!
 //! **Never a whole directory page.** A page would pay a document fetch for the third of its rows
