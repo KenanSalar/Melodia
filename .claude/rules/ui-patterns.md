@@ -619,6 +619,7 @@ three components that answer it, and each argues its geometry at its own file.
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
   rows in a `DetailCache`. A fifth detail implements both traits rather than copying a
   `callbacks/detail.rs`.
+
 - **All nine track lists share Play Next, Add to Queue and the column toggle**, written once in
   `callbacks::track_list` over `track_list_view::TrackListActions`, which `track_list_views!`
   implements beside the column state, plus the `play-row` tail as `play_displayed`. A list
@@ -985,7 +986,7 @@ three components that answer it, and each argues its geometry at its own file.
   registration in the tree. It does both halves: `invoke_closed_teardown()` (the Slint side;
   restore `confirm-label` to `"OK"`, don't clear to `""`), then `current_artwork` **and**
   `TagEditor.cover` reset to `Image::default()` — the two `image`-typed globals, which have no
-  Slint default literal — plus `heap_trim::trim`. **The teardown is a `public function`, not a
+  Slint default literal — plus `allocator::trim`. **The teardown is a `public function`, not a
   callback body**: a callback has a single handler slot, so a default `closed => { … }` body is
   installed at construction and then silently replaced by the Rust `on_closed`.
   `CompositeScroll.reset()` takes this shape for the same reason. Do **not** clear in

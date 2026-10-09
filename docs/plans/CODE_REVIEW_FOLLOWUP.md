@@ -97,7 +97,7 @@ only the chain below it.
       had already built, and is named `reason`.
 - [x] All three `{e:?}` moved: Slint's translation error and notify's say in `Display` what
       `Debug` did.
-- [x] Not in scope: user-facing text (`paint_error`, a toast's detail) built from an error. What
+- [x] Not in scope: user-facing text (`report_failure`, a toast's detail) built from an error. What
       the user reads there is a UI decision, not a logging one.
 - [x] `crates/melodia/tests/logged_errors.rs` holds it: no `log::` call prints `e`, `err`,
       `error` or a `_err`/`_error` name bare, inline, positional or named. A call it cannot read

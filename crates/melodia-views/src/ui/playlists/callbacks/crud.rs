@@ -150,8 +150,9 @@ fn spawn_delete(
     let pu = playlists_ui.clone();
     let weak = weak.clone();
     state.runtime.spawn(async move {
-        if let Err(e) = library::playlists::delete_playlists(&s.db, &ids).await {
-            log::warn!("{label}({ids:?}): {}", describe(&e));
+        match library::playlists::delete_playlists(&s.db, &ids).await {
+            Ok(()) => log::info!("{label}({ids:?})"),
+            Err(e) => log::warn!("{label}({ids:?}): {}", describe(&e)),
         }
         if open_was_deleted {
             // Clear the persisted "last detail" so a restart
@@ -175,7 +176,6 @@ fn spawn_delete(
         if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
             log::warn!("{label} refetch grid: {}", describe(&e));
         }
-        log::info!("{label}({ids:?})");
     });
 }
 

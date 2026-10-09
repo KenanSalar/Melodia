@@ -152,8 +152,12 @@ fn wire_clear_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playl
         let pu = pu.clone();
         let weak = weak.clone();
         s.runtime.clone().spawn(async move {
-            let Ok(current) = library::playlists::get_playlist_detail(&s.db, id).await else {
-                return;
+            let current = match library::playlists::get_playlist_detail(&s.db, id).await {
+                Ok(current) => current,
+                Err(e) => {
+                    log::warn!("playlists::clear_artwork({id}) fetch: {}", describe(&e));
+                    return;
+                }
             };
             if let Err(e) = library::playlists::update_playlist(
                 &s.db,
@@ -164,7 +168,7 @@ fn wire_clear_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playl
             )
             .await
             {
-                log::warn!("playlists::clear_artwork: {}", describe(&e));
+                log::warn!("playlists::clear_artwork({id}): {}", describe(&e));
                 return;
             }
             refresh_after_edit(&s, &pu, weak, &[id], "playlists::clear_artwork").await;

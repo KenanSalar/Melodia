@@ -71,8 +71,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   where a *broken* one stays settled.
 
 - **`stats_changed` vs `library_changed`.** Play-count flushes bump the stats channel only;
-  its two subscribers are Favorites (hero mosaic + Most Played rank by `play_count`) and
-  Recently-Played (ordered by `last_played`, written on the same flush). Everything structural —
+  its three subscribers are Favorites (hero mosaic + Most Played rank by `play_count`),
+  Recently-Played (ordered by `last_played`, written on the same flush) and Playlists, for the
+  smart lists whose rules read play stats. Everything structural —
   scans, watcher, imports, favorite toggles — stays on `library_changed`.
 
 - **No folder is added on its own.** A fresh install starts empty, and the welcome card's first
