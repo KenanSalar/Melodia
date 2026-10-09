@@ -13,11 +13,10 @@ use super::asset_cache;
 use super::check::{Checked, Verdict, check_for_update, recheck_for_update};
 use super::event::UpdaterEvent;
 use super::github::RELEASES_BASE;
+use super::install::installed_version;
 use super::manifest::LatestManifest;
 use super::version::is_upgrade;
 use crate::services::settings::{self, UpdateFlags};
-
-const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// A write the Settings → Updates panel owes, painted by whoever holds the window: this crate
 /// doesn't name the Slint global it lands in.
@@ -88,9 +87,10 @@ pub async fn run_check(http: &reqwest::Client, paths: &Paths) -> AppResult<Findi
         }
     };
 
-    let fetched = match revalidation_etag(&flags, CURRENT_VERSION) {
-        Some(etag) => recheck_for_update(http, RELEASES_BASE, etag, CURRENT_VERSION).await,
-        None => check_for_update(http, RELEASES_BASE, CURRENT_VERSION).await.map(Some),
+    let current = installed_version();
+    let fetched = match revalidation_etag(&flags, &current) {
+        Some(etag) => recheck_for_update(http, RELEASES_BASE, etag, &current).await,
+        None => check_for_update(http, RELEASES_BASE, &current).await.map(Some),
     };
 
     let now = Utc::now().timestamp();
@@ -109,8 +109,8 @@ pub async fn run_check(http: &reqwest::Client, paths: &Paths) -> AppResult<Findi
 }
 
 /// The stored tag, wherever a `304` against it can only mean "nothing newer": the manifest it
-/// names offered this build no upgrade. Anything else is read in full, since a `304` carries no
-/// manifest and this process may no longer hold the one the tag stood for.
+/// names offered `current_version` no upgrade. Anything else is read in full, since a `304`
+/// carries no manifest and this process may no longer hold the one the tag stood for.
 fn revalidation_etag<'a>(flags: &'a UpdateFlags, current_version: &str) -> Option<&'a str> {
     if flags.last_manifest_etag.is_empty() {
         return None;

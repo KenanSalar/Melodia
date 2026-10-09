@@ -1,8 +1,8 @@
 //! [`PlaybackContext`], the one dependency slice of [`AppState`], taken by `library::playback::*`.
 //!
-//! No second context exists. Elsewhere in `library` a function takes the one field it reads, or
-//! the whole state where it reads several, and a struct between the two would only rename one of
-//! them.
+//! No second context exists. Elsewhere in `library` a function reading only `paths` or only `db`
+//! takes that field and the rest take the whole state, and a struct between the two would only
+//! rename one of them.
 //!
 //! `PlaybackContext` owns its `Arc`s rather than borrowing from
 //! `AppState`. Each field is already `Arc`-backed under the hood, so a

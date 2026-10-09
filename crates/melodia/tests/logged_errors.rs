@@ -9,7 +9,7 @@
 //! nests parentheses and sits beside strings, chars and comments that only look like one, and a
 //! reader that loses its place either flags code that is fine or passes code that is not.
 
-use melodia_testkit::rust_sources;
+use melodia_testkit::raw_rust_sources;
 
 /// Loose on purpose: below it the reader has stopped finding calls, not the tree making them.
 const MIN_LOG_CALLS: usize = 300;
@@ -42,7 +42,8 @@ struct Walk {
 
 fn walk_tree() -> Walk {
     let mut walk = Walk { bare: Vec::new(), unreadable: Vec::new(), read: 0 };
-    for (path, src) in rust_sources() {
+    // Raw: the lexer skips comments itself, and the shared stripper can cut a literal short.
+    for (path, src) in raw_rust_sources() {
         for call in log_calls(&src) {
             let site = format!("{path}:{}", call.line);
             match call.verdict {
@@ -221,6 +222,8 @@ fn a_call_the_walk_cannot_read_is_reported_rather_than_passed() {
     let cases = [
         ("unclosed", r#"log::warn!("save failed: {e}""#),
         ("no literal", r#"log::warn!(concat!("save failed: ", "{}"), e);"#),
+        ("square brackets", r#"log::warn!["save failed: {e}"];"#),
+        ("braces", r#"log::warn! {"save failed: {e}"}"#),
     ];
 
     for (case, src) in cases {
@@ -236,8 +239,12 @@ fn log_calls(src: &str) -> Vec<LogCall> {
     log_call_starts(src)
         .into_iter()
         .filter_map(|start| {
-            let open = opening_paren(src, start)?;
-            let verdict = split_args(src, open).map_or(Verdict::Unreadable, |args| judge(&args));
+            let verdict = match invocation(src, start)? {
+                Delimiter::Paren(open) => {
+                    split_args(src, open).map_or(Verdict::Unreadable, |args| judge(&args))
+                }
+                Delimiter::Other => Verdict::Unreadable,
+            };
             Some(LogCall { line: line_of(src, start), verdict })
         })
         .collect()
@@ -262,17 +269,28 @@ fn log_call_starts(src: &str) -> Vec<usize> {
     starts
 }
 
-/// Just past the `(` of a `log::<level>!(` starting at `start`, or `None` where the path names
-/// something else.
-fn opening_paren(src: &str, start: usize) -> Option<usize> {
+/// How a log macro's arguments open.
+enum Delimiter {
+    /// Just past the `(`.
+    Paren(usize),
+    /// `[` or `{`, which the reader does not take apart.
+    Other,
+}
+
+/// The delimiter of a `log::<level>!` invocation starting at `start`, or `None` where the path
+/// names something else.
+fn invocation(src: &str, start: usize) -> Option<Delimiter> {
     let rest = src.get(start + LOG_PATH.len()..)?;
     let name_len = rest.bytes().take_while(|&byte| continues_identifier(byte)).count();
     let (name, rest) = rest.split_at(name_len);
     if !LOG_MACROS.contains(&name) {
         return None;
     }
-    let rest = rest.strip_prefix('!')?.trim_start().strip_prefix('(')?;
-    Some(src.len() - rest.len())
+    let rest = rest.strip_prefix('!')?.trim_start();
+    Some(match rest.strip_prefix('(') {
+        Some(args) => Delimiter::Paren(src.len() - args.len()),
+        None => Delimiter::Other,
+    })
 }
 
 /// The call's top-level arguments, trimmed, or `None` when the call never closes.

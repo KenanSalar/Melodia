@@ -91,7 +91,7 @@ fn try_create_controls(
 impl MediaControlsHandle {
     /// Attach Windows System Media Transport Controls now that the OS window —
     /// and therefore a valid `HWND` — exists. Called from the event loop once
-    /// the Slint window is shown (see `main`).
+    /// the Slint window is shown (see `boot::ui_setup::install`).
     ///
     /// Returns `true` only when this call newly attached the controls.
     /// Idempotent: a call made when controls already exist (or when souvlaki

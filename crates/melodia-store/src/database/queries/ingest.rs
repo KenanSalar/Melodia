@@ -224,7 +224,7 @@ pub(crate) async fn ingest_scanned_files(
 
         // The entry is consumed after a successful re-point so two same-hash
         // new files in one scan can't both steal the one existing row — the
-        // second falls through to a fresh insert (mirrors `reconcile.rs`'s
+        // second falls through to a fresh insert (mirrors `scan::watch_batch`'s
         // consume-once moved-candidates map). A failed folder resolution
         // leaves the entry available for a later same-hash file.
         if let Some((existing_id, old_path)) = moved_from.get(meta.file_hash.as_str()).cloned() {

@@ -36,7 +36,7 @@ use crate::ui::util::len_as_i32;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Dialog, PlaylistPickRow};
 
-/// Wire the `Playlists.*` import/export callbacks. Call once after both the
+/// Wire the `Playlists.*` import/export and Add-to-Playlist callbacks. Call once after both the
 /// `playlists_ui` handle and the notifications stack exist.
 pub fn wire(
     ui: &AppWindow,

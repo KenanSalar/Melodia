@@ -109,8 +109,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         let mut library_rx = state.library_changed.subscribe();
         let mut stats_rx = state.stats_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
-            library_rx.mark_unchanged();
-            stats_rx.mark_unchanged();
             loop {
                 // Both senders live in `AppState` for the process lifetime, so an `Err` only
                 // happens during teardown — exit the loop.

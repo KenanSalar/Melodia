@@ -13,6 +13,8 @@ mod staging;
 mod swap;
 mod verify;
 
+use parking_lot::Mutex;
+
 use melodia_core::error::{AppError, AppResult};
 
 use super::manifest::PlatformAsset;
@@ -36,6 +38,16 @@ pub use swap::swap_in_place;
 #[cfg(target_os = "linux")]
 pub(crate) use swap::old_path;
 
+/// The version an install swapped in this session, which the next launch runs.
+static INSTALLED: Mutex<Option<String>> = Mutex::new(None);
+
+/// The version an update check measures against: one this session already installed, else this
+/// build's own. Measured against the running build instead, a check after an install reads the
+/// release it just swapped in as new and offers it again.
+pub fn installed_version() -> String {
+    INSTALLED.lock().clone().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned())
+}
+
 /// Stream-download `asset.url`, stream-verify it against `asset.signature`,
 /// then install it. Calls `on_progress` with a 0..=100 percentage per chunk.
 ///
@@ -52,7 +64,9 @@ pub async fn download_and_install(
     // left behind once the retention window closed, and runs here because an install attempt is
     // the moment the staging dir is known to matter.
     prune_stale_staging().await;
-    download_and_install_to(http, asset, expected_version, target, on_progress).await
+    download_and_install_to(http, asset, expected_version, target, on_progress).await?;
+    *INSTALLED.lock() = Some(expected_version.to_owned());
+    Ok(())
 }
 
 /// The sequencing, against a target it is handed. Split from the host lookup so a test can drive

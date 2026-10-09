@@ -164,7 +164,7 @@ fn the_deferred_work_still_carries_the_crash_notice() {
 
     assert!(
         deferred.contains("notify_previous_crash"),
-        "`main` must still raise the previous run's crash notice from the closure it hands \
+        "`install_ui` must still raise the previous run's crash notice from the closure it hands \
          `ui::onboarding::install`"
     );
 }

@@ -78,10 +78,9 @@ fn optional_text(text: &str) -> Option<String> {
     (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
-/// Wire the playlist import/export (M3U8) callbacks. Split out of [`wire`]
-/// because it needs the `Rc<NotificationsUi>` for completion toasts, which is
-/// created after the per-view wiring runs. Call once from boot's `install_ui` after the
-/// notifications stack exists — re-exported as `ui::playlists::wire_files`.
+/// Wire the M3U8 import / export callbacks and the Add-to-Playlist picker. Split out of [`wire`]
+/// because each needs the `Rc<NotificationsUi>` for completion toasts, which is created after the
+/// per-view wiring runs. Boot's `install_ui` calls it once, through `ui::playlists::wire_files`.
 pub fn wire_files(
     ui: &AppWindow,
     state: &AppState,

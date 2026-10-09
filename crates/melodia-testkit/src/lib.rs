@@ -259,6 +259,17 @@ fn rust_source_roots() -> Vec<(String, PathBuf)> {
 
 /// Every Rust source in the tree, comment-stripped and paired with the path it came from.
 ///
+/// # Panics
+///
+/// As [`raw_rust_sources`].
+pub fn rust_sources() -> Vec<(String, String)> {
+    raw_rust_sources().into_iter().map(|(path, src)| (path, strip_line_comments(&src))).collect()
+}
+
+/// Every Rust source in the tree as written, for a walk that lexes comments itself:
+/// [`strip_line_comments`] works a line at a time, so it cuts a `//` inside a string literal that
+/// continued from the line above.
+///
 /// Paths are relative to the crate root that produced them, and the workspace layout is what
 /// makes that unambiguous: each crate holds the `src/`-relative subtree it owned when this was
 /// one crate, so `utils/exe.rs` is still `utils/exe.rs` whichever crate it ended up in, and
@@ -269,7 +280,7 @@ fn rust_source_roots() -> Vec<(String, PathBuf)> {
 /// # Panics
 ///
 /// If fewer than [`MIN_SOURCES`] files turn up across all roots, or any path won't read.
-pub fn rust_sources() -> Vec<(String, String)> {
+pub fn raw_rust_sources() -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut unreadable = Vec::new();
 
@@ -281,7 +292,7 @@ pub fn rust_sources() -> Vec<(String, String)> {
             let rel = rel_path(&root, path);
             let rel = if rel.contains('/') { rel } else { format!("{krate}/{rel}") };
             match fs::read_to_string(path) {
-                Ok(src) => out.push((rel, strip_line_comments(&src))),
+                Ok(src) => out.push((rel, src)),
                 Err(_) => unreadable.push(path.clone()),
             }
         }

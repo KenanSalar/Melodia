@@ -114,9 +114,12 @@ async fn resolve_asset(
     // A full read rather than a revalidation: a `304` carries no
     // asset, and the manifest is a few KB against the download it
     // precedes.
-    let outcome =
-        check_for_update(state.http_client(), updater::RELEASES_BASE, env!("CARGO_PKG_VERSION"))
-            .await;
+    let outcome = check_for_update(
+        state.http_client(),
+        updater::RELEASES_BASE,
+        &updater::installed_version(),
+    )
+    .await;
     match outcome {
         Ok(Checked { manifest, verdict: Verdict::Available(asset), .. }) => {
             asset_cache::store(manifest.version.clone(), asset.clone());

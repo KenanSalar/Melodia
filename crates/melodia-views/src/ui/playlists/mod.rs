@@ -64,14 +64,13 @@ pub(super) use detail::{
 };
 pub(super) use grid::{fetch_grid_stats, rebuild_grid};
 
-/// The M3U8 import / export wiring, kept out of [`install`] because it needs
-/// the `Rc<NotificationsUi>` for its completion toasts and that is created
-/// after the per-view wiring runs. Boot's `install_ui` calls it once the stack exists.
+/// The M3U8 import / export and Add-to-Playlist wiring, kept out of [`install`] because each
+/// needs the `Rc<NotificationsUi>` for its completion toasts and that is created after the
+/// per-view wiring runs. Boot's `install_ui` calls it once the stack exists.
 pub use callbacks::wire_files;
 
 /// Install the Playlists grid + detail models, build the handle, and wire every
-/// `Playlists.*` / `PlaylistDetail.*` callback to it — except the file
-/// import/export pair, which is [`wire_files`].
+/// `Playlists.*` / `PlaylistDetail.*` callback to it, bar the ones [`wire_files`] holds.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {

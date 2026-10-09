@@ -53,9 +53,17 @@ fn offset_in(body: &str, needle: &str) -> usize {
 /// as a bug.
 #[test]
 fn the_arena_cap_is_taken_before_anything_allocates_on_a_thread_of_its_own() {
-    offset_in(&body_of("prepare_process"), "pin_arenas_and_thresholds(");
-    offset_in(&body_of("install_diagnostics"), "logging::install(");
-    offset_in(&body_of("build_runtime"), "tokio::runtime::Builder::new_multi_thread(");
+    // Once in the file as well as once in its stage, or a second call written straight into
+    // `main` would run ahead of the stage order below without failing it.
+    let file = strip_line_comments(MAIN);
+    for (stage, call) in [
+        ("prepare_process", "pin_arenas_and_thresholds("),
+        ("install_diagnostics", "logging::install("),
+        ("build_runtime", "tokio::runtime::Builder::new_multi_thread("),
+    ] {
+        offset_in(&file, call);
+        offset_in(&body_of(stage), call);
+    }
 
     let main = body_of("main");
     let cap = offset_in(&main, "prepare_process(");

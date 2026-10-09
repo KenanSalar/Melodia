@@ -33,11 +33,11 @@ pub enum Verdict {
     Available(PlatformAsset),
 }
 
-/// Fetch `latest.json` in full, semver-gate it against the running binary's version, and resolve
-/// the platform-specific asset.
+/// Fetch `latest.json` in full, semver-gate it against `current_version`, and resolve the
+/// platform-specific asset.
 ///
-/// `current_version` is normally `env!("CARGO_PKG_VERSION")` and `base_url`
-/// [`RELEASES_BASE`](super::github::RELEASES_BASE); both are parameters for the
+/// `current_version` is normally [`installed_version`](super::install::installed_version) and
+/// `base_url` [`RELEASES_BASE`](super::github::RELEASES_BASE); both are parameters for the
 /// same reason, which is that a caller can be a test.
 pub async fn check_for_update(
     http: &reqwest::Client,

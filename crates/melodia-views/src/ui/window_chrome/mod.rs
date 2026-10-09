@@ -145,9 +145,9 @@ pub fn request_respawn_and_quit() {
 /// Win32 — impossible on a Windows build, but the API surface stays honest.
 ///
 /// The two consumers are one layer apart and neither may hold this hop: souvlaki's SMTC attach in
-/// `main`, and `dwm_titlebar` through `ui::appearance::theme_apply`, which the split keeps off
-/// every Slint name. It sat in both for a while, byte-identical, which is what a private copy of
-/// an accessor hop turns into.
+/// `boot::ui_setup::install`, and `dwm_titlebar` through `ui::appearance::theme_apply`, which the
+/// split keeps off every Slint name. It sat in both for a while, byte-identical, which is what a
+/// private copy of an accessor hop turns into.
 ///
 /// Fetched per call rather than cached: Slint's `with_winit_window` accessor only borrows for the
 /// closure's duration.

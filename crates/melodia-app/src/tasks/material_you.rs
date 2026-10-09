@@ -13,7 +13,7 @@
 //!    `SeedCache` so prev/next/prev round-trips don't re-quantize the
 //!    same artwork.
 //! 4. Writes `(Palette, accent_hex)` back into `os_state.material_you`
-//!    and triggers a repaint via `slint::invoke_from_event_loop`.
+//!    and hands the result to `repaint_tx` for the UI thread to paint.
 //!
 //! Both inputs are `tokio::sync::watch` receivers, so concurrent bursts
 //! of clicks (e.g. user mashing the variant chip) auto-coalesce — the
