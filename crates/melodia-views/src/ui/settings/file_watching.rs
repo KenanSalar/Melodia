@@ -23,7 +23,7 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 
 use crate::ui::shell::notifications::{NotificationsUi, RowText};
-use melodia_ui::{AppWindow, Settings};
+use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Settings};
 
 pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     // A missing or unreadable file leaves the Slint default in place, matching the
@@ -46,18 +46,23 @@ pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<Notification
         });
 
         if on {
-            notifications.dismiss_by_kind("watcher-disabled");
+            notifications.dismiss_by_kind(NotificationKind::WatcherDisabled);
         } else {
             // Strings come from the `Settings.watcher-disabled-*` pure callbacks, and the row
             // is sticky on the page carrying the language picker, so the recipe is kept.
             let Some(ui) = ui_weak.upgrade() else { return };
-            notifications.show_localized(&ui, "warning", "watcher-disabled", |ui| {
-                let g = ui.global::<Settings>();
-                RowText::plain(
-                    g.invoke_watcher_disabled_title(),
-                    g.invoke_watcher_disabled_message(),
-                )
-            });
+            notifications.show_localized(
+                &ui,
+                NotificationVariant::Warning,
+                NotificationKind::WatcherDisabled,
+                |ui| {
+                    let g = ui.global::<Settings>();
+                    RowText::plain(
+                        g.invoke_watcher_disabled_title(),
+                        g.invoke_watcher_disabled_message(),
+                    )
+                },
+            );
         }
     });
 }

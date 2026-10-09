@@ -68,14 +68,15 @@ fn every_multi_caller_dialog_opens_through_its_own_function() {
     let owner =
         sources.iter().find(|(path, _)| path.ends_with(OWNER)).map_or("", |(_, src)| src.as_str());
 
+    // Both needles end at the `;`, or `delete-playlist` would also match `delete-playlists`.
     let offenders: Vec<String> = sources
         .iter()
         .filter(|(path, _)| !path.ends_with(OWNER))
         .flat_map(|(path, src)| {
             FOLDED_KINDS
                 .iter()
-                .filter(|kind| src.contains(&format!("Dialog.kind = \"{kind}\"")))
-                .map(|kind| format!("{path}: Dialog.kind = \"{kind}\""))
+                .filter(|kind| src.contains(&format!("Dialog.kind = DialogKind.{kind};")))
+                .map(|kind| format!("{path}: Dialog.kind = DialogKind.{kind}"))
                 .collect::<Vec<_>>()
         })
         .collect();
@@ -87,7 +88,7 @@ fn every_multi_caller_dialog_opens_through_its_own_function() {
     let unowned: Vec<&str> = FOLDED_KINDS
         .iter()
         .copied()
-        .filter(|kind| !owner.contains(&format!("kind = \"{kind}\"")))
+        .filter(|kind| !owner.contains(&format!("kind = DialogKind.{kind};")))
         .collect();
     assert!(
         unowned.is_empty(),

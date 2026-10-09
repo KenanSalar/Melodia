@@ -70,7 +70,7 @@ fn anything_else_falls_through_to_other() {
     assert_eq!(FailureKind::classify(&join), FailureKind::Other);
 }
 
-/// Read by the `Settings.update-failed-reason(kind)` switch in `globals/updater.slint`; a value
+/// Read by the `Settings.update-failed-reason(kind)` switch in `settings.slint`; a value
 /// changed on one side alone silently picks the fallback message.
 #[test]
 fn the_kind_discriminators_are_the_ones_slint_branches_on() {

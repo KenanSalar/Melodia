@@ -17,7 +17,7 @@ use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
-use melodia_ui::{AppWindow, CardSelection, Dialog, Radio, RadioForm};
+use melodia_ui::{AppWindow, CardSelection, Dialog, DialogKind, Radio, RadioForm};
 
 pub(super) fn wire(
     ui: &AppWindow,
@@ -179,7 +179,7 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
         dialog.set_confirm_label(form.invoke_save_label());
         dialog.set_cancel_label(form.invoke_cancel_label());
         dialog.set_destructive(false);
-        dialog.set_kind(SharedString::from("edit-station"));
+        dialog.set_kind(DialogKind::EditStation);
         dialog.set_target_id(crate::ui::util::clamp_i64_to_i32(station.id));
         dialog.set_open(true);
     });

@@ -2,7 +2,7 @@ import { Settings } from "../../settings.slint";
 import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { ScrobbleUi } from "../../globals/dialog-forms.slint";
-import { Dialog } from "../../globals/dialog.slint";
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
@@ -85,7 +85,7 @@ export component ScrobblingSection inherits Rectangle {
                     ScrobbleUi.lastfm-token = "";
                     ScrobbleUi.busy = false;
                     ScrobbleUi.error = "";
-                    Dialog.kind = "scrobble-lastfm-login";
+                    Dialog.kind = DialogKind.scrobble-lastfm-login;
                     Dialog.title = @tr("Connect Last.fm");
                     Dialog.message = "";
                     Dialog.confirm-label = @tr("Open Last.fm");
@@ -140,7 +140,7 @@ export component ScrobblingSection inherits Rectangle {
                     ScrobbleUi.lb-token = "";
                     ScrobbleUi.busy = false;
                     ScrobbleUi.error = "";
-                    Dialog.kind = "scrobble-listenbrainz-login";
+                    Dialog.kind = DialogKind.scrobble-listenbrainz-login;
                     Dialog.title = @tr("Connect ListenBrainz");
                     Dialog.message = "";
                     Dialog.confirm-label = @tr("Connect");

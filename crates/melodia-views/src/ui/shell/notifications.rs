@@ -14,7 +14,10 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use melodia_ui::{AppWindow, NotificationRow, Notifications};
+use melodia_ui::{
+    AppWindow, MelodiaUpdater, NotificationKind, NotificationRow, NotificationVariant,
+    Notifications, Settings,
+};
 
 /// Maximum visible notifications. Pushing past it drops the oldest first, so the stack
 /// never grows off-screen.
@@ -25,33 +28,30 @@ const MAX_VISIBLE: usize = 5;
 /// reaches [`NotificationsUi::show_auto_dismiss`].
 pub const TOAST_AUTO_DISMISS_MS: u32 = 3000;
 
-/// One notification's worth of data. `variant` is one of the four strings
-/// `NotificationCard` dispatches on; an unknown one falls through to "info" styling, but
-/// picking outside the four is drift between the two sides.
+/// One notification's worth of data.
 pub struct NotificationParams {
-    pub variant: SharedString,
+    pub variant: NotificationVariant,
     pub title: SharedString,
     pub message: SharedString,
     /// Empty ⇒ no action button rendered.
     pub action_label: SharedString,
-    /// Routing key for the optional action button, read by the default
-    /// `Notifications.action` handler in `globals/updater.slint` and by
-    /// [`NotificationsUi::dismiss_by_kind`] to clear lingering rows of a category.
-    pub action_kind: SharedString,
+    /// Routes the optional action button through `run_action` and groups rows for
+    /// [`NotificationsUi::dismiss_by_kind`].
+    pub kind: NotificationKind,
 }
 
 impl NotificationParams {
     /// A toast with no action button and nothing to dismiss it by — most of them.
-    /// Anything carrying an `action_kind` builds the struct literal instead: that field
-    /// routes the button *and* groups rows for [`NotificationsUi::dismiss_by_kind`], and
-    /// a constructor hiding it would make the two roles harder to tell apart.
-    pub fn plain(variant: &str, title: SharedString, message: SharedString) -> Self {
+    /// Anything carrying a `kind` builds the struct literal instead: that field routes the
+    /// button *and* groups rows for [`NotificationsUi::dismiss_by_kind`], and a constructor
+    /// hiding it would make the two roles harder to tell apart.
+    pub fn plain(variant: NotificationVariant, title: SharedString, message: SharedString) -> Self {
         Self {
-            variant: variant.into(),
+            variant,
             title,
             message,
             action_label: SharedString::default(),
-            action_kind: SharedString::default(),
+            kind: NotificationKind::None,
         }
     }
 }
@@ -123,7 +123,7 @@ impl NotificationsUi {
             title: p.title,
             message: p.message,
             action_label: p.action_label,
-            action_kind: p.action_kind,
+            kind: p.kind,
         });
         id
     }
@@ -150,13 +150,13 @@ impl NotificationsUi {
     /// can run it again. For the sticky rows only — an auto-dismissing toast is gone before
     /// anyone reaches the language picker.
     ///
-    /// An empty `action_kind` is a row that groups with nothing, as on
+    /// [`NotificationKind::None`] is a row that groups with nothing, as on
     /// [`NotificationParams::plain`].
     pub fn show_localized<F>(
         &self,
         ui: &AppWindow,
-        variant: &str,
-        action_kind: &str,
+        variant: NotificationVariant,
+        kind: NotificationKind,
         relabel: F,
     ) -> i32
     where
@@ -164,11 +164,11 @@ impl NotificationsUi {
     {
         let text = relabel(ui);
         let id = self.show(NotificationParams {
-            variant: variant.into(),
+            variant,
             title: text.title,
             message: text.message,
             action_label: text.action_label,
-            action_kind: action_kind.into(),
+            kind,
         });
         self.recipes.borrow_mut().insert(id, Box::new(relabel));
         id
@@ -181,10 +181,9 @@ impl NotificationsUi {
         title: SharedString,
         message: SharedString,
     ) -> i32 {
-        // A `let variant` binding, which is the shape `view_model_strings`' variant walk reads.
         let variant = match completion {
-            Completion::Complete => "success",
-            Completion::Partial => "warning",
+            Completion::Complete => NotificationVariant::Success,
+            Completion::Partial => NotificationVariant::Warning,
         };
         self.show_auto_dismiss(
             NotificationParams::plain(variant, title, message),
@@ -197,7 +196,7 @@ impl NotificationsUi {
     where
         F: Fn(&AppWindow) -> RowText + 'static,
     {
-        self.show_localized(ui, "error", "", relabel)
+        self.show_localized(ui, NotificationVariant::Error, NotificationKind::None, relabel)
     }
 
     /// Re-render every row carrying a recipe. The switch itself reaches only live `@tr`
@@ -237,12 +236,12 @@ impl NotificationsUi {
         }
     }
 
-    /// Remove every row whose `action_kind` matches — the file-watching toggle clearing
+    /// Remove every row whose `kind` matches — the file-watching toggle clearing
     /// its "watching disabled" row. Back-to-front, so a remove doesn't invalidate the
     /// indices of pending matches.
-    pub fn dismiss_by_kind(&self, kind: &str) {
+    pub fn dismiss_by_kind(&self, kind: NotificationKind) {
         for i in (0..self.rows.row_count()).rev() {
-            if self.rows.row_data(i).is_some_and(|r| r.action_kind.as_str() == kind) {
+            if self.rows.row_data(i).is_some_and(|r| r.kind == kind) {
                 self.remove_at(i);
             }
         }
@@ -268,12 +267,8 @@ fn remove_at(
     rows.remove(pos);
 }
 
-/// Install the `Notifications` global's row model and wire its `dismiss` callback,
+/// Install the `Notifications` global's row model and wire both its callbacks,
 /// returning the handle the caller threads into the modules that raise toasts.
-///
-/// The `action` callback is deliberately left to the Slint-side dispatcher in
-/// `globals/updater.slint` — a new action flow is one branch there plus a
-/// `show_localized(…)` call, with no closure threading.
 pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
     let rows: Rc<VecModel<NotificationRow>> = Rc::new(VecModel::default());
     ui.global::<Notifications>().set_rows(ModelRc::from(rows.clone()));
@@ -290,8 +285,40 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
             state.dismiss(id);
         });
     }
+    {
+        let state = state.clone();
+        let weak = ui.as_weak();
+        ui.global::<Notifications>().on_action(move |id, kind| {
+            if let Some(ui) = weak.upgrade() {
+                run_action(&ui, kind);
+            }
+            state.dismiss(id);
+        });
+    }
 
     state
+}
+
+/// Runs what a row's action button stands for, through the callback the matching control in
+/// Settings or the update card fires, so the two share one handler.
+///
+/// Here rather than in Slint because only Rust matches exhaustively: a new kind doesn't build
+/// until it has an arm, where a missing Slint branch still paints a button that does nothing.
+fn run_action(ui: &AppWindow, kind: NotificationKind) {
+    match kind {
+        NotificationKind::InstallUpdate => ui.global::<MelodiaUpdater>().invoke_install(),
+        NotificationKind::UpdateRestart => ui.global::<MelodiaUpdater>().invoke_restart(),
+        NotificationKind::CrashReport => ui.global::<Settings>().invoke_open_log_folder(),
+        NotificationKind::SupportMelodia => ui.global::<Settings>().invoke_open_kofi(),
+        NotificationKind::ExclusiveRefused => ui.global::<Settings>().invoke_open_signal_path(),
+        // Kinds that only group rows; their rows carry no button.
+        NotificationKind::None
+        | NotificationKind::UpdateFailed
+        | NotificationKind::WatcherDisabled
+        | NotificationKind::LibraryResyncing
+        | NotificationKind::AudioDeviceLost
+        | NotificationKind::ArtworkRestoring => {}
+    }
 }
 
 #[cfg(test)]

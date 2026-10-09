@@ -213,7 +213,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **Tag editing = "Edit Track Information", write-through the scan pipeline**
   (`crates/melodia-app/src/library/tags.rs::apply_tag_edit`, `crates/melodia-store/src/media/ingest/tag_writer.rs`). Right-click rows → **Edit
-  Tags…** (`Dialog.kind == "edit-tags"`); **batch is the point** — **touched-tracking is a
+  Tags…** (`DialogKind.edit-tags`); **batch is the point** — **touched-tracking is a
   Rust-side diff against a populate-time snapshot** (Keep/Clear/Set), so only changed fields write.
   **Lyrics live in the file, not the DB** (single-track tab only), though the tab is no longer their
   only reader: `library::lyrics` resolves a sidecar, this tag and a fetched-sheet store for the Now

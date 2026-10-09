@@ -399,17 +399,35 @@ export struct BreadcrumbRow {
     path: string,
 }
 
+// `info` first, being both the default and the card's fallback styling.
+export enum NotificationVariant { info, success, warning, error }
+
+// Routes a row's action button and groups rows for `dismiss_by_kind`. Which kinds route is
+// decided by `ui::shell::notifications::run_action`'s exhaustive match.
+export enum NotificationKind {
+    none,
+    install-update,
+    update-restart,
+    crash-report,
+    support-melodia,
+    exclusive-refused,
+    update-failed,
+    watcher-disabled,
+    library-resyncing,
+    audio-device-lost,
+    artwork-restoring,
+}
+
 // One row in the bottom-right notification stack. `id` is a monotonic handle for
-// `Notifications.dismiss`; `variant` picks icon and left-accent colour; an empty
-// `action-label` renders no button (the close X is always there); `action-kind` routes
-// `Notifications.action`, mirroring `Dialog.kind` + `accepted`.
+// `Notifications.dismiss`; an empty `action-label` renders no button (the close X is always
+// there).
 export struct NotificationRow {
     id: int,
-    variant: string,
+    variant: NotificationVariant,
     title: string,
     message: string,
     action-label: string,
-    action-kind: string,
+    kind: NotificationKind,
 }
 
 // One radio station, as either tab of the Radio page draws it. **`id` is `0` for a station that

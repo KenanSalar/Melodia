@@ -1,4 +1,4 @@
-//! Wire the `ReplayGain` dialog (`Dialog.kind == "replaygain"`) to Rust.
+//! Wire the `ReplayGain` dialog (`DialogKind::Replaygain`) to Rust.
 //!
 //! Seeds the `ReplayGain` global from `settings.json` at startup (enabled flag,
 //! mode dropdown index, preamp, prevent-clipping) and registers the callbacks.

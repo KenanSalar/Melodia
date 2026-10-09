@@ -4,7 +4,7 @@ import { ArtistCreditRow, SmartRuleRow } from "../models.slint";
 // by the `Dialog.accepted` dispatcher — which is why they sit apart from `Dialog`: the dispatcher
 // imports them, never the reverse.
 
-// The Smart-Playlist rule builder (`kind == "smart-playlist-editor"`), owned by
+// The Smart-Playlist rule builder (`DialogKind.smart-playlist-editor`), owned by
 // `crates/melodia-views/src/ui/playlists/callbacks/smart.rs`. The entry points populate everything and open the dialog
 // from a fresh event-loop tick — a synchronous `Dialog.open = true` off a click trips the recursion
 // guard. `commit` reconstructs a `SmartCriteria` from the model plus the scalars.
@@ -33,7 +33,7 @@ export global SmartEditor {
     callback commit();
 }
 
-// The Edit-Track-Information dialog (`kind == "edit-tags"`), opened from a track row's context menu
+// The Edit-Track-Information dialog (`DialogKind.edit-tags`), opened from a track row's context menu
 // over one *or many* rows and owned by `crates/melodia-views/src/ui/callbacks/tags/`. `request-edit` fetches,
 // populates and opens on the same fresh tick `SmartEditor` uses. `commit` diffs each field against
 // the populate-time snapshot into a Keep / Clear / Set tri-state, so only touched fields reach the

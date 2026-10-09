@@ -73,7 +73,7 @@ the OS owns has to be attached late or not at all on at least one platform.
   `NewEvents` between two pumps, so the ordinary loop never wakes for it. A new drag-reachable winit
   arm is where a third pump site would go.
 
-- **The Native Title Bar toggle restarts** via `Dialog` `"restart-titlebar"` →
+- **The Native Title Bar toggle restarts** via `DialogKind.restart-titlebar` →
   `window_chrome::request_respawn_and_quit`; hydrate `Theme.use-native-titlebar` *before*
   `app.show()` so the window maps with the right frame. Slint applies `no-frame` live, so the frame
   is not what the restart is for; `window_chrome`'s module doc says what is.
@@ -123,7 +123,7 @@ the OS owns has to be attached late or not at all on at least one platform.
   by `restore`'s guard against a hand-edited size. The restore caption keeps its own higher floor,
   which has to clear the miniplayer's exit edge.
 
-- **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
+- **`DialogKind.restart-backdrop` is the third of these and the one whose deadline is earlier than
   `app.show()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
   `BlurSpec` at all, so `boot::ui_setup::chrome::apply_backdrop_style` raises it ahead of
   `install_views` rather than in `hydrate_ui_from_settings`. Same three-part shape as the tray's:
@@ -290,7 +290,7 @@ The other way paths arrive from outside, and the one that can arrive before ther
   and dropped by `tray_bridge::shutdown()` before `process::exit` or the icon ghosts**. No SNI host
   → `init_tray` `None`/`false`, tray-less still usable; labels English-only.
   `TrayFlags.tray_enabled` (default on) gates `tray_bridge::install` from
-  `boot::ui_setup::install`; flipping it is restart-gated through `restart-tray` `Dialog` → `WindowChrome.restart-tray()` →
+  `boot::ui_setup::install`; flipping it is restart-gated through `DialogKind.restart-tray` → `WindowChrome.restart-tray()` →
   `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `request_respawn_and_quit`,
   which may decline — above).
 

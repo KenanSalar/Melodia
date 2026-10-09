@@ -7,6 +7,34 @@ import { Queue } from "queue.slint";
 import { WindowChrome } from "shell.slint";
 import { Settings } from "../settings.slint";
 
+// `none` first: the teardown resets to the default, which is the first variant.
+export enum DialogKind {
+    none,
+    remove-folder,
+    restart-titlebar,
+    restart-tray,
+    restart-backdrop,
+    clear-queue,
+    bit-perfect-exclusive,
+    create-playlist,
+    rename-playlist,
+    delete-playlist,
+    delete-playlists,
+    edit-playlist-artwork,
+    export-playlists,
+    add-to-playlist,
+    smart-playlist-editor,
+    edit-tags,
+    add-station,
+    edit-station,
+    remove-from-favorites,
+    remove-from-recent,
+    scrobble-listenbrainz-login,
+    scrobble-lastfm-login,
+    equalizer,
+    replaygain,
+}
+
 // One root-level overlay serving both info ("OK"-only) and confirmation modals. A caller sets the
 // chrome plus a routing payload — `kind` and `target-id` — and flips `open`; the default `accepted`
 // handler reads `kind` and forwards, so no boxed closure is retained on the Rust side. An empty
@@ -36,8 +64,8 @@ export global Dialog {
     in-out property <bool> destructive;
 
     // The routing payload the `accepted` dispatcher reads: `kind` discriminates the
-    // action, `target-id` carries the entity id. Plain primitives, no allocation.
-    in-out property <string> kind;
+    // action, `target-id` carries the entity id.
+    in-out property <DialogKind> kind;
     in-out property <int> target-id: -1;
 
     // For the kinds that prompt for a string: a playlist name, and an optional description. Two-way
@@ -98,42 +126,42 @@ export global Dialog {
     // unmounts whichever body branch is gated on it before the close animation plays, leaving an
     // empty card fading out. Teardown belongs in `closed-teardown` below.
     accepted => {
-        if (root.kind == "remove-folder") {
+        if (root.kind == DialogKind.remove-folder) {
             LibrarySettings.remove-folder(root.target-id);
-        } else if (root.kind == "restart-titlebar") {
+        } else if (root.kind == DialogKind.restart-titlebar) {
             // `target-id` carries the new value — 1 native, 0 custom — read back off the global.
             WindowChrome.restart-app();
-        } else if (root.kind == "restart-tray") {
+        } else if (root.kind == DialogKind.restart-tray) {
             // Likewise: 1 enabled, 0 disabled.
             WindowChrome.restart-tray();
-        } else if (root.kind == "restart-backdrop") {
+        } else if (root.kind == DialogKind.restart-backdrop) {
             // Likewise: 1 aurora, 0 blurred cover.
             WindowChrome.restart-backdrop();
-        } else if (root.kind == "clear-queue") {
+        } else if (root.kind == DialogKind.clear-queue) {
             Queue.clear-queue();
-        } else if (root.kind == "bit-perfect-exclusive") {
+        } else if (root.kind == DialogKind.bit-perfect-exclusive) {
             // One Rust handler, which moves the chip too, rather than the chip's pick beside the
             // button's: the reset reads off the claim whether the device carries the volume, and
             // run first it would raise the device.
             Settings.output-switch-to-bit-perfect();
-        } else if (root.kind == "create-playlist") {
+        } else if (root.kind == DialogKind.create-playlist) {
             // Name, optional description, and the ids to auto-add once it exists.
             Playlists.create-playlist(
                 root.input-text,
                 root.input-text-2,
                 root.pending-track-ids,
             );
-        } else if (root.kind == "rename-playlist") {
+        } else if (root.kind == DialogKind.rename-playlist) {
             Playlists.rename-playlist(
                 root.target-id,
                 root.input-text,
                 root.input-text-2,
             );
-        } else if (root.kind == "delete-playlist") {
+        } else if (root.kind == DialogKind.delete-playlist) {
             Playlists.delete-playlist(root.target-id);
-        } else if (root.kind == "delete-playlists") {
+        } else if (root.kind == DialogKind.delete-playlists) {
             Playlists.delete-playlists(root.pending-card-ids);
-        } else if (root.kind == "edit-playlist-artwork") {
+        } else if (root.kind == DialogKind.edit-playlist-artwork) {
             // Empty and touched reverts to auto; empty and untouched is a no-op.
             if (root.mosaic-selection.length == 0) {
                 if (root.mosaic-touched) {
@@ -142,30 +170,30 @@ export global Dialog {
             } else {
                 Playlists.apply-mosaic(root.target-id, root.mosaic-selection);
             }
-        } else if (root.kind == "export-playlists") {
+        } else if (root.kind == DialogKind.export-playlists) {
             // Rust reads the ticked rows, asks where to save them, writes them.
             Playlists.export-selected-playlists();
-        } else if (root.kind == "add-to-playlist") {
+        } else if (root.kind == DialogKind.add-to-playlist) {
             // Rust adds `pending-track-ids` into every ticked enabled row, then toasts.
             Playlists.add-tracks-to-selected();
-        } else if (root.kind == "smart-playlist-editor") {
+        } else if (root.kind == DialogKind.smart-playlist-editor) {
             // Rust rebuilds a `SmartCriteria` from the rules and scalars.
             SmartEditor.commit();
-        } else if (root.kind == "edit-tags") {
+        } else if (root.kind == DialogKind.edit-tags) {
             // Rust diffs the form against the populate-time snapshot; a no-op commit is dropped.
             TagEditor.commit();
-        } else if (root.kind == "add-station" || root.kind == "edit-station") {
+        } else if (root.kind == DialogKind.add-station || root.kind == DialogKind.edit-station) {
             // Stays open across the probe, like the two logins below; Rust closes it on success.
             RadioForm.submit();
-        } else if (root.kind == "remove-from-favorites") {
+        } else if (root.kind == DialogKind.remove-from-favorites) {
             Radio.remove-from-favorites(root.pending-card-ids);
-        } else if (root.kind == "remove-from-recent") {
+        } else if (root.kind == DialogKind.remove-from-recent) {
             Radio.remove-from-recent(root.pending-card-ids);
-        } else if (root.kind == "scrobble-listenbrainz-login") {
+        } else if (root.kind == DialogKind.scrobble-listenbrainz-login) {
             // The dialog stays open — `dialog.slint` suppresses auto-close for this kind — until
             // Rust closes it on a valid token.
             ScrobbleUi.listenbrainz-verify(ScrobbleUi.lb-token);
-        } else if (root.kind == "scrobble-lastfm-login") {
+        } else if (root.kind == DialogKind.scrobble-lastfm-login) {
             // Step 0 opens the browser approval page, step 1 finishes the session
             // exchange; the dialog stays open across both.
             if (ScrobbleUi.lastfm-step == 0) {
@@ -188,7 +216,7 @@ export global Dialog {
 
     public function closed-teardown() {
         // Routing / kind-gated body branches.
-        root.kind = "";
+        root.kind = DialogKind.none;
         root.target-id = -1;
         // Text-input dialog state.
         root.input-text = "";
@@ -248,7 +276,7 @@ export global Dialog {
         root.confirm-label = @tr("Create");
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
-        root.kind = "create-playlist";
+        root.kind = DialogKind.create-playlist;
         root.target-id = -1;
         root.input-text = "";
         root.input-text-2 = "";
@@ -271,7 +299,7 @@ export global Dialog {
         root.confirm-label = @tr("Save");
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
-        root.kind = "edit-tags";
+        root.kind = DialogKind.edit-tags;
         TagEditor.request-edit(ids, tab);
     }
 
@@ -284,7 +312,7 @@ export global Dialog {
         root.confirm-label = @tr("Save");
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
-        root.kind = "rename-playlist";
+        root.kind = DialogKind.rename-playlist;
         root.target-id = id;
         root.input-text = name;
         root.input-text-2 = description;
@@ -299,7 +327,7 @@ export global Dialog {
         root.confirm-label = @tr("Delete");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
-        root.kind = "delete-playlist";
+        root.kind = DialogKind.delete-playlist;
         root.target-id = id;
         root.open = true;
     }
@@ -313,7 +341,7 @@ export global Dialog {
         root.confirm-label = @tr("Delete");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
-        root.kind = "delete-playlists";
+        root.kind = DialogKind.delete-playlists;
         root.pending-card-ids = ids;
         root.open = true;
     }
@@ -340,7 +368,7 @@ export global Dialog {
         root.confirm-label = @tr("Remove");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
-        root.kind = from-recent ? "remove-from-recent" : "remove-from-favorites";
+        root.kind = from-recent ? DialogKind.remove-from-recent : DialogKind.remove-from-favorites;
         root.pending-card-ids = [station.id];
         root.open = true;
     }
@@ -359,7 +387,7 @@ export global Dialog {
         root.confirm-label = @tr("Remove");
         root.cancel-label = @tr("Cancel");
         root.destructive = true;
-        root.kind = from-recent ? "remove-from-recent" : "remove-from-favorites";
+        root.kind = from-recent ? DialogKind.remove-from-recent : DialogKind.remove-from-favorites;
         root.pending-card-ids = ids;
         root.open = true;
     }
@@ -379,7 +407,7 @@ export global Dialog {
         root.confirm-label = @tr("Save");
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
-        root.kind = "smart-playlist-editor";
+        root.kind = DialogKind.smart-playlist-editor;
         root.target-id = id;
         SmartEditor.request-edit(id);
     }
@@ -397,7 +425,7 @@ export global Dialog {
         root.confirm-label = @tr("Create");
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
-        root.kind = "smart-playlist-editor";
+        root.kind = DialogKind.smart-playlist-editor;
         root.target-id = -1;
         SmartEditor.request-new();
     }
@@ -414,7 +442,7 @@ export global Dialog {
         root.confirm-label = @tr("Add");
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
-        root.kind = "add-to-playlist";
+        root.kind = DialogKind.add-to-playlist;
     }
 
     // The mosaic picker's chrome, for the grid card's overflow and the open playlist's own pill.
@@ -430,7 +458,7 @@ export global Dialog {
         root.confirm-label = @tr("Apply");
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
-        root.kind = "edit-playlist-artwork";
+        root.kind = DialogKind.edit-playlist-artwork;
         root.target-id = id;
         root.input-text = "";
         root.mosaic-selection = [];
@@ -450,6 +478,6 @@ export global Dialog {
         root.confirm-label = @tr("Export");
         root.cancel-label = @tr("Cancel");
         root.destructive = false;
-        root.kind = "export-playlists";
+        root.kind = DialogKind.export-playlists;
     }
 }

@@ -1,7 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
-import { Dialog } from "../../globals/dialog.slint";
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
@@ -128,7 +128,7 @@ export component WindowChromeSection inherits Rectangle {
                 checked: root.native-titlebar;
                 manual: true;
                 toggled(new-value) => {
-                    Dialog.kind = "restart-titlebar";
+                    Dialog.kind = DialogKind.restart-titlebar;
                     Dialog.target-id = new-value ? 1 : 0;
                     Dialog.title = @tr("Restart Required");
                     Dialog.message = new-value
@@ -271,7 +271,7 @@ export component WindowChromeSection inherits Rectangle {
                 checked: Settings.tray-enabled;
                 manual: true;
                 toggled(new-value) => {
-                    Dialog.kind = "restart-tray";
+                    Dialog.kind = DialogKind.restart-tray;
                     Dialog.target-id = new-value ? 1 : 0;
                     Dialog.title = @tr("Restart Required");
                     Dialog.message = @tr("Changing the system tray icon requires restarting Melodia. Restart now?");

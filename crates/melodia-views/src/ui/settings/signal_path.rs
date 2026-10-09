@@ -17,11 +17,6 @@ use melodia_playback::player::playback::output::OutputFormat;
 use melodia_playback::player::playback::output::claim::FallbackReason;
 use melodia_ui::{AppWindow, Equalizer, ReplayGain, Settings, SignalPathUi};
 
-/// The refused claim's toast kind, one string with its branch in the `Notifications.action`
-/// dispatcher (`globals/updater.slint`). A mismatch still paints the Details button, which then
-/// does nothing.
-pub const REFUSAL_TOAST_KIND: &str = "exclusive-refused";
-
 pub fn install(ui: &AppWindow, state: &AppState) {
     let mut rx = state.signal_path_tx.subscribe();
     paint(ui, rx.borrow_and_update().as_ref());

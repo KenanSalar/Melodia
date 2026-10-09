@@ -5,13 +5,6 @@
 //! `.desktop` entry or the Start Menu has no console and no reason to go looking
 //! in `~/.local/share`. This module is the whole of what surfaces it: two
 //! buttons, a switch and one notice.
-//!
-//! **The toast's `action_kind` and the branch that routes it are one string.**
-//! `"crash-report"` here has to match the `kind ==` test in the
-//! `Notifications.action` dispatcher (`globals/updater.slint`); a mismatch still
-//! renders the button — `notification-stack.slint` gates only on a non-empty
-//! action label — and does nothing when clicked, falling off the end of a
-//! dispatcher with no `else`. Pinned by `the_toast_kind_matches_its_dispatcher_branch`.
 
 use std::rc::Rc;
 
@@ -24,10 +17,7 @@ use crate::ui::{file_dialog, launcher};
 use melodia_app::state::AppState;
 use melodia_app::{library, services};
 use melodia_platform::services::platform;
-use melodia_ui::{AppWindow, Settings};
-
-/// Routing key shared with the `Notifications.action` dispatcher.
-const CRASH_TOAST_KIND: &str = "crash-report";
+use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Settings};
 
 pub fn install(ui: &AppWindow, state: &AppState, notifications: &Rc<NotificationsUi>) {
     wire_open_log_folder(ui, state);
@@ -137,14 +127,19 @@ pub fn notify_previous_crash(ui: &AppWindow, state: &AppState, notifications: &N
     };
     log::info!("previous run left a crash report: {}", report.display());
 
-    notifications.show_localized(ui, "warning", CRASH_TOAST_KIND, |ui| {
-        let g = ui.global::<Settings>();
-        RowText {
-            title: g.invoke_crash_report_title(),
-            message: g.invoke_crash_report_message(),
-            action_label: g.invoke_crash_report_action_label(),
-        }
-    });
+    notifications.show_localized(
+        ui,
+        NotificationVariant::Warning,
+        NotificationKind::CrashReport,
+        |ui| {
+            let g = ui.global::<Settings>();
+            RowText {
+                title: g.invoke_crash_report_title(),
+                message: g.invoke_crash_report_message(),
+                action_label: g.invoke_crash_report_action_label(),
+            }
+        },
+    );
 }
 
 #[cfg(test)]

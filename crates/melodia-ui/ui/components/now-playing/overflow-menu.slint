@@ -1,7 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
 import { Equalizer, ReplayGain } from "../../globals/audio.slint";
-import { Dialog } from "../../globals/dialog.slint";
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { Player } from "../../globals/player.slint";
 import { Queue } from "../../globals/queue.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
@@ -234,7 +234,7 @@ export component OverflowMenu inherits Rectangle {
                     active: Equalizer.enabled;
                     clicked => {
                         root.dismiss();
-                        Dialog.kind = "equalizer";
+                        Dialog.kind = DialogKind.equalizer;
                         Dialog.title = @tr("Equalizer");
                         Dialog.message = "";
                         Dialog.confirm-label = @tr("Done");
@@ -252,7 +252,7 @@ export component OverflowMenu inherits Rectangle {
                     active: ReplayGain.enabled;
                     clicked => {
                         root.dismiss();
-                        Dialog.kind = "replaygain";
+                        Dialog.kind = DialogKind.replaygain;
                         Dialog.title = @tr("ReplayGain");
                         Dialog.message = "";
                         Dialog.confirm-label = @tr("Done");

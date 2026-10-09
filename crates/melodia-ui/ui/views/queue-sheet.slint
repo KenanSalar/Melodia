@@ -1,6 +1,6 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
-import { Dialog } from "../globals/dialog.slint";
+import { Dialog, DialogKind } from "../globals/dialog.slint";
 import { Queue } from "../globals/queue.slint";
 import { ListTravel } from "../globals/list-travel.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
@@ -245,7 +245,7 @@ export component QueueSheet inherits Rectangle {
                                     Dialog.confirm-label = @tr("Clear");
                                     Dialog.cancel-label = @tr("Cancel");
                                     Dialog.destructive = true;
-                                    Dialog.kind = "clear-queue";
+                                    Dialog.kind = DialogKind.clear-queue;
                                     Dialog.target-id = -1;
                                     Dialog.open = true;
                                 }

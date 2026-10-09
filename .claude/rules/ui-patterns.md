@@ -712,8 +712,9 @@ three components that answer it, and each argues its geometry at its own file.
   skip, nothing being able to overtake it; bumping one is not. `dialog_openers.rs` walks for both
   triggers.
 
-- **Notifications stack** mirrors `Dialog`'s `kind`-routing — a new action is one branch plus one
-  `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
+- **Notifications stack** routes a row's `NotificationKind` through
+  `ui::shell::notifications::run_action`, not a Slint dispatcher as `Dialog` does, and that function
+  argues why: a new action is one arm plus one `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
   the iter var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
 
 - **Backend-thread toasts via `utils::toast`.** `NotificationsUi` is `Rc`, so failures on tokio

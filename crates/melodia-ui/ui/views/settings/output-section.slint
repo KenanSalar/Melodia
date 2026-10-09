@@ -2,7 +2,7 @@ import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
-import { Dialog } from "../../globals/dialog.slint";
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
@@ -341,7 +341,7 @@ export component OutputSection inherits Rectangle {
                         SignalPathUi.make-bit-perfect();
                         return;
                     }
-                    Dialog.kind = "bit-perfect-exclusive";
+                    Dialog.kind = DialogKind.bit-perfect-exclusive;
                     Dialog.title = @tr("Switch to Exclusive Output?");
                     Dialog.message = @tr("Bit-perfect playback needs exclusive output. Other apps can't play through the device while Melodia does, and the system volume stops applying: Melodia's own volume goes to full unless Hardware Volume is on.");
                     Dialog.confirm-label = @tr("Switch");

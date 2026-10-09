@@ -1,5 +1,5 @@
-//! Smart-playlist rule-builder (`Dialog.kind == "smart-playlist-editor"`,
-//! `SmartEditor` global) wiring.
+//! Smart-playlist rule-builder (`DialogKind::SmartPlaylistEditor`, `SmartEditor` global)
+//! wiring.
 //!
 //! The `rules` model is a Rust-owned `VecModel<SmartRuleRow>` installed here.
 //! Each editor mutation (`add-rule` / `remove-rule` / `set-rule-*`) rewrites the

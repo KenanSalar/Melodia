@@ -42,7 +42,7 @@ use melodia_app::library;
 use melodia_app::services::updater::UpdaterEvent;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, MelodiaUpdater};
+use melodia_ui::{AppWindow, MelodiaUpdater, NotificationKind};
 
 use check::spawn_manual_check;
 use install::spawn_install;
@@ -116,7 +116,7 @@ pub fn wire(
                 g.set_update_available(false);
                 g.set_up_to_date(true);
             }
-            notifications.dismiss_by_kind("install-update");
+            notifications.dismiss_by_kind(NotificationKind::InstallUpdate);
         });
     }
 

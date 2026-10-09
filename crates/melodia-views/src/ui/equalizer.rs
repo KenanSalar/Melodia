@@ -1,4 +1,4 @@
-//! Wire the graphic-equalizer dialog (`Dialog.kind == "equalizer"`) to Rust.
+//! Wire the graphic-equalizer dialog (`DialogKind::Equalizer`) to Rust.
 //!
 //! Seeds the `Equalizer` global from `settings.json` at startup (enabled flag,
 //! the band-gains model, and the selected-preset dropdown index) and registers

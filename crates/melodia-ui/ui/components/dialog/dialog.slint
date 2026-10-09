@@ -1,6 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { SmartEditor, TagEditor, ScrobbleUi, RadioForm } from "../../globals/dialog-forms.slint";
-import { Dialog as DialogGlobal } from "../../globals/dialog.slint";
+import { Dialog as DialogGlobal, DialogKind } from "../../globals/dialog.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
@@ -77,31 +77,31 @@ export component DialogOverlay inherits Rectangle {
         // Per kind, so a picker's grid and preview have room without pinching while
         // every other kind stays at the regular footprint.
         property <length> max-w:
-            DialogGlobal.kind == "equalizer" ? 600px
-            : DialogGlobal.kind == "replaygain" ? 480px
-            : DialogGlobal.kind == "edit-playlist-artwork" ? 520px
-            : DialogGlobal.kind == "smart-playlist-editor" ? 660px
-            : DialogGlobal.kind == "edit-tags" ? 720px
-            : DialogGlobal.kind == "scrobble-lastfm-login" ? 460px
-            : DialogGlobal.kind == "scrobble-listenbrainz-login" ? 460px
-            : DialogGlobal.kind == "add-station" ? 480px
-            : DialogGlobal.kind == "edit-station" ? 480px
+            DialogGlobal.kind == DialogKind.equalizer ? 600px
+            : DialogGlobal.kind == DialogKind.replaygain ? 480px
+            : DialogGlobal.kind == DialogKind.edit-playlist-artwork ? 520px
+            : DialogGlobal.kind == DialogKind.smart-playlist-editor ? 660px
+            : DialogGlobal.kind == DialogKind.edit-tags ? 720px
+            : DialogGlobal.kind == DialogKind.scrobble-lastfm-login ? 460px
+            : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login ? 460px
+            : DialogGlobal.kind == DialogKind.add-station ? 480px
+            : DialogGlobal.kind == DialogKind.edit-station ? 480px
             : 540px;
         // Confirmation kinds only; a form or picker kind keeps the title-only header.
         // Mapped by kind, so a caller doesn't have to set an extra field, and its tile
         // colour is driven independently by `destructive`.
         property <string> kind-icon:
-            DialogGlobal.kind == "delete-playlist" ? "delete" :
-            DialogGlobal.kind == "remove-folder" ? "folder_off" :
-            DialogGlobal.kind == "remove-from-favorites"
-                || DialogGlobal.kind == "remove-from-recent" ? "delete" :
-            DialogGlobal.kind == "clear-queue" ? "clear_all" :
-            DialogGlobal.kind == "bit-perfect-exclusive" ? "graphic_eq" :
+            DialogGlobal.kind == DialogKind.delete-playlist ? "delete" :
+            DialogGlobal.kind == DialogKind.remove-folder ? "folder_off" :
+            DialogGlobal.kind == DialogKind.remove-from-favorites
+                || DialogGlobal.kind == DialogKind.remove-from-recent ? "delete" :
+            DialogGlobal.kind == DialogKind.clear-queue ? "clear_all" :
+            DialogGlobal.kind == DialogKind.bit-perfect-exclusive ? "graphic_eq" :
             // One arm for all three restart flows rather than three lines; the tray one had no
             // entry at all and rendered with no tile.
-            DialogGlobal.kind == "restart-titlebar"
-                || DialogGlobal.kind == "restart-tray"
-                || DialogGlobal.kind == "restart-backdrop" ? "restart_alt" :
+            DialogGlobal.kind == DialogKind.restart-titlebar
+                || DialogGlobal.kind == DialogKind.restart-tray
+                || DialogGlobal.kind == DialogKind.restart-backdrop ? "restart_alt" :
             "";
         width: min(self.max-w, max(360px, parent.width - 96px));
         x: (parent.width - self.width) / 2;
@@ -114,7 +114,7 @@ export component DialogOverlay inherits Rectangle {
         // paints the remainder, action buttons included, outside the card and onto the backdrop.
         // A kind joining this list owes a scroller; `AddStationBody` is the worked example.
         property <bool> body-scrolls:
-            DialogGlobal.kind == "add-station" || DialogGlobal.kind == "edit-station";
+            DialogGlobal.kind == DialogKind.add-station || DialogGlobal.kind == DialogKind.edit-station;
         height: card.body-scrolls
             ? min(layout.preferred-height, max(240px, parent.height - 96px))
             : layout.preferred-height;
@@ -198,8 +198,8 @@ export component DialogOverlay inherits Rectangle {
             //
             // **No auto-focus on init**: calling `focus()` during the open re-enters
             // Slint's property evaluator and trips its recursion guard.
-            if DialogGlobal.kind == "create-playlist"
-                || DialogGlobal.kind == "rename-playlist": VerticalLayout {
+            if DialogGlobal.kind == DialogKind.create-playlist
+                || DialogGlobal.kind == DialogKind.rename-playlist: VerticalLayout {
                 spacing: Theme.pad-sm;
 
                 LabeledInput {
@@ -229,41 +229,41 @@ export component DialogOverlay inherits Rectangle {
 
             // Reads `mosaic-candidates` and mutates `mosaic-selection`; the dispatcher
             // routes to apply-or-clear on Accept.
-            if DialogGlobal.kind == "edit-playlist-artwork": PlaylistMosaicPicker { }
+            if DialogGlobal.kind == DialogKind.edit-playlist-artwork: PlaylistMosaicPicker { }
 
             // Multi-select; the footer's primary button commits through the dispatcher,
             // as the Export picker does.
-            if DialogGlobal.kind == "add-to-playlist": PlaylistPicker { }
+            if DialogGlobal.kind == DialogKind.add-to-playlist: PlaylistPicker { }
 
             // The same toolkit, committing through its own primary button.
-            if DialogGlobal.kind == "export-playlists": ExportPlaylistPicker { }
+            if DialogGlobal.kind == DialogKind.export-playlists: ExportPlaylistPicker { }
 
             // Changes apply live and persist; the footer keeps only its Done button,
             // the caller leaving `cancel-label` empty.
-            if DialogGlobal.kind == "equalizer": EqualizerBody { }
+            if DialogGlobal.kind == DialogKind.equalizer: EqualizerBody { }
 
-            if DialogGlobal.kind == "replaygain": ReplayGainBody { }
+            if DialogGlobal.kind == DialogKind.replaygain: ReplayGainBody { }
 
             // The rule builder; the dispatcher routes Accept to its commit.
-            if DialogGlobal.kind == "smart-playlist-editor": SmartPlaylistEditorBody { }
+            if DialogGlobal.kind == DialogKind.smart-playlist-editor: SmartPlaylistEditorBody { }
 
             // **Its tab strip wraps, so it needs the width it is actually drawn at** —
             // the card less this layout's padding, both of which are this file's to
             // know. Reading `card.width` from in here closes no cycle: that depends on
             // the dialog root's width and never on its children.
-            if DialogGlobal.kind == "edit-tags": TagEditorBody {
+            if DialogGlobal.kind == DialogKind.edit-tags: TagEditorBody {
                 host-w: card.width - 2 * Theme.pad-lg;
             }
 
             // The primary button drives the flow; **the dialog stays open across the
             // async round-trip** and Rust closes it on success.
-            if DialogGlobal.kind == "scrobble-lastfm-login": ScrobbleLastfmBody { }
-            if DialogGlobal.kind == "scrobble-listenbrainz-login": ScrobbleListenbrainzBody { }
+            if DialogGlobal.kind == DialogKind.scrobble-lastfm-login: ScrobbleLastfmBody { }
+            if DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login: ScrobbleListenbrainzBody { }
 
             // Both kinds share one body; the dialog stays open across the probe and Rust closes
             // it, the same round-trip shape as the two logins above.
-            if DialogGlobal.kind == "add-station"
-                || DialogGlobal.kind == "edit-station": AddStationBody { }
+            if DialogGlobal.kind == DialogKind.add-station
+                || DialogGlobal.kind == DialogKind.edit-station: AddStationBody { }
 
             HorizontalLayout {
                 alignment: end;
@@ -286,9 +286,9 @@ export component DialogOverlay inherits Rectangle {
                 SectionButton {
                     // The login kinds pick their label here rather than in Rust, so the
                     // `@tr` literals localize; every other kind takes the caller's.
-                    label: DialogGlobal.kind == "scrobble-lastfm-login"
+                    label: DialogGlobal.kind == DialogKind.scrobble-lastfm-login
                         ? (ScrobbleUi.lastfm-step == 0 ? @tr("Open Last.fm") : @tr("Finish"))
-                        : DialogGlobal.kind == "scrobble-listenbrainz-login"
+                        : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login
                         ? @tr("Connect")
                         : DialogGlobal.confirm-label;
                     icon: "";
@@ -298,40 +298,40 @@ export component DialogOverlay inherits Rectangle {
                     // disabled button surfaces the requirement instead of no-opping on
                     // click. Every other kind stays enabled while the dialog is open.
                     button-enabled: DialogGlobal.open
-                        && ((DialogGlobal.kind != "create-playlist"
-                                && DialogGlobal.kind != "rename-playlist")
+                        && ((DialogGlobal.kind != DialogKind.create-playlist
+                                && DialogGlobal.kind != DialogKind.rename-playlist)
                             || DialogGlobal.input-text != "")
                         // Export needs at least one playlist selected.
-                        && (DialogGlobal.kind != "export-playlists"
+                        && (DialogGlobal.kind != DialogKind.export-playlists
                             || DialogGlobal.export-selected-count > 0)
                         // Add-to-Playlist needs at least one playlist selected.
-                        && (DialogGlobal.kind != "add-to-playlist"
+                        && (DialogGlobal.kind != DialogKind.add-to-playlist
                             || DialogGlobal.add-selected-count > 0)
                         // Smart-playlist editor needs a name and ≥1 rule.
-                        && (DialogGlobal.kind != "smart-playlist-editor"
+                        && (DialogGlobal.kind != DialogKind.smart-playlist-editor
                             || (SmartEditor.name != "" && SmartEditor.rules.length > 0))
                         // Enabled whenever a selection is loaded; Rust short-circuits a
                         // no-op Save.
-                        && (DialogGlobal.kind != "edit-tags"
+                        && (DialogGlobal.kind != DialogKind.edit-tags
                             || TagEditor.track-count > 0)
                         // ListenBrainz: needs a token and no in-flight request.
-                        && (DialogGlobal.kind != "scrobble-listenbrainz-login"
+                        && (DialogGlobal.kind != DialogKind.scrobble-listenbrainz-login
                             || (ScrobbleUi.lb-token != "" && !ScrobbleUi.busy))
                         // Last.fm: just gate on the in-flight request.
-                        && (DialogGlobal.kind != "scrobble-lastfm-login"
+                        && (DialogGlobal.kind != DialogKind.scrobble-lastfm-login
                             || !ScrobbleUi.busy)
                         // A station needs a URL; the name is optional and fills itself in.
-                        && ((DialogGlobal.kind != "add-station"
-                                && DialogGlobal.kind != "edit-station")
+                        && ((DialogGlobal.kind != DialogKind.add-station
+                                && DialogGlobal.kind != DialogKind.edit-station)
                             || (RadioForm.url != "" && !RadioForm.busy));
                     clicked => {
                         DialogGlobal.accepted();
                         // The kinds that make a request stay open across it and Rust closes
                         // them; everything else closes on confirm.
-                        if (DialogGlobal.kind != "scrobble-lastfm-login"
-                                && DialogGlobal.kind != "scrobble-listenbrainz-login"
-                                && DialogGlobal.kind != "add-station"
-                                && DialogGlobal.kind != "edit-station") {
+                        if (DialogGlobal.kind != DialogKind.scrobble-lastfm-login
+                                && DialogGlobal.kind != DialogKind.scrobble-listenbrainz-login
+                                && DialogGlobal.kind != DialogKind.add-station
+                                && DialogGlobal.kind != DialogKind.edit-station) {
                             DialogGlobal.open = false;
                         }
                     }
