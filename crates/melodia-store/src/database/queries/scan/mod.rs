@@ -2,7 +2,7 @@
 //! the upserts, track-row mutations and lookups they are built from.
 //!
 //! [`commit_scan`], [`commit_retag`] and [`apply_watch_batch`] each open, run and commit their own
-//! transaction, which is all of this module a caller outside the crate can reach: every query that
+//! transaction, and are the only writes here a caller outside the crate can reach: every query that
 //! takes a transaction is `pub(crate)`, so no other crate can compose one. Of the building blocks,
 //! [`upserts`] handles find-or-create on artist / album / genre rows, [`name_cache`] keeps those
 //! answers for the span of a transaction, [`mutations`] holds every track-row write, [`lookups`]

@@ -47,7 +47,7 @@ impl Ingested {
         Self { bulk, inserted: 0, moved: 0, updated: 0 }
     }
 
-    pub fn is_bulk(&self) -> bool {
+    pub(crate) fn is_bulk(&self) -> bool {
         self.bulk
     }
 

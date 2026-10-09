@@ -7,7 +7,8 @@ phase per change.
 
 **Order:** phases 0 to 5, 1.5 included, are independent of each other. Phase 6 goes before 7,
 because it shrinks four of the monolithic functions 7 would otherwise split by hand. Phase 9 goes
-last.
+last of the planned phases. Phase 10 is optional; if it is kept, it runs before 9, which would
+otherwise trim comments on code 10 deletes.
 
 ## What we see
 
@@ -352,6 +353,37 @@ figures are rough, from 2026-10-04:
 - [ ] Slint tree, split into `components/`, `views/`, `globals/` and `layout/` plus the root files
 - [ ] Re-measure both ratios and write the target into `.claude/rules/code-style.md`, so new code
       holds it.
+
+## Phase 10 (optional): make dead code visible to the lints
+
+**Optional, and only after a discussion.** That discussion may drop the phase, or widen it where
+another solution can be adapted.
+
+Phase 4 found `scan::update_track_artwork_if_missing` with no caller outside its own tests, and
+nothing had flagged it. `dead_code` judges one crate at a time and treats any `pub` item reachable
+from the crate root as API another crate might use, so an unused `pub fn` in a library crate is
+invisible to it. Narrowing the function to `pub(crate)` is what exposed it: under `--all-targets`
+the library is also built without its tests, and that build found no caller.
+
+- [ ] Narrow `pub` to what another crate imports, crate by crate. A private or `pub(crate)` item
+      is already covered by `dead_code`, test-only callers included. `unreachable_pub` in
+      `[workspace.lints.rust]` catches the `pub` items that aren't exported anyway: measure what it
+      raises first and fix each by hand. It can't see items exported through a `pub mod` tree, so
+      those modules narrow too, keeping `pub` only on what another crate names. Not alongside
+      `clippy::redundant_pub_crate`, which pushes the other way.
+- [ ] A corpus walk in `crates/melodia/tests/` for the `pub` items no other crate uses, a question
+      no lint can answer since each crate compiles alone. It collects each library crate's `pub`
+      free functions and types and asserts each appears in another crate's source, owing the five
+      things CLAUDE.md asks of a walk, with the exemptions (the `#[doc(hidden)]` fixtures among
+      them) held to an exact count. A text walk, so trait methods, generated code and common names
+      like `new` stay out of it.
+- [ ] Whatever either step finds dead is deleted, not suppressed.
+- Ruled out: `dead_code_pub_in_binary` covers binary crates only, and CLAUDE.md keeps it off under
+  `--all-targets`.
+- Candidates for widening it: a tool that answers the cross-crate question better than a text
+  walk, and unused dependencies (`cargo-machete` or `cargo-shear`, both on stable;
+  `unused_crate_dependencies` is too noisy under `--all-targets`, every integration-test crate
+  seeing every dev-dependency).
 
 ## Not in scope
 
