@@ -11,6 +11,7 @@
 use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
+use crate::database::queries::track::columns;
 use melodia_core::entities::smart_criteria::{
     LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
     ValueType, ops_for,
@@ -24,7 +25,7 @@ pub async fn get_smart_playlist_tracks(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let mut qb = membership_query(track::track_list_columns(), criteria);
+    let mut qb = membership_query(columns::TRACK_LIST.joined(), criteria);
     let rows =
         qb.build_query_as::<track::TrackListRow>().persistent(false).fetch_all(db.read()).await?;
     Ok(rows)
@@ -50,7 +51,7 @@ pub async fn get_smart_playlist_tracks_for_export(
     db: &DbPool,
     criteria: &SmartCriteria,
 ) -> Result<Vec<track::PlaylistExportRow>, AppError> {
-    let mut qb = membership_query(track::playlist_export_columns_prefixed("tracks"), criteria);
+    let mut qb = membership_query(columns::PLAYLIST_EXPORT.prefixed("tracks"), criteria);
     let rows = qb
         .build_query_as::<track::PlaylistExportRow>()
         .persistent(false)

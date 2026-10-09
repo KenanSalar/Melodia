@@ -1,3 +1,4 @@
+use super::upserts;
 use crate::database::DbPool;
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
@@ -92,7 +93,7 @@ async fn track_exists_by_path_true_after_insert() -> Result<(), AppError> {
 async fn upsert_artist_new_returns_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
-    let id = queries::scan::upsert_artist(&mut tx, "New Artist", 1).await?;
+    let id = upserts::upsert_artist(&mut tx, "New Artist", 1).await?;
     assert!(id > 1); // 1 is the sentinel "Unknown Artist"
     Ok(())
 }
@@ -101,8 +102,8 @@ async fn upsert_artist_new_returns_id() -> Result<(), AppError> {
 async fn upsert_artist_duplicate_returns_same_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
-    let id1 = queries::scan::upsert_artist(&mut tx, "Duplicate", 1).await?;
-    let id2 = queries::scan::upsert_artist(&mut tx, "Duplicate", 1).await?;
+    let id1 = upserts::upsert_artist(&mut tx, "Duplicate", 1).await?;
+    let id2 = upserts::upsert_artist(&mut tx, "Duplicate", 1).await?;
     assert_eq!(id1, id2);
     Ok(())
 }
@@ -111,7 +112,7 @@ async fn upsert_artist_duplicate_returns_same_id() -> Result<(), AppError> {
 async fn upsert_artist_empty_returns_unknown() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
-    let id = queries::scan::upsert_artist(&mut tx, "", 1).await?;
+    let id = upserts::upsert_artist(&mut tx, "", 1).await?;
     assert_eq!(id, 1);
     Ok(())
 }
@@ -121,7 +122,7 @@ async fn upsert_album_new_returns_some() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
     let credit = ArtistCredit::from_name("Artist");
-    let artist_id = queries::scan::upsert_artist(&mut tx, "Artist", 1).await?;
+    let artist_id = upserts::upsert_artist(&mut tx, "Artist", 1).await?;
     let album_id = queries::scan::upsert_album(
         &mut tx,
         "Album",
@@ -140,7 +141,7 @@ async fn upsert_album_duplicate_returns_same_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
     let credit = ArtistCredit::from_name("Artist");
-    let artist_id = queries::scan::upsert_artist(&mut tx, "Artist", 1).await?;
+    let artist_id = upserts::upsert_artist(&mut tx, "Artist", 1).await?;
     let meta = album_meta(Some(2024));
     let mut names = NameCache::default();
     let id1 = queries::scan::upsert_album(&mut tx, "Album", artist_id, &credit, &meta, &mut names)
@@ -174,7 +175,7 @@ async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
     let credit = ArtistCredit::from_name("Artist");
-    let artist_id = queries::scan::upsert_artist(&mut tx, "Artist", 1).await?;
+    let artist_id = upserts::upsert_artist(&mut tx, "Artist", 1).await?;
     let mut names = NameCache::default();
     let id = queries::scan::upsert_album(
         &mut tx,
@@ -227,7 +228,7 @@ async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
 async fn upsert_genre_new_returns_some() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
-    let genre_id = queries::scan::upsert_genre(&mut tx, "Rock").await?;
+    let genre_id = upserts::upsert_genre(&mut tx, "Rock").await?;
     assert!(genre_id.is_some());
     Ok(())
 }
@@ -236,8 +237,8 @@ async fn upsert_genre_new_returns_some() -> Result<(), AppError> {
 async fn upsert_genre_duplicate_returns_same_id() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
-    let id1 = queries::scan::upsert_genre(&mut tx, "Rock").await?;
-    let id2 = queries::scan::upsert_genre(&mut tx, "Rock").await?;
+    let id1 = upserts::upsert_genre(&mut tx, "Rock").await?;
+    let id2 = upserts::upsert_genre(&mut tx, "Rock").await?;
     assert_eq!(id1, id2);
     Ok(())
 }
@@ -246,7 +247,7 @@ async fn upsert_genre_duplicate_returns_same_id() -> Result<(), AppError> {
 async fn upsert_genre_empty_returns_none() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
     let mut tx = db.write().begin().await?;
-    let result = queries::scan::upsert_genre(&mut tx, "").await?;
+    let result = upserts::upsert_genre(&mut tx, "").await?;
     assert!(result.is_none());
     Ok(())
 }
@@ -258,13 +259,13 @@ async fn insert_track_stores_correct_fields() -> Result<(), AppError> {
 
     let mut tx = db.write().begin().await?;
     let credit = ArtistCredit::from_name("Test Artist");
-    let artist_id = queries::scan::upsert_artist(&mut tx, "Test Artist", 1).await?;
+    let artist_id = upserts::upsert_artist(&mut tx, "Test Artist", 1).await?;
     let meta = make_test_metadata("My Song");
     let mut names = NameCache::default();
     let album_id =
         queries::scan::upsert_album(&mut tx, "Test Album", artist_id, &credit, &meta, &mut names)
             .await?;
-    let genre_id = queries::scan::upsert_genre(&mut tx, "Rock").await?;
+    let genre_id = upserts::upsert_genre(&mut tx, "Rock").await?;
     let ids = queries::ResolvedIds { artist_id, album_id, genre_id, folder_id: 1 };
     let now = "2024-01-01T00:00:00+00:00";
     queries::scan::insert_track(&mut tx, "/music/my.mp3", "my.mp3", &meta, &ids, now, &mut names)
@@ -280,46 +281,6 @@ async fn insert_track_stores_correct_fields() -> Result<(), AppError> {
     assert_eq!(row.0, "My Song");
     assert_eq!(row.1, 180_000);
     assert_eq!(row.2, now);
-    Ok(())
-}
-
-#[tokio::test]
-async fn update_track_artwork_if_missing_sets_when_null() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-
-    let mut tx = db.write().begin().await?;
-    queries::scan::update_track_artwork_if_missing(&mut tx, "/music/song.mp3", "/art/cover.jpg")
-        .await?;
-    tx.commit().await?;
-
-    let artwork: Option<String> =
-        sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE file_path = '/music/song.mp3'")
-            .fetch_one(db.read())
-            .await?;
-    assert_eq!(artwork.as_deref(), Some("/art/cover.jpg"));
-    Ok(())
-}
-
-#[tokio::test]
-async fn update_track_artwork_if_missing_preserves_existing() -> Result<(), AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/music", true).await?;
-    let id = insert_test_track(&db, "/music/song.mp3", "Song", "Artist", "Album", "Rock").await?;
-    set_test_artwork(&db, id, "/art/original.jpg").await?;
-
-    // Try to overwrite — should not change
-    let mut tx = db.write().begin().await?;
-    queries::scan::update_track_artwork_if_missing(&mut tx, "/music/song.mp3", "/art/new.jpg")
-        .await?;
-    tx.commit().await?;
-
-    let artwork: Option<String> =
-        sqlx::query_scalar("SELECT artwork_path FROM tracks WHERE file_path = '/music/song.mp3'")
-            .fetch_one(db.read())
-            .await?;
-    assert_eq!(artwork.as_deref(), Some("/art/original.jpg"));
     Ok(())
 }
 

@@ -160,18 +160,40 @@ three painters that copied views' `callbacks/updater/paint.rs` line for line, an
 
 ## Phase 4: SQL lives in `melodia-store`
 
-Today app runs 3 raw SQL strings (`tasks/tag_backfill.rs`, `tasks/queue_prune.rs`,
-`file_event_processor/reconcile.rs`) and opens about 6 transactions (`tags.rs`, `import.rs`,
-two in `library/scan/`, `reconcile.rs`, `radio_files.rs`). About 6 of its
-functions take a `&mut Transaction`, and one type derives `FromRow` (`queue_prune.rs`).
+Re-measured on 2026-10-09: app ran 3 raw SQL strings (`tasks/tag_backfill.rs`,
+`tasks/queue_prune.rs`, `file_event_processor/reconcile.rs`) and opened 7 write transactions, not
+6: `library/import.rs`, `library/radio_files.rs`, `library/tags.rs`, three in `library/scan/` and
+`reconcile.rs`. Six of its functions took a `&mut Transaction`, and one type derived `FromRow`
+(`queue_prune.rs`).
 
-- [ ] The three queries move into `queries::*` as named functions.
-- [ ] Each transaction becomes a store function that opens, runs and commits it, taking plain data.
-      Non-SQL work (file I/O, tag reads) happens before or after it, never inside a store function
-      that holds the write connection.
-- [ ] The SQL column lists in core's `entities/track.rs` are used only by store, so they move to
-      store. That also takes a large bite out of a ~720-line file.
-- [ ] Remove `sqlx` from app's manifest.
+- [x] The three queries are `queries::track::existing_ids`, `mark_every_track_stale` and, for the
+      watcher's move candidates, `lowest_id_by_hash_on`. That last one was already store's private
+      `ingest::batch_lookup_by_hash` word for word, and ingest and the watcher share it now.
+- [x] Each transaction is one store function that opens, runs and commits it:
+      `artwork::forget_paths` (the repair, roll-ups included), `ingest::commit_import`,
+      `ingest::commit_scan_chunk`, `scan::commit_scan` (the scan's last write, taking `Ingested`
+      and `orphans_of` with it), `radio::import_stations`, `scan::commit_retag` (the tag edit's
+      commit) and `scan::apply_watch_batch`. Tag reads, the rename's fallback `stat`, the
+      blocklist check and override validation stay in app and run before the call.
+      `apply_watch_batch` keeps both halves of moved-file detection in one function: candidates
+      resolved before the transaction opens, deletes applied last.
+- [x] The column lists are `queries/track/columns.rs`: one `Columns` type and eight statics, where
+      core had seven identical `OnceLock` joins and two identical alias caches. `entities/track.rs`
+      went from 720 lines to 473.
+- [x] `sqlx` is a dev-dependency of app, as it already was of the binary: the suites seed rows and
+      read them back, and production code can't name it. 34 store functions that take a
+      transaction, a connection or an executor went crate-private (radio's four into `radio.rs`
+      alone), with `NameCache`, `FolderResolution` and `chunked_in_query`, so app can still open a
+      transaction but has nothing to hand it to. `ResolvedIds` stayed `pub`: it carries no
+      transaction, and narrowed it trips `struct_field_names`.
+- [x] The tests followed their code: the watch handlers' twelve to
+      `queries/tests/watch_batch_tests.rs`, `orphans_of`'s and `Ingested`'s to store, the stale
+      pass's three to `track_tests.rs`. The rename mtime pin split across the seam: store writes the
+      mtime it is handed, and app's conversion hands it `meta`'s or a `stat`'s.
+- Found on the way: `scan::update_track_artwork_if_missing` had no caller outside its two tests,
+  which narrowing made visible; both are gone. `ingest_scanned_files` still checks its moved-file
+  candidates on disk while its write transaction is open. Left as it is: moving that check ahead of
+  the transaction changes how a concurrent delete races it, which is a change of its own.
 
 ## Phase 5: library functions take what they read
 
@@ -284,7 +306,7 @@ from the start.
 - The why behind ordering, lock order, platform quirks and magic constants.
 - Couplings across trees, such as an index order a `.slint` list follows (`signal_path.rs`'s
   `fallback_index`).
-- Anything CLAUDE.md, a rule or an ADR points at ("argued at `process_batch`"). Condense it and
+- Anything CLAUDE.md, a rule or an ADR points at ("argued at `apply_watch_batch`"). Condense it and
   keep the pointer true.
 
 **How the work runs:**

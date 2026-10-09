@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
+use crate::database::queries::track::columns;
 use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
 
@@ -232,7 +233,7 @@ pub async fn get_playlist_tracks_for_list(
     db: &DbPool,
     playlist_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = track::track_list_columns_prefixed("t");
+    let cols = columns::TRACK_LIST.prefixed("t");
     let sql = format!(
         "SELECT {cols} FROM tracks t \
          JOIN playlist_items pi ON pi.track_id = t.id \
@@ -253,7 +254,7 @@ pub async fn get_playlist_tracks_for_export(
     db: &DbPool,
     playlist_id: i64,
 ) -> Result<Vec<track::PlaylistExportRow>, AppError> {
-    let cols = track::playlist_export_columns_prefixed("t");
+    let cols = columns::PLAYLIST_EXPORT.prefixed("t");
     let sql = format!(
         "SELECT {cols} FROM tracks t \
          JOIN playlist_items pi ON pi.track_id = t.id \
@@ -569,7 +570,7 @@ async fn update_playlist_thumbnail_and_timestamp_tx(
 ///
 /// For what reaches a playlist without an edit to it: a track deleted out from under it, or a
 /// cover cleared because its file went missing. `updated_at` stays put: the user changed nothing.
-pub async fn refresh_automatic_thumbnails(
+pub(crate) async fn refresh_automatic_thumbnails(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<(), AppError> {
     sqlx::query(concat!(

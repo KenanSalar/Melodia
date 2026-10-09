@@ -4,16 +4,16 @@ use std::collections::{HashMap, HashSet};
 use rayon::prelude::*;
 use sqlx::AssertSqlSafe;
 
-use crate::database::MAX_BINDS_PER_STATEMENT;
 use crate::database::queries;
 use crate::database::queries::artist::UNKNOWN_ARTIST_ID;
 use crate::database::queries::scan::NameCache;
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT};
 use crate::media::ingest::scan_pool::ScanPool;
 use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::AppError;
 
 /// How to resolve the `folder_id` for each track during ingest.
-pub enum FolderResolution {
+pub(crate) enum FolderResolution {
     /// All tracks belong to the same folder (library scan).
     Fixed(i64),
     /// Resolve folder from each file's parent directory, with caching (file import).
@@ -31,6 +31,98 @@ pub struct IngestResult {
     /// unspecified) so callers don't need a follow-up `WHERE file_path IN
     /// (…)` lookup.
     pub inserted_track_ids: Vec<i64>,
+}
+
+/// What a scan's chunks wrote, summed across them, and how.
+pub struct Ingested {
+    /// The chunks commit with the stats triggers dropped, leaving the counts to the final recalc.
+    bulk: bool,
+    pub inserted: u32,
+    pub(crate) moved: u32,
+    pub(crate) updated: u32,
+}
+
+impl Ingested {
+    pub fn new(bulk: bool) -> Self {
+        Self { bulk, inserted: 0, moved: 0, updated: 0 }
+    }
+
+    pub fn is_bulk(&self) -> bool {
+        self.bulk
+    }
+
+    pub fn add(&mut self, chunk: &IngestResult) {
+        self.inserted += chunk.inserted_count;
+        self.moved += chunk.moved_count;
+        self.updated += chunk.updated_count;
+    }
+
+    pub fn any(&self) -> bool {
+        self.inserted > 0 || self.updated > 0 || self.moved > 0
+    }
+
+    pub fn rewrote_existing(&self) -> bool {
+        self.moved > 0 || self.updated > 0
+    }
+}
+
+/// One chunk of a folder scan, in a write transaction of its own.
+///
+/// On the bulk path the stats triggers are dropped and recreated *inside* that transaction, so a
+/// crash never leaves them missing; the counts lag until [`queries::scan::commit_scan`] recalculates
+/// them.
+pub async fn commit_scan_chunk(
+    db: &DbPool,
+    scanned_files: &[ScannedFile],
+    folder_id: i64,
+    scan_timestamp: &str,
+    pool: &ScanPool,
+    ingested: &Ingested,
+) -> Result<IngestResult, AppError> {
+    let mut tx = db.write().begin().await?;
+    if ingested.is_bulk() {
+        queries::stats::disable_stats_triggers(&mut tx).await?;
+    }
+    let result = ingest_scanned_files(
+        &mut tx,
+        scanned_files,
+        &FolderResolution::Fixed(folder_id),
+        scan_timestamp,
+        true,
+        pool,
+    )
+    .await?;
+    if ingested.is_bulk() {
+        queries::stats::enable_stats_triggers(&mut tx).await?;
+    }
+    tx.commit().await?;
+    Ok(result)
+}
+
+/// Files dropped onto a playlist or the queue, each filed under the library folder its parent
+/// directory belongs to, in one transaction with the album covers and stats brought up to date.
+pub async fn commit_import(
+    db: &DbPool,
+    scanned_files: &[ScannedFile],
+    scan_timestamp: &str,
+    pool: &ScanPool,
+) -> Result<IngestResult, AppError> {
+    let mut tx = db.write().begin().await?;
+    queries::stats::disable_stats_triggers(&mut tx).await?;
+    let result = ingest_scanned_files(
+        &mut tx,
+        scanned_files,
+        &FolderResolution::FromParentDir,
+        scan_timestamp,
+        false,
+        pool,
+    )
+    .await?;
+    queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
+    queries::stats::recalculate_all_stats(&mut tx).await?;
+    queries::stats::enable_stats_triggers(&mut tx).await?;
+    tx.commit().await?;
+    Ok(result)
 }
 
 /// Stored file info for incremental scan comparison.
@@ -72,7 +164,7 @@ impl ResolveCaches {
 /// - `update_artwork_on_existing`: when `true`, updates `artwork_path` on tracks that
 ///   already exist but have no artwork (used by library scan, not by file import).
 /// - `pool`: the pass's own, which the moved-file stat fans out on.
-pub async fn ingest_scanned_files(
+pub(crate) async fn ingest_scanned_files(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],
     folder_resolution: &FolderResolution,
@@ -118,15 +210,14 @@ pub async fn ingest_scanned_files(
         }
     }
 
-    // Batch-load (file_hash → (id, file_path)) for every "new path" file in
-    // one shot. Replaces a per-file `find_track_by_hash` query inside the hot
-    // loop (was O(new_files) round-trips on a fresh first scan).
+    // Every new path's hash in one chunked query, rather than a round-trip per file on a first
+    // scan.
     let new_path_hashes: Vec<&str> = scanned_files
         .iter()
         .filter(|f| !existing_tracks.contains_key(f.path.to_string_lossy().as_ref()))
         .map(|f| f.metadata.file_hash.as_str())
         .collect();
-    let mut hash_to_existing = batch_lookup_by_hash(tx, &new_path_hashes).await?;
+    let mut hash_to_existing = queries::track::lowest_id_by_hash_on(tx, &new_path_hashes).await?;
 
     // For every (existing_id, old_path) candidate above, stat the old path
     // off-thread so the writer transaction isn't blocked by a syscall per
@@ -277,41 +368,6 @@ pub async fn ingest_scanned_files(
     flush_artwork_backfill(tx, artwork_backfill).await?;
 
     Ok(IngestResult { inserted_count, moved_count, updated_count, inserted_track_ids })
-}
-
-/// Chunked `WHERE file_hash IN (…)` lookup, deduped to the lowest-id row per
-/// hash to match `find_track_by_hash`'s `ORDER BY id ASC LIMIT 1` semantics.
-async fn batch_lookup_by_hash(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    hashes: &[&str],
-) -> Result<HashMap<String, (i64, String)>, AppError> {
-    let mut out: HashMap<String, (i64, String)> = HashMap::new();
-    if hashes.is_empty() {
-        return Ok(out);
-    }
-    // Dedup so the bind list isn't quadratic on large duplicate-content sets.
-    let unique: HashSet<&str> = hashes.iter().copied().collect();
-    let unique: Vec<&str> = unique.into_iter().collect();
-
-    for chunk in unique.chunks(MAX_BINDS_PER_STATEMENT) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        // ORDER BY id ASC + entry().or_insert keeps the lowest-id row per
-        // hash, matching the singleton query's behaviour.
-        let sql = format!(
-            "SELECT file_hash, id, file_path FROM tracks
-             WHERE file_hash IN ({placeholders})
-             ORDER BY id ASC"
-        );
-        let mut q = sqlx::query_as::<_, (String, i64, String)>(AssertSqlSafe(sql));
-        for h in chunk {
-            q = q.bind(*h);
-        }
-        let rows = q.persistent(false).fetch_all(&mut **tx).await?;
-        for (h, id, path) in rows {
-            out.entry(h).or_insert((id, path));
-        }
-    }
-    Ok(out)
 }
 
 /// Below this threshold the rayon thread-pool overhead dominates the

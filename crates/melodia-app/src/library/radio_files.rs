@@ -90,6 +90,23 @@ impl StationEntry {
         station.station_uuid = station.station_uuid.filter(|uuid| !uuid.is_empty());
         station
     }
+
+    /// What the store writes for this entry, or `None` for a station the blocklist refuses.
+    ///
+    /// A file is the one door into the table that never passed the directory, so without the check
+    /// a blocked station is one export away from a row. The caller counts it as skipped rather than
+    /// reporting it: it has no vocabulary for the difference, and giving it one would describe the
+    /// blocklist to whoever read the toast.
+    fn to_import(&self) -> Option<queries::radio::ImportedStation> {
+        let station = self.to_new_station();
+        if melodia_net::services::net::radio_blocklist::blocks(&station) {
+            return None;
+        }
+        Some(queries::radio::ImportedStation {
+            station,
+            overrides: stored_overrides(&self.overrides),
+        })
+    }
 }
 
 /// The tags read since the last URL line, waiting for the entry that claims them.
@@ -160,97 +177,33 @@ async fn read_station_list(db: &DbPool, src: &Path) -> Result<ImportStationsResu
         .await
         .map_err(AppError::io_source)??;
 
-    // **One transaction for the whole file.** Every entry was its own implicit commit on a write
-    // pool that holds a single connection, so a list of fifty stations queued a couple of hundred
-    // of them behind whatever else wanted to write. It also makes the lookup inside `import_one`
-    // able to see the rows earlier entries just wrote, which off the read pool it could not: a
-    // file naming one station twice used to depend on each write having already committed.
-    //
-    // All-or-nothing on an error, where before a failure part way left what it had already
-    // written. That is the better half of the trade — the errors reachable here are the database
-    // being unwritable, which is not a condition the next entry recovers from — and it is the same
-    // argument `queries::artwork::repoint_all` makes for its own pass.
-    let mut tx = db.write().begin().await?;
-    let mut result = ImportStationsResult::default();
-    for entry in parse(&body) {
-        if import_one(&mut tx, &entry).await? {
-            result.imported = result.imported.saturating_add(1);
-        } else {
-            result.skipped = result.skipped.saturating_add(1);
-        }
-    }
-    tx.commit().await?;
-    Ok(result)
+    let entries = parse(&body);
+    let stations: Vec<_> = entries.iter().filter_map(StationEntry::to_import).collect();
+    let imported = queries::radio::import_stations(db, &stations).await?;
+    let listed = u32::try_from(entries.len()).unwrap_or(u32::MAX);
+    Ok(ImportStationsResult { imported, skipped: listed.saturating_sub(imported) })
 }
 
-/// Put one entry in the kept list, answering whether that changed anything.
+/// The four fields the file carried, validated for storing, or `None` where there is nothing to
+/// write.
 ///
-/// **A row already here takes nothing from the file but its star.** A snapshot out of a file is
-/// not evidence against a live row, and `set_local_fields` writes all four columns in one
-/// statement, so a file naming one of them would clear the three it says nothing about. Nothing is
-/// lost by that: a station the user deleted arrives as a new row, and un-starring one never
-/// touched its `local_*` columns. It also keeps every row [`apply_overrides`] writes to logo-less,
-/// which is the state [`super::radio::heal_station_logo`] needs to reach one.
-async fn import_one(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    entry: &StationEntry,
-) -> Result<bool, AppError> {
-    let station = entry.to_new_station();
-    // A file is the one door into the table that never passed the directory, so
-    // without this a blocked station is one export away from a row. Counted as
-    // skipped rather than reported: the caller has no vocabulary for the difference
-    // and giving it one would describe the blocklist to whoever read the toast.
-    if melodia_net::services::net::radio_blocklist::blocks(&station) {
-        return Ok(false);
-    }
-    let existing = queries::radio::kept_station_matching(
-        &mut **tx,
-        station.station_uuid.as_deref(),
-        &station.stream_url,
-    )
-    .await?;
-
-    let Some((id, is_favorite)) = existing else {
-        let id = queries::radio::save_station_on(&mut **tx, &station).await?;
-        queries::radio::set_favorite_on(&mut **tx, id, true).await?;
-        apply_overrides(tx, id, &entry.overrides).await;
-        return Ok(true);
-    };
-
-    if is_favorite {
-        return Ok(false);
-    }
-    queries::radio::set_favorite_on(&mut **tx, id, true).await?;
-    Ok(true)
-}
-
-/// Write the four fields the file carried, if it carried any.
+/// Validated here rather than put through `radio::set_station_overrides`, which would download a
+/// logo per entry — the fifty connects the import already refuses to spend on probing. The repair
+/// behind the completion toast fetches them in batches instead, and the store writes these only to
+/// a row the import just created, so all of them qualify.
 ///
-/// Validated and written rather than put through `radio::set_station_overrides`, which would
-/// download a logo per entry — the fifty connects the import already refuses to spend on probing.
-/// The repair behind the completion toast fetches them in batches instead, and every row this
-/// touches is one the import just created, so all of them qualify.
-///
-/// Best-effort: one hand-edited line is not worth refusing a file of fifty stations over, and
-/// every field is editable on the card.
-async fn apply_overrides(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    id: i64,
-    overrides: &radio::StationOverrides,
-) {
+/// A field that will not validate drops the entry's overrides rather than the entry: one
+/// hand-edited line is not worth refusing a file of fifty stations over, and every field is
+/// editable on the card.
+fn stored_overrides(overrides: &radio::StationOverrides) -> Option<radio::StationOverrides> {
     if *overrides == radio::StationOverrides::default() {
-        return;
+        return None;
     }
-    let stored = match super::radio::validated_overrides(overrides) {
-        Ok(stored) => stored,
-        Err(e) => {
-            log::debug!("radio: imported details refused: {}", melodia_core::error::describe(&e));
-            return;
-        }
-    };
-    if let Err(e) = queries::radio::set_local_fields_on(&mut **tx, id, &stored).await {
-        log::debug!("radio: imported details not stored: {}", melodia_core::error::describe(&e));
-    }
+    super::radio::validated_overrides(overrides)
+        .inspect_err(|e| {
+            log::debug!("radio: imported details refused: {}", melodia_core::error::describe(e));
+        })
+        .ok()
 }
 
 /// The four `#MELODIA-*:` tags and the field each carries, **read and written off this one

@@ -2,11 +2,11 @@
 //! ids into rewritten files, a byte-consistent DB, and a refreshed player.
 //!
 //! Everything *after* the tag write reuses the scan pipeline: re-extract the
-//! file ([`extract_metadata`]), resolve the artist/album/genre ids
-//! ([`queries::scan::resolve_track_context`]) and call
-//! [`queries::scan::update_track_metadata`] — which recomputes `file_hash` /
-//! `file_size` / `date_modified` / `sort_key` / `duration_ms` and lets the
-//! existing FTS / stats triggers do the reindex and rollups with no new SQL.
+//! file ([`extract_metadata`]), then [`queries::scan::commit_retag`] resolves the
+//! artist/album/genre ids and refreshes the row through the scan's own
+//! `update_track_metadata` — which recomputes `file_hash` / `file_size` /
+//! `date_modified` / `sort_key` / `duration_ms` and lets the existing FTS /
+//! stats triggers do the reindex and rollups with no new SQL.
 //!
 //! Do **not** shortcut this into a hand-built `UPDATE` from the form values: a
 //! tag write rewrites the file's bytes, so hash/size/mtime all change, and a
@@ -452,24 +452,8 @@ fn run_write_pass(
     }
 }
 
-/// Cache key for `run_commit`'s FK-resolution memo. Holds everything
-/// [`queries::scan::resolve_track_context`] derives its
-/// [`queries::ResolvedIds`] from —
-/// folder (via the parent dir, since folder lookup is a path-prefix match),
-/// artist, album, album-artist (the album's grouping key), `year` (album upsert's
-/// `COALESCE`-on-conflict input), and genre — so identical keys yield identical
-/// ids. Keeping `year` in the key preserves the per-track album-year semantics:
-/// tracks with differing years land in different buckets and each still upserts.
-///
-/// **Ids only.** `upsert_album` also writes the release-level columns off the same metadata, and a
-/// cache hit skips that write, so whichever file resolved the key first is the one those columns
-/// come from. That is right for the dialog, where every selected file receives the same values,
-/// and it is why a batch of files disagreeing about a label has no surface to show it on.
-type ResolveKey = (PathBuf, String, String, String, Option<i32>, String);
-
-/// Land the successful writes in one transaction: resolve ids, refresh each
-/// track row, and apply the artwork override the metadata UPDATE can't do.
-/// Records per-file failures / unsupported fields into `report`.
+/// Land the successful writes through [`queries::scan::commit_retag`], recording per-file failures
+/// and unsupported fields into `report`. Answers the ids whose rows were refreshed.
 async fn run_commit(
     db: &DbPool,
     files: &[FileWrite],
@@ -477,171 +461,43 @@ async fn run_commit(
     cached_artwork: Option<&str>,
     report: &mut TagEditReport,
 ) -> Result<Vec<i64>, AppError> {
-    let mut tx = db.write().begin().await?;
-    let mut updated_ids: Vec<i64> = Vec::new();
-    let mut album_ids: Vec<i64> = Vec::new();
-    // FK resolution is identical for every track sharing a folder + artist +
-    // album/year + genre (the whole-album batch — the flagship case), so resolve
-    // each distinct tuple once instead of re-running a folder lookup + three
-    // `INSERT … ON CONFLICT … RETURNING` upserts per track. Function-scoped, so
-    // it drops at batch end (no persistent cache).
-    let mut resolve_cache: HashMap<ResolveKey, queries::scan::ResolvedIds> = HashMap::new();
-    // The credit tables ask per credited name per track, which `ResolveKey` never covered: it
-    // keys on the *primary* names, so a guest on every track of the selection resolved once per
-    // file. Same scope, dropped at batch end.
-    let mut names = queries::scan::NameCache::for_chunk(files.len());
-    // Artwork-Remove ids with nothing left to point at, flushed as one `IN (…)` UPDATE after
-    // the loop.
-    let mut remove_null_ids: Vec<i64> = Vec::new();
-    // The release-level fields `upsert_album`'s COALESCE cannot empty, and the albums owed the
-    // statement that does. Answered once: an edit clearing none of them collects nothing.
-    let cleared_release = edit.cleared_release_tags();
-    let mut cleared_album_ids: Vec<i64> = Vec::new();
-
+    let mut written: Vec<(&FileWrite, &tag_writer::WriteOutcome)> = Vec::with_capacity(files.len());
+    let mut retagged: Vec<queries::scan::RetaggedFile<'_>> = Vec::with_capacity(files.len());
     for f in files {
-        let (meta, written) = match &f.outcome {
-            Ok(ok) => ok,
+        match &f.outcome {
+            Ok((meta, outcome)) => {
+                retagged.push(queries::scan::RetaggedFile { id: f.id, path: &f.path, meta });
+                written.push((f, outcome));
+            }
             Err(e) => {
                 let reason = describe(e);
                 log::warn!("tag write failed for {}: {reason}", f.path);
                 report.failures.push((f.path.clone(), reason));
-                continue;
             }
-        };
+        }
+    }
 
-        let path = Path::new(&f.path);
-        // Mirror what `resolve_track_context` keys on, or the cache answers with ids it would
-        // never have produced: the **first** credited name, not the whole credit line, since
-        // that is the name the `artists` row carries.
-        let key: ResolveKey = (
-            path.parent().map(Path::to_path_buf).unwrap_or_default(),
-            meta.artist.primary_name().to_owned(),
-            meta.album.clone().unwrap_or_default(),
-            meta.album_artist.primary_name().to_owned(),
-            meta.year,
-            meta.genres.primary().unwrap_or_default().to_owned(),
-        );
-        let rids = if let Some(cached) = resolve_cache.get(&key) {
-            *cached
-        } else {
-            let Some(resolved) = queries::scan::resolve_track_context(
-                &mut tx, path, &f.path, meta, "Tag edit", &mut names,
-            )
-            .await?
-            else {
+    let retags = queries::scan::commit_retag(db, &retagged, edit, cached_artwork).await?;
+
+    let mut updated_ids: Vec<i64> = Vec::with_capacity(written.len());
+    for ((f, outcome), retag) in written.into_iter().zip(retags) {
+        match retag {
+            queries::scan::Retag::OutsideLibrary => {
                 report.failures.push((f.path.clone(), "not in a library folder".to_owned()));
-                continue;
-            };
-            resolve_cache.insert(key, resolved);
-            resolved
-        };
-
-        queries::scan::update_track_metadata(&mut tx, &f.path, meta, &rids, &mut names).await?;
-        updated_ids.push(f.id);
-        if !written.unsupported.is_empty() {
-            report.unsupported.push(UnsupportedWrite {
-                path: f.path.clone(),
-                format: written.format,
-                fields: written.unsupported.clone(),
-            });
-        }
-
-        if !cleared_release.is_empty()
-            && let Some(aid) = rids.album_id
-            && !cleared_album_ids.contains(&aid)
-        {
-            cleared_album_ids.push(aid);
-        }
-
-        // Artwork the metadata UPDATE can't express: its `COALESCE(?, ...)` can
-        // never null a path, and a re-extract of a Replaced file returns the
-        // *external* cover (which shadows embedded art) rather than the one we
-        // just embedded.
-        match edit.artwork {
-            ArtworkEdit::Replace => {
-                if let Some(aid) = rids.album_id {
-                    album_ids.push(aid);
+            }
+            queries::scan::Retag::Updated => {
+                updated_ids.push(f.id);
+                if !outcome.unsupported.is_empty() {
+                    report.unsupported.push(UnsupportedWrite {
+                        path: f.path.clone(),
+                        format: outcome.format,
+                        fields: outcome.unsupported.clone(),
+                    });
                 }
             }
-            ArtworkEdit::Remove => {
-                // Album artwork is left alone: blanking a whole album because one track's
-                // embedded art was removed would be wrong. A track whose re-extract found an
-                // external `cover.jpg` already carries it, the metadata UPDATE's COALESCE
-                // having just written it, so only the nulls need a statement of their own.
-                if meta.artwork_path.is_none() {
-                    remove_null_ids.push(f.id);
-                }
-            }
-            ArtworkEdit::Keep => {}
         }
     }
-
-    match edit.artwork {
-        ArtworkEdit::Replace => {
-            apply_replace_artwork(&mut tx, &updated_ids, &mut album_ids, cached_artwork).await?;
-            queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
-        }
-        ArtworkEdit::Remove => {
-            if !remove_null_ids.is_empty() {
-                queries::track::set_track_artwork(&mut tx, &remove_null_ids, None).await?;
-            }
-            queries::playlist::refresh_automatic_thumbnails(&mut tx).await?;
-        }
-        ArtworkEdit::Keep => {}
-    }
-
-    // After every `upsert_album` above, which is what it exists to undo.
-    queries::album::clear_release_tags(&mut tx, &cleared_album_ids, cleared_release).await?;
-
-    // Both passes answer to a track that changed parents, and the sweep is whole-table:
-    // three correlated deletes inside this transaction on a single-writer pool. A
-    // rating write reaches here on one click and can move nothing, so gating them is
-    // most of what that click costs.
-    //
-    // The residue is that a file whose tags had already drifted from the database
-    // can be re-homed by the re-extract above: its old parent is left stranded, and
-    // the album row it lands in instead gets no cover. The next scan or watcher batch
-    // that writes a row runs both passes and repairs both.
-    if edit.moves_between_parents() {
-        // Backfill album covers from their tracks (null-only, never an overwrite),
-        // so retagging a track into a different album lets that album inherit the
-        // track's existing artwork — the scan/import/reconcile paths already do
-        // this, but the tag editor didn't, leaving a moved track's new album with
-        // a blank cover.
-        queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-
-        // Retagging a track into a different album or genre can strand its old
-        // album (and that album's artist) or old genre with zero tracks; nothing
-        // else deletes an emptied row, so sweep orphans before committing.
-        queries::scan::prune_orphans(&mut tx).await?;
-    }
-
-    tx.commit().await?;
     Ok(updated_ids)
-}
-
-/// Replace: one authoritative overwrite to every updated track and its album(s),
-/// so the Albums grid card updates too (the metadata roll-up only fills NULL
-/// rows). No-op when nothing was updated, or when the cache write failed
-/// (`cached_artwork` is `None`) — leaving the COALESCE'd value beats nulling a
-/// cover we can't repoint.
-async fn apply_replace_artwork(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    updated_ids: &[i64],
-    album_ids: &mut Vec<i64>,
-    cached_artwork: Option<&str>,
-) -> Result<(), AppError> {
-    if updated_ids.is_empty() {
-        return Ok(());
-    }
-    let Some(cached) = cached_artwork else {
-        return Ok(());
-    };
-    queries::track::set_track_artwork(tx, updated_ids, Some(cached)).await?;
-    album_ids.sort_unstable();
-    album_ids.dedup();
-    queries::album::set_album_artwork(tx, album_ids, Some(cached)).await?;
-    Ok(())
 }
 
 #[cfg(test)]

@@ -1,36 +1,40 @@
-//! Scan-time database operations: foreign-key upserts, track row
-//! mutations, lookups, and the natural-sort-key helper.
+//! Scan-time database operations: the three write transactions a library change lands in, and
+//! the upserts, track-row mutations and lookups they are built from.
 //!
-//! The five submodules are organised by *intent*: [`upserts`] handles
-//! find-or-create on artist / album / genre rows, [`name_cache`] keeps
-//! those answers for the span of a transaction, [`mutations`] holds
-//! every track-row write, [`lookups`] holds read-side queries used by
-//! the scanner / file-event processor, and [`sort_key`] precomputes the
-//! `tracks.sort_key` column. Every public function is re-exported here
-//! so callers continue to address them through `queries::scan::*`.
+//! [`commit_scan`], [`commit_retag`] and [`apply_watch_batch`] each open, run and commit their own
+//! transaction, which is all of this module a caller outside the crate can reach: every query that
+//! takes a transaction is `pub(crate)`, so no other crate can compose one. Of the building blocks,
+//! [`upserts`] handles find-or-create on artist / album / genre rows, [`name_cache`] keeps those
+//! answers for the span of a transaction, [`mutations`] holds every track-row write, [`lookups`]
+//! holds the read-side queries, and [`sort_key`] precomputes the `tracks.sort_key` column.
 
+mod finish;
 mod lookups;
 mod mutations;
 mod name_cache;
+mod retag;
 mod sort_key;
 mod upserts;
+mod watch_batch;
 
-pub use lookups::{
-    find_folder_for_path, get_all_track_paths_for_folder, get_existing_track_summaries_for_folder,
-    get_track_id_by_path, track_exists_by_path,
+pub use finish::commit_scan;
+pub use lookups::get_existing_track_summaries_for_folder;
+pub(crate) use lookups::{
+    find_folder_for_path, get_all_track_paths_for_folder, get_track_id_by_path,
+    track_exists_by_path,
 };
-pub use mutations::{
-    INSERT_CHUNK_ROWS, NewTrackRow, delete_track_by_path, delete_tracks_by_paths_batch,
-    insert_track, insert_tracks_batch, prune_orphans, roll_up_covers,
-    update_album_artwork_from_tracks, update_track_artwork_if_missing, update_track_location,
+pub use mutations::{INSERT_CHUNK_ROWS, NewTrackRow};
+pub(crate) use mutations::{
+    delete_track_by_path, delete_tracks_by_paths_batch, insert_track, insert_tracks_batch,
+    prune_orphans, roll_up_covers, update_album_artwork_from_tracks, update_track_location,
     update_track_metadata,
 };
-pub use name_cache::NameCache;
+pub(crate) use name_cache::NameCache;
+pub use retag::{Retag, RetaggedFile, commit_retag};
 pub use sort_key::to_natural_sort_key;
-pub use upserts::{
-    CreditDetails, album_artist_name_for, album_credit_for, upsert_album, upsert_artist,
-    upsert_genre,
-};
+pub(crate) use upserts::upsert_album;
+pub use upserts::{CreditDetails, album_artist_name_for, album_credit_for};
+pub use watch_batch::{WatchedChange, apply_watch_batch};
 
 /// Resolved foreign-key IDs for a track being inserted during a scan.
 #[derive(Clone, Copy)]
@@ -47,7 +51,7 @@ pub struct ResolvedIds {
 ///
 /// Shared by the file-event reconcile path and the tag-edit orchestrator: both
 /// need the same folder lookup + FK upsert sequence before writing a track row.
-pub async fn resolve_track_context(
+pub(crate) async fn resolve_track_context(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &std::path::Path,
     path_str: &str,

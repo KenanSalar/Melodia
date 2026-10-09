@@ -2,8 +2,9 @@
 //!
 //! [`Track`] is the whole row, and the callers that need all of it are few: scan
 //! ingest, hash backfill, the detail view, fixtures. Everything else selects a
-//! narrower struct through its `*_columns()` helper, since a list view fetching
-//! the full row pays a decode per unused column on every row it draws.
+//! narrower struct through its column list in `melodia-store`'s
+//! `queries::track::columns`, since a list view fetching the full row pays a
+//! decode per unused column on every row it draws.
 //!
 //! Pick the slimmest projection that carries what the caller renders:
 //!
@@ -172,102 +173,6 @@ pub struct TrackListRow {
     pub sort_key: Option<String>,
 }
 
-/// The explicit SELECT columns for `TrackSummary` queries.
-/// Listed in `TrackSummary`'s field order for legibility — sqlx's derived
-/// `FromRow` matches by column name, so the order isn't load-bearing. Used
-/// by `get_track_summaries_by_ids` to project only the columns the queue /
-/// now-playing-bar / playback paths actually read, instead of reading all
-/// 60 columns and discarding 43 of them.
-pub const TRACK_SUMMARY_COLUMNS: &[&str] = &[
-    "id",
-    "file_path",
-    "file_name",
-    "title",
-    "artist",
-    "album",
-    "duration_ms",
-    "artwork_path",
-    "track_number",
-    "disc_number",
-    "last_position",
-    "is_favorite",
-    "rating",
-    "replaygain_track_gain",
-    "replaygain_track_peak",
-    "replaygain_album_gain",
-    "replaygain_album_peak",
-];
-
-/// Comma-separated form of `TRACK_SUMMARY_COLUMNS` for direct `SELECT` usage.
-/// Built once on first access and reused (same `OnceLock` pattern as
-/// `track_list_columns`).
-pub fn track_summary_columns() -> &'static str {
-    use std::sync::OnceLock;
-    static CACHED: OnceLock<String> = OnceLock::new();
-    CACHED.get_or_init(|| TRACK_SUMMARY_COLUMNS.join(", "))
-}
-
-/// The explicit SELECT columns for `TrackListRow` queries.
-/// Used by `track.rs` queries (bare) and `playlist.rs` (with table alias via `track_list_columns_prefixed`).
-pub const TRACK_LIST_COLUMNS: &[&str] = &[
-    "id",
-    "file_path",
-    "file_name",
-    "title",
-    "artist",
-    "album_artist",
-    "album",
-    "genre",
-    "track_number",
-    "disc_number",
-    "year",
-    "duration_ms",
-    "artwork_path",
-    "is_favorite",
-    "rating",
-    "album_id",
-    "artist_id",
-    "genre_id",
-    "date_added",
-    "sort_key",
-];
-
-/// Comma-separated form of `TRACK_LIST_COLUMNS` for direct `SELECT` usage.
-/// Built once on first access and reused — every track-list query reads from
-/// the same `&'static str`, no re-allocation per call.
-pub fn track_list_columns() -> &'static str {
-    use std::sync::OnceLock;
-    static CACHED: OnceLock<String> = OnceLock::new();
-    CACHED.get_or_init(|| TRACK_LIST_COLUMNS.join(", "))
-}
-
-/// Comma-separated form of `TRACK_LIST_COLUMNS` with a table alias prefix
-/// (e.g. `"t"` → `"t.id, t.file_path, ..."`). Cached per alias so playlist /
-/// join queries don't rebuild the string on every load.
-pub fn track_list_columns_prefixed(alias: &str) -> &'static str {
-    use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<std::collections::HashMap<&'static str, &'static str>>> =
-        OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
-    let mut guard = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    // The set of aliases is fixed and small (currently just "t"), so leaking
-    // the prefixed string + interning the alias key is bounded.
-    if let Some(&hit) = guard.get(alias) {
-        return hit;
-    }
-    let s: &'static str = Box::leak(
-        TRACK_LIST_COLUMNS
-            .iter()
-            .map(|c| format!("{alias}.{c}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-            .into_boxed_str(),
-    );
-    let key: &'static str = Box::leak(alias.to_owned().into_boxed_str());
-    guard.insert(key, s);
-    s
-}
-
 /// Playlist-export projection: just the fields an Extended-M3U8 line needs
 /// (`#EXTINF` duration + "artist - title", `#MELODIA-HASH`, and the path).
 /// Reading these five columns instead of a full `Track` avoids 55 unused
@@ -285,35 +190,6 @@ pub struct PlaylistExportRow {
     pub duration_ms: i64,
 }
 
-/// The explicit SELECT columns for `PlaylistExportRow` queries.
-pub const PLAYLIST_EXPORT_COLUMNS: &[&str] =
-    &["file_path", "file_hash", "title", "artist", "duration_ms"];
-
-/// Comma-separated form of `PLAYLIST_EXPORT_COLUMNS` with a table-alias
-/// prefix (a manual playlist's export joins `tracks t` to `playlist_items`). Cached
-/// per alias, same pattern as `track_list_columns_prefixed`.
-pub fn playlist_export_columns_prefixed(alias: &str) -> &'static str {
-    use std::sync::{Mutex, OnceLock};
-    static CACHE: OnceLock<Mutex<std::collections::HashMap<&'static str, &'static str>>> =
-        OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
-    let mut guard = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    if let Some(&hit) = guard.get(alias) {
-        return hit;
-    }
-    let s: &'static str = Box::leak(
-        PLAYLIST_EXPORT_COLUMNS
-            .iter()
-            .map(|c| format!("{alias}.{c}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-            .into_boxed_str(),
-    );
-    let key: &'static str = Box::leak(alias.to_owned().into_boxed_str());
-    guard.insert(key, s);
-    s
-}
-
 /// Technical-metadata projection for the full-screen Now Playing view's
 /// chip row — just the 8 columns `TrackMetaRow` renders. Reading these
 /// instead of a full `Track` saves ~33 unused column decodes (most of them
@@ -329,21 +205,6 @@ pub struct TrackMeta {
     pub channels: Option<i32>,
     pub year: Option<i32>,
     pub genre: Option<String>,
-}
-
-/// The explicit SELECT columns for `TrackMeta` queries. Listed in
-/// `TrackMeta`'s field order for legibility — sqlx's derived `FromRow`
-/// matches by column name, so the order isn't load-bearing.
-pub const TRACK_META_COLUMNS: &[&str] =
-    &["id", "codec", "bitrate", "sample_rate", "bit_depth", "channels", "year", "genre"];
-
-/// Comma-separated form of `TRACK_META_COLUMNS` for direct `SELECT` usage.
-/// Built once on first access and reused (same `OnceLock` pattern as
-/// `track_summary_columns`).
-pub fn track_meta_columns() -> &'static str {
-    use std::sync::OnceLock;
-    static CACHED: OnceLock<String> = OnceLock::new();
-    CACHED.get_or_init(|| TRACK_META_COLUMNS.join(", "))
 }
 
 /// Projection backing the Edit-Track-Information dialog: the editable tag
@@ -395,57 +256,6 @@ pub struct TagEditRow {
     pub file_hash: Option<String>,
 }
 
-/// The explicit SELECT columns for `TagEditRow` queries. Listed in
-/// `TagEditRow`'s field order for legibility — sqlx's derived `FromRow`
-/// matches by column name, so the order isn't load-bearing.
-pub const TRACK_TAG_EDIT_COLUMNS: &[&str] = &[
-    "id",
-    "file_path",
-    "title",
-    "artist",
-    "album_artist",
-    "album",
-    "year",
-    "original_year",
-    "track_number",
-    "track_total",
-    "disc_number",
-    "disc_total",
-    "disc_subtitle",
-    "subtitle",
-    "comment",
-    "bpm",
-    "initial_key",
-    "mood",
-    "grouping",
-    "work",
-    "movement",
-    "movement_number",
-    "movement_total",
-    "language",
-    "copyright",
-    "isrc",
-    "artwork_path",
-    "codec",
-    "bitrate",
-    "sample_rate",
-    "bit_depth",
-    "channels",
-    "file_size",
-    "date_modified",
-    "duration_ms",
-    "file_hash",
-];
-
-/// Comma-separated form of `TRACK_TAG_EDIT_COLUMNS` for direct `SELECT` usage.
-/// Built once on first access and reused (same `OnceLock` pattern as
-/// `track_summary_columns`).
-pub fn track_tag_edit_columns() -> &'static str {
-    use std::sync::OnceLock;
-    static CACHED: OnceLock<String> = OnceLock::new();
-    CACHED.get_or_init(|| TRACK_TAG_EDIT_COLUMNS.join(", "))
-}
-
 /// The metadata a scrobble needs, projected straight off `tracks` at track
 /// start. Every field is a native column (artist/album are denormalized
 /// text), so the fetch needs no joins. `title` is the track name;
@@ -464,28 +274,6 @@ pub struct ScrobbleRow {
     pub musicbrainz_release_id: Option<String>,
 }
 
-/// Explicit SELECT columns for `ScrobbleRow` queries, in field order for
-/// legibility (sqlx `FromRow` matches by name, so order isn't load-bearing).
-pub const SCROBBLE_ROW_COLUMNS: &[&str] = &[
-    "id",
-    "title",
-    "artist",
-    "album",
-    "album_artist",
-    "duration_ms",
-    "track_number",
-    "musicbrainz_track_id",
-    "musicbrainz_release_id",
-];
-
-/// Comma-separated form of `SCROBBLE_ROW_COLUMNS` for direct `SELECT` usage,
-/// built once and reused (same `OnceLock` pattern as `track_summary_columns`).
-pub fn scrobble_row_columns() -> &'static str {
-    use std::sync::OnceLock;
-    static CACHED: OnceLock<String> = OnceLock::new();
-    CACHED.get_or_init(|| SCROBBLE_ROW_COLUMNS.join(", "))
-}
-
 /// A track's album/artist/genre linkage and nothing else, for a surface that
 /// renders from [`TrackSummary`] and so has no FK ids of its own — the queue
 /// sheet's context menu. A struct rather than the 4-tuple
@@ -497,17 +285,6 @@ pub struct TrackLinks {
     pub album_id: Option<i64>,
     pub artist_id: Option<i64>,
     pub genre_id: Option<i64>,
-}
-
-/// Explicit SELECT columns for `TrackLinks` queries.
-pub const TRACK_LINKS_COLUMNS: &[&str] = &["id", "album_id", "artist_id", "genre_id"];
-
-/// Comma-separated form of `TRACK_LINKS_COLUMNS` for direct `SELECT` usage,
-/// built once and reused (same `OnceLock` pattern as `track_summary_columns`).
-pub fn track_links_columns() -> &'static str {
-    use std::sync::OnceLock;
-    static CACHED: OnceLock<String> = OnceLock::new();
-    CACHED.get_or_init(|| TRACK_LINKS_COLUMNS.join(", "))
 }
 
 /// Full database entity: every column on the `tracks` table including
@@ -689,30 +466,6 @@ pub struct MostPlayedFavorite {
     /// What the card's heart draws. Always set on Favorites' ranking, which is filtered on it;
     /// Recently Played's spans the whole library.
     pub is_favorite: bool,
-}
-
-/// Explicit SELECT columns for `MostPlayedFavorite` queries, in field order for
-/// legibility (sqlx `FromRow` matches by name, so order isn't load-bearing).
-pub const MOST_PLAYED_COLUMNS: &[&str] = &[
-    "id",
-    "title",
-    "artist",
-    "album_artist",
-    "album",
-    "genre",
-    "year",
-    "artwork_path",
-    "play_count",
-    "duration_ms",
-    "is_favorite",
-];
-
-/// Comma-separated form of `MOST_PLAYED_COLUMNS` for direct `SELECT` usage,
-/// built once and reused (same `OnceLock` pattern as `track_summary_columns`).
-pub fn most_played_columns() -> &'static str {
-    use std::sync::OnceLock;
-    static CACHED: OnceLock<String> = OnceLock::new();
-    CACHED.get_or_init(|| MOST_PLAYED_COLUMNS.join(", "))
 }
 
 #[cfg(test)]

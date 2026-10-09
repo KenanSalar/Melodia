@@ -18,6 +18,7 @@
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
+use crate::database::queries::track::columns;
 use melodia_core::entities::search::SearchResults;
 use melodia_core::entities::{album, artist, genre, track};
 use melodia_core::error::AppError;
@@ -79,7 +80,7 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     }
 
     let fts_query = build_fts_query(trimmed);
-    let cols = track::track_list_columns_prefixed("t");
+    let cols = columns::TRACK_LIST.prefixed("t");
 
     // Name matching for albums / artists / genres is LIKE against their
     // `*_stats` views — small tables, no index to gain. One pattern serves

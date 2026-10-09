@@ -125,7 +125,7 @@ pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), App
 /// is a plain overwrite — so `None` genuinely nulls the column, the artwork-Remove case a COALESCE
 /// can never express. Tx-scoped because the tag-edit orchestrator writes it in the same
 /// transaction as the metadata refresh.
-pub async fn set_track_artwork(
+pub(crate) async fn set_track_artwork(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ids: &[i64],
     artwork_path: Option<&str>,
@@ -144,6 +144,20 @@ pub async fn set_track_artwork(
         query.execute(&mut **tx).await?;
     }
     Ok(())
+}
+
+/// Blank every `date_modified`, answering with how many rows moved.
+///
+/// The column means "the mtime the stored row was parsed from", so NULL is honestly "unknown"
+/// rather than a sentinel: `track_is_current` compares it to the file's own and a missing value
+/// cannot match one. The scan overwrites it from the same `fs::metadata` that proved the file
+/// exists, so nothing is left blank behind the pass.
+pub async fn mark_every_track_stale(db: &DbPool) -> Result<u64, AppError> {
+    let result =
+        sqlx::query("UPDATE tracks SET date_modified = NULL WHERE date_modified IS NOT NULL")
+            .execute(db.write())
+            .await?;
+    Ok(result.rows_affected())
 }
 
 /// Batch-update `file_hash` and `date_modified` for tracks by ID.

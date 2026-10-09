@@ -1,11 +1,12 @@
 //! Narrow projections by id, id lookups by path or hash, and the work lists the one-shot sweeps
 //! page through.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use sqlx::AssertSqlSafe;
+use sqlx::{AssertSqlSafe, SqliteConnection};
 
-use crate::database::{DbPool, chunked_in_query};
+use super::columns;
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query};
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -13,7 +14,7 @@ use melodia_core::error::AppError;
 /// columns `TrackMetaRow` consumes, against `get_track_by_id`'s full `SELECT *`. Returns `None`
 /// for a missing id; the caller renders empty chips.
 pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackMeta>, AppError> {
-    let cols = track::track_meta_columns();
+    let cols = columns::TRACK_META.joined();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
     let row: Option<track::TrackMeta> = sqlx::query_as::<_, track::TrackMeta>(AssertSqlSafe(sql))
         .bind(id)
@@ -28,7 +29,7 @@ pub async fn get_scrobble_row(
     db: &DbPool,
     id: i64,
 ) -> Result<Option<track::ScrobbleRow>, AppError> {
-    let cols = track::scrobble_row_columns();
+    let cols = columns::SCROBBLE_ROW.joined();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
     let row: Option<track::ScrobbleRow> =
         sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql))
@@ -42,7 +43,7 @@ pub async fn get_scrobble_row(
 /// backfill, so connecting a service syncs existing favorites without re-toggling each heart.
 /// Carries the `MusicBrainz` ids `ScrobbleRow` needs for the `ListenBrainz` love path.
 pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::ScrobbleRow>, AppError> {
-    let cols = track::scrobble_row_columns();
+    let cols = columns::SCROBBLE_ROW.joined();
     let sql = format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE");
     let rows =
         sqlx::query_as::<_, track::ScrobbleRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
@@ -56,7 +57,7 @@ pub async fn get_scrobble_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::ScrobbleRow>, AppError> {
-    let cols = track::scrobble_row_columns();
+    let cols = columns::SCROBBLE_ROW.joined();
     chunked_in_query(db.read(), ids, |placeholders| {
         format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
     })
@@ -88,7 +89,7 @@ pub async fn get_track_summaries_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TrackSummary>, AppError> {
-    let cols = track::track_summary_columns();
+    let cols = columns::TRACK_SUMMARY.joined();
     let summaries: Vec<track::TrackSummary> = chunked_in_query(db.read(), ids, |placeholders| {
         format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
     })
@@ -113,7 +114,7 @@ pub async fn get_tag_edit_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TagEditRow>, AppError> {
-    let cols = track::track_tag_edit_columns();
+    let cols = columns::TRACK_TAG_EDIT.joined();
     let rows: Vec<track::TagEditRow> = chunked_in_query(db.read(), ids, |placeholders| {
         format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
     })
@@ -150,7 +151,7 @@ pub async fn get_track_links_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TrackLinks>, AppError> {
-    let cols = track::track_links_columns();
+    let cols = columns::TRACK_LINKS.joined();
     let links: Vec<track::TrackLinks> = chunked_in_query(db.read(), ids, |placeholders| {
         format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
     })
@@ -160,6 +161,15 @@ pub async fn get_track_links_by_ids(
     map.extend(links.into_iter().map(|l| (l.id, l)));
 
     Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+}
+
+/// The subset of `ids` that still has a row.
+pub async fn existing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
+    let rows: Vec<(i64,)> = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
+    })
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
 /// Look up track IDs by file paths. Returns a map from `file_path` → track ID.
@@ -196,6 +206,40 @@ pub async fn get_track_ids_by_hashes(
     let mut map = HashMap::with_capacity(rows.len());
     map.extend(rows.into_iter().map(|(id, hash)| (hash, id)));
     Ok(map)
+}
+
+/// `file_hash → (id, file_path)` of the lowest-id row carrying each of `hashes`: the row a moved
+/// file re-points rather than duplicates. Hashes with no row are absent.
+///
+/// On a connection rather than the pool so the scan's ingest can ask inside its transaction and
+/// the watcher's batch off the read pool, ahead of its own.
+pub(crate) async fn lowest_id_by_hash_on(
+    conn: &mut SqliteConnection,
+    hashes: &[&str],
+) -> Result<HashMap<String, (i64, String)>, AppError> {
+    let mut out: HashMap<String, (i64, String)> = HashMap::new();
+    // Dedup so the bind list isn't quadratic on large duplicate-content sets.
+    let unique: HashSet<&str> = hashes.iter().copied().collect();
+    let unique: Vec<&str> = unique.into_iter().collect();
+
+    for chunk in unique.chunks(MAX_BINDS_PER_STATEMENT) {
+        let placeholders = crate::database::placeholders(chunk.len());
+        // `ORDER BY id` plus `or_insert` is what keeps the lowest id.
+        let sql = format!(
+            "SELECT file_hash, id, file_path FROM tracks
+             WHERE file_hash IN ({placeholders})
+             ORDER BY id ASC"
+        );
+        let mut query = sqlx::query_as::<_, (String, i64, String)>(AssertSqlSafe(sql));
+        for hash in chunk {
+            query = query.bind(*hash);
+        }
+        let rows = query.persistent(false).fetch_all(&mut *conn).await?;
+        for (hash, id, path) in rows {
+            out.entry(hash).or_insert((id, path));
+        }
+    }
+    Ok(out)
 }
 
 /// Get all file paths of tracks that have no `file_hash` (for retroactive hashing).

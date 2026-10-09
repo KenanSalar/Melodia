@@ -22,7 +22,7 @@ use super::upserts::{upsert_artist, upsert_genre};
 /// Scoped to the caller's transaction and dropped with it, so it holds the distinct names of one
 /// chunk and never the library's.
 #[derive(Default)]
-pub struct NameCache {
+pub(crate) struct NameCache {
     artists: HashMap<String, i64>,
     genres: HashMap<String, Option<i64>>,
 }

@@ -2,6 +2,7 @@
 
 use sqlx::AssertSqlSafe;
 
+use super::columns;
 use crate::database::DbPool;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
@@ -31,7 +32,7 @@ pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 /// The display order is the caller's: this hands back [`TRACK_LIST_ORDER`] and
 /// `ui::track_list_cache` permutes it.
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = track::track_list_columns();
+    let cols = columns::TRACK_LIST.joined();
     let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
     let tracks =
         sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
@@ -43,7 +44,7 @@ pub async fn get_tracks_by_album_for_list(
     db: &DbPool,
     album_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = track::track_list_columns();
+    let cols = columns::TRACK_LIST.joined();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
         "SELECT {cols} FROM tracks WHERE album_id = ? ORDER BY disc_number ASC, track_number ASC"
     )))
@@ -63,7 +64,7 @@ pub async fn get_tracks_by_artist_for_list(
     db: &DbPool,
     artist_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = track::track_list_columns();
+    let cols = columns::TRACK_LIST.joined();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
         "SELECT {cols} FROM tracks \
          WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
@@ -86,7 +87,7 @@ pub async fn get_tracks_by_genre_for_list(
     db: &DbPool,
     genre_id: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = track::track_list_columns();
+    let cols = columns::TRACK_LIST.joined();
     let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
         "SELECT {cols} FROM tracks \
          WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
@@ -105,7 +106,7 @@ pub async fn get_tracks_by_genre_for_list(
 pub async fn get_favorite_tracks_for_list(
     db: &DbPool,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = track::track_list_columns();
+    let cols = columns::TRACK_LIST.joined();
     let sql =
         format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {TRACK_LIST_ORDER}");
     let tracks =
@@ -151,7 +152,7 @@ pub async fn get_tracks_in_directory(
     let pattern = format!("{prefix}%");
     let subdir_pattern = format!("{prefix}%{LIKE_SEPARATOR}%");
 
-    let cols = track::track_list_columns();
+    let cols = columns::TRACK_LIST.joined();
     let sql = format!(
         "SELECT {cols} FROM tracks WHERE file_path LIKE ? ESCAPE '\\' AND file_path NOT LIKE ? ESCAPE '\\'"
     );
@@ -180,7 +181,7 @@ pub async fn get_recently_played(
     db: &DbPool,
     limit: i64,
 ) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = track::track_list_columns();
+    let cols = columns::TRACK_LIST.joined();
     let sql = format!(
         "SELECT {cols} FROM tracks \
          WHERE last_played IS NOT NULL \

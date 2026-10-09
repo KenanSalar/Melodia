@@ -10,7 +10,7 @@ use std::path::Path;
 use tempfile::TempDir;
 
 use super::*;
-use melodia_store::database::queries::fixtures::insert_test_track;
+use melodia_store::database::queries::fixtures::{insert_test_track, set_test_artwork};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -36,10 +36,7 @@ impl Library {
     async fn refer_to(&self, stored: &Path) -> Result<(), AppError> {
         let id = insert_test_track(&self.db, "/music/track.mp3", "Song", "Artist", "Album", "Rock")
             .await?;
-        let mut tx = self.db.write().begin().await?;
-        queries::track::set_track_artwork(&mut tx, &[id], Some(&stored.to_string_lossy())).await?;
-        tx.commit().await?;
-        Ok(())
+        set_test_artwork(&self.db, id, &stored.to_string_lossy()).await
     }
 
     async fn artwork_path(&self) -> Result<Option<String>, AppError> {

@@ -3,6 +3,7 @@
 
 use sqlx::AssertSqlSafe;
 
+use super::columns;
 use crate::database::DbPool;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
@@ -68,7 +69,7 @@ pub async fn get_most_played_favorites(
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
     // The order's trailing keys are read, not selected — `MostPlayedFavorite`
     // is the card projection and has no slot for a timestamp.
-    let cols = track::most_played_columns();
+    let cols = columns::MOST_PLAYED.joined();
     let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
         "SELECT {cols} \
            FROM tracks \
@@ -93,7 +94,7 @@ pub async fn get_most_played_favorites(
 /// (`RecentlyPlayedUiState::most_played`). Partial index `idx_tracks_play_count` covers the `WHERE`
 /// and the leading `ORDER BY` term.
 pub async fn get_most_played(db: &DbPool) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    let cols = track::most_played_columns();
+    let cols = columns::MOST_PLAYED.joined();
     let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
         "SELECT {cols} \
            FROM tracks \

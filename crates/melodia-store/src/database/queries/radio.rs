@@ -1,7 +1,7 @@
 use crate::database::queries::scan::to_natural_sort_key;
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::entities::radio::{self, StoredLogoAnswer};
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 /// The columns [`save_station`] writes, in bind order.
 const INSERT_COLUMNS: &str = "station_uuid, name, stream_url, homepage, favicon_url, tags,
@@ -56,7 +56,7 @@ pub async fn save_station(db: &DbPool, station: &radio::NewRadioStation) -> Resu
 
 /// [`save_station`] against any executor, so the import can run its whole loop inside one
 /// transaction without a second copy of the statement.
-pub async fn save_station_on<'e, E>(
+async fn save_station_on<'e, E>(
     executor: E,
     station: &radio::NewRadioStation,
 ) -> Result<i64, AppError>
@@ -192,7 +192,7 @@ pub async fn station_id_with_url(db: &DbPool, stream_url: &str) -> Result<Option
 /// Executor-generic because the import must ask *through its own transaction*: reading off the
 /// read pool would not see the rows earlier entries in the same file just wrote, and a list naming
 /// one station twice would add it twice.
-pub async fn kept_station_matching<'e, E>(
+async fn kept_station_matching<'e, E>(
     executor: E,
     station_uuid: Option<&str>,
     stream_url: &str,
@@ -219,7 +219,7 @@ pub async fn set_favorite(db: &DbPool, id: i64, favorite: bool) -> Result<(), Ap
 }
 
 /// [`set_favorite`] against any executor. See [`save_station_on`].
-pub async fn set_favorite_on<'e, E>(executor: E, id: i64, favorite: bool) -> Result<(), AppError>
+async fn set_favorite_on<'e, E>(executor: E, id: i64, favorite: bool) -> Result<(), AppError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Sqlite>,
 {
@@ -229,6 +229,72 @@ where
         .execute(executor)
         .await?;
     Ok(())
+}
+
+/// One entry of a station list on its way into the kept list.
+pub struct ImportedStation {
+    pub station: radio::NewRadioStation,
+    /// The user's own fields the file carried, already validated; `None` where it carried none.
+    pub overrides: Option<radio::StationOverrides>,
+}
+
+/// Puts every station in the kept list, answering how many entries that changed.
+///
+/// **One transaction for the whole list.** As implicit commits on a single-connection write pool,
+/// fifty stations would queue a couple of hundred statements behind whatever else wanted to write.
+/// It also lets the lookup see the rows earlier entries just wrote, which the read pool would not,
+/// so a list naming one station twice stars it once.
+///
+/// All-or-nothing on an error, and that is the better half of the trade: the errors reachable here
+/// are the database being unwritable, which is not a condition the next entry recovers from. It is
+/// the same argument [`super::artwork::repoint_all`] makes for its own pass.
+pub async fn import_stations(db: &DbPool, stations: &[ImportedStation]) -> Result<u32, AppError> {
+    let mut tx = db.write().begin().await?;
+    let mut changed: u32 = 0;
+    for entry in stations {
+        if import_one(&mut tx, entry).await? {
+            changed = changed.saturating_add(1);
+        }
+    }
+    tx.commit().await?;
+    Ok(changed)
+}
+
+/// Stars one entry, answering whether that changed anything.
+///
+/// **A row already here takes nothing from the file but its star.** A snapshot out of a file is
+/// not evidence against a live row, and [`set_local_fields`] writes all four columns in one
+/// statement, so a file naming one of them would clear the three it says nothing about. Nothing is
+/// lost by that: a station the user deleted arrives as a new row, and un-starring one never
+/// touched its `local_*` columns. It also keeps every row the overrides are written to logo-less,
+/// which is the state the logo repair needs to reach one.
+async fn import_one(
+    conn: &mut sqlx::SqliteConnection,
+    entry: &ImportedStation,
+) -> Result<bool, AppError> {
+    let station = &entry.station;
+    let existing =
+        kept_station_matching(&mut *conn, station.station_uuid.as_deref(), &station.stream_url)
+            .await?;
+
+    let Some((id, is_favorite)) = existing else {
+        let id = save_station_on(&mut *conn, station).await?;
+        set_favorite_on(&mut *conn, id, true).await?;
+        // Best-effort: one hand-edited line is not worth refusing a list of fifty stations over,
+        // and every field is editable on the card.
+        if let Some(overrides) = &entry.overrides
+            && let Err(e) = set_local_fields_on(&mut *conn, id, overrides).await
+        {
+            log::debug!("radio: imported details not stored: {}", describe(&e));
+        }
+        return Ok(true);
+    };
+
+    if is_favorite {
+        return Ok(false);
+    }
+    set_favorite_on(&mut *conn, id, true).await?;
+    Ok(true)
 }
 
 pub async fn delete_station(db: &DbPool, id: i64) -> Result<(), AppError> {
@@ -292,7 +358,7 @@ pub async fn set_local_fields(
 }
 
 /// [`set_local_fields`] against any executor. See [`save_station_on`].
-pub async fn set_local_fields_on<'e, E>(
+async fn set_local_fields_on<'e, E>(
     executor: E,
     id: i64,
     fields: &radio::StationOverrides,

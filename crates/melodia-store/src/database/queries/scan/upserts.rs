@@ -68,7 +68,7 @@ pub struct CreditDetails<'a> {
 /// query and an album-scoped one disagreeing about the same track. `primary_artist_id` covers the
 /// one case the credit can't: a file with no artist tag, which resolves to the sentinel and still
 /// gets its row rather than being credited to nobody.
-pub async fn insert_track_credits(
+pub(crate) async fn insert_track_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
     credit: &ArtistCredit,
@@ -85,7 +85,7 @@ pub async fn insert_track_credits(
 /// One entry point rather than three calls at each of the two insert sites, because the three
 /// tables are one fact about the row — a path that wrote two of them is a track that displays
 /// credits it cannot be found by, and the bug is invisible from either half.
-pub async fn insert_track_joins(
+pub(crate) async fn insert_track_joins(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
     meta: &ExtractedMetadata,
@@ -99,7 +99,7 @@ pub async fn insert_track_joins(
 }
 
 /// [`insert_track_joins`] for a track that may already carry rows: a re-ingest or a tag edit.
-pub async fn replace_track_joins(
+pub(crate) async fn replace_track_joins(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
     meta: &ExtractedMetadata,
@@ -189,7 +189,7 @@ async fn write_genres(
 ///
 /// No insert-only sibling: `upsert_album` reaches this down both arms of its `ON CONFLICT`, so the
 /// rows may or may not be there and only the delete can tell.
-pub async fn replace_album_credits(
+pub(crate) async fn replace_album_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     album_id: i64,
     credit: &ArtistCredit,
@@ -339,7 +339,7 @@ async fn apply_artist_details(
 
 /// Find or create an artist by name, returning the artist ID.
 /// Uses the provided `unknown_artist_id` for empty artist names.
-pub async fn upsert_artist(
+pub(crate) async fn upsert_artist(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     name: &str,
     unknown_artist_id: i64,
@@ -365,7 +365,7 @@ pub async fn upsert_artist(
 /// separate arguments because the caller has already resolved and cached the id. The credit rows
 /// are written here rather than by the caller for the reason [`insert_track_joins`] gives: an
 /// album row without them files under nobody.
-pub async fn upsert_album(
+pub(crate) async fn upsert_album(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     name: &str,
     artist_id: i64,
@@ -429,7 +429,7 @@ pub async fn upsert_album(
 
 /// Find or create a genre by name, returning the genre ID.
 /// Returns None if the genre name is empty.
-pub async fn upsert_genre(
+pub(crate) async fn upsert_genre(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     name: &str,
 ) -> Result<Option<i64>, AppError> {

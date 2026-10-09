@@ -73,7 +73,7 @@ pub(crate) fn case_by_id(rows: usize) -> String {
 ///
 /// Each item binds exactly one placeholder. **Not** for a tuple-IN clause — the
 /// chunk size assumes one bind per item and would bust the cap.
-pub async fn chunked_in_query<T, B>(
+pub(crate) async fn chunked_in_query<T, B>(
     pool: &SqlitePool,
     items: &[B],
     build_sql: impl Fn(&str) -> String,

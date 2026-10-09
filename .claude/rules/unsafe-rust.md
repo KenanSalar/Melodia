@@ -49,7 +49,7 @@ same, and owes a justification somewhere a reviewer will read — not only in th
 attribute's `reason`.
 
 Two non-FFI things that look like they'd need `unsafe` and don't: `Box::leak` (the
-`'static` speakers in `state/mod.rs`, the interned column names in `entities/track.rs`)
+`'static` speakers in `state/mod.rs`, the interned column lists in `queries/track/columns.rs`)
 is safe, and so is every `*mut c_void` that is only *stored* — `media_controls` holds an
 `HWND` across time without a single `unsafe`, because souvlaki owns the deref.
 

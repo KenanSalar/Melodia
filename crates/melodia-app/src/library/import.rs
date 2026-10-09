@@ -89,28 +89,12 @@ async fn import_files(
         .map_err(|e| AppError::scanner("Scan task failed", e))?;
 
         if !scanned_files.is_empty() {
-            let mut tx = db.write().begin().await?;
-            queries::stats::disable_stats_triggers(&mut tx).await?;
-
             let scan_timestamp = melodia_core::utils::now_rfc3339();
-
-            let result = queries::ingest::ingest_scanned_files(
-                &mut tx,
-                &scanned_files,
-                &queries::FolderResolution::FromParentDir,
-                &scan_timestamp,
-                false,
-                &pool,
-            )
-            .await?;
+            let result =
+                queries::ingest::commit_import(db, &scanned_files, &scan_timestamp, &pool).await?;
             drop(pool);
 
             imported_count = result.inserted_count;
-
-            queries::scan::update_album_artwork_from_tracks(&mut tx).await?;
-            queries::stats::recalculate_all_stats(&mut tx).await?;
-            queries::stats::enable_stats_triggers(&mut tx).await?;
-            tx.commit().await?;
 
             // IDs come from `insert_tracks_batch`'s `RETURNING id, file_path`
             // (remapped to input/drop order via the returned path), collected

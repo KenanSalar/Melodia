@@ -33,7 +33,7 @@ use reconcile::process_batch;
 /// `classify_event` calls that a `Created`; backends reporting the rename as a plain modification
 /// land on the other arm. A real `Renamed` is never ours, both its sides being audio. Suppressing
 /// the `Created` is not cosmetic: `reconcile` extracts metadata for created paths too, so the echo
-/// costs a re-hash, a lofty parse and an artwork extract before `handle_created` drops all three.
+/// costs a re-hash, a lofty parse and an artwork extract before `apply_watch_batch` drops all three.
 ///
 /// `take_recent` consumes the entry, so a path is suppressed at most once per
 /// write. See [`SelfWrites`] for the accepted trades.

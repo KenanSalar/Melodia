@@ -6,11 +6,12 @@
 //! existing library however many times it is rescanned. The migration seeds what the database
 //! already knew and no more; the rest is in the files.
 //!
-//! **The pass is one UPDATE.** Blanking `date_modified` is what makes `track_is_current` answer
-//! false, and the scan then does the work through the path that is already batched, chunked and
-//! cancellable. A second ingest pipeline beside it would have to keep its own column list in step
-//! with `TRACK_INSERT_COLUMNS` — which is the duplication the tree's one hand-built UPDATE ban
-//! exists to prevent — and would re-hash every file to fill the columns it isn't there to change.
+//! **The pass is one UPDATE**, `queries::track::mark_every_track_stale`. Blanking `date_modified`
+//! is what makes `track_is_current` answer false, and the scan then does the work through the path
+//! that is already batched, chunked and cancellable. A second ingest pipeline beside it would have
+//! to keep its own column list in step with `TRACK_INSERT_COLUMNS` — which is the duplication the
+//! tree's one hand-built UPDATE ban exists to prevent — and would re-hash every file to fill the
+//! columns it isn't there to change.
 //!
 //! Supersedes the artist-credit import, which read one field through a pass of its own. A rescan
 //! reaches that field and every other, and it repairs the one thing the import's own doc recorded
@@ -24,7 +25,7 @@ use crate::library;
 use crate::state::AppState;
 use crate::tasks::{TaskSpawner, one_shot};
 use melodia_core::error::AppResult;
-use melodia_store::database::DbPool;
+use melodia_store::database::queries;
 
 /// Run the backfill unless this install has already had one.
 ///
@@ -47,7 +48,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
 }
 
 async fn backfill(state: &AppState) -> AppResult<()> {
-    let marked = mark_every_track_stale(&state.db).await?;
+    let marked = queries::track::mark_every_track_stale(&state.db).await?;
     if marked == 0 {
         return Ok(());
     }
@@ -61,21 +62,3 @@ async fn backfill(state: &AppState) -> AppResult<()> {
     library::scan::reconcile_watched_folders(state);
     Ok(())
 }
-
-/// Blank every `date_modified`, answering with how many rows moved.
-///
-/// The column means "the mtime the stored row was parsed from", so NULL is honestly "unknown"
-/// rather than a sentinel: `track_is_current` compares it to the file's own and a missing value
-/// cannot match one. The scan overwrites it from the same `fs::metadata` that proved the file
-/// exists, so nothing is left blank behind the pass.
-async fn mark_every_track_stale(db: &DbPool) -> AppResult<u64> {
-    let result =
-        sqlx::query("UPDATE tracks SET date_modified = NULL WHERE date_modified IS NOT NULL")
-            .execute(db.write())
-            .await?;
-    Ok(result.rows_affected())
-}
-
-#[cfg(test)]
-#[path = "tests/tag_backfill_tests.rs"]
-mod tests;
