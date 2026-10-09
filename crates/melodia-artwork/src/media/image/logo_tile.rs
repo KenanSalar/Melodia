@@ -60,13 +60,13 @@ const WHITE_GROUND_MAX_LUMA: f64 = 149.0;
 const GROUND_LIGHT: Rgb<u8> = Rgb([0xff, 0xff, 0xff]);
 const GROUND_DARK: Rgb<u8> = Rgb([0x1a, 0x1a, 0x1a]);
 
-/// `bytes` filed in the store under `dir` as [`compose`] leaves them, or `None` where nothing
+/// `bytes` filed in the store under `dir` as `compose` leaves them, or `None` where nothing
 /// drawable arrived.
 ///
 /// The floor is asked first and off the header alone, so a source too small to draw costs no
 /// decode at all. `extension` names the source's own bytes; a composed tile is always PNG.
 ///
-/// **Blocking**, like [`compose`].
+/// **Blocking**, like `compose`.
 pub fn store(bytes: &[u8], extension: &str, dir: &Path) -> Option<StoredLogo> {
     let (width, height) = image_decode::memory_dimensions(bytes, image_decode::MAX_SOURCE_DIM)?;
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
@@ -123,12 +123,12 @@ fn encoded_png(tile: RgbImage) -> Option<Vec<u8>> {
 
 /// What [`compose`] decided about a source.
 ///
-/// **Three answers, not two.** "Already fine" and "nothing worth storing" both leave this module
-/// with no tile in hand and mean opposite things to the caller: one keeps the source's own bytes,
-/// the other has to refuse the logo entirely so the card draws its monogram. Folded into one
-/// `None` they were indistinguishable, and a fully transparent source went into the store to be
+/// **Three answers, not two.** "Already fine" and "nothing worth storing" both come back from
+/// [`compose`] with no tile in hand and mean opposite things to the caller: one keeps the source's
+/// own bytes, the other has to refuse the logo entirely so the card draws its monogram. Folded into
+/// one `None` they were indistinguishable, and a fully transparent source went into the store to be
 /// painted as an empty tile.
-pub enum Tile {
+enum Tile {
     /// Composed into a square opaque tile.
     Composed(RgbImage),
     /// Already a square opaque source. Keep its bytes, which is what preserves
@@ -149,7 +149,7 @@ pub enum Tile {
 ///
 /// Takes the decode by value: it is the caller's last use of it, and `into_rgba8` then costs
 /// nothing on a source that already is one, where `to_rgba8` copies the whole buffer.
-pub fn compose(decoded: DynamicImage) -> Tile {
+fn compose(decoded: DynamicImage) -> Tile {
     let (width, height) = (decoded.width(), decoded.height());
     let square = width == height;
     if square && !decoded.color().has_alpha() {
