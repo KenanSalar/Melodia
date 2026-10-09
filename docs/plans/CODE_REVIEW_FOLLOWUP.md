@@ -301,8 +301,9 @@ clippy counting code lines only. Now none does, and both lints are on.
       `recently_played_tests`' closure slices (now fn-bounded, not cut at an indent),
       `winit_filter_tests`' four Resized pins (`fn on_resized(`), `my_library_tests`' land-pending
       count (now on `spawn_open`) and `cover_generation.rs`' exemption (`artwork.rs`).
-- [ ] Windows: `main.rs`'s `select_backend`, `install.rs`'s SMTC attach and titlebar polish and
-      `winit_filter`'s `on_focus` moved without a Windows compile.
+- [x] Windows: `main.rs`'s `select_backend`, `install.rs`'s SMTC attach and titlebar polish and
+      `winit_filter`'s `on_focus` pass fmt, clippy, the tests and a debug build on Windows
+      (2026-10-09).
 - Found on the way:
   - Six subscribers wrote their own `library_changed`/`stats_changed` loop despite CLAUDE.md;
     they take `ui::signal::on_signal` now. Favorites and Recently Played keep theirs, selecting
