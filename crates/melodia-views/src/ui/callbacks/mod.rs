@@ -155,9 +155,9 @@ pub(super) fn next_sort(cur_field: &str, cur_dir: &str, clicked: &str) -> (Strin
 ///
 /// A *synthetic* order — one no column header can ask for — is otherwise unreachable the
 /// moment anything else is clicked, and the sort persists across restarts. Playlist Detail
-/// is the only caller: `"position"` is what drag-to-reorder is gated on, so one click on
-/// Title used to retire reordering for good. Nothing paints the third state, no header
-/// cell matching the natural field.
+/// is the only view naming one (`TrackDetail::NATURAL_SORT`): `"position"` is what
+/// drag-to-reorder is gated on, so one click on Title used to retire reordering for good.
+/// Nothing paints the third state, no header cell matching the natural field.
 pub(super) fn next_sort_with_natural(
     cur_field: &str,
     cur_dir: &str,

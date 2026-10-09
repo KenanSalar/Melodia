@@ -26,8 +26,7 @@ pub fn handle_select_row<V: RowSelectionView>(
     let (new_selected, new_anchor) = compute_click_selection(
         view.anchor(),
         view.selected_ids().iter().collect(),
-        // The cache is the display order, so the range needs no walk of the Slint model.
-        || cache.tracks.lock().iter().map(|t| clamp_i64_to_i32(t.id)).collect(),
+        || displayed_ids(cache),
         idx,
         id,
         shift,
@@ -41,11 +40,11 @@ pub fn handle_select_row<V: RowSelectionView>(
 /// Takes every displayed row into the selection. The anchor is left where the last click put
 /// it; [`crate::ui::list_selection::select_all_curated`] argues why.
 ///
-/// **Deliberately not `list_selection::select_all_ids`**, which the flat lists take: the stamper
-/// below is the O(changed) pass over this view's own cache, so folding the two walks into one
-/// would trade a cheaper stamp for a full one.
+/// **Deliberately not `list_selection::select_all_ids`**, which the flat lists take: that walk
+/// clones every model row to read its id, where the cache already holds them and the stamper
+/// below touches only the rows that flip.
 pub fn select_all<V: RowSelectionView>(view: &V, cache: &DetailCache) {
-    write_selection(view, crate::ui::list_selection::displayed_ids(&view.track_rows()));
+    write_selection(view, displayed_ids(cache));
     apply_selection_to_rows(view, cache);
 }
 
@@ -119,6 +118,11 @@ pub fn prune_selection_to<V: RowSelectionView>(view: &V, tracks: &[RsTrackListRo
     if kept.len() != selected.row_count() {
         write_selection(view, kept);
     }
+}
+
+/// The model's ids in display order, read off the cache that is kept in lockstep with it.
+fn displayed_ids(cache: &DetailCache) -> Vec<i32> {
+    cache.tracks.lock().iter().map(|t| clamp_i64_to_i32(t.id)).collect()
 }
 
 fn write_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {

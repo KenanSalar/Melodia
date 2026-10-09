@@ -74,8 +74,8 @@ impl DetailCache {
         !self.filter.lock().is_empty()
     }
 
-    /// Seats `tracks` as both the canonical and the displayed set, the needle cleared to match:
-    /// a fresh open, or rolling back a drag, which only an unfiltered list allows.
+    /// Seats a freshly opened entity's `tracks` as both the canonical and the displayed set, the
+    /// needle cleared to match.
     pub fn seat_unfiltered(&self, tracks: Vec<RsTrackListRow>) {
         self.filter.lock().clear();
         self.all_tracks.lock().clone_from(&tracks);
@@ -86,11 +86,6 @@ impl DetailCache {
     /// is what keeps a refresh under a live needle from flashing unfiltered rows.
     pub fn set_all_tracks(&self, tracks: Vec<RsTrackListRow>) {
         *self.all_tracks.lock() = tracks;
-    }
-
-    /// The displayed rows, cloned for a caller that may have to put them back.
-    pub fn displayed_rows(&self) -> Vec<RsTrackListRow> {
-        self.tracks.lock().clone()
     }
 
     /// Sorts the canonical and displayed sets with `sort`, returning the displayed ids in their

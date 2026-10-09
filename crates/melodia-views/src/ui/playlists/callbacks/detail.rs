@@ -64,7 +64,8 @@ fn wire_reorder(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi
         if playlist_id < 0 {
             return;
         }
-        let Some(snapshot) = playlists_ui_mod::apply_optimistic_reorder(&ui, &pu, from_u, to_u)
+        let Some(previous_order) =
+            playlists_ui_mod::apply_optimistic_reorder(&ui, &pu, from_u, to_u)
         else {
             return;
         };
@@ -76,7 +77,7 @@ fn wire_reorder(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi
             {
                 log::warn!("playlists::reorder: {}", describe(&e));
                 let _ = weak.upgrade_in_event_loop(move |ui| {
-                    playlists_ui_mod::rollback_reorder(&ui, &pu, snapshot);
+                    playlists_ui_mod::rollback_reorder(&ui, &pu, previous_order);
                 });
             }
         });

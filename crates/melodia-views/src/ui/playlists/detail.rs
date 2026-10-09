@@ -279,14 +279,14 @@ fn resort_detail(g: &PlaylistDetail<'_>, playlists_ui: &PlaylistsUi) {
 }
 
 /// Optimistically reorder the cached detail state for a drag-and-drop commit *before* the DB write
-/// lands. Returns the pre-mutation pair so the caller can roll back on a DB error, or `None` when
-/// nothing was touched.
+/// lands. Returns the position order it replaced so the caller can roll back on a DB error, or
+/// `None` when nothing was touched.
 pub fn apply_optimistic_reorder(
     ui: &AppWindow,
     playlists_ui: &PlaylistsUi,
     from: usize,
     to: usize,
-) -> Option<(Vec<i64>, Vec<RsTrackListRow>)> {
+) -> Option<Vec<i64>> {
     let g = ui.global::<PlaylistDetail>();
     let field = g.get_sort_field();
     let dir = g.get_sort_dir();
@@ -299,10 +299,7 @@ pub fn apply_optimistic_reorder(
     }
 
     // Snapshot for rollback BEFORE we mutate anything.
-    let saved = {
-        let pos = playlists_ui.detail.position_order.lock().clone();
-        (pos, playlists_ui.detail.cache.displayed_rows())
-    };
+    let saved = playlists_ui.detail.position_order.lock().clone();
 
     {
         let mut pos = playlists_ui.detail.position_order.lock();
@@ -321,18 +318,12 @@ pub fn apply_optimistic_reorder(
     Some(saved)
 }
 
-/// Roll back the cached state to the snapshot returned by [`apply_optimistic_reorder`]. Called
-/// when the DB write fails.
-pub fn rollback_reorder(
-    ui: &AppWindow,
-    playlists_ui: &PlaylistsUi,
-    snapshot: (Vec<i64>, Vec<RsTrackListRow>),
-) {
-    let (pos, tracks) = snapshot;
-    *playlists_ui.detail.position_order.lock() = pos;
-    // Reorder is disabled while filtered, so the displayed cache equals the canonical one.
-    playlists_ui.detail.cache.seat_unfiltered(tracks);
-    // Force a UI rebuild of the visible rows from the rolled-back cache.
+/// Put back the position order [`apply_optimistic_reorder`] replaced, when the DB write fails.
+///
+/// Only the order: the rows are re-sorted as they stand, so a heart, a star, a needle or a
+/// refresh landing while the write was in flight survives the rollback.
+pub fn rollback_reorder(ui: &AppWindow, playlists_ui: &PlaylistsUi, position_order: Vec<i64>) {
+    *playlists_ui.detail.position_order.lock() = position_order;
     resort_detail(&ui.global::<PlaylistDetail>(), playlists_ui);
 }
 

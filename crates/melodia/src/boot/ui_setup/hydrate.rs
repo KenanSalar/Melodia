@@ -179,7 +179,7 @@ pub fn spawn_initial_tracks_fetch(
 /// time the user navigates to it.
 ///
 /// A macro rather than a generic `fn` because each `fetch_grid` is a free function in
-/// its own module, over a `*Ui` type no trait ties to the other three. Tracks is
+/// its own module, and no trait the four `*Ui` types share carries it. Tracks is
 /// deliberately not among them, resolving a persisted sort and calling
 /// `fetch_and_apply` instead.
 macro_rules! initial_grid_fetch {

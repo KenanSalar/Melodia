@@ -18,7 +18,7 @@ use melodia_ui::AppWindow;
 /// Call `bump` on the UI thread whenever `tier` finishes a batch it was handed by a miss.
 ///
 /// `bump` is the two-line read-modify-write of one global's generation, which is all that differs
-/// between the tiers — Slint globals share no trait to be generic over.
+/// between the tiers, so a closure costs less than a one-method trait with an impl per global.
 pub fn notify_on_decode(
     tier: &Arc<CoverThumbs>,
     app: &AppWindow,

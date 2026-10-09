@@ -90,9 +90,10 @@ pub fn stamp_rows_selected<S: BuildHasher>(
 
 /// Every id a row model is currently showing, in display order.
 ///
-/// Read off the Slint model rather than any view's cache, so one projection answers for all nine
-/// lists: the model *is* the display order, post-filter and post-sort, whatever each view rebuilt
-/// it from. Disk-only Browse rows are dropped here rather than at that view — they arrive
+/// Read off the Slint model rather than any view's cache, so one projection answers for every
+/// flat list: the model *is* the display order, post-filter and post-sort, whatever each view
+/// rebuilt it from. A detail reads its own cache instead, kept in lockstep with its model.
+/// Disk-only Browse rows are dropped here rather than at that view — they arrive
 /// `enabled == false` and all share `id == 0`, which an id-keyed selection cannot hold.
 pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
     (0..rows.row_count())

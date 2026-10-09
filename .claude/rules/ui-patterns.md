@@ -183,9 +183,10 @@ silently miss the other.
   they are unreachable — and the pick persists. Not cosmetic where something is *gated* on that
   order: one click on Title retired Playlist Detail's drag-to-reorder for the whole install.
   **`next_sort_with_natural` is the cycle** (ascending → descending → natural) and Playlist Detail
-  is the only caller; nothing paints the third state, no header cell matching, which is the honest
-  reading of "unsorted". Reach for it only where the order is one the user can leave and come back
-  to; where the order *is* the page, `sortable: false` is the answer instead.
+  is the only view naming a natural order, through `TrackDetail::NATURAL_SORT`; nothing paints
+  the third state, no header cell matching, which is the honest reading of "unsorted". Reach for
+  it only where the order is one the user can leave and come back to; where the order *is* the
+  page, `sortable: false` is the answer instead.
 
 - **`SortPillRow`** — the `TabBar` shape (parallel `labels`/`fields` + `request-sort`), at all four
   pill rows; every other sortable surface goes through a `TrackList` column header. Pills carry
@@ -616,9 +617,8 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
-  rows in a `DetailCache`. A view's own `callbacks/detail.rs` keeps close-detail, whose routing and
-  release differ per view, and whatever only it has. A fifth detail implements both traits rather
-  than copying a `callbacks/detail.rs`.
+  rows in a `DetailCache`. A fifth detail implements both traits rather than copying a
+  `callbacks/detail.rs`.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
