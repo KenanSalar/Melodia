@@ -6,7 +6,7 @@ use slint::{ComponentHandle, Weak};
 use tokio::sync::watch;
 
 use melodia_app::services::updater::{
-    self, CheckOutcome, FailureKind, UpdaterEvent, asset_cache, check_for_update,
+    self, Checked, FailureKind, UpdaterEvent, Verdict, asset_cache, check_for_update,
 };
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -14,7 +14,6 @@ use melodia_platform::services::platform::install_kind::install_target;
 use melodia_ui::{AppWindow, MelodiaUpdater};
 
 use super::paint::{paint_error, paint_restart_needed, set_is_installing};
-use super::read_etag;
 
 /// True iff a `download_and_install` future is currently in flight on
 /// this process. The Slint UI gates the Install button via
@@ -42,10 +41,9 @@ pub(super) fn spawn_install(
         return;
     }
 
-    // Resolve the asset to download. Happy path: re-fetch the
-    // manifest (usually 304 thanks to the cached ETag) and use the
-    // fresh asset — picks up any URL/signature changes between check
-    // and install. Sad path: re-fetch fails (offline, captive portal),
+    // Resolve the asset to download. Happy path: re-read the manifest
+    // and use the fresh asset — picks up any URL/signature changes
+    // between check and install. Sad path: re-fetch fails (offline, captive portal),
     // fall back to the asset cached at last `Available` observation.
     // The signature check downstream catches any drift between cache
     // and on-disk artifact, so the fallback can't compromise safety.
@@ -73,39 +71,21 @@ pub(super) fn spawn_install(
         // for why the unlinking installs need no such capture.
         let install_target = install_target();
 
-        let etag = read_etag(&state);
-        // `force_refresh = false`: this re-fetch is the install path's
-        // best-effort freshness check (the asset URL/signature could
-        // have rotated between the user clicking "Check" and clicking
-        // "Install"). A 304 here is the happy case — we fall through to
-        // the cached asset, which already passed verification.
+        // A full read rather than a revalidation: a `304` carries no
+        // asset, and the manifest is a few KB against the download it
+        // precedes.
         let outcome = check_for_update(
             state.http_client(),
             updater::RELEASES_BASE,
-            etag.as_deref(),
             env!("CARGO_PKG_VERSION"),
-            false,
         )
         .await;
         let cached = match outcome {
-            Ok(CheckOutcome::Available { manifest, asset, .. }) => {
+            Ok(Checked { manifest, verdict: Verdict::Available(asset), .. }) => {
                 asset_cache::store(manifest.version.clone(), asset.clone());
                 asset_cache::CachedAsset { version: manifest.version, asset }
             }
-            Ok(CheckOutcome::NotModified) => {
-                // 304 — no fresh asset blob in the response. Use
-                // whatever's cached from the last successful check.
-                let Some(cached) = asset_cache::snapshot() else {
-                    set_is_installing(&weak, false);
-                    log::warn!(
-                        "updater: install clicked but no cached asset \
-                         and server returned 304 (stale UI state)"
-                    );
-                    return;
-                };
-                cached
-            }
-            Ok(CheckOutcome::UpToDate) => {
+            Ok(Checked { verdict: Verdict::UpToDate, .. }) => {
                 set_is_installing(&weak, false);
                 log::warn!(
                     "updater: install clicked but server now reports up-to-date \
@@ -113,20 +93,23 @@ pub(super) fn spawn_install(
                 );
                 return;
             }
-            Ok(CheckOutcome::UnsupportedSchema { schema, .. }) => {
+            Ok(Checked { manifest, verdict: Verdict::UnsupportedSchema, .. }) => {
                 // Server bumped the manifest schema between the user's
                 // last Available observation and the Install click.
                 // Same outcome as UpToDate from the install path's POV
                 // — can't proceed, surface a short error so they know
                 // why the click didn't act.
                 set_is_installing(&weak, false);
-                let reason = format!("manifest schema {schema} is newer than this binary supports");
+                let reason = format!(
+                    "manifest schema {} is newer than this binary supports",
+                    manifest.manifest_schema_version
+                );
                 log::warn!("updater: install rejected — {reason}");
                 paint_error(&weak, reason);
                 let _ = event_tx.send(Some(UpdaterEvent::Failed { kind: FailureKind::Other }));
                 return;
             }
-            Ok(CheckOutcome::NoAssetForTarget { .. }) => {
+            Ok(Checked { verdict: Verdict::NoAssetForTarget, .. }) => {
                 set_is_installing(&weak, false);
                 let reason = "no installable asset for this platform".to_owned();
                 log::warn!("updater: install rejected — {reason}");

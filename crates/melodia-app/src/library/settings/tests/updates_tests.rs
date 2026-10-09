@@ -41,10 +41,10 @@ fn a_failure_advances_the_clock_as_well_as_the_counter() {
     assert_eq!(flags.last_check_unix, 1_717_243_200);
 }
 
-/// The 304 path: the body wasn't re-sent, so the cached version is still the most recent thing
-/// seen and overwriting it with nothing would lose what the UI shows.
+/// The 304 path: the body wasn't re-sent, so the stored manifest is still the published one and
+/// both halves of it stay.
 #[test]
-fn a_success_with_no_version_leaves_the_last_known_release_alone() {
+fn a_not_modified_check_keeps_the_stored_manifest() {
     let mut flags = UpdateFlags {
         last_known_release: "0.3.0".to_owned(),
         last_manifest_etag: "\"m1\"".to_owned(),
@@ -52,7 +52,7 @@ fn a_success_with_no_version_leaves_the_last_known_release_alone() {
         ..UpdateFlags::default()
     };
 
-    flags.record_success(1_717_243_200, None, None);
+    flags.record_not_modified(1_717_243_200);
 
     assert_eq!(flags.last_known_release, "0.3.0");
     assert_eq!(flags.last_manifest_etag, "\"m1\"");
@@ -61,27 +61,28 @@ fn a_success_with_no_version_leaves_the_last_known_release_alone() {
 }
 
 #[test]
-fn a_success_carrying_a_version_and_etag_stores_both() {
+fn a_full_read_replaces_the_stored_version_and_tag() {
     let mut flags = UpdateFlags {
         last_known_release: "0.3.0".to_owned(),
         last_manifest_etag: "\"m1\"".to_owned(),
         ..UpdateFlags::default()
     };
 
-    flags.record_success(1_717_243_200, Some("0.4.0".to_owned()), Some("\"m2\"".to_owned()));
+    flags.record_fetch(1_717_243_200, "0.4.0".to_owned(), Some("\"m2\"".to_owned()));
 
     assert_eq!(flags.last_known_release, "0.4.0");
     assert_eq!(flags.last_manifest_etag, "\"m2\"");
 }
 
-/// A skip is never cleared by a check succeeding — only by a strictly newer release, which is the
-/// daily task's call and not this layer's.
+/// A skip is never cleared by a check succeeding — only by a strictly newer release, which is
+/// `run_check`'s call and not this layer's.
 #[test]
 fn recording_a_check_never_touches_the_skipped_release() {
     let mut flags = UpdateFlags { skipped_release: "0.3.0".to_owned(), ..UpdateFlags::default() };
 
-    flags.record_success(1, Some("0.4.0".to_owned()), None);
-    flags.record_failure(2);
+    flags.record_fetch(1, "0.4.0".to_owned(), None);
+    flags.record_not_modified(2);
+    flags.record_failure(3);
 
     assert_eq!(flags.skipped_release, "0.3.0");
 }

@@ -80,10 +80,7 @@ pub use scrobble::{
     set_scrobble_listenbrainz_enabled, set_scrobble_listenbrainz_love_enabled,
 };
 pub use support::{mark_support_prompt_seen, record_launch};
-pub use updates::{
-    record_check_failure, record_check_success, reset_skipped_release, set_auto_check_enabled,
-    set_skipped_release,
-};
+pub use updates::{set_auto_check_enabled, set_skipped_release};
 pub use view::{
     get_view_sort, set_artist_albums_collapsed, set_browse_path, set_browse_view_mode,
     set_favorites_tab, set_last_detail_id, set_last_nav_index, set_locale, set_my_library_tab,

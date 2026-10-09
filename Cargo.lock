@@ -3690,7 +3690,6 @@ dependencies = [
 name = "melodia-app"
 version = "0.18.0"
 dependencies = [
- "async-compat",
  "blake3",
  "chrono",
  "dirs",
@@ -3709,7 +3708,6 @@ dependencies = [
  "melodia-playback",
  "melodia-store",
  "melodia-testkit",
- "melodia-ui",
  "minisign-verify",
  "natord",
  "open",
@@ -3720,7 +3718,6 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "slint",
  "sqlx",
  "tempfile",
  "thiserror 2.0.19",

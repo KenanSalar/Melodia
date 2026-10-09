@@ -139,15 +139,24 @@ artwork only in `media/fetch/station_logo.rs` and `deezer.rs`.
 
 ## Phase 3: drop `melodia-ui` from `melodia-app`
 
-Today `tasks/updater_daily.rs` holds a `Weak<AppWindow>` and writes the `MelodiaUpdater` globals,
-and `tasks/rss_sampler.rs` calls `slint::spawn_local`.
+`tasks/updater_daily.rs` held a `Weak<AppWindow>` and wrote the `MelodiaUpdater` globals through
+three painters that copied views' `callbacks/updater/paint.rs` line for line, and
+`tasks/rss_sampler.rs` called `slint::spawn_local`.
 
-- [ ] `updater_daily` publishes its result on a `watch` on `AppState`. A subscriber in
-      `melodia-views` writes the globals, through `ui::signal::on_signal` or the bridge pattern.
-- [ ] `rss_sampler` gets its UI-thread spawn from its caller, the way it already gets the view-tag
-      closure from `main.rs`.
-- [ ] Remove `melodia-ui` from app's manifest, and `slint` too if nothing else in app uses it.
-- [ ] Update CLAUDE.md's `tasks/` bullet, which documents this edge as the one exception.
+- [x] `updater_daily::spawn` takes a painter, `impl Fn(PanelPaint)`, where it took the window.
+      `ui::callbacks::check_painter` builds it over views' existing painters, so the copies
+      are gone. This replaced the planned `watch` on `AppState`: no channel, no subscriber and no
+      `AppState` field, and every write lands exactly as it did before.
+- [x] `rss_sampler::sampler` hands its loop back, and `boot::ui_setup::install_rss_sampler` spawns
+      it on the UI thread with the view tag `main.rs` used to build.
+- [x] App's manifest drops `melodia-ui`, `slint` and `async-compat`. A `.slint` edit no longer
+      rebuilds app.
+- [x] CLAUDE.md's `tasks/` bullet and its Memory Discipline line now describe it.
+- [x] Found on the way: the Check button and the daily task each had their own copy of what
+      follows a check, and the copies had drifted. Both now run `services::updater::run_check`.
+      It also fixes the ETag cache: an "available" response's tag was cached, so the next daily
+      check got a `304` and showed nothing, and a dismissed update never came back. A tag is now
+      sent only while the manifest it names offered this build nothing newer.
 
 ## Phase 4: SQL lives in `melodia-store`
 

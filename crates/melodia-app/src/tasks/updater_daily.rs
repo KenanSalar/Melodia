@@ -23,35 +23,20 @@
 //!   successful check resets it. Mitigates flaky-network / firewall
 //!   thrash that would otherwise re-fire every 6 h.
 //!
-//! Per-iteration responsibilities:
-//!
-//! 1. Call `services::updater::check_for_update` (ETag-aware fetch +
-//!    semver gate + per-platform asset resolution).
-//! 2. Persist the result via `library::settings::updates::*` (success
-//!    resets failures + caches `ETag`; failure increments counter).
-//! 3. Push state updates into the `Updater` Slint global via
-//!    `Weak<AppWindow>::upgrade_in_event_loop` so the Settings →
-//!    Updates panel reflects the latest state without the user opening
-//!    it manually.
-//! 4. On `Available` (and not previously skipped), forward an
-//!    [`UpdaterEvent::Available`] onto the `event_tx` channel so the
-//!    UI-thread subscriber in `ui::settings::updater_settings` can push a toast.
+//! Each iteration that passes those gates is [`run_check`], the same check
+//! the Settings button runs, framed by the panel's checking state. A failure
+//! is logged and nothing more: a background check stays quiet.
 
 use std::time::Duration;
 
 use chrono::Utc;
-use slint::{ComponentHandle, SharedString, Weak};
 use tokio::sync::watch;
 
-use crate::library;
 use crate::services::settings;
-use crate::services::updater::{
-    CheckOutcome, RELEASES_BASE, UpdaterEvent, asset_cache, check_for_update, version::is_upgrade,
-};
+use crate::services::updater::{PanelPaint, UpdaterEvent, run_check};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, MelodiaUpdater};
 
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
 const NORMAL_CADENCE: Duration = Duration::from_hours(6);
@@ -78,12 +63,11 @@ const BACKOFF_LADDER: &[Duration] = &[
 ///
 /// `event_tx` carries notification-worthy events (the toast push that
 /// fires for newly-available versions). State writes that don't need a
-/// toast — `is-checking` flips, `up-to-date` repaint — go through the
-/// `weak` handle directly.
+/// toast — `is-checking` flips, `up-to-date` repaint — go to `paint`.
 pub fn spawn(
     spawner: &TaskSpawner,
     state: AppState,
-    weak: Weak<AppWindow>,
+    paint: impl Fn(PanelPaint) + Send + Sync + 'static,
     event_tx: watch::Sender<Option<UpdaterEvent>>,
 ) {
     let mut auto_check = state.auto_check_changed.subscribe();
@@ -98,7 +82,7 @@ pub fn spawn(
         }
 
         loop {
-            run_one_iteration(&state, &weak, &event_tx).await;
+            run_one_iteration(&state, &paint, &event_tx).await;
 
             let delay = pick_next_delay(&state);
             tokio::select! {
@@ -121,7 +105,7 @@ pub fn spawn(
 
 async fn run_one_iteration(
     state: &AppState,
-    weak: &Weak<AppWindow>,
+    paint: &impl Fn(PanelPaint),
     event_tx: &watch::Sender<Option<UpdaterEvent>>,
 ) {
     let snapshot = match settings::read_settings(&state.paths) {
@@ -147,149 +131,13 @@ async fn run_one_iteration(
     }
 
     log::info!("updater_daily: checking for updates");
-    set_is_checking(weak, true);
+    paint(PanelPaint::CheckStarted);
+    let checked = run_check(state.http_client(), &state.paths).await;
+    paint(PanelPaint::CheckEnded);
 
-    let etag = if snapshot.last_manifest_etag.is_empty() {
-        None
-    } else {
-        Some(snapshot.last_manifest_etag.as_str())
-    };
-    // `force_refresh = false`: daily checks honour the ETag so a no-op
-    // 304 round-trips zero bytes and zero JSON parses. The "Check for
-    // updates" button bypasses the etag — see check_for_update's doc.
-    let result = check_for_update(
-        state.http_client(),
-        RELEASES_BASE,
-        etag,
-        env!("CARGO_PKG_VERSION"),
-        false,
-    )
-    .await;
-    set_is_checking(weak, false);
-
-    let now = Utc::now();
-    match result {
-        Ok(outcome) => {
-            handle_outcome(state, weak, event_tx, &snapshot.skipped_release, outcome, now);
-        }
-        Err(e) => {
-            log::warn!("updater_daily: check failed: {}", describe(&e));
-            if let Err(persist_err) = library::settings::updates::record_check_failure(state, now) {
-                log::warn!("updater_daily: record_check_failure: {}", describe(&persist_err));
-            }
-        }
-    }
-}
-
-fn handle_outcome(
-    state: &AppState,
-    weak: &Weak<AppWindow>,
-    event_tx: &watch::Sender<Option<UpdaterEvent>>,
-    skipped_release: &str,
-    outcome: CheckOutcome,
-    now: chrono::DateTime<Utc>,
-) {
-    match outcome {
-        CheckOutcome::NotModified => {
-            log::info!("updater_daily: 304 Not Modified");
-            // Touch last_check_unix only — keep cached version / etag intact.
-            persist_success(state, now, None, None);
-        }
-        CheckOutcome::UpToDate => {
-            log::info!("updater_daily: up to date");
-            set_up_to_date(weak);
-            persist_success(state, now, None, None);
-        }
-        CheckOutcome::NoAssetForTarget { etag } => {
-            log::info!("updater_daily: manifest has no asset for current target");
-            persist_success(state, now, None, etag);
-        }
-        CheckOutcome::UnsupportedSchema { schema, etag } => {
-            // The check helper already logged the schema mismatch at
-            // warn level; treat this like NoAssetForTarget — touch
-            // last_check_unix + cache the etag so the next 6-hourly
-            // check 304s, but don't notify (there's nothing the user
-            // can act on from the in-app side).
-            log::info!("updater_daily: unsupported manifest schema {schema}");
-            persist_success(state, now, None, etag);
-        }
-        CheckOutcome::Available { manifest, asset, etag } => {
-            let version = manifest.version.clone();
-            let notes_short = manifest.notes_short.clone();
-            let critical = manifest.critical;
-            log::info!(
-                "updater_daily: update available: {version}{}",
-                if critical { " (critical)" } else { "" }
-            );
-
-            // Cache the (version, asset) pair so a subsequent
-            // `Updater.install` click can use it even if the
-            // install-time re-fetch fails. Version is forwarded to
-            // `verify_stream`'s trusted-comment cross-check.
-            asset_cache::store(version.clone(), asset);
-
-            let verdict = skip_verdict(skipped_release, &version, critical);
-            if verdict.clear_skip
-                && let Err(e) = library::settings::updates::reset_skipped_release(state)
-            {
-                log::warn!("updater_daily: reset_skipped_release: {}", describe(&e));
-            }
-
-            set_update_available(weak, version.clone(), notes_short.clone(), critical);
-            persist_success(state, now, Some(version.clone()), etag);
-
-            if verdict.notify {
-                let _ =
-                    event_tx.send(Some(UpdaterEvent::Available { version, notes_short, critical }));
-            }
-        }
-    }
-}
-
-/// What the stored "skip this version" means once a manifest names a version.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct SkipVerdict {
-    /// Raise the "update available" event.
-    notify: bool,
-    /// Drop the stored skip — it names a version the manifest has moved past, or one semver
-    /// cannot read at all.
-    clear_skip: bool,
-}
-
-/// The only genuinely conditional logic in this file, and the one with a security consequence:
-/// a release the publisher flagged critical must surface even where the user has muted it. Split
-/// from [`handle_outcome`], which takes an `AppState` and a live window a test cannot hand it.
-fn skip_verdict(skipped_release: &str, version: &str, critical: bool) -> SkipVerdict {
-    let unmuted = SkipVerdict { notify: true, clear_skip: false };
-    if skipped_release.is_empty() {
-        return unmuted;
-    }
-
-    match is_upgrade(skipped_release, version) {
-        // Strictly newer than what was skipped, so the skip is spent.
-        Ok(true) => SkipVerdict { notify: true, clear_skip: true },
-        Ok(false) => SkipVerdict { notify: critical, clear_skip: false },
-        Err(e) => {
-            log::warn!(
-                "updater_daily: stored skipped_release {skipped_release:?} not valid semver \
-                 ({}); clearing rather than muting every future notification",
-                describe(&e)
-            );
-            SkipVerdict { notify: true, clear_skip: true }
-        }
-    }
-}
-
-fn persist_success(
-    state: &AppState,
-    now: chrono::DateTime<Utc>,
-    latest_version: Option<String>,
-    etag: Option<String>,
-) {
-    if let Err(e) =
-        library::settings::updates::record_check_success(state, now, latest_version, etag)
-    {
-        log::warn!("updater_daily: record_check_success: {}", describe(&e));
+    match checked {
+        Ok(finding) => finding.deliver(paint, event_tx),
+        Err(e) => log::warn!("updater_daily: check failed: {}", describe(&e)),
     }
 }
 
@@ -335,38 +183,6 @@ fn needs_check(last_check_unix: i64) -> bool {
 fn elapsed_secs(last_check_unix: i64) -> i64 {
     let now = Utc::now().timestamp();
     now.saturating_sub(last_check_unix)
-}
-
-fn set_is_checking(weak: &Weak<AppWindow>, on: bool) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        ui.global::<MelodiaUpdater>().set_is_checking(on);
-    });
-}
-
-fn set_up_to_date(weak: &Weak<AppWindow>) {
-    let _ = weak.upgrade_in_event_loop(|ui| {
-        let g = ui.global::<MelodiaUpdater>();
-        g.set_up_to_date(true);
-        g.set_update_available(false);
-        g.set_error_message(SharedString::default());
-    });
-}
-
-fn set_update_available(
-    weak: &Weak<AppWindow>,
-    version: String,
-    notes_short: String,
-    critical: bool,
-) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        let g = ui.global::<MelodiaUpdater>();
-        g.set_up_to_date(false);
-        g.set_update_available(true);
-        g.set_available_version(version.into());
-        g.set_notes_short(notes_short.into());
-        g.set_is_critical(critical);
-        g.set_error_message(SharedString::default());
-    });
 }
 
 #[cfg(test)]

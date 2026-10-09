@@ -20,7 +20,8 @@ pub use hydrate::{
 };
 pub use subscribers::{
     install_artwork_restore_subscriber, install_audio_device_lost_subscriber,
-    install_library_changed_refresher, install_rescan_notice_subscriber, install_toast_bridge,
+    install_library_changed_refresher, install_rescan_notice_subscriber, install_rss_sampler,
+    install_toast_bridge,
 };
 pub use views::{install_library_settings_and_friends, install_views};
 

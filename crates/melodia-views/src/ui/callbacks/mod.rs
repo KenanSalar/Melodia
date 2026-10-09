@@ -39,7 +39,7 @@ pub use cross_tab_nav::wire_cross_tab_nav;
 pub use library_settings::wire_library_settings;
 pub use now_playing::{RowFlagHandles, wire_now_playing_favorite, wire_now_playing_rating};
 pub use tags::wire_tags;
-pub use updater::wire as wire_updater;
+pub use updater::{check_painter, wire as wire_updater};
 
 /// A Slint `[int]` callback param as `Vec<i64>`, for every track-row context-menu callback
 /// — single-row mode emits a 1-element array, multi-select the whole view selection.

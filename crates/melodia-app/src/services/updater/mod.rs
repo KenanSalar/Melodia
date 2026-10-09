@@ -1,7 +1,7 @@
 //! Auto-updater backend.
 //!
-//! The pipeline: the daily task's `check_for_update` fetches `latest.json`
-//! ETag-aware, `is_upgrade` decides on semver, and an accepted notification runs
+//! The pipeline: [`run_check`] fetches `latest.json`, revalidating only where a
+//! `304` can still be trusted, `is_upgrade` decides on semver, and an accepted notification runs
 //! `download_and_install` → `verify_stream` (prehashed minisign) → `swap_in_place`
 //! (atomic, `cfg`-branched) → `request_respawn_and_quit`.
 //!
@@ -24,15 +24,17 @@ pub mod github;
 pub mod install;
 pub mod manifest;
 pub mod minisign;
+pub mod run;
 pub mod version;
 
 #[cfg(target_os = "linux")]
 use melodia_platform::services::platform::install_kind::install_target;
 
-pub use check::{CheckOutcome, check_for_update};
+pub use check::{Checked, Verdict, check_for_update};
 pub use event::{FailureKind, UpdaterEvent};
 pub use github::RELEASES_BASE;
 pub use install::{download_and_install, prune_stale_staging};
+pub use run::{Finding, PanelPaint, run_check};
 
 /// Whether this build has an in-app updater at all.
 ///

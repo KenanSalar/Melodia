@@ -2,10 +2,9 @@
 //! `https://github.com/KenanSalar/Melodia/releases/latest/download/latest.json`,
 //! plus its sibling `latest.json.minisig` for manifest verification.
 //!
-//! Sends `If-None-Match: <last_manifest_etag>` when the caller has a
-//! cached `ETag`, so the daily-check loop can short-circuit on `304 Not
-//! Modified` without re-parsing the JSON or re-running state transitions
-//! through `Checking` → `UpToDate`.
+//! Sends `If-None-Match` when the caller passes a tag, so a check can
+//! short-circuit on `304 Not Modified` without fetching or verifying the
+//! manifest again. Whether a tag is worth sending is the caller's call.
 //!
 //! Verification ordering: minisign signature over the manifest body
 //! is checked **before** `serde_json::from_str`. A missing `.minisig`,
@@ -50,24 +49,12 @@ pub async fn fetch_latest_manifest(
     http: &reqwest::Client,
     base_url: &str,
     cached_etag: Option<&str>,
-    force_refresh: bool,
 ) -> AppResult<FetchOutcome> {
     let manifest_url = format!("{base_url}/latest.json");
     let signature_url = format!("{manifest_url}.minisig");
 
     let mut req = http.get(&manifest_url);
-    // `force_refresh` skips the `If-None-Match` header so the server
-    // returns the full manifest body even when our cached ETag is
-    // current. Used by the UI "Check for updates" button to clear a
-    // sticky `UnsupportedSchema` state — if a release accidentally
-    // bumped `manifest_schema_version` ahead of the client rollout,
-    // the etag would keep returning 304 forever and the user would
-    // see "schema too new" on every check until the maintainer re-
-    // uploaded `latest.json`. Manual checks bypass the cache; the
-    // daily-task path keeps sending `If-None-Match` to spare GitHub
-    // the bandwidth on the 99% no-op case.
-    if !force_refresh
-        && let Some(tag) = cached_etag
+    if let Some(tag) = cached_etag
         && !tag.is_empty()
         && let Ok(value) = HeaderValue::from_str(tag)
     {

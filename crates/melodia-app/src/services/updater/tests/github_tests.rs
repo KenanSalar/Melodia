@@ -41,7 +41,7 @@ fn server_with_signature(
 }
 
 async fn fetch(server: &TestServer) -> Result<FetchOutcome, AppError> {
-    fetch_latest_manifest(&reqwest::Client::new(), &server.base_url(), None, true).await
+    fetch_latest_manifest(&reqwest::Client::new(), &server.base_url(), None).await
 }
 
 fn refusal(outcome: Result<FetchOutcome, AppError>) -> Result<String, Box<dyn std::error::Error>> {
@@ -115,8 +115,7 @@ async fn a_not_modified_response_short_circuits_before_verification() -> TestRes
     let server = TestServer::start(|_| TestResponse::status(304))?;
 
     let outcome =
-        fetch_latest_manifest(&reqwest::Client::new(), &server.base_url(), Some(ETAG), false)
-            .await?;
+        fetch_latest_manifest(&reqwest::Client::new(), &server.base_url(), Some(ETAG)).await?;
 
     assert!(matches!(outcome, FetchOutcome::NotModified), "got {outcome:?}");
     let sent = server.requests();
@@ -125,14 +124,13 @@ async fn a_not_modified_response_short_circuits_before_verification() -> TestRes
     Ok(())
 }
 
-/// `force_refresh` is how the Check button clears a sticky `UnsupportedSchema`: a cached etag
-/// would otherwise 304 forever and the user would see the same refusal on every check.
+/// A full read is how a check reaches a manifest its stored tag can't vouch for, so it must not
+/// let the server answer `304`.
 #[tokio::test]
-async fn a_forced_refresh_sends_no_conditional_header() -> TestResult {
+async fn a_full_read_sends_no_conditional_header() -> TestResult {
     let server = server_with_signature(MANIFEST, TestResponse::status(404))?;
 
-    let outcome =
-        fetch_latest_manifest(&reqwest::Client::new(), &server.base_url(), Some(ETAG), true).await;
+    let outcome = fetch_latest_manifest(&reqwest::Client::new(), &server.base_url(), None).await;
     assert!(outcome.is_err(), "the unsigned body is still refused");
 
     let sent = server.requests();

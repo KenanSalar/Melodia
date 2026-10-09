@@ -354,13 +354,7 @@ fn main() -> AppResult<()> {
 
     boot::ui_setup::install_toast_bridge(weak.clone(), notifications.clone())?;
 
-    // No-op unless `MELODIA_RSS_SAMPLE` is set. The tag is read here rather than
-    // inside the sampler so `tasks/` names nothing under `ui::`; it runs on the UI
-    // thread, so the Nav / *Detail globals need no atomic shadow.
-    let tag_weak = weak.clone();
-    tasks::rss_sampler::install(move || {
-        tag_weak.upgrade().map(|ui| ui::view_tag::format_view(&ui))
-    });
+    boot::ui_setup::install_rss_sampler(weak.clone())?;
 
     // One `watch` carries backend events from the daily task and the `Updater.*`
     // callbacks to the UI-thread subscriber that toasts them. The daily task
@@ -404,7 +398,7 @@ fn main() -> AppResult<()> {
             tasks::updater_daily::spawn(
                 &deferred_spawner,
                 deferred_state.clone(),
-                deferred_weak.clone(),
+                ui::callbacks::check_painter(deferred_weak.clone()),
                 updater_event_tx,
             );
         } else {

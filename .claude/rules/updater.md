@@ -74,7 +74,7 @@ from `main.rs` without ever opening this file.
   package-DB lookup both run at boot, so today they are defended without it — **and the second of
   those defences is one edit away.** `detect` runs at boot *and* caches: its `OnceLock` is primed
   by `is_system_install()` on a root-owned install and by `desktop_integration` on a writable one,
-  and every later caller reads it — `check_for_update` on the daily task and the user's Check
+  and every later caller reads it — `run_check` on the daily task and the user's Check
   button, the panic hook through `current_target_key()`, and `install/staging.rs`. Drop the cache
   and those three ask a fresh `rpm -qf` mid-session, squarely inside the window. Keep the routing
   regardless, because the failure **compounds**: a marked path makes `rpm -qf` miss, so `detect`
@@ -119,7 +119,7 @@ from `main.rs` without ever opening this file.
   after that guard landed.
 
 - **Manifest schema gate + critical-release flag** (`crates/melodia-app/src/services/updater/manifest.rs`).
-  `manifest_schema_version: u32` (default 1) — `check.rs` returns `CheckOutcome::UnsupportedSchema`
+  `manifest_schema_version: u32` (default 1) — `check.rs` returns `Verdict::UnsupportedSchema`
   when `> SUPPORTED_MANIFEST_SCHEMA`, treated like `NoAssetForTarget`; bumping it means bumping
   `build-latest-json.py`'s `--manifest-schema-version` and the CI invocation. `critical: bool`
   (default false) hides "Skip this version" and bypasses the `skipped_release` filter, set via

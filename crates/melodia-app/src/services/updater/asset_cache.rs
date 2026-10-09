@@ -1,17 +1,16 @@
 //! In-memory cache of the most-recently-observed `Available` asset.
 //!
-//! `Updater.install` (`ui::callbacks::wire_updater`) re-fetches `latest.json`
-//! for the asset blob (URL + signature + size) before downloading. That is cheap on
-//! the happy path — the cached `ETag` usually 304s — but fails outright on a flaky
-//! network, and a failure between the Available toast and the Install click surfaced
-//! as a confusing re-fetch error.
+//! `Updater.install` (`ui::callbacks::wire_updater`) re-reads `latest.json`
+//! for the asset blob (URL + signature + size) before downloading. That fails
+//! outright on a flaky network, and a failure between the Available toast and the
+//! Install click surfaced as a confusing re-fetch error.
 //!
 //! So `spawn_install` falls back to the last `PlatformAsset` from a successful
 //! `Available` outcome: it stays valid as long as the release hasn't been retracted,
 //! and the signature check downstream catches any URL drift. Process-scoped, cleared
 //! on `Installed` so a stale asset can't survive into an in-process re-check, and
-//! never persisted — `last_known_release` tracks the version label for the UI, not
-//! the download target.
+//! never persisted: `settings.json` keeps a manifest's version and tag for
+//! revalidating it, not the download target.
 
 use std::sync::OnceLock;
 
@@ -35,8 +34,8 @@ fn slot() -> &'static Mutex<Option<CachedAsset>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
-/// Replace the cached asset. Called from everything that observes a
-/// `CheckOutcome::Available` — manual check, daily task, install re-fetch.
+/// Replace the cached asset. Called wherever a check finds `Verdict::Available`:
+/// `run_check` and the install re-fetch.
 pub fn store(version: String, asset: PlatformAsset) {
     *slot().lock() = Some(CachedAsset { version, asset });
 }

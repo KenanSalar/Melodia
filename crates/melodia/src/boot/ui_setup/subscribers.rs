@@ -1,5 +1,5 @@
 //! Backend-to-UI bridges: the three `Signal` subscribers, the artwork restore's count and the
-//! process-wide toast channel.
+//! process-wide toast channel. Plus the memory sampler, whose loop reads the UI.
 //!
 //! Each `Signal` one is a closure over `ui::signal::on_signal`, which owns the subscribe-and-spawn
 //! loop; what is left here is what each one does with the tick.
@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use melodia_app::state::AppState;
+use melodia_app::tasks;
 use melodia_ui::AppWindow;
 use melodia_views::ui;
 use slint::ComponentHandle;
@@ -233,4 +234,18 @@ pub fn install_toast_bridge(
     }))
     .map(|_| ())
     .map_err(|e| melodia_core::error::AppError::io("toast bridge", e))
+}
+
+/// Run the memory sampler on the UI thread, where its tag reads the Nav and detail globals with
+/// no atomic shadow. A no-op unless `MELODIA_RSS_SAMPLE` is set.
+pub fn install_rss_sampler(
+    weak: slint::Weak<AppWindow>,
+) -> Result<(), melodia_core::error::AppError> {
+    let view_tag = move || weak.upgrade().map(|ui| ui::view_tag::format_view(&ui));
+    let Some(sampler) = tasks::rss_sampler::sampler(view_tag) else {
+        return Ok(());
+    };
+    slint::spawn_local(async_compat::Compat::new(sampler))
+        .map(|_| ())
+        .map_err(|e| melodia_core::error::AppError::io("memory sampler", e))
 }
