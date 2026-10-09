@@ -25,6 +25,7 @@ use crate::ui::launcher;
 use crate::ui::util::opt_shared;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::entities::integrations::ScrobbleFlags;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
@@ -83,7 +84,7 @@ fn scrobble_toggle_binding(
     state: &AppState,
     label: &'static str,
     set_field: fn(&mut ScrobbleFlags, bool),
-    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    persist: fn(&Paths, bool) -> Result<(), AppError>,
     on_enable: Option<fn(&AppState)>,
 ) -> impl FnMut(bool) + 'static {
     let state = state.clone();
@@ -94,7 +95,7 @@ fn scrobble_toggle_binding(
         if on && let Some(effect) = on_enable {
             effect(&state);
         }
-        state.persist_blocking(label, move |s| persist(s, on));
+        state.persist_blocking(label, move |paths| persist(paths, on));
     }
 }
 

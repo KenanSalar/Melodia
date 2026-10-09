@@ -46,7 +46,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             spawn_blocking_logged!(
                 s_disk,
                 "browse::set_view_mode",
-                library::settings::set_browse_view_mode(&s_disk, mode_idx)
+                library::settings::set_browse_view_mode(&s_disk.paths, mode_idx)
             );
         });
     }

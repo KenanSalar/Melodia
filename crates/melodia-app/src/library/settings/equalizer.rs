@@ -5,14 +5,14 @@
 //! choice. Mirrors the shape of [`super::playback`].
 
 use crate::services;
-use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::equalizer;
 
 /// Persist the EQ on/off toggle. Defaults to `false` on first launch
 /// (`EqualizerFlags::default()`), so new installs land with the EQ inert.
-pub fn set_eq_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_eq_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.equalizer.eq_enabled = enabled;
     })
 }
@@ -21,9 +21,9 @@ pub fn set_eq_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
 /// `settings.json` can't pin an out-of-range value. The runtime effect is
 /// applied synchronously by the UI callback through
 /// `library::playback::player_set_eq_preamp` before this disk write.
-pub fn set_eq_preamp(state: &AppState, preamp_db: f32) -> Result<(), AppError> {
+pub fn set_eq_preamp(paths: &Paths, preamp_db: f32) -> Result<(), AppError> {
     let preamp_db = equalizer::clamp_preamp(preamp_db);
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.equalizer.eq_preamp = preamp_db;
     })
 }
@@ -39,12 +39,12 @@ pub fn set_eq_preamp(state: &AppState, preamp_db: f32) -> Result<(), AppError> {
 /// hand-tuned curve); hydration falls back to a Custom display when the name
 /// isn't one of the built-in presets.
 pub fn set_eq_band_gains_and_preset(
-    state: &AppState,
+    paths: &Paths,
     gains: &[f32],
     preset: String,
 ) -> Result<(), AppError> {
     let norm = equalizer::normalize_gains(gains).to_vec();
-    services::settings::mutate_settings(&state.paths, move |settings| {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.equalizer.eq_band_gains = norm;
         settings.equalizer.eq_selected_preset = preset;
     })

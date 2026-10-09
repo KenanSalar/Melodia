@@ -59,7 +59,7 @@ pub(super) fn wire(
             let result = s
                 .runtime
                 .spawn(async move {
-                    playlist_files::import_playlists_from_files(&import_state, &paths).await
+                    playlist_files::import_playlists_from_files(&import_state.db, &paths).await
                 })
                 .await
                 .unwrap_or_else(|e| {

@@ -12,7 +12,7 @@ use crate::state::fixtures::{seeded_root, seeded_root_with};
 use melodia_core::error::AppError;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 
-use super::{apply_then_persist, persist_always_on_top, write_use_native_titlebar};
+use super::{apply_then_persist, record_always_on_top, write_use_native_titlebar};
 
 /// KDE's unfocused tint mirrors its own window-decoration fade, so it ships on the moment the
 /// native titlebar does. It is still a write the user did not ask for, and both fields have to
@@ -90,7 +90,7 @@ async fn a_pin_the_window_manager_drops_is_persisted() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root_with(|s| s.window.always_on_top = true)?;
     let paths = Arc::new(paths);
 
-    persist_always_on_top(&paths, false).await?;
+    record_always_on_top(&paths, false).await?;
 
     assert!(!services::settings::read_settings(&paths)?.window.always_on_top);
     Ok(())

@@ -20,8 +20,8 @@ use melodia_ui::AppWindow;
 /// `tokio::join!`, **not** `try_join!`: a failure on one tab must not suppress the other.
 pub async fn refresh_grids(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let (most_played_res, fav_artists_res) = tokio::join!(
-        library::favorites::get_most_played_favorites(state),
-        library::favorites::get_favorite_artists(state),
+        library::favorites::get_most_played_favorites(&state.db),
+        library::favorites::get_favorite_artists(&state.db),
     );
 
     // Logged before the guard below, not at the store — a query that failed is worth a line

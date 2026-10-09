@@ -143,7 +143,7 @@ pub fn resolve_view_sort(
     view_id: &str,
     default_field: &str,
 ) -> (String, String) {
-    melodia_app::library::settings::get_view_sort(state, view_id).map_or_else(
+    melodia_app::library::settings::get_view_sort(&state.paths, view_id).map_or_else(
         || (default_field.to_owned(), "asc".to_owned()),
         |s| (s.field, s.dir.as_str().to_owned()),
     )

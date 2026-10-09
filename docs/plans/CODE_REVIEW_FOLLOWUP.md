@@ -198,18 +198,32 @@ Re-measured on 2026-10-09: app ran 3 raw SQL strings (`tasks/tag_backfill.rs`,
 
 ## Phase 5: library functions take what they read
 
-Today about 200 of the library's ~270 pub functions take `&AppState`. About 145 of those read only
-`state.paths` (~80) or only `state.db` (~65). In `library/settings/` it is about 70 of 80, nearly
-all `paths`-only.
+Re-measured on 2026-10-09: 211 pub library functions took `&AppState`, and 141 of them read one
+field and nothing else, 78 `state.paths` and 63 `state.db`. 67 of the `paths` ones were in
+`library/settings/`.
 
-- [ ] Work module by module, starting with `library/settings/` (`settings/playback.rs` alone has 9
-      `paths`-only functions). Go bottom-up: a function that passes `state` onward narrows after
-      its callees do.
-- [ ] The signature becomes `&Paths` or `&DbPool`, and callers pass `&state.paths` or `&state.db`.
-      `AppState` stays the composition root. Functions that really use several fields keep taking
-      it. No new context types.
-- [ ] Rewrite `state/contexts.rs`'s module doc (~lines 6 to 10), which claims library modules touch
-      most of `AppState`.
+- [x] Module by module, `settings/` and `window.rs` first, then the `db` readers. Five more
+      narrowed once their callees had: `entity_tracks::track_ids_for`, `clipboard::entity_lines`,
+      `smart_playlists::recount` and `radio::logos::{for_urls, adopted}`. 65 pub functions still
+      take `&AppState`; each reads several fields.
+- [x] Signatures take `&Paths` or `&DbPool` and callers pass `&state.paths` or `&state.db`. No new
+      context types. `AppState::persist_blocking` hands its closure `&Paths` and moves one `Arc`
+      into the blocking task, where it cloned the whole state; views' six
+      `persist: fn(&AppState, bool)` helpers take `fn(&Paths, bool)`.
+- [x] 26 private twins are gone (17 over `paths`, 9 over `db`). Each existed so a test could reach
+      a body its `&AppState` door hid, and the tests call the public function now. A twin stays
+      where its door reads several fields (`window::set_always_on_top`, `playlists`, `queue`) or
+      fills in a seam (`write_archive`'s clock, `write_use_native_titlebar`'s desktop probe).
+- [x] Left on `&AppState` deliberately: the `SharedFlag` readers, since several flags share the
+      type and a narrowed signature would take the wrong one, and the search-history and
+      `scan::cancel` forwards, which read neither field.
+- [x] `state/contexts.rs` and `library/mod.rs` say what the rule is now. The latter had argued the
+      opposite, keeping the door on `&AppState` so views never held a database handle: views
+      passes `&state.db` now, and still cannot name the type or reach a query.
+- Found on the way: `lyrics::{resident_text, forget_all}` read `state.runtime` across a line break,
+  which the first count missed, so `library::lyrics` keeps `&AppState`. Three intra-doc links
+  were already broken (`radio/authoring.rs`, `lyrics/store.rs`, views' `radio/facets.rs`) and are
+  fixed.
 
 ## Phase 6: one wiring for the four detail views
 

@@ -123,7 +123,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let s = state.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                let detail = match library::playlists::get_playlist_detail(&s, id).await {
+                let detail = match library::playlists::get_playlist_detail(&s.db, id).await {
                     Ok(p) => p,
                     Err(e) => {
                         log::warn!("smart edit fetch {id}: {}", describe(&e));
@@ -183,9 +183,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     // Name / description are user-owned too — update them along
                     // with the criteria. `update_smart_criteria` bumps
                     // `library_changed`, so the grid + open detail refresh.
-                    if let Err(e) =
-                        library::playlists::update_playlist(&s, target_id, name, description, None)
-                            .await
+                    if let Err(e) = library::playlists::update_playlist(
+                        &s.db,
+                        target_id,
+                        name,
+                        description,
+                        None,
+                    )
+                    .await
                     {
                         log::warn!("update smart playlist meta {target_id}: {}", describe(&e));
                     }

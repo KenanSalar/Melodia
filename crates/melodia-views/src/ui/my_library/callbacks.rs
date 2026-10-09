@@ -39,7 +39,7 @@ fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
     let persist = Arc::clone(persist);
     state.runtime.spawn_blocking(move || {
         persist.write_if_current(tab, || {
-            if let Err(e) = library::settings::set_my_library_tab(&s, tab) {
+            if let Err(e) = library::settings::set_my_library_tab(&s.paths, tab) {
                 log::warn!("my_library: set_my_library_tab({tab}): {}", describe(&e));
             }
         });

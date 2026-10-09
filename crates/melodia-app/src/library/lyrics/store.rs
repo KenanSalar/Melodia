@@ -62,7 +62,7 @@ pub(super) fn read(dir: &Path, track_path: &str) -> Option<LyricsOutcome> {
 
 /// What came back, in the form the store keeps it.
 ///
-/// The sheet crosses as **text** rather than as a parsed [`Lyrics`]: what goes on disk is what the
+/// The sheet crosses as **text** rather than as a parsed `Lyrics`: what goes on disk is what the
 /// directory sent, so re-reading it later cannot differ from reading it now, and a sheet written
 /// back through a serializer would quietly lose whatever this parser drops.
 #[derive(Clone, Copy)]

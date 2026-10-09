@@ -429,7 +429,7 @@ async fn an_exported_playlist_imports_back_with_the_same_tracks() -> Result<(), 
     let playlist_id = playlist_with_tracks(&db, "Round Trip", &ids).await?;
 
     let out = tmp.path().join("Round Trip.m3u8");
-    write_playlist(&db, playlist_id, &out).await?;
+    export_playlist_to_file(&db, playlist_id, &out).await?;
 
     let result = read_playlist_file(&db, &out).await?;
 
@@ -554,7 +554,7 @@ async fn a_smart_playlist_exports_the_tracks_its_rules_match() -> Result<(), App
     let smart = queries::playlist::create_smart_playlist(&db, "No Beta", None, &json).await?;
     let out = tmp.path().join("No Beta.m3u8");
 
-    write_playlist(&db, smart.id, &out).await?;
+    export_playlist_to_file(&db, smart.id, &out).await?;
 
     let result = read_playlist_file(&db, &out).await?;
     assert_eq!(titles_in(&db, result.playlist_id).await?, ["Alpha Song", "Gamma Song"]);

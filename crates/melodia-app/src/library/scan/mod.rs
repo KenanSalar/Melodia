@@ -34,8 +34,8 @@ use melodia_core::entities::folder::Folder;
 use melodia_core::entities::scan::{ExistingTrackSummary, ScannedFile};
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
-use melodia_store::database::queries;
 use melodia_store::database::queries::ingest::Ingested;
+use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{
     MediaWalk, ScanObserver, collect_media_files, scan_files_parallel, track_is_current,
@@ -174,7 +174,7 @@ async fn scan_one(
     if !Path::new(&folder.path).exists() {
         return Err(AppError::scanner_msg(format!("Folder does not exist: {}", folder.path)));
     }
-    let scope = Arc::new(ScanScope::of(state, &folder).await?);
+    let scope = Arc::new(ScanScope::of(&state.db, &folder).await?);
 
     // Read-side pre-load through the read pool (before the writer tx opens):
     // size + mtime for every track already in this folder. Doesn't contend
@@ -258,7 +258,7 @@ async fn scan_one(
         return Ok(ScanOutcome::Stopped { rewrote_existing: ingested.rewrote_existing() });
     }
     queries::scan::commit_scan(&state.db, &folder, Some(walk), &ingested).await?;
-    finish::absorb_nested(state, &folder, &scope.nested).await?;
+    finish::absorb_nested(&state.db, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
     state.library_changed.bump();
 
@@ -273,8 +273,8 @@ struct ScanScope {
 
 impl ScanScope {
     /// On the blocking pool, since telling which folders are nested costs a stat apiece.
-    async fn of(state: &AppState, folder: &Folder) -> Result<Self, AppError> {
-        let folders = queries::folder::get_all_folders(&state.db).await?;
+    async fn of(db: &DbPool, folder: &Folder) -> Result<Self, AppError> {
+        let folders = queries::folder::get_all_folders(db).await?;
         let root = PathBuf::from(&folder.path);
         tokio::task::spawn_blocking(move || {
             let nested = folders_inside(&root, &folders);

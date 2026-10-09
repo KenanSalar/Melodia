@@ -215,9 +215,11 @@ pub(in crate::ui) fn open_album_cross_tab(
 
     let s_disk = state.clone();
     state.runtime.spawn_blocking(move || {
-        if let Err(e) =
-            library::settings::set_last_detail_id(&s_disk, view_id::ALBUM_DETAIL, Some(album_id))
-        {
+        if let Err(e) = library::settings::set_last_detail_id(
+            &s_disk.paths,
+            view_id::ALBUM_DETAIL,
+            Some(album_id),
+        ) {
             log::warn!("{log_tag} persist: {}", describe(&e));
         }
     });
@@ -260,9 +262,11 @@ pub(in crate::ui) fn open_artist_cross_tab(
 
     let s_disk = state.clone();
     state.runtime.spawn_blocking(move || {
-        if let Err(e) =
-            library::settings::set_last_detail_id(&s_disk, view_id::ARTIST_DETAIL, Some(artist_id))
-        {
+        if let Err(e) = library::settings::set_last_detail_id(
+            &s_disk.paths,
+            view_id::ARTIST_DETAIL,
+            Some(artist_id),
+        ) {
             log::warn!("{log_tag} persist: {}", describe(&e));
         }
     });
@@ -311,9 +315,11 @@ fn make_go_to_genre(
 
         let s_disk = s.clone();
         s.runtime.spawn_blocking(move || {
-            if let Err(e) =
-                library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, Some(id))
-            {
+            if let Err(e) = library::settings::set_last_detail_id(
+                &s_disk.paths,
+                view_id::GENRE_DETAIL,
+                Some(id),
+            ) {
                 log::warn!("cross_tab_nav::go_to_genre persist: {}", describe(&e));
             }
         });

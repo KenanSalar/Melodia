@@ -201,7 +201,7 @@ async fn fetch_track_meta(state: &AppState, track: Option<&Arc<TrackSummary>>) -
         return TrackMetaRow::default();
     };
 
-    match library::tracks::get_track_meta(state, track.id).await {
+    match library::tracks::get_track_meta(&state.db, track.id).await {
         Ok(Some(meta)) => to_slint_track_meta(&meta),
         Ok(None) => TrackMetaRow::default(),
         Err(e) => {

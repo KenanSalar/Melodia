@@ -86,8 +86,8 @@ struct AppearanceSnapshot {
 /// failed read so the caller can retain its previous snapshot (transient
 /// failure) or bail until the next kick (no snapshot yet).
 async fn read_appearance(state: &AppState) -> Option<AppearanceSnapshot> {
-    let state = state.clone();
-    match tokio::task::spawn_blocking(move || library::settings::get_settings(&state)).await {
+    let paths = Arc::clone(&state.paths);
+    match tokio::task::spawn_blocking(move || library::settings::get_settings(&paths)).await {
         Ok(Ok(s)) => Some(AppearanceSnapshot {
             theme_id: s.theme_id,
             dynamic_color_style: s.dynamic_color_style,

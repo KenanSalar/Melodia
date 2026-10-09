@@ -6,11 +6,11 @@ use crate::state::AppState;
 use crate::tasks::{self, TaskSpawner};
 use melodia_core::entities::folder::Folder;
 use melodia_core::error::AppError;
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 /// Hands `folder` the folders nested in it, tracks and all, now that a scan of it has completed.
 pub(super) async fn absorb_nested(
-    state: &AppState,
+    db: &DbPool,
     folder: &Folder,
     nested: &[NestedFolder],
 ) -> Result<(), AppError> {
@@ -18,7 +18,7 @@ pub(super) async fn absorb_nested(
         return Ok(());
     }
     let ids: Vec<i64> = nested.iter().map(|f| f.id).collect();
-    queries::folder::absorb_folders(&state.db, folder.id, &ids).await?;
+    queries::folder::absorb_folders(db, folder.id, &ids).await?;
     log::info!("Folded {} nested folder(s) into {}", ids.len(), folder.path);
     Ok(())
 }

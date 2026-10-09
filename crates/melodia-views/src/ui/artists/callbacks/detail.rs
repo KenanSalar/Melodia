@@ -85,7 +85,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
                 if let Err(e) = library::settings::set_last_detail_id(
-                    &s_disk,
+                    &s_disk.paths,
                     crate::ui::track_list_view::view_id::ARTIST_DETAIL,
                     None,
                 ) {
@@ -271,7 +271,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
             spawn_blocking_logged!(
                 s,
                 "artists::set_albums_collapsed",
-                library::settings::set_artist_albums_collapsed(&s, new_state)
+                library::settings::set_artist_albums_collapsed(&s.paths, new_state)
             );
         });
     }

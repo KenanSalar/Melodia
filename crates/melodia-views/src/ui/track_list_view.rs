@@ -79,7 +79,7 @@ pub fn persist_visible<T: TrackListColumnState>(state: &AppState, h: &T) {
     spawn_blocking_logged!(
         s,
         "track_list_view::persist_visible",
-        library::settings::update_view_columns(&s, view_id.to_owned(), columns)
+        library::settings::update_view_columns(&s.paths, view_id.to_owned(), columns)
     );
 }
 

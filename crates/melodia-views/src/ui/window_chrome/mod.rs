@@ -167,7 +167,7 @@ pub fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
 /// Hydrate `Theme.use-native-titlebar` from the persisted setting and wire the
 /// `WindowChrome` callbacks. Must run between `AppWindow::new()` and `app.run()`.
 pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
-    let settings = melodia_app::library::settings::get_settings(state)?;
+    let settings = melodia_app::library::settings::get_settings(&state.paths)?;
     let use_native = settings.window.use_native_titlebar;
 
     app.global::<Theme>().set_use_native_titlebar(use_native);
@@ -268,7 +268,8 @@ fn follow_reported_pin(
                 }
                 chrome.set_always_on_top_active(pinned);
             }
-            if let Err(e) = melodia_app::library::window::record_always_on_top(&state, pinned).await
+            if let Err(e) =
+                melodia_app::library::window::record_always_on_top(&state.paths, pinned).await
             {
                 log::warn!("record always_on_top: {}", describe(&e));
             }

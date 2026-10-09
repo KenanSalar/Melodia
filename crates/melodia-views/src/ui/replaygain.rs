@@ -51,8 +51,8 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         rg.on_set_mode(move |idx| {
             let mode = RgMode::from_u8(u8::try_from(idx).unwrap_or(1));
             library::playback::player_set_replaygain_mode(&state.playback_ctx(), mode);
-            state.persist_blocking("persist rg_mode", move |s| {
-                library::settings::set_replaygain_mode(s, mode)
+            state.persist_blocking("persist rg_mode", move |paths| {
+                library::settings::set_replaygain_mode(paths, mode)
             });
         });
     }
@@ -84,8 +84,8 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         let state = state.clone();
         rg.on_commit_preamp(move |db| {
             let db = replaygain::clamp_rg_preamp(db);
-            state.persist_blocking("persist rg_preamp", move |s| {
-                library::settings::set_replaygain_preamp(s, db)
+            state.persist_blocking("persist rg_preamp", move |paths| {
+                library::settings::set_replaygain_preamp(paths, db)
             });
         });
     }

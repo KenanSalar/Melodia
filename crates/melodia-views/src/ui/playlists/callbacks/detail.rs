@@ -56,7 +56,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
                 if let Err(e) = library::settings::set_last_detail_id(
-                    &s_disk,
+                    &s_disk.paths,
                     crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                     None,
                 ) {
@@ -259,7 +259,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 if let Err(e) =
-                    library::playlists::reorder_playlist(&s, playlist_id, from, to).await
+                    library::playlists::reorder_playlist(&s.db, playlist_id, from, to).await
                 {
                     log::warn!("playlists::reorder: {}", describe(&e));
                     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -289,7 +289,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let s = s.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                let candidates = library::playlists::get_playlist_artwork_paths(&s, id)
+                let candidates = library::playlists::get_playlist_artwork_paths(&s.db, id)
                     .await
                     .unwrap_or_default();
                 let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -334,9 +334,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) =
-                    library::playlists::remove_tracks_from_playlist_batch(&s, playlist_id, id_vec)
-                        .await
+                if let Err(e) = library::playlists::remove_tracks_from_playlist_batch(
+                    &s.db,
+                    playlist_id,
+                    id_vec,
+                )
+                .await
                 {
                     log::warn!("playlists::remove_track: {}", describe(&e));
                     return;

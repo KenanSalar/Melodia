@@ -184,7 +184,7 @@ pub(super) fn persist_view_sort(
     let s = state.clone();
     let sort = ViewSort { field, dir };
     state.runtime.spawn_blocking(move || {
-        if let Err(e) = library::settings::set_view_sort(&s, view_id.to_owned(), sort) {
+        if let Err(e) = library::settings::set_view_sort(&s.paths, view_id.to_owned(), sort) {
             log::warn!("{view_id}::set_view_sort: {}", describe(&e));
         }
     });
@@ -323,7 +323,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             let persist = Arc::clone(&persist);
             s.runtime.spawn_blocking(move || {
                 persist.write_if_current(idx, || {
-                    if let Err(e) = library::settings::set_last_nav_index(&s_disk, idx) {
+                    if let Err(e) = library::settings::set_last_nav_index(&s_disk.paths, idx) {
                         log::warn!("nav: set_last_nav_index({idx}): {}", describe(&e));
                     }
                 });
@@ -338,7 +338,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
             let s = s.clone();
             let id = i64::from(track_id);
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::tracks::reveal_in_file_manager(&s, id).await {
+                if let Err(e) = library::tracks::reveal_in_file_manager(&s.db, id).await {
                     log::warn!("nav: reveal_in_folder({id}): {}", describe(&e));
                 }
             });

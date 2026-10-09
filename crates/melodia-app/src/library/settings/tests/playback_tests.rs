@@ -21,8 +21,7 @@ use melodia_playback::player::playback::output::{
 };
 
 use super::{
-    set_playback_speed, write_bit_perfect_reset, write_bit_perfect_switch,
-    write_play_button_animation,
+    reset_for_bit_perfect, set_play_button_animation, set_playback_speed, switch_to_bit_perfect,
 };
 
 fn stored_token(paths: &Paths) -> Result<String, AppError> {
@@ -37,7 +36,7 @@ fn stored_speed(paths: &Paths) -> Result<f64, AppError> {
 fn a_known_animation_token_is_stored_as_it_came() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_play_button_animation(&paths, "equalizer".to_owned())?;
+    set_play_button_animation(&paths, "equalizer".to_owned())?;
 
     assert_eq!(stored_token(&paths)?, "equalizer");
     Ok(())
@@ -49,7 +48,7 @@ fn a_known_animation_token_is_stored_as_it_came() -> Result<(), AppError> {
 fn the_retired_ripple_token_falls_back_to_none() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_play_button_animation(&paths, "ripple".to_owned())?;
+    set_play_button_animation(&paths, "ripple".to_owned())?;
 
     assert_eq!(stored_token(&paths)?, "none");
     Ok(())
@@ -59,7 +58,7 @@ fn the_retired_ripple_token_falls_back_to_none() -> Result<(), AppError> {
 fn an_unknown_animation_token_falls_back_to_none() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_play_button_animation(&paths, "sparkle".to_owned())?;
+    set_play_button_animation(&paths, "sparkle".to_owned())?;
 
     assert_eq!(stored_token(&paths)?, "none");
     Ok(())
@@ -108,7 +107,7 @@ fn a_speed_that_is_not_a_number_is_refused_and_never_written() -> Result<(), App
 fn the_bit_perfect_reset_leaves_follow_rate_off_on_windows() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_bit_perfect_reset(&paths, MAX_VOLUME)?;
+    reset_for_bit_perfect(&paths, MAX_VOLUME)?;
 
     let settings = services::settings::read_settings(&paths)?;
     assert!(!settings.output.output_follow_rate, "the reset turned on a row Windows hides");
@@ -123,7 +122,7 @@ fn the_bit_perfect_reset_follows_the_files_rate_where_the_system_resamples() -> 
 {
     let (_tmp, paths) = seeded_root()?;
 
-    write_bit_perfect_reset(&paths, MAX_VOLUME)?;
+    reset_for_bit_perfect(&paths, MAX_VOLUME)?;
 
     let settings = services::settings::read_settings(&paths)?;
     assert!(settings.output.output_follow_rate, "the reset left the system resampling the file");
@@ -142,7 +141,7 @@ fn the_bit_perfect_reset_writes_every_stage_it_cleared() -> Result<(), AppError>
         settings.volume = 30;
     })?;
 
-    write_bit_perfect_reset(&paths, MAX_VOLUME)?;
+    reset_for_bit_perfect(&paths, MAX_VOLUME)?;
 
     let s = services::settings::read_settings(&paths)?;
     let written = (
@@ -182,7 +181,7 @@ fn the_bit_perfect_reset_keeps_how_each_stage_it_cleared_was_set() -> Result<(),
     };
     let before = tuning(&services::settings::read_settings(&paths)?);
 
-    write_bit_perfect_reset(&paths, MAX_VOLUME)?;
+    reset_for_bit_perfect(&paths, MAX_VOLUME)?;
 
     let after = tuning(&services::settings::read_settings(&paths)?);
     assert_eq!(after, before, "(curve, preamp bits, preset, ReplayGain preamp bits, mode)");
@@ -205,7 +204,7 @@ fn the_switch_to_bit_perfect_writes_the_claim_and_the_reset_together() -> Result
         rate_fallback: RateFallback::Resample,
     };
 
-    write_bit_perfect_switch(&paths, &choice, MAX_VOLUME)?;
+    switch_to_bit_perfect(&paths, &choice, MAX_VOLUME)?;
 
     let s = services::settings::read_settings(&paths)?;
     let written = (s.output.output_choice(), s.equalizer.eq_enabled, s.replaygain.rg_enabled);

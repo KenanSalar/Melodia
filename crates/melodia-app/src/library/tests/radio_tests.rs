@@ -8,7 +8,7 @@ use melodia_store::database::{DbPool, queries};
 
 use super::authoring::{ensure_editable, resolve_station_name, website_url};
 use super::directory::{hide_segmented, hide_segmented_codecs, names_segmented};
-use super::{drop_from_favorites, drop_from_recent, is_listed};
+use super::{is_listed, remove_from_favorites, remove_from_recent};
 
 /// One directory row, segmented or not. Spelled out rather than defaulted: `DirectoryStation` has
 /// no `Default`, a station with no uuid and no URL being one nothing may keep.
@@ -317,7 +317,7 @@ async fn un_starring_a_played_directory_station_keeps_its_row() -> Result<(), Ap
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
     let id = seed(&db, &station).await?;
 
-    drop_from_favorites(&db, id).await?;
+    remove_from_favorites(&db, id).await?;
 
     let kept = stored_row(&db, id).await?;
     assert!(matches!(&kept, Some(row) if !row.is_favorite), "the star is what was asked for");
@@ -335,7 +335,7 @@ async fn un_starring_a_never_played_directory_station_deletes_its_row() -> Resul
     let db = DbPool::test_pool().await?;
     let id = seed(&db, &stored(Some("uuid-1"))).await?;
 
-    drop_from_favorites(&db, id).await?;
+    remove_from_favorites(&db, id).await?;
 
     assert!(stored_row(&db, id).await?.is_none());
     Ok(())
@@ -352,7 +352,7 @@ async fn un_starring_a_hand_typed_station_deletes_it_however_often_it_was_played
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
     let id = seed(&db, &station).await?;
 
-    drop_from_favorites(&db, id).await?;
+    remove_from_favorites(&db, id).await?;
 
     assert!(stored_row(&db, id).await?.is_none());
     Ok(())
@@ -367,7 +367,7 @@ async fn clearing_the_history_of_a_starred_station_keeps_its_row() -> Result<(),
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
     let id = seed(&db, &station).await?;
 
-    drop_from_recent(&db, id).await?;
+    remove_from_recent(&db, id).await?;
 
     let kept = stored_row(&db, id).await?;
     assert!(matches!(&kept, Some(row) if row.last_played.is_none()), "the plays are forgotten");
@@ -385,7 +385,7 @@ async fn clearing_the_history_of_an_unstarred_station_deletes_its_row() -> Resul
     station.last_played = Some("2026-08-23T00:00:00.000+00:00".to_owned());
     let id = seed(&db, &station).await?;
 
-    drop_from_recent(&db, id).await?;
+    remove_from_recent(&db, id).await?;
 
     assert!(stored_row(&db, id).await?.is_none());
     Ok(())

@@ -194,26 +194,24 @@ fn provider_name(target: LoveTarget) -> &'static str {
     }
 }
 
-pub async fn get_favorite_tracks(state: &AppState) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_favorite_tracks_for_list(&state.db).await
+pub async fn get_favorite_tracks(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
+    queries::track::get_favorite_tracks_for_list(db).await
 }
 
-pub async fn get_favorite_stats(state: &AppState) -> Result<track::FavoriteStats, AppError> {
-    queries::track::get_favorite_stats(&state.db).await
+pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
+    queries::track::get_favorite_stats(db).await
 }
 
-pub async fn get_favorite_artists(
-    state: &AppState,
-) -> Result<Vec<artist::FavoriteArtist>, AppError> {
-    queries::artist::get_favorite_artists(&state.db).await
+pub async fn get_favorite_artists(db: &DbPool) -> Result<Vec<artist::FavoriteArtist>, AppError> {
+    queries::artist::get_favorite_artists(db).await
 }
 
 /// Favorite tracks ranked by play count — the whole set, since the Most Played
 /// tab is a virtualized grid and has no reason to truncate.
 pub async fn get_most_played_favorites(
-    state: &AppState,
+    db: &DbPool,
 ) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    queries::track::get_most_played_favorites(&state.db).await
+    queries::track::get_most_played_favorites(db).await
 }
 
 #[cfg(test)]

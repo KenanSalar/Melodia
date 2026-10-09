@@ -29,7 +29,7 @@ use melodia_ui::{AppWindow, MiniPlayer, Settings, Theme};
 /// `tasks::material_you` so the coordinator can write dynamic palettes
 /// back into `os_state` and kick repaints.
 pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, AppError> {
-    let settings = library::settings::get_settings(state)?;
+    let settings = library::settings::get_settings(&state.paths)?;
 
     // Read the OS appearance state synchronously. We're on the main
     // thread, before the Slint event loop, so a brief D-Bus + file read
@@ -152,7 +152,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
 
     // The boot migration for a `settings.json` written before `theme_preferences`
     // existed.
-    if let Err(e) = library::settings::seed_theme_preference(state) {
+    if let Err(e) = library::settings::seed_theme_preference(&state.paths) {
         log::warn!("seed theme_preferences: {}", describe(&e));
     }
 

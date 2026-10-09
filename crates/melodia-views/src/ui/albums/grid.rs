@@ -26,7 +26,7 @@ pub async fn fetch_grid(
     albums_ui: &Arc<AlbumsUi>,
     weak: Weak<AppWindow>,
 ) -> AppResult<()> {
-    let albums = library::albums::get_albums(state).await?;
+    let albums = library::albums::get_albums(&state.db).await?;
     let data = Arc::new(GridData::new(albums));
     // Serialize against `AlbumsUi::release_section_state`'s wipe via the
     // shared section gate. Without this serialization, a fast leave→

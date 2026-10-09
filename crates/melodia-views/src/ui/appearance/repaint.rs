@@ -21,7 +21,7 @@ use melodia_ui::{AppWindow, Settings};
 /// Used by the Material You coordinator after it writes a fresh dynamic
 /// palette into `system.material_you` — must run on the UI thread.
 pub fn repaint_from_settings(ui: &AppWindow, state: &AppState, system: &SystemColorState) {
-    match library::settings::get_settings(state) {
+    match library::settings::get_settings(&state.paths) {
         Ok(settings) => apply_settings(ui, &settings, system),
         Err(e) => log::warn!("material_you repaint: read settings: {}", describe(&e)),
     }

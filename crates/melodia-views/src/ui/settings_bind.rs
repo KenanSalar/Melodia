@@ -9,6 +9,7 @@
 
 use melodia_app::services::settings::{self, SettingsData};
 use melodia_app::state::{AppState, PlaybackContext, SharedFlag};
+use melodia_core::config::Paths;
 use melodia_core::error::{AppError, describe};
 
 /// Persisted settings for an installer to seed its global from, falling back to the inert
@@ -30,12 +31,12 @@ pub fn toggle_binding(
     state: &AppState,
     label: &'static str,
     apply: fn(&PlaybackContext, bool),
-    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    persist: fn(&Paths, bool) -> Result<(), AppError>,
 ) -> impl FnMut(bool) + 'static {
     let state = state.clone();
     move |on| {
         apply(&state.playback_ctx(), on);
-        state.persist_blocking(label, move |s| persist(s, on));
+        state.persist_blocking(label, move |paths| persist(paths, on));
     }
 }
 
@@ -49,12 +50,12 @@ pub fn shadow_toggle(
     state: &AppState,
     shadow: &SharedFlag,
     label: &'static str,
-    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    persist: fn(&Paths, bool) -> Result<(), AppError>,
 ) -> impl Fn(bool) + 'static {
     let state = state.clone();
     let shadow = shadow.clone();
     move |on| {
         shadow.set(on);
-        state.persist_blocking(label, move |s| persist(s, on));
+        state.persist_blocking(label, move |paths| persist(paths, on));
     }
 }

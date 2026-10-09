@@ -18,8 +18,8 @@ use melodia_ui::{AppWindow, MiniPlayer, Settings, Theme};
 pub(super) fn wire_match_unfocused_bg_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_match_unfocused_bg_changed(move |on| {
-        s.persist_blocking("persist match_unfocused_to_system_bg", move |state| {
-            library::settings::set_match_unfocused_to_system_bg(state, on)
+        s.persist_blocking("persist match_unfocused_to_system_bg", move |paths| {
+            library::settings::set_match_unfocused_to_system_bg(paths, on)
         });
     });
 }
@@ -44,8 +44,8 @@ pub(super) fn wire_corner_radius_changed(ui: &AppWindow, state: &AppState) {
             reason = "snapped to {0,6,8,10,15}: exact f32 representation"
         )]
         ui.global::<Theme>().set_shell_radius(radius as f32);
-        s.persist_blocking("persist corner_radius", move |state| {
-            library::settings::set_corner_radius(state, radius)
+        s.persist_blocking("persist corner_radius", move |paths| {
+            library::settings::set_corner_radius(paths, radius)
         });
     });
 }
@@ -57,8 +57,8 @@ pub(super) fn wire_close_to_tray_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_close_to_tray_changed(move |on| {
         crate::ui::shell::tray_bridge::set_close_to_tray(on);
-        s.persist_blocking("persist close_to_tray", move |state| {
-            library::window::set_close_to_tray(state, on)
+        s.persist_blocking("persist close_to_tray", move |paths| {
+            library::window::set_close_to_tray(paths, on)
         });
     });
 }
@@ -73,8 +73,8 @@ pub(super) fn wire_titlebar_button_style_changed(ui: &AppWindow, state: &AppStat
         let Some(ui) = weak.upgrade() else { return };
         let style = style_for(idx);
         ui.global::<Theme>().set_titlebar_button_style(idx_for(style));
-        s.persist_blocking("persist titlebar_button_style", move |state| {
-            library::window::set_titlebar_button_style(state, style)
+        s.persist_blocking("persist titlebar_button_style", move |paths| {
+            library::window::set_titlebar_button_style(paths, style)
         });
     });
 }
@@ -88,8 +88,8 @@ pub(super) fn wire_mini_player_button_style_changed(ui: &AppWindow, state: &AppS
         let Some(ui) = weak.upgrade() else { return };
         let style = style_for(idx);
         ui.global::<MiniPlayer>().set_button_style(idx_for(style));
-        s.persist_blocking("persist mini_player_button_style", move |state| {
-            library::window::set_mini_player_button_style(state, style)
+        s.persist_blocking("persist mini_player_button_style", move |paths| {
+            library::window::set_mini_player_button_style(paths, style)
         });
     });
 }
@@ -106,8 +106,8 @@ pub(super) fn wire_titlebar_button_side_changed(ui: &AppWindow, state: &AppState
             _ => TitlebarButtonSide::Right,
         };
         ui.global::<Theme>().set_titlebar_button_side(idx_for_side(side));
-        s.persist_blocking("persist titlebar_button_side", move |state| {
-            library::window::set_titlebar_button_side(state, side)
+        s.persist_blocking("persist titlebar_button_side", move |paths| {
+            library::window::set_titlebar_button_side(paths, side)
         });
     });
 }
@@ -147,8 +147,8 @@ pub(super) fn wire_overflow_buttons_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_overflow_buttons_changed(move |id, on| {
         let id_str = id.to_string();
-        s.persist_blocking("persist overflow_buttons", move |state| {
-            library::settings::set_overflow_button(state, id_str, on)
+        s.persist_blocking("persist overflow_buttons", move |paths| {
+            library::settings::set_overflow_button(paths, id_str, on)
         });
     });
 }

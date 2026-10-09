@@ -102,7 +102,7 @@ pub fn wire(
             let state_for_disk = state.clone();
             state.runtime.spawn_blocking(move || {
                 if let Err(e) =
-                    library::settings::updates::set_skipped_release(&state_for_disk, version)
+                    library::settings::updates::set_skipped_release(&state_for_disk.paths, version)
                 {
                     log::warn!("updater: set_skipped_release: {}", describe(&e));
                 }
@@ -128,7 +128,8 @@ pub fn wire(
             state.runtime.spawn_blocking(move || {
                 // Kicked inside the write and only on `Ok(())`: the loop re-reads the file on
                 // waking, so a kick over a failed write would wake it onto the old answer.
-                match library::settings::updates::set_auto_check_enabled(&state_for_disk, on) {
+                match library::settings::updates::set_auto_check_enabled(&state_for_disk.paths, on)
+                {
                     Ok(()) => state_for_disk.auto_check_changed.bump(),
                     Err(e) => log::warn!("updater: set_auto_check_enabled: {}", describe(&e)),
                 }

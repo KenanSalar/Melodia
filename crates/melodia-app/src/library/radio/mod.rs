@@ -81,31 +81,28 @@ pub(super) fn directory_client(state: &AppState) -> Result<&reqwest::Client, App
 }
 
 /// Every favorited station, naturally name-ordered.
-pub async fn get_favorites(state: &AppState) -> Result<Vec<radio::RadioStation>, AppError> {
-    queries::radio::get_favorite_stations(&state.db).await
+pub async fn get_favorites(db: &DbPool) -> Result<Vec<radio::RadioStation>, AppError> {
+    queries::radio::get_favorite_stations(db).await
 }
 
 /// The stations played most recently, newest first.
-pub async fn get_recent(state: &AppState) -> Result<Vec<radio::RadioStation>, AppError> {
-    queries::radio::get_recent_stations(&state.db, RECENT_STATIONS_LIMIT).await
+pub async fn get_recent(db: &DbPool) -> Result<Vec<radio::RadioStation>, AppError> {
+    queries::radio::get_recent_stations(db, RECENT_STATIONS_LIMIT).await
 }
 
 /// One station, or `AppError::NotFound` if it is gone.
-pub async fn get_station(state: &AppState, id: i64) -> Result<radio::RadioStation, AppError> {
-    queries::radio::get_station_by_id(&state.db, id).await
+pub async fn get_station(db: &DbPool, id: i64) -> Result<radio::RadioStation, AppError> {
+    queries::radio::get_station_by_id(db, id).await
 }
 
 /// Persist a station, updating the row when the directory already knows it, and answer its id.
 /// Preserves everything the user did with it.
-pub async fn save_station(
-    state: &AppState,
-    station: &radio::NewRadioStation,
-) -> Result<i64, AppError> {
-    queries::radio::save_station(&state.db, station).await
+pub async fn save_station(db: &DbPool, station: &radio::NewRadioStation) -> Result<i64, AppError> {
+    queries::radio::save_station(db, station).await
 }
 
-pub async fn set_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(), AppError> {
-    queries::radio::set_favorite(&state.db, id, favorite).await
+pub async fn set_favorite(db: &DbPool, id: i64, favorite: bool) -> Result<(), AppError> {
+    queries::radio::set_favorite(db, id, favorite).await
 }
 
 /// Drop a station out of the Favorites tab.
@@ -116,29 +113,18 @@ pub async fn set_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(
 /// ever starred is listed nowhere once the star goes, and Browse rewrites it from the directory
 /// the moment it is kept again. A hand-typed one has no directory to be rewritten from, so this
 /// is its delete either way — see [`is_listed`].
-pub async fn remove_from_favorites(state: &AppState, id: i64) -> Result<(), AppError> {
-    drop_from_favorites(&state.db, id).await
-}
-
-/// [`remove_from_favorites`]'s body, narrowed to the pool it reaches so the ladder can be driven
-/// against real rows rather than a copy of it.
-async fn drop_from_favorites(db: &DbPool, id: i64) -> Result<(), AppError> {
+pub async fn remove_from_favorites(db: &DbPool, id: i64) -> Result<(), AppError> {
     queries::radio::set_favorite(db, id, false).await?;
-    delete_unlisted(db, id).await
+    delete_if_unlisted(db, id).await
 }
 
 /// Drop a station out of the Recently Played tab.
 ///
 /// The mirror of [`remove_from_favorites`]: forget the plays, and keep the row while a star still
 /// lists it somewhere.
-pub async fn remove_from_recent(state: &AppState, id: i64) -> Result<(), AppError> {
-    drop_from_recent(&state.db, id).await
-}
-
-/// [`remove_from_recent`]'s body, narrowed the same way as [`drop_from_favorites`].
-async fn drop_from_recent(db: &DbPool, id: i64) -> Result<(), AppError> {
+pub async fn remove_from_recent(db: &DbPool, id: i64) -> Result<(), AppError> {
     queries::radio::clear_play_history(db, id).await?;
-    delete_unlisted(db, id).await
+    delete_if_unlisted(db, id).await
 }
 
 /// Delete a row no tab would list any more.
@@ -149,13 +135,7 @@ async fn drop_from_recent(db: &DbPool, id: i64) -> Result<(), AppError> {
 /// **Every un-star owes this, not just the trash.** The star and the trash leave a station in the
 /// same place; [`set_directory_favorite`] deliberately doesn't decide, so the surface calling it
 /// has to, or a browse-and-unstar leaves a row behind on every pass.
-pub async fn delete_if_unlisted(state: &AppState, id: i64) -> Result<(), AppError> {
-    delete_unlisted(&state.db, id).await
-}
-
-/// [`delete_if_unlisted`]'s body, narrowed to the pool it reaches so what a removal leaves behind
-/// can be read back off the table.
-async fn delete_unlisted(db: &DbPool, id: i64) -> Result<(), AppError> {
+pub async fn delete_if_unlisted(db: &DbPool, id: i64) -> Result<(), AppError> {
     let station = queries::radio::get_station_by_id(db, id).await?;
     if is_listed(&station) {
         return Ok(());

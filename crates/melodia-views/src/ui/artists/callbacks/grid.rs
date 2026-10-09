@@ -106,7 +106,7 @@ pub(super) fn wire(
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
                 if let Err(e) = library::settings::set_last_detail_id(
-                    &s_disk,
+                    &s_disk.paths,
                     crate::ui::track_list_view::view_id::ARTIST_DETAIL,
                     Some(id),
                 ) {

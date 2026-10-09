@@ -82,7 +82,7 @@ pub async fn refresh_tracks(
     // Both ways of storing nothing re-arm the flag, the tab pick having *consumed* it before
     // spawning this: without the re-arm a failed query leaves the sentinel with no answer coming,
     // and the pick that would have re-asked believes the cache is current.
-    let rows = library::favorites::get_favorite_tracks(state)
+    let rows = library::favorites::get_favorite_tracks(&state.db)
         .await
         .inspect_err(|_| fav_ui.mark_songs_dirty())?;
 

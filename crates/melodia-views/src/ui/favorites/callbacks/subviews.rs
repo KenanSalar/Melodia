@@ -184,7 +184,7 @@ pub(super) fn wire(
                 // Scoped to the write alone: a superseded tab drops its own disk
                 // hop, and the cover swap below is this task's regardless.
                 persist_disk.write_if_current(tab, || {
-                    if let Err(e) = library::settings::set_favorites_tab(&s_disk, tab) {
+                    if let Err(e) = library::settings::set_favorites_tab(&s_disk.paths, tab) {
                         log::warn!("favorites::set_favorites_tab: {}", describe(&e));
                     }
                 });

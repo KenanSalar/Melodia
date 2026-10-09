@@ -17,8 +17,8 @@ use melodia_store::database::{DbPool, queries};
 use super::{directory_client, ensure_enabled, get_station};
 
 /// Count a play against a station, which is what orders the recents list.
-pub async fn mark_played(state: &AppState, id: i64) -> Result<(), AppError> {
-    queries::radio::mark_played(&state.db, id).await
+pub async fn mark_played(db: &DbPool, id: i64) -> Result<(), AppError> {
+    queries::radio::mark_played(db, id).await
 }
 
 /// Write down what the mount that just opened actually serves, where it says anything.
@@ -49,8 +49,8 @@ pub async fn record_probed_codec(db: &DbPool, station: &RadioNowPlaying, codec: 
 /// make the row conditional on the server being up.
 pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
     ensure_enabled(state)?;
-    let mut station = get_station(state, id).await?;
-    mark_played(state, id).await?;
+    let mut station = get_station(&state.db, id).await?;
+    mark_played(&state.db, id).await?;
     // The row was read before the count went in, and this play is one the Now-Playing surfaces
     // should already be stating. `mark_played` is `play_count + 1`, so this is the new value
     // rather than a guess at it.
@@ -72,7 +72,7 @@ pub async fn play_station(state: &AppState, id: i64) -> Result<(), AppError> {
 /// somebody who may not have been thinking about the station at all.
 pub async fn station_to_restore(state: &AppState, id: i64) -> Option<Arc<RadioNowPlaying>> {
     ensure_enabled(state).ok()?;
-    match get_station(state, id).await {
+    match get_station(&state.db, id).await {
         Ok(station) => Some(Arc::new(RadioNowPlaying::from(&station))),
         Err(e) => {
             log::debug!("radio: not restoring station {id}: {}", melodia_core::error::describe(&e));
@@ -108,17 +108,6 @@ async fn keep_station(
 /// Un-favoriting leaves the row: it may carry a play history, and deciding whether an unstarred
 /// never-played station is worth deleting belongs with the surface that lists them.
 pub async fn set_directory_favorite(
-    state: &AppState,
-    station: &radio::DirectoryStation,
-    favorite: bool,
-    logo: Option<&str>,
-) -> Result<i64, AppError> {
-    keep_directory_station(&state.db, station, favorite, logo).await
-}
-
-/// [`set_directory_favorite`]'s body, narrowed to the pool it reaches so what the crossing writes
-/// can be read back off the row.
-async fn keep_directory_station(
     db: &DbPool,
     station: &radio::DirectoryStation,
     favorite: bool,

@@ -172,9 +172,9 @@ fn main() -> AppResult<()> {
 
     // Read `settings.json` and `views.json` once and reuse them everywhere.
     let startup_settings: Option<services::settings::SettingsData> =
-        library::settings::get_settings(&state).ok();
+        library::settings::get_settings(&state.paths).ok();
     let startup_view_state: Option<services::view_state::ViewStateData> =
-        library::settings::get_view_state(&state).ok();
+        library::settings::get_view_state(&state.paths).ok();
 
     // Files on the command line replace the restored queue and play, so resume
     // would only be visible for the moment it takes them to land.

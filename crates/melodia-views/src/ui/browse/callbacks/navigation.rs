@@ -45,7 +45,7 @@ fn persist_path(state: &AppState, path: Option<String>) {
     spawn_blocking_logged!(
         s,
         "browse::set_browse_path",
-        library::settings::set_browse_path(&s, path)
+        library::settings::set_browse_path(&s.paths, path)
     );
 }
 

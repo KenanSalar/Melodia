@@ -118,7 +118,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 match library::playlists::create_playlist(
-                    &s,
+                    &s.db,
                     name_str.clone(),
                     description_opt,
                     pending_vec,
@@ -164,7 +164,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 match library::playlists::update_playlist(
-                    &s,
+                    &s.db,
                     id,
                     name_str.clone(),
                     description_opt,
@@ -213,7 +213,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::delete_playlists(&s, &[id]).await {
+                if let Err(e) = library::playlists::delete_playlists(&s.db, &[id]).await {
                     log::warn!("playlists::delete({id}): {}", describe(&e));
                     return;
                 }
@@ -223,7 +223,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
                     let s_disk = s.clone();
                     s.runtime.spawn_blocking(move || {
                         if let Err(e) = library::settings::set_last_detail_id(
-                            &s_disk,
+                            &s_disk.paths,
                             crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                             None,
                         ) {
@@ -267,14 +267,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                if let Err(e) = library::playlists::delete_playlists(&s, &ids).await {
+                if let Err(e) = library::playlists::delete_playlists(&s.db, &ids).await {
                     log::warn!("playlists::delete_many: {}", describe(&e));
                 }
                 if open_was_deleted {
                     let s_disk = s.clone();
                     s.runtime.spawn_blocking(move || {
                         if let Err(e) = library::settings::set_last_detail_id(
-                            &s_disk,
+                            &s_disk.paths,
                             crate::ui::track_list_view::view_id::PLAYLIST_DETAIL,
                             None,
                         ) {
@@ -342,11 +342,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let pu = pu.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                let Ok(current) = library::playlists::get_playlist_detail(&s, id).await else {
+                let Ok(current) = library::playlists::get_playlist_detail(&s.db, id).await else {
                     return;
                 };
                 if let Err(e) = library::playlists::update_playlist(
-                    &s,
+                    &s.db,
                     id,
                     current.name,
                     current.description,
@@ -397,9 +397,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 let (playlists_res, counts_res) = tokio::join!(
-                    library::playlists::get_playlists(&s),
+                    library::playlists::get_playlists(&s.db),
                     library::playlists::count_tracks_in_playlists_for_selection(
-                        &s,
+                        &s.db,
                         id_vec.clone(),
                     ),
                 );
@@ -517,7 +517,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             let s = s.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
-                let candidates = library::playlists::get_playlist_artwork_paths(&s, id)
+                let candidates = library::playlists::get_playlist_artwork_paths(&s.db, id)
                     .await
                     .unwrap_or_default();
                 let _ = weak.upgrade_in_event_loop(move |ui| {

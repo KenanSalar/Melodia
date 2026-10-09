@@ -148,7 +148,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // Scoped to the write alone: a superseded tab drops its own disk
                 // hop, and the cover swap below is this task's regardless.
                 persist_disk.write_if_current(tab, || {
-                    if let Err(e) = library::settings::set_recently_played_tab(&s_disk, tab) {
+                    if let Err(e) = library::settings::set_recently_played_tab(&s_disk.paths, tab) {
                         log::warn!("recently_played::set_recently_played_tab: {}", describe(&e));
                     }
                 });

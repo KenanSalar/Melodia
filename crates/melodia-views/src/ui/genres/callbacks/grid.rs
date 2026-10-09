@@ -109,9 +109,11 @@ pub(super) fn wire(
 
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, Some(id))
-                {
+                if let Err(e) = library::settings::set_last_detail_id(
+                    &s_disk.paths,
+                    view_id::GENRE_DETAIL,
+                    Some(id),
+                ) {
                     log::warn!("genres::open_genre persist: {}", describe(&e));
                 }
             });

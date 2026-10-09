@@ -9,14 +9,14 @@ use crate::services;
 use crate::state::fixtures::seeded_root_with;
 use melodia_core::error::AppError;
 
-use super::{PROMPT_AT_LAUNCH, record_launch_at};
+use super::{PROMPT_AT_LAUNCH, record_launch};
 
 /// The launch that asks, reached from a count an earlier launch left on disk.
 #[test]
 fn the_launch_on_the_threshold_asks_from_a_persisted_count() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root_with(|s| s.support.launch_count = PROMPT_AT_LAUNCH - 1)?;
 
-    let due = record_launch_at(&paths)?;
+    let due = record_launch(&paths)?;
 
     assert!(due, "the count came off the file, not a default");
     assert_eq!(services::settings::read_settings(&paths)?.support.launch_count, PROMPT_AT_LAUNCH);
@@ -27,7 +27,7 @@ fn the_launch_on_the_threshold_asks_from_a_persisted_count() -> Result<(), AppEr
 fn the_launch_below_it_does_not_ask() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root_with(|s| s.support.launch_count = PROMPT_AT_LAUNCH - 2)?;
 
-    let due = record_launch_at(&paths)?;
+    let due = record_launch(&paths)?;
 
     assert!(!due);
     Ok(())
@@ -42,7 +42,7 @@ fn a_settled_install_neither_asks_nor_counts() -> Result<(), AppError> {
         s.support.support_prompt_seen = true;
     })?;
 
-    let due = record_launch_at(&paths)?;
+    let due = record_launch(&paths)?;
 
     assert!(!due);
     assert_eq!(services::settings::read_settings(&paths)?.support.launch_count, PROMPT_AT_LAUNCH);

@@ -37,8 +37,8 @@ async fn fetch_album_detail(
     albums_ui: &AlbumsUi,
     album_id: i64,
 ) -> AppResult<(AlbumStats, Vec<RsTrackListRow>)> {
-    let detail = library::albums::get_album_detail(state, album_id).await?;
-    let tracks = library::albums::get_album_tracks(state, album_id).await?;
+    let detail = library::albums::get_album_detail(&state.db, album_id).await?;
+    let tracks = library::albums::get_album_tracks(&state.db, album_id).await?;
 
     // The `TrackList`'s artwork column, against the shared row tier. The header
     // tile and hero blur go through `decode_detail_pair` instead.
@@ -305,7 +305,7 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 /// time `open_album`'s closure lands. A deleted album just logs and leaves
 /// `album-id` at `-1`, so the grid renders.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
-    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
         s.last_detail_ids.get(crate::ui::track_list_view::view_id::ALBUM_DETAIL).copied()
     }) else {
         return;

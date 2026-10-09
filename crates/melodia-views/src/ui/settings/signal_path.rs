@@ -46,9 +46,9 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         let ctx = state.playback_ctx();
         // One task, the live half first: the persist writes the volume the live half left, and
         // reading the output can wait out a reopen.
-        state.persist_blocking("persist bit-perfect reset", move |state| {
+        state.persist_blocking("persist bit-perfect reset", move |paths| {
             let volume = library::playback::player_make_bit_perfect(&ctx);
-            library::settings::reset_for_bit_perfect(state, volume)
+            library::settings::reset_for_bit_perfect(paths, volume)
         });
         if let Some(ui) = weak.upgrade() {
             show_bit_perfect_reset(&ui);

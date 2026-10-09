@@ -11,7 +11,7 @@ use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_core::themes::MATERIAL_YOU_ACCENT_ID;
 
-use super::{ThemePreference, seed_preference, write_appearance};
+use super::{ThemePreference, seed_theme_preference, set_appearance};
 
 const THEME: &str = "catppuccin";
 const VARIANT: &str = "mocha";
@@ -54,7 +54,7 @@ fn seeding_over_an_entry_that_exists_leaves_it_alone() -> Result<(), AppError> {
         );
     })?;
 
-    seed_preference(&paths)?;
+    seed_theme_preference(&paths)?;
 
     assert_eq!(stored_preference(&paths)?.accent, STATIC_ACCENT);
     Ok(())
@@ -64,7 +64,7 @@ fn seeding_over_an_entry_that_exists_leaves_it_alone() -> Result<(), AppError> {
 fn seeding_records_a_static_accent_as_the_one_to_fall_back_to() -> Result<(), AppError> {
     let (_tmp, paths) = rooted_at_accent(STATIC_ACCENT)?;
 
-    seed_preference(&paths)?;
+    seed_theme_preference(&paths)?;
 
     assert_eq!(stored_preference(&paths)?.last_static_accent, Some(STATIC_ACCENT.to_owned()));
     Ok(())
@@ -76,7 +76,7 @@ fn seeding_records_a_static_accent_as_the_one_to_fall_back_to() -> Result<(), Ap
 fn seeding_a_material_you_accent_records_no_fallback() -> Result<(), AppError> {
     let (_tmp, paths) = rooted_at_accent(MATERIAL_YOU_ACCENT_ID)?;
 
-    seed_preference(&paths)?;
+    seed_theme_preference(&paths)?;
 
     assert_eq!(stored_preference(&paths)?.last_static_accent, None);
     Ok(())
@@ -87,9 +87,9 @@ fn seeding_a_material_you_accent_records_no_fallback() -> Result<(), AppError> {
 #[test]
 fn picking_material_you_preserves_the_static_accent_underneath() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
-    write_appearance(&paths, THEME.to_owned(), VARIANT.to_owned(), STATIC_ACCENT.to_owned())?;
+    set_appearance(&paths, THEME.to_owned(), VARIANT.to_owned(), STATIC_ACCENT.to_owned())?;
 
-    write_appearance(
+    set_appearance(
         &paths,
         THEME.to_owned(),
         VARIANT.to_owned(),
@@ -104,7 +104,7 @@ fn picking_material_you_preserves_the_static_accent_underneath() -> Result<(), A
 fn picking_material_you_for_a_theme_with_no_history_records_no_fallback() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_appearance(
+    set_appearance(
         &paths,
         THEME.to_owned(),
         VARIANT.to_owned(),
@@ -118,14 +118,14 @@ fn picking_material_you_for_a_theme_with_no_history_records_no_fallback() -> Res
 #[test]
 fn picking_a_static_accent_makes_it_the_one_to_fall_back_to() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
-    write_appearance(
+    set_appearance(
         &paths,
         THEME.to_owned(),
         VARIANT.to_owned(),
         MATERIAL_YOU_ACCENT_ID.to_owned(),
     )?;
 
-    write_appearance(&paths, THEME.to_owned(), VARIANT.to_owned(), STATIC_ACCENT.to_owned())?;
+    set_appearance(&paths, THEME.to_owned(), VARIANT.to_owned(), STATIC_ACCENT.to_owned())?;
 
     assert_eq!(stored_preference(&paths)?.last_static_accent, Some(STATIC_ACCENT.to_owned()));
     Ok(())
@@ -138,7 +138,7 @@ fn picking_a_static_accent_makes_it_the_one_to_fall_back_to() -> Result<(), AppE
 fn a_pick_lands_in_both_the_entry_and_the_top_level_fields() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_appearance(&paths, THEME.to_owned(), VARIANT.to_owned(), STATIC_ACCENT.to_owned())?;
+    set_appearance(&paths, THEME.to_owned(), VARIANT.to_owned(), STATIC_ACCENT.to_owned())?;
 
     let settings = services::settings::read_settings(&paths)?;
     assert_eq!(settings.theme_id, THEME);

@@ -35,7 +35,7 @@ pub async fn refresh_hero(
     weak: &Weak<AppWindow>,
     animate: bool,
 ) -> AppResult<()> {
-    let stats = library::favorites::get_favorite_stats(state).await?;
+    let stats = library::favorites::get_favorite_stats(&state.db).await?;
 
     // A leave that landed while the query was in flight has already wiped `stats` and
     // forgotten the collage guard, so the store and the push below would fill both back

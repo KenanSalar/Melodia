@@ -73,7 +73,7 @@ pub(super) fn wire_theme_changed(
         // chip click coarse-grained, so the read is invisible next to the click. Falls
         // back to the theme's canonical defaults on a miss or a read failure.
         let (variant_id, accent_id) = lookup_remembered(&s, theme);
-        let style_id = library::settings::get_settings(&s)
+        let style_id = library::settings::get_settings(&s.paths)
             .map_or_else(|_| "none".to_owned(), |c| c.dynamic_color_style);
         let last_static = read_last_static_accent(&s, theme.id);
         let snapshot = os_state.read().clone();
@@ -101,7 +101,7 @@ pub(super) fn wire_theme_changed(
 /// fails, or the stored ids no longer exist in the registry.
 fn lookup_remembered(state: &AppState, theme: &ThemeDef) -> (String, String) {
     let defaults = || (theme.default_variant.to_owned(), theme.default_accent.to_owned());
-    let Ok(settings) = library::settings::get_settings(state) else {
+    let Ok(settings) = library::settings::get_settings(&state.paths) else {
         return defaults();
     };
     let Some(pref) = settings.theme_preferences.get(theme.id) else {

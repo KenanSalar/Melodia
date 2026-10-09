@@ -73,7 +73,7 @@ fn schedule_prompt(
         let counting = state.clone();
         let due = state
             .runtime
-            .spawn_blocking(move || melodia_app::library::settings::record_launch(&counting))
+            .spawn_blocking(move || melodia_app::library::settings::record_launch(&counting.paths))
             .await;
         match due {
             Ok(Ok(true)) => {}

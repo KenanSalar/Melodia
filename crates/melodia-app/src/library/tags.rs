@@ -140,8 +140,8 @@ impl TagEditReport {
 /// Sits here rather than being called straight off `queries::track` by the
 /// dialog's own wiring: the UI layer reaches the database through this module,
 /// and [`apply_tag_edit`] below is the write half of the same feature.
-pub async fn get_tag_edit_rows(state: &AppState, ids: &[i64]) -> Result<Vec<TagEditRow>, AppError> {
-    queries::track::get_tag_edit_rows_by_ids(&state.db, ids).await
+pub async fn get_tag_edit_rows(db: &DbPool, ids: &[i64]) -> Result<Vec<TagEditRow>, AppError> {
+    queries::track::get_tag_edit_rows_by_ids(db, ids).await
 }
 
 /// A file's lyrics tag, read off the file rather than the database.
@@ -177,10 +177,10 @@ pub fn read_lyrics_and_credits(
 
 /// The credit behind each selected track, for the dialog's multi-selection path.
 pub async fn get_tag_edit_credits(
-    state: &AppState,
+    db: &DbPool,
     ids: &[i64],
 ) -> Result<HashMap<i64, (ArtistCredit, ArtistCredit)>, AppError> {
-    queries::track::get_track_credits_by_ids(&state.db, ids).await
+    queries::track::get_track_credits_by_ids(db, ids).await
 }
 
 /// The role credits behind each selected track.
@@ -190,26 +190,26 @@ pub async fn get_tag_edit_credits(
 /// here — the lyrics tab's open covers the artist tags and the lyrics, not these — so the row,
 /// re-ingested from the file on every scan and every save, is the cheaper of two right answers.
 pub async fn get_tag_edit_role_credits(
-    state: &AppState,
+    db: &DbPool,
     ids: &[i64],
 ) -> Result<HashMap<i64, RoleCredits>, AppError> {
-    queries::track::get_track_role_credits_by_ids(&state.db, ids).await
+    queries::track::get_track_role_credits_by_ids(db, ids).await
 }
 
 /// The genres behind each selected track, as rows rather than as the rendered column.
 pub async fn get_tag_edit_genres(
-    state: &AppState,
+    db: &DbPool,
     ids: &[i64],
 ) -> Result<HashMap<i64, GenreList>, AppError> {
-    queries::track::get_track_genres_by_ids(&state.db, ids).await
+    queries::track::get_track_genres_by_ids(db, ids).await
 }
 
 /// The release tags behind each selected track, for the dialog's Details tab.
 pub async fn get_tag_edit_release_tags(
-    state: &AppState,
+    db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<ReleaseTagRow>, AppError> {
-    queries::album::get_release_tags_for_tracks(&state.db, ids).await
+    queries::album::get_release_tags_for_tracks(db, ids).await
 }
 
 /// Apply `edit` to `ids`, then refresh the player's cached summaries and bump

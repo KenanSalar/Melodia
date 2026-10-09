@@ -60,8 +60,8 @@ async fn fetch_genre_detail(
     genres_ui: &GenresUi,
     genre_id: i64,
 ) -> AppResult<(GenreStats, Vec<RsTrackListRow>)> {
-    let detail = library::genres::get_genre_detail(state, genre_id).await?;
-    let tracks = library::genres::get_genre_tracks(state, genre_id).await?;
+    let detail = library::genres::get_genre_detail(&state.db, genre_id).await?;
+    let tracks = library::genres::get_genre_tracks(&state.db, genre_id).await?;
 
     // Prewarm the detail `TrackList`'s artwork column against the shared row-tier cache. Unlike
     // Albums / Artists Detail there is no separate header tile or hero blur.
@@ -288,7 +288,7 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 /// once at startup *after* [`super::install`] so the `GenreDetail` callbacks are already live by
 /// the time `open_genre`'s `upgrade_in_event_loop` lands. No-ops on a missing genre.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
-    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
         s.last_detail_ids.get(crate::ui::track_list_view::view_id::GENRE_DETAIL).copied()
     }) else {
         return;

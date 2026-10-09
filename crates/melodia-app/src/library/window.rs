@@ -29,17 +29,13 @@ async fn apply_then_persist(
 ) -> Result<(), AppError> {
     melodia_platform::services::platform::always_on_top::apply(method, &paths.data_dir, pinned)
         .await?;
-    persist_always_on_top(paths, pinned).await
+    record_always_on_top(paths, pinned).await
 }
 
 /// Persist a pin the window manager changed on its own, `KWin`'s keep-above titlebar button among
 /// them, so a launch restores the last choice wherever it was made. There is nothing to apply: the
 /// window already carries it.
-pub async fn record_always_on_top(state: &AppState, pinned: bool) -> Result<(), AppError> {
-    persist_always_on_top(&state.paths, pinned).await
-}
-
-async fn persist_always_on_top(paths: &Arc<Paths>, pinned: bool) -> Result<(), AppError> {
+pub async fn record_always_on_top(paths: &Arc<Paths>, pinned: bool) -> Result<(), AppError> {
     let paths = Arc::clone(paths);
     tokio::task::spawn_blocking(move || {
         services::settings::mutate_settings(&paths, |s| {
@@ -66,8 +62,8 @@ async fn persist_always_on_top(paths: &Arc<Paths>, pinned: bool) -> Result<(), A
 /// && !Theme.window-focused`), so the tint is suppressed automatically
 /// in custom-titlebar mode while the persisted value survives for the
 /// next time the native titlebar is enabled.
-pub fn set_use_native_titlebar(state: &AppState, on: bool) -> Result<(), AppError> {
-    write_use_native_titlebar(&state.paths, on, desktop::is_kde_desktop())
+pub fn set_use_native_titlebar(paths: &Paths, on: bool) -> Result<(), AppError> {
+    write_use_native_titlebar(paths, on, desktop::is_kde_desktop())
 }
 
 /// [`set_use_native_titlebar`]'s body, with the desktop probe passed in rather than read: the
@@ -89,8 +85,8 @@ fn write_use_native_titlebar(paths: &Paths, on: bool, is_kde: bool) -> Result<()
 /// handlers consulting the value — is applied synchronously by the UI
 /// callback through `ui::shell::tray_bridge::set_close_to_tray` *before* this
 /// async disk write, so the new behaviour takes effect immediately.
-pub fn set_close_to_tray(state: &AppState, on: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+pub fn set_close_to_tray(paths: &Paths, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
         s.tray.close_to_tray = on;
     })
 }
@@ -101,8 +97,8 @@ pub fn set_close_to_tray(state: &AppState, on: bool) -> Result<(), AppError> {
 /// runs. The toggle is restart-gated through the `restart-tray` `Dialog`
 /// flow, so this write commits just before the process respawns and the new
 /// value takes effect on the next launch.
-pub fn set_tray_enabled(state: &AppState, on: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+pub fn set_tray_enabled(paths: &Paths, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
         s.tray.tray_enabled = on;
     })
 }
@@ -112,8 +108,8 @@ pub fn set_tray_enabled(state: &AppState, on: bool) -> Result<(), AppError> {
 /// blurred half per decode; when `true` they wash the cover's own colours over `Theme.base`
 /// and no blur is built at all. Restart-gated through the `restart-backdrop` `Dialog` flow —
 /// `boot::ui_setup::apply_backdrop_style` is what reads it, before the first tier exists.
-pub fn set_aurora_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+pub fn set_aurora_backdrop(paths: &Paths, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
         s.backdrop.aurora_backdrop = on;
     })
 }
@@ -123,8 +119,8 @@ pub fn set_aurora_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
 /// one surface painting the other's colours, where this only mounts or unmounts the stack that
 /// setting already chose. The seed is `boot::ui_setup`'s and the runtime effect is the Slint
 /// property the button writes before this fires.
-pub fn set_mini_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+pub fn set_mini_backdrop(paths: &Paths, on: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
         s.backdrop.mini_backdrop = on;
     })
 }
@@ -135,10 +131,10 @@ pub fn set_mini_backdrop(state: &AppState, on: bool) -> Result<(), AppError> {
 /// callback before this fires, so the visual swap happens immediately;
 /// here we only commit the new value to disk.
 pub fn set_titlebar_button_style(
-    state: &AppState,
+    paths: &Paths,
     style: TitlebarButtonStyle,
 ) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+    services::settings::mutate_settings(paths, move |s| {
         s.window.titlebar_button_style = style;
     })
 }
@@ -146,10 +142,10 @@ pub fn set_titlebar_button_style(
 /// Persist the miniplayer's caption style, in the same shape: `MiniPlayer.button-style` is
 /// mirrored synchronously by the UI callback, and this only commits the pick.
 pub fn set_mini_player_button_style(
-    state: &AppState,
+    paths: &Paths,
     style: TitlebarButtonStyle,
 ) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+    services::settings::mutate_settings(paths, move |s| {
         s.window.mini_player_button_style = style;
     })
 }
@@ -159,27 +155,24 @@ pub fn set_mini_player_button_style(
 /// `set_titlebar_button_style` — `Theme.titlebar-button-side` is mirrored
 /// synchronously by the UI callback so the buttons reposition before this
 /// disk write commits.
-pub fn set_titlebar_button_side(
-    state: &AppState,
-    side: TitlebarButtonSide,
-) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+pub fn set_titlebar_button_side(paths: &Paths, side: TitlebarButtonSide) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
         s.window.titlebar_button_side = side;
     })
 }
 
 /// Persist whether the frameless window draws its outline. The Slint switch has already flipped
 /// `Settings.window-border-shown`, which the outline reads directly, so this only commits it.
-pub fn set_window_border(state: &AppState, border: WindowBorder) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+pub fn set_window_border(paths: &Paths, border: WindowBorder) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
         s.window.window_border = border;
     })
 }
 
 /// Persist the outline's colour: `WINDOW_BORDER_SYSTEM_COLOR`, or an accent id of the active
 /// theme. The UI callback has already painted the pick, so this only commits it.
-pub fn set_window_border_color(state: &AppState, color_id: String) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |s| {
+pub fn set_window_border_color(paths: &Paths, color_id: String) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
         s.window.window_border_color = color_id;
     })
 }

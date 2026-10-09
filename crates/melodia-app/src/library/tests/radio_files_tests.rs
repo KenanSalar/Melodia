@@ -10,8 +10,8 @@ use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
 use super::{
-    ImportStationsResult, StationEntry, indexed_key, parse, read_station_list, serialize,
-    write_station_list,
+    ImportStationsResult, StationEntry, export_stations, import_stations_from_file, indexed_key,
+    parse, serialize,
 };
 
 /// A kept row, seeded from the same shape the writer tests build.
@@ -27,7 +27,7 @@ async fn import_text(db: &DbPool, text: &str) -> Result<ImportStationsResult, Ap
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("stations.m3u8");
     std::fs::write(&path, text)?;
-    read_station_list(db, &path).await
+    import_stations_from_file(db, &path).await
 }
 
 /// One entry, spelled the way the assertions read. Nothing but the name and the URL: every
@@ -532,7 +532,7 @@ async fn an_export_writes_a_file_the_import_reads_back() -> Result<(), AppError>
 
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("stations.m3u8");
-    assert_eq!(write_station_list(&db, &path).await?, 2, "the count is the rows written");
+    assert_eq!(export_stations(&db, &path).await?, 2, "the count is the rows written");
 
     let text = std::fs::read_to_string(&path)?;
     assert!(
@@ -541,7 +541,7 @@ async fn an_export_writes_a_file_the_import_reads_back() -> Result<(), AppError>
     );
 
     assert_eq!(
-        read_station_list(&db, &path).await?,
+        import_stations_from_file(&db, &path).await?,
         ImportStationsResult { imported: 0, skipped: 2 },
         "both rows are still starred, so the round trip has nothing to do"
     );

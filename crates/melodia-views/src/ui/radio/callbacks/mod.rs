@@ -44,7 +44,7 @@ fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
     let persist = Arc::clone(persist);
     state.runtime.spawn_blocking(move || {
         persist.write_if_current(tab, || {
-            if let Err(e) = library::settings::set_radio_tab(&s, tab) {
+            if let Err(e) = library::settings::set_radio_tab(&s.paths, tab) {
                 log::warn!("radio::set_radio_tab: {}", describe(&e));
             }
         });

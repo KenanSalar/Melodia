@@ -101,9 +101,9 @@ fn install_rate_rows(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
     g.on_output_resync_committed(move |ms| {
         let ms = u32::try_from(ms).unwrap_or(0);
         let ctx = state.playback_ctx();
-        state.persist_blocking("persist output_resync_ms", move |s| {
+        state.persist_blocking("persist output_resync_ms", move |paths| {
             library::playback::player_set_resync_hold(&ctx, Duration::from_millis(u64::from(ms)));
-            library::settings::set_output_resync_ms(s, ms)
+            library::settings::set_output_resync_ms(paths, ms)
         });
     });
 }
@@ -148,11 +148,11 @@ fn install_bit_perfect_switch(ui: &AppWindow, state: &AppState, shadow: &Shadow)
         shadow.lock().choice.mode = OutputMode::Exclusive;
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
-        state.persist_blocking("persist bit-perfect switch", move |state| {
+        state.persist_blocking("persist bit-perfect switch", move |paths| {
             let choice = shadow.lock().choice.clone();
             library::playback::player_set_output_choice(&ctx, choice.clone());
             let volume = library::playback::player_make_bit_perfect(&ctx);
-            library::settings::switch_to_bit_perfect(state, &choice, volume)
+            library::settings::switch_to_bit_perfect(paths, &choice, volume)
         });
         signal_path::show_bit_perfect_reset(&ui);
     });
@@ -176,10 +176,10 @@ fn pick<T>(
 fn apply(state: &AppState, shadow: &Shadow) {
     let ctx = state.playback_ctx();
     let shadow = Arc::clone(shadow);
-    state.persist_blocking("persist output choice", move |state| {
+    state.persist_blocking("persist output choice", move |paths| {
         let choice = shadow.lock().choice.clone();
         library::playback::player_set_output_choice(&ctx, choice.clone());
-        library::settings::set_output_choice(state, &choice)
+        library::settings::set_output_choice(paths, &choice)
     });
 }
 

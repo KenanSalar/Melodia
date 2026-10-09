@@ -102,7 +102,8 @@ pub(super) fn wire_color_style_changed(
         let persisted_accent_for_blocking = persisted_accent.clone();
         s.runtime.spawn_blocking(move || {
             let mut all_persists_ok = true;
-            if let Err(e) = library::settings::set_dynamic_color_style(&s_clone, style_owned) {
+            if let Err(e) = library::settings::set_dynamic_color_style(&s_clone.paths, style_owned)
+            {
                 log::warn!("persist material3 colour style: {}", describe(&e));
                 all_persists_ok = false;
             }
@@ -128,7 +129,7 @@ pub(super) fn wire_color_style_changed(
                     new_accent
                 };
                 if let Err(e) = library::settings::set_appearance(
-                    &s_clone,
+                    &s_clone.paths,
                     theme_id.to_owned(),
                     variant_id,
                     resolved_accent,

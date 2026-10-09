@@ -90,18 +90,18 @@ pub use view::{
 pub use visualizer::{set_visualizer_enabled, set_visualizer_style};
 
 use crate::services::{self, settings::SettingsData, view_state::ViewStateData};
-use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
-pub fn get_settings(state: &AppState) -> Result<SettingsData, AppError> {
-    services::settings::read_settings(&state.paths)
+pub fn get_settings(paths: &Paths) -> Result<SettingsData, AppError> {
+    services::settings::read_settings(paths)
 }
 
 /// Read the per-view UI state from `views.json`. Sibling of
 /// [`get_settings`]; a missing / unreadable file falls back to
 /// [`ViewStateData::default`].
-pub fn get_view_state(state: &AppState) -> Result<ViewStateData, AppError> {
-    services::view_state::read_view_state(&state.paths)
+pub fn get_view_state(paths: &Paths) -> Result<ViewStateData, AppError> {
+    services::view_state::read_view_state(paths)
 }
 
 #[cfg(target_os = "linux")]

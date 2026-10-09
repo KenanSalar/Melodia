@@ -80,10 +80,10 @@ const LOGO_CACHE_MAX_BYTES: i64 = 32 * 1024 * 1024;
 /// Asked about the page in hand rather than about the table, which has no bound worth reading
 /// whole — see the query's own note.
 pub async fn logo_answers(
-    state: &AppState,
+    db: &DbPool,
     favicon_urls: &[String],
 ) -> Result<Vec<radio::StoredLogoAnswer>, AppError> {
-    queries::radio::logo_answers(&state.db, favicon_urls).await
+    queries::radio::logo_answers(db, favicon_urls).await
 }
 
 /// Whether a stored answer is still suppressing its URL at `now`.
@@ -100,8 +100,8 @@ fn answer_is_suppressed(answer: &radio::StoredLogoAnswer, now: &str) -> bool {
 /// The files those rows named become unreferenced by dropping, so the store follows on the next
 /// sweep rather than being touched here — see the query's own note.
 ///
-/// Takes the pool rather than the state, being the one door here with no network behind it and
-/// so nothing for the switch to gate: its caller is a maintenance pass, not a user asking.
+/// Not behind the switch: there is no network behind it, and its caller is a maintenance pass
+/// rather than a user asking.
 pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
     let now = chrono::Utc::now();
     let miss_cutoff = now - chrono::TimeDelta::try_days(LOGO_MISS_MAX_AGE_DAYS).unwrap_or_default();
@@ -127,13 +127,7 @@ pub async fn prune_logo_answers(db: &DbPool) -> Result<u64, AppError> {
 ///
 /// Failing to record is a debug line rather than an error: the row is an optimization over asking
 /// again, and asking again is exactly what its absence causes.
-pub async fn record_logo_outcome(state: &AppState, favicon_url: &str, logo: Option<&StoredLogo>) {
-    record_outcome(&state.db, favicon_url, logo).await;
-}
-
-/// [`record_logo_outcome`]'s body, narrowed to the pool it reaches so the schedule a miss earns
-/// can be read back off the table.
-async fn record_outcome(db: &DbPool, favicon_url: &str, logo: Option<&StoredLogo>) {
+pub async fn record_logo_outcome(db: &DbPool, favicon_url: &str, logo: Option<&StoredLogo>) {
     let recorded = match logo {
         Some(logo) => note_logo_hit(db, favicon_url, logo).await,
         None => note_logo_miss(db, favicon_url).await,
@@ -181,12 +175,8 @@ async fn note_logo_hit(db: &DbPool, favicon_url: &str, logo: &StoredLogo) -> Res
 }
 
 /// Point a station at its stored logo, or clear it with `None`.
-pub async fn set_artwork(
-    state: &AppState,
-    id: i64,
-    artwork_path: Option<&str>,
-) -> Result<(), AppError> {
-    queries::radio::set_artwork(&state.db, id, artwork_path).await
+pub async fn set_artwork(db: &DbPool, id: i64, artwork_path: Option<&str>) -> Result<(), AppError> {
+    queries::radio::set_artwork(db, id, artwork_path).await
 }
 
 /// Whether a stored artwork path still names a file.
@@ -223,7 +213,7 @@ pub(super) async fn ask_logo_url(state: &AppState, seed: &AnswerSeed, url: &str)
             return None;
         }
     };
-    record_logo_outcome(state, url, logo.as_ref()).await;
+    record_logo_outcome(&state.db, url, logo.as_ref()).await;
     logo.map(|logo| logo.path)
 }
 
@@ -262,8 +252,8 @@ impl AnswerSeed {
 
     /// Every stored answer among `urls`, in one query. Duplicates and blanks cost nothing —
     /// stations routinely share a site, and a row with no logo URL contributes none.
-    pub async fn for_urls(state: &AppState, urls: &[String]) -> Self {
-        let Ok(answers) = logo_answers(state, urls).await else {
+    pub async fn for_urls(db: &DbPool, urls: &[String]) -> Self {
+        let Ok(answers) = logo_answers(db, urls).await else {
             return Self::default();
         };
         Self(answers.into_iter().map(|answer| (answer.favicon_url.clone(), answer)).collect())
@@ -275,7 +265,7 @@ impl AnswerSeed {
 /// One query either way, because a second would ask the same row the same thing. A hit whose file
 /// is gone is [`LogoAnswer::Unknown`]: the store is swept against the columns that reference it, and
 /// a path naming nothing paints an empty tile where the monogram was the honest answer.
-/// Narrowed to the pool it reaches, like [`record_outcome`] beside it, so the seed's whole reason
+/// Narrowed to the pool it reaches, like [`record_logo_outcome`], so the seed's whole reason
 /// for existing can be read against a table holding nothing.
 async fn stored_answer(db: &DbPool, seed: &AnswerSeed, url: &str) -> LogoAnswer {
     if let Some(answer) = seed.0.get(url) {
@@ -346,12 +336,12 @@ pub async fn heal_station_logo(
     if let Some(url) = station.logo_source()
         && let Some(path) = ask_logo_url(state, seed, url).await
     {
-        return adopted(state, station.id, path).await;
+        return adopted(&state.db, station.id, path).await;
     }
 
     let origin = site_origin(station.website().unwrap_or_default(), &station.stream_url)?;
     let path = discover_site_logo(state, seed, &origin).await?;
-    adopted(state, station.id, path).await
+    adopted(&state.db, station.id, path).await
 }
 
 /// Every URL [`heal_station_logo`] settles against the answer table before it reaches the network,
@@ -400,14 +390,14 @@ pub async fn discover_site_logo(
         None => None,
     };
     if landed.is_none() {
-        note_site_miss(state, origin.as_str()).await;
+        note_site_miss(&state.db, origin.as_str()).await;
     }
     landed
 }
 
 /// Point the row at `path`, reporting it only once the write took.
-pub(super) async fn adopted(state: &AppState, id: i64, path: String) -> Option<String> {
-    match set_artwork(state, id, Some(&path)).await {
+pub(super) async fn adopted(db: &DbPool, id: i64, path: String) -> Option<String> {
+    match set_artwork(db, id, Some(&path)).await {
         Ok(()) => Some(path),
         Err(e) => {
             log::debug!("radio: station logo not stored: {}", melodia_core::error::describe(&e));
@@ -417,8 +407,8 @@ pub(super) async fn adopted(state: &AppState, id: i64, path: String) -> Option<S
 }
 
 /// Record that a site advertised nothing usable.
-async fn note_site_miss(state: &AppState, origin: &str) {
-    if let Err(e) = note_logo_miss(&state.db, origin).await {
+async fn note_site_miss(db: &DbPool, origin: &str) {
+    if let Err(e) = note_logo_miss(db, origin).await {
         log::debug!("radio: site outcome not recorded: {}", melodia_core::error::describe(&e));
     }
 }

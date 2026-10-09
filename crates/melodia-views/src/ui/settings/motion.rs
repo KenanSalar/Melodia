@@ -19,8 +19,8 @@ pub fn install(ui: &AppWindow, state: &AppState) {
 
     let state = state.clone();
     ui.global::<Settings>().on_skip_startup_animation_changed(move |on| {
-        state.persist_blocking("persist skip_startup_animation", move |s| {
-            library::settings::set_skip_startup_animation(s, on)
+        state.persist_blocking("persist skip_startup_animation", move |paths| {
+            library::settings::set_skip_startup_animation(paths, on)
         });
     });
 }

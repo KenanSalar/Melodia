@@ -71,9 +71,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
 
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
-                if let Err(e) =
-                    library::settings::set_last_detail_id(&s_disk, view_id::GENRE_DETAIL, None)
-                {
+                if let Err(e) = library::settings::set_last_detail_id(
+                    &s_disk.paths,
+                    view_id::GENRE_DETAIL,
+                    None,
+                ) {
                     log::warn!("genres::close_detail persist: {}", describe(&e));
                 }
             });

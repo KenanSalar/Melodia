@@ -99,7 +99,8 @@ pub(super) fn wire(
                 let track_count = track_ids.len();
                 let mut ok: usize = 0;
                 for pid in &pids {
-                    match library::playlists::add_to_playlist(&s, *pid, track_ids.clone()).await {
+                    match library::playlists::add_to_playlist(&s.db, *pid, track_ids.clone()).await
+                    {
                         Ok(()) => ok += 1,
                         Err(e) => {
                             log::warn!(

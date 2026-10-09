@@ -113,8 +113,8 @@ fn remove(
     state.runtime.spawn(async move {
         for id in ids {
             let removed = match from {
-                RemoveFrom::Favorites => library::radio::remove_from_favorites(&s, id).await,
-                RemoveFrom::Recent => library::radio::remove_from_recent(&s, id).await,
+                RemoveFrom::Favorites => library::radio::remove_from_favorites(&s.db, id).await,
+                RemoveFrom::Recent => library::radio::remove_from_recent(&s.db, id).await,
             };
             if let Err(e) = removed {
                 log::warn!("radio: station removal failed: {}", melodia_core::error::describe(&e));

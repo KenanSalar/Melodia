@@ -50,7 +50,7 @@ async fn fetch_playlist_detail(
     playlists_ui: &PlaylistsUi,
     playlist_id: i64,
 ) -> AppResult<(PlaylistStats, Vec<RsTrackListRow>)> {
-    let mut detail = library::playlists::get_playlist_detail(state, playlist_id).await?;
+    let mut detail = library::playlists::get_playlist_detail(&state.db, playlist_id).await?;
     let tracks = if detail.is_smart {
         // Smart playlists have no `playlist_items` rows — resolve membership live from the stored
         // criteria, and derive the header stats from the resolved set, the junction-maintained
@@ -58,12 +58,12 @@ async fn fetch_playlist_detail(
         let criteria = melodia_core::entities::smart_criteria::SmartCriteria::from_json_opt(
             detail.smart_criteria.as_deref(),
         );
-        let rows = library::smart_playlists::evaluate(state, &criteria).await?;
+        let rows = library::smart_playlists::evaluate(&state.db, &criteria).await?;
         detail.track_count = len_as_i32(rows.len());
         detail.total_duration_ms = rows.iter().map(|t| t.duration_ms).sum();
         rows
     } else {
-        library::playlists::get_playlist_tracks(state, playlist_id).await?
+        library::playlists::get_playlist_tracks(&state.db, playlist_id).await?
     };
 
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
@@ -402,7 +402,7 @@ pub fn seed_detail_from_settings(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
 ) {
-    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
         s.last_detail_ids.get(crate::ui::track_list_view::view_id::PLAYLIST_DETAIL).copied()
     }) else {
         return;

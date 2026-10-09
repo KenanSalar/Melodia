@@ -87,7 +87,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
 /// `LibrarySettings.folders`. Safe to call from any thread; the actual UI
 /// write hops onto the event loop.
 pub async fn refresh_folders(ui: Weak<AppWindow>, state: AppState) {
-    let folders = match library::settings::get_folders(&state).await {
+    let folders = match library::settings::get_folders(&state.db).await {
         Ok(f) => f,
         Err(e) => {
             log::warn!("library_settings::refresh_folders: {}", describe(&e));

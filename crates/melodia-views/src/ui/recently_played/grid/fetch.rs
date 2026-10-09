@@ -18,7 +18,7 @@ use melodia_ui::AppWindow;
 pub async fn refresh_grid(state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     // Logged before the guard below, not at the store — a query that failed is
     // worth a line whether or not anyone is still looking at the view.
-    let most_played = library::recently_played::get_most_played(state)
+    let most_played = library::recently_played::get_most_played(&state.db)
         .await
         .inspect_err(|e| {
             log::warn!("recently_played::refresh_grid most_played: {}", describe(e));

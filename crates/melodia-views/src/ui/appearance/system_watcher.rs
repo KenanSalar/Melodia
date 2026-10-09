@@ -108,7 +108,7 @@ fn apply_reading(
     kick.bump();
 
     // Read from disk rather than shadowed: this runs on a desktop event, not per frame.
-    let settings = match library::settings::get_settings(state) {
+    let settings = match library::settings::get_settings(&state.paths) {
         Ok(settings) => settings,
         Err(e) => {
             log::warn!(

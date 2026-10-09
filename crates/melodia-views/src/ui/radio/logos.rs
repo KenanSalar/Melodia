@@ -226,7 +226,7 @@ async fn record_answer(
         }
     };
 
-    library::radio::record_logo_outcome(state, &url, logo.as_ref()).await;
+    library::radio::record_logo_outcome(&state.db, &url, logo.as_ref()).await;
     let hit = logo.is_some();
     memo.record(url, logo.map(|logo| logo.path));
     hit
@@ -338,7 +338,7 @@ async fn seed_from_store(
     effort: Effort,
     on_landed: &impl Fn(),
 ) -> bool {
-    let Ok(answers) = library::radio::logo_answers(state, wanted).await else {
+    let Ok(answers) = library::radio::logo_answers(&state.db, wanted).await else {
         return false;
     };
 

@@ -1,15 +1,16 @@
 //! Library API — direct, in-process replacement for the Tauri `commands/` layer.
 //!
 //! Each submodule mirrors a former `#[tauri::command]` group. Functions are plain
-//! `pub async fn` (or `pub fn`) that take `&AppState` (or specific `Arc<T>`s when
-//! `&AppState` would over-couple) and return `Result<T, AppError>`.
+//! `pub async fn` (or `pub fn`) returning `Result<T, AppError>`, and each takes what it reads:
+//! the one field, `&Paths` or `&DbPool`, where that is all, and `&AppState` where it reads
+//! several. `playback` takes `PlaybackContext`. The signature then says what a call can touch,
+//! and a test drives it off a `test_pool` or a seeded root, an `AppState` being unbuildable
+//! below `headless.rs`. `melodia-views` passes `&state.db` without naming its type, so the store
+//! stays out of its reach.
 //!
-//! Where a function decides something of its own rather than forwarding one query, the door
-//! keeps the `&AppState` and the work moves to a body taking only what it reaches — `browse`,
-//! `import`, `playlist_files`, `playlists`, `queue` and `radio_files` all read that way. The
-//! call sites stay uniform, `melodia-views` never holds a database handle, and the decision
-//! becomes reachable from a `test_pool`. `playback` is the older form of the same split, against
-//! `PlaybackContext`, which `state::fixtures` builds without an audio device under it.
+//! A door that reads several fields hands its decision to a private body taking only what that
+//! reaches (`playlists`, `queue`, `window`), and a body taking a seam its door fills in, a clock
+//! or a desktop probe, stays private beside it for the same reason.
 //!
 //! State propagation to the UI happens via the watch channels on `AppState::sinks`
 //! (driven by `with_state_emit` in `player::engine::state`) — never `app.emit(...)`.

@@ -41,9 +41,9 @@ async fn fetch_artist_detail(
     artists_ui: &ArtistsUi,
     artist_id: i64,
 ) -> AppResult<(ArtistStats, Vec<AlbumStats>, Vec<RsTrackListRow>)> {
-    let detail = library::artists::get_artist_detail(state, artist_id).await?;
-    let albums = library::artists::get_artist_albums(state, artist_id).await?;
-    let tracks = library::artists::get_artist_tracks(state, artist_id).await?;
+    let detail = library::artists::get_artist_detail(&state.db, artist_id).await?;
+    let albums = library::artists::get_artist_albums(&state.db, artist_id).await?;
+    let tracks = library::artists::get_artist_tracks(&state.db, artist_id).await?;
 
     let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         tracks.iter().map(|t| t.artwork_path.as_deref()),
@@ -303,7 +303,7 @@ pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
 
 /// Reopen the artist that was visible at the last shutdown, if any.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
-    let Some(id) = library::settings::get_view_state(state).ok().and_then(|s| {
+    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
         s.last_detail_ids.get(crate::ui::track_list_view::view_id::ARTIST_DETAIL).copied()
     }) else {
         return;

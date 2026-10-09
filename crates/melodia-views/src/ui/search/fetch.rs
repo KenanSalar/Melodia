@@ -44,7 +44,7 @@ pub async fn kick_search(
     }
     set_loading_on_ui(weak, true);
 
-    let results = library::search::search_all(state, trimmed.clone()).await?;
+    let results = library::search::search_all(&state.db, trimmed.clone()).await?;
 
     let token_now = search_ui.fetch_token.load(Ordering::Relaxed);
     if token_now != my_token {

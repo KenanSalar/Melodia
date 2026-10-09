@@ -136,7 +136,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         let persist = Arc::clone(&persist);
         s.runtime.spawn_blocking(move || {
             persist.write_if_current(tab, || {
-                if let Err(e) = library::settings::set_settings_tab(&s_disk, tab) {
+                if let Err(e) = library::settings::set_settings_tab(&s_disk.paths, tab) {
                     log::warn!("settings_page: set_settings_tab({tab}): {}", describe(&e));
                 }
             });

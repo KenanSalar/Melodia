@@ -8,7 +8,7 @@ use crate::services;
 use crate::state::fixtures::seeded_root;
 use melodia_core::error::AppError;
 
-use super::write_skipped_release;
+use super::set_skipped_release;
 
 const SKIPPED: &str = "v1.2.3";
 
@@ -19,7 +19,7 @@ const SKIPPED: &str = "v1.2.3";
 fn a_skip_survives_the_file_and_resets_to_the_empty_string() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_skipped_release(&paths, SKIPPED.to_owned())?;
+    set_skipped_release(&paths, SKIPPED.to_owned())?;
     assert_eq!(services::settings::read_settings(&paths)?.updates.skipped_release, SKIPPED);
 
     services::settings::mutate_settings(&paths, |settings| {

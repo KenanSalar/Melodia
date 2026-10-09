@@ -1,35 +1,35 @@
 //! The Radio section's switches. Persist to `settings.json`; the in-memory
-//! shadows on [`AppState`] are refreshed separately by the UI callbacks once the
+//! shadows on `AppState` are refreshed separately by the UI callbacks once the
 //! write commits, the same kick-after-persist ordering [`super::discord`] uses.
 
 use crate::services;
-use crate::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
 /// Persist the Radio master toggle. Off by default (opt-in).
-pub fn set_radio_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_radio_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.radio.radio_enabled = enabled;
     })
 }
 
 /// Persist whether directory results hide segmented stations.
-pub fn set_radio_hide_segmented(state: &AppState, hide: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_radio_hide_segmented(paths: &Paths, hide: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.radio.radio_hide_segmented = hide;
     })
 }
 
 /// Persist whether playing a station reports a click back to the directory.
-pub fn set_radio_send_clicks(state: &AppState, send: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_radio_send_clicks(paths: &Paths, send: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.radio.radio_send_clicks = send;
     })
 }
 
 /// Persist whether songs heard on a station are scrobbled.
-pub fn set_radio_scrobble(state: &AppState, scrobble: bool) -> Result<(), AppError> {
-    services::settings::mutate_settings(&state.paths, move |settings| {
+pub fn set_radio_scrobble(paths: &Paths, scrobble: bool) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
         settings.radio.radio_scrobble = scrobble;
     })
 }

@@ -215,7 +215,7 @@ fn spawn_with_track_ids<Fut>(
 
     let state = state.clone();
     state.runtime.clone().spawn(async move {
-        match library::entity_tracks::track_ids_for(&state, kind, &entity_ids).await {
+        match library::entity_tracks::track_ids_for(&state.db, kind, &entity_ids).await {
             Ok(track_ids) if track_ids.is_empty() => {
                 log::debug!("{label}: nothing behind the selection");
             }

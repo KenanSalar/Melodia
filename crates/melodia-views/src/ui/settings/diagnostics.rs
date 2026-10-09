@@ -115,8 +115,8 @@ fn wire_verbose_logging(ui: &AppWindow, state: &AppState) {
         // Live first: a failed disk write must not undo what the user can
         // already see working.
         platform::logging::set_verbose(on);
-        state.persist_blocking("persist verbose_logging", move |s| {
-            library::settings::set_verbose_logging(s, on)
+        state.persist_blocking("persist verbose_logging", move |paths| {
+            library::settings::set_verbose_logging(paths, on)
         });
     });
 }

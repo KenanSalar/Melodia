@@ -4,7 +4,7 @@
 //! whose other two fields have the opposite default. A copy that landed the wrong one persists a
 //! switch the user never touched and reads as the toggle they did touch not sticking.
 
-use super::{write_lyrics_enabled, write_lyrics_online_enabled, write_lyrics_romanization_shown};
+use super::{set_lyrics_enabled, set_lyrics_online_enabled, set_lyrics_romanization_shown};
 use crate::services;
 use crate::state::fixtures::seeded_root;
 use melodia_core::error::AppError;
@@ -19,7 +19,7 @@ fn stored(paths: &melodia_core::config::Paths) -> Result<(bool, bool, bool), App
 fn enabling_lyrics_leaves_the_other_two_alone() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_lyrics_enabled(&paths, true)?;
+    set_lyrics_enabled(&paths, true)?;
 
     assert_eq!(stored(&paths)?, (true, false, true));
     Ok(())
@@ -29,7 +29,7 @@ fn enabling_lyrics_leaves_the_other_two_alone() -> Result<(), AppError> {
 fn enabling_the_lookup_leaves_the_other_two_alone() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_lyrics_online_enabled(&paths, true)?;
+    set_lyrics_online_enabled(&paths, true)?;
 
     assert_eq!(stored(&paths)?, (false, true, true));
     Ok(())
@@ -41,7 +41,7 @@ fn hiding_the_romanization_leaves_the_other_two_alone() -> Result<(), AppError> 
     // accident while appearing to have worked.
     let (_tmp, paths) = seeded_root()?;
 
-    write_lyrics_romanization_shown(&paths, false)?;
+    set_lyrics_romanization_shown(&paths, false)?;
 
     assert_eq!(stored(&paths)?, (false, false, false));
     Ok(())
@@ -51,8 +51,8 @@ fn hiding_the_romanization_leaves_the_other_two_alone() -> Result<(), AppError> 
 fn a_switch_written_twice_keeps_the_second_answer() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
 
-    write_lyrics_online_enabled(&paths, true)?;
-    write_lyrics_online_enabled(&paths, false)?;
+    set_lyrics_online_enabled(&paths, true)?;
+    set_lyrics_online_enabled(&paths, false)?;
 
     assert_eq!(stored(&paths)?, (false, false, true));
     Ok(())

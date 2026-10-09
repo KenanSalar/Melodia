@@ -368,8 +368,8 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
     {
         let state = state.clone();
         viz_global.on_set_enabled(move |on| {
-            state.persist_blocking("persist viz_enabled", move |s| {
-                library::settings::set_visualizer_enabled(s, on)
+            state.persist_blocking("persist viz_enabled", move |paths| {
+                library::settings::set_visualizer_enabled(paths, on)
             });
         });
     }
@@ -387,8 +387,8 @@ pub fn install_visualizer(ui: &AppWindow, state: &AppState) {
                 publish_style(&ui.global::<Visualizer>(), picked);
             }
             let key = STYLES[picked].to_owned();
-            state.persist_blocking("persist viz_style", move |s| {
-                library::settings::set_visualizer_style(s, key)
+            state.persist_blocking("persist viz_style", move |paths| {
+                library::settings::set_visualizer_style(paths, key)
             });
         });
     }

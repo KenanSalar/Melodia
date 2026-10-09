@@ -38,7 +38,7 @@ pub(super) fn refresh(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let s = state.clone();
     state.runtime.spawn(async move {
-        let shown = match library::settings::suggested_music_folder(&s).await {
+        let shown = match library::settings::suggested_music_folder(&s.db).await {
             Ok(folder) => folder
                 .map(|path| redact_home(&path.to_string_lossy()).into_owned())
                 .unwrap_or_default(),
@@ -69,7 +69,7 @@ fn wire_add(ui: &AppWindow, state: &AppState) {
         let s = s.clone();
         let weak = weak.clone();
         let _ = slint::spawn_local(Compat::new(async move {
-            match library::settings::suggested_music_folder(&s).await {
+            match library::settings::suggested_music_folder(&s.db).await {
                 Ok(Some(path)) => {
                     add_folder_and_scan(&s, &weak, path.to_string_lossy().into_owned()).await;
                 }

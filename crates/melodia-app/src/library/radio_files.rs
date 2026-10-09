@@ -16,7 +16,6 @@
 
 use std::path::Path;
 
-use crate::state::AppState;
 use melodia_core::entities::radio;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
@@ -137,14 +136,7 @@ impl Pending {
 ///
 /// Returns how many were written. `#EXTINF:-1` throughout — a live stream has no duration, and
 /// `-1` is the tag's own spelling for that.
-pub async fn export_stations(state: &AppState, dest: &Path) -> Result<u32, AppError> {
-    write_station_list(&state.db, dest).await
-}
-
-/// [`export_stations`]'s body, narrowed to what it actually reaches so the tests can drive it off
-/// a bare pool. `playlist_files`'s shape: the library door takes the state, the work takes the
-/// database.
-async fn write_station_list(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
+pub async fn export_stations(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
     let stations = queries::radio::get_favorite_stations(db).await?;
     let text = serialize(&stations);
 
@@ -164,14 +156,9 @@ async fn write_station_list(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
 /// asked to import a list rather than to audition one. A dead entry reports at the click, like a
 /// directory station that went off air.
 pub async fn import_stations_from_file(
-    state: &AppState,
+    db: &DbPool,
     src: &Path,
 ) -> Result<ImportStationsResult, AppError> {
-    read_station_list(&state.db, src).await
-}
-
-/// [`import_stations_from_file`]'s body, narrowed for the reason [`write_station_list`] is.
-async fn read_station_list(db: &DbPool, src: &Path) -> Result<ImportStationsResult, AppError> {
     let path = src.to_path_buf();
     let body = tokio::task::spawn_blocking(move || std::fs::read_to_string(&path))
         .await

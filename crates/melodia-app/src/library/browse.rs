@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use crate::state::AppState;
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder, BrowseResult};
 use melodia_core::entities::folder::Folder;
 use melodia_core::entities::track::TrackListRow;
@@ -63,16 +62,6 @@ fn classify_dir_entries(
 /// re-queried here) so a navigation does a single `folders` read shared
 /// with the caller's `build_breadcrumbs`.
 pub async fn browse_directory(
-    state: &AppState,
-    path: String,
-    library_folders: &[Folder],
-) -> Result<BrowseResult, AppError> {
-    list_directory(&state.db, path, library_folders).await
-}
-
-/// [`browse_directory`]'s body, narrowed to what it reaches so the tests drive the shipped guard
-/// ladder instead of a copy of it.
-async fn list_directory(
     db: &DbPool,
     path: String,
     library_folders: &[Folder],
@@ -172,8 +161,8 @@ async fn list_directory(
 /// **Recursive, unlike what the view lists for the folder it is standing in.** A folder card is a
 /// folder the user has *not* navigated into, so an artist folder holding only album subfolders
 /// would otherwise offer a Play that queues nothing.
-pub async fn folder_track_ids(state: &AppState, path: &str) -> Result<Vec<i64>, AppError> {
-    queries::track::track_ids_under_directory(&state.db, path).await
+pub async fn folder_track_ids(db: &DbPool, path: &str) -> Result<Vec<i64>, AppError> {
+    queries::track::track_ids_under_directory(db, path).await
 }
 
 #[cfg(test)]

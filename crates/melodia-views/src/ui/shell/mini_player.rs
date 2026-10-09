@@ -122,8 +122,8 @@ pub fn install(
             if np_state.mini_visible.get() {
                 follow_artwork(&np_state);
             }
-            state.persist_blocking("mini backdrop", move |s| {
-                melodia_app::library::window::set_mini_backdrop(s, on)
+            state.persist_blocking("mini backdrop", move |paths| {
+                melodia_app::library::window::set_mini_backdrop(paths, on)
             });
         });
     }

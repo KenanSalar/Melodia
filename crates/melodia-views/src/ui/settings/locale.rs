@@ -63,7 +63,7 @@ type PersistedLocale = Arc<parking_lot::Mutex<String>>;
 /// the change callback. **After** `AppWindow::new()`, so the global is mounted, and
 /// **before** `app.run()`.
 pub fn install_locale(ui: &AppWindow, state: &AppState) {
-    let persisted = library::settings::get_settings(state).map_or_else(
+    let persisted = library::settings::get_settings(&state.paths).map_or_else(
         |e| {
             log::warn!("locale: read settings failed: {}", describe(&e));
             DEFAULT_LOCALE.to_owned()
@@ -130,7 +130,9 @@ fn wire_language_changed(ui: &AppWindow, state: &AppState, shadow: PersistedLoca
         code.clone_into(&mut *shadow.lock());
 
         let code_owned = code.to_owned();
-        s.persist_blocking("persist locale", move |s| library::settings::set_locale(s, code_owned));
+        s.persist_blocking("persist locale", move |paths| {
+            library::settings::set_locale(paths, code_owned)
+        });
     });
 }
 

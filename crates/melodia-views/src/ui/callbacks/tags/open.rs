@@ -54,7 +54,7 @@ pub(super) fn wire_request_edit(
         let s = state.clone();
         let session = session.clone();
         let _ = slint::spawn_local(Compat::new(async move {
-            let rows = match library::tags::get_tag_edit_rows(&s, &ids).await {
+            let rows = match library::tags::get_tag_edit_rows(&s.db, &ids).await {
                 Ok(rows) if !rows.is_empty() => rows,
                 Ok(_) => return,
                 Err(e) => {
@@ -89,7 +89,7 @@ pub(super) fn wire_request_edit(
                 }
             } else {
                 let by_id =
-                    or_logged(library::tags::get_tag_edit_credits(&s, &ids).await, "credits");
+                    or_logged(library::tags::get_tag_edit_credits(&s.db, &ids).await, "credits");
                 (String::new(), by_row(&rows, &by_id))
             };
 
@@ -122,18 +122,22 @@ pub(super) fn wire_request_edit(
 
             // Always from the database, single selection included — argued at
             // `library::tags::get_tag_edit_role_credits`.
-            let roles_by_id =
-                or_logged(library::tags::get_tag_edit_role_credits(&s, &ids).await, "role credits");
+            let roles_by_id = or_logged(
+                library::tags::get_tag_edit_role_credits(&s.db, &ids).await,
+                "role credits",
+            );
             let roles: Vec<RoleCredits> = by_row(&rows, &roles_by_id);
 
             let genres_by_id =
-                or_logged(library::tags::get_tag_edit_genres(&s, &ids).await, "genres");
+                or_logged(library::tags::get_tag_edit_genres(&s.db, &ids).await, "genres");
             let genre_lists: Vec<GenreList> = by_row(&rows, &genres_by_id);
 
             // Release-level tags live on `albums`, so the Details tab reads them through the album
             // each selected track sits on.
-            let release =
-                or_logged(library::tags::get_tag_edit_release_tags(&s, &ids).await, "release tags");
+            let release = or_logged(
+                library::tags::get_tag_edit_release_tags(&s.db, &ids).await,
+                "release tags",
+            );
 
             let Some(ui) = weak.upgrade() else { return };
             if !claim.holds(&ui) {

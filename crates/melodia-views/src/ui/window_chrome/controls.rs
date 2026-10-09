@@ -4,11 +4,14 @@
 //! Callback dispatch guarantees the UI thread, so the winit calls are safe directly
 //! without an event-loop hop. The persistence work goes to the tokio runtime.
 
+use std::sync::Arc;
+
 use slint::ComponentHandle;
 use slint::winit_030::WinitWindowAccessor;
 use slint::winit_030::winit::window::WindowLevel;
 
 use melodia_app::state::AppState;
+use melodia_core::config::Paths;
 use melodia_core::error::{AppError, describe};
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 use melodia_ui::AppWindow;
@@ -164,15 +167,15 @@ fn restart_toggle(
     app: &AppWindow,
     state: &AppState,
     setting: &'static str,
-    persist: fn(&AppState, bool) -> Result<(), AppError>,
+    persist: fn(&Paths, bool) -> Result<(), AppError>,
 ) -> impl Fn() + 'static {
     let weak = app.as_weak();
-    let state = state.clone();
+    let paths = Arc::clone(&state.paths);
     move || {
         let Some(ui) = weak.upgrade() else { return };
         let on = ui.global::<melodia_ui::Dialog>().get_target_id() == 1;
 
-        if let Err(e) = persist(&state, on) {
+        if let Err(e) = persist(&paths, on) {
             log::warn!("persist {setting} failed: {}", describe(&e));
             return;
         }

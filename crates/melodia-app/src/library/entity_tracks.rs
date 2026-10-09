@@ -7,10 +7,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::state::AppState;
 use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::error::{AppError, describe};
-use melodia_store::database::queries;
+use melodia_store::database::{DbPool, queries};
 
 /// Which kind of card a grid's menu is acting on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,7 +45,7 @@ impl EntityKind {
 /// The dedupe is load-bearing rather than tidy — a track credited to two selected artists, or
 /// sitting in two selected playlists, should be queued once.
 pub async fn track_ids_for(
-    state: &AppState,
+    db: &DbPool,
     kind: EntityKind,
     ids: &[i64],
 ) -> Result<Vec<i64>, AppError> {
@@ -55,10 +54,10 @@ pub async fn track_ids_for(
     }
     let pairs = match kind {
         EntityKind::Track => return Ok(dedupe(ids.iter().copied())),
-        EntityKind::Album => queries::track::track_ids_by_albums(&state.db, ids).await?,
-        EntityKind::Artist => queries::track::track_ids_by_artists(&state.db, ids).await?,
-        EntityKind::Genre => queries::track::track_ids_by_genres(&state.db, ids).await?,
-        EntityKind::Playlist => return playlist_track_ids(state, ids).await,
+        EntityKind::Album => queries::track::track_ids_by_albums(db, ids).await?,
+        EntityKind::Artist => queries::track::track_ids_by_artists(db, ids).await?,
+        EntityKind::Genre => queries::track::track_ids_by_genres(db, ids).await?,
+        EntityKind::Playlist => return playlist_track_ids(db, ids).await,
     };
     Ok(flatten_in_order(group_by_entity(pairs), ids))
 }
@@ -77,8 +76,8 @@ pub async fn track_ids_for(
 /// An id the split read didn't return was deleted between the grid painting and the click, and a
 /// rule set the evaluator can't answer is logged where it fails. Either way the rest of the
 /// selection still acts: a menu that resolves nothing has only a log line to show for it.
-async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, AppError> {
-    let verdicts = queries::playlist::smart_criteria_for_playlists(&state.db, ids).await?;
+async fn playlist_track_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+    let verdicts = queries::playlist::smart_criteria_for_playlists(db, ids).await?;
 
     let mut manual_ids: Vec<i64> = Vec::new();
     let mut smart: Vec<(i64, SmartCriteria)> = Vec::new();
@@ -91,8 +90,7 @@ async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, A
     }
 
     let resolved = futures_util::future::join_all(smart.iter().map(|(id, criteria)| async move {
-        let track_ids =
-            queries::smart_playlist::get_smart_playlist_track_ids(&state.db, criteria).await;
+        let track_ids = queries::smart_playlist::get_smart_playlist_track_ids(db, criteria).await;
         (*id, track_ids)
     }))
     .await;
@@ -109,7 +107,7 @@ async fn playlist_track_ids(state: &AppState, ids: &[i64]) -> Result<Vec<i64>, A
         }
     }
 
-    let pairs = queries::track::track_ids_by_playlists(&state.db, &manual_ids).await?;
+    let pairs = queries::track::track_ids_by_playlists(db, &manual_ids).await?;
     grouped.extend(group_by_entity(pairs));
     Ok(flatten_in_order(grouped, ids))
 }

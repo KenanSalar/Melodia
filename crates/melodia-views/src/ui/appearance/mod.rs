@@ -91,7 +91,7 @@ pub(super) fn seed_theme_names(ui: &AppWindow) {
 /// static accent has been recorded yet — callers fall back to the
 /// theme's `default_accent`.
 pub(super) fn read_last_static_accent(state: &AppState, theme_id: &str) -> Option<String> {
-    library::settings::get_settings(state)
+    library::settings::get_settings(&state.paths)
         .ok()
         .and_then(|s| s.last_static_accent(theme_id).map(str::to_owned))
 }
@@ -122,8 +122,8 @@ pub(super) fn persist(state: &AppState, theme_id: &str, variant_id: &str, accent
     let theme_id = theme_id.to_owned();
     let variant_id = variant_id.to_owned();
     let accent_id = accent_id.to_owned();
-    state.persist_blocking("persist appearance", move |s| {
-        library::settings::set_appearance(s, theme_id, variant_id, accent_id)
+    state.persist_blocking("persist appearance", move |paths| {
+        library::settings::set_appearance(paths, theme_id, variant_id, accent_id)
     });
 }
 
@@ -140,13 +140,13 @@ pub(super) fn persist_and_kick(
     accent_id: &str,
     kick: &Signal,
 ) {
-    let s = state.clone();
+    let paths = Arc::clone(&state.paths);
     let theme_id = theme_id.to_owned();
     let variant_id = variant_id.to_owned();
     let accent_id = accent_id.to_owned();
     let kick = kick.clone();
     state.runtime.spawn_blocking(move || {
-        match library::settings::set_appearance(&s, theme_id, variant_id, accent_id) {
+        match library::settings::set_appearance(&paths, theme_id, variant_id, accent_id) {
             Ok(()) => kick.bump(),
             Err(e) => log::warn!(
                 "persist appearance: {}; suppressing Material You kick (disk write failed, \

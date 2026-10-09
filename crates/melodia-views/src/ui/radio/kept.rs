@@ -257,14 +257,14 @@ pub fn refresh(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     };
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
     state.runtime.spawn(async move {
-        let favorites = match library::radio::get_favorites(&s).await {
+        let favorites = match library::radio::get_favorites(&s.db).await {
             Ok(favorites) => favorites,
             Err(e) => {
                 log::warn!("radio: kept stations: {}", melodia_core::error::describe(&e));
                 return;
             }
         };
-        let recent = match library::radio::get_recent(&s).await {
+        let recent = match library::radio::get_recent(&s.db).await {
             Ok(recent) => recent,
             Err(e) => {
                 log::warn!("radio: recent stations: {}", melodia_core::error::describe(&e));
@@ -376,7 +376,7 @@ const HEAL_BATCH: usize = 4;
 async fn heal_logos(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
     let logoless = logoless_stations(radio_ui);
     let seed = Arc::new(
-        library::radio::AnswerSeed::for_urls(state, &library::radio::heal_seed_urls(&logoless))
+        library::radio::AnswerSeed::for_urls(&state.db, &library::radio::heal_seed_urls(&logoless))
             .await,
     );
 
