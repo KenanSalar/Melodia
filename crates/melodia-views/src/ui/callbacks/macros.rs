@@ -44,9 +44,7 @@ macro_rules! spawn_blocking_logged {
     ($state:ident, $label:literal, $expr:expr) => {{
         // Before the spawn, so a write that hangs still says what it was.
         log::debug!("view state: {}", $label);
-        // `.clone()` first: `$expr` usually moves the state it borrows `runtime` from,
-        // and a bare `$state.runtime.spawn_blocking(…)` holds that borrow across the move.
-        $state.runtime.clone().spawn_blocking(move || {
+        $state.runtime.spawn_blocking(move || {
             if let Err(e) = $expr {
                 log::warn!("{}: {}", $label, melodia_core::error::describe(&e));
             }

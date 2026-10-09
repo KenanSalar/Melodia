@@ -205,7 +205,7 @@ field and nothing else, 78 `state.paths` and 63 `state.db`. 67 of the `paths` on
 - [x] Module by module, `settings/` and `window.rs` first, then the `db` readers. Five more
       narrowed once their callees had: `entity_tracks::track_ids_for`, `clipboard::entity_lines`,
       `smart_playlists::recount` and `radio::logos::{for_urls, adopted}`. 65 pub functions still
-      take `&AppState`; each reads several fields.
+      take `&AppState`; each reads several fields, bar the exceptions below.
 - [x] Signatures take `&Paths` or `&DbPool` and callers pass `&state.paths` or `&state.db`. No new
       context types. `AppState::persist_blocking` hands its closure `&Paths` and moves one `Arc`
       into the blocking task, where it cloned the whole state; views' six
