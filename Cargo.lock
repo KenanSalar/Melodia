@@ -3842,16 +3842,13 @@ version = "0.18.0"
 dependencies = [
  "blake3",
  "futures-util",
- "image",
  "log",
- "melodia-artwork",
  "melodia-core",
  "melodia-testkit",
  "rand 0.10.2",
  "reqwest",
  "serde",
  "serde_json",
- "tempfile",
  "tokio",
 ]
 

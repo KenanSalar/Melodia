@@ -11,8 +11,10 @@
 //! about not asking a dead host on a schedule rather than about bandwidth.
 
 use crate::state::AppState;
+use melodia_artwork::media::image::logo_tile;
 use melodia_core::entities::radio::{self, StoredLogo};
 use melodia_core::error::AppError;
+use melodia_net::media::fetch::station_logo;
 use melodia_store::database::{DbPool, queries};
 
 use super::directory_client;
@@ -21,17 +23,23 @@ use super::directory_client;
 ///
 /// Through the same seam as the directory calls: "off" has to mean no traffic, and a logo
 /// download is traffic whoever is serving it.
+///
+/// `Ok(None)` is a usable answer with no logo in it (not an image, an unsupported container, or
+/// too small to draw); `Err` is a failure worth retrying later. Callers memoize both, so the
+/// distinction is what separates a debug line from a warning rather than what separates a retry
+/// from a give-up.
 pub async fn fetch_logo(
     state: &AppState,
     favicon_url: &str,
 ) -> Result<Option<StoredLogo>, AppError> {
     let client = directory_client(state)?;
-    melodia_net::media::fetch::station_logo::fetch(
-        client,
-        favicon_url,
-        &state.paths.radio_logos_dir,
-    )
-    .await
+    let Some(fetched) = station_logo::fetch(client, favicon_url).await? else {
+        return Ok(None);
+    };
+    let dir = state.paths.radio_logos_dir.clone();
+    tokio::task::spawn_blocking(move || logo_tile::store(&fetched.bytes, fetched.extension, &dir))
+        .await
+        .map_err(AppError::io_source)
 }
 
 /// How long a logo URL that answered with nothing is left alone, per failed attempt. A day, so a

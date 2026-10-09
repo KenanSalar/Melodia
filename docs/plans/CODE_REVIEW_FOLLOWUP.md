@@ -109,23 +109,33 @@ only the chain below it.
 
 ## Phase 2: take Slint out of the audio stack
 
-Today the chain is `melodia-audio` → `melodia-net` → `melodia-artwork` → `slint`. Net names
+The chain was `melodia-audio` → `melodia-net` → `melodia-artwork` → `slint`. Net named
 artwork only in `media/fetch/station_logo.rs` and `deezer.rs`.
 
-- [ ] Split each of those two files at the store boundary. The HTTP half (fetch, cap, check the
-      bytes) stays in net and returns bytes. The half that writes into the artwork store moves up
-      to its callers, which already sit above artwork: `library/radio/logos.rs` and
-      `services/artist_images.rs` in app, and `discord/artwork.rs` in integrations. Net's own
-      `logo_discovery.rs` keeps calling the fetch half.
-- [ ] Read the Discord call site first. If it only needs the lookup (a URL), the store half goes
-      to app alone. If app and integrations both need it, it goes to integrations, which app
-      already sits above.
-- [ ] Drop `melodia-artwork` from net's manifest. Exit check: `cargo tree -p melodia-audio -i slint`
-      finds nothing, and the same holds for playback, engine and store.
-- [ ] No new crate. CLAUDE.md records how the first new member broke the release workflows by name.
-- [ ] Update CLAUDE.md's `media/` bullet, which describes `fetch/station_logo.rs` as the logo
-      ingest that enforces the store's source-size floor, and `.claude/rules/radio.md` if it names
-      the file.
+- [x] Both files split at the store boundary. `station_logo::fetch` returns a `FetchedLogo` (bytes
+      plus the extension its content type names), and `deezer::download_artist_image` returns the
+      bytes. `logo_discovery.rs` still takes the scheme guard and the timeout from `station_logo`.
+- [x] The station logo's store half went *down*, into artwork's `media/image/logo_tile.rs` as
+      `logo_tile::store` with the `MIN_LOGO_DIM` floor, not up into `library/radio/logos.rs`.
+      `logo_tile` existed only for this caller, and everything the half touches was already
+      artwork's, so app would have held pixel code for no reason. `library::radio::fetch_logo` now
+      fetches, then stores on the blocking pool. Deezer's one store line went up into
+      `services/artist_images.rs` as planned.
+- [x] Discord only needs the lookup (`deezer::search_album_cover`, a URL), so nothing moved to
+      integrations.
+- [x] Net's manifest drops `melodia-artwork`, `image` and the dev-dep `tempfile`. Exit check:
+      `cargo tree -i slint` finds nothing for audio, playback, engine, net and integrations.
+      **Store still finds it**, and the original check was wrong to include it: store names
+      `melodia-artwork` itself for ingest (`scanner.rs`, `metadata.rs`, `cover_embed.rs`), and
+      ADR 33 keeps artwork on Slint.
+- [x] No new crate.
+- [x] The logo store tests moved to `media/image/tests/logo_tile_tests.rs` beside the floor, the
+      `.slint` pin with them. The two that went through a socket only to reach the store call it
+      directly now; net keeps the HTTP cases, plus one checking the bytes come back as served.
+- [x] CLAUDE.md's `media/` bullet, `.claude/rules/radio.md` (paths and the pin's name), and the
+      two `.slint` comments that named `media::fetch::station_logo` now point at `logo_tile`. The
+      `artwork-image.slint` one also dropped "plain-http", stale since cleartext logos were
+      admitted.
 
 ## Phase 3: drop `melodia-ui` from `melodia-app`
 
