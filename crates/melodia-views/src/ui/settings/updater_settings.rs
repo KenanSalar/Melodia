@@ -117,9 +117,8 @@ fn dispatch(ui: &AppWindow, notifications: &NotificationsUi, event: UpdaterEvent
             });
         }
         UpdaterEvent::Failed { kind } => {
-            // Replace any prior failure toast — repeated failures
-            // (e.g. the daily task wakes up to a still-broken DNS)
-            // would otherwise stack identical error cards.
+            // Replace any prior failure toast, or pressing Check again
+            // against a still-broken network stacks identical error cards.
             notifications.dismiss_by_kind("update-failed");
             notifications.show_localized(ui, "error", "update-failed", move |ui| {
                 let g = ui.global::<Settings>();

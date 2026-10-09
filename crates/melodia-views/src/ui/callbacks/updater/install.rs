@@ -43,10 +43,11 @@ pub(super) fn spawn_install(
 
     // Resolve the asset to download. Happy path: re-read the manifest
     // and use the fresh asset — picks up any URL/signature changes
-    // between check and install. Sad path: re-fetch fails (offline, captive portal),
-    // fall back to the asset cached at last `Available` observation.
-    // The signature check downstream catches any drift between cache
-    // and on-disk artifact, so the fallback can't compromise safety.
+    // between check and install. Sad path: re-fetch fails (offline,
+    // captive portal), fall back to the asset cached at last `Available`
+    // observation. The signature check downstream catches any drift
+    // between cache and on-disk artifact, so the fallback can't
+    // compromise safety.
     set_is_installing(&weak, true);
     let runtime = state.runtime.clone();
     runtime.spawn(async move {
