@@ -107,7 +107,7 @@ pub fn set_tray_enabled(paths: &Paths, on: bool) -> Result<(), AppError> {
 /// artwork-derived surfaces blur the cover behind them, and the two artwork tiers build a
 /// blurred half per decode; when `true` they wash the cover's own colours over `Theme.base`
 /// and no blur is built at all. Restart-gated through the `restart-backdrop` `Dialog` flow —
-/// `boot::ui_setup::apply_backdrop_style` is what reads it, before the first tier exists.
+/// `boot::ui_setup::chrome::apply_backdrop_style` is what reads it, before the first tier exists.
 pub fn set_aurora_backdrop(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.backdrop.aurora_backdrop = on;

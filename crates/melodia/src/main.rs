@@ -83,7 +83,7 @@ fn main() -> AppResult<()> {
     let runtime = build_runtime()?;
 
     // Slint's a11y/D-Bus thread looks up a tokio reactor from UI-thread tasks,
-    // so the guard has to stay alive for the entire `app.run()` window.
+    // so the guard has to stay alive for as long as the event loop runs.
     let runtime_guard = runtime.enter();
 
     let (state, channels) = runtime.block_on(AppState::init(paths, runtime.handle().clone()))?;
@@ -270,7 +270,7 @@ fn open_window(settings: Option<&SettingsData>) -> AppResult<AppWindow> {
 
     let app = AppWindow::new().map_err(|e| AppError::io("main window", e))?;
 
-    // After `AppWindow::new()` (the adapter must exist) and before `app.run()`
+    // After `AppWindow::new()` (the adapter must exist) and before `app.show()`
     // (the window must not be shown). `set_size` sets winit's
     // `has_explicit_size`, which stops Slint snapping the window to its
     // content-preferred size on first show.

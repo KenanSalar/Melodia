@@ -290,7 +290,7 @@ pub(crate) fn release_lyrics(ui: &AppWindow, state: &AppState, np_state: &NowPla
 }
 
 /// Install the Now Playing view's models + subscribers. Runs on the Slint
-/// event-loop thread, between `AppWindow::new()` and `app.run()`.
+/// event-loop thread, between `AppWindow::new()` and `app.show()`.
 pub fn install(
     ui: &AppWindow,
     state: &AppState,

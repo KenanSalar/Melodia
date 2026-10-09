@@ -8,10 +8,10 @@ import { AuroraBackdrop } from "../aurora-backdrop.slint";
 // so one pair can serve this tier *and* Now Playing's `Player.np-*`.
 //
 // **Only the live arm is mounted**, safe because the condition is a process constant:
-// `Theme.aurora-backdrop` is written once by `boot::ui_setup::apply_backdrop_style`, before
-// `install_views` and before `app.show()`. Painting the loser transparent is not the free option it
-// reads as — `Brush::is_transparent()` answers `false` for *every* gradient whatever its stop
-// alphas, so femtovg tessellates the path and fills the whole surface anyway.
+// `Theme.aurora-backdrop` is written once by `boot::ui_setup::chrome::apply_backdrop_style`,
+// before `install_views` and before `app.show()`. Painting the loser transparent is not the free
+// option it reads as — `Brush::is_transparent()` answers `false` for *every* gradient whatever its
+// stop alphas, so femtovg tessellates the path and fills the whole surface anyway.
 //
 // `shown` survives the gate as the host's own question — for `LibraryTabBand`, whether the band is
 // painting a hero at all — and the surviving stack drains to its idle colours through it, which is

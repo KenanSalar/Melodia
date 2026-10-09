@@ -87,7 +87,7 @@ pub fn open_on(ui: &AppWindow, tab: SettingsTab) {
 }
 
 /// Seed the active tab from `views.json`. Call from
-/// `boot::ui_setup::hydrate_ui_from_settings`, which already has the view state loaded.
+/// `boot::ui_setup::hydrate::hydrate_ui_from_settings`, which already has the view state loaded.
 pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
     let page = ui.global::<SettingsPage>();
     let clamped = clamp_tab(persisted_tab, page.get_tab_count());

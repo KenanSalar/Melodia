@@ -3,7 +3,7 @@
 //! winit (via Slint's `unstable-winit-030` accessor).
 //!
 //! Seven reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
-//! `AppWindow::new()` and `app.run()`, where boot calls [`install`], so the window maps
+//! `AppWindow::new()` and `app.show()`, where boot calls [`install`], so the window maps
 //! with its frame decided rather than swapping it on screen), the
 //! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
 //! [`drag_region`], [`resize_grab`], [`resize_release`]), the Slint tick a Win32 drag parks
@@ -60,7 +60,7 @@ use melodia_ui::{AppWindow, Theme};
 /// leaves two windows on screen while the old process tears down its runtime.
 static RESPAWN_AFTER_EXIT: AtomicBool = AtomicBool::new(false);
 
-/// Read by `main()` after `app.run()` returns.
+/// Read by `shutdown::respawn_if_requested` once the event loop has returned.
 pub fn should_respawn_after_exit() -> bool {
     RESPAWN_AFTER_EXIT.load(Ordering::SeqCst)
 }
@@ -165,7 +165,7 @@ pub fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
 }
 
 /// Hydrate `Theme.use-native-titlebar` from the persisted setting and wire the
-/// `WindowChrome` callbacks. Must run between `AppWindow::new()` and `app.run()`.
+/// `WindowChrome` callbacks. Must run between `AppWindow::new()` and `app.show()`.
 pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
     let settings = melodia_app::library::settings::get_settings(&state.paths)?;
     let use_native = settings.window.use_native_titlebar;

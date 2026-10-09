@@ -355,7 +355,7 @@ three components that answer it, and each argues its geometry at its own file.
   **Which is also why the setting is restart-gated rather than live**: the two arms publish
   unrelated tiers, so a flip mid-session leaves one stack painting the other's colours, and the
   artwork tiers decide at construction whether to build a blurred half at all
-  (`boot::ui_setup::apply_backdrop_style` raises the flag ahead of `install_views` for that
+  (`boot::ui_setup::chrome::apply_backdrop_style` raises the flag ahead of `install_views` for that
   reason; `boot::tests::ui_setup_tests` pins the order).
   **Producing the `BackdropSample` is the decoder's job, never the publisher's** — it runs in
   whichever `spawn_blocking` already decoded the cover, the quantize being the heaviest thing on
@@ -386,14 +386,14 @@ three components that answer it, and each argues its geometry at its own file.
   mounted**: each stack sits behind its own branch of that property, the two conditions each
   other's negation.
   **The branch is safe because the condition is a process constant**: `Theme.aurora-backdrop` is an
-  `in` property written once by `boot::ui_setup::apply_backdrop_style`, ahead of `install_views` and
-  `app.show()`, so no frame sees it move and neither leaf carries a `changed` tracker. The pair was
-  mounted unconditionally with the loser painted transparent for as long as an art-less track could
-  move the arm with the view on screen — that term is gone, and **a transparent loser was never the
-  free option it reads as**: `Brush::is_transparent()` (`i-slint-core/graphics/brush.rs`) answers
-  `false` for every gradient whatever its stop alphas, and femtovg's `draw_rectangle` tessellates
-  the path before `brush_to_paint` looks at it, so a stack faded to nothing still filled the whole
-  surface every frame — four of them on the blur arm.
+  `in` property written once by `boot::ui_setup::chrome::apply_backdrop_style`, ahead of
+  `install_views` and `app.show()`, so no frame sees it move and neither leaf carries a `changed`
+  tracker. The pair was mounted unconditionally with the loser painted transparent for as long as
+  an art-less track could move the arm with the view on screen — that term is gone, and **a
+  transparent loser was never the free option it reads as**: `Brush::is_transparent()`
+  (`i-slint-core/graphics/brush.rs`) answers `false` for every gradient whatever its stop alphas,
+  and femtovg's `draw_rectangle` tessellates the path before `brush_to_paint` looks at it, so a
+  stack faded to nothing still filled the whole surface every frame — four of them on the blur arm.
   What the gate does **not** retire is `shown`: the mounted stack still drains to its idle colours
   through it (below), which is why each stack's `shown: false` arm stays a *gradient of the same
   shape* — `Brush::interpolate` blends stop-for-stop and only between matching types, so

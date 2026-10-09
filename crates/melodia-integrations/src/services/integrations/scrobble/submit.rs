@@ -99,8 +99,7 @@ impl ScrobbleService {
             // Nowhere to send: drop the Last.fm side of every pending item.
             lastfm.drop_pending();
         } else if let Some(creds) = lastfm_creds.as_ref()
-            && let (Some(api_key), Some(secret)) =
-                (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
+            && let Some((api_key, secret)) = lastfm::keys()
         {
             let session = LastfmSession { api_key, secret, session_key: &creds.session_key };
             self.scrobble_to_lastfm(&mut lastfm, &client, &session, stop).await;
@@ -139,7 +138,7 @@ impl ScrobbleService {
         session: &LastfmSession<'_>,
         stop: &CancellationToken,
     ) {
-        let (batch, idx) = take_batch(drain.snapshot, |it| it.lastfm_remaining);
+        let (batch, idx) = take_batch(drain.snapshot, drain.pending);
         if batch.is_empty() {
             return;
         }
@@ -167,7 +166,7 @@ impl ScrobbleService {
         token: &str,
         stop: &CancellationToken,
     ) {
-        let (batch, idx) = take_batch(drain.snapshot, |it| it.listenbrainz_remaining);
+        let (batch, idx) = take_batch(drain.snapshot, drain.pending);
         if batch.is_empty() {
             return;
         }
@@ -296,8 +295,7 @@ impl ScrobbleService {
         if !lastfm_ready {
             lastfm.drop_pending();
         } else if let Some(creds) = lastfm_creds.as_ref()
-            && let (Some(api_key), Some(secret)) =
-                (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
+            && let Some((api_key, secret)) = lastfm::keys()
         {
             let session = LastfmSession { api_key, secret, session_key: &creds.session_key };
             self.love_on_lastfm(&mut lastfm, &client, &session, stop).await;
@@ -345,12 +343,12 @@ impl ScrobbleService {
         stop: &CancellationToken,
     ) {
         let LastfmSession { api_key, secret, session_key } = *session;
-        let snapshot = drain.snapshot;
+        let (snapshot, pending) = (drain.snapshot, drain.pending);
         for (i, love) in snapshot.iter().enumerate() {
             if drain.done.len() >= SCROBBLE_BATCH_MAX {
                 break;
             }
-            if !love.lastfm_remaining {
+            if !pending(love) {
                 continue;
             }
             match stop
@@ -382,12 +380,12 @@ impl ScrobbleService {
         token: &str,
         stop: &CancellationToken,
     ) {
-        let snapshot = drain.snapshot;
+        let (snapshot, pending) = (drain.snapshot, drain.pending);
         for (i, love) in snapshot.iter().enumerate() {
             if drain.done.len() >= SCROBBLE_BATCH_MAX {
                 break;
             }
-            if !love.listenbrainz_remaining {
+            if !pending(love) {
                 continue;
             }
             let Some(mbid) = love.track.recording_mbid.as_deref() else {

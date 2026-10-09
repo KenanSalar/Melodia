@@ -149,7 +149,7 @@ export component AppWindow inherits Window {
         }
     }
 
-    // `window_chrome::install` hydrates `Theme.use-native-titlebar` before `app.run()`, so the
+    // `window_chrome::install` hydrates `Theme.use-native-titlebar` before `app.show()`, so the
     // window maps with the right frame; Slint applies later flips live. Dropping the OS frame also
     // drops its resize edges, which `ResizeRing` restores along this band, as wide as the margins it
     // covers so they resize the way the frame's borders did.

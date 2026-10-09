@@ -1,4 +1,4 @@
-//! What `boot::ui_setup::install_views` hands every view slice's `install`.
+//! What `boot::ui_setup::views::install_views` hands every view slice's `install`.
 
 use std::sync::Arc;
 

@@ -306,7 +306,7 @@ fn logical_dim(physical: u32, scale: f64) -> u32 {
 }
 
 /// Derive a grid-cover cap from the window's own logical size. **Must run after
-/// `app.show()`** — see the deferred call in `boot::ui_setup::install_views`; a zero
+/// `app.show()`** — see the deferred call in `boot::ui_setup::views::install_views`; a zero
 /// extent means it ran early anyway and falls back rather than clamping to the floor.
 ///
 /// Slint's window rather than winit's monitor: the monitor caps against a screen the

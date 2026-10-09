@@ -107,9 +107,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     // `library_changed` is bumped by scans / imports / favorite toggles;
     // `stats_changed` after every play-count flush (which writes both this
     // view's ordering keys — `last_played` for Songs, `play_count` for Most
-    // Played). So it is the second subscriber to `stats_changed` (Favorites is
-    // the first). Visible ⇒ refetch grid + tracks in place; hidden ⇒ mark dirty
-    // for the next enter.
+    // Played), so it listens to `stats_changed` as Favorites and Playlists
+    // do. Visible ⇒ refetch grid + tracks in place; hidden ⇒ mark dirty
+    // for the next enter. Its own loop for Favorites' reason: it selects over
+    // both channels, and `ui::signal::on_signal` takes one.
     {
         let s = state.clone();
         let ru = rp_ui.clone();

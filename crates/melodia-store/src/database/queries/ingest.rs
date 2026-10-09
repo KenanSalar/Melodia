@@ -286,10 +286,9 @@ pub(crate) async fn ingest_scanned_files(
 /// Batch-load existing tracks with file info for incremental comparison.
 /// Maps `file_path` -> (`file_size`, `date_modified`) for mtime+size gate.
 ///
-/// Chunked over `scanned_files` directly — per-chunk `Vec<Cow<'_, str>>`
-/// binds are alloc-free for valid-UTF-8 paths (the common case) and drop
-/// at end of chunk, vs. the previous `Vec<String>` covering every scanned
-/// file held resident for the whole function (~1 MiB on a 10k-track scan).
+/// Chunked over `scanned_files` itself, so a chunk's `Cow` binds (alloc-free for valid UTF-8,
+/// the common case) drop at its end rather than one `String` per scanned path living for the
+/// whole ingest.
 async fn load_existing(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     scanned_files: &[ScannedFile],

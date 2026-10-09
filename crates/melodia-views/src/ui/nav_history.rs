@@ -14,7 +14,7 @@
 //! lands a section flip — and so a `record_current` — long after that step returned.
 //! [`PendingNav::apply`] and [`PendingNav::apply_deferred`] are that split.
 //!
-//! Not persisted: each launch starts empty. `boot::ui_setup::install_views` seeds one
+//! Not persisted: each launch starts empty. `boot::ui_setup::views::install_views` seeds one
 //! entry for the section landed on, and any persisted detail's async open records itself
 //! on the way in.
 

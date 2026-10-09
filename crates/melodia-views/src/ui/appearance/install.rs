@@ -95,7 +95,7 @@ fn spawn_repaint_subscriber(
     repaint_tx
 }
 
-/// The window rows' persisted values, written before `app.run()` so the first
+/// The window rows' persisted values, written before `app.show()` so the first
 /// painted frame reflects them.
 fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
     // Seed the Match Unfocused Window Background row.
@@ -109,7 +109,7 @@ fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
     // single source of truth (chips bind to it); `Theme.shell-radius`
     // drives the actual painted rounding on the outer mantle shell +
     // inner content panel in custom-titlebar mode. Both must be set
-    // before `app.run()` so the first frame renders with the persisted
+    // before `app.show()` so the first frame renders with the persisted
     // radius.
     #[allow(
         clippy::cast_possible_wrap,
@@ -127,7 +127,7 @@ fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
     // Seed the Decoration Button Style + Side rows. Same shape as the
     // corner-radius seed above: `Settings.*` is the UI source of truth
     // (chip selection), `Theme.*` drives `custom-titlebar.slint`'s
-    // conditional layout. Both written before `app.run()` so the first
+    // conditional layout. Both written before `app.show()` so the first
     // painted frame reflects the persisted choice.
     {
         let style_idx = window_settings::idx_for(settings.window.titlebar_button_style);

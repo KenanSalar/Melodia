@@ -10,7 +10,7 @@ use melodia_views::ui;
 use slint::ComponentHandle;
 
 /// Hydrate Slint's bundled-translation runtime from the persisted
-/// `settings.locale` *before* `app.run()`, so the very first frame's `@tr(...)`
+/// `settings.locale` *before* `app.show()`, so the very first frame's `@tr(...)`
 /// resolutions land in the chosen language, then wire the Language section.
 pub fn install_locale(
     app: &AppWindow,

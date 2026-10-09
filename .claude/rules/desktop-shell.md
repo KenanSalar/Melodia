@@ -75,7 +75,7 @@ the OS owns has to be attached late or not at all on at least one platform.
 
 - **The Native Title Bar toggle restarts** via `Dialog` `"restart-titlebar"` →
   `window_chrome::request_respawn_and_quit`; hydrate `Theme.use-native-titlebar` *before*
-  `app.run()` so the window maps with the right frame. Slint applies `no-frame` live, so the frame
+  `app.show()` so the window maps with the right frame. Slint applies `no-frame` live, so the frame
   is not what the restart is for; `window_chrome`'s module doc says what is.
 
 - **Under the native title bar the miniplayer drops the frame**, through `app-window.slint`'s
@@ -124,9 +124,9 @@ the OS owns has to be attached late or not at all on at least one platform.
   which has to clear the miniplayer's exit edge.
 
 - **`"restart-backdrop"` is the third of these and the one whose deadline is earlier than
-  `app.run()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
-  `BlurSpec` at all, so `boot::ui_setup::apply_backdrop_style` raises it ahead of `install_views`
-  rather than in `hydrate_ui_from_settings`. Same three-part shape as the tray's:
+  `app.show()`** — `BackdropFlags.aurora_backdrop` decides whether the two artwork tiers hold a
+  `BlurSpec` at all, so `boot::ui_setup::chrome::apply_backdrop_style` raises it ahead of
+  `install_views` rather than in `hydrate_ui_from_settings`. Same three-part shape as the tray's:
   `WindowChrome.restart-backdrop()` → `controls.rs::on_restart_backdrop`
   (`library::window::set_aurora_backdrop` + `request_respawn_and_quit`). Why it can't be live is
   `.claude/rules/ui-patterns.md`'s.

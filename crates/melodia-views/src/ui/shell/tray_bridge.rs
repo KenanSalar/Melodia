@@ -213,7 +213,7 @@ fn reschedule_geometry_restore(
 }
 
 /// Create the tray and spawn the action receiver and state subscriber. Call once during
-/// startup, before `app.run()`.
+/// startup, before `app.show()`.
 pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     let (tx, rx) = tokio::sync::mpsc::channel::<TrayAction>(TRAY_ACTION_CHANNEL_CAP);
     spawn_action_receiver(spawner, state, ui.as_weak(), rx);

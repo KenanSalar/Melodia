@@ -85,7 +85,7 @@ fn default_last_nav_index() -> i32 {
 /// The highest index `nav.slint` routes. Bounds [`ViewStateData::last_nav_index`]
 /// at both ends of its round trip — the clamp in
 /// `library::settings::set_last_nav_index` and the guard in
-/// `boot::ui_setup::install_views` — and the two have to agree, a section written
+/// `boot::ui_setup::views::install_views` — and the two have to agree, a section written
 /// past the write's clamp and one dropped by the read's guard both landing the
 /// next boot somewhere else with nothing to say why.
 pub const MAX_NAV_INDEX: i32 = 10;

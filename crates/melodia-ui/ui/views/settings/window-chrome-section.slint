@@ -259,7 +259,7 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-tray-icon && root.show-tray-icon: SectionDivider {}
 
-        // Master toggle for the tray subsystem — off, `main.rs` skips
+        // Master toggle for the tray subsystem. Off, boot's `install_ui` skips
         // `tray_bridge::install` entirely (no D-Bus connection, no service
         // thread). That gate reads the value once at startup, so this takes the
         // same restart-dialog shape as the Native Title Bar row above.

@@ -26,8 +26,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     // --- Section-active mirror + cache release / re-enter --------
     // Seed the synchronous shadow from the current nav state — it has to be right on its own, the
     // gate firing only on a later difference (`.claude/rules/ui-patterns.md`'s `SectionActiveGate`
-    // bullet). `boot::ui_setup::install_views` hydrates the persisted nav index before any `wire_*`
-    // runs, so the read below sees it; the sibling `active_tab` shadow is `favorites::seed_tab`'s.
+    // bullet). `boot::ui_setup::views::install_views` hydrates the persisted nav index before any
+    // `wire_*` runs, so the read below sees it; the sibling `active_tab` shadow is
+    // `favorites::seed_tab`'s.
     fav_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_FAVORITES);
     {
         let fu = fav_ui.clone();
@@ -98,9 +99,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
 
     // --- library_changed + stats_changed subscriber ---
     // `library_changed` is bumped after every favorite toggle and every scan / file-event commit;
-    // `stats_changed` after every play-count flush. Favorites is the only surface ranking by
-    // `play_count`, so it alone listens to both. Visible, it refetches in place; hidden, it marks
-    // dirty so the next enter triggers `kick_full_refresh`.
+    // `stats_changed` after every play-count flush, which reorders Most Played. Visible, it
+    // refetches in place; hidden, it marks dirty so the next enter triggers `kick_full_refresh`.
+    // Its own loop because it selects over both channels, and `ui::signal::on_signal` takes one.
     {
         let s = state.clone();
         let fu = fav_ui.clone();

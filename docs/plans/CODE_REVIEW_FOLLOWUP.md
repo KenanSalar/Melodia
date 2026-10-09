@@ -148,8 +148,9 @@ three painters that copied views' `callbacks/updater/paint.rs` line for line, an
       `ui::callbacks::check_painter` builds it over views' existing painters, so the copies
       are gone. This replaced the planned `watch` on `AppState`: no channel, no subscriber and no
       `AppState` field, and every write lands exactly as it did before.
-- [x] `rss_sampler::sampler` hands its loop back, and `boot::ui_setup::install_rss_sampler` spawns
-      it on the UI thread with the view tag `main.rs` used to build.
+- [x] `rss_sampler::sampler` hands its loop back, and
+      `boot::ui_setup::subscribers::install_rss_sampler` spawns it on the UI thread with the view
+      tag `main.rs` used to build.
 - [x] App's manifest drops `melodia-ui`, `slint` and `async-compat`. A `.slint` edit no longer
       rebuilds app.
 - [x] CLAUDE.md's `tasks/` bullet and its Memory Discipline line now describe it.
@@ -289,9 +290,10 @@ clippy counting code lines only. Now none does, and both lints are on.
       column toggle are `callbacks::track_list`, over a `TrackListActions` trait all nine track
       lists implement. Playlists' `dialog.rs` split into `crud.rs`, `artwork.rs` (the Edit Artwork
       opener shared with `detail.rs`), the add-picker (which took its opener) and
-      `ui/callbacks/dialog_closed.rs`. One `refresh_after_edit` replaces four copies of
-      refetch-then-refresh-detail. The updater's failure tail is `paint::report_failure`, and
-      `nav_history`'s five open arms go through one `spawn_open`.
+      `ui/callbacks/dialog_closed.rs`, leaving the row-cover lookup as `row_cover.rs`. One
+      `refresh_after_edit` replaces four copies of refetch-then-refresh-detail. The updater's
+      failure tail is `paint::report_failure`, and `nav_history`'s five open arms go through one
+      `spawn_open`.
 - [x] `cognitive_complexity = "warn"` in `[workspace.lints.clippy]`; `too_many_lines = "allow"` is
       gone, and `clippy.toml` spells `too-many-lines-threshold = 100` beside the complexity one.
       No `#[expect]` was needed.
@@ -304,8 +306,9 @@ clippy counting code lines only. Now none does, and both lints are on.
       `winit_filter`'s `on_focus` moved without a Windows compile.
 - Found on the way:
   - Six subscribers wrote their own `library_changed`/`stats_changed` loop despite CLAUDE.md;
-    they take `ui::signal::on_signal` now. Favorites, Recently Played and `library_settings` keep
-    theirs, each awaiting its refresh inline, which `on_signal` can't express.
+    they take `ui::signal::on_signal` now. Favorites and Recently Played keep theirs, selecting
+    over two channels, and `library_settings` its own, awaiting the refetch inline; each says so
+    at the loop.
   - Tracks' and Browse's `columns.rs` were the toggle-column wire under another name; both are
     gone.
   - The single playlist delete stopped at a failed write and skipped the selection clear and
@@ -314,6 +317,8 @@ clippy counting code lines only. Now none does, and both lints are on.
     third. `paint_listing` writes them for all three.
   - The radio import's per-file loop moved to `library::radio_files::import_stations_from_files`,
     the twin of the playlist one.
+  - Four call sites spelled the Last.fm key pair by hand; they take `lastfm::keys()` now, and the
+    two consts behind it are private.
   - `ingest.rs` claimed the move-candidate stat ran outside the writer transaction, and
     `library-data.md` that Search's rating stayed non-optimistic. Both corrected, along with every
     doc that named `main.rs` as the caller of a step now in `boot`.

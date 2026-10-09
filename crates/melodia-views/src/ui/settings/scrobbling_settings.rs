@@ -293,7 +293,7 @@ fn wire_lastfm_open_auth(ui: &AppWindow, state: &AppState) {
     let state = state.clone();
     let weak = ui.as_weak();
     ui.global::<ScrobbleUi>().on_lastfm_open_auth(move || {
-        let Some((api_key, secret)) = lastfm_keys() else {
+        let Some((api_key, secret)) = lastfm::keys() else {
             return;
         };
         begin_busy(&weak);
@@ -324,7 +324,7 @@ fn wire_lastfm_finish(ui: &AppWindow, state: &AppState) {
     let state = state.clone();
     let weak = ui.as_weak();
     ui.global::<ScrobbleUi>().on_lastfm_finish(move |token| {
-        let Some((api_key, secret)) = lastfm_keys() else {
+        let Some((api_key, secret)) = lastfm::keys() else {
             return;
         };
         let token = token.to_string();
@@ -350,11 +350,6 @@ fn wire_lastfm_finish(ui: &AppWindow, state: &AppState) {
             }
         });
     });
-}
-
-/// The build's Last.fm API key and shared secret, `None` in a build without them.
-fn lastfm_keys() -> Option<(&'static str, &'static str)> {
-    Some((lastfm::LASTFM_API_KEY?, lastfm::LASTFM_SHARED_SECRET?))
 }
 
 /// The credential a provider just issued has been written, or failed to be.

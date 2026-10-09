@@ -198,7 +198,7 @@ export global Theme {
     out property <duration> dur-med: 250ms;
     out property <duration> dur-spatial: 400ms;
 
-    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.run()`**: Slint applies
+    // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.show()`**: Slint applies
     // `no-frame` live, so a later write maps the window with the wrong frame and swaps it on screen.
     in-out property <bool> use-native-titlebar: false;
 
@@ -224,7 +224,8 @@ export global Theme {
     // only Rust reader, so no publisher can solve for one surface while the mount paints the other.
     // **`in`, not `in-out`**: the two arms publish different tiers, so a mid-session flip leaves one
     // stack painting the other's colours, and the qualifier is what pins
-    // `boot::ui_setup::apply_backdrop_style` as the only writer. The default matches the setting's.
+    // `boot::ui_setup::chrome::apply_backdrop_style` as the only writer. The default matches the
+    // setting's.
     in property <bool> aurora-backdrop: true;
 
     // Integer arithmetic, so no float rounding; anything ≤ 0 collapses to "0:00", which lets

@@ -376,8 +376,7 @@ impl ScrobbleService {
         };
 
         if let Some(creds) = lastfm_creds
-            && let (Some(api_key), Some(secret)) =
-                (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
+            && let Some((api_key, secret)) = lastfm::keys()
         {
             let client = self.client();
             let track = track.clone();

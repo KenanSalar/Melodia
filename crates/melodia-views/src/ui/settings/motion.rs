@@ -8,7 +8,7 @@ use melodia_ui::{AppWindow, Settings};
 
 /// Seed and wire the Skip Startup Animation switch.
 ///
-/// Nothing is applied here — `boot::ui_setup::hydrate_ui_from_settings` reads the same
+/// Nothing is applied here — `boot::ui_setup::hydrate::hydrate_ui_from_settings` reads the same
 /// field and raises `Nav.suppress-enter-animation` from it before the window is shown,
 /// which is the only mount the setting speaks for. Seeded with `if let Ok` so an
 /// unreadable file leaves the Slint-declared `false`, the same answer the hydrate reaches.

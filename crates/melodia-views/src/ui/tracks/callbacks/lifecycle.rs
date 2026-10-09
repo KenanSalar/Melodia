@@ -39,7 +39,7 @@ pub(super) fn wire(ui: &AppWindow, _state: &AppState, tracks_ui: &Arc<TracksUi>)
         // answer. Marking dirty anyway made a tab pick a full `get_tracks` plus a
         // library-sized row build on the event loop, every time the user came back to
         // Songs. Freshness is unaffected:
-        // `boot::ui_setup::install_library_changed_refresher` already folds every bump
+        // `boot::ui_setup::subscribers::install_library_changed_refresher` already folds every bump
         // arriving while this tab is unmounted into the same flag.
         if !active {
             // The one exception, and it releases nothing: a selection the user can no longer

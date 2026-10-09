@@ -306,7 +306,7 @@ fn release_popup_highlight(weak: &slint::Weak<AppWindow>) {
 fn on_resized(w: &slint::Window, weak: &slint::Weak<AppWindow>) -> EventResult {
     // Into the live mirror while the winit window is still alive: shutdown
     // reads the mirror, `with_winit_window` answering `None` once
-    // `app.run()` has returned.
+    // the event loop has returned.
     let (maximized, frame, margins) = w
         .with_winit_window(|ww| {
             let reading = geometry::WindowReading::take(ww);

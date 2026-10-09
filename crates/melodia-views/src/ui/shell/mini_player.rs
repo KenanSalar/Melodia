@@ -42,7 +42,7 @@ fn follow_artwork(np_state: &NowPlayingState) {
 }
 
 /// Wire the callbacks to the Up Next subscriber's `mini_visible` gate and the large artwork's
-/// cache lifecycle. Runs on the event-loop thread between `AppWindow::new()` and `app.run()`,
+/// cache lifecycle. Runs on the event-loop thread between `AppWindow::new()` and `app.show()`,
 /// the same window as `now_playing` and `window_chrome`.
 pub fn install(
     app: &AppWindow,

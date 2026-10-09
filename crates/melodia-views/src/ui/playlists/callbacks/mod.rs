@@ -7,7 +7,7 @@
 //! * [`crud`] — the create / rename / delete commits.
 //! * [`artwork`] — the Edit Artwork picker: the grid card's opener and the body [`detail`]'s
 //!   shares, the mosaic-candidate toggle and the apply / clear commits.
-//! * [`dialog`] — the row-tier cover lookup every picker dialog draws through.
+//! * [`row_cover`] — the row-tier cover lookup every picker dialog draws through.
 //! * [`smart`] — the smart-playlist rule editor.
 //! * [`lifecycle`] — section enter/leave cache management + the
 //!   `library_changed` re-fetch subscriber.
@@ -17,10 +17,10 @@
 mod artwork;
 mod crud;
 mod detail;
-mod dialog;
 mod files;
 mod grid;
 mod lifecycle;
+mod row_cover;
 mod smart;
 
 use std::rc::Rc;
@@ -45,7 +45,7 @@ use melodia_ui::AppWindow;
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     grid::wire(ui, state, playlists_ui);
     detail::wire(ui, state, playlists_ui);
-    dialog::wire(ui, playlists_ui);
+    row_cover::wire(ui, playlists_ui);
     crud::wire(ui, state, playlists_ui);
     artwork::wire(ui, state, playlists_ui);
     smart::wire(ui, state, playlists_ui);

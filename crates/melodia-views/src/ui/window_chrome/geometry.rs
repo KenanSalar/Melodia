@@ -1,6 +1,6 @@
 //! Persisted window geometry restore + snapshot.
 //!
-//! **Restore** runs in `main.rs` between `AppWindow::new()` and `app.run()`. Size and
+//! **Restore** runs in `main.rs` between `AppWindow::new()` and `app.show()`. Size and
 //! position go through `slint::Window::set_size` / `set_position` rather than the
 //! `WindowAttributes` hook, because `set_size` flips `has_explicit_size` in the winit
 //! backend and that flag, re-read at first show, is what stops Slint snapping the window
@@ -10,7 +10,7 @@
 //! window-attributes hook applies `with_maximized(true)` during `AppWindow::new()` — no
 //! un-maximize→maximize flash.
 //!
-//! **Save** can't read winit: `shutdown::save_state_on_exit` runs after `app.run()`
+//! **Save** can't read winit: `shutdown::save_state_on_exit` runs after the event loop
 //! returns, by which point the window is destroyed and `with_winit_window` answers `None`.
 //! [`super::winit_filter`]'s `Resized` / `Moved` handlers call [`record`] to keep an
 //! in-memory mirror while the window is alive, and [`snapshot_into`] reads it at exit.
@@ -82,7 +82,7 @@ impl PersistedGeometry {
 
 /// Restore the persisted window size and position, the full player held behind a miniplayer it
 /// closed as, and seed `WindowChrome.is-maximized`. Must run after `AppWindow::new()`, the window
-/// adapter having to exist, and before `app.run()`.
+/// adapter having to exist, and before `app.show()`.
 pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<FullPlayerGeometry>) {
     let mini = app.global::<MiniPlayer>();
     let floor = LogicalSize::new(mini.get_window_min_width(), mini.get_window_min_height());
