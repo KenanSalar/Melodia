@@ -3,15 +3,16 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Global as _, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global as _};
 
+use super::artwork::open_edit_artwork;
 use crate::ui::callbacks::track_detail;
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, Dialog, PlaylistDetail};
+use melodia_ui::{AppWindow, PlaylistDetail};
 
 /// Wire the `PlaylistDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
@@ -84,13 +85,11 @@ fn wire_reorder(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi
     });
 }
 
-/// Populates the mosaic candidates from the playlist's own track artworks and opens the picker,
-/// seeding `current-artwork` from `PlaylistDetail.cover`, already decoded for the open detail,
-/// so the dialog opens on a preview of the saved state. The rest of the chrome is
-/// `Dialog.prepare-edit-artwork`'s.
+/// Opens the Edit Artwork picker seeding `current-artwork` from `PlaylistDetail.cover`, already
+/// decoded for the open detail, so the dialog opens on a preview of the saved state.
 ///
 /// Rename and Delete need no handler here: their opens are populated inline in
-/// `my-library/tab-pills.slint`, and their commits are `super::dialog`'s.
+/// `my-library/tab-pills.slint`, and their commits are `super::crud`'s.
 fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
@@ -101,25 +100,7 @@ fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
             return;
         }
         let Some(claim) = DialogClaim::take_from(&weak) else { return };
-        let s = s.clone();
-        let weak = weak.clone();
-        s.runtime.clone().spawn(async move {
-            let candidates =
-                library::playlists::get_playlist_artwork_paths(&s.db, id).await.unwrap_or_default();
-            let _ = weak.upgrade_in_event_loop(move |ui| {
-                if !claim.holds(&ui) {
-                    return;
-                }
-                let current_cover = ui.global::<PlaylistDetail>().get_cover();
-                let cand_rows: Vec<SharedString> =
-                    candidates.into_iter().map(SharedString::from).collect();
-                let dlg = ui.global::<Dialog>();
-                dlg.invoke_prepare_edit_artwork(i32::try_from(id).unwrap_or(-1));
-                dlg.set_current_artwork(current_cover);
-                dlg.set_mosaic_candidates(ModelRc::new(VecModel::from(cand_rows)));
-                dlg.set_open(true);
-            });
-        });
+        open_edit_artwork(&s, &weak, claim, id, |ui| ui.global::<PlaylistDetail>().get_cover());
     });
 }
 

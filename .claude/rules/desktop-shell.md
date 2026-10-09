@@ -277,8 +277,8 @@ The other way paths arrive from outside, and the one that can arrive before ther
   `MediaPlayer`. Bounded `mpsc` (cap 32) decouples the callback thread from `PlayerState`,
   `EventSink` from Slint. **Windows SMTC deferred** — souvlaki panics on a null
   `HWND` and no OS window exists at `AppState::init`, so `init_media_controls()` leaves Windows
-  inert; `main()` posts a one-shot post-show `invoke_from_event_loop` grabbing the `HWND` and
-  calling `MediaControlsHandle::attach_smtc`, a newly-attached `true` triggering a no-op
+  inert; `boot::ui_setup::install` posts a one-shot post-show `invoke_from_event_loop` grabbing
+  the `HWND` and calling `MediaControlsHandle::attach_smtc`, a newly-attached `true` triggering a no-op
   `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly; `event_tx`
   retained Windows-only for the late rewire.
 
@@ -289,8 +289,8 @@ The other way paths arrive from outside, and the one that can arrive before ther
   a `sinks.view_model` subscriber pushes tooltip + play/pause label. Linux eager; **Win/mac deferred,
   and dropped by `tray_bridge::shutdown()` before `process::exit` or the icon ghosts**. No SNI host
   → `init_tray` `None`/`false`, tray-less still usable; labels English-only.
-  `TrayFlags.tray_enabled` (default on) gates `tray_bridge::install` from `main.rs`; flipping it is
-  restart-gated through `restart-tray` `Dialog` → `WindowChrome.restart-tray()` →
+  `TrayFlags.tray_enabled` (default on) gates `tray_bridge::install` from
+  `boot::ui_setup::install`; flipping it is restart-gated through `restart-tray` `Dialog` → `WindowChrome.restart-tray()` →
   `controls.rs::on_restart_tray` (`library::window::set_tray_enabled` + `request_respawn_and_quit`,
   which may decline — above).
 

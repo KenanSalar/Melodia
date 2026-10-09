@@ -266,24 +266,57 @@ shared callbacks; only the shuffle's name differs.
 
 ## Phase 7: break up the monolithic functions, then turn the lints on
 
-The largest today, roughly: playlists `callbacks/dialog.rs::wire` (390), `main` (305),
-`winit_filter::install` (210), `callbacks/tags/open.rs::populate` (175),
-`search/callbacks/results.rs::wire` (165), `card_actions::wire` (160), `ingest_scanned_files`
-(140), `spawn_playback_monitor` (140) and `library::scan::scan_one` (110). Phase 6 split the four
-detail `wire`s into one function per concern.
+Re-measured on 2026-10-09 with both lints forced on: 32 functions over clippy's 100 code lines
+and one (`main`, 40) over the complexity threshold of 30. `scan_one` no longer tripped either,
+clippy counting code lines only. Now none does, and both lints are on.
 
-- [ ] Wiring functions get one named function per callback, and `wire` becomes the list of calls.
-- [ ] `main()` splits into named boot steps, kept in order. `crates/melodia/src/tests/main_order_tests.rs`
-      pins that order by reading `main.rs` as text, so its pins move with the code in the same
-      step.
-- [ ] The rest (`scan_one`, `ingest_scanned_files`, `spawn_playback_monitor`, `populate`) split
-      by stage.
-- [ ] Turn on `cognitive_complexity` in `[workspace.lints.clippy]`. Its threshold of 30 is already
-      set in `clippy.toml`, where it does nothing until the lint is on.
-- [ ] Remove `too_many_lines = "allow"` from `Cargo.toml` once the count is down. If the leftovers
-      still need it, set `too-many-lines-threshold` in `clippy.toml` to what the tree meets and
-      lower it over time. A function that must stay long gets `#[expect(…, reason = "…")]`, never
-      `allow`.
+- [x] Wiring functions are the list of their concerns: one named function per callback, or per
+      small group where the callbacks are thin forwards to one handle (a selection trio, the
+      transport macros), the shape Phase 6 gave `callbacks::track_detail`.
+- [x] `main()` keeps its two literal-first branches and calls `prepare_process`,
+      `install_diagnostics`, `build_runtime` and `open_window`, all in `main.rs`. UI construction
+      is `boot::ui_setup::install_ui`, itself five stages, in a new `install.rs`. Nothing it builds
+      has to outlive the call: every installed closure and subscriber holds its own clone. The exit
+      tail stays inline, the `EnterGuard` borrow ruling out one helper for it.
+- [x] `main_order_tests` reads call order off `main`'s own body and each call off the stage that
+      holds it. File-wide offsets would compare where the stages are defined.
+- [x] The rest split by stage: `ingest_scanned_files` (`load_existing`,
+      `resolve_move_candidates`, an `InsertBuffer` replacing the copied remainder flush), `extract`,
+      the playback monitor (a `Monitor` whose `poll` returns `Counted` or `Skipped`, so the save
+      cadence still counts playback), `submit_loves` and `submit_scrobbles` (per-provider methods
+      over one `Drain` and one reaction helper each), and `download_to_file`.
+- [x] Copies collapsed where they sat inside these functions. Play Next, Add to Queue and the
+      column toggle are `callbacks::track_list`, over a `TrackListActions` trait all nine track
+      lists implement. Playlists' `dialog.rs` split into `crud.rs`, `artwork.rs` (the Edit Artwork
+      opener shared with `detail.rs`), the add-picker (which took its opener) and
+      `ui/callbacks/dialog_closed.rs`. One `refresh_after_edit` replaces four copies of
+      refetch-then-refresh-detail. The updater's failure tail is `paint::report_failure`, and
+      `nav_history`'s five open arms go through one `spawn_open`.
+- [x] `cognitive_complexity = "warn"` in `[workspace.lints.clippy]`; `too_many_lines = "allow"` is
+      gone, and `clippy.toml` spells `too-many-lines-threshold = 100` beside the complexity one.
+      No `#[expect]` was needed.
+- [x] Re-anchored pins, each checked to fail on a mutation of what it guards: `main_order_tests`,
+      `ui_setup_tests`' backdrop order, `onboarding.rs`'s crash notice, `favorites_tests`' and
+      `recently_played_tests`' closure slices (now fn-bounded, not cut at an indent),
+      `winit_filter_tests`' four Resized pins (`fn on_resized(`), `my_library_tests`' land-pending
+      count (now on `spawn_open`) and `cover_generation.rs`' exemption (`artwork.rs`).
+- [ ] Windows: `main.rs`'s `select_backend`, `install.rs`'s SMTC attach and titlebar polish and
+      `winit_filter`'s `on_focus` moved without a Windows compile.
+- Found on the way:
+  - Six subscribers wrote their own `library_changed`/`stats_changed` loop despite CLAUDE.md;
+    they take `ui::signal::on_signal` now. Favorites, Recently Played and `library_settings` keep
+    theirs, each awaiting its refresh inline, which `on_signal` can't express.
+  - Tracks' and Browse's `columns.rs` were the toggle-column wire under another name; both are
+    gone.
+  - The single playlist delete stopped at a failed write and skipped the selection clear and
+    refetch the batch delete ran. Both carry on now.
+  - Browse's fetch wrote its caches off the UI thread on two arms and inside the UI hop on the
+    third. `paint_listing` writes them for all three.
+  - The radio import's per-file loop moved to `library::radio_files::import_stations_from_files`,
+    the twin of the playlist one.
+  - `ingest.rs` claimed the move-candidate stat ran outside the writer transaction, and
+    `library-data.md` that Search's rating stayed non-optimistic. Both corrected, along with every
+    doc that named `main.rs` as the caller of a step now in `boot`.
 
 ## Phase 8: `Dialog.kind` as an enum
 

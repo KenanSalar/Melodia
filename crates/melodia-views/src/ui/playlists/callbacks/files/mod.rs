@@ -6,8 +6,8 @@
 //!   included → per-file import aggregation → grid refresh → summary toast).
 //! * [`export`] — the Export pill (fill picker → save dialog → one `.m3u8`,
 //!   or a zip of several → toast) and the export picker's selection plumbing.
-//! * [`add_picker`] — the Add-to-Playlist picker's selection plumbing and
-//!   the add-tracks commit.
+//! * [`add_picker`] — the Add-to-Playlist picker's opener, selection plumbing
+//!   and the add-tracks commit.
 //!
 //! All native dialogs run on the UI thread via
 //! `slint::spawn_local(Compat::new(...))` (`Compat` supplies a tokio reactor
@@ -17,8 +17,8 @@
 //! and export await the file work on the runtime instead, since it parses or
 //! serializes every playlist and would otherwise do so on the UI thread.
 //!
-//! Wired separately from [`super::wire`] (in `main.rs`, after the
-//! notifications stack exists) because these handlers need the
+//! Wired separately from [`super::wire`] (in `boot::ui_setup::install`, after
+//! the notifications stack exists) because these handlers need the
 //! `Rc<NotificationsUi>` — see [`wire`].
 
 mod add_picker;
@@ -34,7 +34,7 @@ use crate::ui::playlists::PlaylistsUi;
 use crate::ui::shell::notifications::NotificationsUi;
 use crate::ui::util::len_as_i32;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Dialog};
+use melodia_ui::{AppWindow, Dialog, PlaylistPickRow};
 
 /// Wire the `Playlists.*` import/export callbacks. Call once after both the
 /// `playlists_ui` handle and the notifications stack exist.
@@ -100,10 +100,10 @@ fn set_all_picks<R: Clone + 'static>(
     }
 }
 
-/// A picker row is disabled (unselectable) when every pending track is already
-/// in that playlist. Mirrors the Slint-side `disabled` expression.
-fn add_pick_disabled(contained_count: i32, pick_total: i32) -> bool {
-    pick_total > 0 && contained_count >= pick_total
+/// Whether a picker row can be selected: not when every pending track is already
+/// in that playlist. The negation of the Slint-side `disabled` expression.
+fn add_pickable(row: &PlaylistPickRow, pick_total: i32) -> bool {
+    !(pick_total > 0 && row.contained_count >= pick_total)
 }
 
 /// Recompute `Dialog.add-selected-count` and `Dialog.add-select-all` from the
@@ -115,7 +115,7 @@ fn refresh_add_selection_meta(dlg: &Dialog) {
     let mut enabled: usize = 0;
     let mut selected: usize = 0;
     for r in model.iter() {
-        if add_pick_disabled(r.contained_count, pick_total) {
+        if !add_pickable(&r, pick_total) {
             continue;
         }
         enabled += 1;

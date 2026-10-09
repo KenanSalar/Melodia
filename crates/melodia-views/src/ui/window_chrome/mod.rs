@@ -3,7 +3,7 @@
 //! winit (via Slint's `unstable-winit-030` accessor).
 //!
 //! Seven reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
-//! `AppWindow::new()` and `app.run()`, where `main.rs` calls [`install`], so the window maps
+//! `AppWindow::new()` and `app.run()`, where boot calls [`install`], so the window maps
 //! with its frame decided rather than swapping it on screen), the
 //! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
 //! [`drag_region`], [`resize_grab`], [`resize_release`]), the Slint tick a Win32 drag parks

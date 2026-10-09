@@ -11,7 +11,7 @@ use melodia_testkit::{UI_DIR, strip_line_comments};
 /// edit rather than the walk's subject.
 const MIN_ONBOARDING_SOURCES: usize = 3;
 
-const MAIN: &str = include_str!("../src/main.rs");
+const BOOT_UI: &str = include_str!("../src/boot/ui_setup/install.rs");
 const APP_WINDOW: &str = include_str!("../../melodia-ui/ui/app-window.slint");
 const SHORTCUT_SCOPE: &str = include_str!("../../melodia-ui/ui/layout/shortcut-scope.slint");
 const UPDATE_SECTION: &str =
@@ -148,7 +148,7 @@ fn the_card_gates_the_non_escape_shortcuts() {
 }
 
 /// The crash notice used to sit inside `settings::diagnostics::install`, where it could not be
-/// lost. It is a line in a closure in `main` now, so that the welcome card can hold it back —
+/// lost. It is a line in a closure in `install_ui` now, so that the welcome card can hold it back —
 /// and `take_unseen` consumes the marker, so dropping the line doesn't defer a report, it
 /// retires the whole surface. The failure is silence: reports keep accruing and none is ever
 /// shown, which no other test and no run can notice.
@@ -158,7 +158,7 @@ fn the_card_gates_the_non_escape_shortcuts() {
 /// than silence, and shows on the next launch.
 #[test]
 fn the_deferred_work_still_carries_the_crash_notice() {
-    let boot = strip_line_comments(MAIN);
+    let boot = strip_line_comments(BOOT_UI);
     let deferred =
         boot.split_once("ui::onboarding::install(").map(|(_, rest)| rest).unwrap_or_default();
 

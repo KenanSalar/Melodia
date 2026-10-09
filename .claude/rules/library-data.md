@@ -205,8 +205,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   field + emits, so the NP star updates from a list-row edit — it re-checks the id under the emit
   lock, safe against a mid-write track change. Rating **never changes list membership**, so every
   surface is optimistic (`flip_rating`/`apply_row_rating`, detail siblings), wired via
-  `wire_row_flag!`; Search is excluded on purpose and stays non-optimistic. NP parity via
-  `wire_now_playing_rating`.
+  `wire_row_flag!`; Search included, having no `library_changed` subscriber to fall back on. NP
+  parity via `wire_now_playing_rating`.
 
 ## Write-through to files
 

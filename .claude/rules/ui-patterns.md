@@ -619,6 +619,10 @@ three components that answer it, and each argues its geometry at its own file.
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
   rows in a `DetailCache`. A fifth detail implements both traits rather than copying a
   `callbacks/detail.rs`.
+- **All nine track lists share Play Next, Add to Queue and the column toggle**, written once in
+  `callbacks::track_list` over `track_list_view::TrackListActions`, which `track_list_views!`
+  implements beside the column state, plus the `play-row` tail as `play_displayed`. A list
+  supplies only what differs: its id source, and Browse its non-zero id filter.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
@@ -686,7 +690,7 @@ three components that answer it, and each argues its geometry at its own file.
   data-agnostic. Both commit through the `Dialog.accepted` dispatcher gated on a selected count;
   Add-to-Playlist disables fully-contained playlists and counts only enabled rows. Toggles and
   commit live in `files/export.rs` and `files/add_picker.rs` (commit needs
-  `Rc<NotificationsUi>`). Export opens from `export.rs`, Add-to-Playlist from `dialog.rs`.
+  `Rc<NotificationsUi>`). Each opens from its own file too.
 
 - **A raise that crosses an `await` owes a `DialogClaim`, and `Dialog.open` is not one.** Six
   openers deliberately leave `open` false while Rust fetches the body, so through that whole window

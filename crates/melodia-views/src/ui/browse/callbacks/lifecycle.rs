@@ -2,12 +2,13 @@
 
 use std::sync::Arc;
 
-use async_compat::Compat;
 use slint::{ComponentHandle, Model};
 
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi, NAV_BROWSE};
 use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::signal::on_signal;
 use melodia_app::state::AppState;
+use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Browse, Nav};
 
 /// Seed the section shadow, wire the gate, and subscribe to `library_changed`.
@@ -73,38 +74,36 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // library_changed subscriber: watcher / scan completion / folder add+remove all bump
-    // this counter. Re-fetch the current path so new files appear, removed files
-    // disappear, and the root view updates when folders are added/removed. Mirrors the
-    // `ui::settings::library_settings` pattern.
-    {
-        let s = state.clone();
-        let bu = browse_ui.clone();
-        let weak = weak.clone();
-        let mut rx = state.library_changed.subscribe();
-        let _ = slint::spawn_local(Compat::new(async move {
-            // The initial `borrow()` value is whatever the channel started at; mark it
-            // seen so we don't re-fetch immediately.
-            rx.mark_unchanged();
-            while rx.changed().await.is_ok() {
-                // Skip the directory re-fetch (read_dir + a full-index LIKE scan) while
-                // the section is hidden — a scan or a busy watcher can bump this channel
-                // repeatedly, and re-fetching a view nobody is looking at is O(library)
-                // per bump. Mark dirty so the next section-enter re-fetches once instead.
-                if !bu.section_active() {
-                    bu.mark_dirty();
-                    continue;
-                }
-                let path = bu.current_path();
-                let s = s.clone();
-                let bu = bu.clone();
-                let weak = weak.clone();
-                spawn_logged!(
-                    s,
-                    "browse::library_changed",
-                    browse_ui_mod::fetch_and_apply(&s, &bu, weak, path)
-                );
+    install_library_refresher(ui, state, browse_ui);
+}
+
+/// Watcher / scan completion / folder add+remove all bump `library_changed`.
+/// Re-fetch the current path so new files appear, removed files disappear,
+/// and the root view updates when folders are added/removed.
+fn install_library_refresher(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) {
+    let s = state.clone();
+    let bu = browse_ui.clone();
+    let installed =
+        on_signal(&state.library_changed, ui.as_weak(), "browse-library-changed", move |ui| {
+            // Skip the directory re-fetch (read_dir + a full-index LIKE scan) while
+            // the section is hidden — a scan or a busy watcher can bump this channel
+            // repeatedly, and re-fetching a view nobody is looking at is O(library)
+            // per bump. Mark dirty so the next section-enter re-fetches once instead.
+            if !bu.section_active() {
+                bu.mark_dirty();
+                return;
             }
-        }));
+            let path = bu.current_path();
+            let s = s.clone();
+            let bu = bu.clone();
+            let weak = ui.as_weak();
+            spawn_logged!(
+                s,
+                "browse::library_changed",
+                browse_ui_mod::fetch_and_apply(&s, &bu, weak, path)
+            );
+        });
+    if let Err(e) = installed {
+        log::warn!("Browse won't follow library changes: {}", describe(&e));
     }
 }

@@ -19,6 +19,7 @@
 //! on the way in.
 
 use std::collections::VecDeque;
+use std::future::Future;
 use std::sync::{Arc, LazyLock};
 
 use parking_lot::Mutex;
@@ -30,7 +31,7 @@ use crate::ui::my_library::{
 use crate::ui::radio::NAV_RADIO;
 use crate::ui::view_tag;
 use melodia_app::state::AppState;
-use melodia_core::error::describe;
+use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue, Radio};
 
 const HISTORY_CAP: usize = 24;
@@ -391,110 +392,98 @@ fn spawn_open_detail(
     if section != NAV_MY_LIBRARY && section != NAV_RADIO {
         return;
     }
-    // Two handles: `weak` is consumed by whichever `open_*_with` runs, `fallback` is what
-    // is left to land the navigation on if it never gets there.
+    // `weak` is consumed by whichever `open_*_with` runs; `ReplayOpen::fallback` is what is
+    // left to land the navigation on if it never gets there.
     let weak: Weak<AppWindow> = ui.as_weak();
-    let fallback: Weak<AppWindow> = ui.as_weak();
-    let s = state.clone();
-    let expected = NavEntry { section, tab, detail_id: Some(id) };
+    let replay = |label| ReplayOpen {
+        expected: NavEntry { section, tab, detail_id: Some(id) },
+        pending,
+        fallback: ui.as_weak(),
+        label,
+    };
     if section == NAV_RADIO {
-        let Some(ru) = nav().handles().radio.lock().clone() else {
-            land_pending(pending, &fallback);
-            return;
-        };
         // Only a kept station is ever recorded, so the id is the whole handle: `StationRef::is_kept`
         // splits on it, and `open_station_with` fills the uuid in off the row it resolves.
         let station = crate::ui::radio::StationRef { id, uuid: String::new() };
-        state.runtime.clone().spawn(async move {
-            if nav().history().current() != Some(expected) {
-                return;
-            }
+        let handle = nav().handles().radio.lock().clone();
+        spawn_open(state, handle, replay("open_station"), move |s, ru| async move {
             let hook = pending_hook(pending);
-            if let Err(e) =
-                crate::ui::radio::open_station_with(&s, &ru, weak, station, direction, hook).await
-            {
-                log::warn!("nav_history::replay open_station({id}): {}", describe(&e));
-                land_pending(pending, &fallback);
-            }
+            crate::ui::radio::open_station_with(&s, &ru, weak, station, direction, hook).await
         });
         return;
     }
     match tab_from_index(&ui.global::<MyLibrary>(), tab) {
         MyLibraryTab::Songs => {}
         MyLibraryTab::Albums => {
-            let Some(au) = nav().handles().albums.lock().clone() else {
-                land_pending(pending, &fallback);
-                return;
-            };
-            state.runtime.clone().spawn(async move {
-                if nav().history().current() != Some(expected) {
-                    return;
-                }
+            let handle = nav().handles().albums.lock().clone();
+            spawn_open(state, handle, replay("open_album"), move |s, au| async move {
                 let hook = pending_hook(pending);
-                if let Err(e) =
-                    crate::ui::albums::open_album_with(&s, &au, weak, id, direction, hook).await
-                {
-                    log::warn!("nav_history::replay open_album({id}): {}", describe(&e));
-                    land_pending(pending, &fallback);
-                }
+                crate::ui::albums::open_album_with(&s, &au, weak, id, direction, hook).await
             });
         }
         MyLibraryTab::Artists => {
-            let Some(au) = nav().handles().artists.lock().clone() else {
-                land_pending(pending, &fallback);
-                return;
-            };
-            state.runtime.clone().spawn(async move {
-                if nav().history().current() != Some(expected) {
-                    return;
-                }
+            let handle = nav().handles().artists.lock().clone();
+            spawn_open(state, handle, replay("open_artist"), move |s, au| async move {
                 let hook = pending_hook(pending);
-                if let Err(e) =
-                    crate::ui::artists::open_artist_with(&s, &au, weak, id, direction, hook).await
-                {
-                    log::warn!("nav_history::replay open_artist({id}): {}", describe(&e));
-                    land_pending(pending, &fallback);
-                }
+                crate::ui::artists::open_artist_with(&s, &au, weak, id, direction, hook).await
             });
         }
         MyLibraryTab::Genres => {
-            let Some(gu) = nav().handles().genres.lock().clone() else {
-                land_pending(pending, &fallback);
-                return;
-            };
-            state.runtime.clone().spawn(async move {
-                if nav().history().current() != Some(expected) {
-                    return;
-                }
+            let handle = nav().handles().genres.lock().clone();
+            spawn_open(state, handle, replay("open_genre"), move |s, gu| async move {
                 let hook = pending_hook(pending);
-                if let Err(e) =
-                    crate::ui::genres::open_genre_with(&s, &gu, weak, id, direction, hook).await
-                {
-                    log::warn!("nav_history::replay open_genre({id}): {}", describe(&e));
-                    land_pending(pending, &fallback);
-                }
+                crate::ui::genres::open_genre_with(&s, &gu, weak, id, direction, hook).await
             });
         }
         MyLibraryTab::Playlists => {
-            let Some(pu) = nav().handles().playlists.lock().clone() else {
-                land_pending(pending, &fallback);
-                return;
-            };
-            state.runtime.clone().spawn(async move {
-                if nav().history().current() != Some(expected) {
-                    return;
-                }
+            let handle = nav().handles().playlists.lock().clone();
+            spawn_open(state, handle, replay("open_playlist"), move |s, pu| async move {
                 let hook = pending_hook(pending);
-                if let Err(e) =
-                    crate::ui::playlists::open_playlist_with(&s, &pu, weak, id, direction, hook)
-                        .await
-                {
-                    log::warn!("nav_history::replay open_playlist({id}): {}", describe(&e));
-                    land_pending(pending, &fallback);
-                }
+                crate::ui::playlists::open_playlist_with(&s, &pu, weak, id, direction, hook).await
             });
         }
     }
+}
+
+/// One replay's open: the entry it must still be current against when it starts, the
+/// navigation it owes, and the handle to land that navigation on if the open never reaches
+/// its hook.
+struct ReplayOpen {
+    expected: NavEntry,
+    pending: Option<PendingNav>,
+    fallback: Weak<AppWindow>,
+    /// Names the open in the warning a failure leaves.
+    label: &'static str,
+}
+
+/// Run `open` behind the newer-replay bail. The missing-handle bail and a failed open each land
+/// the pending navigation, being the two paths that can still open something and don't reach
+/// the hook.
+fn spawn_open<H, Fut>(
+    state: &AppState,
+    handle: Option<Arc<H>>,
+    replay: ReplayOpen,
+    open: impl FnOnce(AppState, Arc<H>) -> Fut + Send + 'static,
+) where
+    H: Send + Sync + 'static,
+    Fut: Future<Output = AppResult<()>> + Send + 'static,
+{
+    let ReplayOpen { expected, pending, fallback, label } = replay;
+    let Some(handle) = handle else {
+        land_pending(pending, &fallback);
+        return;
+    };
+    let s = state.clone();
+    state.runtime.spawn(async move {
+        if nav().history().current() != Some(expected) {
+            return;
+        }
+        if let Err(e) = open(s, handle).await {
+            let id = expected.detail_id.unwrap_or_default();
+            log::warn!("nav_history::replay {label}({id}): {}", describe(&e));
+            land_pending(pending, &fallback);
+        }
+    });
 }
 
 /// The `on_applied` hook the four `open_*_with` calls share — a no-op when the

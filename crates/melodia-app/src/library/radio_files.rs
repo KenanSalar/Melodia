@@ -14,10 +14,10 @@
 //! Export writes Extended-M3U8, the one format every player reads. Import takes `.m3u`, `.m3u8`
 //! and `.pls`, because that is what the user will have been handed.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use melodia_core::entities::radio;
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use melodia_store::database::{DbPool, queries};
 
 const HEADER: &str = "#EXTM3U";
@@ -55,6 +55,13 @@ pub struct ImportStationsResult {
     /// Entries already starred, so the import had nothing to do for them. Skipped rather than
     /// refused, so re-importing a file the user has grown since is the obvious thing to do.
     pub skipped: u32,
+}
+
+/// [`ImportStationsResult`] summed over several files, beside the files that failed whole.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ImportStationFiles {
+    pub stations: ImportStationsResult,
+    pub failed: u32,
 }
 
 /// One entry of a station playlist: the URL, whatever the file called it, and — if the file is one
@@ -143,6 +150,25 @@ pub async fn export_stations(db: &DbPool, dest: &Path) -> Result<u32, AppError> 
     let written = u32::try_from(stations.len()).unwrap_or(u32::MAX);
     melodia_core::utils::atomic_file::write_text(dest.to_path_buf(), text).await?;
     Ok(written)
+}
+
+/// [`import_stations_from_file`] over each of `paths`, totalled for the completion toast. A file
+/// that fails whole counts once in `failed`, so the files beside it still land.
+pub async fn import_stations_from_files(db: &DbPool, paths: &[PathBuf]) -> ImportStationFiles {
+    let mut total = ImportStationFiles::default();
+    for path in paths {
+        match import_stations_from_file(db, path).await {
+            Ok(file) => {
+                total.stations.imported = total.stations.imported.saturating_add(file.imported);
+                total.stations.skipped = total.stations.skipped.saturating_add(file.skipped);
+            }
+            Err(e) => {
+                total.failed = total.failed.saturating_add(1);
+                log::warn!("radio: import {}: {}", path.display(), describe(&e));
+            }
+        }
+    }
+    total
 }
 
 /// Read a station playlist and put everything in it back in the kept list.

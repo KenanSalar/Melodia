@@ -95,7 +95,7 @@ fn the_resize_press_arm_keeps_the_press_from_slint() {
 /// because the handler at the other end needs a live window and all seven view handles.
 #[test]
 fn the_resize_arm_retunes_the_cover_tiers() {
-    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const ARM: &str = "fn on_resized(";
     let code = filter_source();
     let arm = block_after(&code, ARM);
 
@@ -154,7 +154,7 @@ fn the_move_arm_ticks_the_loop_win32_parked() {
 /// so a window parked just inside the threshold bounces straight back out.
 #[test]
 fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
-    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const ARM: &str = "fn on_resized(";
     const GATE: &str = "if let Some(frame) = frame";
     let code = filter_source();
     let arm = block_after(&code, ARM);
@@ -179,7 +179,7 @@ fn the_resize_arm_writes_the_frame_only_when_one_was_measured() {
 /// and the switch leaves against the edge it had before the drop.
 #[test]
 fn the_resize_arm_writes_the_frame_ahead_of_slint() {
-    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const ARM: &str = "fn on_resized(";
     const POSTED: &str = "weak.upgrade_in_event_loop(move |ui|";
     const SETTER: &str = "set_frame_allowance_w(";
     let code = filter_source();
@@ -205,7 +205,7 @@ fn the_resize_arm_writes_the_frame_ahead_of_slint() {
 /// window grows by them at its next layout.
 #[test]
 fn the_resize_arm_writes_the_margins_only_when_they_were_measured() {
-    const ARM: &str = "WindowEvent::Resized(_) =>";
+    const ARM: &str = "fn on_resized(";
     const GATE: &str = "if let Some(margins) = margins";
     const SETTERS: [&str; 3] =
         ["set_frame_margin_left(", "set_frame_margin_right(", "set_frame_margin_bottom("];

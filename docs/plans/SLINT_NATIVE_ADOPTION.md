@@ -363,8 +363,8 @@ foundation only, watch but not yet usable.
 - **Trigger:** a winit **0.31 release** carrying #4571 + a Slint release cut from
   `feature/winit-0.31` that surfaces external drops as file paths on `DropArea`. This also means
   `unstable-winit-030` → `unstable-winit-031` and a `slint::winit_030` → `winit_031` rename
-  across the nine files importing it today (`main.rs`, `shell/tray_bridge.rs` and seven under
-  `window_chrome/`). The fork retirement and the winit major bump land together.
+  across the ten files importing it today (`main.rs`, `boot/ui_setup/install.rs`,
+  `shell/tray_bridge.rs` and seven under `window_chrome/`). The fork retirement and the winit major bump land together.
 - **Migration:** delete `winit/` + the `[patch.crates-io]` block; replace the `winit_filter`
   DnD arms + `drop_coalescer` with a `DropArea` over the content panel feeding
   `queue_import_files`; re-check the queue-sheet drop gating (`is_open` atomic filter).

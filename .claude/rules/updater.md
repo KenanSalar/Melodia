@@ -33,8 +33,8 @@ from `main.rs` without ever opening this file.
 - **Two gates decide whether the updater exists, and they are not the same question.**
   `updater::is_available()` is the outer one: false on a source build, because `target/` belongs to
   cargo and a swapped-in release would be older than the tree above it and gone at the next build.
-  It stops `updater_daily::spawn` in `main()` and clears `MelodiaUpdater.updates-supported`, which
-  gates `UpdateSection.has-matches` and so takes the card *and* its settings-search hits.
+  It stops `updater_daily::spawn` in `boot::ui_setup::install` and clears
+  `MelodiaUpdater.updates-supported`, which gates `UpdateSection.has-matches` and so takes the card *and* its settings-search hits.
   `is_system_install()` is the inner one and softer: the update is real, only the mechanism is the
   package manager's, so the check survives and Download/Skip become a hint. Reach for the right one
   — widening `is_system_install` to cover a dev build would offer a `sudo dnf update` hint to
@@ -45,7 +45,7 @@ from `main.rs` without ever opening this file.
   successful boot, single source `install::old_path()`. The `pkexec mv` cross-fs fallback,
   `install_via_package_manager` (Linux RPM/DEB) and `install_via_msiexec` (Windows MSI) retain
   **no** `.old` — the package format owns the replace — and skip the smoke-test via the
-  `InstallMethod` match in `download_and_install`. `main()`'s `.old` reaper is
+  `InstallMethod` match in `download_and_install`. `main.rs`'s `.old` reaper (`prepare_process`) is
   `cfg(target_os = "linux")`, and macOS isn't a CI target, so `swap_in_place` falls through to
   `std::fs::rename`.
 

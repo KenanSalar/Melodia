@@ -8,7 +8,7 @@
 //! [`melodia_core::entities::locale::SUPPORTED_LOCALES`] and seeds the index from the persisted
 //! code; `wire_language_changed` resolves a click back to a code, calls
 //! `select_bundled_translation` synchronously, updates the [`PersistedLocale`] shadow
-//! and spawns the disk write. `main.rs` makes the same call once before `app.run()`, so
+//! and spawns the disk write. Boot makes the same call once before `app.run()`, so
 //! the first frame already paints in the persisted language.
 //!
 //! Native-name labels are always rendered in their own script, never translated — the

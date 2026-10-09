@@ -121,7 +121,7 @@ fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_
     // so we don't write them here.
 
     // Paint the OS-drawn caption in the same mantle so it blends into the chrome
-    // below. Nothing to paint until the window is shown, which `main.rs`'s
+    // below. Nothing to paint until the window is shown, which boot's
     // post-show one-shot covers. See [`melodia_platform::services::platform::dwm_titlebar`].
     #[cfg(target_os = "windows")]
     if let Some(hwnd) = crate::ui::window_chrome::win32_hwnd(ui) {

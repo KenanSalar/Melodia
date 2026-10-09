@@ -9,13 +9,12 @@ use std::sync::Arc;
 
 use slint::Weak;
 
-use super::macros::{spawn_logged, wire_row_flag};
+use super::macros::wire_row_flag;
+use super::track_list::{play_displayed, wire_queue_actions, wire_toggle_column};
 use super::{
-    collect_track_ids, next_sort_with_natural, persist_view_sort, play_row_start,
-    spawn_play_then_shuffle,
+    collect_track_ids, next_sort_with_natural, persist_view_sort, spawn_play_then_shuffle,
 };
 use crate::ui::track_detail::{DetailGlobal, DetailRows, TrackDetail, selection};
-use crate::ui::track_list_view::persist_visible;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -74,43 +73,10 @@ fn wire_playback<V: TrackDetail>(g: &V::Global, state: &AppState, view: &Arc<V>)
         let s = state.clone();
         let view = view.clone();
         g.bind_play_row(move |track_id, idx| {
-            let ids = view.cache().track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let start = play_row_start(&ids, i64::from(track_id), idx);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                format_args!("{}::play_row", V::VIEW_ID),
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
-            );
+            play_displayed(&s, V::VIEW_ID, view.cache().track_ids(), track_id, idx);
         });
     }
-    {
-        let s = state.clone();
-        g.bind_play_next(move |ids| {
-            let id_vec = collect_track_ids(&ids);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                format_args!("{}::play_next", V::VIEW_ID),
-                library::queue::queue_play_next_many(&s, id_vec)
-            );
-        });
-    }
-    {
-        let s = state.clone();
-        g.bind_add_to_queue(move |ids| {
-            let id_vec = collect_track_ids(&ids);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                format_args!("{}::add_to_queue", V::VIEW_ID),
-                library::queue::queue_add_tracks(&s, id_vec)
-            );
-        });
-    }
+    wire_queue_actions(g, state, collect_track_ids);
 }
 
 /// Heart and stars write through, then patch the rows they touched.
@@ -169,7 +135,7 @@ fn wire_selection<V: TrackDetail>(g: &V::Global, weak: &Weak<V::Global>, view: &
 }
 
 /// A header click re-sorts in memory and persists the pick, one sort shared by every entity of
-/// the view. The column popup has already flipped its `show-*` flag, so a toggle only persists.
+/// the view.
 fn wire_sort_and_columns<V: TrackDetail>(
     g: &V::Global,
     state: &AppState,
@@ -190,14 +156,7 @@ fn wire_sort_and_columns<V: TrackDetail>(
             persist_view_sort(&s, V::VIEW_ID, new_field, new_dir);
         });
     }
-    {
-        let s = state.clone();
-        let weak = weak.clone();
-        g.bind_toggle_column(move |_id| {
-            let Some(g) = weak.upgrade() else { return };
-            persist_visible(&s, &g);
-        });
-    }
+    wire_toggle_column(weak, state);
 }
 
 /// A settled keystroke re-walks the cached rows: an in-memory filter, no database round trip.

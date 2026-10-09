@@ -68,7 +68,7 @@ pub fn seed_initial_view_model(
 /// Apply every UI-visible persisted section to the Slint globals — sidebar
 /// geometry from `settings.json`, per-view columns and collapse state from
 /// `views.json`. Missing entries leave the defaults, which is first-launch
-/// behaviour. A `None` snapshot re-reads from disk; `main()` passes what it
+/// behaviour. A `None` snapshot re-reads from disk; boot passes what `main()`
 /// already read to avoid a second parse.
 pub fn hydrate_ui_from_settings(
     app: &AppWindow,

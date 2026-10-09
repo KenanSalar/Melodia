@@ -343,13 +343,14 @@ await_holding_lock        = "deny"
 await_holding_refcell_ref = "deny"
 mutex_atomic              = "warn"
 rc_mutex                  = "warn"
+# A nursery lint, so off unless named; `clippy.toml` holds its threshold.
+cognitive_complexity      = "warn"
 
 module_name_repetitions = "allow"
 must_use_candidate      = "allow"
 missing_errors_doc      = "allow"
 missing_panics_doc      = "allow"
 similar_names           = "allow"
-too_many_lines          = "allow"
 
 unnecessary_literal_unwrap  = "warn"
 field_reassign_with_default = "warn"

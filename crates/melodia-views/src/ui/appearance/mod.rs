@@ -34,7 +34,7 @@ use melodia_ui::{AppWindow, Settings};
 pub use install::install;
 pub use repaint::{apply_and_seed, repaint_from_settings};
 
-/// Handles returned by [`fn@install`] so `main.rs` can wire the Material You
+/// Handles returned by [`fn@install`] so boot can wire the Material You
 /// coordinator (`tasks::material_you`) without `appearance` having to
 /// reach across into the player view-model channel itself.
 pub struct AppearanceHandles {

@@ -94,7 +94,7 @@ counts as empty while any one of its forms is.
 ## What CI runs
 
 Every pull request runs **PR Validation**: a `cargo audit` advisory scan, a `cargo fmt`
-check, `clippy` with `-D warnings`, and the test suite on both Linux and Windows — the
+check, `clippy` with `-D warnings`, and the test suite on both Linux and Windows. The
 Windows job skips the one integration test that needs an audio device. The aggregate
 `pr-validation` check has to be green before a merge. Documentation-only changes skip
 all six.
@@ -111,4 +111,4 @@ published to [kenansalar.github.io/Melodia](https://kenansalar.github.io/Melodia
 Write it by hand or with an assistant, whichever you work best with. Review treats
 both the same, which also means the bar is the same: you are responsible for what you
 submit, so understand it well enough to explain it and fix it, and test it for real
-rather than trusting generated tests. Please write issue and PR comments yourself.
+rather than trusting generated tests.

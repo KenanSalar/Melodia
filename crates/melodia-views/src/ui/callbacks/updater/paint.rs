@@ -3,8 +3,9 @@
 //! `upgrade_in_event_loop`, so they're safe to call from any thread.
 
 use slint::{ComponentHandle, SharedString, Weak};
+use tokio::sync::watch;
 
-use melodia_app::services::updater::PanelPaint;
+use melodia_app::services::updater::{FailureKind, PanelPaint, UpdaterEvent};
 use melodia_ui::{AppWindow, MelodiaUpdater};
 
 /// The painter both update checks report through, the daily task's crate being unable to name
@@ -56,10 +57,17 @@ fn paint_available(weak: &Weak<AppWindow>, version: String, notes_short: String,
     });
 }
 
-pub(super) fn paint_error(weak: &Weak<AppWindow>, reason: String) {
+/// A failure the panel shows and the event subscriber toasts.
+pub(super) fn report_failure(
+    weak: &Weak<AppWindow>,
+    event_tx: &watch::Sender<Option<UpdaterEvent>>,
+    reason: String,
+    kind: FailureKind,
+) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         ui.global::<MelodiaUpdater>().set_error_message(SharedString::from(reason));
     });
+    let _ = event_tx.send(Some(UpdaterEvent::Failed { kind }));
 }
 
 pub(super) fn paint_restart_needed(weak: &Weak<AppWindow>) {

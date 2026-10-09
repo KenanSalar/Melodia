@@ -10,8 +10,8 @@ use melodia_ui::{AppWindow, Nav};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
-/// The per-view handles `install_views` hands back for the wiring `main()` still
-/// owns: the initial fetches, the playlist and station import/export pills
+/// The per-view handles `install_views` hands back for the wiring
+/// [`super::install_ui`] owns: the initial fetches, the playlist and station import/export pills
 /// (which need the notifications stack), and the `cover_thumbs` consumers.
 ///
 /// Only handles a *caller* reads live here. `BrowseUi` / `FavoritesUi` /
@@ -220,8 +220,8 @@ pub fn install_views(
 }
 
 /// Every Settings section, plus the notifications stack. The updater's Slint
-/// state seeds here too; its daily-check task and callbacks wire from `main()`
-/// once the `AppState` clones and tokio handle are in scope.
+/// state seeds here too; its daily-check task and callbacks wire later in
+/// [`super::install_ui`], beside the onboarding card that defers the task.
 pub fn install_library_settings_and_friends(
     app: &AppWindow,
     state: &AppState,

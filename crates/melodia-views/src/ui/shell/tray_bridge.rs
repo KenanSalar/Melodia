@@ -233,7 +233,7 @@ pub fn install(spawner: &TaskSpawner, state: &AppState, ui: &AppWindow) {
     #[cfg(any(target_os = "windows", target_os = "macos"))]
     {
         // `tray-icon` wants the UI thread with the event loop already running, so defer
-        // the way `main.rs` defers the SMTC attach.
+        // the way boot defers the SMTC attach.
         let sinks = state.sinks.clone();
         let weak = ui.as_weak();
         if let Err(e) = slint::invoke_from_event_loop(move || {

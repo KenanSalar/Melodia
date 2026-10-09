@@ -1,7 +1,7 @@
 //! The kept tabs' own wiring: the sort, the add / edit form, and remove.
 //!
 //! Import and export are not here — their completion toasts need the notifications stack, which
-//! does not exist yet when a slice installs, so they wire from `main()` through
+//! does not exist yet when a slice installs, so they wire from boot's `install_ui` through
 //! [`super::files`], the shape `ui::playlists::wire_files` already uses.
 
 use std::sync::Arc;

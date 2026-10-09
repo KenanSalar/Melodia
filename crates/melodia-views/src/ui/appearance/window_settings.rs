@@ -24,6 +24,12 @@ pub(super) fn wire_match_unfocused_bg_changed(ui: &AppWindow, state: &AppState) 
     });
 }
 
+/// `px` clamped, then snapped to the nearest chip preset, so the painted radius and the
+/// persisted value can't diverge from the chip group's set. The boot seed and the row share it.
+pub(super) fn corner_radius_preset(px: u32) -> u32 {
+    library::settings::snap_to_preset(px.min(services::settings::MAX_CORNER_RADIUS))
+}
+
 /// Wire the Window Corner Radius row: clamp, apply synchronously so the shell and inner
 /// panel repaint at once, then persist on the blocking pool. No shadow — nothing else
 /// touches `settings.corner_radius` — and no coordinator kick, `Theme.shell-radius`
@@ -33,11 +39,9 @@ pub(super) fn wire_corner_radius_changed(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     ui.global::<Settings>().on_corner_radius_changed(move |px_i32| {
         let Some(ui) = weak.upgrade() else { return };
-        // Clamp, then snap to the nearest chip preset, so the painted radius and the
-        // persisted value can't diverge from the chip group's set. Defensive — the chip
-        // group only emits valid presets — against a later path forwarding arbitrary px.
-        let clamped = u32::try_from(px_i32).unwrap_or(0).min(services::settings::MAX_CORNER_RADIUS);
-        let radius = library::settings::snap_to_preset(clamped);
+        // Defensive — the chip group only emits valid presets — against a later path
+        // forwarding arbitrary px.
+        let radius = corner_radius_preset(u32::try_from(px_i32).unwrap_or(0));
         // Slint length properties codegen as `f32` logical pixels.
         #[allow(
             clippy::cast_precision_loss,

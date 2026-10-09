@@ -1080,30 +1080,36 @@ fn a_history_walk_lands_the_tab_beside_the_detail_id() {
 
     // A path that skips the hook and can still open something has to land the navigation
     // itself, or the press does nothing at all — a Mouse-4 into a deleted playlist being
-    // the reachable case. There are two per detail: the missing-handle bail before the
-    // spawn and the failed open after it.
-    //
-    // The two used to be told apart by which handle each read, one taking the caller's
-    // `state` and the other its clone; neither reads one now. What still separates them is
-    // that only the bail returns, so the role split is read off what follows the call
-    // rather than off the call itself — trimmed, the four match arms sitting a level deeper
-    // than Radio's.
-    let lands_pending = "land_pending(pending, &fallback);";
+    // the reachable case. There are two: the missing-handle bail before the spawn and the
+    // failed open after it, both in the one `spawn_open` every detail goes through. Only
+    // the bail returns, so the role split is read off what follows each call.
+    let dispatch = NAV_HISTORY
+        .split_once("fn spawn_open_detail(")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
     assert_eq!(
-        NAV_HISTORY.matches(lands_pending).count(),
-        WALKABLE_DETAILS * 2,
-        "every path in `spawn_open_detail` that can still open something must land the \
-         pending navigation",
+        dispatch.matches("spawn_open(state, handle,").count(),
+        WALKABLE_DETAILS,
+        "every walkable detail must open through `spawn_open`, which is what lands the \
+         pending navigation on the paths that miss the hook",
     );
-    let bails = NAV_HISTORY
-        .split(lands_pending)
-        .skip(1)
-        .filter(|rest| rest.trim_start().starts_with("return;"))
-        .count();
+    let lands_pending = "land_pending(pending, &fallback);";
+    let open = NAV_HISTORY
+        .split_once("fn spawn_open<")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or("", |(body, _)| body);
     assert_eq!(
-        bails, WALKABLE_DETAILS,
-        "the missing-handle bails in `spawn_open_detail` must each land the pending \
-         navigation before returning",
+        open.matches(lands_pending).count(),
+        2,
+        "`spawn_open` must land the pending navigation on both paths that can still open \
+         something",
+    );
+    let bails =
+        open.split(lands_pending).skip(1).filter(|rest| rest.trim_start().starts_with("return;"));
+    assert_eq!(
+        bails.count(),
+        1,
+        "the missing-handle bail must land the pending navigation before returning",
     );
 }
 

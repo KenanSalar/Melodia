@@ -152,19 +152,20 @@ are gated internally.
 `crates/melodia/src/main.rs`
 - **Keep ungated:** the `--version` literal-first branch (forward-compat
   contract; it only prints, never calls into the gated install path).
-- **[fix] Gate the `.old` reaper** at `crates/melodia/src/main.rs:79-84` — it calls
+- **[fix] Gate the `.old` reaper** in `prepare_process()` — it calls
   `install_target_old()`, now gated. Change `#[cfg(target_os = "linux")]` to
   `#[cfg(all(target_os = "linux", feature = "self-update"))]`. (A feature-off
   build never produces a `.old`, so reaping it is moot anyway.)
-- **Gate** (`#[cfg(feature = "self-update")]`) the updater sites in `main()`, which are no
-  longer one block:
-  - `updater_event_tx/rx` channel
-  - `ui::settings::updater_settings::install_event_subscriber(...)`
-  - `ui::callbacks::wire_updater(...)`
+
+`crates/melodia/src/boot/ui_setup/install.rs`
+- **Gate** (`#[cfg(feature = "self-update")]`) the updater sites, which are not one block:
+  - in `install_updater_and_onboarding`, the `updater_event_tx/rx` channel,
+    `ui::settings::updater_settings::install_event_subscriber(...)` and
+    `ui::callbacks::wire_updater(...)`
   - the `updater_daily::spawn(...)` gate (incl. the `else` log branch). It sits inside
     `ui::onboarding::install`'s deferred closure, after the crash notice, which stays: gate the
     `if`/`else` alone, plus the `deferred_spawner` and `updater_event_tx` captures only it uses.
-  - the `prune_stale_staging()` boot task
+  - the `prune_stale_staging()` boot task in `install_platform_hooks`
 
 `crates/melodia-app/src/tasks/mod.rs`
 - Gate `pub mod updater_daily;`.
@@ -172,9 +173,9 @@ are gated internally.
 `crates/melodia-views/src/ui/callbacks/mod.rs`
 - Gate `mod updater;` and `pub use updater::{check_painter, wire as wire_updater};`. The
   `crates/melodia-views/src/ui/callbacks/updater/` dir (`check.rs`, `install.rs`, `paint.rs`,
-  `mod.rs`) is reached only through those two names: `wire_updater` from `main.rs`'s wiring and
-  `check_painter` from its `updater_daily::spawn` call, both among the `main.rs` sites gated
-  above, so gating the whole dir is clean.
+  `mod.rs`) is reached only through those two names: `wire_updater` and the `check_painter`
+  handed to `updater_daily::spawn`, both among the `install.rs` sites gated above, so gating the
+  whole dir is clean.
 
 `crates/melodia-views/src/ui/settings/updater_settings.rs`
 - **`install()` stays ungated** — it seeds `MelodiaUpdater.current-version`

@@ -41,7 +41,7 @@ fn paint_status(ui: &AppWindow, status: DiscordStatus) {
 /// waiting for the next player-state change — the detector reacts only to the
 /// `view_model` watch, which a settings toggle doesn't otherwise disturb. The
 /// disabled→enabled edge resets the detector's dedupe, so this republish paints.
-/// Mirrors the Windows SMTC-attach flush in `main.rs`.
+/// Mirrors the Windows SMTC-attach flush in boot's `install_ui`.
 fn discord_toggle_binding(
     state: &AppState,
     label: &'static str,

@@ -1,4 +1,4 @@
-//! The big startup `install` function. Hydrates the Slint `Settings`
+//! The startup `install` function. Hydrates the Slint `Settings`
 //! global from `settings.json`, applies the resolved palette, wires
 //! every chip callback, and seeds the Material You repaint subscriber.
 
@@ -16,16 +16,17 @@ use super::{
     window_settings,
 };
 use melodia_app::library;
-use melodia_app::services;
+use melodia_app::services::settings::SettingsData;
 use melodia_app::state::{AppState, Signal};
 use melodia_core::error::{AppError, describe};
+use melodia_core::themes::SystemColorState;
 use melodia_platform::services::platform::desktop;
 use melodia_ui::{AppWindow, MiniPlayer, Settings, Theme};
 
 /// Hydrate the Settings global from `settings.json`, paint the resolved
 /// palette, and wire chip-click callbacks. Call once during startup,
 /// before `hydrate_ui_from_settings` so the UI's first frame uses the
-/// correct theme. Returns handles `main.rs` forwards to
+/// correct theme. Returns handles boot forwards to
 /// `tasks::material_you` so the coordinator can write dynamic palettes
 /// back into `os_state` and kick repaints.
 pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, AppError> {
@@ -38,25 +39,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     let os_state = Arc::new(RwLock::new(initial_state.clone()));
 
     let kick = Signal::new();
-
-    // Repaint channel — the Material You coordinator writes the latest
-    // `SystemColorState` snapshot here after each palette generation;
-    // the subscriber below applies it on the UI thread.
-    let (repaint_tx, mut repaint_rx) = watch::channel(initial_state.clone());
-    {
-        let weak = ui.as_weak();
-        let state = state.clone();
-        let res = slint::spawn_local(Compat::new(async move {
-            while repaint_rx.changed().await.is_ok() {
-                let snap = repaint_rx.borrow_and_update().clone();
-                let Some(ui) = weak.upgrade() else { return };
-                repaint_from_settings(&ui, &state, &snap);
-            }
-        }));
-        if let Err(e) = res {
-            log::warn!("material_you repaint subscriber: {}", describe(&e));
-        }
-    }
+    let repaint_tx = spawn_repaint_subscriber(ui, state, initial_state.clone());
 
     // Follow the OS's light/dark flips, repainting whenever the persisted
     // variant is `"system"`.
@@ -72,10 +55,49 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     // Ahead of `apply_settings`, whose palette apply resolves the border colour seeded here.
     window_border::seed(ui, &settings.window);
     apply_settings(ui, &settings, &initial_state);
+    seed_window_rows(ui, &settings);
+
+    // The boot migration for a `settings.json` written before `theme_preferences`
+    // existed.
+    if let Err(e) = library::settings::seed_theme_preference(&state.paths) {
+        log::warn!("seed theme_preferences: {}", describe(&e));
+    }
 
     let persisted_accent: PersistedAccent =
         Arc::new(parking_lot::Mutex::new(settings.accent_color.clone()));
+    wire_pickers(ui, state, &os_state, &kick, &persisted_accent);
+    wire_window_rows(ui, state);
 
+    Ok(AppearanceHandles { os_state, kick, repaint_tx })
+}
+
+/// The repaint channel — the Material You coordinator writes the latest
+/// `SystemColorState` snapshot here after each palette generation; the
+/// subscriber this spawns applies it on the UI thread.
+fn spawn_repaint_subscriber(
+    ui: &AppWindow,
+    state: &AppState,
+    initial_state: SystemColorState,
+) -> watch::Sender<SystemColorState> {
+    let (repaint_tx, mut repaint_rx) = watch::channel(initial_state);
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let res = slint::spawn_local(Compat::new(async move {
+        while repaint_rx.changed().await.is_ok() {
+            let snap = repaint_rx.borrow_and_update().clone();
+            let Some(ui) = weak.upgrade() else { return };
+            repaint_from_settings(&ui, &state, &snap);
+        }
+    }));
+    if let Err(e) = res {
+        log::warn!("material_you repaint subscriber: {}", describe(&e));
+    }
+    repaint_tx
+}
+
+/// The window rows' persisted values, written before `app.run()` so the first
+/// painted frame reflects them.
+fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
     // Seed the Match Unfocused Window Background row.
     {
         let g = ui.global::<Settings>();
@@ -88,16 +110,14 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     // drives the actual painted rounding on the outer mantle shell +
     // inner content panel in custom-titlebar mode. Both must be set
     // before `app.run()` so the first frame renders with the persisted
-    // radius. The persisted value is clamped *and* snapped to the
-    // nearest chip preset before seeding.
+    // radius.
     #[allow(
         clippy::cast_possible_wrap,
         clippy::cast_precision_loss,
         reason = "corner_radius clamped to 0..=15: exact in i32 and exact in f32 (f32 mantissa has 23 bits)"
     )]
     {
-        let clamped = settings.corner_radius.min(services::settings::MAX_CORNER_RADIUS);
-        let radius = library::settings::snap_to_preset(clamped);
+        let radius = window_settings::corner_radius_preset(settings.corner_radius);
         ui.global::<Settings>().set_corner_radius(radius as i32);
         let theme = ui.global::<Theme>();
         theme.set_shell_radius(radius as f32);
@@ -149,13 +169,16 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         g.set_overflow_queue(v.iter().any(|x| x == "queue"));
         g.set_overflow_quality(v.iter().any(|x| x == "quality"));
     }
+}
 
-    // The boot migration for a `settings.json` written before `theme_preferences`
-    // existed.
-    if let Err(e) = library::settings::seed_theme_preference(&state.paths) {
-        log::warn!("seed theme_preferences: {}", describe(&e));
-    }
-
+/// The theme, variant, accent and colour-style pickers.
+fn wire_pickers(
+    ui: &AppWindow,
+    state: &AppState,
+    os_state: &Arc<RwLock<SystemColorState>>,
+    kick: &Signal,
+    persisted_accent: &PersistedAccent,
+) {
     theme_picker::wire_theme_changed(
         ui,
         state,
@@ -176,8 +199,11 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         state,
         os_state.clone(),
         kick.clone(),
-        persisted_accent,
+        persisted_accent.clone(),
     );
+}
+
+fn wire_window_rows(ui: &AppWindow, state: &AppState) {
     window_settings::wire_match_unfocused_bg_changed(ui, state);
     window_settings::wire_corner_radius_changed(ui, state);
     window_settings::wire_titlebar_button_style_changed(ui, state);
@@ -186,6 +212,4 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     window_settings::wire_overflow_buttons_changed(ui, state);
     window_settings::wire_close_to_tray_changed(ui, state);
     window_border::wire(ui, state);
-
-    Ok(AppearanceHandles { os_state, kick, repaint_tx })
 }

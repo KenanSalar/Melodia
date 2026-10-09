@@ -66,7 +66,7 @@ pub(super) use grid::{fetch_grid_stats, rebuild_grid};
 
 /// The M3U8 import / export wiring, kept out of [`install`] because it needs
 /// the `Rc<NotificationsUi>` for its completion toasts and that is created
-/// after the per-view wiring runs. `main.rs` calls it once the stack exists.
+/// after the per-view wiring runs. Boot's `install_ui` calls it once the stack exists.
 pub use callbacks::wire_files;
 
 /// Install the Playlists grid + detail models, build the handle, and wire every

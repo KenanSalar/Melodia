@@ -13,14 +13,14 @@ use std::sync::Arc;
 use slint::{ModelRc, SharedString};
 
 use crate::ui::list_selection::RowSelectionView;
-use crate::ui::track_list_view::TrackListColumnState;
+use crate::ui::track_list_view::{TrackListActions, TrackListColumnState};
 use melodia_ui::{
     AlbumDetail, ArtistDetail, GenreDetail, PlaylistDetail, TrackListRow as UiTrackListRow,
 };
 
-/// The Slint surface of a detail global the shared wiring needs beyond selection and columns.
+/// The Slint surface of a detail global the shared wiring needs beyond what every track list has.
 /// Method names stay apart from the generated accessors, as [`RowSelectionView`]'s do.
-pub trait DetailGlobal: RowSelectionView + TrackListColumnState {
+pub trait DetailGlobal: RowSelectionView + TrackListColumnState + TrackListActions {
     /// The current `(sort-field, sort-dir)`.
     fn sort(&self) -> (SharedString, SharedString);
     fn set_sort(&self, field: &str, dir: &str);
@@ -30,15 +30,12 @@ pub trait DetailGlobal: RowSelectionView + TrackListColumnState {
 
     fn bind_shuffle(&self, f: impl FnMut() + 'static);
     fn bind_play_row(&self, f: impl FnMut(i32, i32) + 'static);
-    fn bind_play_next(&self, f: impl FnMut(ModelRc<i32>) + 'static);
-    fn bind_add_to_queue(&self, f: impl FnMut(ModelRc<i32>) + 'static);
     fn bind_toggle_row_favorite(&self, f: impl FnMut(ModelRc<i32>, bool) + 'static);
     fn bind_set_row_rating(&self, f: impl FnMut(ModelRc<i32>, i32) + 'static);
     fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static);
     fn bind_select_all(&self, f: impl FnMut() + 'static);
     fn bind_clear_selection(&self, f: impl FnMut() + 'static);
     fn bind_request_sort(&self, f: impl FnMut(SharedString) + 'static);
-    fn bind_toggle_column(&self, f: impl FnMut(SharedString) + 'static);
     fn bind_filter_changed(&self, f: impl FnMut(SharedString) + 'static);
 }
 
@@ -66,12 +63,6 @@ macro_rules! impl_detail_global {
             fn bind_play_row(&self, f: impl FnMut(i32, i32) + 'static) {
                 self.on_play_row(f);
             }
-            fn bind_play_next(&self, f: impl FnMut(ModelRc<i32>) + 'static) {
-                self.on_play_next(f);
-            }
-            fn bind_add_to_queue(&self, f: impl FnMut(ModelRc<i32>) + 'static) {
-                self.on_add_to_queue(f);
-            }
             fn bind_toggle_row_favorite(&self, f: impl FnMut(ModelRc<i32>, bool) + 'static) {
                 self.on_toggle_row_favorite(f);
             }
@@ -89,9 +80,6 @@ macro_rules! impl_detail_global {
             }
             fn bind_request_sort(&self, f: impl FnMut(SharedString) + 'static) {
                 self.on_request_sort(f);
-            }
-            fn bind_toggle_column(&self, f: impl FnMut(SharedString) + 'static) {
-                self.on_toggle_column(f);
             }
             fn bind_filter_changed(&self, f: impl FnMut(SharedString) + 'static) {
                 self.on_filter_changed(f);

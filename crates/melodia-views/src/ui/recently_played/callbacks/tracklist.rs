@@ -11,12 +11,13 @@
 
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Global as _};
 
-use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
-use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
+use crate::ui::callbacks::macros::wire_row_flag;
+use crate::ui::callbacks::track_list::{play_displayed, wire_queue_actions, wire_toggle_column};
+use crate::ui::callbacks::{collect_track_ids, spawn_play_then_shuffle};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
-use crate::ui::track_list_view;
+use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, RecentlyPlayed};
@@ -24,53 +25,28 @@ use melodia_ui::{AppWindow, RecentlyPlayed};
 /// Wire the list row / filter / column / selection / header callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     let g = ui.global::<RecentlyPlayed>();
-    let weak = ui.as_weak();
+    wire_play_row(&g, state, rp_ui);
+    wire_queue_actions(&g, state, collect_track_ids);
+    wire_row_flags(ui, state, rp_ui);
+    wire_filter(ui, state, rp_ui);
+    wire_toggle_column(&g.as_weak(), state);
+    wire_selection(ui, rp_ui);
+    wire_shuffle(&g, state, rp_ui);
+}
 
-    // --- Row actions ----------------------------------------------
-    // play-row loads the filtered list into the queue and starts on the
-    // clicked track; the header's Shuffle is the same call at index 0, plus
-    // a shuffle flip.
-    {
-        let s = state.clone();
-        let ru = rp_ui.clone();
-        g.on_play_row(move |track_id, idx| {
-            let ids = ru.filtered_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let start = play_row_start(&ids, i64::from(track_id), idx);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                "recently_played::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
-            );
-        });
-    }
-    {
-        let s = state.clone();
-        g.on_play_next(move |ids| {
-            let id_vec = collect_track_ids(&ids);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                "recently_played::play_next",
-                library::queue::queue_play_next_many(&s, id_vec)
-            );
-        });
-    }
-    {
-        let s = state.clone();
-        g.on_add_to_queue(move |ids| {
-            let id_vec = collect_track_ids(&ids);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                "recently_played::add_to_queue",
-                library::queue::queue_add_tracks(&s, id_vec)
-            );
-        });
-    }
+/// Loads the filtered list into the queue and starts on the clicked track;
+/// the header's Shuffle is the same call at index 0, plus a shuffle flip.
+fn wire_play_row(g: &RecentlyPlayed<'_>, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
+    let s = state.clone();
+    let ru = rp_ui.clone();
+    g.on_play_row(move |track_id, idx| {
+        play_displayed(&s, view_id::RECENTLY_PLAYED, ru.filtered_track_ids(), track_id, idx);
+    });
+}
+
+fn wire_row_flags(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
+    let g = ui.global::<RecentlyPlayed>();
+    let weak = ui.as_weak();
     // toggle-row-favorite: flip in place (recency membership is independent of
     // the favorite flag, so the row stays). `set_favorite` bumps
     // `library_changed`; the lifecycle subscriber re-fetches. Multi-select
@@ -108,42 +84,33 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
             }
         });
     }
+}
 
-    // --- Filter ---------------------------------------------------
-    // One needle, two caches — and they are walked on different threads because
-    // they are bounded by different things. Songs is the 200-row recency set, so
-    // its walk stays here. Most Played is whatever `get_most_played` returned,
-    // uncapped and library-wide, so its walk goes to a worker and comes back
-    // through `generation` to prove it still answers the needle on screen.
-    {
-        let s = state.clone();
-        let ru = rp_ui.clone();
+/// One needle, two caches — and they are walked on different threads because
+/// they are bounded by different things. Songs is the 200-row recency set, so
+/// its walk stays here. Most Played is whatever `get_most_played` returned,
+/// uncapped and library-wide, so its walk goes to a worker and comes back
+/// through `generation` to prove it still answers the needle on screen.
+fn wire_filter(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
+    let s = state.clone();
+    let ru = rp_ui.clone();
+    let weak = ui.as_weak();
+    ui.global::<RecentlyPlayed>().on_filter_changed(move |text| {
+        let generation = recently_played_ui_mod::set_filter(&ru, &text);
+        recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
+
+        let ru = ru.clone();
         let weak = weak.clone();
-        g.on_filter_changed(move |text| {
-            let generation = recently_played_ui_mod::set_filter(&ru, &text);
-            recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
-
-            let ru = ru.clone();
-            let weak = weak.clone();
-            s.runtime.spawn(async move {
-                recently_played_ui_mod::apply_filtered_grid_settled(&ru, &weak, generation);
-            });
+        s.runtime.spawn(async move {
+            recently_played_ui_mod::apply_filtered_grid_settled(&ru, &weak, generation);
         });
-    }
+    });
+}
 
-    // --- Column visibility ----------------------------------------
+fn wire_selection(ui: &AppWindow, rp_ui: &Arc<RecentlyPlayedUi>) {
+    let g = ui.global::<RecentlyPlayed>();
     {
-        let s = state.clone();
-        let weak = weak.clone();
-        g.on_toggle_column(move |_id| {
-            let Some(ui) = weak.upgrade() else { return };
-            track_list_view::persist_visible(&s, &ui.global::<RecentlyPlayed>());
-        });
-    }
-
-    // --- Selection ------------------------------------------------
-    {
-        let weak = weak.clone();
+        let weak = ui.as_weak();
         let ru = rp_ui.clone();
         g.on_select_row(move |idx, id, shift, ctrl| {
             let Some(ui) = weak.upgrade() else { return };
@@ -151,29 +118,27 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         });
     }
     {
-        let weak = weak.clone();
+        let weak = ui.as_weak();
         let ru = rp_ui.clone();
         g.on_select_all(move || {
             let Some(ui) = weak.upgrade() else { return };
             recently_played_ui_mod::select_all(&ui, &ru);
         });
     }
-
     {
-        let weak = weak.clone();
+        let weak = ui.as_weak();
         let ru = rp_ui.clone();
         g.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
             recently_played_ui_mod::clear_selection(&ui, &ru);
         });
     }
+}
 
-    // --- Header pill: Shuffle -------------------------------------
-    {
-        let s = state.clone();
-        let ru = rp_ui.clone();
-        g.on_shuffle_all(move || {
-            spawn_play_then_shuffle(&s, "recently_played::shuffle_all", ru.filtered_track_ids());
-        });
-    }
+fn wire_shuffle(g: &RecentlyPlayed<'_>, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
+    let s = state.clone();
+    let ru = rp_ui.clone();
+    g.on_shuffle_all(move || {
+        spawn_play_then_shuffle(&s, "recently_played::shuffle_all", ru.filtered_track_ids());
+    });
 }

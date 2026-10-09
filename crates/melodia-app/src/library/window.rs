@@ -92,7 +92,7 @@ pub fn set_close_to_tray(paths: &Paths, on: bool) -> Result<(), AppError> {
 }
 
 /// Persist the user toggle for "System Tray Icon". When `false`
-/// `main.rs` skips `ui::shell::tray_bridge::install` at startup, so the
+/// boot skips `ui::shell::tray_bridge::install` at startup, so the
 /// tray subsystem — D-Bus connection, service thread, action tasks — never
 /// runs. The toggle is restart-gated through the `restart-tray` `Dialog`
 /// flow, so this write commits just before the process respawns and the new

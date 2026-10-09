@@ -8,7 +8,7 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
-use super::paint::{check_painter, paint_error};
+use super::paint::{check_painter, report_failure};
 
 /// Runs the daily task's check on demand. Unlike that background check, a failure here is shown:
 /// the user asked, and is looking at the panel.
@@ -29,8 +29,7 @@ pub(super) fn spawn_manual_check(
             Err(e) => {
                 let kind = FailureKind::classify(&e);
                 log::warn!("updater: manual check failed ({kind:?}): {}", describe(&e));
-                paint_error(&weak, format!("{e}"));
-                let _ = event_tx.send(Some(UpdaterEvent::Failed { kind }));
+                report_failure(&weak, &event_tx, format!("{e}"), kind);
             }
         }
     });

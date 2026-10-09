@@ -7,6 +7,7 @@
 use std::collections::VecDeque;
 use std::time::Duration;
 
+use reqwest::Client;
 use tokio_util::sync::CancellationToken;
 
 use melodia_core::error::describe;
@@ -93,44 +94,16 @@ impl ScrobbleService {
         };
 
         let client = self.client();
-        let mut clear_lastfm: Vec<usize> = Vec::new();
-        let mut clear_lb: Vec<usize> = Vec::new();
-        let mut retry_after: Option<Duration> = None;
-
-        // ---- Last.fm ----
+        let mut lastfm = Drain::new(&snapshot, |it: &QueuedItem| it.lastfm_remaining);
         if !lastfm_ready {
             // Nowhere to send: drop the Last.fm side of every pending item.
-            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
+            lastfm.drop_pending();
         } else if let Some(creds) = lastfm_creds.as_ref()
             && let (Some(api_key), Some(secret)) =
                 (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
         {
-            let (batch, idx) = take_batch(&snapshot, |it| it.lastfm_remaining);
-            if !batch.is_empty() {
-                match stop
-                    .run_until_cancelled(lastfm::scrobble_batch(
-                        &client,
-                        api_key,
-                        secret,
-                        &creds.session_key,
-                        &batch,
-                    ))
-                    .await
-                {
-                    None => {}
-                    Some(Ok(())) => clear_lastfm.extend(idx),
-                    Some(Err(e)) => match lastfm_reaction(&e) {
-                        Reaction::Disconnect => {
-                            self.disconnect_lastfm().await;
-                            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
-                        }
-                        Reaction::Retry(delay) => {
-                            log_deferral("Last.fm scrobble", &e, delay);
-                            retry_after = Some(merge_retry(retry_after, delay));
-                        }
-                    },
-                }
-            }
+            let session = LastfmSession { api_key, secret, session_key: &creds.session_key };
+            self.scrobble_to_lastfm(&mut lastfm, &client, &session, stop).await;
         } else {
             // `lastfm_ready` implies `is_configured()` (both keys present) AND a
             // stored session, so this arm is unreachable. If a future change ever
@@ -140,47 +113,105 @@ impl ScrobbleService {
                 false,
                 "lastfm_ready but api keys/session absent — is_configured() invariant broke"
             );
-            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
+            lastfm.drop_pending();
         }
 
-        // ---- ListenBrainz ----
+        let mut lb = Drain::new(&snapshot, |it: &QueuedItem| it.listenbrainz_remaining);
         if !lb_ready {
-            drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
+            lb.drop_pending();
         } else if let Some(creds) = lb_creds.as_ref() {
-            let (batch, idx) = take_batch(&snapshot, |it| it.listenbrainz_remaining);
-            if !batch.is_empty() {
-                match stop
-                    .run_until_cancelled(listenbrainz::submit_listens(
-                        &client,
-                        &self.listenbrainz_base,
-                        &creds.token,
-                        &batch,
-                    ))
-                    .await
-                {
-                    None => {}
-                    Some(Ok(())) => clear_lb.extend(idx),
-                    Some(Err(e)) => match listenbrainz_reaction(&e) {
-                        Reaction::Disconnect => {
-                            self.disconnect_listenbrainz().await;
-                            drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
-                        }
-                        Reaction::Retry(delay) => {
-                            log_deferral("ListenBrainz submit", &e, delay);
-                            retry_after = Some(merge_retry(retry_after, delay));
-                        }
-                    },
-                }
-            }
+            self.scrobble_to_listenbrainz(&mut lb, &client, &creds.token, stop).await;
         }
 
         // Scrobbles never coalesce in place, so an unconditional clear is safe.
         if let Some(snapshot) =
-            self.collect_writeback(|q| &mut q.items, &clear_lastfm, &clear_lb, |_, _| true)
+            self.collect_writeback(|q| &mut q.items, &lastfm.done, &lb.done, |_, _| true)
         {
             self.persist_queue(snapshot).await;
         }
-        retry_after
+        merge_opt(lastfm.retry_after, lb.retry_after)
+    }
+
+    async fn scrobble_to_lastfm(
+        &self,
+        drain: &mut Drain<'_, QueuedItem>,
+        client: &Client,
+        session: &LastfmSession<'_>,
+        stop: &CancellationToken,
+    ) {
+        let (batch, idx) = take_batch(drain.snapshot, |it| it.lastfm_remaining);
+        if batch.is_empty() {
+            return;
+        }
+        let LastfmSession { api_key, secret, session_key } = *session;
+        match stop
+            .run_until_cancelled(lastfm::scrobble_batch(
+                client,
+                api_key,
+                secret,
+                session_key,
+                &batch,
+            ))
+            .await
+        {
+            None => {}
+            Some(Ok(())) => drain.done.extend(idx),
+            Some(Err(e)) => self.on_lastfm_error(&e, "Last.fm scrobble", drain).await,
+        }
+    }
+
+    async fn scrobble_to_listenbrainz(
+        &self,
+        drain: &mut Drain<'_, QueuedItem>,
+        client: &Client,
+        token: &str,
+        stop: &CancellationToken,
+    ) {
+        let (batch, idx) = take_batch(drain.snapshot, |it| it.listenbrainz_remaining);
+        if batch.is_empty() {
+            return;
+        }
+        match stop
+            .run_until_cancelled(listenbrainz::submit_listens(
+                client,
+                &self.listenbrainz_base,
+                token,
+                &batch,
+            ))
+            .await
+        {
+            None => {}
+            Some(Ok(())) => drain.done.extend(idx),
+            Some(Err(e)) => self.on_listenbrainz_error(&e, "ListenBrainz submit", drain).await,
+        }
+    }
+
+    /// A rejected session disconnects Last.fm and drops every flag still pending for it, which
+    /// would otherwise retry against a credential just deleted; anything else defers.
+    async fn on_lastfm_error<T>(&self, error: &LastfmError, what: &str, drain: &mut Drain<'_, T>) {
+        match lastfm_reaction(error) {
+            Reaction::Disconnect => {
+                self.disconnect_lastfm().await;
+                drain.drop_pending();
+            }
+            Reaction::Retry(delay) => drain.defer(what, error, delay),
+        }
+    }
+
+    /// [`Self::on_lastfm_error`] for `ListenBrainz`.
+    async fn on_listenbrainz_error<T>(
+        &self,
+        error: &ListenBrainzError,
+        what: &str,
+        drain: &mut Drain<'_, T>,
+    ) {
+        match listenbrainz_reaction(error) {
+            Reaction::Disconnect => {
+                self.disconnect_listenbrainz().await;
+                drain.drop_pending();
+            }
+            Reaction::Retry(delay) => drain.defer(what, error, delay),
+        }
     }
 
     /// Clear the submitted providers' flags by snapshot index (bounds-checked
@@ -261,52 +292,15 @@ impl ScrobbleService {
         };
 
         let client = self.client();
-        let mut clear_lastfm: Vec<usize> = Vec::new();
-        let mut clear_lb: Vec<usize> = Vec::new();
-        let mut retry_after: Option<Duration> = None;
-
-        // ---- Last.fm ----
+        let mut lastfm = Drain::new(&snapshot, |it: &LoveItem| it.lastfm_remaining);
         if !lastfm_ready {
-            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
+            lastfm.drop_pending();
         } else if let Some(creds) = lastfm_creds.as_ref()
             && let (Some(api_key), Some(secret)) =
                 (lastfm::LASTFM_API_KEY, lastfm::LASTFM_SHARED_SECRET)
         {
-            for (i, love) in snapshot.iter().enumerate() {
-                if clear_lastfm.len() >= SCROBBLE_BATCH_MAX {
-                    break;
-                }
-                if !love.lastfm_remaining {
-                    continue;
-                }
-                match stop
-                    .run_until_cancelled(lastfm::love(
-                        &client,
-                        api_key,
-                        secret,
-                        &creds.session_key,
-                        &love.track,
-                        love.loved,
-                    ))
-                    .await
-                {
-                    None => break,
-                    Some(Ok(())) => clear_lastfm.push(i),
-                    Some(Err(e)) => {
-                        match lastfm_reaction(&e) {
-                            Reaction::Disconnect => {
-                                self.disconnect_lastfm().await;
-                                drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
-                            }
-                            Reaction::Retry(delay) => {
-                                log_deferral("Last.fm love", &e, delay);
-                                retry_after = Some(merge_retry(retry_after, delay));
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
+            let session = LastfmSession { api_key, secret, session_key: &creds.session_key };
+            self.love_on_lastfm(&mut lastfm, &client, &session, stop).await;
         } else {
             // Unreachable while `lastfm_reachable()` keeps its `is_configured()`
             // gate (see the matching arm in `submit_scrobbles`); drop rather than
@@ -315,55 +309,14 @@ impl ScrobbleService {
                 false,
                 "lastfm reachable but api keys/session absent — is_configured() invariant broke"
             );
-            drop_flags(&snapshot, |it| it.lastfm_remaining, &mut clear_lastfm);
+            lastfm.drop_pending();
         }
 
-        // ---- ListenBrainz ----
+        let mut lb = Drain::new(&snapshot, |it: &LoveItem| it.listenbrainz_remaining);
         if !lb_ready {
-            drop_flags(&snapshot, |it| it.listenbrainz_remaining, &mut clear_lb);
+            lb.drop_pending();
         } else if let Some(creds) = lb_creds.as_ref() {
-            for (i, love) in snapshot.iter().enumerate() {
-                if clear_lb.len() >= SCROBBLE_BATCH_MAX {
-                    break;
-                }
-                if !love.listenbrainz_remaining {
-                    continue;
-                }
-                let Some(mbid) = love.track.recording_mbid.as_deref() else {
-                    clear_lb.push(i); // no MBID for LB to key on → nothing to do
-                    continue;
-                };
-                match stop
-                    .run_until_cancelled(listenbrainz::submit_feedback(
-                        &client,
-                        &self.listenbrainz_base,
-                        &creds.token,
-                        mbid,
-                        i8::from(love.loved),
-                    ))
-                    .await
-                {
-                    None => break,
-                    Some(Ok(())) => clear_lb.push(i),
-                    Some(Err(e)) => {
-                        match listenbrainz_reaction(&e) {
-                            Reaction::Disconnect => {
-                                self.disconnect_listenbrainz().await;
-                                drop_flags(
-                                    &snapshot,
-                                    |it| it.listenbrainz_remaining,
-                                    &mut clear_lb,
-                                );
-                            }
-                            Reaction::Retry(delay) => {
-                                log_deferral("ListenBrainz feedback", &e, delay);
-                                retry_after = Some(merge_retry(retry_after, delay));
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
+            self.love_on_listenbrainz(&mut lb, &client, &creds.token, stop).await;
         }
 
         // Only clear a love whose queued `loved` still matches what we submitted:
@@ -373,13 +326,125 @@ impl ScrobbleService {
         // out next round.
         if let Some(queue_snapshot) = self.collect_writeback(
             |q| &mut q.loves,
-            &clear_lastfm,
-            &clear_lb,
+            &lastfm.done,
+            &lb.done,
             |i, current: &LoveItem| snapshot.get(i).is_some_and(|s| s.loved == current.loved),
         ) {
             self.persist_queue(queue_snapshot).await;
         }
-        retry_after
+        merge_opt(lastfm.retry_after, lb.retry_after)
+    }
+
+    /// One `track.love`/`track.unlove` per pending love, up to the round's cap, stopping at the
+    /// first failure.
+    async fn love_on_lastfm(
+        &self,
+        drain: &mut Drain<'_, LoveItem>,
+        client: &Client,
+        session: &LastfmSession<'_>,
+        stop: &CancellationToken,
+    ) {
+        let LastfmSession { api_key, secret, session_key } = *session;
+        let snapshot = drain.snapshot;
+        for (i, love) in snapshot.iter().enumerate() {
+            if drain.done.len() >= SCROBBLE_BATCH_MAX {
+                break;
+            }
+            if !love.lastfm_remaining {
+                continue;
+            }
+            match stop
+                .run_until_cancelled(lastfm::love(
+                    client,
+                    api_key,
+                    secret,
+                    session_key,
+                    &love.track,
+                    love.loved,
+                ))
+                .await
+            {
+                None => break,
+                Some(Ok(())) => drain.done.push(i),
+                Some(Err(e)) => {
+                    self.on_lastfm_error(&e, "Last.fm love", drain).await;
+                    break;
+                }
+            }
+        }
+    }
+
+    /// One recording-feedback POST per pending love, as [`Self::love_on_lastfm`].
+    async fn love_on_listenbrainz(
+        &self,
+        drain: &mut Drain<'_, LoveItem>,
+        client: &Client,
+        token: &str,
+        stop: &CancellationToken,
+    ) {
+        let snapshot = drain.snapshot;
+        for (i, love) in snapshot.iter().enumerate() {
+            if drain.done.len() >= SCROBBLE_BATCH_MAX {
+                break;
+            }
+            if !love.listenbrainz_remaining {
+                continue;
+            }
+            let Some(mbid) = love.track.recording_mbid.as_deref() else {
+                drain.done.push(i); // no MBID for LB to key on → nothing to do
+                continue;
+            };
+            match stop
+                .run_until_cancelled(listenbrainz::submit_feedback(
+                    client,
+                    &self.listenbrainz_base,
+                    token,
+                    mbid,
+                    i8::from(love.loved),
+                ))
+                .await
+            {
+                None => break,
+                Some(Ok(())) => drain.done.push(i),
+                Some(Err(e)) => {
+                    self.on_listenbrainz_error(&e, "ListenBrainz feedback", drain).await;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// The three strings every signed Last.fm call takes.
+#[derive(Clone, Copy)]
+struct LastfmSession<'a> {
+    api_key: &'a str,
+    secret: &'a str,
+    session_key: &'a str,
+}
+
+/// One provider's pass over a drain round's snapshot: the indices it is done with, and the
+/// longest wait it was asked for.
+struct Drain<'a, T> {
+    snapshot: &'a [T],
+    pending: fn(&T) -> bool,
+    done: Vec<usize>,
+    retry_after: Option<Duration>,
+}
+
+impl<'a, T> Drain<'a, T> {
+    fn new(snapshot: &'a [T], pending: fn(&T) -> bool) -> Self {
+        Self { snapshot, pending, done: Vec::new(), retry_after: None }
+    }
+
+    /// Marks every entry still pending for this provider done, there being nowhere to send it.
+    fn drop_pending(&mut self) {
+        drop_flags(self.snapshot, self.pending, &mut self.done);
+    }
+
+    fn defer(&mut self, what: &str, cause: &dyn std::error::Error, delay: Duration) {
+        log_deferral(what, cause, delay);
+        self.retry_after = Some(merge_retry(self.retry_after, delay));
     }
 }
 
