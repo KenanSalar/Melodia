@@ -7,7 +7,7 @@ import { Queue } from "queue.slint";
 import { WindowChrome } from "shell.slint";
 import { Settings } from "../settings.slint";
 
-// `none` first: the teardown resets to the default, which is the first variant.
+// `none` first, so a dialog never opened and one torn down read the same.
 export enum DialogKind {
     none,
     remove-folder,

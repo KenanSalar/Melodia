@@ -1,6 +1,6 @@
 //! In-memory cache of the most-recently-observed `Available` asset.
 //!
-//! `Updater.install` (`ui::callbacks::wire_updater`) re-reads `latest.json`
+//! `Updater.install` (`ui::callbacks::updater::wire`) re-reads `latest.json`
 //! for the asset blob (URL + signature + size) before downloading. That fails
 //! outright on a flaky network, and a failure between the Available toast and the
 //! Install click surfaced as a confusing re-fetch error.

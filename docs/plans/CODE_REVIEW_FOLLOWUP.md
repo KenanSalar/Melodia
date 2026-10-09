@@ -329,16 +329,16 @@ clippy counting code lines only. Now none does, and both lints are on.
 arms. A typo builds fine and gives a button that does nothing.
 
 - [x] Re-measured on 2026-10-09: 23 kinds, 9 inline `.slint` writers, the openers and one Rust
-      setter. `DialogKind` lives beside `Dialog` in `globals/dialog.slint`, `none` first so the
-      teardown resets to the default. The `accepted` dispatcher stays in Slint: its arms read the
-      dialog's own state, and the two info kinds rightly have no arm.
+      setter. `DialogKind` lives beside `Dialog` in `globals/dialog.slint`, `none` first so a
+      dialog never opened and one torn down read the same. The `accepted` dispatcher stays in
+      Slint: its arms read the dialog's own state, and the two info kinds rightly have no arm.
 - [x] The toast kinds were still strings, 10 of them, and only 5 route a button; the rest group
-      rows for `dismiss_by_kind`. They are `NotificationKind`, and the row's `action-kind` field is
-      `kind`. An enum alone stops a typo but not a kind with no branch, so the dispatcher moved into
-      Rust as `ui::shell::notifications::run_action`, one exhaustive `match` invoking the same
-      callbacks the Slint arms did. The four string consts and their "must match the branch" docs
-      are gone, as is the branch-exists half of `diagnostics_tests` and `support_tests`. The
-      same-callback half reads the Rust arm now, and fails on a mutated one.
+      rows for `dismiss_by_kind`. They are `NotificationKind`, and the row's `action-kind` field
+      became `kind`. An enum alone stops a typo but not a kind with no branch, so the dispatcher
+      moved into Rust as `ui::shell::notifications::run_action`, one exhaustive `match` invoking
+      the same callbacks the Slint arms did. The four string consts and their "must match the
+      branch" docs are gone, as is the branch-exists half of `diagnostics_tests` and
+      `support_tests`. The same-callback half reads the Rust arm now, and fails on a mutated one.
 - [x] The toast variant was a third free string, held together by about 180 lines of
       `view_model_strings.rs`. It is `NotificationVariant`, and the card's two ladders are one
       `look` struct, so a colour can't be styled without its glyph. That half of the walk is gone;

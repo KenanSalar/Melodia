@@ -713,9 +713,10 @@ three components that answer it, and each argues its geometry at its own file.
   triggers.
 
 - **Notifications stack** routes a row's `NotificationKind` through
-  `ui::shell::notifications::run_action`, not a Slint dispatcher as `Dialog` does, and that function
-  argues why: a new action is one arm plus one `show_localized(…)` call. Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as
-  the iter var), and translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
+  `ui::shell::notifications::run_action`, a Rust `match` rather than a Slint dispatcher like
+  `Dialog`'s (the function argues why). A new action is one arm plus one `show_localized(…)` call.
+  Cap 5. Per-card props use `data:` not `row:` (Slint reserves `row` as the iter var), and
+  translated strings reach Rust via `pure callback`s wrapping `@tr(…)` literals.
 
 - **Backend-thread toasts via `utils::toast`.** `NotificationsUi` is `Rc`, so failures on tokio
   workers surface through a neutral `OnceLock<UnboundedSender<…>>` — no-op when uninstalled,
