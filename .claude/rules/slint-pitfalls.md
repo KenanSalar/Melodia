@@ -467,8 +467,9 @@ this file is what builds, looks right, and is wrong.
   `opacity` animate. A write never resets the outgoing slot, which stays painted for the fade. A
   slot is cleared only where no fade can still be reading it: a station, which nothing fades
   *into* (`ui::now_playing::source_change`), a hero handed back with its page
-  (`release_hero_slots!`), and Now Playing once no surface draws it, emptying only the slots not
-  on show and only after `dur-med` (`NowPlayingState::release_artwork`). Each argues itself there.
+  (`detail_view::release_hero_slots`), and Now Playing once no surface draws it, emptying only the
+  slots not on show and only after `dur-med` (`NowPlayingState::release_artwork`). Each argues
+  itself there.
 
 - **A rounded `clip: true` renders everything under it into a texture, and a clip on a rounded
   element is always a rounded one.** `passes/clip.rs` copies the element's radius onto the `Clip`

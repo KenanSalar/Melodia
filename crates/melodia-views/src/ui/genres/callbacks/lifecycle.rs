@@ -12,11 +12,13 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::ui::callbacks::macros::{release_shared_hero, spawn_logged};
+use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::detail_view::release_shared_hero;
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
+use crate::ui::track_detail::TrackDetail;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
@@ -73,8 +75,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                 d.set_selection_anchor(-1);
                 // Six heroes share one colour set and one chip row; this one has
                 // no images to release, so it takes the shared pair alone rather
-                // than the full `release_detail_hero_images!`.
-                release_shared_hero!(ui);
+                // than the full `release_detail_hero_images`.
+                release_shared_hero(&ui);
                 // The card grid's set goes back with the models it describes;
                 // `card-selection.slint` argues why it cannot outlive the leave.
                 ui.global::<CardSelection>().invoke_clear();
@@ -111,10 +113,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) 
                             // procedural-gradient tiles — but the hero colour
                             // set and chip row are shared, so both still have
                             // to be handed back.
-                            genres_ui_mod::clear_detail(&gu);
+                            gu.clear_detail();
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 ui.global::<GenreDetail>().set_genre_id(-1);
-                                release_shared_hero!(ui);
+                                release_shared_hero(&ui);
                             });
                         }
                     }

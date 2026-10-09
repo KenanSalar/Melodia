@@ -185,7 +185,7 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
         "apply_detail_artwork must guard the `HeroBackdrop` write on `section_active`"
     );
     assert!(
-        body.contains("g.set_cover("),
+        body.contains("g.write_cover("),
         "the cover write should stay *outside* the gate — a hidden view still wants to be ready \
          to paint when it is shown"
     );
@@ -241,16 +241,24 @@ fn the_two_seams_gate_the_shared_write_and_only_that() {
 /// cross-tab drill. Only the record can tell those apart.
 #[test]
 fn the_shared_teardown_holds_what_the_band_can_still_reach() {
-    const MACROS: &str = include_str!("../callbacks/macros.rs");
+    // A leave that names the tab it is leaving is the shape this replaced, and the one a
+    // later edit is likeliest to reach for: the departing tab cannot tell a hand-off whose
+    // destination has already filled the strip from one still waiting on a fetch.
+    const SIGNATURE: &str = "pub fn release_shared_hero(ui: &AppWindow) {";
+    assert!(
+        DETAIL_VIEW.contains(SIGNATURE),
+        "`release_shared_hero` must take the `AppWindow` alone — whose chips are on the band \
+         is the record's question, not the departing view's"
+    );
 
-    let body = MACROS
-        .split_once("macro_rules! release_shared_hero {")
+    let body = DETAIL_VIEW
+        .split_once(SIGNATURE)
         .and_then(|(_, rest)| rest.split_once("\n}"))
         .map_or("", |(body, _)| body);
-    assert!(!body.is_empty(), "`release_shared_hero!` is gone or no longer a macro");
+    assert!(!body.is_empty(), "`release_shared_hero` is gone");
 
     let colours = body
-        .split_once("if !$crate::ui::my_library::the_band_is_up(&$ui) {")
+        .split_once("if !crate::ui::my_library::the_band_is_up(ui) {")
         .and_then(|(_, rest)| rest.split_once('}'))
         .map_or("", |(inside, _)| inside);
     assert!(
@@ -265,19 +273,10 @@ fn the_shared_teardown_holds_what_the_band_can_still_reach() {
          hand-off, which is the case each is shaped around"
     );
     assert!(
-        body.contains("$crate::ui::hero_chips::clear_if_stale(&$ui);"),
+        body.contains("crate::ui::hero_chips::clear_if_stale(ui);"),
         "the chip half must route through `clear_if_stale` — an unconditional clear empties the \
          strip on frame one of the 400 ms collapse it is being painted in, and a *conditional* \
          one written here cannot see whether the incoming hero has already published"
-    );
-
-    // A leave that names the tab it is leaving is the shape this replaced, and the one a
-    // later edit is likeliest to reach for: the departing tab cannot tell a hand-off whose
-    // destination has already filled the strip from one still waiting on a fetch.
-    assert!(
-        !body.contains("$departing"),
-        "`release_shared_hero!` must take the `AppWindow` alone — whose chips are on the band \
-         is the record's question, not the departing view's"
     );
 }
 
@@ -288,21 +287,19 @@ fn the_shared_teardown_holds_what_the_band_can_still_reach() {
 /// fallback glyph during the collapse and again on the way back in.
 #[test]
 fn a_tab_leave_holds_the_slots_the_band_can_still_paint() {
-    const MACROS: &str = include_str!("../callbacks/macros.rs");
-
-    let body = MACROS
-        .split_once("macro_rules! release_detail_hero_images {")
+    let body = DETAIL_VIEW
+        .split_once("pub fn release_detail_hero_images(")
         .and_then(|(_, rest)| rest.split_once("\n}"))
         .map_or("", |(body, _)| body);
-    assert!(!body.is_empty(), "`release_detail_hero_images!` is gone or no longer a macro");
+    assert!(!body.is_empty(), "`release_detail_hero_images` is gone");
 
     let guarded = body
-        .split_once("if !$crate::ui::my_library::the_band_is_up(&$ui) {")
+        .split_once("if !crate::ui::my_library::the_band_is_up(ui) {")
         .and_then(|(_, rest)| rest.split_once('}'))
         .map_or("", |(inside, _)| inside);
     assert!(
-        guarded.contains("release_hero_slots!"),
-        "`release_hero_slots!` must sit behind `the_band_is_up` — unguarded it hands back the \
+        guarded.contains("release_hero_slots(g)"),
+        "`release_hero_slots` must sit behind `the_band_is_up` — unguarded it hands back the \
          cover and blur pair of a detail that is still open, which the band is either \
          collapsing out of or one tab pick away from painting again"
     );
@@ -353,7 +350,7 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
         .and_then(|(_, rest)| rest.split_once("\n}"))
         .map_or("", |(body, _)| body);
     assert_eq!(
-        page.matches("release_hero_slots!").count(),
+        page.matches("release_hero_slots(").count(),
         3,
         "`release_page_hero` must hand back all three image globals unconditionally — the \
          per-tab gates only fire for the *mounted* tab, so a detail held on another one is \

@@ -8,11 +8,13 @@ use async_compat::Compat;
 use slint::ComponentHandle;
 
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
-use crate::ui::callbacks::macros::{release_detail_hero_images, spawn_logged};
+use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::tab_bar::UNFETCHED_COUNT;
+use crate::ui::track_detail::TrackDetail;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
@@ -66,7 +68,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                 clear_vec_model::<UiArtistGridRow>(&g.get_grid_rows(), "artists: clear grid");
 
                 let d = ui.global::<ArtistDetail>();
-                release_detail_hero_images!(ui, d);
+                release_detail_hero_images(&ui, &d);
                 clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "artists: clear detail tracks");
                 clear_vec_model::<UiAlbumRow>(&d.get_albums(), "artists: clear detail albums");
                 clear_vec_model::<i32>(&d.get_selected_ids(), "artists: clear detail selection");
@@ -104,7 +106,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                             // hidden); drop back to the grid rather than
                             // stranding the user on an empty detail page.
                             // Mirrors the Albums slice's own lifecycle wiring.
-                            artists_ui_mod::clear_detail(&au);
+                            au.clear_detail();
                             // Handed back warm, as a failed restore's grid is.
                             grid_prewarm::prewarm_off_thread(
                                 &au,
@@ -114,7 +116,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
                             let _ = weak.upgrade_in_event_loop(|ui| {
                                 let g = ui.global::<ArtistDetail>();
                                 g.set_artist_id(-1);
-                                release_detail_hero_images!(ui, g);
+                                release_detail_hero_images(&ui, &g);
                             });
                         }
                     } else {

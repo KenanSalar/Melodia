@@ -4,7 +4,7 @@
 //! other hero draws it from one. Composing that collage **once** is what collapses the
 //! difference: past [`compose_hero_pair`] each is an ordinary single-artwork hero and
 //! reuses the detail path whole — `apply_detail_artwork`, `write_crossfade_slot`,
-//! `release_hero_slots!`. What is left here is the composition and the guard deciding
+//! `release_hero_slots`. What is left here is the composition and the guard deciding
 //! whether to redo it.
 
 use std::path::PathBuf;

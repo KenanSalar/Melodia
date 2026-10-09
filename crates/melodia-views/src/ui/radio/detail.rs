@@ -23,7 +23,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Weak};
 
 use crate::ui::detail_artwork::{DetailPair, decode_detail_pair};
-use crate::ui::detail_view::impl_detail_view_helpers;
+use crate::ui::detail_view::apply_detail_artwork;
 use crate::ui::hero_chips::{self, StationFacts};
 use crate::ui::track_list_view::view_id;
 use crate::ui::util::clamp_i64_to_i32;
@@ -35,10 +35,6 @@ use melodia_ui::{AppWindow, NavEnterFrom, Radio, RadioStationRow};
 
 use super::tabs::{RadioTab, mounted_tab, section_is_up};
 use super::{RadioUi, browse, kept, rows};
-
-// `apply_detail_artwork` — the cover and hero-blur write. `artwork_only` because this detail's
-// list is bare titles rather than a `TrackList`, so there is no `tracks` model to swap.
-impl_detail_view_helpers!(artwork_only Radio);
 
 /// What identifies a station across the fetch that opens its page.
 ///

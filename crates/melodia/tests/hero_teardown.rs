@@ -7,17 +7,17 @@
 
 use melodia_testkit::{callback_sources, rust_sources};
 
-/// **No leave decides for itself whether the chips are stale.** The macro pair is the only
-/// way a hero teardown may be spelled, and the mutation to catch is a site reaching past
-/// it for a bare `hero_chips::clear` — which wipes a row the *incoming* hero has already
-/// filled, or one the band is mid-collapse over. Both are invisible at the site, the one
-/// place with no way to tell which case it is in.
+/// **No leave decides for itself whether the chips are stale.** `ui::detail_view`'s pair
+/// is the only way a hero teardown may be spelled, and the mutation to catch is a site
+/// reaching past it for a bare `hero_chips::clear` — which wipes a row the *incoming* hero
+/// has already filled, or one the band is mid-collapse over. Both are invisible at the
+/// site, the one place with no way to tell which case it is in.
 ///
 /// **It walks the wiring tree rather than listing the sites**, for the reason
 /// the `rfd` pin beside it does. The corpus is `melodia_testkit::callback_sources`, whose
 /// `CALLBACK_HOMES` equality stops a renamed subtree shrinking this walk in silence.
 #[test]
-fn no_leave_clears_the_chips_behind_the_macro() {
+fn no_leave_clears_the_chips_behind_the_shared_teardown() {
     /// Two per detail lifecycle, plus the playlist dialog's, plus one per curated page. A
     /// floor rather than an equality so a sixth teardown needs no edit here; the *corpus*
     /// is held exact by `CALLBACK_HOMES` instead.
@@ -25,20 +25,11 @@ fn no_leave_clears_the_chips_behind_the_macro() {
 
     let mut total = 0;
     for (rel, code) in callback_sources() {
-        // Skipped rather than checked: `macros.rs` *defines* the needles and
-        // `my_library`'s wiring owns the page's two deliberate teardowns, both pinned by
-        // their own tests. The asserts stop each skip outliving its reason — a file that
-        // moves out from under its literal loses its exemption and trips the
-        // `hero_chips::clear` assert instead, which is the loud direction.
-        if rel == "callbacks/macros.rs" {
-            assert!(
-                code.contains("macro_rules! release_shared_hero")
-                    && code.contains("macro_rules! release_detail_hero_images"),
-                "`macros.rs` no longer defines both teardown macros, so the skip above is \
-                 exempting a file nothing is checking"
-            );
-            continue;
-        }
+        // Skipped rather than checked: `my_library`'s wiring owns the page's two deliberate
+        // teardowns, pinned by their own tests. The assert stops the skip outliving its
+        // reason — a file that moves out from under its literal loses its exemption and trips
+        // the `hero_chips::clear` assert instead, which is the loud direction. The pair itself
+        // is defined in `ui/detail_view.rs`, outside this corpus.
         if rel == "my_library/callbacks.rs" {
             assert!(
                 code.contains("fn release_page_hero(")
@@ -51,13 +42,13 @@ fn no_leave_clears_the_chips_behind_the_macro() {
 
         assert!(
             !code.contains("hero_chips::clear"),
-            "{rel} must hand its chips back through `release_shared_hero!` — a leave has no way \
+            "{rel} must hand its chips back through `release_shared_hero` — a leave has no way \
              to tell a hand-off whose destination already published from one still fetching, and \
              clearing on the first is the stale-empty band this rule exists to prevent"
         );
 
-        total += code.matches("release_shared_hero!").count()
-            + code.matches("release_detail_hero_images!").count();
+        total += code.matches("release_shared_hero(").count()
+            + code.matches("release_detail_hero_images(").count();
     }
     assert!(
         total >= MIN_TEARDOWNS,

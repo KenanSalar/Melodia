@@ -614,6 +614,12 @@ three components that answer it, and each argues its geometry at its own file.
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
+- **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
+  `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
+  rows in a `DetailCache`. A view's own `callbacks/detail.rs` keeps close-detail, whose routing and
+  release differ per view, and whatever only it has. A fifth detail implements both traits rather
+  than copying a `callbacks/detail.rs`.
+
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
   `player_play_tracks(ids, start)`. The eight Play All pills made that same call pinned to
@@ -953,11 +959,11 @@ three components that answer it, and each argues its geometry at its own file.
 
 ## Releasing what the UI pins
 
-- **Detail-close releases global Image properties.** `release_detail_hero_images!` resets `cover` +
-  `blur-img-a/b`, clears `has-blur`, and re-solves the two shared globals, alongside `clear_detail`
-  + `release_detail_artwork`. Without it `SharedPixelBuffer` Arcs pin the cover tile and **both**
-  blur slots, on the heap and again as Mesa textures. It runs on each view's **section leave**,
-  gated per the hero-teardown rules above.
+- **Detail-close releases global Image properties.** `detail_view::release_detail_hero_images`
+  resets `cover` + `blur-img-a/b`, clears `has-blur`, and re-solves the two shared globals,
+  alongside `clear_detail` + `release_detail_artwork`. Without it `SharedPixelBuffer` Arcs pin the
+  cover tile and **both** blur slots, on the heap and again as Mesa textures. It runs on each
+  view's **section leave**, gated per the hero-teardown rules above.
 
 - **A close doesn't run it, and that is the contract the morph forced.** Every fact the band paints
   is a ternary over the detail id, so clearing on the frame the id does leaves the band spending

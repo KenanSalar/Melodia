@@ -1,9 +1,9 @@
 import { TrackListRow, TrackColumns, EntityStripRow, EntityGridRow } from "../models.slint";
 
 // The two curated pages, both wearing `MosaicTabHero` over their sub-views. Two globals rather
-// than one because a Slint component can't be parameterised over a global — the wall
-// `impl_detail_view_helpers!` works around in Rust; what the pages genuinely share is in the
-// component.
+// than one because a Slint component can't be parameterised over a global — the wall Rust
+// answers with a trait over the generated globals (`ui::detail_view::HeroSlots`); what the pages
+// genuinely share is in the component.
 
 // Three mutually exclusive sub-views: Songs (a sortable, filterable `TrackList`), Most Played and
 // Favorite Artists (both virtualized `EntityCardGrid`s). No Favorite Albums tab by design — albums

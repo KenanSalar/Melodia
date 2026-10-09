@@ -1,19 +1,16 @@
-//! Album Detail header + track list: fetch, artwork pair decode, re-sort,
-//! refresh-preserving, startup seed.
+//! Album Detail's own half: fetch, artwork pair decode, open, refresh and the
+//! startup seed. What the four details share is [`crate::ui::track_detail`].
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString, Weak};
 
-use super::selection::{apply_selection_to_rows, write_selection};
 use super::{AlbumsUi, to_slint_album_row};
 use crate::ui::detail_artwork::decode_detail_pair;
-use crate::ui::detail_filter::FilterRefs;
-use crate::ui::detail_selection::prune_selection_to;
-use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
-use crate::ui::model_patch;
+use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::track_detail::{DetailCache, TrackDetail, filter, selection};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
@@ -24,10 +21,13 @@ use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackListRow};
 
-// `apply_detail_artwork` (cover + hero-blur write) and
-// `replace_tracks_model` (in-place `tracks` `VecModel` swap) — see
-// `src/ui/detail_view.rs`.
-impl_detail_view_helpers!(artwork AlbumDetail);
+impl TrackDetail for AlbumsUi {
+    type Global = AlbumDetail<'static>;
+
+    fn cache(&self) -> &DetailCache {
+        &self.detail
+    }
+}
 
 /// Fetch an album's header + track list and prewarm their cover
 /// thumbnails. Shared by [`open_album`] (fresh user open) and
@@ -114,19 +114,18 @@ where
     // already holds the rows.
     let genre = crate::ui::hero_folds::dominant_genre(&tracks);
 
-    *albums_ui.detail.album_id.lock() = album_id;
+    albums_ui.detail.set_id(album_id);
 
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
-        replace_tracks_model(&g, ui_tracks);
-        reset_detail_selection(&g, &albums_ui);
+        filter::install_tracks(&g, ui_tracks);
+        selection::reset(&g, &albums_ui.detail);
         // A fresh open lands on the full track set, not the previous detail's
-        // needle. Slint property and Rust cache cleared together.
+        // needle; `seat_unfiltered` below clears the Rust half.
         g.set_filter(SharedString::default());
-        albums_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
         // Marked before the hook can flip `Nav.selected-index`, so a
@@ -134,9 +133,7 @@ where
         // same-page drill, whose body reads a fixed `below`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_album_id(clamp_i64_to_i32(album_id));
-        // No filter yet, so the displayed cache equals the canonical set.
-        albums_ui.detail.all_tracks.lock().clone_from(&tracks);
-        *albums_ui.detail.tracks.lock() = tracks;
+        albums_ui.detail.seat_unfiltered(tracks);
         // After `album-id`, so whatever globals the hook writes land in the same
         // UI-thread tick as the detail flip.
         on_applied(&ui);
@@ -215,89 +212,11 @@ pub async fn refresh_detail(
         // re-derive the displayed cache and the model from the canonical set. It diffs, so a
         // refresh that leaves the id order alone patches only the rows whose content moved —
         // a tag edit, a favourite toggled elsewhere — and keeps the shift-range anchor.
-        prune_selection_to(&g, &tracks);
-        *albums_ui.detail.all_tracks.lock() = tracks;
-        apply_filtered_detail(&ui, &albums_ui);
+        selection::prune_selection_to(&g, &tracks);
+        albums_ui.detail.set_all_tracks(tracks);
+        filter::apply_filtered_detail(&g, &albums_ui.detail);
     });
     Ok(())
-}
-
-/// Re-sort the cached detail tracks and reorder the existing model rows to
-/// match. No DB hit, **and no row rebuild** — a header click changes row order,
-/// not row content, so the `UiTrackListRow` structs are moved rather than rebuilt
-/// and nothing is re-decoded or re-allocated. Selection survives, track ids being
-/// stable across a re-sort. Runs on the UI thread.
-pub fn resort_detail(ui: &AppWindow, albums_ui: &AlbumsUi) {
-    let g = ui.global::<AlbumDetail>();
-    let field = g.get_sort_field().to_string();
-    let dir = g.get_sort_dir().to_string();
-
-    // Caches first — `play-row` and range-select read the displayed `tracks`,
-    // and `all_tracks` sorts in lockstep so widening the filter later still
-    // yields sorted rows.
-    let order: Vec<i32> = {
-        sort_track_list_rows(&mut albums_ui.detail.all_tracks.lock(), &field, &dir);
-        let mut tracks = albums_ui.detail.tracks.lock();
-        sort_track_list_rows(&mut tracks, &field, &dir);
-        tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
-    };
-
-    crate::ui::model_diff::permute_rows_by_id(&g.get_tracks(), &order, |r| r.id);
-    // A no-op in the steady state, the reordered structs keeping their flags;
-    // kept as a cheap re-sync.
-    apply_selection_to_rows(&g, albums_ui);
-}
-
-/// Clear the detail view's cached state when the user navigates back to
-/// the grid. The Slint side has already flipped `album-id` to `-1`.
-pub fn clear_detail(albums_ui: &AlbumsUi) {
-    *albums_ui.detail.album_id.lock() = -1;
-    albums_ui.detail.tracks.lock().clear();
-    albums_ui.detail.all_tracks.lock().clear();
-    albums_ui.detail.applied_selection.lock().clear();
-    albums_ui.detail.filter.lock().clear();
-}
-
-/// Update the cached filter needle, so `refresh_detail` can re-apply it to fresh
-/// data without round-tripping the UI thread for the property read. Stored
-/// folded, so the per-keystroke walk doesn't re-fold per row.
-pub fn set_filter(albums_ui: &AlbumsUi, needle: &str) {
-    *albums_ui.detail.filter.lock() = crate::ui::row_match::fold_needle(needle);
-}
-
-/// Re-walk the cached tracks through the current filter and push the model.
-/// Runs on the UI thread; [`crate::ui::detail_filter`] is the shared body.
-pub fn apply_filtered_detail(ui: &AppWindow, albums_ui: &AlbumsUi) {
-    let g = ui.global::<AlbumDetail>();
-    crate::ui::detail_filter::apply_filtered_detail(
-        &g,
-        &FilterRefs {
-            all_tracks: &albums_ui.detail.all_tracks,
-            tracks: &albums_ui.detail.tracks,
-            applied: &albums_ui.detail.applied_selection,
-            filter: &albums_ui.detail.filter,
-        },
-    );
-}
-
-/// Flip `is_favorite` on one detail row, leaving scroll position and neighbours
-/// alone. Mirrors `tracks::apply_row_favorite`.
-pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<AlbumDetail>().get_tracks(), id, |r| {
-            r.is_favorite = fav;
-        });
-    });
-}
-
-/// Set `rating` on a single detail row in the Slint `VecModel`. Mirrors
-/// [`apply_detail_row_favorite`].
-pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<AlbumDetail>().get_tracks(), id, |r| {
-            r.rating = rating;
-        });
-    });
 }
 
 /// Reopen the album that was visible at the last shutdown. Runs once at startup
@@ -331,13 +250,4 @@ pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &A
             ui.global::<AlbumDetail>().set_restoring(false);
         });
     });
-}
-
-/// Clear the `selected-ids` model + anchor without walking the row model —
-/// freshly-built rows already carry `selected: false`, so the `applied`
-/// shadow is reset to empty to match.
-pub(super) fn reset_detail_selection(g: &AlbumDetail, albums_ui: &AlbumsUi) {
-    write_selection(g, Vec::new());
-    g.set_selection_anchor(-1);
-    albums_ui.detail.applied_selection.lock().clear();
 }

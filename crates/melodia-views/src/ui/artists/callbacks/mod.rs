@@ -1,8 +1,8 @@
 //! `Artists.*` / `ArtistDetail.*` callbacks, split by concern:
 //!
 //! * [`grid`] — the artist-card grid (cover lookup, filter / sort, drill-in).
-//! * [`detail`] — the open-artist detail view (play, queue, favorite, sort,
-//!   filter, Albums sub-section collapse).
+//! * [`detail`] — the open-artist detail view: close-detail and the Albums
+//!   sub-section collapse, plus the set every detail shares.
 //! * [`cross_tab`] — the Artist Detail → Albums tab hand-off.
 //! * [`lifecycle`] — section enter/leave cache management + the
 //!   `library_changed` re-fetch subscriber.

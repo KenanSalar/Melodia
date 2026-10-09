@@ -1,17 +1,15 @@
 //! Shared flat-list row-selection core: the [`RowSelectionView`] surface the four detail
-//! globals and the two curated pages are driven through, modifier-aware click math, the
+//! globals, the two curated pages and Search are driven through, modifier-aware click math, the
 //! diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
 //!
-//! Tracks, Favorites, and Recently Played all implement the same click
-//! semantics (plain click = single, Ctrl = toggle, Shift = range over the
-//! displayed order); their per-view `selection.rs` files stay as thin
-//! adapters that read/write their own Slint global and call in here. The two curated pages get the
-//! whole of it from the three `*_curated` functions below. **Tracks stays hand-written and should**:
-//! its range branch walks the filtered cache (`current_ids_filtered`) where those two read the Slint
-//! model directly.
+//! Every list implements the same click semantics (plain click = single, Ctrl = toggle, Shift =
+//! range over the displayed order). The curated pages and Search get the whole of it from the
+//! three `*_curated` functions below, their `selection.rs` files staying thin adapters over their
+//! own global. **Tracks stays hand-written and should**: its range branch walks the filtered cache
+//! (`current_ids_filtered`) where those read the Slint model directly.
 //!
-//! `detail_selection.rs` is the other consumer of the trait: same accessors, cache-indexed
-//! selection with different complexity trade-offs.
+//! [`crate::ui::track_detail::selection`] is the other consumer of the trait: same accessors,
+//! cache-indexed selection with different complexity trade-offs.
 
 use std::collections::HashSet;
 use std::hash::BuildHasher;
@@ -20,7 +18,7 @@ use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
 use melodia_ui::{
-    AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed,
+    AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed, Search,
     TrackListRow as UiTrackListRow,
 };
 
@@ -167,8 +165,8 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
 /// The per-view Slint surface both selection layers drive. Each global implements it by routing
 /// through its auto-generated `get_*` / `set_*` accessors; the trait method names are deliberately
 /// distinct from those so the bodies are unambiguous. Here rather than in
-/// [`crate::ui::detail_selection`] because the *logic* differs between the two layers and the
-/// accessors don't.
+/// [`crate::ui::track_detail::selection`] because the *logic* differs between the two layers and
+/// the accessors don't.
 pub trait RowSelectionView {
     /// The shift-range anchor row index (`-1` = no anchor).
     fn anchor(&self) -> i32;
@@ -215,6 +213,7 @@ impl_row_selection_view!(Favorites);
 impl_row_selection_view!(GenreDetail);
 impl_row_selection_view!(PlaylistDetail);
 impl_row_selection_view!(RecentlyPlayed);
+impl_row_selection_view!(Search);
 
 /// Compute the new selection set for a curated page's row click and apply it, on the UI thread.
 /// Click semantics match `tracks::handle_select_row` exactly, and the selection is mirrored into

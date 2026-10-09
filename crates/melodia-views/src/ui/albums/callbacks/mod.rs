@@ -1,7 +1,8 @@
 //! `Albums.*` / `AlbumDetail.*` callbacks, split by concern:
 //!
 //! * [`grid`] — the album-card grid (cover lookup, filter / sort, drill-in).
-//! * [`detail`] — the open-album detail view (play, queue, favorite, sort).
+//! * [`detail`] — the open-album detail view: close-detail, plus the set every
+//!   detail shares.
 //! * [`lifecycle`] — section enter/leave cache management + the
 //!   `library_changed` re-fetch subscriber.
 

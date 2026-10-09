@@ -24,8 +24,9 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui::callbacks::DialogClaim;
-use crate::ui::callbacks::macros::release_detail_hero_images;
+use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
+use crate::ui::track_detail::TrackDetail;
 use crate::ui::util::opt_shared;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -206,8 +207,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if was_open && let Some(ui) = weak.upgrade() {
                 let d = ui.global::<PlaylistDetail>();
                 d.set_playlist_id(-1);
-                release_detail_hero_images!(ui, d);
-                playlists_ui_mod::clear_detail(&pu);
+                release_detail_hero_images(&ui, &d);
+                pu.clear_detail();
             }
             let s = s.clone();
             let pu = pu.clone();
@@ -260,8 +261,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
             if open_was_deleted && let Some(ui) = weak.upgrade() {
                 let d = ui.global::<PlaylistDetail>();
                 d.set_playlist_id(-1);
-                release_detail_hero_images!(ui, d);
-                playlists_ui_mod::clear_detail(&pu);
+                release_detail_hero_images(&ui, &d);
+                pu.clear_detail();
             }
             let s = s.clone();
             let pu = pu.clone();

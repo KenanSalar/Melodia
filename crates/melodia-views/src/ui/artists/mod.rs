@@ -8,8 +8,8 @@
 //!   circular and pull their cover lazily via `request-cover`.
 //!
 //! * `ArtistDetail` — the full Artist Detail view. `open_artist` fetches the header, the albums
-//!   sub-section and the full track list; the cached list in `ArtistsUi::detail.tracks` lets
-//!   `play-row`, selection and in-memory re-sort work without round-tripping the Slint model.
+//!   sub-section and the full track list; the rows sit in a [`DetailCache`], so `play-row`,
+//!   selection and an in-memory re-sort work without reading the Slint model back.
 //!
 //! Cross-thread layout mirrors `albums.rs`: `ArtistsUi` is `Send + Sync`, and Slint properties and
 //! models are only touched from the UI thread via `Weak<AppWindow>::upgrade_in_event_loop`.
@@ -17,10 +17,8 @@
 mod callbacks;
 mod detail;
 mod grid;
-mod selection;
 mod state;
 
-use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -30,8 +28,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
-use crate::ui::row_match::Needle;
-use crate::ui::section_state::{SectionState, impl_detail_row_cache, impl_section_state_helpers};
+use crate::ui::section_state::{SectionState, impl_section_state_helpers};
+use crate::ui::track_detail::DetailCache;
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -54,15 +52,10 @@ use state::GridIndexCache;
 pub use detail::{open_artist_with, seed_detail_from_settings};
 pub use grid::fetch_grid;
 
-// Reached only from this slice's own `callbacks/`, plus the cross-slice `apply_detail_row_*`
-// mirrors in `callbacks::now_playing` and the drill in `callbacks::cross_tab_nav`. `pub(super)` is
-// `pub(in crate::ui)` here, which is exactly that reach.
-pub(super) use detail::{
-    apply_detail_row_favorite, apply_detail_row_rating, apply_filtered_detail, clear_detail,
-    open_artist, refresh_detail, resort_detail, set_filter,
-};
+// Reached from this slice's own `callbacks/` and the drill in `callbacks::cross_tab_nav`.
+// `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
+pub(super) use detail::{open_artist, refresh_detail};
 pub(super) use grid::rebuild_grid;
-pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// Install the Artists grid + detail models, build the handle, and wire every `Artists.*` /
 /// `ArtistDetail.*` callback to it.
@@ -106,12 +99,8 @@ impl ArtistsUi {
                 index_cache: Mutex::new(None),
             },
             detail: ArtistDetailState {
-                tracks: Mutex::new(Vec::new()),
-                all_tracks: Mutex::new(Vec::new()),
+                cache: DetailCache::default(),
                 albums: Mutex::new(Vec::new()),
-                artist_id: Mutex::new(-1),
-                filter: Mutex::new(Needle::default()),
-                applied_selection: Mutex::new(HashSet::new()),
             },
             cover_thumbs,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
@@ -141,11 +130,8 @@ impl ArtistsUi {
             }
             *self.grid.data.lock() = Arc::new(GridData::new(Vec::new()));
             *self.grid.index_cache.lock() = None;
-            self.detail.tracks.lock().clear();
-            self.detail.all_tracks.lock().clear();
+            self.detail.cache.release_rows();
             self.detail.albums.lock().clear();
-            self.detail.filter.lock().clear();
-            self.detail.applied_selection.lock().clear();
         }
         melodia_platform::services::platform::allocator::trim();
     }
@@ -172,7 +158,7 @@ impl ArtistsUi {
 
     /// Artist id currently open in the detail view (`-1` = grid).
     pub fn detail_artist_id(&self) -> i64 {
-        *self.detail.artist_id.lock()
+        self.detail.cache.id()
     }
 }
 
@@ -208,7 +194,6 @@ pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
 }
 
 impl_section_state_helpers!(ArtistsUi);
-impl_detail_row_cache!(ArtistsUi);
 
 // `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {

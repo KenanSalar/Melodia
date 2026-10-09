@@ -227,39 +227,50 @@ field and nothing else, 78 `state.paths` and 63 `state.db`. 67 of the `paths` on
 
 ## Phase 6: one wiring for the four detail views
 
-Today albums, artists, genres and playlists each have a `detail.rs` and a `callbacks/detail.rs`,
-about 2,600 lines together and 60 to 90% alike once the view names are normalized.
-`RowSelectionView` (`list_selection.rs`) and `TrackListColumnState` (`track_list_view.rs`) already
-show that a trait over generated globals works, yet four comments say it can't.
+Re-measured on 2026-10-09: the four `detail.rs` and four `callbacks/detail.rs` were 2,607 lines,
+and no callback had been added since this plan was written. Each global wires the same twelve
+shared callbacks; only the shuffle's name differs.
 
-- [ ] Re-read the four wirings first. Recent work (copy entries, flyout menus) may have added
-      callbacks.
-- [ ] Add a `DetailGlobal` trait over the four detail globals, implemented by one macro of the same
-      shape as `RowSelectionView`'s.
-- [ ] Add a generic `wire_track_detail::<G>` that captures `G::as_weak()` (a `'static` handle in
-      Slint 1.16) rather than borrowing the UI. It wires the shared set: play-row, favorite,
-      rating, the three selection callbacks, columns, shuffle, play-next, queue, filter and the
-      sorts.
-- [ ] What differs stays per view: close-detail, playlists' reorder, remove, edit-artwork and
-      natural sort, artists' album strip, and each view's `open_*_with`, `refresh_detail` and
-      `fetch_*`.
-- [ ] The four `*DetailState` structs share a `DetailCache`.
-- [ ] The shared wiring answers to no single view, so it goes under `ui/callbacks/`. The new home
-      goes into `CALLBACK_HOMES` in the same change, since that walk checks for equality.
-- [ ] `search/selection.rs` drops its own copy of `handle_curated_click` and uses `RowSelectionView`.
-- [ ] Fix the four stale comments: `detail_view.rs:3-7`, `cross_tab_nav.rs:100-103`,
-      `my_library/filter.rs:31-33` and `macros.rs:159-161`.
-- [ ] Leave the five list views alone. Their overlap buys little.
-- Expected: roughly 350 to 400 lines gone (~15% of those files), and one place to fix instead of
-  four.
+- [x] `ui/track_detail/` holds what the four share. `DetailGlobal` is the generated global's
+      surface, implemented by one macro on `impl_row_selection_view!`'s model. `TrackDetail` is the
+      view handle's, with a `'static` `Global` (Slint 1.16's `Global::as_weak` returns one, `Send`
+      and with `upgrade_in_event_loop`). `DetailCache` replaces the four `*DetailState`s; Artists
+      and Playlists wrap it beside their strip and their position order.
+- [x] `callbacks::track_detail::wire::<V>` wires the twelve, holding the global's weak handle
+      alone. Playlists' natural sort is `TrackDetail::NATURAL_SORT`, Artists' strip and Playlists'
+      drag abort override `refilter`.
+- [x] Close-detail stays per view, but its common tail is `forget_closed`, which holds the one
+      `describe`d persist log Phase 0 promised. Reorder, remove, edit-artwork and the Albums-strip
+      collapse stay per view, as do `open_*_with`, `refresh_detail` and `fetch_*`.
+- [x] `detail_selection.rs` and `detail_filter.rs` moved under `track_detail/` and take the cache.
+      `SelectionRefs`, `FilterRefs`, `impl_detail_selection!`, `impl_detail_row_cache!`, the four
+      `selection.rs` adapters and eight `apply_detail_row_*` are gone. The click math and the
+      restamp now reuse `list_selection`'s, where the detail layer had copies of both.
+- [x] `CALLBACK_HOMES` did not change: it keys on the first path component under `src/ui`, and
+      `ui/callbacks/track_detail.rs` lands in the existing `"callbacks"` home.
+- [x] `search/selection.rs` is a thin adapter over the curated functions, `Search` implementing
+      `RowSelectionView`.
+- [x] The four comments. Two are true by deletion: a `HeroSlots` trait over the six hero globals
+      turns `apply_detail_artwork` and the three release macros into functions in `detail_view.rs`,
+      leaving `impl_curated_hero_helpers!` for the two curated pages. `cross_tab_nav.rs` and
+      `my_library/filter.rs` keep their macros and now say why.
+- [x] The five list views were left alone.
+- Found on the way, each one copy drifting from three:
+  - The Now Playing heart and stars skipped Playlist Detail's rows; it is in the fan-out now.
+  - Album and Genre Detail left their Slint filter set on close.
+  - Artists' section leave dropped a needle the other three kept.
+  - Playlist Detail's Add to Queue collected ids by hand.
+- Measured: the eight detail files went from 2,607 lines to 1,520, and the files the phase
+  touched from 5,407 to 4,376. `my_library_tests`' close-handler pin now also reads
+  `forget_closed`, so a teardown moved into the shared tail fails it.
 
 ## Phase 7: break up the monolithic functions, then turn the lints on
 
-The largest today, roughly: playlists `callbacks/dialog.rs::wire` (390), `main` (305), playlists
-`callbacks/detail.rs::wire` (270, shrinking in phase 6), `winit_filter::install` (210), the other
-three detail `wire`s (150 to 190, phase 6), `callbacks/tags/open.rs::populate` (175),
+The largest today, roughly: playlists `callbacks/dialog.rs::wire` (390), `main` (305),
+`winit_filter::install` (210), `callbacks/tags/open.rs::populate` (175),
 `search/callbacks/results.rs::wire` (165), `card_actions::wire` (160), `ingest_scanned_files`
-(140), `spawn_playback_monitor` (140) and `library::scan::scan_one` (110).
+(140), `spawn_playback_monitor` (140) and `library::scan::scan_one` (110). Phase 6 split the four
+detail `wire`s into one function per concern.
 
 - [ ] Wiring functions get one named function per callback, and `wire` becomes the list of calls.
 - [ ] `main()` splits into named boot steps, kept in order. `crates/melodia/src/tests/main_order_tests.rs`

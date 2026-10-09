@@ -177,6 +177,7 @@ pub fn install_views(
         albums: &albums_ui,
         artists: &artists_ui,
         genres: &genres_ui,
+        playlists: &playlists_ui,
         search: &search_ui,
     };
     ui::callbacks::wire_now_playing_favorite(app, state, row_flags);

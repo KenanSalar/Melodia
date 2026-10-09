@@ -8,7 +8,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
+use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::NAV_RECENTLY_PLAYED;
 use crate::ui::recently_played::{
@@ -52,7 +52,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // models so their `SharedString`s drop on the same tick as the
                 // LRU release below.
                 let g = ui.global::<RecentlyPlayed>();
-                release_hero_slots!(g);
+                release_hero_slots(&g);
                 // Unconditional, on the same tick as the wipe — see the
                 // matching call in `favorites/lifecycle.rs`.
                 ru.forget_mosaic();
@@ -63,7 +63,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // Six heroes share one colour set and one chip row, so hand
                 // both back rather than leaving this banner's solve and this
                 // view's counts for the next hero to paint under.
-                release_shared_hero!(ui);
+                release_shared_hero(&ui);
                 // Rewind both counts to "not fetched yet" on the same tick
                 // as the models they number, for the reason the folds are reset
                 // beside their caches: a count that outlives its model is the

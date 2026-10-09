@@ -1,278 +1,83 @@
-//! `ArtistDetail.*` callbacks: close, play / shuffle / play-row, queue
-//! actions, favorite toggle, row selection, in-memory sort, column
-//! toggle, in-memory filter, and the Albums sub-section collapse toggle.
+//! `ArtistDetail.*` callbacks: close-detail and the Albums sub-section collapse here, the rest
+//! through [`crate::ui::callbacks::track_detail`].
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, Global as _};
 
-use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
-use crate::ui::callbacks::macros::{spawn_blocking_logged, spawn_logged, wire_row_flag};
-use crate::ui::callbacks::{collect_track_ids, play_row_start, spawn_play_then_shuffle};
+use crate::ui::artists::ArtistsUi;
+use crate::ui::callbacks::macros::spawn_blocking_logged;
+use crate::ui::callbacks::track_detail;
 use crate::ui::my_library::return_to_section;
-use crate::ui::track_list_view::{self, view_id};
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::error::describe;
 use melodia_ui::{AppWindow, ArtistDetail};
 
 /// Wire the `ArtistDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
-    let detail = ui.global::<ArtistDetail>();
+    track_detail::wire(&ui.global::<ArtistDetail>().as_weak(), state, artists_ui);
+    wire_close(ui, state, artists_ui);
+    wire_albums_collapse(ui, state);
+}
+
+/// The header's back button, with the cross-section origin pattern `albums/callbacks/detail.rs`
+/// argues.
+fn wire_close(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
+    let s = state.clone();
+    let au = artists_ui.clone();
     let weak = ui.as_weak();
+    ui.global::<ArtistDetail>().on_close_detail(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let g = ui.global::<ArtistDetail>();
 
-    // close-detail: back to the grid + drop cached detail + clear the
-    // persisted detail id so the next launch lands on the grid. Same
-    // cross-tab origin pattern as `albums::on_close_detail` — if the
-    // detail was opened from another tab (currently only Favorites,
-    // index 2), flip `Nav.selected-index` back to that tab in the same
-    // UI-thread tick as the `artist-id` reset so the Slint conditional
-    // reroutes straight to the origin tab without an Artists-grid
-    // frame in between.
-    {
-        let s = state.clone();
-        let au = artists_ui.clone();
-        let weak = weak.clone();
-        detail.on_close_detail(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let g = ui.global::<ArtistDetail>();
+        crate::ui::nav_transition::mark_drill_back(&ui);
+        let origin = g.get_origin_nav_index();
+        let origin_was_cross_section = origin >= 0;
+        if origin_was_cross_section {
+            return_to_section(&ui, origin);
+            g.set_origin_nav_index(-1);
+        }
 
-            // View-transition direction: `Left` = returning from a detail.
-            // The cross-section close alone samples it — the `selected-index`
-            // write below. See `albums/detail.rs`'s note for why the same-page
-            // back reads nothing.
-            crate::ui::nav_transition::mark_drill_back(&ui);
+        track_detail::forget_closed(&ui, &s, &*au, &g);
 
-            // **An origin is a section** — see `albums/detail.rs`'s note: a drill
-            // from a sibling tab records none, so the arrow closes into the
-            // Artists grid the tab bar has been naming all along.
-            let origin = g.get_origin_nav_index();
-            let origin_was_cross_section = origin >= 0;
+        let au = au.clone();
+        s.runtime.spawn_blocking(move || {
+            au.release_detail_artwork();
+            // One arm or the other, never both: one tier serves the grid and the Albums strip,
+            // so a hand-back beside the prewarm would shrink the screenful it just decoded and
+            // leave the grid soft on the frame it mounts. Routing to another section, the grid
+            // isn't going to mount and the strip is gone, so the pixels are dead weight; coming
+            // back to the grid, warming it is the point.
             if origin_was_cross_section {
-                return_to_section(&ui, origin);
-                g.set_origin_nav_index(-1);
-            }
-
-            g.set_artist_id(-1);
-            // The hero Images are *not* dropped here. This id is what the band's
-            // whole hero half is a ternary over, so releasing on the same tick
-            // leaves it collapsing a placeholder — `MyLibrary.hero-collapsed`
-            // owns that teardown now, and the band fires it once the morph is
-            // done. See `callbacks::my_library::release_collapsed_hero`.
-            //
-            // Clear the SearchBar so the next open lands on the full
-            // tracks + albums set, not a stale needle from the last
-            // detail. `clear_detail` drops the Rust-side mirror too.
-            g.set_filter(SharedString::default());
-            artists_ui_mod::clear_detail(&au);
-
-            let au_swap = au.clone();
-            s.runtime.spawn_blocking(move || {
-                au_swap.release_detail_artwork();
-                // One arm or the other, never both: one tier serves the grid and the
-                // Albums strip now, so a hand-back beside the prewarm would shrink
-                // the screenful it just decoded and leave the grid soft on the frame
-                // it mounts. Routing to another section, the grid isn't going to
-                // mount and the strip is gone, so the pixels are dead weight for the
-                // destination; coming back to the grid, warming it is the point.
-                if origin_was_cross_section {
-                    crate::ui::grid_prewarm::hand_back_covers();
-                } else {
-                    au_swap.prewarm_visible_covers();
-                }
-            });
-
-            let s_disk = s.clone();
-            s.runtime.spawn_blocking(move || {
-                if let Err(e) = library::settings::set_last_detail_id(
-                    &s_disk.paths,
-                    crate::ui::track_list_view::view_id::ARTIST_DETAIL,
-                    None,
-                ) {
-                    log::warn!("artists::close_detail persist: {}", describe(&e));
-                }
-            });
-
-            // Record the post-close state — see the matching call in
-            // `albums/detail.rs::on_close_detail` for the rationale.
-            crate::ui::nav_history::record_current(&ui);
-        });
-    }
-
-    {
-        let s = state.clone();
-        let au = artists_ui.clone();
-        detail.on_shuffle_artist(move || {
-            spawn_play_then_shuffle(&s, "artists::shuffle_artist", au.detail_track_ids());
-        });
-    }
-
-    // play-row: double-click loads the artist's tracks into the queue and
-    // starts on the clicked one.
-    {
-        let s = state.clone();
-        let au = artists_ui.clone();
-        detail.on_play_row(move |track_id, idx| {
-            let ids = au.detail_track_ids();
-            if ids.is_empty() {
-                return;
-            }
-            let start = play_row_start(&ids, i64::from(track_id), idx);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                "artists::play_row",
-                library::playback::player_play_tracks(&s.playback_ctx(), ids, start)
-            );
-        });
-    }
-
-    {
-        let s = state.clone();
-        detail.on_play_next(move |ids| {
-            let id_vec = collect_track_ids(&ids);
-            let s = s.clone();
-            spawn_logged!(
-                s,
-                "artists::play_next",
-                library::queue::queue_play_next_many(&s, id_vec)
-            );
-        });
-    }
-
-    {
-        let s = state.clone();
-        detail.on_add_to_queue(move |ids| {
-            let id_vec = collect_track_ids(&ids);
-            let s = s.clone();
-            spawn_logged!(s, "artists::add_to_queue", library::queue::queue_add_tracks(&s, id_vec));
-        });
-    }
-
-    // toggle-row-favorite / set-row-rating: write through, then surgically
-    // update each affected row (rating never changes list membership, so a
-    // surgical per-row patch suffices).
-    {
-        let au = artists_ui.clone();
-        wire_row_flag!(detail, on_toggle_row_favorite, state, "artists::set_favorite",
-        library::favorites::set_favorite, collect_track_ids,
-        captures: [weak, au],
-        after: |id_vec, fav| {
-            for id in &id_vec {
-                au.flip_detail_favorite(*id, fav);
-                artists_ui_mod::apply_detail_row_favorite(&weak, *id, fav);
+                crate::ui::grid_prewarm::hand_back_covers();
+            } else {
+                au.prewarm_visible_covers();
             }
         });
-    }
-    {
-        let au = artists_ui.clone();
-        wire_row_flag!(detail, on_set_row_rating, state, "artists::set_rating",
-        library::ratings::set_rating, collect_track_ids,
-        captures: [weak, au],
-        after: |id_vec, rating| {
-            for id in &id_vec {
-                au.flip_detail_rating(*id, rating);
-                artists_ui_mod::apply_detail_row_rating(&weak, *id, rating);
-            }
-        });
-    }
+    });
+}
 
-    {
-        let weak = weak.clone();
-        let au = artists_ui.clone();
-        detail.on_select_row(move |idx, id, shift, ctrl| {
-            let Some(ui) = weak.upgrade() else { return };
-            artists_ui_mod::handle_select_row(&ui, &au, idx, id, shift, ctrl);
-        });
-    }
-
-    {
-        let weak = weak.clone();
-        let au = artists_ui.clone();
-        detail.on_select_all(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            artists_ui_mod::select_all(&ui, &au);
-        });
-    }
-
-    {
-        let weak = weak.clone();
-        let au = artists_ui.clone();
-        detail.on_clear_selection(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            artists_ui_mod::clear_selection(&ui, &au);
-        });
-    }
-
-    {
-        let s = state.clone();
-        let au = artists_ui.clone();
-        let weak = weak.clone();
-        detail.on_request_sort(move |field| {
-            let Some(ui) = weak.upgrade() else { return };
-            let g = ui.global::<ArtistDetail>();
-            let (new_field, new_dir) = crate::ui::callbacks::next_sort(
-                g.get_sort_field().as_str(),
-                g.get_sort_dir().as_str(),
-                &field,
-            );
-            g.set_sort_field(SharedString::from(new_field.as_str()));
-            g.set_sort_dir(SharedString::from(new_dir.as_str()));
-            artists_ui_mod::resort_detail(&ui, &au);
-            crate::ui::callbacks::persist_view_sort(&s, view_id::ARTIST_DETAIL, new_field, new_dir);
-        });
-    }
-
-    {
-        let s = state.clone();
-        let weak = weak.clone();
-        detail.on_toggle_column(move |_id| {
-            let Some(ui) = weak.upgrade() else { return };
-            track_list_view::persist_visible(&s, &ui.global::<ArtistDetail>());
-        });
-    }
-
-    // filter-changed: re-walk the cached tracks + albums through the
-    // new needle and push filtered Slint models. In-memory walk, no
-    // DB round-trip. Mirrors `Favorites.on_filter_changed` (which
-    // additionally re-filters the Most Played + Artist strips —
-    // Artist Detail has no carousels, just tracks + albums).
-    {
-        let au = artists_ui.clone();
-        let weak = weak.clone();
-        detail.on_filter_changed(move |text| {
-            let Some(ui) = weak.upgrade() else { return };
-            artists_ui_mod::set_filter(&au, text.as_str());
-            artists_ui_mod::apply_filtered_detail(&ui, &au);
-        });
-    }
-
-    // toggle-albums-collapsed: flip the per-section flag synchronously
-    // so the UI repaints this frame, then persist to
-    // `views.json`'s `artist_albums_collapsed` so the next launch
-    // restores the same state. Collapsing also hands the grid tier's
-    // pixels back: the `if !albums-collapsed` gate has unmounted the
-    // scroller, so nothing queries them through `request-album-cover`.
-    // The strip pays a re-decode to come back either way — its lookup
-    // is the blocking one, which takes a proxy for a miss — so the
-    // proxy buys the bytes here and nothing else.
-    {
-        let s = state.clone();
-        let weak = weak.clone();
-        detail.on_toggle_albums_collapsed(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let g = ui.global::<ArtistDetail>();
-            let new_state = !g.get_albums_collapsed();
-            g.set_albums_collapsed(new_state);
-            if new_state {
-                s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
-            }
-            let s = s.clone();
-            spawn_blocking_logged!(
-                s,
-                "artists::set_albums_collapsed",
-                library::settings::set_artist_albums_collapsed(&s.paths, new_state)
-            );
-        });
-    }
+/// Flips the flag synchronously so the UI repaints this frame, then persists it. Collapsing also
+/// hands the grid tier's pixels back: the `if !albums-collapsed` gate has unmounted the scroller,
+/// so nothing queries them. The strip pays a re-decode to come back either way, its lookup being
+/// the blocking one, which takes a proxy for a miss, so the proxy buys the bytes here and
+/// nothing else.
+fn wire_albums_collapse(ui: &AppWindow, state: &AppState) {
+    let s = state.clone();
+    let weak = ui.as_weak();
+    ui.global::<ArtistDetail>().on_toggle_albums_collapsed(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let g = ui.global::<ArtistDetail>();
+        let new_state = !g.get_albums_collapsed();
+        g.set_albums_collapsed(new_state);
+        if new_state {
+            s.runtime.spawn_blocking(crate::ui::grid_prewarm::hand_back_covers);
+        }
+        let s = s.clone();
+        spawn_blocking_logged!(
+            s,
+            "artists::set_albums_collapsed",
+            library::settings::set_artist_albums_collapsed(&s.paths, new_state)
+        );
+    });
 }

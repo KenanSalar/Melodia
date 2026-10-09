@@ -18,6 +18,7 @@ pub(in crate::ui) mod index_persist;
 mod library_settings;
 mod now_playing;
 mod tags;
+pub(in crate::ui) mod track_detail;
 mod updater;
 
 use std::sync::Arc;

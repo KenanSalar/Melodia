@@ -6,7 +6,7 @@ use std::sync::Arc;
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use crate::ui::callbacks::macros::{release_hero_slots, release_shared_hero};
+use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
 use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::model_diff::clear_vec_model;
@@ -47,7 +47,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // own refs even after the LRU drops — and empty the models so their
                 // `SharedString`s go on this tick.
                 let g = ui.global::<Favorites>();
-                release_hero_slots!(g);
+                release_hero_slots(&g);
                 // Same tick as the wipe above, and unconditional: `release_section_state` bails
                 // when the user has already come back, so leaving the guard to it can strand the
                 // hero on the bare gradient floor until the next channel tick.
@@ -57,7 +57,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 fu.forget_grid_signature();
                 // Six heroes share one colour set and one chip row, so hand both back rather than
                 // leaving this banner's solve for the next hero to paint under.
-                release_shared_hero!(ui);
+                release_shared_hero(&ui);
                 // Rewind all three counts on the same tick as the models they number: a count
                 // that outlives its model is the one thing these surfaces can state that is
                 // *wrong* rather than merely absent. `track-count` is the visible one, the hero

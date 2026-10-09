@@ -642,11 +642,22 @@ fn the_pill_row_follows_the_body_router() {
 
 /// The four `on_close_detail` handlers, which used to own the hero teardown.
 const CLOSE_HANDLERS: [(&str, &str); 4] = [
-    ("album", include_str!("../../albums/callbacks/detail.rs")),
-    ("artist", include_str!("../../artists/callbacks/detail.rs")),
-    ("genre", include_str!("../../genres/callbacks/detail.rs")),
-    ("playlist", include_str!("../../playlists/callbacks/detail.rs")),
+    ("albums/callbacks/detail", include_str!("../../albums/callbacks/detail.rs")),
+    ("artists/callbacks/detail", include_str!("../../artists/callbacks/detail.rs")),
+    ("genres/callbacks/detail", include_str!("../../genres/callbacks/detail.rs")),
+    ("playlists/callbacks/detail", include_str!("../../playlists/callbacks/detail.rs")),
 ];
+
+/// Where the four closes' common tail lives.
+const SHARED_CLOSE: &str = include_str!("../../callbacks/track_detail.rs");
+
+/// The comment-stripped body of the item `head` opens, up to the column-zero brace closing it.
+fn fn_body(src: &str, head: &str) -> String {
+    code(src)
+        .split_once(head)
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map_or(String::new(), |(body, _)| body.to_owned())
+}
 
 /// **The band's hero reads a latched arm; everything else reads the live one.**
 ///
@@ -798,18 +809,18 @@ fn the_count_line_holds_the_sentence_it_is_collapsing_out_of() {
 /// hero instead of handing it back.
 #[test]
 fn no_close_detail_hands_the_hero_back() {
-    for (name, src) in CLOSE_HANDLERS {
-        let handler = code(src)
-            .split_once("on_close_detail(move ||")
-            .and_then(|(_, rest)| rest.split_once("\n        });"))
-            .map_or(String::new(), |(body, _)| body.to_owned());
-        assert!(!handler.is_empty(), "{name}/detail.rs no longer wires `on_close_detail`");
+    // Each view's own close, then the tail all four share.
+    let mut closes: Vec<(&str, String)> =
+        CLOSE_HANDLERS.iter().map(|&(name, src)| (name, fn_body(src, "fn wire_close("))).collect();
+    closes.push(("callbacks/track_detail", fn_body(SHARED_CLOSE, "fn forget_closed")));
 
-        for banned in ["release_detail_hero_images!", "hero_backdrop::reset", "hero_chips::clear"] {
+    for (name, body) in closes {
+        assert!(!body.is_empty(), "{name}: the close is no longer where this pin reads it");
+        for banned in ["release_detail_hero_images", "hero_backdrop::reset", "hero_chips::clear"] {
             assert!(
-                !handler.contains(banned),
-                "{name}/detail.rs must not run `{banned}` on close: every hero fact is a ternary \
-                 over the id it clears one line earlier, so the band would collapse a placeholder. \
+                !body.contains(banned),
+                "{name}: a close must not run `{banned}`: every hero fact is a ternary over the \
+                 id it clears one line earlier, so the band would collapse a placeholder. \
                  `MyLibrary.hero-collapsed` owns this now.",
             );
         }

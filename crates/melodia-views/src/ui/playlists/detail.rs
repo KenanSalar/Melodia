@@ -1,6 +1,6 @@
-//! Playlist Detail header + track list: fetch, artwork pair decode, re-sort, refresh-preserving,
-//! startup seed. Mirrors `albums::detail`, with a `"position"` sort that rebuilds the display
-//! order from the canonical position-order cache instead of re-fetching.
+//! Playlist Detail's own half: fetch, artwork pair decode, open, refresh and the startup seed,
+//! plus a `"position"` sort that rebuilds the display order from the canonical position-order
+//! cache instead of re-fetching. What the four details share is [`crate::ui::track_detail`].
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -8,14 +8,11 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString, Weak};
 
-use super::selection::{apply_selection_to_rows, write_selection};
 use super::{PlaylistsUi, to_slint_playlist_row};
 use crate::ui::detail_artwork::decode_detail_pair;
-use crate::ui::detail_filter::FilterRefs;
-use crate::ui::detail_selection::prune_selection_to;
-use crate::ui::detail_view::{impl_detail_view_helpers, resolve_view_sort};
-use crate::ui::model_patch;
+use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::track_detail::{DetailCache, TrackDetail, filter, selection};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
@@ -26,14 +23,33 @@ use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, NavEnterFrom, PlaylistDetail, TrackListRow as UiTrackListRow};
 
-// `apply_detail_artwork` (cover + hero-blur write) and `replace_tracks_model` (in-place `tracks`
-// `VecModel` swap) — see `src/ui/detail_view.rs`. Playlist Detail keeps its own position-aware
-// `sort_playlist_tracks` below.
-impl_detail_view_helpers!(artwork PlaylistDetail);
-
 /// The playlist's own curated order. Synthetic — no column header asks for it,
 /// which is why the sort cycle has to hand it back (`next_sort_with_natural`).
 pub const POSITION_FIELD: &str = "position";
+
+impl TrackDetail for PlaylistsUi {
+    type Global = PlaylistDetail<'static>;
+
+    const NATURAL_SORT: Option<&'static str> = Some(POSITION_FIELD);
+
+    fn cache(&self) -> &DetailCache {
+        &self.detail.cache
+    }
+
+    fn resort(&self, g: &Self::Global) {
+        resort_detail(g, self);
+    }
+
+    fn refilter(&self, g: &Self::Global) {
+        apply_filtered_detail(g, self);
+    }
+
+    fn clear_detail(&self) {
+        self.detail.cache.clear();
+        self.detail.position_order.lock().clear();
+        crate::ui::window_chrome::set_current_playlist_id(-1);
+    }
+}
 
 /// Whether the rows on screen are in canonical position order, ascending.
 ///
@@ -133,7 +149,7 @@ where
 
     // Seed both caches before the UI hop so resort / drag-reorder / play-row callbacks firing on
     // the next tick already see consistent state.
-    *playlists_ui.detail.playlist_id.lock() = playlist_id;
+    playlists_ui.detail.cache.set_id(playlist_id);
     *playlists_ui.detail.position_order.lock() = position_order;
 
     // Inform the OS file-drop coalescer that this playlist is the current drop target — used only
@@ -153,12 +169,11 @@ where
         let g = ui.global::<PlaylistDetail>();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
-        replace_tracks_model(&g, ui_tracks);
-        reset_detail_selection(&g, &playlists_ui);
+        filter::install_tracks(&g, ui_tracks);
+        selection::reset(&g, &playlists_ui.detail.cache);
         // Fresh open clears the filter so the user lands on the full track set, not a stale needle
-        // from the previous detail.
+        // from the previous detail; `seat_unfiltered` below clears the Rust half.
         g.set_filter(SharedString::default());
-        playlists_ui.detail.filter.lock().clear();
         g.set_sort_field(SharedString::from(sort_field.as_str()));
         g.set_sort_dir(SharedString::from(sort_dir.as_str()));
         // Set the page's enter direction before the `on_applied` hook can flip
@@ -166,9 +181,7 @@ where
         // Inert on a same-page open, whose body reads a fixed `below`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_playlist_id(clamp_i64_to_i32(playlist_id));
-        // Fresh open: no filter, so the displayed cache equals the canonical full set.
-        playlists_ui.detail.all_tracks.lock().clone_from(&tracks);
-        *playlists_ui.detail.tracks.lock() = tracks;
+        playlists_ui.detail.cache.seat_unfiltered(tracks);
         // Run after `playlist-id` is set so any global writes the hook performs share this tick
         // with the detail flip — the router then never sees the Playlists grid.
         on_applied(&ui);
@@ -231,10 +244,10 @@ pub async fn refresh_detail(
         // re-derive the displayed cache and the model from the canonical set. It diffs, so a
         // scan that touched unrelated files writes back only the rows whose content moved and
         // keeps both the shift-range anchor and an in-flight drag.
-        prune_selection_to(&g, &tracks);
-        *playlists_ui.detail.all_tracks.lock() = tracks;
+        selection::prune_selection_to(&g, &tracks);
+        playlists_ui.detail.cache.set_all_tracks(tracks);
         *playlists_ui.detail.position_order.lock() = position_order_snapshot;
-        apply_filtered_detail(&ui, &playlists_ui);
+        apply_filtered_detail(&g, &playlists_ui);
     });
     Ok(())
 }
@@ -245,33 +258,24 @@ pub async fn refresh_detail(
 ///
 /// Reconciling the selection is the caller's, and only [`resort_detail`] owes it: a permutation
 /// carries each row's `selected` with it, so the drag path has nothing to reconcile.
-fn reapply_order(g: &PlaylistDetail, playlists_ui: &PlaylistsUi, field: &str, dir: &str) {
-    // Sort the canonical full set and the displayed subset in lockstep so `play-row` /
-    // range-select read a consistent order and widening the filter still yields sorted rows.
-    let order: Vec<i32> = {
+fn reapply_order(g: &PlaylistDetail<'_>, playlists_ui: &PlaylistsUi, field: &str, dir: &str) {
+    let order = {
         let position_order = playlists_ui.detail.position_order.lock();
-        sort_playlist_tracks(
-            &mut playlists_ui.detail.all_tracks.lock(),
-            &position_order,
-            field,
-            dir,
-        );
-        let mut tracks = playlists_ui.detail.tracks.lock();
-        sort_playlist_tracks(&mut tracks, &position_order, field, dir);
-        tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect()
+        playlists_ui
+            .detail
+            .cache
+            .sort_both(|rows| sort_playlist_tracks(rows, &position_order, field, dir))
     };
-
     crate::ui::model_diff::permute_rows_by_id(&g.get_tracks(), &order, |r| r.id);
 }
 
 /// Re-sort the cached detail tracks to the current `PlaylistDetail` sort state,
 /// then reorder the existing `tracks` model rows to match.
-pub fn resort_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
-    let g = ui.global::<PlaylistDetail>();
+fn resort_detail(g: &PlaylistDetail<'_>, playlists_ui: &PlaylistsUi) {
     let field = g.get_sort_field();
     let dir = g.get_sort_dir();
-    reapply_order(&g, playlists_ui, &field, &dir);
-    apply_selection_to_rows(&g, playlists_ui);
+    reapply_order(g, playlists_ui, &field, &dir);
+    selection::apply_selection_to_rows(g, &playlists_ui.detail.cache);
 }
 
 /// Optimistically reorder the cached detail state for a drag-and-drop commit *before* the DB write
@@ -290,15 +294,14 @@ pub fn apply_optimistic_reorder(
     // cache. The filter term is the sharp one: filtered, `tracks` is a subset of the canonical
     // `position_order`, so `from` names a different track — and the write still lands, a filtered
     // index being in range.
-    if !is_manual_order(&field, &dir) || !playlists_ui.detail.filter.lock().is_empty() {
+    if !is_manual_order(&field, &dir) || playlists_ui.detail.cache.is_filtered() {
         return None;
     }
 
     // Snapshot for rollback BEFORE we mutate anything.
     let saved = {
         let pos = playlists_ui.detail.position_order.lock().clone();
-        let tracks = playlists_ui.detail.tracks.lock().clone();
-        (pos, tracks)
+        (pos, playlists_ui.detail.cache.displayed_rows())
     };
 
     {
@@ -327,47 +330,15 @@ pub fn rollback_reorder(
 ) {
     let (pos, tracks) = snapshot;
     *playlists_ui.detail.position_order.lock() = pos;
-    // Reorder is disabled while filtered, so the displayed `tracks` cache equals the canonical
-    // `all_tracks` — restore both.
-    playlists_ui.detail.all_tracks.lock().clone_from(&tracks);
-    *playlists_ui.detail.tracks.lock() = tracks;
+    // Reorder is disabled while filtered, so the displayed cache equals the canonical one.
+    playlists_ui.detail.cache.seat_unfiltered(tracks);
     // Force a UI rebuild of the visible rows from the rolled-back cache.
-    resort_detail(ui, playlists_ui);
+    resort_detail(&ui.global::<PlaylistDetail>(), playlists_ui);
 }
 
-pub fn clear_detail(playlists_ui: &PlaylistsUi) {
-    *playlists_ui.detail.playlist_id.lock() = -1;
-    playlists_ui.detail.tracks.lock().clear();
-    playlists_ui.detail.all_tracks.lock().clear();
-    playlists_ui.detail.position_order.lock().clear();
-    playlists_ui.detail.applied_selection.lock().clear();
-    playlists_ui.detail.filter.lock().clear();
-    crate::ui::window_chrome::set_current_playlist_id(-1);
-}
-
-/// Update the cached filter needle. Nothing binds the Slint half to this one — the page's single
-/// box reaches nine surfaces through Rust, so `ui::my_library::filter::dispatch` writes both
-/// sides. This mirror is what lets `refresh_detail` re-apply the filter to fresh data without
-/// round-tripping the UI thread for the property read. Always stored folded.
-pub fn set_filter(playlists_ui: &PlaylistsUi, needle: &str) {
-    *playlists_ui.detail.filter.lock() = crate::ui::row_match::fold_needle(needle);
-}
-
-/// Re-walk the cached tracks through the current filter and push the
-/// filtered Slint model — see [`crate::ui::detail_filter`] for the
-/// shared implementation. Runs on the UI thread (filter keystroke /
-/// refresh-with-filter).
-pub fn apply_filtered_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
-    let g = ui.global::<PlaylistDetail>();
-    let was_reset = crate::ui::detail_filter::apply_filtered_detail(
-        &g,
-        &FilterRefs {
-            all_tracks: &playlists_ui.detail.all_tracks,
-            tracks: &playlists_ui.detail.tracks,
-            applied: &playlists_ui.detail.applied_selection,
-            filter: &playlists_ui.detail.filter,
-        },
-    );
+/// The shared filter pass, plus the drag abort a reset owes. UI thread.
+fn apply_filtered_detail(g: &PlaylistDetail<'_>, playlists_ui: &PlaylistsUi) {
+    let was_reset = filter::apply_filtered_detail(g, &playlists_ui.detail.cache);
     if was_reset {
         // Abort any in-flight drag-reorder: the row indices it was computed against no longer
         // describe the playlist, and the reset destroyed the row instance holding the pointer
@@ -377,24 +348,6 @@ pub fn apply_filtered_detail(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
         g.set_drag_source(-1);
         g.set_drop_slot(-1);
     }
-}
-
-pub fn apply_detail_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<PlaylistDetail>().get_tracks(), id, |r| {
-            r.is_favorite = fav;
-        });
-    });
-}
-
-/// Set `rating` on a single detail row in the Slint `VecModel`. Mirrors
-/// `apply_detail_row_favorite`.
-pub fn apply_detail_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<PlaylistDetail>().get_tracks(), id, |r| {
-            r.rating = rating;
-        });
-    });
 }
 
 pub fn seed_detail_from_settings(
@@ -431,12 +384,6 @@ pub fn seed_detail_from_settings(
             ui.global::<PlaylistDetail>().set_restoring(false);
         });
     });
-}
-
-pub(super) fn reset_detail_selection(g: &PlaylistDetail, playlists_ui: &PlaylistsUi) {
-    write_selection(g, Vec::new());
-    g.set_selection_anchor(-1);
-    playlists_ui.detail.applied_selection.lock().clear();
 }
 
 /// Sort `rows` in place by `field` / `dir`. `"position"` rebuilds from

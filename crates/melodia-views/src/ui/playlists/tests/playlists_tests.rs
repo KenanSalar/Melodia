@@ -5,7 +5,7 @@
 //! Plus the four things drag-to-reorder needs to stay alive, none of which any
 //! other pin can see go missing.
 
-use super::detail::is_manual_order;
+use super::detail::{POSITION_FIELD, is_manual_order};
 use super::*;
 use melodia_testkit::code_tokens;
 
@@ -14,7 +14,7 @@ const DRAGGABLE_LIST: &str =
 const QUEUE_SHEET: &str = include_str!("../../../../../melodia-ui/ui/views/queue-sheet.slint");
 const DETAIL_VIEW: &str =
     include_str!("../../../../../melodia-ui/ui/views/my-library/playlist-detail.slint");
-const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
+const SHARED_DETAIL_WIRING: &str = include_str!("../../callbacks/track_detail.rs");
 const DETAIL: &str = include_str!("../detail.rs");
 
 /// Minimal `PlaylistStats` builder — only the fields the grid filter / sort
@@ -141,15 +141,19 @@ fn the_reorder_gate_reads_every_term_the_drag_depends_on() {
 /// it, so the sort cycle is the only way back. Drop the natural field and the
 /// first click on any column retires reordering for the whole install —
 /// persisted, so it survives a restart.
+///
+/// Two halves in two files: the shared wiring has to hand the view's natural
+/// order to the cycle, and this view has to name one.
 #[test]
 fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
-    let src = code_tokens(DETAIL_CALLBACKS);
     assert!(
-        src.contains("next_sort_with_natural"),
+        code_tokens(SHARED_DETAIL_WIRING)
+            .contains("next_sort_with_natural(&field, &dir, &clicked, V::NATURAL_SORT)"),
         "the plain `next_sort` has two states and cannot reach `\"position\"`"
     );
     assert!(
-        src.contains("Some(playlists_ui_mod::POSITION_FIELD)"),
+        code_tokens(DETAIL)
+            .contains("const NATURAL_SORT: Option<&'static str> = Some(POSITION_FIELD);"),
         "the cycle needs the curated order named as its third state"
     );
 }
@@ -175,7 +179,7 @@ fn the_optimistic_reorder_refuses_a_filtered_list() {
         "the order half must be asked before the display indices reach `position_order`"
     );
     assert!(
-        guard.contains("|| !playlists_ui.detail.filter.lock().is_empty()"),
+        guard.contains("|| playlists_ui.detail.cache.is_filtered()"),
         "so must the filter half — a filtered index is in range, so the write lands"
     );
 }

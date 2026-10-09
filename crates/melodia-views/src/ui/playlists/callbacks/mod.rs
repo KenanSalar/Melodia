@@ -2,8 +2,8 @@
 //!
 //! * [`grid`] — the playlist-card grid (cover lookup, filter, drill-in,
 //!   the Rename-overlay name / description lookups).
-//! * [`detail`] — the open-playlist detail view (play, queue, favorite,
-//!   sort, drag-reorder, edit-artwork open, track removal).
+//! * [`detail`] — the open-playlist detail view: close-detail, drag-reorder,
+//!   edit-artwork open and track removal, plus the set every detail shares.
 //! * [`dialog`] — the create / rename / delete / mosaic-artwork CRUD
 //!   commits, the add-to-playlist picker, and mosaic-candidate toggling.
 //! * [`lifecycle`] — section enter/leave cache management + the

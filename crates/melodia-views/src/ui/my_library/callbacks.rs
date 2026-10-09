@@ -17,7 +17,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, SharedString};
 
 use crate::ui::callbacks::index_persist::IndexPersist;
-use crate::ui::callbacks::macros::release_hero_slots;
+use crate::ui::detail_view::release_hero_slots;
 use crate::ui::my_library as my_library_mod;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -65,15 +65,15 @@ fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
 fn release_collapsed_hero(ui: &AppWindow) {
     let album = ui.global::<AlbumDetail>();
     if album.get_album_id() < 0 {
-        release_hero_slots!(album);
+        release_hero_slots(&album);
     }
     let artist = ui.global::<ArtistDetail>();
     if artist.get_artist_id() < 0 {
-        release_hero_slots!(artist);
+        release_hero_slots(&artist);
     }
     let playlist = ui.global::<PlaylistDetail>();
     if playlist.get_playlist_id() < 0 {
-        release_hero_slots!(playlist);
+        release_hero_slots(&playlist);
     }
     crate::ui::hero_chips::clear_if_stale(ui);
 }
@@ -89,9 +89,9 @@ fn release_collapsed_hero(ui: &AppWindow) {
 /// Unconditional, unlike [`release_collapsed_hero`]: past this point no id can bring a
 /// banner back without a fetch that republishes all of it.
 fn release_page_hero(ui: &AppWindow) {
-    release_hero_slots!(ui.global::<AlbumDetail>());
-    release_hero_slots!(ui.global::<ArtistDetail>());
-    release_hero_slots!(ui.global::<PlaylistDetail>());
+    release_hero_slots(&ui.global::<AlbumDetail>());
+    release_hero_slots(&ui.global::<ArtistDetail>());
+    release_hero_slots(&ui.global::<PlaylistDetail>());
     crate::ui::hero_backdrop::reset(ui);
     crate::ui::hero_chips::clear(ui);
 }

@@ -98,10 +98,9 @@ pub fn wire_cross_tab_nav(
 ) {
     let weak = ui.as_weak();
 
-    // One trio per global, spelled once. A `macro_rules!` rather than a helper fn because
-    // the generated globals are unrelated types sharing only their accessor *names* —
-    // there is no trait to be generic over, which is why `ui::list_selection`'s
-    // `impl_row_selection_view!` has the same shape.
+    // One trio per global, spelled once. A `macro_rules!` rather than a generic fn: these
+    // nine globals, `Tracks`, `Browse` and `Queue` among them, share these three setters and
+    // nothing else, so a trait for them would need an impl macro of its own and save nothing.
     macro_rules! wire_go_to {
         ($($global:ident),+ $(,)?) => {
             $({

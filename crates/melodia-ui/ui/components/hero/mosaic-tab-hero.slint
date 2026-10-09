@@ -11,9 +11,9 @@ import { TabSearchHeader } from "tab-search-header.slint";
 // strings, their tab list and the pills they pass as `@children`.
 //
 // **Data-agnostic on purpose.** A Slint component can't be parameterised over a global and
-// `Favorites` / `RecentlyPlayed` are distinct generated types — the same wall
-// `impl_detail_view_helpers!` works around in Rust, and the reason this is a component rather
-// than a third copy.
+// `Favorites` / `RecentlyPlayed` are distinct generated types — the wall Rust answers with a
+// trait over the generated globals (`ui::detail_view::HeroSlots`), and the reason this is a
+// component rather than a third copy.
 export component MosaicTabHero inherits Rectangle {
     // **Inline `[@tr("…"), …]` at the call site** — an array populated from Rust renders
     // untranslated. Forwarding one through here keeps the literal in a `.slint` file.

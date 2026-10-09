@@ -178,10 +178,10 @@ pub fn spawn_initial_tracks_fetch(
 /// Kick off an entity grid's initial fetch so its cards are populated by the
 /// time the user navigates to it.
 ///
-/// A macro rather than a generic `fn` for the reason `impl_detail_view_helpers!`
-/// is one: the four `*Ui` types share no trait, and each `fetch_grid` is a free
-/// function in its own module. Tracks is deliberately not among them, resolving a
-/// persisted sort and calling `fetch_and_apply` instead.
+/// A macro rather than a generic `fn` because each `fetch_grid` is a free function in
+/// its own module, over a `*Ui` type no trait ties to the other three. Tracks is
+/// deliberately not among them, resolving a persisted sort and calling
+/// `fetch_and_apply` instead.
 macro_rules! initial_grid_fetch {
     ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty, $label:literal) => {
         $(#[$doc])*
