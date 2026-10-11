@@ -267,11 +267,12 @@ ttf-parser = { version = "0.25.1", default-features = false }
 # the gap leaves uncovered.
 
 # Linux
-# Do NOT enable the `tokio` feature: cargo unifies it onto Slint's accesskit_unix →
-# atspi → zbus chain, whose a11y thread has no tokio context and panics at startup.
+# Do NOT enable the `tokio` feature: under it every `zbus::blocking` call blocks on a
+# runtime zbus starts for itself, and `AppState::init` opens two connections (MPRIS,
+# the always-on-top probe) inside `runtime.block_on`, where tokio panics on a second.
 # Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`; MPRIS serves on a
 # blocking connection and signals from a thread of its own.
-zbus = "5.18.0"
+zbus = "5.19.0"
 # Linux tray (StatusNotifierItem, no GTK); Windows/macOS take `tray-icon` below.
 # Defaults off: ksni's default `tokio` feature turns on `zbus/tokio` and walks into
 # the footgun above. `async-io` is mandatory (`compat` won't compile without an
