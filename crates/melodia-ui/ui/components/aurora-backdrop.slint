@@ -28,6 +28,11 @@ component AuroraSweep inherits Rectangle {
         ? @linear-gradient(root.heading, root.tint.transparentize(0.45) 0%, root.tint.transparentize(1.0) 100%)
         : @linear-gradient(root.heading, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 100%);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
+
+    // Read once at mount, for the reason `HeroBlurBackdrop` gives at its own.
+    init => {
+        root.background;
+    }
 }
 
 // The artwork-derived backdrop: three broad sweeps of album colour over the theme's own base, and a
@@ -60,6 +65,11 @@ export component AuroraBackdrop inherits Rectangle {
         ? @linear-gradient(135deg, root.base-start, root.base-end)
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
+
+    // Read once at mount, as each sweep's is.
+    init => {
+        root.background;
+    }
 
     // **Declared back to front.** Slint paints the last child on top, so tint-3 goes down first and
     // tint-1 — the colour the artwork most is — lands over both.

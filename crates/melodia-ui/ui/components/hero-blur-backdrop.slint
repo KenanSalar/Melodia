@@ -37,7 +37,17 @@ export component HeroBlurBackdrop inherits Rectangle {
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    Image {
+    // **Every animated layer is read once at mount.** A first evaluation lands without easing, so a
+    // `shown` flipped before the first paint would arrive at full strength; the miniplayer's press is
+    // that flip.
+    init => {
+        root.background;
+        slot-a.opacity;
+        slot-b.opacity;
+        scrim-layer.background;
+    }
+
+    slot-a := Image {
         x: 0;
         y: 0;
         width: 100%;
@@ -47,7 +57,7 @@ export component HeroBlurBackdrop inherits Rectangle {
         opacity: (root.has-blur && root.use-a) ? 1.0 : 0.0;
         animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
     }
-    Image {
+    slot-b := Image {
         x: 0;
         y: 0;
         width: 100%;
@@ -63,7 +73,7 @@ export component HeroBlurBackdrop inherits Rectangle {
     //
     // **Gated with the floor**, so the whole stack drains together — ungated, the scrim is the one
     // layer still painting once the floor and both slots have gone.
-    Rectangle {
+    scrim-layer := Rectangle {
         x: 0;
         y: 0;
         width: 100%;

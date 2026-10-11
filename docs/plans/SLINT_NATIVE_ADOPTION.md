@@ -44,11 +44,12 @@ per-frame walk is still in the source.
 
 ## Migration plan: 1.16.1 → 1.18.1
 
-**Status (2026-10-11):** phases 0 and 1 are applied together in the tree on
-`refactor/upgrade-dependencies`, uncommitted, since neither half validates alone. fmt, clippy and
-`cargo test` pass on Linux. Phase 0 is a go: on the manual run the queue sheet and the nav
-transitions were as smooth on 1.18.1 as on 1.16.1, so the bump stays. Phase 2 passed in full on
-the manual pass, on Linux. Phase 4 is a small follow-up the bump makes possible.
+**Status (2026-10-11):** phases 0 and 1 landed together as `24453338` on
+`refactor/upgrade-dependencies`, since neither half validates alone. fmt, clippy and `cargo test`
+pass on Linux. Phase 0 is a go: on the manual run the queue sheet and the nav transitions were as
+smooth on 1.18.1 as on 1.16.1, so the bump stays. Phase 2 passed on the manual pass, on Linux,
+once the miniplayer backdrop's fade-in was fixed on top of the bump. Phase 4 is a small follow-up
+the bump makes possible.
 
 A trial on 2026-09-16 (throwaway worktree, since removed) ran
 `cargo clippy --all-targets --workspace` on Linux against 1.18.0, and the diagnostics listed in
@@ -103,6 +104,9 @@ real check.
 - [x] `crates/melodia-ui/build.rs` lost its `cargo:rerun-if-changed=translations`: slint-build 1.18
       prints the same directory itself (#13329).
 - [x] `slint-tr-extractor` 1.18.1 and `scripts/update-translations.sh`: no catalog moved.
+- [x] `.cargo/audit.toml`: `rustybuzz` left the lockfile with usvg 0.48, so its ignore went, it
+      being one that would hide a future advisory on that crate. The bincode, ttf-parser and paste
+      reasons now name the 1.18.1 chains, and an ignore-free audit fires exactly those three.
 - [x] The in-tree "Slint 1.16 has no …" notes whose claim 1.18.1 still makes true now say 1.18
       (`closed`, `.contains()`, the Rust-callable `tr`, `Text`'s font axes, `DragArea.dragging`,
       cross-app drops). The ones phase 3 retires keep their tag until then. Two are left as they
@@ -180,6 +184,12 @@ shadows the built-in one without a diagnostic.
 - [x] Close to tray and back, with the log open for a hide warning (#13507).
 - [x] The `ListView`s that set an explicit `content-width`/`-height`: 1.18 stops overwriting it
       (#5485), e.g. `horizontal-card-strip.slint` and Artist Detail's album strip.
+- [x] The miniplayer backdrop's fade-in, the other fade a 1 ms Timer flips right after its mount.
+      Missed by the first pass and found in review: it snapped on some presses, blocker 1 one
+      `if` deeper, since its layers sit in `NpBackdropStack`'s own arm and that arm can be built
+      after the Timer fires. Both components now read their layers in `init`, and the Timer runs
+      on `NpBackdropStack.arm-mounted`. Fades on every press on the manual re-check; pinned with
+      `ViewTransition` by `ui::mount_fade_tests`.
 
 ### Phase 3: adoptions
 

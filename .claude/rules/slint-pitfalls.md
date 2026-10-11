@@ -659,7 +659,8 @@ this file is what builds, looks right, and is wrong.
   itself when you switch tabs, the content-area `if` remounting it at 0. `CompositeScrollbars`
   re-clamps on `changed v-outer-max`; a new scroller that two-way-binds `content-y` needs the
   same. To audit, grep the generated file for `r#Flickable :: FIELD_OFFSETS . r#content_y ())`
-  (empty parens included): 2 `link_two_way` hits, every other one a `.get()` or `.set()`.
+  (empty parens included): 2 `link_two_way` hits, every other one a read, a write, or the pin a
+  `ListView`'s repeater is handed.
 
 - **Stock Slint 1.18 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
   in-process only, with no `PathBuf`. Vendored winit PR #4009. Fix
@@ -718,7 +719,15 @@ this file is what builds, looks right, and is wrong.
 
 - **`init` runs *after* bindings resolve to final values — useless for entry animations.** Setting
   `shown: true` in `init` makes `true` the *initial* value, so `animate opacity` never runs. Fix:
-  single-shot 1 ms `Timer` flips `shown` once at mount.
+  single-shot 1 ms `Timer` flips `shown` once at mount. **On 1.18 the Timer is half of it**: an
+  `if` branch is instantiated eagerly, so the Timer can fire before any animated binding has been
+  evaluated, and one first evaluated after the flip has nothing to ease from. `init` reads each
+  animated property once, so it starts from its `shown: false` value
+  (`components/view-transition.slint`). **That read only helps if it runs before the Timer can
+  fire**: where the animated layers sit in an `if` nested below the Timer, that branch can be
+  built a pass later, so the Timer waits for it to mount. Bit the miniplayer backdrop on some
+  presses and not others; its Timer runs on `NpBackdropStack.arm-mounted`. Pinned by
+  `ui::mount_fade_tests`, the bare reads looking like dead statements.
 
 - **Glyphs outside Vazirmatn inflate `Text` line-box and break patched-metrics centring.** Unicode
   arrows or any glyph the bundled font lacks pulls a fallback font; its taller `typoAsc/Desc`

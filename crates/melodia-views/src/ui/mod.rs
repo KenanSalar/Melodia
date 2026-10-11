@@ -75,7 +75,8 @@ pub mod window_chrome;
 // for the decoration buttons, whose fill answers to the OS decoration beside the window and
 // to a backdrop that is off by default. `frameless_tests` holds the
 // shell's frame bindings and the miniplayer's exit edge to one another, a pairing only a Win32
-// or macOS frame shows breaking.
+// or macOS frame shows breaking. `mount_fade_tests` holds every fade flipped right after its
+// mount to reading its layers first, a race that snaps on some runs and fades on the rest.
 //
 // What used to sit among them and no longer does is the set that walked the *tree* rather
 // than reading a component: those are `crates/melodia/tests/`, on the rule that a check
@@ -107,6 +108,9 @@ mod library_tab_band_tests;
 #[cfg(test)]
 #[path = "tests/mosaic_tab_hero_tests.rs"]
 mod mosaic_tab_hero_tests;
+#[cfg(test)]
+#[path = "tests/mount_fade_tests.rs"]
+mod mount_fade_tests;
 #[cfg(test)]
 #[path = "tests/placeholder_tests.rs"]
 mod placeholder_tests;

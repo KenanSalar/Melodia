@@ -33,7 +33,7 @@ export component MiniBackdrop inherits Rectangle {
         drain.running = false;
         if (on) {
             // Still mounted means mid-drain, with painted frames to ease back from. Otherwise the
-            // timer inside the mount paints it once its unpainted first frame is down.
+            // timer inside the mount paints it once its arm is up, unpainted.
             root.painting = root.mounted;
             root.mounted = true;
         } else {
@@ -55,19 +55,20 @@ export component MiniBackdrop inherits Rectangle {
         }
     }
 
-    if root.mounted: NpBackdropStack {
+    if root.mounted: stack := NpBackdropStack {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
         shown: root.painting;
 
-        // Paints the stack a tick after it mounts, so the first frame is the unpainted one its
-        // drain eases in from. Reads the switch rather than setting `true`, for a press back off
-        // inside that tick.
+        // Paints the stack a tick after its arm mounts, so the stack eases in from its unpainted
+        // values. **The arm's mount, not the stack's**: the arm is a nested `if` that can be
+        // built a pass later, and a flip landing before its layers exist arrives at full strength.
+        // Reads the switch rather than setting `true`, for a press back off inside that tick.
         Timer {
             interval: 1ms;
-            running: true;
+            running: stack.arm-mounted;
             triggered => {
                 self.running = false;
                 root.painting = MiniPlayer.backdrop-shown;
