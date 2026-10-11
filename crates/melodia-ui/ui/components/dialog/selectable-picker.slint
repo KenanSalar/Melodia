@@ -232,8 +232,8 @@ export component PickerListCard inherits Rectangle {
         height: parent.height - 2 * root.border-w;
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
-        viewport-width: self.visible-width;
-        viewport-height: root.content-h - 2 * root.border-w;
+        content-width: self.visible-width;
+        content-height: root.content-h - 2 * root.border-w;
 
         VerticalLayout {
             padding: root.pad - root.border-w;
@@ -250,8 +250,8 @@ export component PickerListCard inherits Rectangle {
         width: Theme.scrollbar-slot;
         height: parent.height - 4px;
         visible-size: sv.visible-height;
-        content-size: sv.viewport-height;
-        offset: -sv.viewport-y;
-        scroll-to(o) => { sv.viewport-y = -o; }
+        content-size: sv.content-height;
+        offset: -sv.content-y;
+        scroll-to(o) => { sv.content-y = -o; }
     }
 }

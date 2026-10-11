@@ -133,8 +133,8 @@ this file is what builds, looks right, and is wrong.
   body; sibling `ListView` renders 0 rows. Pin fixed-size rows with `min-height` + `max-height` +
   `vertical-stretch: 0`. Never `height/width: 100%` on layout child.
 
-- **Nested ScrollView + ListView need `viewport-height: self.height` on outer.** Reverse: lock
-  `viewport-width: self.width`.
+- **Nested ScrollView + ListView need `content-height: self.height` on outer.** Reverse: lock
+  `content-width: self.width`.
 
 - **A nested `ListView` swallows the mouse wheel at its scroll edge — it never bubbles to an outer
   `ScrollView`** (`flickable.rs::process_wheel_event` returns `EventAccepted` at the edge during
@@ -166,21 +166,18 @@ this file is what builds, looks right, and is wrong.
   the upper section is a header the list belongs under, not a peer view: `browse-view.slint` and
   `ArtistDetailBody`.
 
-- **A `Flickable` claims a whole *gesture* on `TouchPhase::Started`, whatever direction it is
-  going — so a touchpad scrolls where a wheel does not.** `flickable.rs`'s filter returns
-  `Intercept` for that phase unconditionally and `process_wheel_event` sets `capture_events` with
-  no `is_allowed_scroll_direction` call, so the *outermost* `Flickable` under the pointer owns
-  every event until `Ended` — its `Moved`/`Cancelled` arms do check direction, which is the whole
-  of why a wheel behaves. **Only a precision device sends the phase**: Wayland folds a discrete
-  axis to `Moved`, X11 and Win32 send nothing else — Wayland and macOS only, invisible to a mouse.
-  Bites any scroller nested in another on a crossing axis: a card strip under Search's vertical
-  outer scroller never sees a sideways swipe. Cure in `winit_filter.rs`'s `route_wheel`:
-  swallow the native `Started` and re-send its delta through
-  `Window::try_dispatch_event(PointerScrolled)`, which lands as a one-shot `Cancelled` and leaves
-  the capture flag unset for the rest of the gesture. **Ungated on purpose** — it reads no view
-  state, so a new nested scroller is covered without owing a sentinel or a `reset()`. It costs
-  Slint's kinetic fling, gated on that same flag. `MouseWheel` carries no position, hence the
-  `CursorMoved` mirror beside it.
+- **Through Slint 1.18.0 a `Flickable` claimed a whole touchpad *gesture* on
+  `TouchPhase::Started`, whatever direction it was going**, so the outermost one under the pointer
+  owned every event until `Ended`, and a card strip under Search's vertical scroller never saw a
+  sideways swipe. **Only a precision device sends the phase**: Wayland folds a discrete axis to
+  `Moved`, X11 and Win32 send nothing else, so a mouse never shows it. 1.18.1 checks the direction
+  before capturing (#13453). **Our cure for it is still in `winit_filter.rs`'s `route_wheel`, and
+  on 1.18 it costs more than it did**: it swallows the native `Started` and re-sends its delta
+  through `Window::dispatch_event_with_result(PointerScrolled)`, which lands as a one-shot
+  `Cancelled`. Slint never sees the gesture start, so it never captures it, and every touchpad
+  `Moved` takes the mouse-wheel arm instead: animated over 180 ms since 1.17, so the content trails
+  the fingers, with no kinetic fling at the end. Retire the `Unphased` arm once a touchpad swipes
+  a Search strip sideways without it.
 
 - **The same `Flickable` steals a *mouse* drag wherever it is interactive, and there the cure is
   per-list: `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture and only one
@@ -647,26 +644,25 @@ this file is what builds, looks right, and is wrong.
   past the endpoint, so geometry lies on both sides of the edge and both tips fade alike. Bit
   `caption-buttons.slint`'s KDE glyphs, copied from a decoration that draws round caps.
 
-- **A `<=>` on a `Flickable`'s `viewport-y` silently disables Slint's own out-of-bounds correction
+- **A `<=>` on a `Flickable`'s `content-y` silently disables Slint's own out-of-bounds correction
   — a one-way binding doesn't.** `Flickable::init` installs a change handler that pulls a
   scrolled-past-the-end viewport back in range, guarded on
-  `if *y_out_of_bounds && !y.has_binding()` (`items/flickable.rs:112`), so a `viewport-y` carrying
+  `if *y_out_of_bounds && !y.has_binding()` (`items/flickable.rs:118`), so a `content-y` carrying
   a binding opts out. **The distinction is which kind survives a write.** Most scrollers here
-  reach `viewport-y` imperatively (`sv.viewport-y = -o`); the constant `0px` binding the generated
-  tree seeds them with is *orphaned by the first such write* (the one-way-binding pitfall above),
-  and until then `0px` can't be out of bounds either way — so they keep the guard. `<=>` compiles
-  to `Property::link_two_way`, which **does** survive a self-write, making the two composite views
-  (`browse-view.slint`, `ArtistDetailBody`) the only permanently unguarded scrollers in the tree.
+  reach `content-y` imperatively (`sv.content-y = -o`), and 1.18's generated tree seeds them with
+  no binding at all, so they keep the guard. `<=>` compiles to `Property::link_two_way`, which
+  **does** survive a self-write, making the two composite views (`browse-view.slint`,
+  `ArtistDetailBody`) the only permanently unguarded scrollers in the tree.
   Left uncorrected, content that shrinks under the current offset paints a **blank region** —
   Browse leaving a deep folder for the much shorter library root, or either view filtering a long
   list to a few rows. Nothing looks wrong in the source; the symptom is an empty view that fixes
   itself when you switch tabs, the content-area `if` remounting it at 0. `CompositeScrollbars`
-  re-clamps on `changed v-outer-max`; a new scroller that two-way-binds `viewport-y` needs the
-  same. To audit, grep the generated file for `r#Flickable :: FIELD_OFFSETS . r#viewport_y ())`
-  (empty parens included): 2 `link_two_way` hits, 23 benign `set_property_binding` seeds.
+  re-clamps on `changed v-outer-max`; a new scroller that two-way-binds `content-y` needs the
+  same. To audit, grep the generated file for `r#Flickable :: FIELD_OFFSETS . r#content_y ())`
+  (empty parens included): 2 `link_two_way` hits, every other one a `.get()` or `.set()`.
 
-- **Stock Slint 1.16 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
-  in-process only — no `PathBuf`, still true of released 1.17.x. Vendored winit PR #4009. Fix
+- **Stock Slint 1.18 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
+  in-process only, with no `PathBuf`. Vendored winit PR #4009. Fix
   merged upstream but unreleased: winit **#4571**, a new `DataTransfer` DnD API superseding
   #1881/#4009.
 
@@ -742,3 +738,5 @@ this file is what builds, looks right, and is wrong.
   elided `Text` **drops** the line that overflows its box rather than clipping it, so words go
   missing rather than looking cramped. `ui::now_playing::lyrics`'s `OPEN_HANGUL_EMS` is the one
   place that pays for it; delete it when a Slint release composes the block, and not before.
+  **Not yet re-checked on 1.18**, which keeps the same stack (now built in
+  `textlayout/sharedparley/shaping.rs`) over parley 0.11.

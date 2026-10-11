@@ -21,7 +21,7 @@ import { FavoritesSongsTab } from "favorites/songs-tab.slint";
 // **Each tab owns exactly one scroller**, which is why this view mounts plain `OverlayScrollbar`s
 // rather than `CompositeScrollbars`: a nested `ListView` swallows the wheel at its own edge instead
 // of bubbling, and one scroller per tab retires that whole problem along with the hover sentinel
-// and the two-way `viewport-y` binding that opts out of Slint's out-of-bounds correction.
+// and the two-way `content-y` binding that opts out of Slint's out-of-bounds correction.
 export component FavoritesView inherits Rectangle {
     property <int> filter-tick-pending: 0;
 

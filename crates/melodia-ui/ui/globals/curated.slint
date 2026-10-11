@@ -116,7 +116,7 @@ export global Favorites {
     // `FavoritesUi.section_active` to drive the cache release / re-fetch.
     callback section-active-changed(bool);
 
-    // The Favorite-Artist card subtitle. Slint 1.16 exposes no Rust-callable `tr`, so Rust resolves
+    // The Favorite-Artist card subtitle. Slint 1.18 exposes no Rust-callable `tr`, so Rust resolves
     // the plural through this at row-build time; shares its msgid with the hero count line.
     pure callback artist-favorite-subtitle(int /*count*/) -> string;
     artist-favorite-subtitle(count) => {

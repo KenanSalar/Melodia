@@ -46,7 +46,7 @@ export component DraggableTrackList inherits Rectangle {
 
     // Only meaningful while `drag-source >= 0`; read by the auto-scroll gate.
     property <length> drag-src-screen-y:
-        root.drag-source * root.row-height + inner-list.viewport-y;
+        root.drag-source * root.row-height + inner-list.content-y;
 
     // In the visible list's own coordinates: centred on the slot boundary, then
     // pinned inside the band. The after-the-last-row slot sits on the content's
@@ -58,13 +58,13 @@ export component DraggableTrackList inherits Rectangle {
         0px,
         min(
             inner-list.visible-height - root.drop-line-h,
-            root.drop-slot * root.row-height + inner-list.viewport-y
+            root.drop-slot * root.row-height + inner-list.content-y
                 - root.drop-line-h / 2,
         ),
     );
 
     pure function in-travel(y: length) -> length {
-        return ListTravel.pin(y, inner-list.visible-height, inner-list.viewport-height);
+        return ListTravel.pin(y, inner-list.visible-height, inner-list.content-height);
     }
 
     callback request-sort(string /*field*/);
@@ -92,14 +92,14 @@ export component DraggableTrackList inherits Rectangle {
     in property <[int]> view-selected-ids;
 
     out property <length> v-visible-height: inner-list.visible-height;
-    out property <length> v-viewport-height: inner-list.viewport-height;
-    out property <length> v-offset: -inner-list.viewport-y;
+    out property <length> v-viewport-height: inner-list.content-height;
+    out property <length> v-offset: -inner-list.content-y;
     out property <length> body-y: inner-list.absolute-position.y - root.absolute-position.y;
     out property <length> body-height: inner-list.height;
 
     callback set-v-offset(length);
 
-    set-v-offset(o) => { inner-list.viewport-y = -o; }
+    set-v-offset(o) => { inner-list.content-y = -o; }
 
     VerticalLayout {
         padding-left: root.inset-left;
@@ -146,7 +146,7 @@ export component DraggableTrackList inherits Rectangle {
                 row-count: root.rows.length;
                 list-y0: inner-list.absolute-position.y;
                 list-height: inner-list.height;
-                list-viewport-y: inner-list.viewport-y;
+                list-viewport-y: inner-list.content-y;
                 drag-source <=> root.drag-source;
                 drop-slot <=> root.drop-slot;
 
@@ -168,7 +168,7 @@ export component DraggableTrackList inherits Rectangle {
                 go-to-genre(gid) => { root.go-to-genre(gid); }
                 request-scroll-by(dy) => {
                     // `dy` is a content-space delta, so it *subtracts* from
-                    // `viewport-y`, which runs 0 at the top and negative
+                    // `content-y`, which runs 0 at the top and negative
                     // downwards. Same shape as `queue-sheet.slint`.
                     //
                     // The nudge is skipped when it would carry the dragged
@@ -179,8 +179,8 @@ export component DraggableTrackList inherits Rectangle {
                     if (root.drag-source >= 0
                         && (root.drag-src-screen-y - dy) > -root.row-height
                         && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                        inner-list.viewport-y =
-                            root.in-travel(inner-list.viewport-y - dy);
+                        inner-list.content-y =
+                            root.in-travel(inner-list.content-y - dy);
                     }
                 }
             }

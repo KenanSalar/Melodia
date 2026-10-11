@@ -16,8 +16,8 @@ import { SelectionPill } from "../components/track-list/selection-pill.slint";
 //
 // **The drag is hand-rolled rather than built on `DragArea` / `DropArea`.** Those negotiate a drop
 // onto a whole element: no insertion-slot granularity, no edge auto-scroll, and what they add is a
-// mime-typed payload a reorder has nothing to put in; 1.16's `DragArea` doesn't expose `dragging`
-// either. `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit pointer
+// `data-transfer` payload a reorder has nothing to put in; 1.18's `DragArea` doesn't expose
+// `dragging` either. `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit pointer
 // capture — which is what makes `absolute-position.y + mouse-y` → row index reliable.
 export component QueueRowItem inherits Rectangle {
     in property <QueueRow> row-data;
@@ -78,7 +78,7 @@ export component QueueRowItem inherits Rectangle {
     // and the handler stays one line.
     private property <length> cur-abs-y: 0px;
     // The same point in the list's *content* space. A row sits on screen at
-    // `list-y0 + viewport-y + idx * row-height`, so recovering the index means taking
+    // `list-y0 + list-viewport-y + idx * row-height`, so recovering the index means taking
     // the scroll offset back out — without it the slot walks off the moment the queue is
     // scrolled while the host's indicator, which does account for it, points elsewhere.
     private property <length> cur-list-y:

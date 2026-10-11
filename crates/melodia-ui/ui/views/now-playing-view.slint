@@ -211,13 +211,13 @@ export component NowPlayingView inherits Rectangle {
                     // Locked to the viewport: left alone a ScrollView sizes its content to the
                     // content's own preferred width, and everything below centres against the
                     // column rather than against the widest thing in it.
-                    viewport-width: group-sv.visible-width;
+                    content-width: group-sv.visible-width;
                     // The visible height for as long as the column's floors fit inside it, so the
                     // cover gives ground before anything scrolls, and the column's own minimum
                     // past that. **Off the column, never off the scroller** — a ScrollView reports
-                    // a preferred height of its own and binds `viewport-height` back through it,
+                    // a preferred height of its own and binds `content-height` back through it,
                     // so reading that here closes the loop through this very property.
-                    viewport-height: max(group-sv.visible-height, group.min-height);
+                    content-height: max(group-sv.visible-height, group.min-height);
 
                     group := VerticalLayout {
                         alignment: center;
@@ -360,9 +360,9 @@ export component NowPlayingView inherits Rectangle {
                     width: Theme.scrollbar-slot;
                     height: parent.height;
                     visible-size: group-sv.visible-height;
-                    content-size: group-sv.viewport-height;
-                    offset: -group-sv.viewport-y;
-                    scroll-to(o) => { group-sv.viewport-y = -o; }
+                    content-size: group-sv.content-height;
+                    offset: -group-sv.content-y;
+                    scroll-to(o) => { group-sv.content-y = -o; }
                 }
             }
 
@@ -422,7 +422,7 @@ export component NowPlayingView inherits Rectangle {
                         height: 100%;
                         horizontal-scrollbar-policy: always-off;
                         vertical-scrollbar-policy: always-off;
-                        viewport-width: self.width;
+                        content-width: self.width;
 
                         // The station page's shape: the scroller keeps the full width so the
                         // wheel works over the bar's lane too, and the content insets instead.
@@ -462,9 +462,9 @@ export component NowPlayingView inherits Rectangle {
                         width: Theme.scrollbar-slot;
                         height: parent.height;
                         visible-size: station-sv.visible-height;
-                        content-size: station-sv.viewport-height;
-                        offset: -station-sv.viewport-y;
-                        scroll-to(o) => { station-sv.viewport-y = -o; }
+                        content-size: station-sv.content-height;
+                        offset: -station-sv.content-y;
+                        scroll-to(o) => { station-sv.content-y = -o; }
                     }
                 }
             }

@@ -215,13 +215,13 @@ export component Sidebar inherits Rectangle {
         // Caps the sidebar's preferred height, so the content row stops claiming a tall
         // slot and the now-playing bar keeps its own at small window heights. Both
         // built-in scrollbars are off — the `OverlayScrollbar` at the root sits flush
-        // with the right edge instead — and **`viewport-width: self.width` locks the
+        // with the right edge instead — and **`content-width: self.width` locks the
         // orthogonal axis**, so wheel events aren't hijacked into horizontal scroll.
         nav-scroll := ScrollView {
             vertical-stretch: 1;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            viewport-width: self.width;
+            content-width: self.width;
 
             VerticalLayout {
                 spacing: Theme.pad-xs;
@@ -319,10 +319,10 @@ export component Sidebar inherits Rectangle {
         bar-radius: Nav.sidebar-collapsed ? 2px : 4px;
         min-thumb: Nav.sidebar-collapsed ? 20px : 28px;
         visible-size: nav-scroll.visible-height;
-        content-size: nav-scroll.viewport-height;
-        offset: -nav-scroll.viewport-y;
+        content-size: nav-scroll.content-height;
+        offset: -nav-scroll.content-y;
         scroll-to(o) => {
-            nav-scroll.viewport-y = -o;
+            nav-scroll.content-y = -o;
         }
     }
 }

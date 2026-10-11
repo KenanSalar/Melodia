@@ -36,7 +36,7 @@ export component CompositeScrollbars inherits Rectangle {
     property <length> v-inner-max: max(0px, root.inner-viewport-height - root.inner-visible-height);
 
     // **Pulls the outer offset back in range when content shrinks under it.** A `Flickable`
-    // self-corrects only for a `viewport-y` that carries *no* binding, and the mount contract binds
+    // self-corrects only for a `content-y` that carries *no* binding, and the mount contract binds
     // it two-way: an imperative write orphans its binding and gets the guard back, where `<=>`
     // survives a self-write, so these views are the only ones permanently without it — and that
     // same survival is what makes writing the property here safe. Left uncorrected the viewport

@@ -60,7 +60,7 @@ export component QueueSheet inherits Rectangle {
     // Where the dragged row's top sits inside the visible list — meaningful only
     // mid-drag, and read by the auto-scroll gate below.
     private property <length> drag-src-screen-y:
-        Queue.drag-source * root.row-height + inner-list.viewport-y;
+        Queue.drag-source * root.row-height + inner-list.content-y;
 
     // In the list body's own coordinates: centred on the slot boundary, then **pinned
     // inside the band**. The after-the-last-row slot sits exactly on the content's
@@ -73,13 +73,13 @@ export component QueueSheet inherits Rectangle {
         0px,
         min(
             inner-list.visible-height - root.drop-line-h,
-            Queue.drop-slot * root.row-height + inner-list.viewport-y
+            Queue.drop-slot * root.row-height + inner-list.content-y
                 - root.drop-line-h / 2,
         ),
     );
 
     pure function in-travel(y: length) -> length {
-        return ListTravel.pin(y, inner-list.visible-height, inner-list.viewport-height);
+        return ListTravel.pin(y, inner-list.visible-height, inner-list.content-height);
     }
 
     // Where the viewport sits with `index` centred, pinned inside the travel. Every row is
@@ -105,7 +105,7 @@ export component QueueSheet inherits Rectangle {
     //
     // **Arms rather than seats.** A scroll written from `changed watched-open` lands inside
     // `run_change_handlers`, which drains the flickable's in-bounds tracker re-entrantly, and
-    // that tracker evaluates against the `viewport-height` the close teardown left at zero and
+    // that tracker evaluates against the `content-height` the close teardown left at zero and
     // pins the offset straight back to the top.
     function arm-seat() {
         root.seat-ticks-left = root.seat-ticks-total;
@@ -115,7 +115,7 @@ export component QueueSheet inherits Rectangle {
     // Seats the list on the playing row once per open and then leaves it alone — a queue is
     // read *past* the current track, so a sheet that kept following would fight every
     // scroll. **It converges rather than writing once.** A `ListView` publishes
-    // `visible-height` off its own geometry and `viewport-height` off its repeater, and on a
+    // `visible-height` off its own geometry and `content-height` off its repeater, and on a
     // fresh mount the two land on different passes, so a single write committed to whichever
     // pair its one tick happened to find: the open after a miniplayer swap centred against a
     // height of zero and put the playing row at the top, where the second open, laid out
@@ -134,18 +134,18 @@ export component QueueSheet inherits Rectangle {
                 return;
             }
             // Two ways to be unmeasured and neither is safe to centre against: no geometry at
-            // all, and a viewport short of its own rows, where `in-travel` collapses to the
-            // top against a height about to grow. The second reads `QueueRowItem`'s height,
+            // all, and a content height short of its own rows, where `in-travel` collapses to
+            // the top against a height about to grow. The second reads `QueueRowItem`'s height,
             // which is the `row-height` handed to it.
             if (inner-list.visible-height <= 0px
-                || inner-list.viewport-height < Queue.rows.length * root.row-height) {
+                || inner-list.content-height < Queue.rows.length * root.row-height) {
                 return;
             }
-            if (abs(inner-list.viewport-y - root.centred-on(Queue.current-index)) <= 1px) {
+            if (abs(inner-list.content-y - root.centred-on(Queue.current-index)) <= 1px) {
                 self.running = false;
                 return;
             }
-            inner-list.viewport-y = root.centred-on(Queue.current-index);
+            inner-list.content-y = root.centred-on(Queue.current-index);
         }
     }
 
@@ -296,7 +296,7 @@ export component QueueSheet inherits Rectangle {
                         row-index: idx;
                         list-y0: inner-list.absolute-position.y;
                         list-height: inner-list.height;
-                        list-viewport-y: inner-list.viewport-y;
+                        list-viewport-y: inner-list.content-y;
                         row-height: root.row-height;
                         // Drives the per-corner radius gating, so contiguous selected
                         // rows merge into one pill.
@@ -311,8 +311,8 @@ export component QueueSheet inherits Rectangle {
                             if (Queue.drag-source >= 0
                                 && (root.drag-src-screen-y - dy) > -root.row-height
                                 && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                                inner-list.viewport-y =
-                                    root.in-travel(inner-list.viewport-y - dy);
+                                inner-list.content-y =
+                                    root.in-travel(inner-list.content-y - dy);
                             }
                         }
                     }
@@ -341,9 +341,9 @@ export component QueueSheet inherits Rectangle {
                     width: Theme.scrollbar-slot;
                     height: parent.height;
                     visible-size: inner-list.visible-height;
-                    content-size: inner-list.viewport-height;
-                    offset: -inner-list.viewport-y;
-                    scroll-to(o) => { inner-list.viewport-y = -o; }
+                    content-size: inner-list.content-height;
+                    offset: -inner-list.content-y;
+                    scroll-to(o) => { inner-list.content-y = -o; }
                 }
 
                 // Empty state.

@@ -26,7 +26,6 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Ok(inner) => inner?,
         Err(payload) => std::panic::resume_unwind(payload),
     }
-    println!("cargo:rerun-if-changed=translations");
 
     Ok(())
 }

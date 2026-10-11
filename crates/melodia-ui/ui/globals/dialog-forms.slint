@@ -214,7 +214,7 @@ export global TagEditor {
 // approval page and advances `lastfm-step`, then `lastfm-finish` exchanges it
 // for a session. ListenBrainz just validates a pasted token. `error` carries a
 // localized line, which Rust has to set through the `err-*` `@tr` callbacks —
-// Slint 1.16 exposes no Rust-callable `tr()`.
+// Slint 1.18 exposes no Rust-callable `tr()`.
 export global ScrobbleUi {
     in-out property <int> lastfm-step;      // 0 = open browser, 1 = finish
     in-out property <string> lastfm-token;  // unauthorized token between steps
@@ -254,7 +254,7 @@ export global ScrobbleUi {
 // rather than at the first click. Rust closes the dialog once that succeeds.
 //
 // `error` carries a localized line, which Rust has to set through the `err-*` `@tr` callbacks —
-// Slint 1.16 exposes no Rust-callable `tr()`.
+// Slint 1.18 exposes no Rust-callable `tr()`.
 export global RadioForm {
     in-out property <int> edit-id: -1;
     in-out property <string> url;

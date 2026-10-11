@@ -216,8 +216,8 @@ export component PlaylistMosaicPicker inherits Rectangle {
             cand-sv := ScrollView {
                 horizontal-scrollbar-policy: always-off;
                 vertical-scrollbar-policy: always-off;
-                viewport-width: self.visible-width;
-                viewport-height: root.grid-content-h + 8px;
+                content-width: self.visible-width;
+                content-height: root.grid-content-h + 8px;
 
                 Rectangle {
                     width: 100%;
@@ -344,9 +344,9 @@ export component PlaylistMosaicPicker inherits Rectangle {
                 width: Theme.scrollbar-slot;
                 height: parent.height - 4px;
                 visible-size: cand-sv.visible-height;
-                content-size: cand-sv.viewport-height;
-                offset: -cand-sv.viewport-y;
-                scroll-to(o) => { cand-sv.viewport-y = -o; }
+                content-size: cand-sv.content-height;
+                offset: -cand-sv.content-y;
+                scroll-to(o) => { cand-sv.content-y = -o; }
             }
         }
     }

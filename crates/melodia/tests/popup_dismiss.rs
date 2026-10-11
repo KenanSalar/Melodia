@@ -1,6 +1,6 @@
 //! Every singleton popup closes when the OS window loses focus.
 //!
-//! Slint 1.16 gives a `PopupWindow` no `closed` callback, so a popup that only closes on a click
+//! Slint 1.18 gives a `PopupWindow` no `closed` callback, so a popup that only closes on a click
 //! outside stays open behind another application and leaves `PopupHighlight.id` set. That id is
 //! what lights the trigger, so the control it belongs to goes on looking pressed with nothing
 //! under it, and the next click lands on a menu the user had stopped looking at.

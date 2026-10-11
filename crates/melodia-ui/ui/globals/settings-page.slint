@@ -93,7 +93,7 @@ export global SettingsPage {
         return root.body-cols == 2 ? Math.mod(i, 2) : 0;
     }
 
-    // Slint 1.16 has no `.contains()` on string, so the test is wired in Rust.
+    // Slint 1.18 has no `.contains()` on string, so the test is wired in Rust.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
     // Whether a row survives the filter, shared rather than copied into ten sections. **Reading

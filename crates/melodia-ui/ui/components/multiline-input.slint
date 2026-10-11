@@ -34,12 +34,12 @@ export component MultilineInput inherits Rectangle {
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
         // Width locked to the viewport so lines wrap instead of scrolling
-        // sideways. The height's `max` is required: without it the viewport
+        // sideways. The height's `max` is required: without it the content
         // never grows past what's visible, so there is no vertical travel, the
         // caret-nudge handler has nothing to scroll, and long text runs off the
         // bottom.
-        viewport-width: self.visible-width;
-        viewport-height: max(self.visible-height, ti.preferred-height);
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, ti.preferred-height);
 
         ti := TextInput {
             text <=> root.text;
@@ -53,10 +53,10 @@ export component MultilineInput inherits Rectangle {
             // only upstream's y-branch survives — with the line height derived
             // from the font size rather than hardcoded as upstream does.
             cursor-position-changed(cpos) => {
-                if (cpos.y + sv.viewport-y < 12px) {
-                    sv.viewport-y = min(0px, max(sv.visible-height - self.height, -cpos.y + 12px));
-                } else if (cpos.y + sv.viewport-y > sv.visible-height - 12px - Theme.font-size-md * 1.5) {
-                    sv.viewport-y = min(0px, max(sv.visible-height - self.height, sv.visible-height - cpos.y - 12px - Theme.font-size-md * 1.5));
+                if (cpos.y + sv.content-y < 12px) {
+                    sv.content-y = min(0px, max(sv.visible-height - self.height, -cpos.y + 12px));
+                } else if (cpos.y + sv.content-y > sv.visible-height - 12px - Theme.font-size-md * 1.5) {
+                    sv.content-y = min(0px, max(sv.visible-height - self.height, sv.visible-height - cpos.y - 12px - Theme.font-size-md * 1.5));
                 }
             }
         }
@@ -83,8 +83,8 @@ export component MultilineInput inherits Rectangle {
         width: Theme.scrollbar-slot;
         height: parent.height - 2 * root.pad;
         visible-size: sv.visible-height;
-        content-size: sv.viewport-height;
-        offset: -sv.viewport-y;
-        scroll-to(o) => { sv.viewport-y = -o; }
+        content-size: sv.content-height;
+        offset: -sv.content-y;
+        scroll-to(o) => { sv.content-y = -o; }
     }
 }

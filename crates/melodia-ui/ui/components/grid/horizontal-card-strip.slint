@@ -10,7 +10,7 @@ import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 // every cover requested, which is what makes it affordable there and not on a page of its own.
 //
 // Scrolling is the usual pattern: stock scrollbars off, a sibling `OverlayScrollbar` along the
-// bottom edge reading `viewport-x`, and the bar hides itself with no overflow. The hover play
+// bottom edge reading `content-x`, and the bar hides itself with no overflow. The hover play
 // overlay is opt-in, the result strips showing it so an album plays without leaving the page.
 export component HorizontalCardStrip inherits Rectangle {
     in property <string>             heading;
@@ -65,7 +65,7 @@ export component HorizontalCardStrip inherits Rectangle {
                 // A card click and a drag-pan are one gesture, and the default is
                 // the style's to pick; argument on `views/radio/station-grid.slint`.
                 mouse-drag-pan-enabled: false;
-                viewport-height: self.height;
+                content-height: self.height;
 
                 HorizontalLayout {
                     spacing: root.card-gap;
@@ -139,9 +139,9 @@ export component HorizontalCardStrip inherits Rectangle {
                 width: parent.width;
                 height: 8px;
                 visible-size: sv.visible-width;
-                content-size: sv.viewport-width;
-                offset: -sv.viewport-x;
-                scroll-to(o) => { sv.viewport-x = -o; }
+                content-size: sv.content-width;
+                offset: -sv.content-x;
+                scroll-to(o) => { sv.content-x = -o; }
             }
         }
     }

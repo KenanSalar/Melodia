@@ -98,7 +98,7 @@ pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
 pub fn install(ui: &AppWindow, state: &AppState) {
     let page = ui.global::<SettingsPage>();
 
-    // Slint 1.16 has no `.contains()` on string, so every section's row-visibility
+    // Slint 1.18 has no `.contains()` on string, so every section's row-visibility
     // expression routes its substring test through here — the same predicate the library
     // filter boxes run, so an ASCII query reaches the accented catalogue labels.
     //

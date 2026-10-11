@@ -19,7 +19,7 @@ export component DialogScrollPane inherits Rectangle {
 
     // The column's natural height, for a host that sizes itself to its content rather than capping
     // it. **Off the column, never off the scroller**: a `ScrollView` reports a preferred height of
-    // its own rather than its content's, and its `viewport-height` is bound to
+    // its own rather than its content's, and its own `content-height` is bound to
     // `max(content, flickable.height)`, so a host reading that closes a loop through the very
     // property it is setting.
     out property <length> content-height: column.preferred-height;
@@ -29,7 +29,7 @@ export component DialogScrollPane inherits Rectangle {
         vertical-scrollbar-policy: always-off;
         // Locked to the viewport, or the stretchy inputs collapse to nothing — the smart-editor
         // pitfall.
-        viewport-width: sv.visible-width;
+        content-width: sv.visible-width;
 
         column := VerticalLayout {
             spacing: root.content-spacing;
@@ -49,10 +49,10 @@ export component DialogScrollPane inherits Rectangle {
         width: Theme.scrollbar-slot;
         height: parent.height;
         visible-size: sv.visible-height;
-        content-size: sv.viewport-height;
-        offset: -sv.viewport-y;
+        content-size: sv.content-height;
+        offset: -sv.content-y;
         scroll-to(o) => {
-            sv.viewport-y = -o;
+            sv.content-y = -o;
         }
     }
 }

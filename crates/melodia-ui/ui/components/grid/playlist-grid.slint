@@ -32,10 +32,10 @@ export component PlaylistGrid inherits Rectangle {
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
     out property <length> v-visible-height: list.visible-height;
-    out property <length> v-viewport-height: list.viewport-height;
-    out property <length> v-offset: -list.viewport-y;
+    out property <length> v-viewport-height: list.content-height;
+    out property <length> v-offset: -list.content-y;
     callback set-v-offset(length);
-    set-v-offset(o) => { list.viewport-y = -o; }
+    set-v-offset(o) => { list.content-y = -o; }
 
     list := ListView {
         vertical-scrollbar-policy: always-off;

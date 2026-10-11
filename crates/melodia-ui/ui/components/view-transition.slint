@@ -4,9 +4,11 @@ import { Nav, NavEnterFrom } from "../globals/nav.slint";
 // Enter-only wrapper, re-instantiated on every branch mount so the flip and the animation replay
 // per nav. There is no exit half — Slint's `if` destroys the outgoing view instantly.
 //
-// **A single-shot Timer, not `init`.** `init` runs *after* bindings resolve to their final values,
-// so flipping `shown` there makes `true` the initial value and the view appears instantly; the
-// Timer fires once the first `shown: false` frame has painted.
+// **A single-shot Timer flips `shown`, not `init`.** `init` runs *after* bindings resolve to their
+// final values, so flipping `shown` there makes `true` the initial value and the view appears
+// instantly. Slint instantiates an `if` eagerly, so the Timer can fire before anything has painted
+// or read the animated bindings, and one first evaluated after the flip has nothing to animate
+// from; `init` reads them once so each starts from its `shown: false` value.
 export component ViewTransition inherits Rectangle {
     in property <NavEnterFrom> enter-from: NavEnterFrom.above;
     // Off, the view is simply *there*. For the nested case: a page wrapping each tab body in
@@ -24,6 +26,12 @@ export component ViewTransition inherits Rectangle {
     // Disabled — or suppressed, for the launch mount and the return from the miniplayer — this is
     // `true` from the first evaluation, so the three bindings below never transition.
     private property <bool> settled: !root.enabled || root.shown || Nav.suppress-enter-animation;
+
+    init => {
+        root.opacity;
+        root.x;
+        root.y;
+    }
 
     Timer {
         interval: 1ms;

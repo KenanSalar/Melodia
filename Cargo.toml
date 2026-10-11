@@ -43,7 +43,7 @@ homepage = "https://github.com/KenanSalar/Melodia"
 # `WinitWindowAccessor` for `drag_window()` and `WindowEvent::Resized` (slint-ui#2521,
 # #6273, #4817); `renderer-femtovg` because the software renderer can't clip to
 # `border-radius` (slint#4176).
-slint = { version = "1.16.1", default-features = false, features = [
+slint = { version = "1.18.1", default-features = false, features = [
     "std",
     "backend-default",
     "accessibility",
@@ -54,8 +54,9 @@ slint = { version = "1.16.1", default-features = false, features = [
 ] }
 # Must match the `slint` version above; the pair is declared adjacently for that.
 # So must `slint-tr-extractor`: `scripts/update-translations.sh` reads the version off the
-# `slint = { version = … }` line and refuses an extractor that doesn't match it.
-slint-build = "1.16.1"
+# `slint = { version = … }` line and refuses an extractor that doesn't match it. The default
+# `renderer-software` feature only embeds resources for a renderer we don't build.
+slint-build = { version = "1.18.1", default-features = false, features = ["compat-1-18"] }
 
 # Async runtime / synchronisation
 tokio = { version = "1.53.2", features = [

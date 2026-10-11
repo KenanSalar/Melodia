@@ -227,7 +227,7 @@ export global CompositeScroll {
 }
 
 // Lets a popup trigger keep its hover background painted while its `PopupWindow` is open: Slint
-// 1.16 has no `closed` callback, `has-hover` flips false the moment the popup steals input, and no
+// 1.18 has no `closed` callback, `has-hover` flips false the moment the popup steals input, and no
 // scrim can catch the dismissing click either. The contract:
 //   - a trigger writes its own discriminator to `id` right before `show()` and binds
 //     `force-bg: PopupHighlight.id == "<my-id>"`. A string, not a bool, so triggers can't cross-talk

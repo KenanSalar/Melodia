@@ -346,7 +346,7 @@ export global Settings {
     in-out property <bool> verbose-logging: false;
     callback verbose-logging-changed(bool);
 
-    // Everything below is a `pure callback` wrapping an `@tr` literal, Slint 1.16 exposing no
+    // Everything below is a `pure callback` wrapping an `@tr` literal, Slint 1.18 exposing no
     // Rust-callable `tr(...)`: Rust invokes these at push time so each string resolves in the
     // locale selected right then, not the one active when the notification was built.
     pure callback watcher-disabled-title() -> string;

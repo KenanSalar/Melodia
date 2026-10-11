@@ -17,8 +17,8 @@
 //! 4. **`Focused(bool)`** — mirror OS focus into `Theme.window-focused`, and use the
 //!    transition to reconcile the tray-bridge's visibility shadow: raise on focus, ask
 //!    the OS about a minimize on focus loss (see [`schedule_minimize_probe`]).
-//! 5. **`DroppedFile` / `HoveredFile` / `HoveredFileCancelled`** — Slint 1.16 has no
-//!    cross-app `DnD` API, so this is the only path a file drop arrives through.
+//! 5. **`DroppedFile` / `HoveredFile` / `HoveredFileCancelled`** — Slint 1.18's winit backend
+//!    delivers no cross-app drop, so this is the only path a file drop arrives through.
 //! 6. **`MouseWheel`**, for two unrelated `Flickable` defects — see [`route_wheel`].
 //!    `CursorMoved` is mirrored for the same arm, a wheel event carrying no position.
 //! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
@@ -98,12 +98,11 @@ enum WheelRoute {
 /// in `globals/shell.slint`. Horizontal-dominant wheel stays native there, that axis
 /// belonging to the strips' own scrollers.
 ///
-/// `Unphased` is the touchpad one. `Flickable` intercepts `TouchPhase::Started`
-/// unconditionally and sets its capture flag without checking the delta's axis, so the
-/// outermost one under the pointer owns the whole gesture where its `Moved` and
-/// `Cancelled` arms check direction first — and only a precision device sends the phase,
-/// which is why a scroller nested inside another scrolls under a wheel and not two fingers.
-/// Re-sending unphased leaves the capture flag unset, costing Slint's kinetic fling.
+/// `Unphased` is the touchpad one. Through Slint 1.18.0 a `Flickable` captured on
+/// `TouchPhase::Started` whatever the delta's axis, so the outermost one under the pointer
+/// owned the whole gesture and a scroller nested inside it scrolled under a wheel but not two
+/// fingers. 1.18.1 checks the axis first (#13453), and re-sending unphased now puts every
+/// touchpad move on the animated wheel path, so the arm goes once a touchpad confirms the fix.
 fn route_wheel(
     composite_hovered: bool,
     overlay_open: bool,
@@ -470,7 +469,7 @@ fn on_mouse_wheel(
                 delta_x: dx,
                 delta_y: dy,
             };
-            if let Err(e) = ui.window().try_dispatch_event(scrolled) {
+            if let Err(e) = ui.window().dispatch_event_with_result(scrolled) {
                 log::warn!("touchpad scroll: dispatch: {}", describe(&e));
             }
             EventResult::PreventDefault

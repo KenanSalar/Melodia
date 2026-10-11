@@ -66,7 +66,7 @@ export component SearchView inherits Rectangle {
             height: 100%;
             horizontal-scrollbar-policy: always-off;
             vertical-scrollbar-policy:   always-off;
-            viewport-width: self.width;
+            content-width: self.width;
 
             VerticalLayout {
                 padding-top: root.bar-inset;
@@ -163,9 +163,9 @@ export component SearchView inherits Rectangle {
         width: Theme.scrollbar-slot;
         height: parent.height;
         visible-size: below-sv.visible-height;
-        content-size: below-sv.viewport-height;
-        offset: -below-sv.viewport-y;
-        scroll-to(o) => { below-sv.viewport-y = -o; }
+        content-size: below-sv.content-height;
+        offset: -below-sv.content-y;
+        scroll-to(o) => { below-sv.content-y = -o; }
     }
 
     // Declared last so it paints over both the results and the scrollbar — Slint paints

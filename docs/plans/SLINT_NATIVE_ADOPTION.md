@@ -2,10 +2,10 @@
 
 Melodia carries hand-rolled workarounds for gaps in Slint ≤ 1.16. Slint 1.17 (2026-06-24) and
 1.18 (2026-09-16) shipped native replacements for several of them, or the foundations for one.
-This doc holds the migration plan from 1.16.1 to 1.18.0 and one section per workaround we can
+This doc holds the migration plan from 1.16.1 to 1.18.1 and one section per workaround we can
 retire once there.
 
-## Where we stand (checked 2026-09-17)
+## Where we stand (checked 2026-09-17, re-checked against 1.18.1 on 2026-10-11)
 
 We are on 1.16.1. We moved to 1.17.0 and reverted on 2026-07-06 because it regressed us twice:
 
@@ -18,15 +18,17 @@ We are on 1.16.1. We moved to 1.17.0 and reverted on 2026-07-06 because it regre
    `draw_contents` every frame; on our monolithic item tree this visibly drops frames during
    animations (confirmed on the queue sheet).
 
-**1.18.0 fixes neither.** Checked in the published crate sources, not the changelog:
+**1.18.1 fixes neither.** Checked in the published crate sources, not the changelog:
 
 - **Blocker 2 is structurally unchanged.** `WindowInner::draw_contents` still opens with
-  `ensure_tree_instantiated()` (`i-slint-core-1.18.0/window.rs:1846`, the same call 1.17.1 made),
-  and the generated `ensure_instantiated` is the same recursive walk. Every repeater still
-  recurses into every instance, and `Repeater::ensure_children_instantiated` collects
-  `instances_vec()` into a fresh `Vec` per repeater on each walk (`model/repeater.rs:700`, `:883`).
-  There is still **no upstream issue**: slint#11397 is the PR that introduced the pass, and
-  nothing tracks its per-frame cost.
+  `ensure_tree_instantiated()` (`i-slint-core-1.18.1/window.rs:1846`, now inside
+  `evaluate_no_tracking`, the same call 1.17.1 made), and the generated `ensure_instantiated` is
+  the same recursive walk. Every repeater still recurses into every instance, and
+  `Repeater::ensure_children_instantiated` collects `instances_vec()` into a fresh `Vec` per
+  repeater on each walk (`model/repeater.rs:702`, `:883`). Master only adds a loop over overlays.
+  There is still **no upstream issue**: slint#11397 is the PR that introduced the pass, #13621
+  (merged after 1.18.1) only moves `ComponentContainer` building into it, and nothing tracks its
+  per-frame cost.
 - **Blocker 1 is unverified.** 1.17.1's #12303 and 1.18's #12683 both change where an animation
   starts from, and neither targets an `if` mount flipping `shown` from a Timer. The `init`-read
   fix is backward compatible, so it goes in with the bump either way.
@@ -36,50 +38,80 @@ exponential visibility checks on deeply nested elements; #13043, slow focus move
 trees; #12853, smaller generated code). So the stutter has to be **re-measured, not assumed**, and
 that measurement is the go/no-go for everything below.
 
-## Migration plan: 1.16.1 → 1.18.0
+**Outcome (2026-10-11):** neither blocker shows on 1.18.1. Enter transitions play with the `init`
+read in place, and the queue sheet and nav transitions run as smooth as on 1.16.1, though the
+per-frame walk is still in the source.
+
+## Migration plan: 1.16.1 → 1.18.1
+
+**Status (2026-10-11):** phases 0 and 1 are applied together in the tree on
+`refactor/upgrade-dependencies`, uncommitted, since neither half validates alone. fmt, clippy and
+`cargo test` pass on Linux. Phase 0 is a go: on the manual run the queue sheet and the nav
+transitions were as smooth on 1.18.1 as on 1.16.1, so the bump stays. Phase 2 passed in full on
+the manual pass, on Linux. Phase 4 is a small follow-up the bump makes possible.
 
 A trial on 2026-09-16 (throwaway worktree, since removed) ran
-`cargo clippy --all-targets --workspace` on Linux against 1.18.0. With the lockfile fix below it
-compiled, and the diagnostics listed in phase 1 were the only ones. Windows-only code
-(`window_chrome/parked_loop.rs`, the `tray-icon` path) wasn't compiled there.
+`cargo clippy --all-targets --workspace` on Linux against 1.18.0, and the diagnostics listed in
+phase 1 were the only ones. On 1.18.1 against the real tree the gate came out the same, and with
+the renames below it prints no Slint build-script warning at all. Windows-only code
+(`window_chrome/parked_loop.rs`, the `tray-icon` path) isn't compiled on Linux.
 `CustomApplicationHandler` is unchanged in the 1.18 source, but the `clippy-windows` job is the
 real check.
 
 ### Phase 0: go/no-go on blocker 2
 
-- [ ] In a scratch worktree with phase 1 applied, re-measure frame pacing on the queue sheet
-      against 1.16.1, same protocol as the July attempt.
-- [ ] **Still stutters:** file the upstream issue with the numbers, naming the per-frame walk in
-      `draw_contents` and the per-repeater `Vec`, and stay on 1.16.1.
-- [ ] **Smooth:** carry on with phase 1 in the tree.
+- [x] Measurement binaries, fresh release builds of HEAD (`47c49567`) and of the bumped tree:
+      `~/Development/melodia-measure/target/slint-1.16.1/Melodia` and `…/slint-1.18.1/Melodia`.
+- [x] Re-measure frame pacing on the queue sheet and the nav transitions on both, with
+      `SLINT_DEBUG_PERFORMANCE=refresh_full_speed,console`: Slint prints
+      `average frames per second: n` to stderr once a second in both versions, so the per-frame
+      walk shows as a lower steady rate with the sheet mounted. Smooth by eye on both
+      (2026-10-11), and the debug build under `cargo run` didn't stutter either. No rate was
+      printed: the command broke across lines, so the variable never reached the binary.
+- [ ] ~~Peak RSS via `/usr/bin/time -v` on both, since eager instantiation builds every mount's
+      contents up front.~~ Not part of the go/no-go: measured separately, outside this plan.
+- [ ] ~~**Still stutters:** file the upstream issue with the numbers, naming the per-frame walk in
+      `draw_contents` and the per-repeater `Vec`, `git restore` the bump, and stay on 1.16.1.~~
+      Not taken.
+- [x] **Smooth:** keep the bump and carry on with phase 2.
 
 ### Phase 1: the bump
 
-- [ ] `slint` and `slint-build` to `1.18.0` in the root `[workspace.dependencies]`.
-- [ ] **Lockfile trap: also run `cargo update -p const-field-offset`** (to 0.2.1). 1.18.0's
-      generated code calls `sp::compose_field_offsets`, which only exists from
-      `const-field-offset` 0.2.1, while `slint` still declares `0.2.0`. A plain
-      `cargo update -p slint -p slint-build` keeps 0.2.0, and `melodia-ui` then fails with 7,876
-      `E0425`s. A fresh resolve would pick 0.2.1; a targeted update doesn't. Worth reporting
-      upstream as a missing version floor.
-- [ ] `window_chrome/winit_filter.rs:415`: `try_dispatch_event` → `dispatch_event_with_result`,
-      ignoring the new `WindowEventDispatchResult` since only the error is logged. This is the one
+- [x] `slint` and `slint-build` to `1.18.1` in the root `[workspace.dependencies]`.
+- [x] **The 1.18.0 lockfile trap is gone.** 1.18.0's generated code called
+      `sp::compose_field_offsets`, which only exists from `const-field-offset` 0.2.1, while
+      `slint` declared `0.2.0`, so a targeted update kept 0.2.0 and `melodia-ui` failed with
+      7,876 `E0425`s. `slint` and `i-slint-core` 1.18.1 both declare `0.2.1`, so a plain
+      `cargo update -p slint -p slint-build` takes it.
+- [x] `window_chrome/winit_filter.rs:473`: `try_dispatch_event` → `dispatch_event_with_result`,
+      ignoring the new `WindowEventDispatchResult` since only the error is logged. This was the one
       rustc warning in the workspace, and `-D warnings` fails the gate on it.
-- [ ] `viewport-x`/`-y`/`-width`/`-height` → `content-*` on `Flickable`, `ScrollView` and
-      `ListView`: 123 compiler deprecation warnings. The old names are deprecated aliases and
-      build-script warnings don't trip `-D warnings`, but they bury everything else in the build
-      output. The prose spelling the old names moves in the same change: CLAUDE.md's scrollbar
-      convention (`offset: -sv.viewport-y` / `scroll-to`), the nested-ScrollView and
-      `<=>`-on-`viewport-y` entries in `.claude/rules/slint-pitfalls.md`, and the
-      `now_playing/lyrics/follow.rs` module doc. `v-viewport-height` / `v-visible-height` are our
-      own properties and stay.
-- [ ] Re-apply the blocker-1 fix in `crates/melodia-ui/ui/components/view-transition.slint`:
-      read the animated properties once in `init`. The file is still the plain 1ms-Timer form.
-- [ ] Optional: `slint-build = { version = "1.18.0", default-features = false, features = ["compat-1-18"] }`.
+- [x] `viewport-x`/`-y`/`-width`/`-height` → `content-*` on `Flickable`, `ScrollView` and
+      `ListView`: 123 sites plus 19 `.slint` comments, and the `now_playing/lyrics/follow.rs`
+      module doc. The old names are deprecated aliases and build-script warnings don't trip
+      `-D warnings`, but they buried everything else in the build output. `v-viewport-height`,
+      `r-viewport-*`, `t-viewport-y` and the row's `list-viewport-y` are our own and stay.
+      CLAUDE.md's scrollbar convention and the `slint-pitfalls.md` entries moved with the docs
+      pass.
+- [x] The blocker-1 fix in `crates/melodia-ui/ui/components/view-transition.slint`: `init` reads
+      `opacity`, `x` and `y` once, so each starts from its `shown: false` value before the Timer
+      flips it. The generated `app-window.rs` keeps the three `.get()`s in every instance's
+      `user_init`.
+- [x] `slint-build = { version = "1.18.1", default-features = false, features = ["compat-1-18"] }`.
       `renderer-software` became a default feature that only feeds software-renderer resource
       embedding, which `crates/melodia-ui/build.rs` doesn't use.
-- [ ] "Slint 1.16" in CLAUDE.md's opening line and README's stack line. The in-tree "Slint 1.16
-      has no …" notes go with the code that phase 3 retires, not in this pass.
+- [x] `crates/melodia-ui/build.rs` lost its `cargo:rerun-if-changed=translations`: slint-build 1.18
+      prints the same directory itself (#13329).
+- [x] `slint-tr-extractor` 1.18.1 and `scripts/update-translations.sh`: no catalog moved.
+- [x] The in-tree "Slint 1.16 has no …" notes whose claim 1.18.1 still makes true now say 1.18
+      (`closed`, `.contains()`, the Rust-callable `tr`, `Text`'s font axes, `DragArea.dragging`,
+      cross-app drops). The ones phase 3 retires keep their tag until then. Two are left as they
+      were: `theme.slint`'s easing note, unverified on 1.18, and `color-dot-grid.slint`'s "no
+      transform on a Rectangle", which 1.16.1's own compiler doesn't bear out either.
+- [x] The docs pass: "Slint 1.18" in CLAUDE.md (opening line, RTL note) and README's stack line,
+      `content-y` in CLAUDE.md's scrollbar convention, and `slint-pitfalls.md` / `ui-patterns.md`
+      retagged and re-checked against the 1.18.1 source. The touchpad entry and `route_wheel`'s doc
+      comment now say 1.18.1 fixed the capture (#13453); the arm itself is phase 4.
 
 Nothing else moves. `unstable-winit-030` / `slint::winit_030` are unchanged, and
 `i-slint-backend-winit` still wants `winit = "0.30.2"`, so the vendored fork's
@@ -105,38 +137,49 @@ shadows the built-in one without a diagnostic.
 - **Build:** smaller, faster-compiling generated code (#12853, upstream's claim, not measured
   here), and deterministic generated code and bundled translations (#12932) for reproducible
   distro packages.
-- **Dependency graph**, measured on the trial lockfile before tray-icon moved to 0.26: 860 → 829
-  packages, and crates resolved at more than one version 74 → 59. `windows` 0.61 drops out, and
-  the AVIF/EXR decoders (`rav1e`, `ravif`, `exr`) leave, since slint-build's extra image formats
-  are opt-in now. The trial also collapsed `muda` 0.18 and 0.19 to 0.19.2, which no longer
-  happens: tray-icon 0.26 takes `muda` 0.21, so Slint's 0.19 stays a second copy, and
-  `keyboard-types` stays at two versions with it.
+- **1.18.1 over 1.18.0**, the reason for the target: a panic when a repeated element's handler
+  removes its own row or closes its popup and then touches something outside it (#13528, our row
+  context menus' remove entries); a min-height over a nested layout lost, making windows too short
+  (#13523); nested `Flickable`s unscrollable by touchpad (#13453, the composite views); and a
+  spurious "hide failed" warning on close (#13507, close-to-tray).
+- **Dependency graph**, measured on the bumped lockfile against HEAD's: 867 → 836 packages, and
+  names resolved at more than one version 77 → 62. `windows` 0.61 drops out, and the AVIF/EXR
+  decoders (`rav1e`, `ravif`, `exr`) leave, since slint-build's extra image formats are opt-in
+  now. Slint's `muda` moves 0.18 → 0.19.3 and stays a second copy beside tray-icon's 0.21.2, so
+  `keyboard-types` stays at two versions with it. wgpu 30 and Skia appear in the lockfile only as
+  Slint's optional renderers; `cargo tree` builds neither on Linux, Windows or macOS.
 
 ### Phase 2: manual verification
 
-- [ ] Frame pacing on the queue sheet (phase 0), and peak RSS via `/usr/bin/time -v` against the
-      current release build: eager `if`/`for` instantiation creates every mount's contents up
-      front.
-- [ ] Enter transitions on every nav, tab switch and the return from the miniplayer.
-- [ ] Mouse-wheel scrolling now animates (1.17, fixed 180 ms, not configurable). Composite views
+- [x] Frame pacing on the queue sheet (phase 0).
+- [x] Enter transitions on every nav, tab switch and the return from the miniplayer.
+- [x] Mouse-wheel scrolling now animates (1.17, fixed 180 ms, not configurable). Composite views
       stay stepped; see the `Flickable` section.
-- [ ] Word-wrapped `Text` now reports its longest word as its minimum width (1.18). Check the
+- [x] Word-wrapped `Text` now reports its longest word as its minimum width (1.18). Check the
       miniplayer and Settings rows at the minimum window width.
-- [ ] Percentage sizes no longer feed the parent's layout (1.17, #3346).
-- [ ] `clip: true` with a border now clips children at the border's inner edge (1.18, #1988). One
+- [x] Percentage sizes no longer feed the parent's layout (1.17, #3346).
+- [x] `clip: true` with a border now clips children at the border's inner edge (1.18, #1988). One
       site: `components/dialog/playlist-mosaic-picker.slint:214`. Expected to look better, since
       the scrolled mosaic stops painting over the 1 px edge.
-- [ ] Every popup: non-native popup clipping changed (1.17.1, #12324), and a popup's offset is
+- [x] Every popup: non-native popup clipping changed (1.17.1, #12324), and a popup's offset is
       recalculated when its size changes while shown (1.18).
-- [ ] Locale decimal separator: 1.17 routes float→string through `Platform.decimal-separator`.
+- [x] Locale decimal separator: 1.17 routes float→string through `Platform.decimal-separator`.
       The one fractional readout, `views/settings/playback-section.slint:144` (crossfade
       seconds), renders `2,5 s` in de/fr/es/tr/el/it. Arguably correct; check the `.po` strings
       still read naturally.
-- [ ] Default font size is read from system settings on Windows/Linux (1.17). We pin
+- [x] Default font size is read from system settings on Windows/Linux (1.17). We pin
       `default-font-size` at `app-window.slint:134`, so this should be inert. Visual-check at a
       non-default system font scale anyway, since the patched Vazirmatn metrics assume our size.
-- [ ] The Wayland sizing fixes against the miniplayer's restore paths, and the macOS title-bar fix
+- [x] The Wayland sizing fixes against the miniplayer's restore paths, and the macOS title-bar fix
       against the native-titlebar miniplayer.
+- [x] Keyboard shortcuts after a field that stays mounted but goes hidden held focus: 1.18 clears
+      focus off an invisible item (#11079), and only a view change runs the mirrors that hand
+      it back to `ShortcutScope`.
+- [x] Remove a row through its own context menu in the queue, a playlist and Favorites (#13528).
+- [x] Touchpad scrolling in the composite views (#13453).
+- [x] Close to tray and back, with the log open for a hide warning (#13507).
+- [x] The `ListView`s that set an explicit `content-width`/`-height`: 1.18 stops overwriting it
+      (#5485), e.g. `horizontal-card-strip.slint` and Artist Detail's album strip.
 
 ### Phase 3: adoptions
 
@@ -152,6 +195,42 @@ One change per section, in this order, each on a tree already on 1.18:
 
 Legend: 🟢 adoptable once on 1.18 · 🟡 shipped upstream but wait/verify first · 🔭 upstream
 foundation only, watch but not yet usable.
+
+### Phase 4: retire the touchpad re-dispatch
+
+Small and separate from phase 3's adoptions: it deletes a workaround for a bug 1.18.1 fixed, and on
+1.18 the workaround is what makes touchpad scrolling worse.
+
+- **Why it can go.** Through 1.18.0 a `Flickable` intercepted `TouchPhase::Started` whatever the
+  delta's axis (`i-slint-core-1.18.0/items/flickable.rs:762`), so the outermost one owned the whole
+  gesture and a card strip under Search's vertical scroller never saw a sideways swipe. 1.18.1
+  intercepts only a gesture it already holds or one on an axis it can scroll (#13453,
+  `items/flickable.rs:765-782`), and `process_wheel_event` hands a crossing-axis gesture back
+  (`:469-477`).
+- **Why it should go.** `route_wheel` swallows the native `Started` and re-sends its delta as a
+  `PointerScrolled`, which Slint delivers as a one-shot `Cancelled` (`api.rs:702-706`). Slint never
+  sees the gesture start, so nothing captures it, and every touchpad `Moved` takes the mouse-wheel
+  arm: animated over 180 ms since 1.17 (`WHEEL_SCROLL_DURATION`), so the content trails the
+  fingers, with no kinetic fling on release.
+- **The fix is the deletion.** Not a phase-aware re-dispatch and not a tuned animation: upstream's
+  own path now does what the arm was for, with direct tracking and the fling.
+
+- [ ] `window_chrome/winit_filter.rs`: delete `WheelRoute::Unphased`, the `Started` branch in
+      `route_wheel` and the `PointerScrolled` arm in `on_mouse_wheel`, then the parameters nothing
+      reads any more (`route_wheel`'s `phase`, `on_mouse_wheel`'s `cursor_pos`). The `CursorMoved`
+      mirror stays, since the titlebar's double press reads it. Trim `route_wheel`'s doc and the
+      module doc's item 6 to the one defect left, the composite one.
+- [ ] `window_chrome/tests/winit_filter_tests.rs`: drop
+      `a_touchpad_gesture_start_is_unphased_on_both_axes`, and the overlay test's `Started` case
+      now expects `Native`.
+- [ ] `.claude/rules/slint-pitfalls.md`: delete the touchpad entry, its bug fixed and its cure gone.
+- [ ] Gate: `cargo fmt --all --check`, clippy, `cargo test --locked --workspace`.
+- [ ] Manual, on a touchpad under Wayland. X11 and Win32 send no phase, so a mouse and those two
+      see no change; macOS does send one, and is the other platform this reaches.
+      - A sideways two-finger swipe moves a Search card strip.
+      - A vertical swipe over that strip still scrolls the page.
+      - A plain list follows the fingers and flings on release.
+      - Browse and Artist Detail still scroll vertically, the composite route being untouched.
 
 ---
 
@@ -327,10 +406,11 @@ foundation only, watch but not yet usable.
 - **Upstream in 1.17:** discrete-wheel scrolling is animated (fixed 180 ms physics decel, not
   disableable). Verified in source: the edge-swallow behavior (`EventAccepted` during the
   scroll-capture window) is **unchanged**, so the composite routing remains required.
-- **Still true in 1.18** (`i-slint-core-1.18.0/items/flickable.rs:465`): `TouchPhase::Started`
-  captures without checking the delta's direction, so `route_wheel`'s `Unphased` re-dispatch
-  stays too. 1.18 also adds `Flickable.mouse-drag-pan-enabled` and renames the scroll offsets
-  to `content-*` (phase 1).
+- **1.18.0 vs 1.18.1:** 1.18.0 still intercepted `TouchPhase::Started` without checking the
+  delta's direction (`i-slint-core-1.18.0/items/flickable.rs:762`). 1.18.1 checks it (#13453,
+  `:769-774`), so `route_wheel`'s `Unphased` re-dispatch is redundant and is phase 4.
+  The edge-swallow is a separate defect and stays. 1.18 also adds
+  `Flickable.mouse-drag-pan-enabled` and renames the scroll offsets to `content-*` (phase 1).
 - **On adoption:** native-wheeled views become smooth while composite views stay stepped. Decide
   whether to (a) accept the inconsistency, (b) add matching smoothing to the composite path, or
   (c) leave everything as-is. Also note: an external offset write during the 180 ms wheel
@@ -515,4 +595,6 @@ foundation only, watch but not yet usable.
 *Promoted out of this list on 2026-07-23: external drag-and-drop (winit #4571 merged) and
 Slint-native window drag (`WindowMoveArea` on master) — both now have their own sections.
 2026-09-17: the 1.18.0 migration plan replaced the re-migration checklist; `WindowMoveArea` moved
-to 🟢 on its release; `FlexboxLayout` and the Hangul workaround got sections of their own.*
+to 🟢 on its release; `FlexboxLayout` and the Hangul workaround got sections of their own.
+2026-10-11: retargeted to 1.18.1, phase 1 applied in the tree, phase 4 (the touchpad
+re-dispatch) added.*

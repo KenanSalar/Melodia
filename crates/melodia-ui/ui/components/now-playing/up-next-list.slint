@@ -213,9 +213,9 @@ export component UpNextList inherits Rectangle {
         on-backdrop: root.bar-on-backdrop;
         recolor-duration: root.bar-recolor-duration;
         visible-size: up-next-list.visible-height;
-        content-size: up-next-list.viewport-height;
-        offset: -up-next-list.viewport-y;
-        scroll-to(o) => { up-next-list.viewport-y = -o; }
+        content-size: up-next-list.content-height;
+        offset: -up-next-list.content-y;
+        scroll-to(o) => { up-next-list.content-y = -o; }
     }
 
     if NowPlaying.up-next-rows.length == 0: NpEmptyState {

@@ -261,9 +261,9 @@ export component FacetChip inherits Rectangle {
                         width: Theme.scrollbar-slot;
                         height: 100%;
                         visible-size: list.visible-height;
-                        content-size: list.viewport-height;
-                        offset: -list.viewport-y;
-                        scroll-to(o) => { list.viewport-y = -o; }
+                        content-size: list.content-height;
+                        offset: -list.content-y;
+                        scroll-to(o) => { list.content-y = -o; }
                     }
                 }
             }

@@ -1001,7 +1001,7 @@ three components that answer it, and each argues its geometry at its own file.
 - **PopupWindow auto-dismiss on OS focus loss** is `FocusLossWatcher`, mounted inside the
   popup's own `PopupWindow`, whose body Slint builds in `show()` and drops in `close()`, so only
   the open popup has a live watcher. Singletons also gate it on `PopupHighlight.id`, the key that
-  lights their trigger; the four right-click menus mount it ungated. Slint 1.16 has no `closed`
+  lights their trigger; the four right-click menus mount it ungated. Slint 1.18 has no `closed`
   callback, but `pop.close()` is a safe no-op when hidden.
 
 - **Native dialogs (rfd) — always through `ui::file_dialog::parented(&weak, title)`.** The helper
