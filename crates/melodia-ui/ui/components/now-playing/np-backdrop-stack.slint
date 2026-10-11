@@ -18,10 +18,6 @@ export component NpBackdropStack inherits Rectangle {
     // the miniplayer drains through it before unmounting the stack.
     in property <bool> shown: true;
 
-    // Up once the live arm exists with its layers already read. The arm is an `if` of its own and
-    // can be built a pass after the stack, so a host fading the stack in on mount waits for this.
-    out property <bool> arm-mounted;
-
     // Named once, because both terms below read it and a second spelling of the condition can
     // invert on its own.
     property <bool> aurora-shown: Theme.aurora-backdrop;
@@ -39,7 +35,6 @@ export component NpBackdropStack inherits Rectangle {
         // floor and scrim out from under a cover still at full strength, which pops off on unmount.
         has-blur: Player.blur-has-image && root.shown;
         shown: root.shown;
-        init => { root.arm-mounted = true; }
     }
 
     if root.aurora-shown: AuroraBackdrop {
@@ -52,6 +47,5 @@ export component NpBackdropStack inherits Rectangle {
         tint-3: Player.np-tint-3;
         dither: Player.np-dither;
         shown: root.shown;
-        init => { root.arm-mounted = true; }
     }
 }

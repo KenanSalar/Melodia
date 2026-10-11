@@ -412,9 +412,8 @@ three components that answer it, and each argues its geometry at its own file.
   - **`detail-open`** for `LibraryTabBand`, whose globals outlive the tab that filled them;
   - **the drain** for the miniplayer, whose `MiniBackdrop` fades the stack out through `shown`
     and unmounts it once drained, the backdrop being off for every install that never presses
-    the button. A press mounts it unpainted and paints it once `NpBackdropStack.arm-mounted` is
-    up, the arm being an `if` of its own that can be built a pass after the stack
-    (`slint-pitfalls.md`'s `init` entry).
+    the button. A press mounts it unpainted and paints it a tick later, which eases in only
+    because both stacks read their faded layers in `init` (`slint-pitfalls.md`'s `init` entry).
 
   That makes the gate a two-file deal and each half its own pin: the band passes the term
   (`library_tab_band_tests::no_hero_tier_outlives_the_banner_it_was_solved_for`) and both

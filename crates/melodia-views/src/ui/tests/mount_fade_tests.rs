@@ -5,9 +5,9 @@
 //! `if` branch at input time, well before its first paint, so a 1 ms `Timer` can flip `shown`
 //! before anything has read the layers it fades. Whether the fade then arrives at full strength is
 //! a race, and neither review nor a single manual run shows it: the miniplayer backdrop snapped on
-//! some presses and faded on others. Two halves keep it fading. Each faded layer is read once in
-//! `init`, and where the layers sit in an `if` below the `Timer`, the `Timer` waits for that
-//! branch to report its mount. `.claude/rules/slint-pitfalls.md`'s `init` entry has the mechanism.
+//! some presses and faded on others. Each faded layer is read once in `init`, which runs before the
+//! `Timer` can fire, even where the layers sit in an `if` nested below it.
+//! `.claude/rules/slint-pitfalls.md`'s `init` entry has the mechanism.
 //!
 //! The bare reads look like dead statements, which is what makes them worth pinning: deleting one
 //! builds clean and fades correctly on every run that happens to paint first.
@@ -19,13 +19,6 @@ const VIEW_TRANSITION: &str =
 const HERO_BLUR: &str =
     include_str!("../../../../melodia-ui/ui/components/hero-blur-backdrop.slint");
 const AURORA: &str = include_str!("../../../../melodia-ui/ui/components/aurora-backdrop.slint");
-const NP_STACK: &str =
-    include_str!("../../../../melodia-ui/ui/components/now-playing/np-backdrop-stack.slint");
-const MINI_BACKDROP: &str =
-    include_str!("../../../../melodia-ui/ui/components/mini-player/mini-backdrop.slint");
-
-/// The two arms `NpBackdropStack` can mount, by the name it mounts them under.
-const NP_STACK_ARMS: [&str; 2] = ["HeroBlurBackdrop", "AuroraBackdrop"];
 
 /// Every statement in every `init` block of `src`, in source order.
 fn init_reads(src: &str) -> Vec<String> {
@@ -95,42 +88,5 @@ fn the_aurora_reads_every_faded_layer_at_mount() {
         "aurora-backdrop.slint",
         AURORA,
         &["root.background", "root.background"],
-    );
-}
-
-/// Each arm reports its mount, the miniplayer's paint `Timer` running on nothing else. An arm left
-/// silent never paints: the backdrop button does nothing under that one setting while the other
-/// setting works, so whoever tests the change sees no fault.
-#[test]
-fn every_arm_of_the_now_playing_stack_reports_its_mount() {
-    let code = strip_line_comments(NP_STACK);
-    for arm in NP_STACK_ARMS {
-        let mount = code
-            .split_once(&format!("{arm} {{"))
-            .and_then(|(_, rest)| rest.split_once("\n    }"))
-            .map_or("", |(mount, _)| mount);
-        assert!(
-            mount.contains("init => { root.arm-mounted = true; }"),
-            "`NpBackdropStack`'s `{arm}` arm no longer raises `arm-mounted`, so the miniplayer \
-             never paints its backdrop under that setting"
-        );
-    }
-}
-
-/// The miniplayer's paint `Timer` waits for the arm, not the stack. The arm is an `if` of its own
-/// and can be built a pass after the stack, and a `Timer` started with the stack fired first on
-/// some presses. `running: true` reads as the obvious simplification and puts the snap back.
-#[test]
-fn the_miniplayer_paints_its_backdrop_only_once_the_arm_is_up() {
-    let code = strip_line_comments(MINI_BACKDROP);
-    let stack_mount = code.split_once("stack := NpBackdropStack {").map_or("", |(_, rest)| rest);
-
-    let running = stack_mount.lines().map(str::trim).find(|line| line.starts_with("running:"));
-
-    assert_eq!(
-        running,
-        Some("running: stack.arm-mounted;"),
-        "the paint `Timer` inside the stack's mount must start on `stack.arm-mounted`. Started \
-         with the stack, it can flip `painting` before the arm's layers exist"
     );
 }

@@ -186,10 +186,14 @@ shadows the built-in one without a diagnostic.
       (#5485), e.g. `horizontal-card-strip.slint` and Artist Detail's album strip.
 - [x] The miniplayer backdrop's fade-in, the other fade a 1 ms Timer flips right after its mount.
       Missed by the first pass and found in review: it snapped on some presses, blocker 1 one
-      `if` deeper, since its layers sit in `NpBackdropStack`'s own arm and that arm can be built
-      after the Timer fires. Both components now read their layers in `init`, and the Timer runs
-      on `NpBackdropStack.arm-mounted`. Fades on every press on the manual re-check; pinned with
-      `ViewTransition` by `ui::mount_fade_tests`.
+      `if` deeper, its layers first evaluated at paint while the Timer could fire before it.
+      `HeroBlurBackdrop` and `AuroraBackdrop` now read their layers in `init`, which is enough
+      even inside `NpBackdropStack`'s arm: `Conditional::ensure_updated` runs a new branch's `init`
+      and builds its nested `if`s in one call, before the event loop can fire the Timer. A Timer
+      waiting on the arm's mount went in with the first fix and came out for that reason. Pinned
+      with `ViewTransition` by `ui::mount_fade_tests`.
+- [x] Re-check the miniplayer backdrop over a few presses on the reads alone, the first re-check
+      having run with the arm wait still in place. Fades on every press.
 
 ### Phase 3: adoptions
 

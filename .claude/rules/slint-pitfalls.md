@@ -717,17 +717,18 @@ this file is what builds, looks right, and is wrong.
   reached the sung line) at the end of each tick, where reading `target-y` is free, the handler
   running nowhere near the pass.
 
-- **`init` runs *after* bindings resolve to final values — useless for entry animations.** Setting
-  `shown: true` in `init` makes `true` the *initial* value, so `animate opacity` never runs. Fix:
-  single-shot 1 ms `Timer` flips `shown` once at mount. **On 1.18 the Timer is half of it**: an
-  `if` branch is instantiated eagerly, so the Timer can fire before any animated binding has been
-  evaluated, and one first evaluated after the flip has nothing to ease from. `init` reads each
-  animated property once, so it starts from its `shown: false` value
-  (`components/view-transition.slint`). **That read only helps if it runs before the Timer can
-  fire**: where the animated layers sit in an `if` nested below the Timer, that branch can be
-  built a pass later, so the Timer waits for it to mount. Bit the miniplayer backdrop on some
-  presses and not others; its Timer runs on `NpBackdropStack.arm-mounted`. Pinned by
-  `ui::mount_fade_tests`, the bare reads looking like dead statements.
+- **`init` runs *after* bindings resolve to final values — useless for *flipping* an entry
+  animation.** Setting `shown: true` in `init` makes `true` the *initial* value, so
+  `animate opacity` never runs. Fix: single-shot 1 ms `Timer` flips `shown` once at mount. **On
+  1.18 the Timer is half of it**: an `if` branch is instantiated eagerly, so the Timer can fire
+  before any animated binding has been evaluated, and one first evaluated after the flip has
+  nothing to ease from. `init` reads each animated property once, so it starts from its
+  `shown: false` value (`components/view-transition.slint`). **The layers' own `init` is enough
+  even where they sit in an `if` nested below the Timer**: `Conditional::ensure_updated` runs a new
+  branch's `init` and builds its nested `if`s in the same call, before the event loop can fire the
+  Timer. Bit the miniplayer backdrop on some presses and not others, until `HeroBlurBackdrop` and
+  `AuroraBackdrop` read theirs. Pinned by `ui::mount_fade_tests`, the bare reads looking like dead
+  statements.
 
 - **Glyphs outside Vazirmatn inflate `Text` line-box and break patched-metrics centring.** Unicode
   arrows or any glyph the bundled font lacks pulls a fallback font; its taller `typoAsc/Desc`
