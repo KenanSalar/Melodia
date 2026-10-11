@@ -281,7 +281,7 @@ ksni = { version = "0.3.6", default-features = false, features = ["blocking", "a
 # `mallopt` caps the per-thread arenas and pins the mmap/trim thresholds, which
 # otherwise ratchet up until nothing returns to the kernel, and `malloc_trim` hands
 # retained pages back.
-libc = "0.2.189"
+libc = "0.2.190"
 
 # Windows
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
