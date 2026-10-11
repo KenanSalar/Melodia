@@ -6,6 +6,7 @@
 //! resolve against.
 
 use std::io::{Read, Seek, Write};
+use std::path::Path;
 
 use chrono::NaiveDateTime;
 use zip::write::SimpleFileOptions;
@@ -103,7 +104,8 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
     for index in 0..archive.len() {
         let is_playlist = archive
             .name_for_index(index)
-            .is_some_and(|name| has_extension(name.as_ref(), &PLAYLIST_EXTENSIONS));
+            .and_then(Result::ok)
+            .is_some_and(|name| has_extension(Path::new(&*name), &PLAYLIST_EXTENSIONS));
         if !is_playlist {
             continue;
         }
@@ -147,9 +149,9 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
 /// stops on the budget from one that runs over it. A read failing partway leaves what it got in
 /// `bytes`.
 ///
-/// `None` for a directory. A name that climbs out of the archive or is absolute is an error, so it
-/// is counted like any unreadable entry: used, it would pick the folder its playlist's relative
-/// paths resolve against.
+/// `None` for a directory. A name that climbs out of the archive is an error, so it is counted
+/// like any unreadable entry: used, it would pick the folder its playlist's relative paths resolve
+/// against. An absolute one comes back with its root stripped, so it lands inside too.
 fn read_entry<R: Read + Seek>(
     archive: &mut ZipArchive<R>,
     index: usize,
