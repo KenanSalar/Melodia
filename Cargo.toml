@@ -146,7 +146,7 @@ walkdir = "2.5"
 notify = "8.2.0"
 notify-debouncer-full = "0.7.0"
 rayon = "1.12"
-blake3 = "1.8.5"
+blake3 = "1.8.7"
 natord = "1.0.9"
 # Accent folding, so filter boxes narrow on the same spellings `tracks_fts`'s
 # `remove_diacritics 2` tokenizer does.
