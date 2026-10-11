@@ -227,8 +227,8 @@ pub struct OpusDecoder {
     decoder: opus_pure::OpusMSDecoder,
     buf: AudioBuffer<f32>,
     /// Interleaved scratch the codec writes into, sized once for the longest packet Opus allows so
-    /// that nothing *here* grows. `opus_pure` still takes a couple of small allocations per packet
-    /// for its own bookkeeping; closing that is an upstream change.
+    /// that nothing *here* grows. Once warm, `opus_pure` allocates nothing per packet either, except
+    /// on a switch between SILK and CELT, whose transition it fills through concealment.
     pcm: Vec<f32>,
     channels: usize,
     /// Which Opus output channel feeds each plane of [`Self::buf`], the two orders parting company
@@ -322,8 +322,8 @@ impl OpusDecoder {
 
 impl AudioDecoder for OpusDecoder {
     fn reset(&mut self) {
-        // Its only failure is the argument check `try_new` already passed, and one that refused
-        // anyway would keep the state it has: an artefact after the seek, not silence.
+        // The reset is in place and has no failing path. One that refused would keep the state it
+        // has: an artefact after the seek, not silence.
         let _ = self.decoder.reset_state();
     }
 
