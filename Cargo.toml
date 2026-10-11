@@ -58,7 +58,7 @@ slint = { version = "1.16.1", default-features = false, features = [
 slint-build = "1.16.1"
 
 # Async runtime / synchronisation
-tokio = { version = "1.53.1", features = [
+tokio = { version = "1.53.2", features = [
     "rt-multi-thread",
     "macros",
     "sync",
@@ -66,12 +66,12 @@ tokio = { version = "1.53.1", features = [
     "fs",
     "process",
 ] }
-tokio-util = { version = "0.7.19", features = ["rt"] }
-async-compat = "0.2.5"
+tokio-util = { version = "0.7.20", features = ["rt"] }
+async-compat = "0.2.6"
 parking_lot = "0.12.5"
 # `StreamExt` over a response body, so neither the updater's download nor a capped read
 # collects the whole asset; `future::join_all` where a view fans out over its rows.
-futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 
 # Database
 # `macros` stays despite every query going through runtime `query_as`, because
