@@ -232,7 +232,7 @@ thiserror = "2.0.21"
 # Updater
 # `minisign-verify` is zero-dep and verify-only. `semver` powers `is_upgrade()`, so a
 # rolled-back `latest.json` reports `UpToDate` where string equality would downgrade.
-minisign-verify = "0.2.5"
+minisign-verify = "0.3.0"
 semver = "1.0.28"
 
 # OS integrations

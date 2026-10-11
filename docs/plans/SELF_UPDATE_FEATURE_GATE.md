@@ -88,8 +88,8 @@ optional so it disappears from feature-off builds — fewer crates for distro
 auditors:
 
 ```toml
-# was: minisign-verify = "0.2.5"
-minisign-verify = { version = "0.2.5", optional = true }
+# was: minisign-verify = "0.3.0"
+minisign-verify = { version = "0.3.0", optional = true }
 ```
 
 `reqwest` stays unconditional — it is **shared** with
