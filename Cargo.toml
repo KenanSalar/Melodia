@@ -217,7 +217,7 @@ md5 = "0.8.1"
 
 # Serde / config
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde_json = "1.0.152"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "6.0.0"
 
@@ -226,8 +226,8 @@ log = "0.4.33"
 # Replaced `env_logger` when logs had to reach a file: the only candidate with size
 # and age rotation in one criterion and no background thread. `colors` pulls
 # `nu-ansi-term`, the only crate the swap adds against thirteen it retires.
-flexi_logger = { version = "0.31.9", default-features = false, features = ["colors"] }
-thiserror = "2.0.19"
+flexi_logger = { version = "0.31.10", default-features = false, features = ["colors"] }
+thiserror = "2.0.21"
 
 # Updater
 # `minisign-verify` is zero-dep and verify-only. `semver` powers `is_upgrade()`, so a
@@ -238,15 +238,15 @@ semver = "1.0.28"
 # OS integrations
 rfd = "0.17.2"
 # Hands a path to the OS default handler, for "Open Containing Folder".
-open = "5.4.0"
+open = "5.4.4"
 # The single-instance socket: one abstraction over a Linux abstract unix socket and
 # a Windows named pipe, whose *server* half would otherwise be `CreateNamedPipeW`, an
 # FFI site no Linux runner compiles. `tokio` would pull `tokio/net`, left off above.
-interprocess = "2.4.3"
+interprocess = "2.4.5"
 
 # Utilities
-rand = "0.10.2"
-lru = "0.18.2"
+rand = "0.10.3"
+lru = "0.18.5"
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
 # Several playlists export as one archive of `.m3u8` files. Deflate is the one method an
