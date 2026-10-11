@@ -307,9 +307,10 @@ dunce = "1.0.5"
 winresource = "0.1.31"
 
 # Windows and macOS
-# Defaults off to drop `gtk` and `libxdo`, the Linux paths `ksni` covers. The icon is
-# created on the main thread, its menu events pumped from Slint's winit loop.
-tray-icon = { version = "0.24.2", default-features = false }
+# Defaults off so `libappindicator` and its `gtk` stay out of `Cargo.lock`, which resolves
+# every target; Linux takes `ksni`. The icon is created on the main thread, its menu events
+# pumped from Slint's winit loop.
+tray-icon = { version = "0.26.1", default-features = false }
 # SMTC and `MediaPlayer`. Linux serves MPRIS over `zbus` instead: souvlaki's `Position`
 # is whatever it was last pushed, and each push re-announces the playback status.
 souvlaki = "0.8.3"

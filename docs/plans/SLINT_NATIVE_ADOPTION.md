@@ -105,10 +105,12 @@ shadows the built-in one without a diagnostic.
 - **Build:** smaller, faster-compiling generated code (#12853, upstream's claim, not measured
   here), and deterministic generated code and bundled translations (#12932) for reproducible
   distro packages.
-- **Dependency graph**, measured on the trial lockfile: 860 → 829 packages, and crates resolved at
-  more than one version 74 → 59. `muda` 0.18 and 0.19 collapse to 0.19.2, `windows` 0.61 drops
-  out, and the AVIF/EXR decoders (`rav1e`, `ravif`, `exr`) leave, since slint-build's extra image
-  formats are opt-in now.
+- **Dependency graph**, measured on the trial lockfile before tray-icon moved to 0.26: 860 → 829
+  packages, and crates resolved at more than one version 74 → 59. `windows` 0.61 drops out, and
+  the AVIF/EXR decoders (`rav1e`, `ravif`, `exr`) leave, since slint-build's extra image formats
+  are opt-in now. The trial also collapsed `muda` 0.18 and 0.19 to 0.19.2, which no longer
+  happens: tray-icon 0.26 takes `muda` 0.21, so Slint's 0.19 stays a second copy, and
+  `keyboard-types` stays at two versions with it.
 
 ### Phase 2: manual verification
 
