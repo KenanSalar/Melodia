@@ -10,10 +10,11 @@ import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
 // The right-click menu every track row raises, and the only place its entries are mounted.
 //
-// **The host keeps the pointer; this keeps the menu.** A row hands the press position over as
-// `at-x`/`at-y` and calls `show()`. Two hosts today — `TrackListRowItem` and the queue sheet's
-// `QueueRowItem` — and the second is the reason the entries live here rather than inline in the
-// first.
+// **The host says where; this keeps the menu.** A row hands over where the right-click landed
+// through `show-at`, which stores it: an open popup follows its `x`/`y`, so an anchor bound to the
+// row's pointer would drag the menu after it. Two hosts today — `TrackListRowItem` and the queue
+// sheet's `QueueRowItem` — and the second is the reason the entries live here rather than inline in
+// the first.
 //
 // **The root is zero-size on purpose.** It mounts as a free sibling of the row's TouchArea, so the
 // popup's coordinate frame is the row chrome's, which is the frame `touch.mouse-x` already reports
@@ -43,8 +44,6 @@ export component TrackContextMenu inherits Rectangle {
     // `effective-selection.length`: the queue selects rows and acts on ids, and one track sitting
     // in it twice makes those two different numbers.
     in property <int> selection-count;
-    in property <length> at-x;
-    in property <length> at-y;
 
     // Read by the host to route a batch action, so it sits on the root rather than in the popup.
     // Multi mode needs this row selected *and* more than one selected — right-clicking an
@@ -71,11 +70,15 @@ export component TrackContextMenu inherits Rectangle {
     property <bool> show-remove:
         root.view-context == "playlist-detail" || root.view-context == "queue";
 
-    // The Copy flyout. Collapsed by every `show()`, so the menu always opens on its own column.
+    // The Copy flyout. Collapsed by every `show-at()`, so the menu always opens on its own column.
     property <bool> copy-open;
+    property <length> at-x;
+    property <length> at-y;
 
-    public function show() {
+    public function show-at(x: length, y: length) {
         root.copy-open = false;
+        root.at-x = x;
+        root.at-y = y;
         pop.show();
     }
 
@@ -120,14 +123,16 @@ export component TrackContextMenu inherits Rectangle {
     // stays a screenful of popups whatever the library size. Add-to-Playlist hands off to a picker
     // dialog rather than scrolling inline.
     //
-    // **Grows by the Copy flyout while it is open**, on whichever side has room. The menu column
-    // stays under the pointer either way: on the left side the popup moves that much further left.
+    // **Grows by the Copy flyout while it is open, on whichever side has room**, the left side
+    // holding its room from the start (`ContextMenuMetrics` says why). The menu column stays under
+    // the pointer either way: on the left side the popup opens that much further left.
     pop := PopupWindow {
         // On the popup, so it can read its own descendant's layout.
         property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
         property <length> menu-h: menu-vl.preferred-height;
         property <length> flyout-h: ContextMenuMetrics.flyout-h(TrackCopyFields.list.length);
-        property <length> flyout-room: root.copy-open ? ContextMenuMetrics.flyout-room : 0px;
+        property <length> flyout-room:
+            root.copy-open || self.flyout-left ? ContextMenuMetrics.flyout-room : 0px;
         // Off the root's position, which sits outside the popup and so still means the window.
         property <bool> flyout-left:
             ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
@@ -156,12 +161,12 @@ export component TrackContextMenu inherits Rectangle {
             close => { root.dismiss(); }
         }
 
-        // First, so every row drawn over it wins its own click and a click beside the column
-        // still closes the menu.
+        // First, so every row drawn over it wins its own click and a click beside the column,
+        // or on the room held for the flyout, still closes the menu.
         PopupDismissCatcher {
             width: parent.width;
             height: parent.height;
-            clicked => { root.dismiss(); }
+            close-requested => { root.dismiss(); }
         }
 
         PopupSurface {

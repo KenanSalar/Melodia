@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { TextEditMenu } from "text-edit-menu.slint";
+import { ContextClick } from "context-menu.slint";
 
 // The editing half of every single-line field, the host drawing the chrome around it: the
 // `TextInput`, the placeholder Slint doesn't give it, and what std-widgets' `LineEdit` adds to one.
@@ -9,7 +10,7 @@ import { TextEditMenu } from "text-edit-menu.slint";
 // `LineEditBase` arrangement: the input as wide as its text inside a clip, moved on every cursor
 // move.
 //
-// **A right-click opens the edit menu.** The input takes only left and middle presses, so a right
+// **A right-click opens the edit menu.** The input takes only left and middle clicks, so a right
 // one reaches the area around it.
 export component SingleLineInput inherits Rectangle {
     in-out property <string> text <=> ti.text;
@@ -34,20 +35,16 @@ export component SingleLineInput inherits Rectangle {
 
     // How near the cursor comes to either edge before the text slides.
     property <length> edge-margin: Theme.pad-xs;
-    property <length> menu-x;
-    property <length> menu-y;
 
     // No radius, so a scissor rather than a layer.
     clip: true;
 
     TouchArea {
         pointer-event(event) => {
-            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
-                root.menu-x = self.mouse-x;
-                root.menu-y = self.mouse-y;
+            if (ContextClick.raises-menu(event, self.mouse-x, self.mouse-y, self.width, self.height)) {
                 // First, so the popup hands the keyboard back to this field when it closes.
                 ti.focus();
-                menu.show();
+                menu.show-at(self.mouse-x, self.mouse-y);
             }
         }
 
@@ -94,8 +91,6 @@ export component SingleLineInput inherits Rectangle {
     }
 
     menu := TextEditMenu {
-        at-x: root.menu-x;
-        at-y: root.menu-y;
         has-text: root.text != "";
         cut => { ti.cut(); }
         copy => { ti.copy(); }

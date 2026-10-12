@@ -269,6 +269,15 @@ this file is what builds, looks right, and is wrong.
   widest chip). Nothing higher up saves you: the same replacement happens on the root `Window`.
   Pinned by `ui::hero_chips::tests::the_strip_rows_hang_off_a_layout_not_off_the_root`.
 
+- **A box layout holds a stretched child to that child's own `min`/`max` on the cross axis, and the
+  std `ScrollView` floors itself at 50 px.** `clamp_cross_stretch_size` (`passes/lower_layout.rs`)
+  wraps the column's width in the child's explicit constraints, where 1.16 handed the column over
+  as is. So a std scroller (`ListView` included, which inherits the floor) in a narrower column
+  overflows it, and everything sized off its `content-width` goes too: the collapsed sidebar's rows
+  drew their fill past the rail. A wide column never shows it and nothing warns. Cure:
+  `min-width: 0px` at the mount, which replaces the widget's own (`layout/sidebar.slint`'s
+  `nav-scroll`). Tell: `.max (50f64` on the binding in `app-window.rs`.
+
 - **`VerticalLayout` divides surplus equally when every child has `vertical-stretch: 0`.** Append
   trailing `Rectangle { vertical-stretch: 1; }`, or set `alignment: start`, which hands out no
   surplus at all, a stretching child included: under it the smart editor's value field sat at its
@@ -439,15 +448,31 @@ this file is what builds, looks right, and is wrong.
   before first layout — popup lands above trigger top, expands downward. Canonical:
   `components/now-playing/overflow-menu.slint`.
 
-- **A `PopupWindow` is sized and placed once, as it opens, so content that changes while it is open
-  paints into the old box.** `WindowInner::show_popup` reads the popup's layout info and `set()`s
-  the size into its root as a plain value, replacing any binding on its `height`, and
-  `place_popup` fixes the origin; nothing re-flows it after that. A child with no width of its own,
-  as `PopupSurface` is, re-centres in the frozen box as its content narrows, so a shrinking list
-  reads as an empty slot plus the popup sliding sideways. Only a reopen re-measures. Bites any
-  popup whose model is refreshed as it opens: `Dropdown`'s `about-to-open` returns the revision its
-  refresh will publish and shows the popup once that lands, the output device picker being the
-  host that needed it (`components/settings/dropdown.slint`).
+- **An open `PopupWindow` re-lays its content at once and moves a loop pass later.** Everything
+  inside reads the popup's new size on the frame that changed it, while its origin and box are
+  re-read by `WindowInner::update_popup_properties` on the zero-delay timer the popup's
+  `PropertyTracker` schedules, which runs after that frame is drawn. So a popup whose origin moves
+  while open (end-aligned, opening upward, growing leftward) draws one frame of its new layout at
+  the old origin. Two answers in the tree. Keep the origin fixed: `OverflowMenu` reserves its
+  widest flyout, and a right-click menu opening left holds its flyout's room from the start
+  (`ContextMenuMetrics`). Or keep the content still while open: `Dropdown`'s `about-to-open`
+  returns the revision its refresh will publish and shows the popup once that lands, the output
+  device picker being the host that needed it (`components/settings/dropdown.slint`).
+
+- **A press outside an open `PopupWindow` closes it and reaches nothing else.**
+  `WindowInner::process_mouse_input` closes the popup on that press and, the pointer being outside
+  a popup that isn't a `Menu`, dispatches it nowhere, so whatever it landed on never sees it. The
+  release does arrive, the popup being gone by then. Hence a right-click menu raised on the press
+  needed a second right-click to move to another row, and every menu now opens on the release
+  (`ContextClick`). An element that closes its own popup on a press hands its release onward the
+  same way, the grab going with the popup (the grab-invalidation entry): `PopupDismissCatcher`
+  leans on it.
+
+- **A `TouchArea` grabs on a press of any button, and only `pressed` is left-only.** So its
+  `mouse-x`/`mouse-y` keep tracking the pointer until that button comes up, wherever it goes, and
+  an open popup follows its `x`/`y` (the entry above). A menu anchored to a host's live
+  `touch.mouse-x` dragged after a held right button. A menu takes its anchor once, through
+  `show-at`.
 
 - **A child with no `x`/`y` in a non-layout parent is *centred*, not at the origin** — Slint
   generates `(parent.width - self.width) / 2`, which reads as 0 only for a child as wide as its
@@ -467,8 +492,9 @@ this file is what builds, looks right, and is wrong.
 - **A flyout opens *inside* the overflow menu's single `PopupWindow` — no nesting.** The
   playback-speed row (`speed-flyout.slint`, presets in shared `flyout-presets.slint` globals) is
   the worked example. Fixed-reserve geometry, as with the volume popup: size the popup for
-  menu-column + flyout up front and bottom-anchor both, so the menu stays pinned under its
-  trigger; a transparent full-popup `TouchArea` **declared first** closes on stray clicks.
+  menu-column + flyout up front and bottom-anchor both, so opening a flyout never moves the
+  popup's origin (the entry above) and the menu stays pinned under its trigger; a transparent
+  full-popup `TouchArea` **declared first** closes on stray clicks.
 
 - **Sleep timer = a session-only cancel-and-replace tokio countdown + a `PlayerState`
   end-of-track flag.** In `crates/melodia-views/src/ui/sleep_timer.rs` — a **UI-layer** module, because `tasks/` may

@@ -6,6 +6,7 @@ import { ArtworkImage } from "../components/artwork-image.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { Checkbox } from "../components/checkbox.slint";
 import { TrackContextMenu } from "../components/track-list/track-context-menu.slint";
+import { ContextClick } from "../components/context-menu.slint";
 import { SelectionPill } from "../components/track-list/selection-pill.slint";
 
 // One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete.
@@ -195,8 +196,8 @@ export component QueueRowItem inherits Rectangle {
                 }
                 // Nothing here touches the drag state: its arm is left-only, so a right-click
                 // can't ghost the row.
-                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                    ctx-menu.show();
+                if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                    ctx-menu.show-at(self.mouse-x, self.mouse-y);
                 }
             }
             moved => {
@@ -397,8 +398,6 @@ export component QueueRowItem inherits Rectangle {
             view-context: "queue";
             effective-selection: Queue.selected-ids;
             selection-count: Queue.selected-count;
-            at-x: touch.mouse-x;
-            at-y: touch.mouse-y;
 
             play-single => { Queue.skip-to(root.row-index); }
             toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }

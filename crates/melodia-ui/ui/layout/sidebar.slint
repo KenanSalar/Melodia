@@ -219,6 +219,9 @@ export component Sidebar inherits Rectangle {
         // orthogonal axis**, so wheel events aren't hijacked into horizontal scroll.
         nav-scroll := ScrollView {
             vertical-stretch: 1;
+            // The std ScrollView floors its own width, and a box layout holds a stretched child to
+            // that floor, so on the collapsed rail every row came out wider than its column.
+            min-width: 0px;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
             content-width: self.width;

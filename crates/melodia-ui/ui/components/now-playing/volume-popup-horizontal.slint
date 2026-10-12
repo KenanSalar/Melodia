@@ -6,6 +6,7 @@ import { PopupSurface } from "../popup-surface.slint";
 import { SliderTrack } from "../slider-track.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 
 // `VolumePopup` rotated 90°, for the miniplayer, whose short strip and card clip
 // the vertical one. Same `SliderTrack` in the same `PopupSurface` chrome, laid
@@ -98,12 +99,12 @@ export component VolumePopupHorizontal inherits Rectangle {
 
         // Catches clicks in the empty top strip. Declared before `chrome`, so
         // the slider's own TouchArea still wins.
-        TouchArea {
+        PopupDismissCatcher {
             x: 0;
             y: 0;
             width: parent.width;
             height: parent.height - chrome.height;
-            clicked => { pop.close(); }
+            close-requested => { pop.close(); }
         }
 
         chrome := PopupSurface {

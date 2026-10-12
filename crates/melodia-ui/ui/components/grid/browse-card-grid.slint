@@ -95,8 +95,6 @@ export component BrowseCardGrid inherits Rectangle {
                     width: root.card-width;
                     height: root.card-height;
 
-                    property <length> ctx-x;
-                    property <length> ctx-y;
                     // A library track, the one card with a favorite to draw or toggle.
                     property <bool> favorable: card.enabled && !card.is_folder;
                     property <bool> is-favorite:
@@ -135,11 +133,7 @@ export component BrowseCardGrid inherits Rectangle {
                         select-clicked(shift, ctrl) => {
                             root.select-card(card.row_index, card.id, shift, ctrl);
                         }
-                        context-requested(x, y) => {
-                            cell.ctx-x = x;
-                            cell.ctx-y = y;
-                            ctx-menu.show();
-                        }
+                        context-requested(x, y) => { ctx-menu.show-at(x, y); }
                         overlay-hovered: fav.has-hover;
                     }
 
@@ -162,8 +156,6 @@ export component BrowseCardGrid inherits Rectangle {
                         card-selected: root.is-card-selected(card.id, root.selection-generation);
                         effective-selection: root.selected-ids;
                         selection-count: root.selected-ids.length;
-                        at-x: cell.ctx-x;
-                        at-y: cell.ctx-y;
 
                         // The card's own activation: the folder from this track, as a click gives.
                         play-single => { root.track-clicked(card.id, card.row_index); }

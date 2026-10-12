@@ -19,10 +19,11 @@ import { FlyoutMetrics, SleepPresets, SpeedPresets } from "./flyout-presets.slin
 // The bar's overflow trigger and its popup: five permanent rows, two of which open a
 // left-side flyout, plus every button the user routed here.
 //
-// **Sized to what it draws**: the menu column, plus the open flyout and the gap to it, with a
-// transparent catcher over the empty regions. It opens upward, the bar living at the window's
-// bottom, and the menu column right-aligns under the trigger, so a flyout grows the popup
-// leftward and upward. Slint re-measures an open popup, which is what lets it.
+// **Fixed-reserve geometry**: the `PopupWindow` is always sized for the menu column *and* the
+// widest flyout, with a transparent catcher over the empty regions. A flyout may not move the
+// popup's origin: Slint re-lays an open popup's content at once but moves the popup a loop pass
+// later, so the column would draw a frame out of place on every toggle. It opens upward, the bar
+// living at the window's bottom, and the menu column right-aligns under the trigger.
 //
 // The speed control is **always** here rather than configurable — it is never shown
 // inline — which is why the trigger itself is always mounted.
@@ -74,13 +75,8 @@ export component OverflowMenu inherits Rectangle {
     property <length> sleep-flyout-h:
         FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + 9px
         + FlyoutMetrics.chrome-h;
-    // Zero while both are shut, so the popup is the menu column alone.
-    property <length> open-flyout-w: root.speed-flyout-open
-        ? root.flyout-w
-        : (root.sleep-flyout-open ? root.sleep-flyout-w : 0px);
-    property <length> open-flyout-h: root.speed-flyout-open
-        ? root.flyout-h
-        : (root.sleep-flyout-open ? root.sleep-flyout-h : 0px);
+    // Reserve the wider one, so the popup keeps its box on a switch.
+    property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w);
     // Keeps the two columns reading as separate floating chromes.
     property <length> gap: 8px;
 
@@ -121,26 +117,26 @@ export component OverflowMenu inherits Rectangle {
         // The menu column's on-screen position is independent of the popup's size —
         // both offsets cancel `self.width` — so it stays pinned under the trigger
         // whether or not a flyout is open.
-        width: self.menu-w + (root.open-flyout-w > 0 ? root.open-flyout-w + root.gap : 0px);
-        height: max(root.menu-h, root.open-flyout-h);
+        width: root.left-col-w + root.gap + self.menu-w;
+        height: max(root.menu-h, max(root.flyout-h, root.sleep-flyout-h));
         x: btn.width - self.width;
         y: -self.height - Theme.popup-gap;
         close-policy: close-on-click-outside;
 
-        // Over the gap and the space above the shorter column while a flyout is open.
+        // Over the reserved left column and the space above the shorter column.
         PopupDismissCatcher {
             width: parent.width;
             height: parent.height;
-            clicked => {
+            close-requested => {
                 root.dismiss();
             }
         }
 
         // Bottom-anchored with the menu column and growing upward, and **mounted only
-        // while open** so its rows aren't built when collapsed. At the popup's left edge,
-        // the popup being only as wide as the open flyout needs.
+        // while open** so its rows aren't built when collapsed. Right-aligned inside the
+        // shared left column, so the gap holds whichever flyout is wider.
         if root.speed-flyout-open: SpeedFlyout {
-            x: 0px;
+            x: root.left-col-w - root.flyout-w;
             y: parent.height - root.flyout-h;
             width: root.flyout-w;
             height: root.flyout-h;
@@ -154,7 +150,7 @@ export component OverflowMenu inherits Rectangle {
         // The same left column. A preset applies and closes; the stepper's Start pill
         // arms a custom duration and closes.
         if root.sleep-flyout-open: SleepTimerFlyout {
-            x: 0px;
+            x: root.left-col-w - root.sleep-flyout-w;
             y: parent.height - root.sleep-flyout-h;
             width: root.sleep-flyout-w;
             height: root.sleep-flyout-h;

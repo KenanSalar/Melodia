@@ -5,6 +5,7 @@ import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { TrackContextMenu } from "track-context-menu.slint";
+import { ContextClick } from "../context-menu.slint";
 import { DataCell } from "track-list-cell.slint";
 import { Checkbox } from "../checkbox.slint";
 import { SelectionPill } from "selection-pill.slint";
@@ -233,8 +234,9 @@ export component TrackListRowItem inherits Rectangle {
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
                     root.request-blur-search();
                 }
-                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right && root.enabled) {
-                    ctx-menu.show();
+                if (root.enabled
+                    && ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                    ctx-menu.show-at(self.mouse-x, self.mouse-y);
                     root.request-blur-search();
                 }
                 // Drag-reorder tracking — opt-in via `enable-drag`.
@@ -530,8 +532,6 @@ export component TrackListRowItem inherits Rectangle {
             current-playlist-id: root.current-playlist-id;
             effective-selection: root.view-selected-ids;
             selection-count: root.view-selected-ids.length;
-            at-x: touch.mouse-x;
-            at-y: touch.mouse-y;
 
             play-single => { root.play-row(root.row-data.id, root.row-index); }
             play-next(ids) => { root.play-next(ids); }

@@ -4,6 +4,7 @@ import { IconButton } from "../icon-button.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 
 // An icon button and a popup holding a Material 3 vertical slider, plus the shared `Tooltip` pill
 // reading the percentage out to its left. **The popup is wider than the slider chrome**: slider
@@ -90,12 +91,12 @@ export component VolumePopup inherits Rectangle {
         // **The empty left strip is still inside the popup's rectangle**, so a click
         // there doesn't trigger close-on-click-outside and the popup feels sticky.
         // Declared before the chrome, so the slider's own TouchArea still wins.
-        TouchArea {
+        PopupDismissCatcher {
             x: 0;
             y: 0;
             width: parent.width - chrome.width;
             height: parent.height;
-            clicked => { pop.close(); }
+            close-requested => { pop.close(); }
         }
 
         // `pill: true` derives the radius from the short axis. No entry animation —

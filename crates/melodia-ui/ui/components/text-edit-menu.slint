@@ -8,8 +8,6 @@ import { FocusLossWatcher } from "focus-loss-watcher.slint";
 // Undo and redo stay on the keyboard: the input can't say whether either has anything to do, and
 // a menu row has no disabled state to say it with.
 export component TextEditMenu inherits Rectangle {
-    in property <length> at-x;
-    in property <length> at-y;
     // An empty field has nothing to cut, copy or select.
     in property <bool> has-text;
 
@@ -18,7 +16,13 @@ export component TextEditMenu inherits Rectangle {
     callback paste();
     callback select-all();
 
-    public function show() {
+    // `TrackContextMenu.show-at`'s reason for keeping these here.
+    property <length> at-x;
+    property <length> at-y;
+
+    public function show-at(x: length, y: length) {
+        root.at-x = x;
+        root.at-y = y;
         menu.show();
     }
 

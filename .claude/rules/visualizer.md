@@ -144,17 +144,17 @@ counter, both worth reading before changing a gate.
   `visualizer-picker.slint` bought by replacing the Now-Playing view menu: no second column, so no
   fixed reserve to keep in step, no `PopupDismissCatcher` over gaps that no longer exist, and no
   collapse flag — the geometry is the flyout's own height off `FlyoutMetrics` and the preset count.
-  The `FocusLossWatcher` is mounted directly and gated on `PopupHighlight.id`, the volume popup's
-  shape, where the bar's overflow menu takes `MenuSurface` and its `popup-id`. That menu keeps the
-  Speed and Sleep flyouts and the whole two-column apparatus; it is the reference for what a *menu*
-  costs, not a second host of this list.
+  The `FocusLossWatcher` is mounted directly inside the popup, the volume popup's shape, where the
+  bar's overflow menu takes `MenuSurface`. That menu keeps the Speed and Sleep flyouts and the
+  whole two-column apparatus; it is the reference for what a *menu* costs, not a second host of
+  this list.
 
-- **Each host keeps one `dismiss()` function** holding its close set — `pop.close()`, whatever
-  flyout flags it has, and `PopupHighlight.id = ""` — that every closing path calls; a function, not a
-  callback, for the same single-handler-slot reason the Dialog teardown is one. What can't move
-  into `MenuSurface` is the rows' `VerticalLayout`: the popup sizes itself off that layout's
-  `preferred-width` and only the host can name a descendant, so it stays in the host and passes
-  through `@children`.
+- **A host with flyouts keeps one `dismiss()` function** holding its close set, `pop.close()` and
+  its flyout flags, that every closing path calls; a function, not a callback, for the same
+  single-handler-slot reason the Dialog teardown is one. The single-column hosts have nothing but
+  `pop.close()` to call. What can't move into `MenuSurface` is the rows' `VerticalLayout`: the
+  popup sizes itself off that layout's `preferred-width` and only the host can name a descendant,
+  so it stays in the host and passes through `@children`.
 
 - **The picker needs no Rust.** "Off" writes **both** halves of `Visualizer.enabled` (the two-way
   binding, so the Settings toggle and `watched-viz-active` follow, plus `set-enabled` to persist);

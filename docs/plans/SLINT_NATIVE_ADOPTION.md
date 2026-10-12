@@ -203,7 +203,8 @@ One change per section, in this order, each on a tree already on 1.18:
 
 1. 🟢 `FlexboxLayout` → retire the row packer and the `Wrap` global (largest deletion). **Done
    2026-10-12.**
-2. 🟢 `PopupWindow.is-open` → slim the `PopupHighlight` plumbing
+2. 🟢 `PopupWindow.is-open` → slim the `PopupHighlight` plumbing. **Built 2026-10-12, manual pass
+   pending.**
 3. 🟢 `animate { enabled }` → replace duration-zero gating
 4. 🟢 `cross-axis-alignment` → drop centering wrapper layouts
 5. 🟢 `WindowMoveArea` → retire the drag-region press intercept
@@ -312,6 +313,23 @@ Done 2026-10-12, every step passed by hand.
   about outside-click semantics, not open state.
 - **Risk:** the fixed-reserve pattern also solves bottom-anchoring; don't unwind it without
   screenshots on both anchor directions.
+- **Outcome:** (b) went whole: every trigger sat beside its popup, so `PopupHighlight` and the
+  winit Release arm are gone. (a) was tried everywhere and kept only where the origin holds still:
+  an open popup re-lays its content at once and moves a loop pass later, so a box growing left or
+  up draws one frame out of place. The overflow menu keeps its reserve; a right-click menu grows
+  rightward and holds its room up front leftward. `slint-pitfalls.md` carries the mechanism.
+- **Follow-up, the right-click menus:** live geometry also made a menu anchored to the row's live
+  `mouse-x` follow a held right button, and an outside press was always swallowed, so a second
+  right-click only closed the menu. Every menu now opens on the release through
+  `ContextClick.raises-menu` and takes its anchor through `show-at`; `PopupDismissCatcher` closes
+  on a right press, so the release reaches what lies beneath. Pinned by
+  `crates/melodia/tests/context_click.rs`.
+- [ ] Manual: the bar overflow's Speed, Sleep and the switch between them; Copy on a right-click
+      menu opening each way; each trigger lit while open and dark after Escape, an outside click and
+      a focus loss.
+- [ ] Manual: right-click a song, then another near and far from the menu, moving it in one click;
+      a held right button opens nothing until released and the menu stays put; a press dragged off
+      its row raises nothing; the same on a card, a text field and the queue.
 
 ## 🟢 `animate { enabled: … }` → replace duration-zero gating
 

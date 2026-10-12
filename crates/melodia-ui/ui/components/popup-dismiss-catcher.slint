@@ -1,6 +1,22 @@
-// Transparent catcher covering a whole PopupWindow. `close-on-click-outside` only fires for clicks
-// truly *outside* the popup rect, so a click on an empty region inside it — the gap between a menu
-// and its flyout, the space above the shorter of the two — would otherwise do nothing. Declare it
-// **first** inside the popup, so the real rows drawn over it win their own clicks; the host sizes
-// it, a root binding not being able to read `parent`.
-export component PopupDismissCatcher inherits TouchArea { }
+// Transparent catcher over a PopupWindow's empty regions. `close-on-click-outside` only fires for
+// clicks truly *outside* the popup rect, so a click on an empty region inside it — the room held
+// for a flyout, the gap beside it, the space above the shorter column — would otherwise do nothing.
+// Declare it **first** inside the popup, so the real rows drawn over it win their own clicks; the
+// host sizes it, a root binding not being able to read `parent`.
+//
+// **Any other button closes on its press**, so the catcher is gone with its popup by the release
+// and Slint hands that release to whatever lies beneath: a right-click there raises its own menu
+// (`ContextClick`). A left click keeps closing on its release, which would otherwise land on the
+// item beneath as a stray one.
+export component PopupDismissCatcher inherits TouchArea {
+    callback close-requested();
+
+    clicked => {
+        root.close-requested();
+    }
+    pointer-event(ev) => {
+        if (ev.kind == PointerEventKind.down && ev.button != PointerEventButton.left) {
+            root.close-requested();
+        }
+    }
+}

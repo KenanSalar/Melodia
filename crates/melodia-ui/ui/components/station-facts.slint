@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { StationHistoryRow } from "../models.slint";
 import { CopyActions } from "../globals/copy-actions.slint";
-import { ContextMenuMetrics, MenuItem } from "./context-menu.slint";
+import { ContextClick, ContextMenuMetrics, MenuItem } from "./context-menu.slint";
 import { FocusLossWatcher } from "./focus-loss-watcher.slint";
 import { IconButton } from "./icon-button.slint";
 import { PopupSurface } from "./popup-surface.slint";
@@ -220,7 +220,7 @@ export component StationHistory inherits Rectangle {
 
             touch := TouchArea {
                 pointer-event(ev) => {
-                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                    if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
                         root.menu-row = entry;
                         root.menu-x = touch.absolute-position.x + touch.mouse-x - root.absolute-position.x;
                         root.menu-y = touch.absolute-position.y + touch.mouse-y - root.absolute-position.y;

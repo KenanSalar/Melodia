@@ -229,12 +229,12 @@ three components that answer it, and each argues its geometry at its own file.
   no header — the four under My Library are bodies, the banner being the page's own band.
 
 - **`EntityCard` goes inside `grid/card-cell.slint`'s `CardCell`, which owns everything a card owes
-  its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame and
-  the delegate needs somewhere to hold the right-click position, so neither can live on the
-  `EntityCard` mount; the card itself arrives through `@children` because Slint has no generics and
-  each grid iterates its own row struct. **A mount states its scope and nothing else** — `selected`,
-  `selection-live`, the menu's `effective-selection` and its count are all derived there once, and a
-  mount reaching past them for a `CardSelection` call is re-spelling what the cell already answers.
+  its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame, so
+  it can't live on the `EntityCard` mount; the card itself arrives through `@children` because
+  Slint has no generics and each grid iterates its own row struct. **A mount states its scope and
+  nothing else** — `selected`, `selection-live`, the menu's `effective-selection` and its count are
+  all derived there once, and a mount reaching past them for a `CardSelection` call is re-spelling
+  what the cell already answers.
   Per-kind menu arms (`go-to-artist`, the playlist four, `play-single`) are callbacks the grid
   forwards, inert on a kind that never raises them.
   **It mounts two menus and opens one by kind**: `card-kind: "station"` raises
@@ -574,9 +574,9 @@ three components that answer it, and each argues its geometry at its own file.
   place its entries are mounted.** Two hosts, `TrackListRowItem` and the queue sheet's
   `QueueRowItem`. It owns the entries, the `multi-active` gate (this row selected *and* more than
   one selected, so a right-click on an unselected row falls back to that row alone) and the
-  `effective-ids` every handler reads; the host keeps the pointer position. **`view-context` is
-  most of what a host configures** — it suppresses the entry naming the surface you are already
-  on and picks the remove arm, and `"queue"` drops Play Next and Add to Queue outright, the queue
+  `effective-ids` every handler reads; the host only says where, through `show-at`.
+  **`view-context` is most of what a host configures** — it suppresses the entry naming the
+  surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add to Queue outright, the queue
   being what they name. A remove label handed over by the host would ship untranslated, `@tr`
   resolving literals at codegen, so a third list's arm is one more `if` here rather than a
   property.
@@ -587,19 +587,21 @@ three components that answer it, and each argues its geometry at its own file.
   parts (`MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `ContextMenuMetrics`), and
   `components/track-copy-items.slint` the track Copy rows the row and card menus share; each menu
   argues its own entries.
+  - **A menu opens on the right button's release and keeps its own anchor.** Every surface asks
+    `ContextClick.raises-menu`, whose comment argues the release, and calls the menu's
+    `show-at(x, y)`; none binds an `at-x` from its live `mouse-x`, which an open popup would follow
+    for as long as the button is held (`slint-pitfalls.md`). `crates/melodia/tests/context_click.rs`
+    holds the first half: only the predicate may name the right button.
   - **Copy opens a flyout inside the menu's own popup** where the surface has more than one field
-    to offer, and is a flat entry where it has one. The geometry is `OverflowMenu`'s fixed reserve,
-    the popup being sized once as it opens: wide enough for the flyout whether or not it opens, the
-    reserve on whichever side `ContextMenuMetrics.opens-left` finds room, so the column stays under
-    the pointer. A second `PopupWindow` is not an option (`slint-pitfalls.md`).
+    to offer, and is a flat entry where it has one. The flyout opens on whichever side
+    `ContextMenuMetrics.opens-left` finds room, so the column stays under the pointer: rightward
+    the popup grows by it while it is open, leftward it holds the room from the start, an open
+    popup moving its origin a frame late (`slint-pitfalls.md`). A second `PopupWindow` is not an
+    option (same file).
   - **The three with a flyout take `close-on-click-outside`, and every entry calls the menu's
     `dismiss()` after acting.** `close-on-click` closes on any release inside the popup, the click
     that opens the flyout included. After, because `pop.effective-ids` goes with the popup. The
     history list's menu and `TextEditMenu` are flat and keep `close-on-click`.
-  - **Each mounts its `FocusLossWatcher` ungated, inside its own popup.** The popup's body exists
-    only while it is shown, so that is already one live watcher. A highlight key gating it is
-    gone by the end of the click that opened the menu, the winit Release arm clearing every key on
-    every release.
   - **The width follows the rows**, `ContextMenuMetrics.menu-w` over the rows' `preferred-width`,
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
@@ -999,11 +1001,15 @@ three components that answer it, and each argues its geometry at its own file.
 
 ## Popups, native dialogs, input
 
-- **PopupWindow auto-dismiss on OS focus loss** is `FocusLossWatcher`, mounted inside the
-  popup's own `PopupWindow`, whose body Slint builds in `show()` and drops in `close()`, so only
-  the open popup has a live watcher. Singletons also gate it on `PopupHighlight.id`, the key that
-  lights their trigger; the five right-click menus mount it ungated. Slint 1.18 has no `closed`
-  callback, but `pop.close()` is a safe no-op when hidden.
+- **PopupWindow auto-dismiss on OS focus loss** is `FocusLossWatcher`, mounted ungated inside the
+  popup's own `PopupWindow` (or through `MenuSurface`), whose body Slint builds in `show()` and
+  drops in `close()`, so only the open popup has a live watcher. A trigger lights off its own
+  popup's `is-open`, which every close path resets, Escape and an outside click included.
+  `crates/melodia/tests/popup_dismiss.rs` walks every popup for the watcher.
+
+- **An empty region inside a popup takes `PopupDismissCatcher`**, never a bare `TouchArea`: the
+  room a menu holds for its flyout, the volume popups' strips. Its comment argues which button
+  closes on which edge, and a bare one gets the right button wrong.
 
 - **Native dialogs (rfd) — always through `ui::file_dialog::parented(&weak, title)`.** The helper
   owns the `weak.upgrade()` + `.set_parent(…)` half; the caller chains its own

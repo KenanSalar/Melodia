@@ -24,8 +24,6 @@ export component StationContextMenu inherits Rectangle {
     // The batch payload in multi mode, the host's own scope's selection.
     in property <[int]> effective-selection;
     in property <int> selection-count;
-    in property <length> at-x;
-    in property <length> at-y;
 
     // Multi mode needs this card selected *and* more than one selected, so a right-click on an
     // unselected card acts on that card alone.
@@ -47,12 +45,17 @@ export component StationContextMenu inherits Rectangle {
     property <bool> copy-website: root.multi-active || root.station.homepage != "";
 
     property <bool> copy-open;
+    // `TrackContextMenu.show-at`'s reason for keeping these here.
+    property <length> at-x;
+    property <length> at-y;
 
     callback select-all();
     callback clear-selection();
 
-    public function show() {
+    public function show-at(x: length, y: length) {
         root.copy-open = false;
+        root.at-x = x;
+        root.at-y = y;
         pop.show();
     }
 
@@ -79,7 +82,8 @@ export component StationContextMenu inherits Rectangle {
         property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
         property <length> menu-h: menu-vl.preferred-height;
         property <length> flyout-h: ContextMenuMetrics.flyout-h(root.copy-website ? 3 : 2);
-        property <length> flyout-room: root.copy-open ? ContextMenuMetrics.flyout-room : 0px;
+        property <length> flyout-room:
+            root.copy-open || self.flyout-left ? ContextMenuMetrics.flyout-room : 0px;
         // Off the root's position, which sits outside the popup and so still means the window.
         property <bool> flyout-left:
             ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
@@ -98,12 +102,12 @@ export component StationContextMenu inherits Rectangle {
             close => { root.dismiss(); }
         }
 
-        // First, so every row drawn over it wins its own click and a click beside the column
-        // still closes the menu.
+        // First, so every row drawn over it wins its own click and a click beside the column,
+        // or on the room held for the flyout, still closes the menu.
         PopupDismissCatcher {
             width: parent.width;
             height: parent.height;
-            clicked => { root.dismiss(); }
+            close-requested => { root.dismiss(); }
         }
 
         PopupSurface {

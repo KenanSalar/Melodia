@@ -3,9 +3,25 @@ import { WindowChrome } from "../globals/shell.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { PopupSurface } from "popup-surface.slint";
 
+// The one answer to whether a pointer event raises a right-click menu, read by every surface that
+// raises one.
+//
+// **On the button's release, never its press.** Slint closes an open popup on a press outside it
+// and swallows that press, so a right-click on another row reaches the row only as a release.
+// Inside the area, so a press dragged off it before the release raises nothing.
+export global ContextClick {
+    pure public function raises-menu(
+        ev: PointerEvent, x: length, y: length, width: length, height: length) -> bool {
+        return ev.kind == PointerEventKind.up && ev.button == PointerEventButton.right
+            && x >= 0px && y >= 0px && x <= width && y <= height;
+    }
+}
+
 // What every right-click menu with a flyout shares, so the flyout's room and the edge test are
-// stated once rather than per menu. A menu grows by that room while its flyout is open, Slint
-// re-measuring an open popup, and the side it grows on is decided when the menu opens.
+// stated once rather than per menu. A menu opening its flyout rightward grows by that room while
+// the flyout is open; one opening it leftward holds the room from the start, because growing left
+// moves the popup's origin and Slint moves an open popup a loop pass after re-laying its content,
+// which would draw the column a frame out of place.
 export global ContextMenuMetrics {
     out property <length> item-h: 32px;
     out property <length> flyout-w: 200px;
@@ -17,8 +33,7 @@ export global ContextMenuMetrics {
     // past it elides rather than running off the surface.
     out property <length> menu-min-w: 220px;
     out property <length> menu-max-w: 400px;
-    // How much wider than its column a menu grows while its flyout is open, on whichever side
-    // has room.
+    // The width a flyout adds beside its menu's column, on whichever side has room.
     out property <length> flyout-room: root.gap + root.flyout-w;
 
     // Off the rows' `preferred-width`, which only the popup holding them can read.
