@@ -68,7 +68,7 @@ component SidebarItem inherits Rectangle {
             padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
             spacing: Theme.pad-md;
             alignment: start;
-            animate padding-left, padding-right { duration: Nav.sidebar-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+            animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
 
             VerticalLayout {
                 alignment: center;
@@ -122,14 +122,10 @@ component Divider inherits Rectangle {
 }
 
 export component Sidebar inherits Rectangle {
-    // A drag sets the width on every mouse move, so without this the animation
-    // interpolates each delta and the handle feels laggy. Ease the collapse only.
-    property <bool> is-dragging;
-
     width: Nav.sidebar-collapsed
         ? Theme.sidebar-collapsed-w
         : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
-    animate width { duration: is-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+    animate width { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
 
     background: WindowChrome.mantle;
 
@@ -184,7 +180,7 @@ export component Sidebar inherits Rectangle {
                     padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
                     spacing: Theme.pad-md;
                     alignment: start;
-                    animate padding-left, padding-right { duration: Nav.sidebar-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+                    animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
                     VerticalLayout {
                         alignment: center;
                         MaterialIcon {
@@ -283,11 +279,9 @@ export component Sidebar inherits Rectangle {
                 if (ev.kind == PointerEventKind.down) {
                     self.start-w = Nav.sidebar-width;
                     self.press-abs-x = self.absolute-position.x + self.pressed-x;
-                    root.is-dragging = true;
                     Nav.sidebar-dragging = true;
                 }
                 if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
-                    root.is-dragging = false;
                     Nav.sidebar-dragging = false;
                 }
             }

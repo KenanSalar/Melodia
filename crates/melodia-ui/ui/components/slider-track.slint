@@ -109,16 +109,15 @@ export component SliderTrack inherits Rectangle {
 
     // On top of the mask, so the seam-cover itself stays invisible.
     Rectangle {
+        // Snapped, not eased: easing a binding off the position ticks phase-lags
+        // the source, and repaints the thumb plus everything it overlaps for the
+        // length of the curve, once per tick.
         x: root.thumb-x;
         y: root.track-cy - root.thumb-h / 2;
         width: root.thumb-w;
         height: root.thumb-h;
         border-radius: self.width / 2;
         background: root.is-disabled ? Theme.overlay0 : root.fill-color;
-        // Snapped, not eased: easing a binding off the position ticks phase-lags
-        // the source, and repaints the thumb plus everything it overlaps for the
-        // length of the curve, once per tick.
-        animate x { duration: 0ms; }
     }
 
     touch := TouchArea {

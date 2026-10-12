@@ -50,9 +50,9 @@ pass on Linux. Phase 0 is a go: on the manual run the queue sheet and the nav tr
 smooth on 1.18.1 as on 1.16.1, so the bump stays. Phase 2 passed on the manual pass, on Linux,
 once the miniplayer backdrop's fade-in was fixed on top of the bump. Phase 4 landed as `75493151`
 and passed its manual pass on a Wayland touchpad, and the composite views keep their own scrolling
-(the decision after it). Phase 3 is under way: item 1, `FlexboxLayout`, landed as `5b3aa4ac`,
-item 2, `PopupWindow.is-open`, as `22c4a775` with `2c0ea226` and `a49c7309` on top, both passed by
-hand, and items 3–7 remain.
+(the decision after it). Phase 3 is under way: items 1–3 landed and passed by hand
+(`FlexboxLayout` as `5b3aa4ac`, `PopupWindow.is-open` as `22c4a775` with `2c0ea226` and
+`a49c7309` on top, then `animate { enabled }`), and items 4–7 remain.
 
 A trial on 2026-09-16 (throwaway worktree, since removed) ran
 `cargo clippy --all-targets --workspace` on Linux against 1.18.0, and the diagnostics listed in
@@ -205,7 +205,7 @@ One change per section, in this order, each on a tree already on 1.18:
 1. 🟢 `FlexboxLayout` → retire the row packer and the `Wrap` global (largest deletion). **Done
    2026-10-12.**
 2. 🟢 `PopupWindow.is-open` → slim the `PopupHighlight` plumbing. **Done 2026-10-12.**
-3. 🟢 `animate { enabled }` → replace duration-zero gating
+3. 🟢 `animate { enabled }` → replace duration-zero gating. **Done 2026-10-12.**
 4. 🟢 `cross-axis-alignment` → drop centering wrapper layouts
 5. 🟢 `WindowMoveArea` → retire the drag-region press intercept
 6. 🟢 Two-way model row bindings → slim the model-patch walkers (prototype first)
@@ -337,6 +337,8 @@ Done 2026-10-12, every step passed by hand.
 
 ## 🟢 `animate { enabled: … }` → replace duration-zero gating
 
+Done 2026-10-12, every step passed by hand.
+
 - **Today:** the "don't animate drag micro-updates" pitfall is handled with
   `duration: is-dragging ? 0ms : …`, at `layout/sidebar.slint:71`, `:132` and `:187` (rail width
   and row padding).
@@ -345,6 +347,12 @@ Done 2026-10-12, every step passed by hand.
   duration token intact. Cleaner semantics, same behavior.
 - **Risk:** trivial; verify the disabled path snaps to target (upstream implements it as
   jump-to-target).
+- **Outcome:** the three sidebar sites, plus one the list missed: `tab-bar.slint`'s `compact-t`,
+  gated on `eased`. A disabled animation returns its target at once
+  (`i-slint-core-1.18.1/properties/properties_animations.rs:171`), imperative writes included.
+  `Sidebar`'s local `is-dragging` went too, a copy of `Nav.sidebar-dragging` the handle wrote
+  beside it, and so did the slider thumb's `animate x { duration: 0ms; }`, which never eased. No
+  `animate` in the tree spells a zero duration now.
 
 ## 🟢 `cross-axis-alignment` on box layouts → drop centering wrapper layouts
 
@@ -428,5 +436,5 @@ Done 2026-10-12, every step passed by hand.
 *2026-09-17: the 1.18.0 migration plan replaced the re-migration checklist. 2026-10-11: retargeted
 to 1.18.1, phase 1 applied in the tree, phase 4 added. 2026-10-12: phase 4 landed and passed by
 hand, and every section waiting on an upstream Slint change moved to #127. Later that day phase
-3's item 1 (`FlexboxLayout`) landed and passed by hand, its Settings-body step reverted, and item
-2 (`PopupWindow.is-open`) followed with the right-click menus reworked on top, also passed by hand.*
+3's items 1 (`FlexboxLayout`, its Settings-body step reverted), 2 (`PopupWindow.is-open`, the
+right-click menus reworked on top) and 3 (`animate { enabled }`) landed and passed by hand.*

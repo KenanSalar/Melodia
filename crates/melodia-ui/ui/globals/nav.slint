@@ -31,8 +31,8 @@ export global Nav {
     in-out property <bool> suppress-enter-animation: false;
     in-out property <bool> sidebar-collapsed: false;
     in-out property <length> sidebar-width: 180px;
-    // Read by the rows to disable their `padding-left` ease, which every mouse move would
-    // otherwise restart, leaving the icons lagging the edge.
+    // Switches off the rail's width ease and the rows' padding ease for a handle drag, which
+    // every mouse move would otherwise restart, leaving the edge and the icons lagging the pointer.
     in-out property <bool> sidebar-dragging: false;
     // The collapsed rail's tooltip channel; `app-window.slint` paints one pill beside the rail.
     // **It can't be mounted on the row** — `nav-scroll` clips its viewport, and the Sidebar is

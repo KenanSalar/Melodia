@@ -26,9 +26,10 @@ this file is what builds, looks right, and is wrong.
   constraints still collapse it (`tab-search-header.slint`).
 
 - **Don't `animate` a property driven by both toggle and continuous input** (drag micro-updates
-  get full easing → spongy). Gate duration on bool:
-  `animate width { duration: is-dragging ? 0ms : 250ms; }`. Boolean ternaries safe; #7999 only
-  fires on array/list calcs.
+  get full easing → spongy). Switch the ease off for the drag and keep the token:
+  `animate width { duration: Theme.dur-med; enabled: !Nav.sidebar-dragging; }`. A disabled
+  animation lands on its target at once, imperative writes included (`layout/sidebar.slint`,
+  `tab-bar.slint`'s `compact-t`).
 
 - **An animated property with a *binding* restarts whenever a dependency is marked dirty — not
   when its value changes.** `AnimatedBindingCallable::mark_dirty`
