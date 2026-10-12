@@ -50,8 +50,9 @@ pass on Linux. Phase 0 is a go: on the manual run the queue sheet and the nav tr
 smooth on 1.18.1 as on 1.16.1, so the bump stays. Phase 2 passed on the manual pass, on Linux,
 once the miniplayer backdrop's fade-in was fixed on top of the bump. Phase 4 landed as `75493151`
 and passed its manual pass on a Wayland touchpad, and the composite views keep their own scrolling
-(the decision after it). Phase 3 is under way: item 1, `FlexboxLayout`, landed as `5b3aa4ac` and
-passed by hand, and items 2–7 remain.
+(the decision after it). Phase 3 is under way: item 1, `FlexboxLayout`, landed as `5b3aa4ac`,
+item 2, `PopupWindow.is-open`, as `22c4a775` with `2c0ea226` and `a49c7309` on top, both passed by
+hand, and items 3–7 remain.
 
 A trial on 2026-09-16 (throwaway worktree, since removed) ran
 `cargo clippy --all-targets --workspace` on Linux against 1.18.0, and the diagnostics listed in
@@ -203,8 +204,7 @@ One change per section, in this order, each on a tree already on 1.18:
 
 1. 🟢 `FlexboxLayout` → retire the row packer and the `Wrap` global (largest deletion). **Done
    2026-10-12.**
-2. 🟢 `PopupWindow.is-open` → slim the `PopupHighlight` plumbing. **Built 2026-10-12, manual pass
-   pending.**
+2. 🟢 `PopupWindow.is-open` → slim the `PopupHighlight` plumbing. **Done 2026-10-12.**
 3. 🟢 `animate { enabled }` → replace duration-zero gating
 4. 🟢 `cross-axis-alignment` → drop centering wrapper layouts
 5. 🟢 `WindowMoveArea` → retire the drag-region press intercept
@@ -297,6 +297,8 @@ Done 2026-10-12, every step passed by hand.
 
 ## 🟢 `PopupWindow` geometry reactivity + `is-open` → simplify popup plumbing
 
+Done 2026-10-12, every step passed by hand.
+
 - **Today:** two workarounds: (a) fixed-reserve geometry in `overflow-menu.slint` (popup always
   sized for menu + flyout because geometry was frozen at `show()`), (b) `FocusLossWatcher` +
   `PopupHighlight.id` discriminators (`globals/shell.slint:176`) because Slint has no
@@ -324,13 +326,13 @@ Done 2026-10-12, every step passed by hand.
   `ContextClick.raises-menu` and takes its anchor through `show-at`; `PopupDismissCatcher` closes
   on a right press, so the release reaches what lies beneath. Pinned by
   `crates/melodia/tests/context_click.rs`.
-- [ ] Manual: the bar overflow's Speed, Sleep and the switch between them; Copy on a right-click
+- [x] Manual: the bar overflow's Speed, Sleep and the switch between them; Copy on a right-click
       menu opening each way; each trigger lit while open and dark after Escape, an outside click and
       a focus loss.
-- [ ] Manual: right-click a song, then another near and far from the menu, moving it in one click;
+- [x] Manual: right-click a song, then another near and far from the menu, moving it in one click;
       a held right button opens nothing until released and the menu stays put; a press dragged off
       its row raises nothing; the same on a card, a text field and the queue.
-- [ ] Manual: a right-click on a flyout menu's padding or a separator moves the menu to the row
+- [x] Manual: a right-click on a flyout menu's padding or a separator moves the menu to the row
       beneath; the radio facet chip's search field raises an edit menu that stays open.
 
 ## 🟢 `animate { enabled: … }` → replace duration-zero gating
@@ -426,4 +428,5 @@ Done 2026-10-12, every step passed by hand.
 *2026-09-17: the 1.18.0 migration plan replaced the re-migration checklist. 2026-10-11: retargeted
 to 1.18.1, phase 1 applied in the tree, phase 4 added. 2026-10-12: phase 4 landed and passed by
 hand, and every section waiting on an upstream Slint change moved to #127. Later that day phase
-3's item 1 (`FlexboxLayout`) landed and passed by hand, its Settings-body step reverted.*
+3's item 1 (`FlexboxLayout`) landed and passed by hand, its Settings-body step reverted, and item
+2 (`PopupWindow.is-open`) followed with the right-click menus reworked on top, also passed by hand.*
