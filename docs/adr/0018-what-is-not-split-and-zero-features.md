@@ -38,7 +38,3 @@ requires the network fetch and self-replace code to be **provably absent** from 
 than merely disabled at runtime. Repository and store reviewers ask for exactly that, and no runtime
 toggle satisfies it. If that channel is pursued, this ADR is superseded rather than quietly bent,
 and the cost above is what gets paid.
-
-This ADR settles a contradiction that had been live in two working docs at once:
-`docs/plans/SELF_UPDATE_FEATURE_GATE.md` proposes that feature and predates the split, and neither
-doc cited the other.
