@@ -114,7 +114,8 @@ export component DialogOverlay inherits Rectangle {
         // paints the remainder, action buttons included, outside the card and onto the backdrop.
         // A kind joining this list owes a scroller; `AddStationBody` is the worked example.
         property <bool> body-scrolls:
-            DialogGlobal.kind == DialogKind.add-station || DialogGlobal.kind == DialogKind.edit-station;
+            DialogGlobal.kind == DialogKind.add-station || DialogGlobal.kind == DialogKind.edit-station
+            || DialogGlobal.kind == DialogKind.smart-playlist-editor;
         height: card.body-scrolls
             ? min(layout.preferred-height, max(240px, parent.height - 96px))
             : layout.preferred-height;

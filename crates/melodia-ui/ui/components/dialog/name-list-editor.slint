@@ -1,7 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { IconButton } from "../icon-button.slint";
 import { PillButton } from "../action-pill.slint";
-import { CreditNameInput } from "./credit-name-input.slint";
+import { ControlledInput } from "./controlled-input.slint";
 
 // One name in a plain list. `CreditRowView` without the phrase picker, which is the whole of the
 // difference: an artist credit prints as a line and needs to say what joins two names, where a
@@ -15,7 +15,7 @@ component NameRowView inherits HorizontalLayout {
 
     spacing: Theme.pad-sm;
 
-    CreditNameInput {
+    ControlledInput {
         horizontal-stretch: 1;
         min-width: 120px;
         text: root.name;

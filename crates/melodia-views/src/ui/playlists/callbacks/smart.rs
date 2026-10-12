@@ -14,8 +14,12 @@
 //! tick — a synchronous `Dialog.open = true` inside a click callback trips
 //! Slint's property-recursion guard (same reason the create-playlist open is
 //! inline-Slint and the export open hops through Rust).
+//!
+//! `recount` answers the track count under the form from the same criteria the
+//! commit saves, so the number shown is the playlist that Save would make.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
@@ -28,6 +32,9 @@ use melodia_app::state::AppState;
 use melodia_core::entities::smart_criteria as sc;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, SmartEditor, SmartRuleRow};
+
+/// `SmartEditor.match-count` while no count describes the form, which hides the line.
+const NOT_COUNTED: i32 = -1;
 
 /// Wire the Smart-Playlist editor callbacks + install its rules model. See
 /// [`super::wire`].
@@ -43,6 +50,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     wire_set_rule_value(ui);
     wire_request_new(ui);
     wire_request_edit(ui, state);
+    wire_recount(ui, state);
     wire_commit(ui, state, playlists_ui);
 }
 
@@ -142,6 +150,36 @@ fn wire_request_edit(ui: &AppWindow, state: &AppState) {
                     return;
                 }
                 open_editor(&ui, &name, &description, &criteria, id);
+            });
+        });
+    });
+}
+
+/// Count the form off the UI thread. The queries finish in no particular order, so each carries
+/// a generation and only the newest may write.
+fn wire_recount(ui: &AppWindow, state: &AppState) {
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let generation = Arc::new(AtomicU64::new(0));
+    ui.global::<SmartEditor>().on_recount(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let criteria = read_criteria(&ui);
+        let asked = generation.fetch_add(1, Ordering::Relaxed) + 1;
+        let generation = generation.clone();
+        let s = state.clone();
+        let weak = weak.clone();
+        s.runtime.clone().spawn(async move {
+            let count = match library::smart_playlists::count(&s.db, &criteria).await {
+                Ok((count, _duration_ms)) => clamp_i64_to_i32(count),
+                Err(e) => {
+                    log::warn!("smart editor recount: {}", describe(&e));
+                    NOT_COUNTED
+                }
+            };
+            let _ = weak.upgrade_in_event_loop(move |ui| {
+                if generation.load(Ordering::Relaxed) == asked {
+                    ui.global::<SmartEditor>().set_match_count(count);
+                }
             });
         });
     });
@@ -330,7 +368,18 @@ fn collect_criteria(ui: &AppWindow) -> Option<CriteriaDraft> {
     if name.is_empty() {
         return None;
     }
-    let description = optional_text(&se.get_description());
+    Some(CriteriaDraft {
+        name,
+        description: optional_text(&se.get_description()),
+        criteria: read_criteria(ui),
+        target_id: i64::from(se.get_target_id()),
+    })
+}
+
+/// The match mode, rules and limit as the form holds them, dropping rows too incomplete to stand
+/// as a rule.
+fn read_criteria(ui: &AppWindow) -> sc::SmartCriteria {
+    let se = ui.global::<SmartEditor>();
     let limit = se.get_limit_enabled().then(|| sc::SmartLimit {
         count: se
             .get_limit_count_text()
@@ -343,17 +392,12 @@ fn collect_criteria(ui: &AppWindow) -> Option<CriteriaDraft> {
     let rules: Vec<sc::Rule> =
         with_rules_model(ui, |vm| vm.iter().filter_map(|r| row_to_rule(&r)).collect())
             .unwrap_or_default();
-    Some(CriteriaDraft {
-        name,
-        description,
-        criteria: sc::SmartCriteria {
-            version: sc::SMART_CRITERIA_VERSION,
-            match_mode: sc::MatchMode::from_index(se.get_match_mode_index()),
-            rules,
-            limit,
-        },
-        target_id: i64::from(se.get_target_id()),
-    })
+    sc::SmartCriteria {
+        version: sc::SMART_CRITERIA_VERSION,
+        match_mode: sc::MatchMode::from_index(se.get_match_mode_index()),
+        rules,
+        limit,
+    }
 }
 
 /// Populate every `SmartEditor` global + the rules model from a criteria and
@@ -387,5 +431,8 @@ fn open_editor(
         }
         vm.set_vec(rows);
     });
+    // The last session's number describes another form until this one is counted.
+    se.set_match_count(NOT_COUNTED);
+    se.invoke_recount();
     ui.global::<Dialog>().set_open(true);
 }

@@ -19,6 +19,8 @@ export global SmartEditor {
     in-out property <int> limit-order-index;
     // -1 creates; otherwise the playlist being edited.
     in-out property <int> target-id: -1;
+    // How many tracks the rules hold right now, limit applied. -1 hides the line.
+    in property <int> match-count: -1;
 
     callback request-new();
     callback request-edit(int /*playlist_id*/);
@@ -29,6 +31,9 @@ export global SmartEditor {
     callback set-rule-field(int /*row*/, int /*field index*/);
     callback set-rule-op(int /*row*/, int /*op index*/);
     callback set-rule-value(int /*row*/, string);
+
+    // Re-counts `match-count` from the form as it stands, name aside.
+    callback recount();
 
     callback commit();
 }

@@ -4,7 +4,7 @@ import { ArtistCreditRow } from "../../models.slint";
 import { Dropdown } from "../settings/dropdown.slint";
 import { IconButton } from "../icon-button.slint";
 import { PillButton } from "../action-pill.slint";
-import { CreditNameInput } from "./credit-name-input.slint";
+import { ControlledInput } from "./controlled-input.slint";
 
 // One credited name. Purely presentational — Rust owns the model.
 //
@@ -22,7 +22,7 @@ component CreditRowView inherits HorizontalLayout {
 
     spacing: Theme.pad-sm;
 
-    CreditNameInput {
+    ControlledInput {
         horizontal-stretch: 1;
         min-width: 120px;
         text: root.credit.name;
@@ -102,10 +102,9 @@ export component CreditEditor inherits VerticalLayout {
         spacing: Theme.pad-sm;
         alignment: start;
 
-        // `PillButton` rather than a stadium with a `"+"` in its label, which is the shape the
-        // smart-playlist rule editor still uses: a literal plus is a text glyph at label weight
-        // and reads a size smaller than the control around it. This is the same pill, at the same
-        // size, with the same Material glyph as every other add in the app.
+        // `PillButton` rather than a stadium with a `"+"` in its label: a literal plus is a text
+        // glyph at label weight and reads a size smaller than the control around it. This is the
+        // same pill, at the same size, with the same Material glyph as every other add in the app.
         PillButton {
             icon: "add";
             // `NameListEditor`'s label, and the same reason: the field's own heading sits directly

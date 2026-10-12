@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
+import { SingleLineInput } from "single-line-input.slint";
 
 // The reusable compact filter input: an `ActionPill`-matching outline over a fill that
 // **solidifies the moment the bar is engaged** — half its mounts sit over a detail hero, so at rest
@@ -33,7 +34,7 @@ export component SearchBar inherits Rectangle {
     // Measured off the Text the bar actually draws, so measured and drawn can't drift. A Text's
     // *horizontal* layout info is intrinsic to the string, so this is a derivation and not a cycle.
     property <length> natural-width:
-        placeholder-text.preferred-width + root.chrome-overhead;
+        input.placeholder-width + root.chrome-overhead;
 
     // Recessed into a surface rather than floating over content: the host's corner instead of a
     // stadium, and no lift or swell — inside a popup there is nothing to be above. Fills, border
@@ -43,7 +44,7 @@ export component SearchBar inherits Rectangle {
     // Slint has no click-outside behaviour for `TextInput`, so each increment fires
     // `clear-focus()` on the inner input.
     in property <int> blur-trigger: 0;
-    changed blur-trigger => { input.clear-focus(); }
+    changed blur-trigger => { input.clear-input-focus(); }
 
     callback edited(string);
 
@@ -85,13 +86,13 @@ export component SearchBar inherits Rectangle {
 
     // The simple case: a same-file caller with an id skips the `blur-trigger` plumbing.
     public function clear-input-focus() {
-        input.clear-focus();
+        input.clear-input-focus();
     }
 
     // For a view auto-focusing its bar on mount. Named `focus-input` because `focus`
     // collides with the built-in element method.
     public function focus-input() {
-        input.focus();
+        input.focus-input();
     }
 
     // The slot still doesn't stretch — `preferred` and `max` are the same number, so the bar is
@@ -163,7 +164,7 @@ export component SearchBar inherits Rectangle {
             width: 100%;
             height: 100%;
             // Forwards focus so the whole pill is the target, not just the input.
-            clicked => { input.focus(); }
+            clicked => { input.focus-input(); }
 
         HorizontalLayout {
             padding-left: Theme.pad-sm;
@@ -185,51 +186,17 @@ export component SearchBar inherits Rectangle {
                 }
             }
 
-            // Slint's `TextInput` has no `placeholder-text`, so the placeholder is a
-            // sibling Text overlaid while the input is empty.
-            Rectangle {
+            // The bar's full height rather than a line-sized box centred in it: the same centre,
+            // and the clip around the text then leaves room for marks that reach past its line.
+            input := SingleLineInput {
                 horizontal-stretch: 1;
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        height: 20px;
-                        // Both children fill this box, so their `vertical-alignment` actually
-                        // centres the glyph line-box inside it — without an explicit height they
-                        // auto-size to the line-box and pin to the top, reading a pixel high.
-                        placeholder-text := Text {
-                            visible: root.text == "";
-                            text: root.placeholder;
-                            // `PillButton`'s label brush, so a bar and the pills beside it read as
-                            // one family, dimmed just enough to stay a hint rather than typed
-                            // text. Alpha in the brush, never `opacity`, which crops the ink.
-                            color: Theme.text.transparentize(0.3);
-                            font-size: Theme.font-size-md;
-                            vertical-alignment: center;
-                            x: 0;
-                            // **Bounded, and only then elided.** The parent is a plain Rectangle
-                            // rather than a layout, so without a width of its own this Text takes
-                            // its *implicit* size — the untruncated string — and paints straight
-                            // through the pill's right edge. Eliding alone doesn't save it: elide
-                            // lowers a Text's layout *minimum* to one ellipsis and leaves
-                            // `preferred` at the full string, and the implicit size is the larger.
-                            width: 100%;
-                            height: 100%;
-                            overflow: elide;
-                        }
-                        input := TextInput {
-                            text <=> root.text;
-                            color: Theme.text;
-                            font-size: Theme.font-size-md;
-                            single-line: true;
-                            vertical-alignment: center;
-                            x: 0;
-                            width: 100%;
-                            height: 100%;
-                            edited => { root.edited(self.text); }
-                            accepted => { root.accepted(); }
-                        }
-                    }
-                }
+                text <=> root.text;
+                placeholder: root.placeholder;
+                // `PillButton`'s label brush, so a bar and the pills beside it read as one family,
+                // dimmed just enough to stay a hint rather than typed text.
+                placeholder-color: Theme.text.transparentize(0.3);
+                edited(t) => { root.edited(t); }
+                accepted => { root.accepted(); }
             }
 
             if root.text != "": Rectangle {

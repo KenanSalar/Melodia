@@ -145,31 +145,38 @@ export component TagEditorBody inherits HorizontalLayout {
                     remove(row) => { TagEditor.remove-genre(row); }
                 }
 
+                // Digits only wherever the commit parses an integer, which otherwise keeps the old
+                // value over a typo without a word.
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
                     LabeledInput {
                         label: @tr("Year");
                         placeholder: TagEditor.year-placeholder;
+                        input-type: InputType.number;
                         text <=> TagEditor.year;
                     }
                     LabeledInput {
                         label: @tr("Track");
                         placeholder: TagEditor.track-number-placeholder;
+                        input-type: InputType.number;
                         text <=> TagEditor.track-number;
                     }
                     LabeledInput {
                         label: @tr("Total");
                         placeholder: TagEditor.track-total-placeholder;
+                        input-type: InputType.number;
                         text <=> TagEditor.track-total;
                     }
                     LabeledInput {
                         label: @tr("Disc");
                         placeholder: TagEditor.disc-number-placeholder;
+                        input-type: InputType.number;
                         text <=> TagEditor.disc-number;
                     }
                     LabeledInput {
                         label: @tr("Total");
                         placeholder: TagEditor.disc-total-placeholder;
+                        input-type: InputType.number;
                         text <=> TagEditor.disc-total;
                     }
                 }
@@ -177,8 +184,11 @@ export component TagEditorBody inherits HorizontalLayout {
                 LabeledInput {
                     label: @tr("Original Year");
                     placeholder: TagEditor.original-year-placeholder;
+                    input-type: InputType.number;
                     text <=> TagEditor.original-year;
                 }
+                // Free text: a tempo can be fractional, and `decimal` would take the locale's
+                // comma, which the commit's parse rejects.
                 LabeledInput {
                     label: @tr("BPM");
                     placeholder: TagEditor.bpm-placeholder;
@@ -243,11 +253,13 @@ export component TagEditorBody inherits HorizontalLayout {
                         // Translators: the movement's number, as in movement 2 of 4
                         label: @tr("Number");
                         placeholder: TagEditor.movement-number-placeholder;
+                        input-type: InputType.number;
                         text <=> TagEditor.movement-number;
                     }
                     LabeledInput {
                         label: @tr("Total");
                         placeholder: TagEditor.movement-total-placeholder;
+                        input-type: InputType.number;
                         text <=> TagEditor.movement-total;
                     }
                 }

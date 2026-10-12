@@ -157,10 +157,12 @@ msgid "Playlist name"
 msgstr "Name der Playlist"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Beschreibung (optional)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Beschreibung hinzufügen…"
 
@@ -229,6 +231,7 @@ msgid "No playlists to export"
 msgstr "Keine Playlists zum Exportieren"
 
 #: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
 #: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
 #: ui/globals/search.slint ui/views/queue-sheet.slint
@@ -334,6 +337,7 @@ msgstr "Dein Token findest du in den Profileinstellungen auf ListenBrainz."
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Alle auswählen"
@@ -874,7 +878,7 @@ msgstr "Titelinformationen bearbeiten"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Kopieren"
@@ -1442,6 +1446,14 @@ msgstr "Titel kopieren"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Künstler kopieren"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Ausschneiden"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Einfügen"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"

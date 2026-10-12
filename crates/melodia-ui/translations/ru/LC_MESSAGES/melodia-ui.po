@@ -157,10 +157,12 @@ msgid "Playlist name"
 msgstr "Название плейлиста"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Описание (необязательно)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Добавьте описание…"
 
@@ -229,6 +231,7 @@ msgid "No playlists to export"
 msgstr "Нет плейлистов для экспорта"
 
 #: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
 #: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
 #: ui/globals/search.slint ui/views/queue-sheet.slint
@@ -335,6 +338,7 @@ msgstr "Токен можно найти на странице настроек 
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Выбрать все"
@@ -876,7 +880,7 @@ msgstr "Изменить сведения о треке"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Копировать"
@@ -1448,6 +1452,14 @@ msgstr "Копировать название"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Копировать исполнителя"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Вырезать"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Вставить"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"

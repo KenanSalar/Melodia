@@ -24,6 +24,12 @@ export component DialogScrollPane inherits Rectangle {
     // property it is setting.
     out property <length> content-height: column.preferred-height;
 
+    // A write rather than a binding, so the `Flickable` still pulls the view back in range when
+    // the content later shrinks under it.
+    public function scroll-to-end() {
+        sv.content-y = min(0px, sv.visible-height - sv.content-height);
+    }
+
     sv := ScrollView {
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;

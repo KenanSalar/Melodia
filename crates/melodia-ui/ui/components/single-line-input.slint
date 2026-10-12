@@ -1,0 +1,117 @@
+import { Theme } from "../theme.slint";
+import { TextEditMenu } from "text-edit-menu.slint";
+
+// The editing half of every single-line field, the host drawing the chrome around it: the
+// `TextInput`, the placeholder Slint doesn't give it, and what std-widgets' `LineEdit` adds to one.
+//
+// **The text slides to keep the cursor in view.** A bare `TextInput` clips at its own width and
+// never scrolls, so a long value ran out of sight with the cursor behind it. This is upstream's
+// `LineEditBase` arrangement: the input as wide as its text inside a clip, moved on every cursor
+// move.
+//
+// **A right-click opens the edit menu.** The input takes only left and middle presses, so a right
+// one reaches the area around it.
+export component SingleLineInput inherits Rectangle {
+    in-out property <string> text <=> ti.text;
+    in property <string> placeholder;
+    in property <brush> placeholder-color: Theme.overlay2;
+    in property <InputType> input-type: InputType.text;
+    out property <bool> has-focus: ti.has-focus;
+    // The placeholder's natural width, for a host sizing itself to its hint.
+    out property <length> placeholder-width: hint.preferred-width;
+
+    callback edited(string);
+    callback accepted();
+
+    // Named apart from the built-in `focus` and `clear-focus`, which act on this element.
+    public function focus-input() {
+        ti.focus();
+    }
+
+    public function clear-input-focus() {
+        ti.clear-focus();
+    }
+
+    // How near the cursor comes to either edge before the text slides.
+    property <length> edge-margin: Theme.pad-xs;
+    property <length> menu-x;
+    property <length> menu-y;
+
+    // No radius, so a scissor rather than a layer.
+    clip: true;
+
+    TouchArea {
+        pointer-event(event) => {
+            if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
+                root.menu-x = self.mouse-x;
+                root.menu-y = self.mouse-y;
+                ti.focus();
+                menu.show();
+            }
+        }
+
+        hint := Text {
+            // Hidden while an input method composes too, or the hint paints under the composition.
+            visible: root.text == "" && ti.preedit-text == "";
+            text: root.placeholder;
+            color: root.placeholder-color;
+            font-size: Theme.font-size-md;
+            vertical-alignment: center;
+            // Bounded and elided, per the faked-placeholder pitfall.
+            x: 0;
+            width: 100%;
+            height: 100%;
+            overflow: elide;
+        }
+
+        ti := TextInput {
+            // Where the cursor last pushed the text. The clamp below keeps either end from
+            // leaving a gap once the text shrinks.
+            property <length> scroll-x;
+
+            x: min(0px, max(parent.width - self.width - self.text-cursor-width, self.scroll-x));
+            width: max(parent.width - self.text-cursor-width, self.preferred-width);
+            height: 100%;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            single-line: true;
+            vertical-alignment: center;
+            input-type: root.input-type;
+
+            cursor-position-changed(cursor-position) => {
+                if (cursor-position.x + self.scroll-x < root.edge-margin) {
+                    self.scroll-x = root.edge-margin - cursor-position.x;
+                } else if (cursor-position.x + self.scroll-x
+                        > parent.width - root.edge-margin - self.text-cursor-width) {
+                    self.scroll-x = parent.width - root.edge-margin - self.text-cursor-width
+                        - cursor-position.x;
+                }
+            }
+            edited => { root.edited(self.text); }
+            accepted => { root.accepted(); }
+        }
+    }
+
+    // Each entry hands the keyboard back, the menu having taken it while open.
+    menu := TextEditMenu {
+        at-x: root.menu-x;
+        at-y: root.menu-y;
+        has-text: root.text != "";
+        cut => {
+            ti.cut();
+            ti.focus();
+        }
+        copy => {
+            ti.copy();
+            ti.focus();
+        }
+        paste => {
+            ti.paste();
+            ti.focus();
+        }
+        select-all => {
+            ti.select-all();
+            ti.focus();
+        }
+    }
+}

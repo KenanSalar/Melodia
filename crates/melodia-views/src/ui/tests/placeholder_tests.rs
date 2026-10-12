@@ -2,7 +2,7 @@
 //! that paint text nobody sized, the one that sizes itself to text, and the two hosts
 //! that reach for it rather than drawing a pill of their own.
 //!
-//! Slint has no `placeholder-text` on a raw `TextInput`, so all four inputs fake one: a
+//! Slint has no `placeholder-text` on a raw `TextInput`, so both of ours fake one: a
 //! sibling `Text` gated on the field being empty. In a non-layout parent that Text takes
 //! its own *implicit* width — the untruncated string — and paints out of its field.
 //! `overflow: elide` is half the cure: it lowers the layout *minimum* to one ellipsis and
@@ -11,8 +11,8 @@
 //!
 //! `multiline-input.slint` is pinned to the *opposite* shape — bounded to its scroller and
 //! wrapping. It never had the bug, so it is the one nothing would catch being "fixed"
-//! into it. Here rather than beside one component because the defect is one copy-pasted
-//! block in three files with no Rust owner between them.
+//! into it. Here rather than beside either component because the two shapes only mean
+//! something read against each other.
 //!
 //! `SearchBar` is also the one input with two shapes, and the pins for that sit here because it
 //! is where the rest of its source contract already lives: floating chrome by default, recessed
@@ -33,10 +33,9 @@ const SEARCH_BAR: &str = include_str!("../../../../melodia-ui/ui/components/sear
 /// The chrome every `PopupWindow` body wraps, and so the corner an `inset` bar sits inside.
 const POPUP_SURFACE: &str =
     include_str!("../../../../melodia-ui/ui/components/popup-surface.slint");
-const LABELED_INPUT: &str =
-    include_str!("../../../../melodia-ui/ui/components/labeled-input.slint");
-const RULE_VALUE_INPUT: &str =
-    include_str!("../../../../melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint");
+/// The editing half every single-line field mounts, the search bar included.
+const SINGLE_LINE_INPUT: &str =
+    include_str!("../../../../melodia-ui/ui/components/single-line-input.slint");
 const MULTILINE_INPUT: &str =
     include_str!("../../../../melodia-ui/ui/components/multiline-input.slint");
 const TOOLTIP: &str = include_str!("../../../../melodia-ui/ui/components/tooltip.slint");
@@ -75,31 +74,28 @@ fn code_between(src: &str, from: &str, to: &str) -> String {
 }
 
 /// The placeholder's own declaration, taken as everything between it and the
-/// `TextInput` that follows it in all three files.
+/// `TextInput` that follows it.
 fn placeholder_block(src: &str) -> String {
     code_between(src, "text: root.placeholder;", "TextInput")
 }
 
 #[test]
-fn every_faked_placeholder_is_bounded_and_elides() {
-    for (name, src) in [
-        ("search-bar.slint", SEARCH_BAR),
-        ("labeled-input.slint", LABELED_INPUT),
-        ("smart-playlist-editor-body.slint", RULE_VALUE_INPUT),
-    ] {
-        let block = placeholder_block(src);
-        assert!(!block.is_empty(), "{name} no longer declares `text: root.placeholder;`");
-        assert!(
-            block.contains("width: 100%;"),
-            "{name}'s placeholder has no width — it will take the untruncated \
-             string's and paint out of its field"
-        );
-        assert!(
-            block.contains("overflow: elide;"),
-            "{name}'s placeholder is bounded but not elided — a long translation \
-             gets cut mid-glyph with no ellipsis"
-        );
-    }
+fn the_single_line_placeholder_is_bounded_and_elides() {
+    let block = placeholder_block(SINGLE_LINE_INPUT);
+    assert!(
+        !block.is_empty(),
+        "single-line-input.slint no longer declares `text: root.placeholder;`"
+    );
+    assert!(
+        block.contains("width: 100%;"),
+        "single-line-input.slint's placeholder has no width — it will take the untruncated \
+         string's and paint out of its field"
+    );
+    assert!(
+        block.contains("overflow: elide;"),
+        "single-line-input.slint's placeholder is bounded but not elided — a long translation \
+         gets cut mid-glyph with no ellipsis"
+    );
 }
 
 /// The fourth takes the opposite shape on purpose: a multi-line box wants its hint bounded
@@ -165,8 +161,13 @@ fn the_search_bar_publishes_the_floor_its_hosts_budget_against() {
 fn the_search_bar_measures_its_own_placeholder() {
     let src = normalized(SEARCH_BAR);
     assert!(
-        src.contains("natural-width: placeholder-text.preferred-width + root.chrome-overhead;"),
+        src.contains("natural-width: input.placeholder-width + root.chrome-overhead;"),
         "search-bar.slint no longer measures its own placeholder"
+    );
+    assert!(
+        normalized(SINGLE_LINE_INPUT)
+            .contains("out property <length> placeholder-width: hint.preferred-width;"),
+        "single-line-input.slint no longer publishes the width of the hint it draws"
     );
     assert!(
         src.contains("chrome-overhead: Theme.pad-sm + root.icon-size + 2 * Theme.pad-xs;"),

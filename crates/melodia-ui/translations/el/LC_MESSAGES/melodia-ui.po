@@ -157,10 +157,12 @@ msgid "Playlist name"
 msgstr "Όνομα λίστας"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Περιγραφή (προαιρετική)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Προσθήκη περιγραφής…"
 
@@ -230,6 +232,7 @@ msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
 
 # Greek pluralizes a noun after a numeral, so the two forms differ.
 #: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
 #: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
 #: ui/globals/search.slint ui/views/queue-sheet.slint
@@ -335,6 +338,7 @@ msgstr "Θα βρείτε το διακριτικό σας στη σελίδα �
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Επιλογή όλων"
@@ -875,7 +879,7 @@ msgstr "Επεξεργασία πληροφοριών κομματιού"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Αντιγραφή"
@@ -1443,6 +1447,14 @@ msgstr "Αντιγραφή τίτλου"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Αντιγραφή καλλιτέχνη"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Αποκοπή"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Επικόλληση"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"

@@ -157,10 +157,12 @@ msgid "Playlist name"
 msgstr "Tên danh sách phát"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Mô tả (không bắt buộc)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Thêm mô tả…"
 
@@ -229,6 +231,7 @@ msgid "No playlists to export"
 msgstr "Không có danh sách phát nào để xuất"
 
 #: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
 #: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
 #: ui/globals/search.slint ui/views/queue-sheet.slint
@@ -333,6 +336,7 @@ msgstr "Bạn có thể tìm mã thông báo trên trang cài đặt hồ sơ Li
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Chọn tất cả"
@@ -872,7 +876,7 @@ msgstr "Sửa thông tin bản nhạc"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Sao chép"
@@ -1436,6 +1440,14 @@ msgstr "Sao chép tiêu đề"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Sao chép nghệ sĩ"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Cắt"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Dán"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"
