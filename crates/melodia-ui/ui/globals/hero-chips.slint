@@ -6,13 +6,9 @@
 // and it makes "which chips, in what order, omitted when" a tested pure function instead of six
 // ternary chains. What Rust cannot do is translate; hence the trampolines below.
 export global HeroChips {
-    // Rows of chips — the `MetaChipStrip` contract. A hero wraps into at most
-    // `ui::hero_chips::HERO_MAX_ROWS` and drops the overflow. Empty means no chips at all.
-    in-out property <[[string]]> rows;
-
-    // Strip → Rust: the width to chunk against. `MetaChipStrip` owns the width mirror and the
-    // mount seed; each hero forwards its `measured` here.
-    callback recompute(length);
+    // In reading order. The band shows two rows of them and clips the rest (`HeroChipStrip`'s
+    // `max-rows`). Empty means no chips at all.
+    in-out property <[string]> chips;
 
     // Translated chip labels, resolved by Rust on the UI thread. The plural pairs deliberately
     // reuse msgids the catalogues already carry from the meta lines these chips replace.

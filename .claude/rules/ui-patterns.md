@@ -529,25 +529,24 @@ three components that answer it, and each argues its geometry at its own file.
   current filter**: forced rather than chosen, an album's chips being unable to follow its track
   filter without lying about the album.
 
-- **`HeroChipStrip`** is where a hero mounts `MetaChipStrip`: it fixes the `HeroBackdrop` brushes
-  and forwards `measured` into `HeroChips.recompute`, making the wrong mount unspellable rather
-  than merely tested against. `MetaChip`'s `Theme.*` defaults are correct nowhere and never taken —
+- **`HeroChipStrip`** is where a hero mounts `MetaChipStrip`: it fixes the `HeroBackdrop` brushes,
+  the chip list and the row cap, making the wrong mount unspellable rather than merely tested
+  against. `MetaChip`'s `Theme.*` defaults are correct nowhere and never taken —
   they exist so the file imports neither `Player` nor `HeroBackdrop`, which is what lets one
   component sit on a blurred cover *and* a blurred banner.
-  - **`fade` multiplies both brushes** and only `LibraryTabBand` sets it — the strip carries a
-    `changed` tracker, so a band wanting a fade-out must keep it *mounted* across the collapse, and
-    `Opacity::need_layer` bails only at exactly `1.0`.
-  - **Who chunks is the host's**, via `chunk_chips_to_rows`'s `max_rows` — `None` for the Now
-    Playing column, `Some(HERO_MAX_ROWS)` for a band. **`HERO_MAX_ROWS` is 2, measured rather than
-    picked**: a second row plus its gap fits the slack every hero's trailing spacer already leaves,
-    where a third overruns the tile and pushes the pill out of the banner. If a wrapped row ever
-    clips, the fix is a per-hero max into `write_rows`, **not** a taller band — the band clips, so
-    the failure is bounded.
-  - **The rows hang off a plain `VerticalLayout` pinned at `min-width: 0px`**, not off the root —
-    the conditional-child pitfall, one shipped bug per axis. Without the wrapper the root reports
-    `preferred: 0` and paints the second row outside its allotment; with it and without the
-    `min-width`, the widest published row becomes a floor no narrowing can negotiate. The second is
-    the one to remember, fixing the first being what introduces it.
+  - **`fade` multiplies both brushes** and only `LibraryTabBand` sets it, keeping the strip
+    *mounted* across the collapse, where an `opacity` under 1 would cost a layer every frame
+    (`Opacity::need_layer` bails only at exactly `1.0`).
+  - **The strip wraps in a `FlexboxLayout` at the width it is drawn, and the host decides how many
+    rows show** through `max-rows`: none for the Now Playing column, two for a band, which clips the
+    rest away whole, the chips being one height. **Two is measured rather than picked** and argued
+    at `HeroChipStrip`'s binding. If a wrapped row ever clips wrongly, the fix is a per-hero cap,
+    **not** a taller band — the band clips, so the failure is bounded.
+  - **The rows hang off a plain `VerticalLayout`**, not off the root, and the root's `height` is
+    read off it: the conditional-child pitfall, where a root sized any other way paints the second
+    row outside its allotment. The height is bound so a host short of height can't squeeze a row
+    over what follows, which also keeps the strip out of any `FlexboxLayout` (`slint-pitfalls.md`'s
+    flex measuring entry).
   - **`Theme.hero-title-size` is the one number all six titles read.** Pinned over **`HERO_VIEWS`**
     (two bands, six banners), with **`MOSAIC_HOSTS`**/**`BAND_HOSTS`** holding each page to mounting
     its band and growing no title, chip strip or artwork size of its own — the detail bodies being
@@ -1236,7 +1235,8 @@ siblings, not one parameterised component**, differing in which artwork square t
 Slint can abstract over — so the header-row fixes are *ported
 verbatim* and `ui::library_tab_band_tests` holds the copy to a contract a copy is exactly how you
 lose. **Two things stay at each host**: the per-tab `ActionPill` rows (`@children`, placed after the
-trailing spacer, which is also the slack `HERO_MAX_ROWS` is measured against) and the tooltip frame.
+trailing spacer, which is also the slack the chip strip's two-row cap is measured against) and the
+tooltip frame.
 
 - **The height is a `min`/`preferred`/`max-height` split with `clip: true`**, never a bound
   `height` — the animated-root-dimension pitfall one axis over. **`hero-t` is *written* from
@@ -1244,9 +1244,10 @@ trailing spacer, which is also the slack `HERO_MAX_ROWS` is measured against) an
   open lands at hero height instead of growing into it.
 
 - **What may hang off an `if` is decided by change trackers, not taste.** Everything tracker-free
-  rides one `hero-shown: detail-open || hero-t > 0`. The chip strip **cannot** join them — it
-  carries a `changed` tracker over a layout property the morph re-dirties every frame, so dropping
-  its branch panics; it stays mounted and fades by brush alpha.
+  rides one `hero-shown: detail-open || hero-t > 0`, and a piece carrying a tracker over a layout
+  property the morph re-dirties every frame stays mounted and fades by brush alpha, dropping its
+  branch being a panic. The chip strip sits outside the gate and fades that way, though it carries
+  no tracker and could join it.
 
 - **Nothing carrying content answers `opacity`** — the layer is sized to child *geometry* and a
   text run's ink leaves its line box. Fade through the brush instead, via **`transparentize`, which
@@ -1403,14 +1404,13 @@ edit would otherwise reverse.
   the double spelling, not the `@tr`. Nothing enforces any of this, and a fresh section is exactly
   where it comes back.
 
-- **Anything that has to fit a width reads `SettingsPage`, and never measures.**
+- **The body's geometry is `SettingsPage`'s, and nothing in a card measures.**
   `settings-view.slint` publishes `page-w` (the panel width it already mirrors — a live
   `root.width` read feeding a child's size re-enters layout) and `body-cols`; the global derives
-  `body-w`/`card-w`/`row-content-w`. Every card spans a full body column, so those are exact, and a
-  control four levels down sizes itself with no width mirror, no mount `Timer` and no `parent`
-  reach-around. **`row-content-w` is the one to want** — the width a `SettingRowStacked` leaves its
-  content block. Override at a call site that isn't a full-width card row; don't recompute the
-  number.
+  `body-w`/`card-w`. Every card spans a full body column, so those are exact. A control inside a
+  card that has to fit a width (the chip groups, the accent grids) wraps at the width it is drawn
+  rather than being handed one, so it needs no width mirror, no mount `Timer` and no `parent`
+  reach-around.
 
 - **`card-cap` (800 px) is one number both layouts obey**: a card grows to the cap, stops, and
   takes margins from there, and a second column appears exactly when two *capped* cards fit beside
@@ -1435,17 +1435,15 @@ edit would otherwise reverse.
   reintroduce the bar — a settings page that needs one is a page with a row that has stopped being
   able to wrap.
 
-- **The wrapping strips wrap through Rust, because Slint can't build a nested array.**
-  `chunk-indices(count, per-row) -> [[int]]` splits `0..count` into index groups and the strip
-  iterates two real arrays, sidestepping both traps the predecessor was built around: Slint rejects
-  an inline `for … : if …`, and a `Rectangle` wrapper around a filtered-out item still claims its
-  parent layout's spacing. `wrap-per-row` and `wrap-height` sit beside it. **How many fit is
-  measured, not estimated** — `ChipGroup` mounts a hidden ruler of real `Chip`s, `TabBar`'s idiom,
-  and **`min-width: 0px` on the root is load-bearing**, stopping that ruler leaking a floor into
-  the card. **`chunk-indices` hands back one model per row shape** (`ui::chips::IndexRows`), and
-  that is what keeps a resize cheap. Every width change re-runs the strip's binding through
-  `SettingsPage.page-w`, and a repeater handed a model it can't match by pointer rebuilds every chip
-  and swatch under it, tooltips included; see the repeater entry in `slint-pitfalls.md`.
+- **The wrapping strips are `FlexboxLayout`s over their flat list** (`ChipGroup`, `ColorDotGrid`),
+  breaking lines where the real chips stop fitting. Two lines on each root are load-bearing:
+  **`min-width: 0px`**, without which the flex floors the card at its widest chip, and a `height`
+  bound to the flex's `preferred-height`, without which a host with height to spare spreads the
+  lines apart (`slint-pitfalls.md`'s two flex entries). An accent swatch picks its tooltip side
+  off its cell's laid-out `y`, so the side follows wherever the flex broke the line.
+  **The body itself stays a `GridLayout`**: a flex body of card columns would measure each column
+  at a width it hasn't committed to, and these strips, `SettingRow`'s wrapped labels and the other
+  `Rectangle`-rooted controls answer at the width they were drawn, a cycle Slint panics on.
 
 - **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
   `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its

@@ -10,9 +10,9 @@ import { IconButton } from "../../components/icon-button.slint";
 // `subtitle2`. What is genuinely a station's own is the overlay's five controls and the rule that
 // the star outlives a hover, so those are what this file holds.
 //
-// **The tags line is a string, not a chip strip.** `MetaChipStrip` carries a `changed` tracker
-// over a layout property, and a tracker inside a `ListView` delegate outlives the delegate the
-// virtualization destroys. Rust hands the line over already trimmed and joined.
+// **The tags line is a string, not a chip strip.** The card's height is fixed inside a `ListView`
+// row, where a strip wrapping onto a second line has nowhere to go. Rust hands the line over
+// already trimmed and joined.
 export component StationCard inherits Rectangle {
     in property <string> artwork-path;
     in property <image> cover;

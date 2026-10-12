@@ -163,12 +163,9 @@ export global Player {
     // landing after a rapid track change.
     in-out property <TrackMetaRow> track-meta;
 
-    // Chunked by `ui::chips` against the width the strip last reported. Uncapped — the view
-    // has room to wrap where the hero band does not.
-    in-out property <[[string]]> chip-rows;
-
-    // View → Rust: the strip's available width. `MetaChipStrip` owns the mirror and mount seed.
-    callback recompute-chip-rows(length);
+    // The metadata chips for `track-meta`, in reading order. Uncapped: the view has room to
+    // wrap where the hero band does not.
+    in-out property <[string]> chips;
 
     // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
     // `ui::backdrop`, which answers twice over: on the blur these take their *hue* from the accent

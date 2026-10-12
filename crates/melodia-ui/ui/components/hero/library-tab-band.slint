@@ -421,8 +421,8 @@ export component LibraryTabBand inherits Rectangle {
                     }
                 }
 
-                // The rows live on a global six heroes share, so what empties the strip is the
-                // collapse's teardown rather than an `if` — which this couldn't be anyway.
+                // The chips live on a global six heroes share, so what empties the strip is the
+                // collapse's teardown rather than an `if`.
                 HeroChipStrip { fade: root.hero-t; }
 
                 Rectangle { vertical-stretch: 1; }

@@ -1,6 +1,4 @@
 import { Theme } from "../../theme.slint";
-import { SettingsPage } from "../../globals/settings-page.slint";
-import { Wrap } from "../../globals/wrap.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 
 // One swatch. The active one takes its ring from `text`, so it stays legible
@@ -61,8 +59,7 @@ component ColorDot inherits Rectangle {
 // A grid of accent swatches; `labels` is read by index alongside `colors` so each dot names its
 // accent in a tooltip. It wraps, and it has to: Catppuccin ships fourteen accents, fifteen with
 // Material You prepended, which on one row was the widest incompressible thing on the settings
-// page. The dots are fixed-size, so unlike `ChipGroup` this needs no ruler — how many fit is
-// arithmetic, and `Wrap.chunk-indices` splits the swatches into rows of that many.
+// page. Laid out as `ChipGroup` is, for its reasons.
 //
 // `first-is-dynamic` marks index 0 as the dynamic swatch, wired from
 // `Settings.material-you-active`; Material You always being prepended at index 0 when active is
@@ -75,43 +72,36 @@ export component ColorDotGrid inherits Rectangle {
     // translate rather than a colour name Rust can hand over. Empty leaves `labels` in charge.
     in property <string> first-label;
     in-out property <int> selected-index;
-    // See `ChipGroup.avail-width` — same contract, same default.
-    in property <length> avail-width: SettingsPage.row-content-w;
 
     callback selected(int);
 
     // The cell runs a little taller than the dot, so the selection ring isn't
     // clipped against the row edge.
     property <length> cell-h: 36px;
-    // Both wrapping strips take the same two `Wrap` helpers.
-    property <int> per-row: Wrap.per-row(root.avail-width, 32px, Theme.pad-sm);
 
-    horizontal-stretch: 0;
-    height: Wrap.rows-height(root.colors.length, root.per-row, root.cell-h, Theme.pad-sm);
+    min-width: 0px;
+    height: flow.preferred-height;
 
-    VerticalLayout {
+    flow := FlexboxLayout {
         spacing: Theme.pad-sm;
 
-        for row[r] in Wrap.chunk-indices(root.colors.length, root.per-row):
-            HorizontalLayout {
-                spacing: Theme.pad-sm;
-                alignment: start;
-
-                for i in row: VerticalLayout {
-                    alignment: center;
-                    ColorDot {
-                        swatch: root.colors[i];
-                        selected: i == root.selected-index;
-                        is-dynamic: root.first-is-dynamic && i == 0;
-                        label: i == 0 && root.first-label != "" ? root.first-label
-                            : i < root.labels.length ? root.labels[i] : "";
-                        tip-side: r == 0 ? TooltipSide.above : TooltipSide.below;
-                        clicked => {
-                            root.selected-index = i;
-                            root.selected(i);
-                        }
-                    }
+        for color[i] in root.colors: cell := VerticalLayout {
+            height: root.cell-h;
+            alignment: center;
+            ColorDot {
+                swatch: color;
+                selected: i == root.selected-index;
+                is-dynamic: root.first-is-dynamic && i == 0;
+                label: i == 0 && root.first-label != "" ? root.first-label
+                    : i < root.labels.length ? root.labels[i] : "";
+                // Off the laid-out position rather than a count of what fits, so the side can't
+                // disagree with where the flex actually broke the line.
+                tip-side: cell.y < root.cell-h ? TooltipSide.above : TooltipSide.below;
+                clicked => {
+                    root.selected-index = i;
+                    root.selected(i);
                 }
             }
+        }
     }
 }

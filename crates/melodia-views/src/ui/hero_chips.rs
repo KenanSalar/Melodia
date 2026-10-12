@@ -1,8 +1,7 @@
 //! Publishes the hero band's metadata chips into the `HeroChips` global.
 //!
-//! The thin half of [`crate::ui::chips`]: that module wraps a list of chips into rows,
-//! this one decides which chips a hero has. Six views share one global, so every hero
-//! opens by calling exactly one `publish_*`.
+//! Which chips a hero has, in what order; `HeroChipStrip` lays them out. Six views share
+//! one global, so every hero opens by calling exactly one `publish_*`.
 //!
 //! **No chip costs a query, and no `publish_*` walks a `Vec`.** Every fact is either on a
 //! stats struct the caller already holds or folded out of a `Vec` the same fetch walked —
@@ -23,14 +22,14 @@
 //! forced rather than chosen, an album's chips being unable to follow its track filter
 //! without lying about the album.
 //!
-//! Order matters: the band wraps at [`HERO_MAX_ROWS`] and drops what still doesn't fit,
-//! so each builder leads with the fact a user is most likely scanning for.
+//! Order matters: the band clips its chips at two rows (`HeroChipStrip`'s `max-rows`), so
+//! each builder leads with the fact a user is most likely scanning for.
 
-use std::cell::RefCell;
+use std::cell::Cell;
+use std::rc::Rc;
 
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::ui::chips;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi, NAV_FAVORITES};
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
@@ -46,17 +45,6 @@ use melodia_ui::{
     AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
     Radio,
 };
-
-/// How many rows a hero band gives its chips before dropping the rest.
-///
-/// Two, measured rather than picked: a second row plus its gap fits the slack every
-/// hero's trailing spacer already leaves. A third overruns the tile on all six and pushes
-/// the action pill out of the banner — unlike the Now Playing strip, which passes `None`.
-///
-/// The slack is what the title block leaves, so on the two heroes carrying a subtitle
-/// (Album's artist, Playlist's description) `Theme.hero-title-size` and `font-size-md` are a
-/// pair: raising either spends it.
-const HERO_MAX_ROWS: usize = 2;
 
 /// The translated labels a builder needs. A trait rather than the global directly, so the
 /// builders — the part with the decisions in them — are testable without an `AppWindow`.
@@ -138,45 +126,14 @@ pub enum ChipOwner {
     Station,
 }
 
-/// The published chips, who published them, and the width they were chunked against.
-///
-/// UI-thread state, so a `thread_local` rather than something threaded through six call
-/// sites that only hold an `&AppWindow`. The width deliberately survives a hero swap: the
-/// incoming strip re-reports it a frame later, and until then it beats zero.
-struct PublishedChips {
-    width: f32,
-    owner: Option<ChipOwner>,
-    chips: Vec<SharedString>,
-    /// Row lengths of the split last handed to Slint — see
-    /// [`chips::split_shape`] for what it buys and why the chips aren't in it.
-    shape: Vec<usize>,
-}
-
 thread_local! {
-    static PUBLISHED: RefCell<PublishedChips> = const {
-        RefCell::new(PublishedChips {
-            width: 0.0,
-            owner: None,
-            chips: Vec::new(),
-            shape: Vec::new(),
-        })
-    };
+    /// Who published the chips now on the band. UI-thread state, so a `thread_local` rather
+    /// than something threaded through six call sites that only hold an `&AppWindow`.
+    static PUBLISHED_BY: Cell<Option<ChipOwner>> = const { Cell::new(None) };
 }
 
-/// Wire the width channel. Called once, at boot.
-pub fn install(ui: &AppWindow) {
-    let weak = ui.as_weak();
-    ui.global::<HeroChips>().on_recompute(move |width| {
-        let Some(ui) = weak.upgrade() else { return };
-        PUBLISHED.with_borrow_mut(|p| p.width = width);
-        // The one caller that may re-chunk to the shape already on screen, and the one
-        // that fires per pointer motion of a resize drag.
-        write_rows(&ui, false);
-    });
-}
-
-/// Replace the band's chips and re-chunk, but only when the publishing view is on screen.
-/// Callers reach for a `publish_*` wrapper below; this is the seam they share.
+/// Replace the band's chips, but only when the publishing view is on screen. Callers
+/// reach for a `publish_*` wrapper below; this is the seam they share.
 ///
 /// **The gate is not optional.** One global serves six heroes and the boot path fetches
 /// every persisted detail id whichever section is restored, so at cold start up to four
@@ -187,11 +144,8 @@ fn publish(ui: &AppWindow, owner: ChipOwner, chips: Vec<SharedString>, section_a
     if !section_active {
         return;
     }
-    PUBLISHED.with_borrow_mut(|p| {
-        p.owner = Some(owner);
-        p.chips = chips;
-    });
-    write_rows(ui, true);
+    PUBLISHED_BY.set(Some(owner));
+    ui.global::<HeroChips>().set_chips(ModelRc::from(Rc::new(VecModel::from(chips))));
 }
 
 /// Drop the band's chips unconditionally — the page-level teardown, where nothing can
@@ -201,11 +155,8 @@ fn publish(ui: &AppWindow, owner: ChipOwner, chips: Vec<SharedString>, section_a
 /// reset the backdrop when their mosaic empties while the view is still on screen, and
 /// clearing there would blank a live band.
 pub fn clear(ui: &AppWindow) {
-    PUBLISHED.with_borrow_mut(|p| {
-        p.owner = None;
-        p.chips.clear();
-    });
-    write_rows(ui, true);
+    PUBLISHED_BY.set(None);
+    ui.global::<HeroChips>().set_chips(ModelRc::default());
 }
 
 /// Drop the band's chips **unless the band is still painting the hero that published
@@ -225,8 +176,7 @@ pub fn clear(ui: &AppWindow) {
 ///   really closed (id `-1`, so this clears) or a tab switch collapsed it and picking
 ///   that tab again morphs the banner back open with its counts intact.
 pub fn clear_if_stale(ui: &AppWindow) {
-    let recorded = PUBLISHED.with_borrow(|p| p.owner);
-    let Some(recorded) = recorded else {
+    let Some(recorded) = PUBLISHED_BY.get() else {
         return;
     };
     if should_clear(recorded, band_owner(ui), is_open(ui, recorded)) {
@@ -312,27 +262,6 @@ fn is_open(ui: &AppWindow, owner: ChipOwner) -> bool {
         }
         ChipOwner::Favorites | ChipOwner::RecentlyPlayed => false,
     }
-}
-
-/// Re-chunk and hand the split to Slint.
-///
-/// `force` is the caller answering "did my chips move?" — `true` from [`publish`] and
-/// [`clear`], the only two that can. Unforced, an unchanged shape skips the write:
-/// `set_rows` is a model reset, so a strip re-chunking to the same two rows would rebuild
-/// every chip once per pointer motion.
-fn write_rows(ui: &AppWindow, force: bool) {
-    let Some(rows) = PUBLISHED.with_borrow_mut(|p| {
-        let rows = chips::chunk_chips_to_rows(&p.chips, p.width, Some(HERO_MAX_ROWS));
-        let shape = chips::split_shape(&rows);
-        if !force && shape == p.shape {
-            return None;
-        }
-        p.shape = shape;
-        Some(rows)
-    }) else {
-        return;
-    };
-    ui.global::<HeroChips>().set_rows(chips::rows_to_model(rows));
 }
 
 // --- Per-hero publishers ------------------------------------------------

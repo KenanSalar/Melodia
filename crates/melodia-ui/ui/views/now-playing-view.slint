@@ -53,7 +53,7 @@ export component NowPlayingView inherits Rectangle {
     property <length> up-next-width: clamp(root.width * 0.35, 280px, 420px);
 
     // What the artwork / title / chip column gets: the panel less its left padding, the
-    // inter-column gap and the Up Next column. `Player.recompute-chip-rows` chunks against it.
+    // inter-column gap and the Up Next column.
     property <length> content-width: root.width - Theme.pad-lg - Theme.pad-md - root.up-next-width;
 
     // The square the slot reserves. The tile is square at whichever axis runs out first, so on a
@@ -320,17 +320,15 @@ export component NowPlayingView inherits Rectangle {
 
                         // **The strip reserves its row unconditionally**, so the centred artwork
                         // above never reflows when a slow fetch lands or a track has no metadata.
-                        // On a narrow window it grows downward, the strip reporting its width and
-                        // Rust re-chunking uncapped. Contents are gated on the track id, so a fetch
-                        // landing after a rapid track change is never shown against the wrong
-                        // track.
+                        // On a narrow window it grows downward. Contents are gated on the track
+                        // id, so a fetch landing after a rapid track change is never shown against
+                        // the wrong track.
                         if Player.vm.has_track: MetaChipStrip {
-                            rows: Player.chip-rows;
+                            chips: Player.chips;
                             show-rows: Player.track-meta.track_id == Player.vm.track.id;
                             centred: true;
                             chip-fill: Player.np-chip-fill;
                             chip-label-color: Player.np-chrome-text;
-                            measured(w) => { Player.recompute-chip-rows(w); }
                         }
 
                         // The base under the whole cover → title → chips group. Wrapped in a

@@ -247,13 +247,7 @@ export component DialogOverlay inherits Rectangle {
             // The rule builder; the dispatcher routes Accept to its commit.
             if DialogGlobal.kind == DialogKind.smart-playlist-editor: SmartPlaylistEditorBody { }
 
-            // **Its tab strip wraps, so it needs the width it is actually drawn at** —
-            // the card less this layout's padding, both of which are this file's to
-            // know. Reading `card.width` from in here closes no cycle: that depends on
-            // the dialog root's width and never on its children.
-            if DialogGlobal.kind == DialogKind.edit-tags: TagEditorBody {
-                host-w: card.width - 2 * Theme.pad-lg;
-            }
+            if DialogGlobal.kind == DialogKind.edit-tags: TagEditorBody { }
 
             // The primary button drives the flow; **the dialog stays open across the
             // async round-trip** and Rust closes it on success.

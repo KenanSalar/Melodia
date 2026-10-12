@@ -67,9 +67,9 @@ this file is what builds, looks right, and is wrong.
   old and new `ModelRc` **by pointer**, so a callback building a fresh model per call drops and
   rebuilds the whole repeater, trackers and tooltip layers included. Symptom: a page that stutters
   through a resize drag while nothing on it visibly changes, because every width feeding an argument
-  re-ran the call. Cure: hand back the *same* `ModelRc` for the same answer. `ui::chips::IndexRows`
-  memoizes the settings strips by row shape, and `ui::chips::PackedLabels` does the same for
-  `Wrap.pack-labels` behind Recent Searches, keyed on the labels and the split they packed into.
+  re-ran the call. Cure: hand back the *same* `ModelRc` for the same answer, or better, keep the
+  model flat and let a layout do what the callback was computing, which is why the chip strips are
+  `FlexboxLayout`s over one list rather than rows split for them.
 
 - **A shared component may not `animate` a brush its host hands it — it cannot tell an eased
   input from a stepped one, so it eases a *float* and lets the brush track its source.** A host
@@ -260,15 +260,14 @@ this file is what builds, looks right, and is wrong.
   **A `min-height` beside it makes this survivable and therefore invisible**: `MetaChipStrip`
   shipped as `Rectangle { min-height: 26px; if show-rows: VerticalLayout { … } }`, reported
   `preferred: 0`, took its 26 px floor, and drew every wrapped row *outside* the box — only wrong
-  once content wraps, i.e. a narrow window or a long-plural locale. **And the wrapper owes a
-  `min-width: 0px`** — a layout child folds in *both* orientations, and `layout_items` never
-  shrinks a cell past its `min`, so a strip that chunks itself against the width it is handed
-  reports the old width back, never learns there is less room, and clips instead of wrapping. An
-  explicit `min-width` **replaces** the merged constraint rather than maxing with it, so one line
-  is the whole cure (`settings/chip-group.slint` carries it against a hidden ruler). Nothing
-  higher up saves you: the same replacement happens on the root `Window`. Pinned by
-  `ui::hero_chips::tests::{the_strip_rows_hang_off_a_layout_not_off_the_root,`
-  `the_strip_leaks_no_width_floor}`.
+  once content wraps, i.e. a narrow window or a long-plural locale. The wrapper is also the one
+  thing outside the `if` the root can read its height off, an id inside an `if` being unreadable
+  from out there. **The fold runs in *both* orientations**, and `layout_items` never shrinks a cell
+  past its `min`, so a wrapper's `min-width` becomes a floor under whatever holds the root. An
+  explicit `min-width` **replaces** the merged constraint rather than maxing with it, so one line is
+  the whole cure (`settings/chip-group.slint`, whose flex would otherwise floor the card at its
+  widest chip). Nothing higher up saves you: the same replacement happens on the root `Window`.
+  Pinned by `ui::hero_chips::tests::the_strip_rows_hang_off_a_layout_not_off_the_root`.
 
 - **`VerticalLayout` divides surplus equally when every child has `vertical-stretch: 0`.** Append
   trailing `Rectangle { vertical-stretch: 1; }`, or set `alignment: start`, which hands out no
@@ -279,13 +278,38 @@ this file is what builds, looks right, and is wrong.
 
 - **A `GridLayout` cannot do masonry, and the cure is to make each cell a column rather than an
   item.** Cells are top-aligned to a row as tall as its tallest, so a short item is followed by
-  dead space down to the next row. No per-column flow, no `Flow` element to fall back on.
+  dead space down to the next row. No per-column flow, and a `FlexboxLayout` of columns can't stand
+  in for it over cards like these (the flex measuring entry below).
   Restructure: one cell per column, each a `VerticalLayout` of the items
   (`views/settings/pages/*.slint` place *columns*, not cards). Two consequences: stacked, it is
   column A's items then column B's, so columns want to be **contiguous halves** of the list rather
   than alternating; and a page with fewer items than columns leaves one empty, so an item that
   must not fill the surplus width needs its own `max-width` (`SectionCard` pins one beside its
   `preferred-width`).
+
+- **A `FlexboxLayout` measures its items at a width it hasn't committed to, and only a
+  layout-rooted component can answer.** taffy solves both axes in one pass, so placing an item
+  whose height follows its width means asking that height at a trial width, through the
+  synthesized `layoutinfo-v-with-constraint`. The compiler synthesizes it on *layout* elements only
+  (`passes/lower_layout.rs`), and a host treats a child as height-for-width only when the child's
+  component root has one (`llr/lower_layout_expression.rs`, `is_height_for_width_cell`). A
+  `Rectangle`-rooted component whose height follows its width (`ChipGroup`, `SettingRow` with its
+  wrapped label, `SettingSlider`, `Dropdown`, …) is read at its *drawn* height instead, which
+  depends on its drawn width, which comes from the solve still in progress. Symptom: `Recursion
+  detected` at `i-slint-core/properties.rs`, at run time only and on the first layout, through
+  `layout_item_info_at_cross_width` and `*_layoutinfo_v_with_constraint` frames; the build and
+  every test stay green. A flex Settings body of two card columns hit it on opening Interface and
+  went back to the `GridLayout` above, which solves widths before heights. **What a flex may hold
+  is fixed-height or layout-rooted**, which every flex in the tree keeps to: chips, pills, swatches
+  and tiles. A root `height` bound to its own flex's `preferred-height` (`ChipGroup`,
+  `MetaChipStrip`) is read at the drawn width too, so neither may sit in a flex itself.
+
+- **A `FlexboxLayout` reports no maximum height and stretches its lines into whatever it is
+  given**, `cross-axis-line-alignment` defaulting to `stretch` (taffy's `align-content`). A host
+  with height to spare spreads the rows apart, and nothing says so until one has some. Three
+  answers in the tree: bind the root's `height` to the flex's `preferred-height` (`ChipGroup`), set
+  `cross-axis-line-alignment: start` (the mosaic picker, whose viewport outgrows one row of tiles),
+  or hand the flex no surplus (`alignment: start` on `RecentSearches`' root).
 
 - **`GridLayout` honours a runtime expression for `row`/`col` on a plain child, and forces `Auto`
   on a repeated one.** `convert_row_col_expr` lowers `RowColExpr::Named` to a `PropertyReference`
@@ -532,8 +556,8 @@ this file is what builds, looks right, and is wrong.
     render Arabic correctly. Any `Text` that can hold user
     data wants `elide` even where nothing can overflow — **but it also lowers that element's
     layout `min` to the width of one `…`**, so an over-packed row that used to overflow one chip
-    now compresses and truncates all of them (`components/meta-chip.slint`;
-    `ui::chips::estimated_chip_width` keeps the wrap estimate out of reach). Sharper for a
+    now compresses and truncates all of them (`components/meta-chip.slint`, safe only because its
+    strip breaks lines on the chips' real widths). Sharper for a
     *fixed*-height `Text` — it is asking to be cut, so give it slack or leave the height alone.
 
 - **A function's arguments are unreachable inside a gradient's stops, so a shared
@@ -672,7 +696,8 @@ this file is what builds, looks right, and is wrong.
   whole distinction: a tracker reading a property driven from **inside** the branch dies quietly
   (`tooltip.slint`'s `changed hovered`, fed by its own `TouchArea`), where one reading a **layout**
   property is re-dirtied by the *surviving parent* the moment it re-flows without the child
-  (`meta-chip-strip.slint`'s `changed watched-w`). So the rule is about the **condition**, not the
+  (`grid-columns-sync.slint`'s `changed watched-cols`, a count off a width). So the rule is about
+  the **condition**, not the
   handler: a branch carrying a layout-watching tracker may only be dropped when nothing has
   re-dirtied that property in the same frame — never by an animated property, never by anything a
   `changed` handler writes. **Don't read "a discrete write from Rust" as the cure — the quiet
@@ -686,11 +711,10 @@ this file is what builds, looks right, and is wrong.
   `change_tracker<N>.init` whose *eval* closure reads a `_width` / `_height` / `_watched_w`.
   The shape to copy is `library-tab-band.slint`: everything tracker-free rides one
   `hero-shown: root.detail-open || root.hero-t > 0` (which also stops the two halves mounting a
-  frame apart), and **the chip strip is mounted for the life of the band**, fading by brush alpha
-  through `HeroBackdrop.chip-fill-at` — brush alpha rather than `opacity` because a permanent
-  mount satisfies neither `need_layer` bail. Pinned by
-  `ui::library_tab_band_tests::the_chip_strip_outlives_every_morph_it_is_painted_in` (a brace
-  walk, not an indent walk — the band has `if`-gated *siblings* at shallower depths).
+  frame apart), and a piece carrying a layout-watching tracker stays mounted for the life of the
+  band, fading by brush alpha — brush alpha rather than `opacity` because a permanent mount
+  satisfies neither `need_layer` bail. Pinned by
+  `ui::library_tab_band_tests::the_hero_mounts_on_the_detail_or_a_running_morph`.
 
 - **A `Timer`'s `interval` may not reach a layout property, even transitively.** Slint evaluates it
   through a `ChangeTracker` initialised in the component's `user_init`, and for a timer inside an

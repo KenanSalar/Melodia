@@ -23,8 +23,7 @@ pub(super) fn to_slint_track_meta(t: &TrackMeta) -> TrackMetaRow {
 
 /// Walks `TrackMetaRow` fields in the same order the declarative chip block
 /// in `now-playing-view.slint` declared them and returns the non-empty
-/// texts. Used both to seed the chip shadow on track-meta change and to
-/// re-chunk on width changes without re-reading the global.
+/// texts.
 pub(super) fn visible_chip_texts(m: &TrackMetaRow) -> Vec<SharedString> {
     let fields =
         [&m.codec, &m.bitrate, &m.sample_rate, &m.bit_depth, &m.channels, &m.year, &m.genre];
@@ -36,9 +35,6 @@ pub(super) fn visible_chip_texts(m: &TrackMetaRow) -> Vec<SharedString> {
     }
     out
 }
-
-// The wrap itself lives in `crate::ui::chips` — shared with the hero bands, so
-// both strips break the same way and only the row cap differs.
 
 #[cfg(test)]
 #[path = "tests/metadata_tests.rs"]

@@ -10,31 +10,31 @@ import { MetaChipStrip } from "meta-chip-strip.slint";
 // which is what lets one strip sit on a blurred cover *and* a blurred banner.
 export component HeroChipStrip inherits MetaChipStrip {
     // How much of the hero is on screen, for a band that morphs into one. Multiplying both brushes
-    // is the *only* way this strip can fade: it carries `MetaChipStrip`'s `changed watched-w`
-    // tracker, so a band wanting a fade-out must keep it mounted, and an `opacity` under 1 on a
-    // mounted subtree with children costs a layer every frame. The five fixed heroes take default.
+    // is how this strip fades, an `opacity` under 1 on a mounted subtree with children costing a
+    // layer every frame. The five fixed heroes take the default.
     in property <float> fade: 1.0;
 
     // **How much of the row has arrived.** The chips are the one hero fact that can land after the
     // banner: a tab re-entered onto an open detail morphs open on held artwork and colours while
     // these are still behind the re-fetch. `dur-med`, matching the blur crossfade and the palette
     // mirrors. A float into the same two brushes `fade` is, and safe to `animate` as a binding —
-    // its only dependency is the row model, which Rust writes discretely.
-    property <float> arrive-t: root.rows.length > 0 ? 1.0 : 0.0;
+    // its only dependency is the chip model, which Rust writes discretely.
+    property <float> arrive-t: root.chips.length > 0 ? 1.0 : 0.0;
     animate arrive-t {
         duration: Theme.dur-med;
         easing: ease-in-out;
     }
 
-    rows: HeroChips.rows;
+    chips: HeroChips.chips;
+    // Two, measured rather than picked: a second row plus its gap fits the slack every hero's
+    // trailing spacer already leaves, where a third overruns the tile on all six and pushes the
+    // action pill out of the banner. The slack is what the title block leaves, so on the two heroes
+    // carrying a subtitle (Album's artist, Playlist's description) `Theme.hero-title-size` and
+    // `font-size-md` are a pair: raising either spends it.
+    max-rows: 2;
     // `chrome-text` rather than `chrome`: a label is held to 4.5:1 where the glyphs on that tier
     // answer to 3:1. **`transparentize`, never `with-alpha`** — both tiers carry alpha of their own
     // on the aurora arm, and setting it here would paint them opaque at rest.
     chip-fill: HeroBackdrop.chip-fill-at(root.fade * root.arrive-t);
     chip-label-color: HeroBackdrop.chrome-text.transparentize(1.0 - root.fade * root.arrive-t);
-    vertical-stretch: 0;
-
-    measured(w) => {
-        HeroChips.recompute(w);
-    }
 }

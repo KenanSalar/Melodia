@@ -250,8 +250,6 @@ pub fn install_library_settings_and_friends(
     // pushes the "crashed last time" notice itself.
     ui::settings::diagnostics::install(app, state, &notifications);
     ui::settings::settings_page::install(app, state);
-    ui::chips::install(app);
-    ui::hero_chips::install(app);
     ui::track_columns::install(app);
     // The stack is the one surface a language switch can't reach on its own: its rows carry
     // strings Rust resolved once, they outlive every navigation, and the file-watching

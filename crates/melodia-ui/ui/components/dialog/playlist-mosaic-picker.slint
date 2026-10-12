@@ -22,14 +22,8 @@ import { SectionButton } from "../settings/section-button.slint";
 export component PlaylistMosaicPicker inherits Rectangle {
     private property <length> cand-tile: 64px;
     private property <length> cand-gap: 8px;
-    private property <int> cand-cols: 6;
-    private property <length> cand-stride: root.cand-tile + root.cand-gap;
-    private property <length> grid-row-h: root.cand-stride;
-    private property <int> total-rows:
-        Math.ceil(Dialog.mosaic-candidates.length / root.cand-cols);
     // Two rows visible; the ScrollView takes the overflow.
     private property <length> grid-area-h: 160px;
-    private property <length> grid-content-h: root.total-rows * root.grid-row-h;
 
     // Painted *behind* the cells, so the gaps between tiles read as gutters
     // rather than as butted-up halves; the preview's own padding picks up the
@@ -172,9 +166,6 @@ export component PlaylistMosaicPicker inherits Rectangle {
             }
         }
 
-        // Wrapping candidate grid. Slint has no `flex-wrap`, so the tiles are
-        // absolutely positioned by index inside a Rectangle of known height —
-        // which is what lets the ScrollView around it take the overflow.
         if Dialog.mosaic-candidates.length == 0: Rectangle {
             vertical-stretch: 1;
             height: 80px;
@@ -217,116 +208,114 @@ export component PlaylistMosaicPicker inherits Rectangle {
                 horizontal-scrollbar-policy: always-off;
                 vertical-scrollbar-policy: always-off;
                 content-width: self.visible-width;
-                content-height: root.grid-content-h + 8px;
 
-                Rectangle {
-                    width: 100%;
-                    // Insets the absolutely-positioned children from the edges.
-                    VerticalLayout {
-                        padding: Theme.pad-xs;
+                VerticalLayout {
+                    padding: Theme.pad-xs;
+                    // A full row would otherwise run under the scrollbar.
+                    padding-right: Theme.scrollbar-slot + 2px;
 
-                        Rectangle {
-                            height: root.grid-content-h;
+                    FlexboxLayout {
+                        spacing: root.cand-gap;
+                        // The viewport can be taller than the tiles need, and stretched lines
+                        // would spread them down it.
+                        cross-axis-line-alignment: start;
 
-                            for path[i] in Dialog.mosaic-candidates: cand := Rectangle {
-                                x: Math.mod(i, root.cand-cols) * root.cand-stride;
-                                y: Math.floor(i / root.cand-cols) * root.cand-stride;
-                                width: root.cand-tile;
-                                height: root.cand-tile;
-                                // The tile's one rounded clip. Everything inside is square or
-                                // an `EdgeOutline`, so this is the curve's only antialiased pass.
-                                clip: true;
-                                border-radius: Theme.radius-sm;
+                        for path in Dialog.mosaic-candidates: cand := Rectangle {
+                            width: root.cand-tile;
+                            height: root.cand-tile;
+                            // The tile's one rounded clip. Everything inside is square or
+                            // an `EdgeOutline`, so this is the curve's only antialiased pass.
+                            clip: true;
+                            border-radius: Theme.radius-sm;
 
-                                // Cap is 4, so four arms beat a loop. On `cand`
-                                // itself because `parent` doesn't reach through
-                                // nested layouts — descendants read `cand.slot`.
-                                property <int> slot:
-                                    (Dialog.mosaic-selection.length >= 1
-                                        && Dialog.mosaic-selection[0] == path) ? 0 :
-                                    (Dialog.mosaic-selection.length >= 2
-                                        && Dialog.mosaic-selection[1] == path) ? 1 :
-                                    (Dialog.mosaic-selection.length >= 3
-                                        && Dialog.mosaic-selection[2] == path) ? 2 :
-                                    (Dialog.mosaic-selection.length >= 4
-                                        && Dialog.mosaic-selection[3] == path) ? 3 : -1;
-                                // The hairline's fade. Through its brush, since `opacity` on an
-                                // element with children renders it into a texture.
-                                property <float> hover-t:
-                                    cand-touch.has-hover && cand.slot < 0 ? 1.0 : 0.0;
-                                animate hover-t { duration: Theme.dur-fast; easing: ease-out; }
-                                // The selection ring's fade, the same way for the same reason.
-                                property <float> ring-t: cand.slot >= 0 ? 1.0 : 0.0;
-                                animate ring-t { duration: Theme.dur-fast; easing: ease-out; }
+                            // Cap is 4, so four arms beat a loop. On `cand`
+                            // itself because `parent` doesn't reach through
+                            // nested layouts — descendants read `cand.slot`.
+                            property <int> slot:
+                                (Dialog.mosaic-selection.length >= 1
+                                    && Dialog.mosaic-selection[0] == path) ? 0 :
+                                (Dialog.mosaic-selection.length >= 2
+                                    && Dialog.mosaic-selection[1] == path) ? 1 :
+                                (Dialog.mosaic-selection.length >= 3
+                                    && Dialog.mosaic-selection[2] == path) ? 2 :
+                                (Dialog.mosaic-selection.length >= 4
+                                    && Dialog.mosaic-selection[3] == path) ? 3 : -1;
+                            // The hairline's fade. Through its brush, since `opacity` on an
+                            // element with children renders it into a texture.
+                            property <float> hover-t:
+                                cand-touch.has-hover && cand.slot < 0 ? 1.0 : 0.0;
+                            animate hover-t { duration: Theme.dur-fast; easing: ease-out; }
+                            // The selection ring's fade, the same way for the same reason.
+                            property <float> ring-t: cand.slot >= 0 ? 1.0 : 0.0;
+                            animate ring-t { duration: Theme.dur-fast; easing: ease-out; }
 
-                                ArtworkImage {
-                                    artwork-path: path;
-                                    cover: Playlists.request-row-cover(path);
-                                    tile-size: root.cand-tile;
-                                    // Square, so its own clip is a plain one: `cand` rounds it.
-                                    tile-radius: 0px;
-                                    // Hover pop, as on the album grid card.
-                                    // `ArtworkImage` animates the scale itself.
-                                    cover-scale: cand-touch.has-hover ? 1.06 : 1.0;
+                            ArtworkImage {
+                                artwork-path: path;
+                                cover: Playlists.request-row-cover(path);
+                                tile-size: root.cand-tile;
+                                // Square, so its own clip is a plain one: `cand` rounds it.
+                                tile-radius: 0px;
+                                // Hover pop, as on the album grid card.
+                                // `ArtworkImage` animates the scale itself.
+                                cover-scale: cand-touch.has-hover ? 1.06 : 1.0;
+                            }
+
+                            // Mounted until its fade-out lands, for the ring's reason below.
+                            if cand.hover-t > 0: EdgeOutline {
+                                width: 100%;
+                                height: 100%;
+                                radius: Theme.radius-sm;
+                                stroke-width: 1px;
+                                stroke-color: Theme.overlay1.transparentize(1.0 - cand.hover-t);
+                            }
+
+                            // Selection ring + badge, mounted until the fade-out
+                            // lands rather than for as long as the tile is shown:
+                            // gated on `slot`, the ring would vanish on deselect.
+                            if cand.ring-t > 0: Rectangle {
+                                width: 100%;
+                                height: 100%;
+
+                                Rectangle {
+                                    x: 0;
+                                    y: 0;
+                                    width: 100%;
+                                    height: 100%;
+                                    background: Theme.accent.with-alpha(0.18 * cand.ring-t);
                                 }
 
-                                // Mounted until its fade-out lands, for the ring's reason below.
-                                if cand.hover-t > 0: EdgeOutline {
+                                EdgeOutline {
                                     width: 100%;
                                     height: 100%;
                                     radius: Theme.radius-sm;
-                                    stroke-width: 1px;
-                                    stroke-color: Theme.overlay1.transparentize(1.0 - cand.hover-t);
+                                    stroke-width: 2px;
+                                    stroke-color: Theme.accent.transparentize(1.0 - cand.ring-t);
                                 }
 
-                                // Selection ring + badge, mounted until the fade-out
-                                // lands rather than for as long as the tile is shown:
-                                // gated on `slot`, the ring would vanish on deselect.
-                                if cand.ring-t > 0: Rectangle {
-                                    width: 100%;
-                                    height: 100%;
-
-                                    Rectangle {
-                                        x: 0;
-                                        y: 0;
-                                        width: 100%;
-                                        height: 100%;
-                                        background: Theme.accent.with-alpha(0.18 * cand.ring-t);
-                                    }
-
-                                    EdgeOutline {
-                                        width: 100%;
-                                        height: 100%;
-                                        radius: Theme.radius-sm;
-                                        stroke-width: 2px;
-                                        stroke-color: Theme.accent.transparentize(1.0 - cand.ring-t);
-                                    }
-
-                                    Rectangle {
-                                        width: 22px;
-                                        height: 22px;
-                                        x: 4px;
-                                        y: 4px;
-                                        border-radius: 11px;
-                                        background: Theme.accent.transparentize(1.0 - cand.ring-t);
-                                        // Empty when deselected; only ever seen
-                                        // during the ring's fade-out.
-                                        Text {
-                                            text: cand.slot >= 0 ? (cand.slot + 1) + "" : "";
-                                            color: Theme.accent-text.transparentize(1.0 - cand.ring-t);
-                                            font-size: 12px;
-                                            font-weight: 700;
-                                            horizontal-alignment: center;
-                                            vertical-alignment: center;
-                                        }
+                                Rectangle {
+                                    width: 22px;
+                                    height: 22px;
+                                    x: 4px;
+                                    y: 4px;
+                                    border-radius: 11px;
+                                    background: Theme.accent.transparentize(1.0 - cand.ring-t);
+                                    // Empty when deselected; only ever seen
+                                    // during the ring's fade-out.
+                                    Text {
+                                        text: cand.slot >= 0 ? (cand.slot + 1) + "" : "";
+                                        color: Theme.accent-text.transparentize(1.0 - cand.ring-t);
+                                        font-size: 12px;
+                                        font-weight: 700;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
                                     }
                                 }
+                            }
 
-                                cand-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    clicked => {
-                                        Playlists.toggle-mosaic-candidate(path);
-                                    }
+                            cand-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    Playlists.toggle-mosaic-candidate(path);
                                 }
                             }
                         }
@@ -334,8 +323,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
                 }
             }
 
-            // Inset off the card's border and radius. The tiles are anchored left
-            // at a fixed six-column stride, so it needs no gutter reserved for it.
+            // Inset off the card's border and radius, over the gutter the tiles leave it.
             OverlayScrollbar {
                 horizontal: false;
                 track-color: Theme.scrollbar-track-on-card;

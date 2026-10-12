@@ -521,8 +521,8 @@ export struct RadioSuggestionRow {
 // **Every count is Rust's answer, not the layout's.** A `for` loop exposes no per-item element
 // whose `y` could be read back, so following the song means Rust owning a cumulative offset table.
 // It can only do that if it also decides how tall each row is, which it does by estimating the
-// wrap the way `ui::chips` estimates a chip's width. Over by one costs a blank line; under by one
-// elides.
+// wrap from per-character widths (`ui::now_playing::lyrics::measure`). Over by one costs a blank
+// line; under by one elides.
 //
 // The three are declared in the order they are drawn: the words, how they sound, what they mean.
 //

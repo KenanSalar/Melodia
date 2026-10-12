@@ -42,8 +42,8 @@ export global SettingsPage {
 
     // The two facts the view writes imperatively — a global can't be bound from a view, and the
     // page can't read its live width into a binding feeding a child's size without re-entering
-    // layout. **Everything below derives from them.** The seed is a plausible narrow page: too
-    // narrow costs an extra chip row, where zero collapses the strips outright.
+    // layout. **Everything below derives from them.** The seed is a plausible narrow page, where
+    // zero would collapse every card for the frame before the first write.
     in-out property <length> page-w: 440px;
     // 1 or 2. Also what `grid-row`/`grid-col` key off.
     in-out property <int> body-cols: 1;
@@ -72,14 +72,8 @@ export global SettingsPage {
     // one shade off shows as a box or a seam.
     out property <brush> card-fill: Theme.surface0;
 
-    // The glyph column both settings rows lead with. Here rather than in the rows because
-    // `row-content-w` has to subtract it, and two copies could drift with nothing failing.
+    // The glyph column both settings rows lead with, here so the two can't drift apart.
     out property <length> row-icon-w: 22px;
-
-    // What a `SettingRowStacked` leaves its content column. Derived rather than measured, every
-    // card spanning a full column — which is what lets the strips wrap with no mirror of their own.
-    out property <length> row-content-w:
-        max(0px, root.card-w - (3 * Theme.pad-lg + root.row-icon-w));
 
     // Where a page's **column** sits in the body grid — not a card. Cards placed as cells are
     // row-aligned and a grid row is as tall as its taller cell, so a short card leaves a hole; one

@@ -200,7 +200,8 @@ shadows the built-in one without a diagnostic.
 
 One change per section, in this order, each on a tree already on 1.18:
 
-1. 🟢 `FlexboxLayout` → retire the row packer and the `Wrap` global (largest deletion)
+1. 🟢 `FlexboxLayout` → retire the row packer and the `Wrap` global (largest deletion). **Done
+   2026-10-12.**
 2. 🟢 `PopupWindow.is-open` → slim the `PopupHighlight` plumbing
 3. 🟢 `animate { enabled }` → replace duration-zero gating
 4. 🟢 `cross-axis-alignment` → drop centering wrapper layouts
@@ -270,59 +271,27 @@ carries the gap over to the touchpad:
 
 ## 🟢 `FlexboxLayout` → retire the Rust row packer and the `Wrap` global
 
-- **Today:** Slint 1.16 has no wrapping layout, so four components split their items into rows
-  themselves and walk nested arrays.
-  - **`MetaChipStrip`**, mounted by Now Playing (`views/now-playing-view.slint:327`) and, as
-    `HeroChipStrip`, by both heroes (`components/hero/library-tab-band.slint:426`,
-    `components/hero/mosaic-tab-hero.slint:189`). The strip reports its width through `measured`
-    (plus a 1 ms Timer, since `changed` misses the first layout). Rust then packs `[[string]]`
-    rows (`Player.chip-rows`, `HeroChips.rows`) from an *estimated* chip width: `ui/chips.rs`'s
-    `CHAR_W` times the character count, plus a hand-copied `Theme.pad-sm` (`SPACING`). The split
-    shape is cached in three places (`chips::split_shape`, `NowPlayingState.chip_last_width` /
-    `chip_last_shape`, `hero_chips::PublishedChips.width` / `shape`), because every re-publish is
-    a model reset that rebuilds each chip once per pointer motion of a resize drag.
-  - **`ChipGroup`** (`components/settings/chip-group.slint`, 13 mounts across Settings,
-    onboarding and the tag editor). A hidden ruler measures the widest chip, `Wrap.per-row`
-    counts how many fit, `Wrap.chunk-indices` returns `[[int]]` from a Rust cache
-    (`chips::IndexRows`), and `Wrap.rows-height` pins the height. Chips still draw at their
-    natural width; the ruler only makes the wrap point conservative.
-  - **`ColorDotGrid`** (`components/settings/color-dot-grid.slint`, 3 mounts): the same index
-    split over fixed-size dots.
-  - **Recent searches** (`views/search/recent-searches.slint:148`): `Wrap.pack-labels`, packed
-    in Rust by estimated width with its own cache (`chips::PackedLabels`).
-- **Upstream in 1.18:** `FlexboxLayout`, which wraps by default and is laid out by taffy.
-  `spacing-horizontal` / `spacing-vertical` carry the chips' `pad-sm`-across / `pad-xs`-down
-  split, and `alignment` covers Now Playing's centred rows and the heroes' left-aligned ones.
-  Every item is measured for real, so no estimate and no ruler.
-- **Migration:** each surface becomes a `FlexboxLayout` over a flat model.
-  - `ui/chips.rs` and `ui/tests/chips_tests.rs` are deleted, along with the
-    `ui::chips::install` call in `crates/melodia/src/boot/ui_setup/views.rs`.
-  - `globals/wrap.slint` is deleted. `ColorDotGrid` still needs to know whether a dot is on the
-    first row, for its tooltip side (`tip-side: r == 0 ? above : below`). The dots are fixed
-    width, so that's `i < per-row` over the same arithmetic, moved into the component as a
-    private function since it would be the only caller left.
-  - `Player.chip-rows: [[string]]` becomes a flat `[string]`. `Player.recompute-chip-rows`,
-    `NowPlayingState.chip_last_width` / `chip_last_shape` and the re-chunk in
-    `now_playing/source_change.rs` all go.
-  - `HeroChips.rows` becomes a flat list. `HeroChips.recompute`, `PublishedChips.width` /
-    `shape` and `write_rows`'s shape check all go.
-  - `MetaChipStrip` loses `measured`, its Timer and `watched-w`. Its `min-height` /
-    `min-width: 0px` notes argue against the nested `VerticalLayout`, so re-derive them against
-    the new layout rather than carrying them over.
-- **Decide first:** a hero caps its chips at `HERO_MAX_ROWS = 2` and *drops* what doesn't fit.
-  Each builder leads with the most important fact, and a band growing during a resize drag reads
-  as thrashing. `FlexboxLayout` has no row cap. The likely answer is a two-row height plus
-  `clip: true` on the hero strip: chips are uniform height, so clipping at exactly two rows
-  hides the third row whole. Settle it before touching the heroes.
-- **Risk: height-for-width.** Every host gets its height from Rust's row count or from
-  `Wrap.rows-height` today. A wrapping container has to report the height it needs at the width
-  its parent layout hands it. 1.18 synthesizes that constraint pass, and #12776 fixed the same
-  case for word-wrapped cells. Prototype on one `ChipGroup` in a Settings card first, where a
-  wrong answer is obvious and nothing else depends on it. Then do recent searches and the heroes,
-  and Now Playing last, since its reserved row is what keeps the artwork from reflowing.
-- **Not for the card grids.** `FlexboxLayout` doesn't virtualize, and
-  `ui::grid_prewarm::cover_size` sizes the cover tier off the card width `GridGeometry` packs.
-  Those stay `ListView` rows.
+Done 2026-10-12, every step passed by hand.
+
+- **The four wrapping surfaces** (the Now Playing and hero chip strips, every `ChipGroup` and
+  `ColorDotGrid`, Recent Searches) are `FlexboxLayout`s over flat models, breaking lines on the
+  chips' real widths. `ui/chips.rs`, `globals/wrap.slint`, the strip's width channel and the
+  hidden ruler are gone. A hero's two-row cap is a clip on `MetaChipStrip` (`max-rows`), argued at
+  `HeroChipStrip`'s binding.
+- **Two more wraps went the same way**: Radio Browse's suggestion pills, which lost their
+  four-pill cap, and the playlist mosaic picker's tiles, which lost their hand-placed grid.
+- **The Settings body was tried as a flex of two card columns and reverted.** A flex measures its
+  items at a trial width, which only a layout-rooted component can answer, and the settings cards
+  are full of `Rectangle`-rooted ones whose height follows their width: it built clean and
+  panicked `Recursion detected` on opening Interface. `.claude/rules/slint-pitfalls.md`'s flex
+  measuring entry carries the mechanism.
+- **Not a fit, checked**: the virtualized card grids (a flex doesn't virtualize), the station
+  cards' tag line (a fixed card height inside a `ListView` row), the lyrics rows (word wrap plus a
+  Rust-owned offset table), the track columns (per-column widths), the miniplayer (a continuous
+  morph) and the band pill rows (a fixed band row height).
+- **Possible now and not done**: the band's chip strip joining `hero-shown`, a `MetaChipStrip` in
+  the welcome card, Search's Top Result and Songs stacking on a narrow panel, the Browse
+  breadcrumb wrapping, and `SettingRow` dropping its control under the label.
 
 ## 🟢 `PopupWindow` geometry reactivity + `is-open` → simplify popup plumbing
 
@@ -346,7 +315,7 @@ carries the gap over to the touchpad:
 ## 🟢 `animate { enabled: … }` → replace duration-zero gating
 
 - **Today:** the "don't animate drag micro-updates" pitfall is handled with
-  `duration: is-dragging ? 0ms : …`, at `layout/sidebar.slint:71`, `:132` and `:186` (rail width
+  `duration: is-dragging ? 0ms : …`, at `layout/sidebar.slint:71`, `:132` and `:187` (rail width
   and row padding).
 - **Upstream in 1.17:** `animate` blocks take an `enabled` boolean (default true).
 - **Migration:** swap to `enabled: !is-dragging` where the intent is "no animation", keeping the

@@ -1,16 +1,11 @@
 import { Theme } from "../theme.slint";
 import { MetaChip } from "meta-chip.slint";
 
-// A row (or rows) of `MetaChip`s, wrapped by Rust.
-//
-// Slint 1.16 has no `Flow` and can't build a nested array, so the split comes from `crates/melodia-views/src/ui/chips.rs`
-// as a `[[string]]` of rows and this walks two real arrays. The strip only reports its width — who
-// chunks against it, and whether overflow wraps or is dropped, is the host's business: Now Playing
-// wraps freely, a hero caps at `ui::hero_chips::HERO_MAX_ROWS`, its band being sized by the tile.
+// A wrapping strip of `MetaChip`s, broken into lines at the width the host draws it.
 //
 // Both brushes are inputs for the reason `MetaChip` states, and every mount overrides both.
 export component MetaChipStrip inherits Rectangle {
-    in property <[[string]]> rows;
+    in property <[string]> chips;
     in property <brush> chip-fill;
     in property <brush> chip-label-color;
     // Now Playing centres its rows under the cover; a hero's text column is left-aligned.
@@ -18,59 +13,38 @@ export component MetaChipStrip inherits Rectangle {
     // Lets a host hide the chips while keeping the row reserved — Now Playing drops a metadata
     // fetch landing after a rapid track change, and a vanishing row would reflow the artwork.
     in property <bool> show-rows: true;
+    // How many rows are drawn, zero for all of them. The chips are one height, so a cap at a row
+    // boundary clips the next row away whole rather than slicing it.
+    in property <int> max-rows: 0;
 
-    // Reported on mount and on every resize. The host chunks against it.
-    callback measured(length);
+    // `MetaChip`'s height.
+    property <length> row-h: 26px;
+    // Tighter than the gap between chips: a wrapped row is the same strip continuing, not a
+    // second one, which is what lets a hero band absorb it without growing.
+    property <length> row-gap: Theme.pad-xs;
+    property <length> capped-h: root.max-rows * root.row-h + (root.max-rows - 1) * root.row-gap;
+    property <length> rows-h: root.max-rows > 0
+        ? min(rows-box.preferred-height, root.capped-h)
+        : rows-box.preferred-height;
 
-    // == MetaChip height. Reserving it unconditionally is what keeps a track with no metadata — or
-    // a slow fetch — from reflowing whatever sits above.
-    //
-    // **The floor, not the answer**: an explicit binding replaces the folded one, so a bare 26px is
-    // a promise of one row from a strip that draws however many it was handed, and a host short of
-    // height takes it at its word and lets the rows past the first paint over whatever follows.
-    min-height: max(26px, rows-box.min-height);
-    vertical-stretch: 0;
-    // The other half of the wrapper below, and the half nothing catches at build time: that wrapper
-    // is a real layout, so the root merges its horizontal constraint and the widest published row
-    // becomes a floor no narrowing can negotiate — the strip keeps being handed the width it was
-    // chunked at and the chips clip instead of wrapping. Same cure as `settings/chip-group.slint`.
-    min-width: 0px;
+    // Bound to what the rows need at this width, so a host short of height can't squeeze a
+    // wrapped row over whatever follows. One row is reserved whether or not there are chips,
+    // which keeps a track with no metadata, or a slow fetch, from reflowing what sits above.
+    height: max(root.row-h, root.rows-h);
+    // A scissor rather than a layer, the clip having no radius.
+    clip: root.max-rows > 0;
 
-    // `changed` can't watch a path expression, so the width is mirrored into a local first.
-    property <length> watched-w: self.width;
-    changed watched-w => {
-        root.measured(watched-w);
-    }
-
-    // First-layout seed: `changed` doesn't fire on the initial evaluation, so the mount-time width
-    // reaches the host through nothing else.
-    Timer {
-        interval: 1ms;
-        running: true;
-        triggered() => {
-            self.running = false;
-            root.measured(root.width);
-        }
-    }
-
-    // The plain wrapper is what lets a second row grow the strip. A `Rectangle` root folds a child
-    // *layout* into its own layout info but not a conditional one — an `if` lowers to a repeater,
-    // which `gen_layout_info_prop` skips — so with the `if` as the direct child the strip reported
-    // `preferred: 0`, took its `min-height` floor and drew every row past the first outside the box.
+    // What the root reads its height off, an id inside the `if` being unreadable from out here.
     rows-box := VerticalLayout {
-        if root.show-rows: VerticalLayout {
-            // Tighter than the gap between chips: a wrapped row is the same strip continuing, not
-            // a second one, which is what lets a hero band absorb it without growing. Only the
-            // horizontal number is mirrored in Rust (`ui::chips::SPACING`).
-            spacing: Theme.pad-xs;
-            for row in root.rows: HorizontalLayout {
-                alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;
-                spacing: Theme.pad-sm;
-                for t in row: MetaChip {
-                    text: t;
-                    fill: root.chip-fill;
-                    label-color: root.chip-label-color;
-                }
+        if root.show-rows: FlexboxLayout {
+            spacing-horizontal: Theme.pad-sm;
+            spacing-vertical: root.row-gap;
+            alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;
+
+            for t in root.chips: MetaChip {
+                text: t;
+                fill: root.chip-fill;
+                label-color: root.chip-label-color;
             }
         }
     }

@@ -421,21 +421,14 @@ fn the_band_publishes_whether_its_height_is_still_moving() {
     );
 }
 
-/// **The column that mounts `HeroChipStrip` carries no `if`, and every other piece of the
-/// hero mounts on `detail-open || hero-t > 0`.** Two failures meet here.
+/// **Every piece of the hero mounts on `detail-open || hero-t > 0`.**
 ///
 /// The morph is *written*, so it genuinely starts at 0, and a branch gated on
 /// `detail-open` therefore mounts a frame before one gated on `hero-t > 0`: the title
 /// block spends that frame as its row's only child, hard left under the count line, then
 /// jumps a tile's width right. `hero-shown` is true at both ends.
-///
-/// The strip is the part that may not be dropped **at all**: its `changed watched-w`
-/// tracker watches a layout property the surviving parent re-dirties on every frame of the
-/// morph, so dropping the branch panics whoever writes the condition — an animated
-/// predicate, a `changed` handler and a timer's `triggered` all lose the same race. Hence
-/// a permanent mount and a brush fade; the mechanism is `.claude/rules/slint-pitfalls.md`'s.
 #[test]
-fn the_chip_strip_outlives_every_morph_it_is_painted_in() {
+fn the_hero_mounts_on_the_detail_or_a_running_morph() {
     let code = code();
 
     assert!(
@@ -443,35 +436,6 @@ fn the_chip_strip_outlives_every_morph_it_is_painted_in() {
         "the hero's gate must be the detail *or* a running morph. On `detail-open` alone it leaves \
          on the frame the id clears, while the tile beside it fades for the full duration; on \
          `hero-t > 0` alone it arrives a frame late, laid out where the tile is not yet"
-    );
-
-    let lines: Vec<&str> = code.lines().collect();
-    let mount = lines.iter().position(|line| line.contains("HeroChipStrip {"));
-    assert!(mount.is_some(), "the band no longer mounts `HeroChipStrip`");
-    let mount = mount.unwrap_or_default();
-
-    // By brace depth rather than indent — the band has `if`-gated *siblings* at shallower
-    // depths and an indent walk reads those as parents. Net per line, so the `"\u{200e}"`
-    // escapes balance out.
-    let mut ancestors: Vec<&str> = Vec::new();
-    for line in &lines[..mount] {
-        let opens = line.matches('{').count();
-        let closes = line.matches('}').count();
-        for _ in closes..opens {
-            ancestors.push(line.trim());
-        }
-        for _ in opens..closes {
-            ancestors.pop();
-        }
-    }
-    let enclosing = ancestors.iter().find(|line| line.starts_with("if "));
-    assert!(
-        enclosing.is_none(),
-        "no `if` may enclose `HeroChipStrip` — found `{}`. The strip's `changed watched-w` tracker \
-         is queued by every frame of the morph, so whatever drops the branch drops it with a live \
-         entry in `run_change_handlers`' taken list and the next evaluation unwraps a dead weak \
-         handle",
-        enclosing.map_or("", |line| line)
     );
 }
 
@@ -580,8 +544,8 @@ fn the_hero_fades_on_the_morph_at_both_ends() {
     assert!(
         code.contains("HeroChipStrip { fade: root.hero-t; }"),
         "the chip strip fades through its own `fade` input, on the same clock — it cannot take an \
-         `opacity` and it cannot be unmounted, so this is the only way it leaves with the title \
-         above it"
+         `opacity` and it stays mounted through the morph, so this is the only way it leaves with \
+         the title above it"
     );
     let strip = include_str!("../../../../melodia-ui/ui/components/hero-chip-strip.slint");
     assert!(
@@ -607,8 +571,8 @@ fn the_chip_row_fades_in_when_it_lands() {
     let flat = strip.split_whitespace().collect::<Vec<_>>().join(" ");
 
     assert!(
-        flat.contains("property <float> arrive-t: root.rows.length > 0 ? 1.0 : 0.0;"),
-        "the arrival fade must ride the row model's own emptiness — nothing else knows when \
+        flat.contains("property <float> arrive-t: root.chips.length > 0 ? 1.0 : 0.0;"),
+        "the arrival fade must ride the chip model's own emptiness — nothing else knows when \
          the chips have landed, and a host-driven flag would need one per hero"
     );
     assert!(
@@ -621,9 +585,9 @@ fn the_chip_row_fades_in_when_it_lands() {
         flat.matches("root.fade * root.arrive-t").count(),
         2,
         "both brushes must carry both factors. A float multiplied into the brushes, never an \
-         `opacity`: this strip carries `MetaChipStrip`'s change tracker so it cannot be \
-         unmounted, and `Opacity::need_layer` bails only at exactly 1.0 — a permanently \
-         mounted subtree under one blends an offscreen layer on every frame forever"
+         `opacity`: this strip stays mounted for the life of the band, and \
+         `Opacity::need_layer` bails only at exactly 1.0 — a mounted subtree under one blends \
+         an offscreen layer on every frame it stays mounted"
     );
 }
 

@@ -45,12 +45,6 @@ component SummaryRow inherits HorizontalLayout {
 export component TagEditorBody inherits HorizontalLayout {
     spacing: Theme.pad-lg;
 
-    // Handed over rather than measured: a component root can't reach `parent`,
-    // and this one is a layout root besides, so reading its own `width` to size
-    // a child would re-enter layout. `dialog.slint` owns the card's ceiling and
-    // its padding, so it owns the subtraction.
-    in property <length> host-w;
-
     // The Credits tab's role headings, **in `entities::credits::ROLES` order** — the Rust side
     // indexes `role-names` by position, so a label out of order files a conductor as a producer.
     // An inline literal list because `@tr` resolves at codegen: a `[string]` seeded from Rust
@@ -66,18 +60,6 @@ export component TagEditorBody inherits HorizontalLayout {
     // Fixed body height so switching tabs doesn't resize + recenter the card.
     private property <length> body-h: 360px;
     private property <length> cover-w: 160px;
-
-    // What the right column is drawn at, which the wrapping `ChipGroup` below
-    // needs and can't work out itself. Stating it is mandatory: the fallback is
-    // `SettingsPage.row-content-w`, so left alone the *dialog's* tab strip wraps
-    // on whatever width the **Settings page** was last drawn at.
-    //
-    // Derived from the host rather than from the card's own cap, which it only
-    // reaches on a window wide enough to afford it. Below that, three chips in a
-    // long locale no longer fit the line the cap would have claimed for them,
-    // and nothing here clips — they would paint past the card's edge.
-    private property <length> tabs-w:
-        max(0px, root.host-w - Theme.pad-lg - root.cover-w);
 
     // Left column: cover + artwork actions.
     VerticalLayout {
@@ -118,7 +100,6 @@ export component TagEditorBody inherits HorizontalLayout {
                 ? [@tr("Tags"), @tr("Credits"), @tr("Details"), @tr("Lyrics"), @tr("Summary")]
                 : [@tr("Tags"), @tr("Credits"), @tr("Details")];
             selected-index <=> TagEditor.active-tab;
-            avail-width: root.tabs-w;
         }
 
         // The children may take 100% here, which is normally a trap: the parent

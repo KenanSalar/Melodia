@@ -13,8 +13,7 @@ import { OnboardingFeaturesPanel } from "features-panel.slint";
 // close, and a tracker watching anything that outlives the branch — a global, or a property owned
 // above the mount — stays registered against it and panics the next time it moves, which
 // re-running the card from Settings does directly. That rules out `TabBar` (hence the hand-drawn
-// dots below), `SearchBar`, `MetaChipStrip`, `GridColumnsSync`, `FilterThrottle` and
-// `FocusLossWatcher`. A tracker on a property local to the branch is fine and one is already here:
+// dots below), `SearchBar`, `GridColumnsSync`, `FilterThrottle` and `FocusLossWatcher`. A tracker on a property local to the branch is fine and one is already here:
 // `IconButton` brings a `Tooltip`, whose `changed hovered` dies with the button — `NowPlayingView`
 // is `if`-mounted too and drops the same one on every close.
 export component OnboardingOverlay inherits Rectangle {
@@ -44,9 +43,6 @@ export component OnboardingOverlay inherits Rectangle {
         // Wide enough for the feature rows' label-plus-description pairs without the copy running
         // to a second line at every locale.
         property <length> max-w: 560px;
-        // What the panels have to lay out inside. Derived from `parent.width`, which the window
-        // fixes independently of anything in here, so a panel sizing itself off it is not a cycle.
-        property <length> content-w: self.width - 2 * Theme.pad-lg;
 
         width: min(self.max-w, max(360px, parent.width - 96px));
         x: (parent.width - self.width) / 2;
@@ -112,11 +108,9 @@ export component OnboardingOverlay inherits Rectangle {
                 }
             }
 
-            // The library first, nothing else filling it. Only the appearance panel takes the
-            // width: its strips wrap against it, where the other two lay themselves out from the
-            // layout alone.
+            // The library first, nothing else filling it.
             if Onboarding.step == 0: OnboardingMusicPanel { }
-            if Onboarding.step == 1: OnboardingAppearancePanel { content-w: card.content-w; }
+            if Onboarding.step == 1: OnboardingAppearancePanel { }
             if Onboarding.step == 2: OnboardingFeaturesPanel { }
 
             HorizontalLayout {
