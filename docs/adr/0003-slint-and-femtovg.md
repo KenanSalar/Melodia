@@ -25,11 +25,10 @@ remove.
 
 The cost is that Slint is younger than the alternatives and its gaps are ours. Several things this
 app wants do not exist in it: no backdrop blur, no RTL or bidi-aware layout, no Rust-callable
-`tr()`, and tooltips clip at the window edge. `docs/plans/SLINT_NATIVE_ADOPTION.md` tracks ten such
-workarounds against upstream. Version 1.17 regressed both enter-transitions and per-frame cost, so
-the tree is pinned to 1.16.1 and a toolkit upgrade is a budgeted task rather than a version bump.
-Wayland file drag-and-drop needs a vendored winit fork. And Slint's own test API is unusable here,
-so the UI is pinned from the Rust side by tests that read the markup as text.
+`tr()`, and tooltips clip at the window edge. Version 1.17 regressed both enter-transitions and
+per-frame cost, so the tree is pinned to 1.16.1 and a toolkit upgrade is a budgeted task rather
+than a version bump. Wayland file drag-and-drop needs a vendored winit fork. And Slint's own test
+API is unusable here, so the UI is pinned from the Rust side by tests that read the markup as text.
 
 FemtoVG is not a preference to revisit: the software renderer cannot clip to `border-radius`
 (slint#4176), and rounded surfaces are the whole visual language. It is set on the dependency rather

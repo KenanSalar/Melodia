@@ -159,7 +159,7 @@ shadows the built-in one without a diagnostic.
 - [x] Frame pacing on the queue sheet (phase 0).
 - [x] Enter transitions on every nav, tab switch and the return from the miniplayer.
 - [x] Mouse-wheel scrolling now animates (1.17, fixed 180 ms, not configurable). Composite views
-      stay stepped; see the `Flickable` section.
+      stay stepped; see #127.
 - [x] Word-wrapped `Text` now reports its longest word as its minimum width (1.18). Check the
       miniplayer and Settings rows at the minimum window width.
 - [x] Percentage sizes no longer feed the parent's layout (1.17, #3346).
@@ -208,8 +208,7 @@ One change per section, in this order, each on a tree already on 1.18:
 6. 🟢 Two-way model row bindings → slim the model-patch walkers (prototype first)
 7. 🟡 Hangul measuring workaround → retire if 1.18's text stack composes the syllables
 
-Legend: 🟢 adoptable once on 1.18 · 🟡 shipped upstream but wait/verify first · 🔭 upstream
-foundation only, watch but not yet usable.
+Legend: 🟢 adoptable once on 1.18 · 🟡 shipped upstream but wait/verify first.
 
 ### Phase 4: retire the touchpad re-dispatch
 
@@ -262,10 +261,10 @@ carries the gap over to the touchpad:
 | Browse, Artist Detail | jumps a notch at a time | follows the fingers, stops dead on release |
 
 - [x] Decided on phase 4's manual pass (2026-10-12): **accept the difference.** The composite path
-      is a workaround for the edge-swallow defect, which the Flickable section below watches to
-      shrink, and matching Slint grows it. A port of `Flickable`'s fling into that path was tried
-      the same day, made no visible difference on the manual pass, and was dropped. Easing a notch
-      over the same 180 ms in `composite-scrollbars.slint` was never tried.
+      is a workaround for the edge-swallow defect, which #127 watches to shrink, and matching
+      Slint grows it. A port of `Flickable`'s fling into that path was tried the same day, made no
+      visible difference on the manual pass, and was dropped. Easing a notch over the same 180 ms
+      in `composite-scrollbars.slint` was never tried.
 
 ---
 
@@ -432,204 +431,8 @@ carries the gap over to the touchpad:
 - **Migration:** delete `OPEN_HANGUL_EMS`, `is_open_hangul_syllable` and the measuring branch
   that reads them, plus the pitfall entry.
 
-## 🟡 Flickable animated wheel scrolling → consistency with composite-scroll routing
-
-- **Today:** composite views (Favorites, Recently Played, Artist Detail, Browse) route
-  vertical wheel through the winit layer (`CompositeScroll` + `composite-scrollbars.slint`)
-  because a nested ListView swallows wheel at its scroll edge. Wheel there writes the scroll
-  offset directly (unsmoothed).
-- **Upstream in 1.17:** discrete-wheel scrolling is animated (fixed 180 ms physics decel, not
-  disableable). Verified in source: the edge-swallow behavior (`EventAccepted` during the
-  scroll-capture window) is **unchanged**, so the composite routing remains required.
-- **1.18.0 vs 1.18.1:** 1.18.0 still intercepted `TouchPhase::Started` without checking the
-  delta's direction (`i-slint-core-1.18.0/items/flickable.rs:762`). 1.18.1 checks it (#13453,
-  `:769-774`), and phase 4 retired `route_wheel`'s `Unphased` re-dispatch.
-  The edge-swallow is a separate defect and stays. 1.18 also adds
-  `Flickable.mouse-drag-pan-enabled` and renames the scroll offsets to `content-*` (phase 1).
-- **Composite views stay stepped**, and on a touchpad they stop dead where plain lists fling. The
-  decision after phase 4 keeps them that way. Also note: an external offset write during the
-  180 ms wheel animation doesn't clear the leftover-delta state, still the case in 1.18. A
-  follow-up wheel tick can re-add stale distance (relevant to overlay-scrollbar thumb drags
-  immediately after wheeling).
-- **Retirement watch:** if upstream ever makes Flickable return `EventIgnored` at the edge
-  (bubbling to outer scrollers), the entire composite wheel plumbing can shrink dramatically.
-
 ---
 
-*The sections below need an upstream change before they're adoptable.*
-
-## 🟡 OS drag-and-drop → retire the vendored winit fork (the big one)
-
-- **Today:** `winit/` vendored fork (0.30.13 + 3 Wayland-DnD commits from abandoned winit
-  PR #4009), wired via `[patch.crates-io]`. Flow: `winit_filter.rs::DroppedFile` →
-  `drop_coalescer.rs` → `queue_import_files`; `HoveredFile{,Cancelled}` → `Queue.is-drop-hovered`.
-- **Upstream in 1.17:** `DragArea`/`DropArea` elements + `data-transfer` type — **in-process
-  only** in the released 1.17.x.
-- **Moved 2026-07-16 (was 🔭):** winit **PR #4571 "New drag and drop API" merged**. Receive
-  *and* initiate on Wayland/Windows/macOS; X11 receive-only (initiating explicitly out of
-  scope). Written expressly to support Slint's DnD work (slint#1967, closed 2026-07-19). Slint
-  is already plumbing it on the **`feature/winit-0.31` branch** — `Add native drag-and-drop to
-  the winit backend (#12294)` on 2026-07-17, `Support dragging and dropping images (#12549)` on
-  2026-07-20.
-- **Still blocked through 1.18 (checked 2026-09-17).** winit's newest release is
-  `0.31.0-beta.3` (2026-09-04), with no stable 0.31. slint#11243 "Upgrade to winit 0.31" is open,
-  and `feature/winit-0.31`'s last commit is 2026-07-20. 1.18's `DataTransfer` gained a list of
-  file paths (#1967), but its winit backend still handles no `DroppedFile` / `HoveredFile`, so
-  nothing produces them for us.
-- **Trigger:** a winit **0.31 release** carrying #4571 + a Slint release cut from
-  `feature/winit-0.31` that surfaces external drops as file paths on `DropArea`. This also means
-  `unstable-winit-030` → `unstable-winit-031` and a `slint::winit_030` → `winit_031` rename
-  across the ten files importing it today (`main.rs`, `boot/ui_setup/install.rs`,
-  `shell/tray_bridge.rs` and seven under `window_chrome/`). The fork retirement and the winit major bump land together.
-- **Migration:** delete `winit/` + the `[patch.crates-io]` block; replace the `winit_filter`
-  DnD arms + `drop_coalescer` with a `DropArea` over the content panel feeding
-  `queue_import_files`; re-check the queue-sheet drop gating (`is_open` atomic filter).
-- **Risk:** #4571 is a **rewrite** around a new `DataTransfer` abstraction, not a continuation
-  of #4009 — so the fork's `WindowId` fix and URI percent-decoding aren't "did they take our
-  commits" questions, they're entirely different code. Re-test percent-decoded paths (spaces,
-  non-ASCII) empirically on the new API before deleting the fork.
-- **Also update `CLAUDE.md` on retirement** — the fork's provenance, its retirement condition and
-  the `unstable-winit-030` → `-031` rename now sit in one Known Gaps bullet (search `Vendored winit
-  fork`), which is what has to go with the directory. winit#1881 is still open but #4571 supersedes
-  it in practice.
-
-## 🟡 `SystemTrayIcon` element → retire the dual tray stack
-
-- **Today:** `crates/melodia-platform/src/services/platform/tray/` cfg-split (Linux `ksni` with the
-  zbus-feature footgun; Win/mac `tray-icon` with deferred init + pre-exit drop),
-  `crates/melodia-views/src/ui/shell/tray_bridge.rs`, embedded `tray.png`,
-  restart-gated enable toggle, close-to-tray geometry-restore timer dance.
-- **Upstream:** declarative `SystemTrayIcon` element (1.17). As of 1.18 it carries `icon`,
-  `tooltip`, `visible`, `title`, a `clicked` callback and a `Menu` child. 1.18 also fixed
-  `show()`/`hide()` and reports an error when no tray backend is available. On Linux it's built
-  on `ksni` 0.3 with `blocking` + `async-io` (`i-slint-core`'s `system-tray` feature), the same
-  features we pin, so adopting it wouldn't reopen the zbus footgun.
-- **Trigger:** verified on all three platforms: menu labels that follow bindings (play/pause),
-  tooltip updates, click actions, and an SNI-less Linux session degrading rather than aborting.
-  That's everything `TraySnapshot`/`TrayAction` does today.
-- **Migration:** replace `services/tray/` + `tray_bridge` with the element + callbacks; keep the
-  close-to-tray window logic (that part is ours, not the tray lib's). Removes the ksni zbus
-  pin worry entirely.
-- **Risk:** feature parity on all three platforms; check idle-RSS impact per Memory Discipline.
-
-## 🟡 Built-in `Tooltip` element → retire our tooltip component
-
-- **Today:** `crates/melodia-ui/ui/components/tooltip.slint`, whose name shadows the built-in. It
-  compiles silently on 1.18 (trial) but is confusing long-term. Seventeen mounts:
-  - **Nine anchored in-tree:** `action-pill.slint:146`, `icon-button.slint:137`,
-    `macos-traffic-light.slint:73`, `caption-buttons.slint:133`,
-    `now-playing/play-button.slint:153`, `now-playing/lyrics-controls.slint:71`,
-    `settings/color-dot-grid.slint:45`, `now-playing/volume-popup.slint:280`,
-    `now-playing/volume-popup-horizontal.slint:159`.
-  - **Eight top-layer:** seven `TooltipFrame` mounts (`radio-view.slint:280`,
-    `browse-view.slint:340`, `recently-played-view.slint:197`, `settings-view.slint:193`,
-    `favorites-view.slint:239`, `my-library-view.slint:463` and `:472`) plus the collapsed
-    rail's tip (`app-window.slint:626`).
-
-  The top-layer ones are the awkward half of any migration: they exist precisely because the pill
-  has to be drawn somewhere other than on its anchor, which a built-in anchored element can't
-  express.
-- **1.18's runtime `z` doesn't retire the top-layer frames.** `z` only re-sorts siblings. Where a
-  band's tooltip is covered by the body declared after it, band and body are already siblings
-  (checked in My Library and Settings), and a constant `z` was available in 1.16 too. The rail tip
-  is clipped by `nav-scroll`, which no `z` escapes.
-- **Upstream in 1.17:** native `Tooltip` element.
-- **Blocked (re-checked 2026-09-17):** slint#12260 *"Tooltip is clipped when the anchor widget is
-  near the edge of the window"* is **still open**, with no activity since 2026-06-29. The 1.17.1
-  popup-clipping fix (#12324) is a different bug. Ours flips and slides its pill inside the window
-  at every mount, so adopting today would regress each edge-adjacent one: the captions
-  (`caption-buttons.slint:133`, `macos-traffic-light.slint:73`) and the miniplayer's whole cluster.
-- **Trigger:** #12260 closed and released.
-- **Migration:** swap call sites (IconButton `tooltip-text`, etc.), delete our component, drop
-  the name shadowing.
-- **Risk:** styling parity with our popup chrome (`PopupSurface` look); reveal-delay behavior;
-  placement parity, ours taking the opposite side where the window leaves no room.
-
-## 🟡 `Window.minimized`/`maximized` + `close()`/`hide()` → drop winit accessors?
-
-- **Today:** all window-control APIs go through `WinitWindowAccessor::with_winit_window`
-  because Slint's `set_minimized`/`set_maximized` property cache stalled on Wayland; tray
-  show/hide uses Slint `Window::hide/show` + `WINDOW_VISIBLE` atomic + geometry-restore timer.
-- **Upstream in 1.17:** `minimized`/`maximized` in-out properties and `close()`/`hide()`
-  functions on `Window`. 1.18 makes `close()` return whether the close was accepted and deprecates
-  setting `Window.x`/`y`; the root sets neither. Nothing in 1.18 addresses the Wayland cache.
-- **Trigger:** verified-on-Wayland behavior (KDE + GNOME) of the new properties — test in a
-  scratch app first, not in Melodia.
-- **Risk:** high regression surface (custom titlebar, maximize seed, resize ring gating,
-  `RESPAWN_AFTER_EXIT`). The winit path works; migrate only if it meaningfully simplifies
-  `window_chrome/`. Low priority.
-
----
-
-## Not yet upstream — watching
-
-- **Public Rust-callable translations** (`tr("…")` equivalent): would retire the
-  `Settings` pure-callback `@tr` bridges for toast strings (`playlist-{import,export}-*` etc.).
-  Still `i_slint_core`-internal in 1.18, which only adds `slint::update_all_translations()`
-  (re-renders everything; it translates nothing from Rust).
-- **`direction: rtl` / bidi-aware layouts**: blocks fa/ar/he locales; still absent in 1.18.
-  `layout-order` and `FlexboxLayout`'s `row-reverse` are building blocks, not bidi.
-- **`string.contains()`**: 1.18 adds `starts-with`, `ends-with` and `replace-all` only, so the
-  Settings search's row-visibility test (`globals/settings-page.slint:96`,
-  `ui/settings/settings_page.rs:62`) stays in Rust.
-- **Entry/mount animation semantics**: if Slint grows a first-class "animate on mount"
-  mechanism, the `ViewTransition` 1ms-Timer pattern (and its `init`-read adaptation) can go.
-- **Runtime `z` (1.18): no consumer.** Nothing in the tree sets `z`, and no stacking flips at
-  runtime. It becomes useful with new work that needs it, such as a dragged queue row lifted above
-  its neighbours.
-
-### Backdrop blur / frosted glass — checked 2026-07-25, status re-checked 2026-09-17
-
-- **Status 2026-09-17:** 1.18 adds no backdrop blur. slint#2066 has no maintainer comment since
-  the 2026-06-29 one quoted below; its newest activity is a user use-case comment (2026-09-13).
-  1.18's experimental Vello renderer doesn't change the FemtoVG caveat.
-- **Wanted for:** frosted-glass fills on the Now-Playing metadata chips (`MetaChip`,
-  `crates/melodia-ui/ui/views/now-playing-view.slint`) and the Up Next row hover slab
-  (`crates/melodia-ui/ui/components/now-playing/up-next-list.slint`). Both currently fake depth with a flat
-  `Player.np-accent-bright.with-alpha(0.16)` tint over the blurred-artwork backdrop.
-- **Status: absent upstream, and not on the roadmap.** Verified in source, not docs:
-  `i-slint-compiler`'s `typeregister.rs` registers exactly two blur-typed properties in the
-  whole language — `drop-shadow-blur` (:221) and `inner-shadow-blur` (:229) — plus
-  `BoxShadow`'s own `blur` (`builtins.slint:1589`). All three describe a shadow the element
-  *casts*; nothing reads back the pixels underneath, which is the prerequisite. `opacity` is
-  not a substitute — fixed-function blending, not a filter over the backdrop.
-- **Tracking:** slint#2066 *"Add first-class support for blurring what's underneath a
-  Rectangle"* (2023-01, 17 👍, no milestone/assignee/PR) and slint#612 *"Compositing /
-  effects"* (2021-10, 18 👍). General form: slint#10887 *"Custom Shader support"* (2026-02,
-  labelled `a:renderer-femtovg`, quiet since March).
-- **Newest maintainer word — slint#2066, 2026-06-29 (eira-fransham):** "We've been talking
-  about implementing arbitrary shaders for a while, with blur just being a special case, but
-  it's a big topic. I made the suggestion the other day that blur is common enough that it
-  would be worth special-casing … but whether that translates to it coming up soon on the
-  roadmap is a different question." Discussed internally, some agreement to special-case blur
-  ahead of general shaders, explicitly uncommitted.
-- **⚠ Renderer caveat.** The most concrete path a maintainer has named (tronical, 2024-12) is
-  a read-back into an offscreen surface via **Skia**'s `SaveLayerRec`, which "would probably
-  work with Skia out of the box". We render with **FemtoVG**. A release announcing backdrop
-  blur is therefore not automatically a release where *we* get it — check the renderer before
-  planning any work.
-- **Not the same thing: OS window blur.** slint#2339 *"Blurred window"* has recent movement
-  (winit gained blur support 2026-04; KDE 6.7 swapped `org_kde_kwin_blur_manager` for
-  `ext_background_effect_manager_v1`; winit PR #4580 backports it to the 0.30.x branch our
-  vendored fork sits on). That blurs the **desktop behind the window** — our chips sit over
-  the app's own opaque gradient + artwork blur, so it can never reach them. Relevant to the
-  window shell, irrelevant here.
-- **Trigger:** a Slint release whose changelog names a backdrop/background-blur property on
-  `Rectangle` **and** covers FemtoVG (or we've moved renderers by then).
-- **Migration:** swap the two `.with-alpha(0.16)` accent fills for the blur property plus a
-  much lighter tint; re-check legibility of the solid `np-accent-bright` chip label and "Up
-  Next" heading against a blurred rather than tinted ground. Measure — a per-element backdrop
-  read-back every frame is exactly what Memory Discipline exists for.
-- **Meanwhile:** the only in-engine approximation is the pre-blurred-`Image` trick already
-  used for the NP backdrop (`crates/melodia-views/src/ui/now_playing_artwork.rs`), and it degrades badly for these
-  two surfaces — chips reflow across rows on resize, the hover slab moves per row and scrolls,
-  so each would need its own correctly-offset crop recomputed on every layout change. The flat
-  tint is the right stand-in until upstream lands.
-
-*Promoted out of this list on 2026-07-23: external drag-and-drop (winit #4571 merged) and
-Slint-native window drag (`WindowMoveArea` on master) — both now have their own sections.
-2026-09-17: the 1.18.0 migration plan replaced the re-migration checklist; `WindowMoveArea` moved
-to 🟢 on its release; `FlexboxLayout` and the Hangul workaround got sections of their own.
-2026-10-11: retargeted to 1.18.1, phase 1 applied in the tree, phase 4 (the touchpad
-re-dispatch) added. 2026-10-12: phase 4 landed and passed by hand, and the composite views' scroll
-feel moved out of the Flickable section into a decision beside it, settled as accepted.*
+*2026-09-17: the 1.18.0 migration plan replaced the re-migration checklist. 2026-10-11: retargeted
+to 1.18.1, phase 1 applied in the tree, phase 4 added. 2026-10-12: phase 4 landed and passed by
+hand, and every section waiting on an upstream Slint change moved to #127.*
