@@ -45,6 +45,7 @@ export component SingleLineInput inherits Rectangle {
             if (event.kind == PointerEventKind.down && event.button == PointerEventButton.right) {
                 root.menu-x = self.mouse-x;
                 root.menu-y = self.mouse-y;
+                // First, so the popup hands the keyboard back to this field when it closes.
                 ti.focus();
                 menu.show();
             }
@@ -92,26 +93,13 @@ export component SingleLineInput inherits Rectangle {
         }
     }
 
-    // Each entry hands the keyboard back, the menu having taken it while open.
     menu := TextEditMenu {
         at-x: root.menu-x;
         at-y: root.menu-y;
         has-text: root.text != "";
-        cut => {
-            ti.cut();
-            ti.focus();
-        }
-        copy => {
-            ti.copy();
-            ti.focus();
-        }
-        paste => {
-            ti.paste();
-            ti.focus();
-        }
-        select-all => {
-            ti.select-all();
-            ti.focus();
-        }
+        cut => { ti.cut(); }
+        copy => { ti.copy(); }
+        paste => { ti.paste(); }
+        select-all => { ti.select-all(); }
     }
 }

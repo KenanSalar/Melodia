@@ -173,6 +173,12 @@ impl RuleField {
             RuleField::LastPlayed | RuleField::DateAdded => ValueType::Date,
         }
     }
+
+    /// Whether a value can carry a fractional part. `bpm` is the one `REAL` column, so the editor
+    /// keeps every other numeric field to digits.
+    pub fn holds_fractions(self) -> bool {
+        matches!(self, RuleField::Bpm)
+    }
 }
 
 /// Coarse value category of a [`RuleField`].

@@ -15,11 +15,13 @@
 //! Slint's property-recursion guard (same reason the create-playlist open is
 //! inline-Slint and the export open hops through Rust).
 //!
-//! `recount` answers the track count under the form from the same criteria the
-//! commit saves, so the number shown is the playlist that Save would make.
+//! `recount` answers the track count the dialog's footer states, from the same
+//! criteria the commit saves, so the number shown is the playlist that Save
+//! would make.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
@@ -35,6 +37,10 @@ use melodia_ui::{AppWindow, Dialog, SmartEditor, SmartRuleRow};
 
 /// `SmartEditor.match-count` while no count describes the form, which hides the line.
 const NOT_COUNTED: i32 = -1;
+
+/// How long the form sits still before it is counted. Every keystroke in a value field asks
+/// again, and the count is a query over the whole library.
+const RECOUNT_SETTLE: Duration = Duration::from_millis(250);
 
 /// Wire the Smart-Playlist editor callbacks + install its rules model. See
 /// [`super::wire`].
@@ -155,8 +161,9 @@ fn wire_request_edit(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Count the form off the UI thread. The queries finish in no particular order, so each carries
-/// a generation and only the newest may write.
+/// Count the form off the UI thread once it settles. Each ask carries a generation: one a later
+/// edit has overtaken stands down before it queries, and a query that finishes behind a newer one
+/// doesn't write.
 fn wire_recount(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     let state = state.clone();
@@ -169,6 +176,10 @@ fn wire_recount(ui: &AppWindow, state: &AppState) {
         let s = state.clone();
         let weak = weak.clone();
         s.runtime.clone().spawn(async move {
+            tokio::time::sleep(RECOUNT_SETTLE).await;
+            if generation.load(Ordering::Relaxed) != asked {
+                return;
+            }
             let count = match library::smart_playlists::count(&s.db, &criteria).await {
                 Ok((count, _duration_ms)) => clamp_i64_to_i32(count),
                 Err(e) => {
@@ -279,6 +290,7 @@ fn rebuilt_row(
         op_index,
         field_kind: vt.as_index(),
         input_kind,
+        fractional: field.holds_fractions(),
         value_text: keep_or_clear(input_kind, old.input_kind, &old.value_text),
     }
 }
@@ -290,12 +302,14 @@ fn first_op(vt: sc::ValueType) -> sc::RuleOp {
 
 /// The default blank rule row: `Title contains …`.
 fn default_rule_row() -> SmartRuleRow {
-    let vt = sc::RuleField::Title.value_type();
+    let field = sc::RuleField::Title;
+    let vt = field.value_type();
     SmartRuleRow {
         field_index: 0,
         op_index: 0,
         field_kind: vt.as_index(),
         input_kind: first_op(vt).input_kind(vt).as_index(),
+        fractional: field.holds_fractions(),
         value_text: SharedString::default(),
     }
 }
@@ -338,6 +352,7 @@ fn rule_to_row(rule: &sc::Rule) -> Option<SmartRuleRow> {
         op_index,
         field_kind: vt.as_index(),
         input_kind: rule.op.input_kind(vt).as_index(),
+        fractional: rule.field.holds_fractions(),
         value_text,
     })
 }

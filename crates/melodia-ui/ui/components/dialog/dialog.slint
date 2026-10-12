@@ -80,7 +80,7 @@ export component DialogOverlay inherits Rectangle {
             DialogGlobal.kind == DialogKind.equalizer ? 600px
             : DialogGlobal.kind == DialogKind.replaygain ? 480px
             : DialogGlobal.kind == DialogKind.edit-playlist-artwork ? 520px
-            : DialogGlobal.kind == DialogKind.smart-playlist-editor ? 660px
+            : DialogGlobal.kind == DialogKind.smart-playlist-editor ? 760px
             : DialogGlobal.kind == DialogKind.edit-tags ? 720px
             : DialogGlobal.kind == DialogKind.scrobble-lastfm-login ? 460px
             : DialogGlobal.kind == DialogKind.scrobble-listenbrainz-login ? 460px
@@ -119,6 +119,11 @@ export component DialogOverlay inherits Rectangle {
         height: card.body-scrolls
             ? min(layout.preferred-height, max(240px, parent.height - 96px))
             : layout.preferred-height;
+        // A fact about the form rather than an action on it, stated opposite the buttons.
+        property <string> footer-note:
+            DialogGlobal.kind == DialogKind.smart-playlist-editor && SmartEditor.match-count >= 0
+                ? @tr("{n} track" | "{n} tracks" % SmartEditor.match-count)
+                : "";
         background: Theme.surface0;
         // `Tooltip`'s chrome, and for its reason: a transient surface floating over the
         // app has to state its own edge. **Not `Theme.border`** — all four Catppuccin
@@ -261,9 +266,19 @@ export component DialogOverlay inherits Rectangle {
                 || DialogGlobal.kind == DialogKind.edit-station: AddStationBody { }
 
             HorizontalLayout {
-                alignment: end;
                 spacing: Theme.pad-sm;
                 padding-top: Theme.pad-sm;
+
+                if card.footer-note != "": Text {
+                    horizontal-stretch: 0;
+                    text: card.footer-note;
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                // Holds the buttons at the end of the row, note or not; neither stretches.
+                Rectangle { horizontal-stretch: 1; }
 
                 // Confirm-mode only. `if` rather than `visible: false`, so the absent
                 // button claims no space.

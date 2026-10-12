@@ -581,8 +581,9 @@ three components that answer it, and each argues its geometry at its own file.
   resolving literals at codegen, so a third list's arm is one more `if` here rather than a
   property.
 
-- **The four right-click menus share one shape**: the row menu, `CardContextMenu`,
-  `StationContextMenu` and the radio history list's. `components/context-menu.slint` holds the
+- **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
+  `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
+  `components/context-menu.slint` holds the
   parts (`MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `ContextMenuMetrics`), and
   `components/track-copy-items.slint` the track Copy rows the row and card menus share; each menu
   argues its own entries.
@@ -594,7 +595,7 @@ three components that answer it, and each argues its geometry at its own file.
   - **The three with a flyout take `close-on-click-outside`, and every entry calls the menu's
     `dismiss()` after acting.** `close-on-click` closes on any release inside the popup, the click
     that opens the flyout included. After, because `pop.effective-ids` goes with the popup. The
-    history list's menu is flat and keeps `close-on-click`.
+    history list's menu and `TextEditMenu` are flat and keep `close-on-click`.
   - **Each mounts its `FocusLossWatcher` ungated, inside its own popup.** The popup's body exists
     only while it is shown, so that is already one live watcher. A highlight key gating it is
     gone by the end of the click that opened the menu, the winit Release arm clearing every key on
@@ -603,7 +604,7 @@ three components that answer it, and each argues its geometry at its own file.
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
     being picked by a side the width decides.
-  - **Copy acts on the effective set, one line per item, in the order handed over**, never
+  - **An item menu's Copy acts on the effective set, one line per item, in the order handed over**, never
     re-sorted: on a list or grid that is the selection's pick order (a range in display order, a
     ctrl-click appended), so it matches what Play queues, and on the queue sheet it is queue order,
     the set being read back off its rows. An item without the field adds no line. Why line breaks
@@ -1001,7 +1002,7 @@ three components that answer it, and each argues its geometry at its own file.
 - **PopupWindow auto-dismiss on OS focus loss** is `FocusLossWatcher`, mounted inside the
   popup's own `PopupWindow`, whose body Slint builds in `show()` and drops in `close()`, so only
   the open popup has a live watcher. Singletons also gate it on `PopupHighlight.id`, the key that
-  lights their trigger; the four right-click menus mount it ungated. Slint 1.18 has no `closed`
+  lights their trigger; the five right-click menus mount it ungated. Slint 1.18 has no `closed`
   callback, but `pop.close()` is a safe no-op when hidden.
 
 - **Native dialogs (rfd) — always through `ui::file_dialog::parented(&weak, title)`.** The helper

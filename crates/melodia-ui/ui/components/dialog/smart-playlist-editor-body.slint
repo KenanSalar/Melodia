@@ -3,10 +3,10 @@ import { SmartEditor } from "../../globals/dialog-forms.slint";
 import { SmartRuleRow } from "../../models.slint";
 import { Dropdown } from "../settings/dropdown.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
+import { SectionButton } from "../settings/section-button.slint";
+import { SectionDivider } from "../settings/section-divider.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { IconButton } from "../icon-button.slint";
-import { PillButton } from "../action-pill.slint";
-import { FilterThrottle } from "../filter-throttle.slint";
 import { ControlledInput } from "./controlled-input.slint";
 import { DialogScrollPane } from "./dialog-scroll-pane.slint";
 
@@ -23,9 +23,13 @@ component RowLabel inherits VerticalLayout {
     }
 }
 
-// One editable rule, drawn as its own card. Purely presentational: Rust owns the model and applies
-// every edit through the callbacks below, so this never mutates `rule`. The `View` suffix is to
-// keep it clear of the model struct's name.
+// One editable rule, a row of the rules card. Purely presentational: Rust owns the model and
+// applies every edit through the callbacks below, so this never mutates `rule`. The `View` suffix
+// is to keep it clear of the model struct's name.
+//
+// **A flex rather than a row**, so a card too narrow for every control wraps the value field onto
+// a line of its own instead of pushing the remove button out of it. On one line the field takes
+// whatever the pickers leave; wrapped, it takes the line.
 component SmartRuleRowView inherits Rectangle {
     in property <SmartRuleRow> rule;
     in property <[string]> field-names;
@@ -37,15 +41,23 @@ component SmartRuleRowView inherits Rectangle {
     callback set-value(string);
     callback remove();
 
-    // A fill a step off the card's rather than a border, so the rule reads as one unit and its
-    // corners stay a single antialiased curve.
-    background: Theme.base;
-    border-radius: Theme.radius-md;
+    // Narrower than this beside the pickers, the value field moves to a line of its own.
+    property <length> value-basis: 200px;
 
-    HorizontalLayout {
-        padding: Theme.pad-sm;
+    // Bound, because the flex reports no maximum and spreads its lines over any surplus.
+    height: flow.preferred-height;
+
+    flow := FlexboxLayout {
+        // `SectionDivider`'s inset, so the rule between two rows ends where their controls do.
+        padding-left: Theme.pad-lg;
+        padding-right: Theme.pad-lg;
+        padding-top: Theme.pad-sm;
+        padding-bottom: Theme.pad-sm;
         spacing: Theme.pad-sm;
-        alignment: start;
+        // Grows only the value field (or the spacer standing in for it); every other control here
+        // has a fixed width, so a line without one leaves its slack free.
+        alignment: stretch;
+        cross-axis-alignment: center;
 
         Dropdown {
             trigger-width: 148px;
@@ -74,17 +86,19 @@ component SmartRuleRowView inherits Rectangle {
             height: root.control-h;
             horizontal-stretch: 1;
             min-width: 90px;
+            preferred-width: root.value-basis;
             text: root.rule.value-text;
             placeholder: @tr("value");
             edited(t) => { root.set-value(t); }
         }
-        // Digits only: every numeric field is a whole number, and `decimal` would take the
-        // locale's comma, which the Rust parse rejects.
+        // Digits only where the field is whole. A tempo can be fractional, and `decimal` would
+        // take the locale's comma, which the Rust parse rejects.
         if root.rule.input-kind == 2: ControlledInput {
             height: root.control-h;
             horizontal-stretch: 1;
             min-width: 90px;
-            input-type: InputType.number;
+            preferred-width: root.value-basis;
+            input-type: root.rule.fractional ? InputType.text : InputType.number;
             text: root.rule.value-text;
             placeholder: root.rule.field-kind == 3 ? @tr("days") : @tr("number");
             edited(t) => { root.set-value(t); }
@@ -96,16 +110,13 @@ component SmartRuleRowView inherits Rectangle {
         // Keeps the remove button flush-right when the operator takes no value.
         if root.rule.input-kind == 0: Rectangle { horizontal-stretch: 1; }
 
-        VerticalLayout {
-            alignment: center;
-            IconButton {
-                icon: "close";
-                icon-size: 16px;
-                diameter: 28px;
-                idle-bg: Theme.surface1;
-                hover-fg: Theme.danger;
-                clicked => { root.remove(); }
-            }
+        IconButton {
+            icon: "close";
+            icon-size: 16px;
+            diameter: 28px;
+            idle-bg: Theme.surface1;
+            hover-fg: Theme.danger;
+            clicked => { root.remove(); }
         }
     }
 }
@@ -155,8 +166,6 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
     // The `Dropdown` trigger's height, so a value field lines up with the pickers beside it.
     property <length> control-h: 32px;
 
-    // Bumped by every edit that can move the count.
-    property <int> recount-pending;
     // Raised by Add rule, lowered once the new row has been scrolled to.
     property <bool> reveal-end;
 
@@ -167,8 +176,9 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
             : root.date-ops;
     }
 
+    // Every edit that can move the count. Rust waits for a burst to settle before it queries.
     function criteria-changed() {
-        root.recount-pending += 1;
+        SmartEditor.recount();
     }
 
     // The card is capped against the window, so a long rule set scrolls the whole form rather
@@ -208,34 +218,48 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         VerticalLayout {
             spacing: Theme.pad-sm;
 
-            for rule[i] in SmartEditor.rules: SmartRuleRowView {
-                rule: rule;
-                field-names: root.field-names;
-                ops: root.ops-for-kind(rule.field-kind);
-                control-h: root.control-h;
-                set-field(idx) => {
-                    SmartEditor.set-rule-field(i, idx);
-                    root.criteria-changed();
-                }
-                set-op(idx) => {
-                    SmartEditor.set-rule-op(i, idx);
-                    root.criteria-changed();
-                }
-                set-value(t) => {
-                    SmartEditor.set-rule-value(i, t);
-                    root.criteria-changed();
-                }
-                remove => {
-                    SmartEditor.remove-rule(i);
-                    root.criteria-changed();
+            // One card holding every rule, divided the way a settings card divides its rows. Its
+            // fill is a step off the dialog's, and unmounted with no rules to hold.
+            if SmartEditor.rules.length > 0: Rectangle {
+                background: Theme.base;
+                border-radius: Theme.radius-lg;
+
+                VerticalLayout {
+                    // No `last-child` in Slint, so the divider goes above each row after the first.
+                    for rule[i] in SmartEditor.rules: VerticalLayout {
+                        if i > 0: SectionDivider {}
+                        SmartRuleRowView {
+                            rule: rule;
+                            field-names: root.field-names;
+                            ops: root.ops-for-kind(rule.field-kind);
+                            control-h: root.control-h;
+                            set-field(idx) => {
+                                SmartEditor.set-rule-field(i, idx);
+                                root.criteria-changed();
+                            }
+                            set-op(idx) => {
+                                SmartEditor.set-rule-op(i, idx);
+                                root.criteria-changed();
+                            }
+                            set-value(t) => {
+                                SmartEditor.set-rule-value(i, t);
+                                root.criteria-changed();
+                            }
+                            remove => {
+                                SmartEditor.remove-rule(i);
+                                root.criteria-changed();
+                            }
+                        }
+                    }
                 }
             }
 
             HorizontalLayout {
                 alignment: start;
-                PillButton {
+                SectionButton {
+                    label: @tr("Add rule");
                     icon: "add";
-                    text: @tr("Add rule");
+                    primary: false;
                     clicked => {
                         SmartEditor.add-rule();
                         root.reveal-end = true;
@@ -279,29 +303,6 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
                 selected-index <=> SmartEditor.limit-order-index;
                 selected(idx) => { root.criteria-changed(); }
             }
-        }
-    }
-
-    // Always mounted, so its line is held before the first count lands and the card doesn't grow
-    // under the pointer. A `Rectangle` rather than a layout, which would give the throttle a slot.
-    Rectangle {
-        height: count-line.preferred-height;
-
-        count-line := Text {
-            x: 0;
-            text: SmartEditor.match-count >= 0
-                ? @tr("{n} track" | "{n} tracks" % SmartEditor.match-count)
-                : "";
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-        }
-
-        // A count is a query over the library, so it waits for a typing burst to settle.
-        FilterThrottle {
-            pending: root.recount-pending;
-            trailing: true;
-            interval: 250ms;
-            fire() => { SmartEditor.recount(); }
         }
     }
 

@@ -271,7 +271,8 @@ this file is what builds, looks right, and is wrong.
 
 - **`VerticalLayout` divides surplus equally when every child has `vertical-stretch: 0`.** Append
   trailing `Rectangle { vertical-stretch: 1; }`, or set `alignment: start`, which hands out no
-  surplus at all. Inside a `GridLayout` one of the two is mandatory: a row is as tall as its
+  surplus at all, a stretching child included: under it the smart editor's value field sat at its
+  preferred width beside a row of free space. Inside a `GridLayout` one of the two is mandatory: a row is as tall as its
   taller cell and the shorter is stretched to match, so surplus lands inside whatever that cell
   contains — a settings body column left on `stretch` grows its cards instead of ending above the
   taller column's floor.
@@ -294,14 +295,15 @@ this file is what builds, looks right, and is wrong.
   (`passes/lower_layout.rs`), and a host treats a child as height-for-width only when the child's
   component root has one (`llr/lower_layout_expression.rs`, `is_height_for_width_cell`). A
   `Rectangle`-rooted component whose height follows its width (`ChipGroup`, `SettingRow` with its
-  wrapped label, `SettingSlider`, `Dropdown`, …) is read at its *drawn* height instead, which
+  wrapped label, `SettingSlider`, …) is read at its *drawn* height instead, which
   depends on its drawn width, which comes from the solve still in progress. Symptom: `Recursion
   detected` at `i-slint-core/properties.rs`, at run time only and on the first layout, through
   `layout_item_info_at_cross_width` and `*_layoutinfo_v_with_constraint` frames; the build and
   every test stay green. A flex Settings body of two card columns hit it on opening Interface and
   went back to the `GridLayout` above, which solves widths before heights. **What a flex may hold
-  is fixed-height or layout-rooted**, which every flex in the tree keeps to: chips, pills, swatches
-  and tiles. A root `height` bound to its own flex's `preferred-height` (`ChipGroup`,
+  is fixed-height or layout-rooted**, which every flex in the tree keeps to: chips, pills, swatches,
+  tiles, and the smart editor's rule rows, whose `Dropdown`s, value field and remove button each
+  bind a constant height. A root `height` bound to its own flex's `preferred-height` (`ChipGroup`,
   `MetaChipStrip`) is read at the drawn width too, so neither may sit in a flex itself.
 
 - **A `FlexboxLayout` reports no maximum height and stretches its lines into whatever it is
@@ -352,14 +354,17 @@ this file is what builds, looks right, and is wrong.
 
 - **A faked placeholder `Text` in a non-layout parent paints out of its input, and
   `overflow: elide` alone doesn't stop it.** Slint's raw `TextInput` has no `placeholder-text`, so
-  all four placeholders in the tree are a sibling `Text` gated on the field being empty. Under a
+  both placeholders in the tree are a sibling `Text` gated on the field being empty:
+  `single-line-input.slint`'s, which every single-line field mounts, and
+  `multiline-input.slint`'s. Under a
   plain `Rectangle`, `make_default_implicit` sizes each to `max(preferred, min)` of its **own**
   `layout_info` — the untruncated string — so it paints through the pill's right edge, and the
   default `clip` is against that same full-string width. Elide is half the cure: `text_layout_info`
   lowers only `min` to one `…`, leaving `preferred` at the full string, so a non-layout parent
-  hands over the larger and elide never fires. **Bound the width *and* elide.** The `TextInput`
-  beside each one never had the bug: it fills its parent (an item with **no** implicit size is
-  sized to 100 %) and clips itself besides. `multiline-input.slint` is exempt — bounded to its
+  hands over the larger and elide never fires. **Bound the width *and* elide.** The single-line
+  `TextInput` beside it is the opposite case on purpose: it grows wider than the field once its
+  text does, sliding to keep the cursor in view, and the component's own scissor `clip` holds it
+  in. `multiline-input.slint` is exempt — bounded to its
   scroller (`width: sv.width`) and wrapping rather than eliding. A **locale** bug in practice,
   English fitting every slot where the catalogues run ~1.3× longer; pinned by
   `ui::placeholder_tests`.
@@ -367,8 +372,8 @@ this file is what builds, looks right, and is wrong.
 - **A `SearchBar`'s slot is sized off its own placeholder, so its root spells
   `min-width`/`preferred-width`/`max-width` and never binds `width`** — a bound `width` is
   reported as both `min` and `max` and would drag the window's resize floor along with a
-  locale-sized default. The natural width is `placeholder-text.preferred-width + chrome-overhead`,
-  read off the Text the bar draws (the `label-w` idiom: a Text's *horizontal* layout info is
+  locale-sized default. The natural width is `input.placeholder-width + chrome-overhead`, which
+  `SingleLineInput` publishes off the hint it draws (the `label-w` idiom: a Text's *horizontal* layout info is
   intrinsic to the string and never reads back the width it was handed, so it's a derivation and
   not a cycle). Only the **default** is measured — the four hosts that set `input-width` outright
   never evaluate it. What every mount keeps is the `min-width` floor: below it the bar compresses
