@@ -229,22 +229,45 @@ Small and separate from phase 3's adoptions: it deletes a workaround for a bug 1
 - **The fix is the deletion.** Not a phase-aware re-dispatch and not a tuned animation: upstream's
   own path now does what the arm was for, with direct tracking and the fling.
 
-- [ ] `window_chrome/winit_filter.rs`: delete `WheelRoute::Unphased`, the `Started` branch in
+- [x] `window_chrome/winit_filter.rs`: delete `WheelRoute::Unphased`, the `Started` branch in
       `route_wheel` and the `PointerScrolled` arm in `on_mouse_wheel`, then the parameters nothing
-      reads any more (`route_wheel`'s `phase`, `on_mouse_wheel`'s `cursor_pos`). The `CursorMoved`
-      mirror stays, since the titlebar's double press reads it. Trim `route_wheel`'s doc and the
-      module doc's item 6 to the one defect left, the composite one.
-- [ ] `window_chrome/tests/winit_filter_tests.rs`: drop
-      `a_touchpad_gesture_start_is_unphased_on_both_axes`, and the overlay test's `Started` case
-      now expects `Native`.
+      reads any more (`route_wheel`'s `phase`, `on_mouse_wheel`'s `cursor_pos` and `phase`). The
+      `CursorMoved` mirror stays, since the titlebar's double press reads it. Trim `route_wheel`'s
+      doc and the module doc's item 6 to the one defect left, the composite one.
+- [x] `window_chrome/tests/winit_filter_tests.rs`: drop
+      `a_touchpad_gesture_start_is_unphased_on_both_axes`, its sideways case folding into
+      `a_wheel_is_left_to_slint`. The rest lose their `TouchPhase` argument with `route_wheel`'s
+      `phase`, and the overlay test expects `Native` for both its cases.
 - [ ] `.claude/rules/slint-pitfalls.md`: delete the touchpad entry, its bug fixed and its cure gone.
-- [ ] Gate: `cargo fmt --all --check`, clippy, `cargo test --locked --workspace`.
+      Held for the manual pass.
+- [x] Gate: `cargo fmt --all --check`, clippy, `cargo test --locked --workspace` (2026-10-12).
 - [ ] Manual, on a touchpad under Wayland. X11 and Win32 send no phase, so a mouse and those two
       see no change; macOS does send one, and is the other platform this reaches.
       - A sideways two-finger swipe moves a Search card strip.
       - A vertical swipe over that strip still scrolls the page.
       - A plain list follows the fingers and flings on release.
       - Browse and Artist Detail still scroll vertically, the composite route being untouched.
+      - Now Playing or the queue sheet opened over Browse scrolls its own list, the overlay arm
+        now going native.
+
+### Open decision: how the composite views scroll
+
+Browse and Artist Detail scroll through `CompositeScroll`, which writes each delta straight to the
+offset. Everywhere else Slint scrolls, and since 1.17 it eases a wheel notch over 180 ms. Phase 4
+carries the gap over to the touchpad:
+
+|                       | mouse wheel             | touchpad                                   |
+|-----------------------|-------------------------|--------------------------------------------|
+| plain lists           | glides over 180 ms      | follows the fingers, flings on release     |
+| Browse, Artist Detail | jumps a notch at a time | follows the fingers, stops dead on release |
+
+- [ ] Decide on phase 4's manual pass, with both kinds of view under the fingers:
+      - **Accept the difference (recommended).** The composite path is a workaround for the
+        edge-swallow defect, which the Flickable section below watches to shrink. Matching Slint
+        grows it.
+      - **Match Slint**, in two separable halves: a notch eased over the same 180 ms in
+        `composite-scrollbars.slint`, and a fling, which needs the gesture's phase and a velocity
+        estimate carried from `winit_filter.rs` into the view.
 
 ---
 
@@ -422,15 +445,14 @@ Small and separate from phase 3's adoptions: it deletes a workaround for a bug 1
   scroll-capture window) is **unchanged**, so the composite routing remains required.
 - **1.18.0 vs 1.18.1:** 1.18.0 still intercepted `TouchPhase::Started` without checking the
   delta's direction (`i-slint-core-1.18.0/items/flickable.rs:762`). 1.18.1 checks it (#13453,
-  `:769-774`), so `route_wheel`'s `Unphased` re-dispatch is redundant and is phase 4.
+  `:769-774`), and phase 4 retired `route_wheel`'s `Unphased` re-dispatch.
   The edge-swallow is a separate defect and stays. 1.18 also adds
   `Flickable.mouse-drag-pan-enabled` and renames the scroll offsets to `content-*` (phase 1).
-- **On adoption:** native-wheeled views become smooth while composite views stay stepped. Decide
-  whether to (a) accept the inconsistency, (b) add matching smoothing to the composite path, or
-  (c) leave everything as-is. Also note: an external offset write during the 180 ms wheel
-  animation doesn't clear the leftover-delta state, still the case in 1.18. A follow-up wheel
-  tick can re-add stale distance (relevant to overlay-scrollbar thumb drags immediately after
-  wheeling).
+- **Composite views stay stepped**, and on a touchpad they stop dead where plain lists fling. Whether
+  to match them is the open decision after phase 4. Also note: an external offset write during the
+  180 ms wheel animation doesn't clear the leftover-delta state, still the case in 1.18. A
+  follow-up wheel tick can re-add stale distance (relevant to overlay-scrollbar thumb drags
+  immediately after wheeling).
 - **Retirement watch:** if upstream ever makes Flickable return `EventIgnored` at the edge
   (bubbling to outer scrollers), the entire composite wheel plumbing can shrink dramatically.
 
@@ -611,4 +633,5 @@ Slint-native window drag (`WindowMoveArea` on master) — both now have their ow
 2026-09-17: the 1.18.0 migration plan replaced the re-migration checklist; `WindowMoveArea` moved
 to 🟢 on its release; `FlexboxLayout` and the Hangul workaround got sections of their own.
 2026-10-11: retargeted to 1.18.1, phase 1 applied in the tree, phase 4 (the touchpad
-re-dispatch) added.*
+re-dispatch) added. 2026-10-12: phase 4's code landed, and the composite views' scroll feel moved
+out of the Flickable section into an open decision beside it.*

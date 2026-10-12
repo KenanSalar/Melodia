@@ -5,7 +5,8 @@
 //! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
 //!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
 //!    issue the parent module's docs describe. The titlebar's double press toggles maximize
-//!    instead, Slint never seeing the pair (`drag_region`).
+//!    instead, Slint never seeing the pair (`drag_region`). `CursorMoved` is mirrored for it, a
+//!    press carrying no position.
 //! 2. **`MouseInput { Pressed, Back | Forward }`** — Mouse-4 / Mouse-5 into the nav
 //!    history, gated on no overlay being open so the buttons don't fight its input
 //!    context.
@@ -19,8 +20,8 @@
 //!    the OS about a minimize on focus loss (see [`schedule_minimize_probe`]).
 //! 5. **`DroppedFile` / `HoveredFile` / `HoveredFileCancelled`** — Slint 1.18's winit backend
 //!    delivers no cross-app drop, so this is the only path a file drop arrives through.
-//! 6. **`MouseWheel`**, for two unrelated `Flickable` defects — see [`route_wheel`].
-//!    `CursorMoved` is mirrored for the same arm, a wheel event carrying no position.
+//! 6. **`MouseWheel`**, for a nested `ListView` that swallows the wheel at its scroll edge. See
+//!    [`route_wheel`].
 //! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
 //!    loop parks winit out of; see `parked_loop`.
 //! 8. **`ThemeChanged`**, Windows only: a light/dark flip for a theme on its System
@@ -35,9 +36,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use slint::winit_030::winit::error::ExternalError;
-use slint::winit_030::winit::event::{
-    ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
-};
+use slint::winit_030::winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 use slint::winit_030::{EventResult, WinitWindowAccessor};
 use slint::{ComponentHandle, SharedString};
@@ -85,36 +84,20 @@ fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
 enum WheelRoute {
     /// Into the mounted composite view's own scroll math.
     Composite,
-    /// Re-send to Slint without the gesture phase, then swallow the original.
-    Unphased,
     /// Leave it to Slint.
     Native,
 }
 
-/// Decide where one wheel event goes. Two unrelated `Flickable` defects meet here, and the
-/// composite view is asked first — it owns its region outright.
+/// Decides whether one wheel event belongs to the mounted composite view, whose nested
+/// `ListView` would otherwise swallow it at its scroll edge (argued at `CompositeScroll` in
+/// `globals/shell.slint`). Horizontal-dominant wheel stays native, that axis belonging to the
+/// strips' own scrollers.
 ///
-/// `Composite` is the nested-`ListView`-swallows-the-wheel one, argued at `CompositeScroll`
-/// in `globals/shell.slint`. Horizontal-dominant wheel stays native there, that axis
-/// belonging to the strips' own scrollers.
-///
-/// `Unphased` is the touchpad one. Through Slint 1.18.0 a `Flickable` captured on
-/// `TouchPhase::Started` whatever the delta's axis, so the outermost one under the pointer
-/// owned the whole gesture and a scroller nested inside it scrolled under a wheel but not two
-/// fingers. 1.18.1 checks the axis first (#13453), and re-sending unphased now puts every
-/// touchpad move on the animated wheel path, so the arm goes once a touchpad confirms the fix.
-fn route_wheel(
-    composite_hovered: bool,
-    overlay_open: bool,
-    phase: TouchPhase,
-    dx: f32,
-    dy: f32,
-) -> WheelRoute {
+/// Everything else reaches Slint as winit sent it. A touchpad gesture tracks the fingers and
+/// flings only when Slint sees its phases, so nothing here may re-send one.
+fn route_wheel(composite_hovered: bool, overlay_open: bool, dx: f32, dy: f32) -> WheelRoute {
     if composite_hovered && !overlay_open && dy != 0.0 && dy.abs() >= dx.abs() {
         return WheelRoute::Composite;
-    }
-    if matches!(phase, TouchPhase::Started) {
-        return WheelRoute::Unphased;
     }
     WheelRoute::Native
 }
@@ -153,7 +136,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     let PressTargets { drag_region, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
-    // Where the pointer is, for the synthetic scroll and the titlebar's double press below.
+    // Where the pointer is, for the titlebar's double press below.
     let mut cursor_pos = slint::LogicalPosition::default();
     let mut double_press = DoublePress::default();
     let resize_watch = ResizeWatch::new(app.as_weak());
@@ -232,9 +215,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 cursor_pos = slint::LogicalPosition::new(l.x, l.y);
                 EventResult::Propagate
             }
-            WindowEvent::MouseWheel { delta, phase, .. } => {
-                on_mouse_wheel(w, &weak, cursor_pos, *delta, *phase)
-            }
+            WindowEvent::MouseWheel { delta, .. } => on_mouse_wheel(w, &weak, *delta),
             // The filter runs ahead of Slint's own dispatch, so the last `Resized` has already
             // landed its size and `draw()` has not run yet: a handler firing here sees the frame
             // it is about to be painted into.
@@ -427,9 +408,7 @@ fn on_close_requested(weak: &slint::Weak<AppWindow>) -> EventResult {
 fn on_mouse_wheel(
     w: &slint::Window,
     weak: &slint::Weak<AppWindow>,
-    cursor_pos: slint::LogicalPosition,
     delta: MouseScrollDelta,
-    phase: TouchPhase,
 ) -> EventResult {
     let (dx, dy) = match delta {
         MouseScrollDelta::LineDelta(lx, ly) => (lx * 60.0, ly * 60.0),
@@ -446,7 +425,7 @@ fn on_mouse_wheel(
     // region with no pointer move, Slint clearing `has-hover` only on the
     // next `MouseEvent::Exit`. Mirrors the Mouse-4/5 arm's own gate.
     let overlay_open = crate::ui::nav_history::overlay_open(&ui);
-    match route_wheel(cs.get_hovered(), overlay_open, phase, dx, dy) {
+    match route_wheel(cs.get_hovered(), overlay_open, dx, dy) {
         WheelRoute::Composite => {
             // Accumulate rather than overwrite: the `changed wheel-tick`
             // handler fires at most once per loop iteration, so several
@@ -458,20 +437,6 @@ fn on_mouse_wheel(
             // Nothing paints either property, so nothing else asks for the
             // frame whose `new_events` runs the handler that applies them.
             ui.window().request_redraw();
-            EventResult::PreventDefault
-        }
-        // `PointerScrolled` lands as a one-shot `TouchPhase::Cancelled`
-        // wheel, the direction-aware arm. Re-sent rather than dropped so
-        // the shortest gesture — one event and a stop — still moves.
-        WheelRoute::Unphased => {
-            let scrolled = slint::platform::WindowEvent::PointerScrolled {
-                position: cursor_pos,
-                delta_x: dx,
-                delta_y: dy,
-            };
-            if let Err(e) = ui.window().dispatch_event_with_result(scrolled) {
-                log::warn!("touchpad scroll: dispatch: {}", describe(&e));
-            }
             EventResult::PreventDefault
         }
         WheelRoute::Native => EventResult::Propagate,
