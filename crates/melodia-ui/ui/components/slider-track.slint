@@ -24,10 +24,6 @@ export component SliderTrack inherits Rectangle {
     // So a host can gate a floating badge on hover without wrapping this in an
     // outer TouchArea, which would steal the pointer events.
     out property <bool>  has-hover: touch.has-hover;
-    // Raw pressed, because the winit Release filter clears `PopupHighlight.id`
-    // on every mouse-up while `committed` only fires after movement — a no-move
-    // grab still needs a way back to the trigger highlight.
-    out property <bool>  pressed: touch.pressed;
 
     callback changed(float);
     callback committed(float);

@@ -35,17 +35,16 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use slint::ComponentHandle;
 use slint::winit_030::winit::error::ExternalError;
 use slint::winit_030::winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 use slint::winit_030::{EventResult, WinitWindowAccessor};
-use slint::{ComponentHandle, SharedString};
 
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, PopupHighlight, Queue, Theme,
-    WindowChrome,
+    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, Queue, Theme, WindowChrome,
 };
 
 use super::drag_region::{DoublePress, PressAction};
@@ -166,17 +165,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             } if drag_region.get() != DragRegion::None => {
                 drag_press(w, &weak, &mut double_press, drag_region.get(), cursor_pos)
             }
-            // Above the `Released` cleanup arm because the press is what wants
-            // `PreventDefault`.
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: button @ (MouseButton::Back | MouseButton::Forward),
                 ..
             } => nav_button(&weak, &state, *button),
-            WindowEvent::MouseInput { state: ElementState::Released, .. } => {
-                release_popup_highlight(&weak);
-                EventResult::Propagate
-            }
             WindowEvent::Resized(_) => on_resized(w, &weak),
             // X11/Win32/macOS deliver these. Wayland never does, a client there not knowing its
             // own position: position restore is a no-op there anyway, but a drag pressed again
@@ -261,26 +254,6 @@ fn nav_button(weak: &slint::Weak<AppWindow>, state: &AppState, button: MouseButt
     let going_back = matches!(button, MouseButton::Back);
     crate::ui::nav_history::replay(state, &ui, going_back);
     EventResult::PreventDefault
-}
-
-/// Popup-trigger highlight cleanup. `PopupWindow` has no `closed` callback,
-/// and while one is open the dispatcher stops routing mouse events to
-/// main-window items, so an `AppWindow`-level scrim `TouchArea` can't catch the
-/// dismissing click. Release works because the press has already fired Slint's
-/// `close-on-click-outside`; popup-internal areas that should *keep* the
-/// highlight re-set `PopupHighlight.id` from their own `pointer-event(up)`,
-/// which runs after this filter. The write is sentinel-gated so a random click
-/// doesn't churn the property.
-///
-/// Synchronous rather than `upgrade_in_event_loop`: a deferred clear lands
-/// after those `pointer-event(up)` handlers and wipes the re-set.
-fn release_popup_highlight(weak: &slint::Weak<AppWindow>) {
-    if let Some(ui) = weak.upgrade() {
-        let ph = ui.global::<PopupHighlight>();
-        if !ph.get_id().is_empty() {
-            ph.set_id(SharedString::default());
-        }
-    }
 }
 
 fn on_resized(w: &slint::Window, weak: &slint::Weak<AppWindow>) -> EventResult {

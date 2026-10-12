@@ -5,7 +5,7 @@ import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { Player } from "../../globals/player.slint";
 import { Queue } from "../../globals/queue.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
-import { WindowChrome, PopupHighlight } from "../../globals/shell.slint";
+import { WindowChrome } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
@@ -19,10 +19,10 @@ import { FlyoutMetrics, SleepPresets, SpeedPresets } from "./flyout-presets.slin
 // The bar's overflow trigger and its popup: five permanent rows, two of which open a
 // left-side flyout, plus every button the user routed here.
 //
-// **Fixed-reserve geometry**, the volume popup's pattern: the `PopupWindow` is always
-// sized for the menu column *and* the widest flyout, so it never re-layouts when one
-// expands, with a transparent catcher over the empty regions. It opens upward, the bar
-// living at the window's bottom, and the menu column right-aligns under the trigger.
+// **Sized to what it draws**: the menu column, plus the open flyout and the gap to it, with a
+// transparent catcher over the empty regions. It opens upward, the bar living at the window's
+// bottom, and the menu column right-aligns under the trigger, so a flyout grows the popup
+// leftward and upward. Slint re-measures an open popup, which is what lets it.
 //
 // The speed control is **always** here rather than configurable — it is never shown
 // inline — which is why the trigger itself is always mounted.
@@ -37,14 +37,13 @@ export component OverflowMenu inherits Rectangle {
     property <bool> speed-flyout-open: false;
     property <bool> sleep-flyout-open: false;
 
-    // The close triple every row calls: drop the popup, collapse both flyouts, release
-    // the trigger highlight. **A function rather than a callback** — the rows invoke it
-    // and nothing subscribes, so there is no handler slot to clobber.
+    // What every closing row calls: drop the popup and collapse both flyouts. **A function
+    // rather than a callback** — the rows invoke it and nothing subscribes, so there is no
+    // handler slot to clobber.
     public function dismiss() {
         pop.close();
         root.speed-flyout-open = false;
         root.sleep-flyout-open = false;
-        PopupHighlight.id = "";
     }
 
     // The overflowed buttons only; the permanent rows are counted separately below. The
@@ -75,8 +74,13 @@ export component OverflowMenu inherits Rectangle {
     property <length> sleep-flyout-h:
         FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + 9px
         + FlyoutMetrics.chrome-h;
-    // Reserve the wider one, so the popup never re-layouts on a switch.
-    property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w);
+    // Zero while both are shut, so the popup is the menu column alone.
+    property <length> open-flyout-w: root.speed-flyout-open
+        ? root.flyout-w
+        : (root.sleep-flyout-open ? root.sleep-flyout-w : 0px);
+    property <length> open-flyout-h: root.speed-flyout-open
+        ? root.flyout-h
+        : (root.sleep-flyout-open ? root.sleep-flyout-h : 0px);
     // Keeps the two columns reading as separate floating chromes.
     property <length> gap: 8px;
 
@@ -100,13 +104,10 @@ export component OverflowMenu inherits Rectangle {
         diameter: clamp(root.bar-w * 0.05, 28px, 36px);
         icon-size: clamp(root.bar-w * 0.03, 18px, 20px);
         tooltip-text: @tr("More");
-        // Keeps the disc highlighted while the popup is open; `dismiss()` and the winit
-        // Release path both clear it.
-        force-bg: PopupHighlight.id == "overflow";
+        force-bg: pop.is-open;
         clicked => {
             // Always (re)open collapsed.
             root.speed-flyout-open = false; root.sleep-flyout-open = false;
-            PopupHighlight.id = "overflow";
             pop.show();
         }
     }
@@ -120,13 +121,13 @@ export component OverflowMenu inherits Rectangle {
         // The menu column's on-screen position is independent of the popup's size —
         // both offsets cancel `self.width` — so it stays pinned under the trigger
         // whether or not a flyout is open.
-        width: root.left-col-w + root.gap + self.menu-w;
-        height: max(root.menu-h, max(root.flyout-h, root.sleep-flyout-h));
+        width: self.menu-w + (root.open-flyout-w > 0 ? root.open-flyout-w + root.gap : 0px);
+        height: max(root.menu-h, root.open-flyout-h);
         x: btn.width - self.width;
         y: -self.height - Theme.popup-gap;
         close-policy: close-on-click-outside;
 
-        // Mirrors the volume popup's left-strip catcher.
+        // Over the gap and the space above the shorter column while a flyout is open.
         PopupDismissCatcher {
             width: parent.width;
             height: parent.height;
@@ -136,10 +137,10 @@ export component OverflowMenu inherits Rectangle {
         }
 
         // Bottom-anchored with the menu column and growing upward, and **mounted only
-        // while open** so its rows aren't built when collapsed. Right-aligned inside the
-        // shared left column, so the gap holds whichever flyout is wider.
+        // while open** so its rows aren't built when collapsed. At the popup's left edge,
+        // the popup being only as wide as the open flyout needs.
         if root.speed-flyout-open: SpeedFlyout {
-            x: root.left-col-w - root.flyout-w;
+            x: 0px;
             y: parent.height - root.flyout-h;
             width: root.flyout-w;
             height: root.flyout-h;
@@ -153,7 +154,7 @@ export component OverflowMenu inherits Rectangle {
         // The same left column. A preset applies and closes; the stepper's Start pill
         // arms a custom duration and closes.
         if root.sleep-flyout-open: SleepTimerFlyout {
-            x: root.left-col-w - root.sleep-flyout-w;
+            x: 0px;
             y: parent.height - root.sleep-flyout-h;
             width: root.sleep-flyout-w;
             height: root.sleep-flyout-h;
@@ -172,7 +173,6 @@ export component OverflowMenu inherits Rectangle {
 
         // Menu column — right, bottom-anchored under the trigger.
         MenuSurface {
-            popup-id: "overflow";
             x: parent.width - pop.menu-w;
             y: parent.height - root.menu-h;
             width: pop.menu-w;
@@ -185,8 +185,7 @@ export component OverflowMenu inherits Rectangle {
                 padding: Theme.pad-xs;
                 spacing: 0;
 
-                // **Doesn't close the popup**, and re-asserts the highlight id so the
-                // winit Release clear can't unmount the `FocusLossWatcher`.
+                // **Doesn't close the popup.**
                 OverflowRow {
                     icon: "speed";
                     label: @tr("Speed");
@@ -202,7 +201,6 @@ export component OverflowMenu inherits Rectangle {
                     clicked => {
                         root.speed-flyout-open = !root.speed-flyout-open;
                         root.sleep-flyout-open = false;
-                        PopupHighlight.id = "overflow";
                     }
                 }
 
@@ -221,7 +219,6 @@ export component OverflowMenu inherits Rectangle {
                     clicked => {
                         root.sleep-flyout-open = !root.sleep-flyout-open;
                         root.speed-flyout-open = false;
-                        PopupHighlight.id = "overflow";
                     }
                 }
 
@@ -263,8 +260,7 @@ export component OverflowMenu inherits Rectangle {
                 }
 
                 // Inline, so unlike the dialog rows it neither closes the popup nor
-                // opens a flyout: a star applies immediately and re-asserts the
-                // highlight id.
+                // opens a flyout: a star applies immediately.
                 rating-row := Rectangle {
                     // Not an `OverflowRow`, so it has to take the shared row
                     // height itself — `menu-h` above reserves one for it.
@@ -306,7 +302,6 @@ export component OverflowMenu inherits Rectangle {
                                 empty-color: Theme.subtext0.transparentize(1.0 - rating-row.fade);
                                 rated(n) => {
                                     Player.set-current-rating(n);
-                                    PopupHighlight.id = "overflow";
                                 }
                             }
                         }

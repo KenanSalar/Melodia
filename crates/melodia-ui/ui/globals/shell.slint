@@ -225,15 +225,3 @@ export global CompositeScroll {
         root.wheel-dy = 0px;
     }
 }
-
-// Lets a popup trigger keep its hover background painted while its `PopupWindow` is open: Slint
-// 1.18 has no `closed` callback, `has-hover` flips false the moment the popup steals input, and no
-// scrim can catch the dismissing click either. The contract:
-//   - a trigger writes its own discriminator to `id` right before `show()` and binds
-//     `force-bg: PopupHighlight.id == "<my-id>"`. A string, not a bool, so triggers can't cross-talk
-//   - the winit layer clears `id` on every mouse Release; an Esc close leaves it until the next click
-//   - popup-internal areas that *don't* close the popup re-set `id` from `pointer-event(up)`
-//   - areas that *do* close it clear `id` beside `close()`, belt-and-braces with winit
-export global PopupHighlight {
-    in-out property <string> id: "";
-}

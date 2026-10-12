@@ -1,5 +1,4 @@
 import { Theme } from "../theme.slint";
-import { PopupHighlight } from "../globals/shell.slint";
 import { PillButton } from "action-pill.slint";
 import { PopupSurface } from "popup-surface.slint";
 import { FocusLossWatcher } from "focus-loss-watcher.slint";
@@ -11,10 +10,8 @@ import { FocusLossWatcher } from "focus-loss-watcher.slint";
 // at codegen, so a label handed over as a string would ship untranslated — the same reason
 // `TrackContextMenu` spells its own entries rather than taking them.
 //
-// `menu-id` is the `PopupHighlight` discriminator, so two overflow menus in one view can't
-// hold each other's highlight. `close-on-click` because every entry here acts and dismisses.
+// `close-on-click` because every entry here acts and dismisses.
 export component PillOverflowMenu inherits Rectangle {
-    in property <string> menu-id;
     in property <string> tooltip-text;
     // A floor, not the width: past it the widest entry decides. Matches the Now Playing
     // overflow's, so the two read as one control at their narrowest as well as by their glyph.
@@ -26,11 +23,6 @@ export component PillOverflowMenu inherits Rectangle {
     // Read back rather than answered here, so the host's frame aligns its pill off the same
     // property the in-tree mount does. Always true for a glyph-only trigger.
     out property <bool> icon-only: btn.icon-only;
-
-    // Every close path clears `PopupHighlight.id` back to "", which is also `menu-id`'s default,
-    // so the `!= ""` half is what stops a host that forgot to set one sitting in its pressed
-    // background with a live watcher. `MenuSurface` carries the same guard.
-    property <bool> holds-highlight: root.menu-id != "" && PopupHighlight.id == root.menu-id;
 
     // Sized to the pill row's height so the popup hangs off this box rather than off the
     // button's own alignment inside it.
@@ -44,9 +36,8 @@ export component PillOverflowMenu inherits Rectangle {
         icon: "more_vert";
         tooltip-text: root.tooltip-text;
         tooltip-overlay: root.tooltip-overlay;
-        force-bg: root.holds-highlight;
+        force-bg: pop.is-open;
         clicked => {
-            PopupHighlight.id = root.menu-id;
             pop.show();
         }
     }
@@ -63,10 +54,9 @@ export component PillOverflowMenu inherits Rectangle {
         width: max(root.min-menu-width, items.preferred-width + 2px);
         close-policy: close-on-click;
 
-        if root.holds-highlight: FocusLossWatcher {
+        FocusLossWatcher {
             close => {
                 pop.close();
-                PopupHighlight.id = "";
             }
         }
 

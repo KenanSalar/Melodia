@@ -17,7 +17,8 @@ export component IconButton inherits Rectangle {
     // broken.
     in property <brush> disabled-fg: Theme.overlay0;
     in property <float> disabled-fade: 0.5;
-    // Lets a popup trigger keep its highlight while the popup is open — see `PopupHighlight`.
+    // For a popup trigger, bound to its popup's `is-open`: `has-hover` drops the moment the popup
+    // takes the pointer, so hover alone would leave the disc dark under an open popup.
     in property <bool> force-bg: false;
     in property <brush> idle-bg: transparent;
     // Overridden where the button sits on `surface0` itself and the default hover fill is invisible.

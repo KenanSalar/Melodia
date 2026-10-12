@@ -59,7 +59,7 @@ export component CardContextMenu inherits Rectangle {
     property <bool> playlist-edits: root.is-playlist && !root.multi-active;
 
     // **Only the kinds with more than one field to copy open a flyout.** The rest copy their one
-    // field from the row itself, and their menu reserves no room for a column it never opens.
+    // field from the row itself, so `copy-open` never moves for them.
     property <bool> has-flyout: root.is-track || root.card-kind == "album";
     property <bool> copy-open;
 
@@ -108,23 +108,23 @@ export component CardContextMenu inherits Rectangle {
     height: 0px;
 
     // One PopupWindow per mounted card. The grids virtualize by row, so this stays a screenful of
-    // popups whatever the library size. Opened wide enough for its Copy flyout where it has one,
-    // on whichever side has room, `TrackContextMenu`'s reserve.
+    // popups whatever the library size. Grows by its Copy flyout while one is open, on whichever
+    // side has room, as `TrackContextMenu` does.
     pop := PopupWindow {
         // On the popup, so it can read its own descendant's layout.
         property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
         property <length> menu-h: menu-vl.preferred-height;
         property <length> flyout-h:
             ContextMenuMetrics.flyout-h(root.is-track ? TrackCopyFields.list.length : 3);
-        property <length> reserve: root.has-flyout ? ContextMenuMetrics.reserve : 0px;
+        property <length> flyout-room: root.copy-open ? ContextMenuMetrics.flyout-room : 0px;
         // Off the root's position, which sits outside the popup and so still means the window.
         property <bool> flyout-left: root.has-flyout
             && ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
 
-        x: root.at-x - (self.flyout-left ? self.reserve : 0px);
+        x: root.at-x - (self.flyout-left ? self.flyout-room : 0px);
         y: root.at-y;
-        width: self.menu-w + self.reserve;
-        height: root.has-flyout ? max(self.menu-h, self.flyout-h) : self.menu-h;
+        width: self.menu-w + self.flyout-room;
+        height: max(self.menu-h, root.copy-open ? self.flyout-h : 0px);
         close-policy: close-on-click-outside;
 
         // This card alone in single mode, the whole selection in multi. Computed once so every
@@ -137,7 +137,7 @@ export component CardContextMenu inherits Rectangle {
             close => { root.dismiss(); }
         }
 
-        // First, so every row drawn over it wins its own click and a click on the empty reserve
+        // First, so every row drawn over it wins its own click and a click beside the column
         // still closes the menu.
         PopupDismissCatcher {
             width: parent.width;
@@ -146,7 +146,7 @@ export component CardContextMenu inherits Rectangle {
         }
 
         PopupSurface {
-            x: pop.flyout-left ? pop.reserve : 0px;
+            x: pop.flyout-left ? pop.flyout-room : 0px;
             y: 0px;
             width: pop.menu-w;
             height: pop.menu-h;

@@ -120,23 +120,22 @@ export component TrackContextMenu inherits Rectangle {
     // stays a screenful of popups whatever the library size. Add-to-Playlist hands off to a picker
     // dialog rather than scrolling inline.
     //
-    // **Opened wide enough for the Copy flyout whether or not it opens**, `OverflowMenu`'s
-    // reserve, and the reserve goes on whichever side has room. The menu column stays under the
-    // pointer either way: on the left side the popup opens that much further left.
+    // **Grows by the Copy flyout while it is open**, on whichever side has room. The menu column
+    // stays under the pointer either way: on the left side the popup moves that much further left.
     pop := PopupWindow {
         // On the popup, so it can read its own descendant's layout.
         property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
         property <length> menu-h: menu-vl.preferred-height;
         property <length> flyout-h: ContextMenuMetrics.flyout-h(TrackCopyFields.list.length);
-        property <length> reserve: ContextMenuMetrics.reserve;
+        property <length> flyout-room: root.copy-open ? ContextMenuMetrics.flyout-room : 0px;
         // Off the root's position, which sits outside the popup and so still means the window.
         property <bool> flyout-left:
             ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
 
-        x: root.at-x - (self.flyout-left ? self.reserve : 0px);
+        x: root.at-x - (self.flyout-left ? self.flyout-room : 0px);
         y: root.at-y;
-        width: self.menu-w + self.reserve;
-        height: max(self.menu-h, self.flyout-h);
+        width: self.menu-w + self.flyout-room;
+        height: max(self.menu-h, root.copy-open ? self.flyout-h : 0px);
         close-policy: close-on-click-outside;
 
         // This row alone in single mode, the whole selection in multi. Computed once so every
@@ -157,7 +156,7 @@ export component TrackContextMenu inherits Rectangle {
             close => { root.dismiss(); }
         }
 
-        // First, so every row drawn over it wins its own click and a click on the empty reserve
+        // First, so every row drawn over it wins its own click and a click beside the column
         // still closes the menu.
         PopupDismissCatcher {
             width: parent.width;
@@ -166,7 +165,7 @@ export component TrackContextMenu inherits Rectangle {
         }
 
         PopupSurface {
-            x: pop.flyout-left ? pop.reserve : 0px;
+            x: pop.flyout-left ? pop.flyout-room : 0px;
             y: 0px;
             width: pop.menu-w;
             height: pop.menu-h;

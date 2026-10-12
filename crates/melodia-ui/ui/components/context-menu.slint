@@ -3,9 +3,9 @@ import { WindowChrome } from "../globals/shell.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { PopupSurface } from "popup-surface.slint";
 
-// What every right-click menu with a flyout shares, so the reserve and the edge test are stated
-// once rather than per menu. The reserve is `OverflowMenu`'s: a `PopupWindow` is sized as it
-// opens and never again, so a menu that can grow a flyout is opened wide enough for it.
+// What every right-click menu with a flyout shares, so the flyout's room and the edge test are
+// stated once rather than per menu. A menu grows by that room while its flyout is open, Slint
+// re-measuring an open popup, and the side it grows on is decided when the menu opens.
 export global ContextMenuMetrics {
     out property <length> item-h: 32px;
     out property <length> flyout-w: 200px;
@@ -17,8 +17,9 @@ export global ContextMenuMetrics {
     // past it elides rather than running off the surface.
     out property <length> menu-min-w: 220px;
     out property <length> menu-max-w: 400px;
-    // How much wider than its column a menu with a flyout opens, on whichever side has room.
-    out property <length> reserve: root.gap + root.flyout-w;
+    // How much wider than its column a menu grows while its flyout is open, on whichever side
+    // has room.
+    out property <length> flyout-room: root.gap + root.flyout-w;
 
     // Off the rows' `preferred-width`, which only the popup holding them can read.
     pure public function menu-w(rows-w: length) -> length {
@@ -31,7 +32,7 @@ export global ContextMenuMetrics {
         return rows * root.item-h + 2 * root.inset;
     }
 
-    // A left flyout takes the reserve the popup was shifted by, so it starts at the popup's edge.
+    // A left flyout takes the room the popup was shifted by, so it starts at the popup's edge.
     pure public function flyout-x(left: bool, menu-w: length) -> length {
         return left ? 0px : menu-w + root.gap;
     }
@@ -46,7 +47,7 @@ export global ContextMenuMetrics {
     // In window coordinates, so a host passes its menu root's `absolute-position`: the root sits
     // outside the popup, where the position still means the window.
     pure public function opens-left(anchor-x: length, menu-w: length) -> bool {
-        return anchor-x + menu-w + root.reserve > WindowChrome.shell-x + WindowChrome.shell-width;
+        return anchor-x + menu-w + root.flyout-room > WindowChrome.shell-x + WindowChrome.shell-width;
     }
 }
 

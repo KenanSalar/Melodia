@@ -62,8 +62,8 @@ export component PillButton inherits Rectangle {
     // the host can drive that overlay.
     in property <bool> tooltip-overlay: false;
     out property <bool> hovered: touch.has-hover;
-    // Lets a popup trigger keep its highlight while the popup is open — see
-    // `PopupHighlight`.
+    // For a popup trigger, bound to its popup's `is-open`: `has-hover` drops the moment the popup
+    // takes the pointer, so hover alone would leave the pill dark under an open popup.
     in property <bool> force-bg: false;
     callback clicked();
 

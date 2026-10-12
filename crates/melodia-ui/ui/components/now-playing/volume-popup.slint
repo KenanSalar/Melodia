@@ -1,6 +1,5 @@
 import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
@@ -70,10 +69,8 @@ export component VolumePopup inherits Rectangle {
         recolor-duration: root.trigger-recolor-duration;
         tooltip-text: round(Player.vm.volume) + "%";
         force-tooltip: root.tooltip-ticks-remaining > 0;
-        // Keeps the disc highlighted while the popup is open; the catcher below and the
-        // winit Release path both clear it.
-        force-bg: PopupHighlight.id == "volume";
-        clicked => { PopupHighlight.id = "volume"; pop.show(); }
+        force-bg: pop.is-open;
+        clicked => { pop.show(); }
     }
 
     pop := PopupWindow {
@@ -86,8 +83,8 @@ export component VolumePopup inherits Rectangle {
         height: 180px;
         close-policy: close-on-click-outside;
 
-        if PopupHighlight.id == "volume": FocusLossWatcher {
-            close => { pop.close(); PopupHighlight.id = ""; }
+        FocusLossWatcher {
+            close => { pop.close(); }
         }
 
         // **The empty left strip is still inside the popup's rectangle**, so a click
@@ -98,7 +95,7 @@ export component VolumePopup inherits Rectangle {
             y: 0;
             width: parent.width - chrome.width;
             height: parent.height;
-            clicked => { pop.close(); PopupHighlight.id = ""; }
+            clicked => { pop.close(); }
         }
 
         // `pill: true` derives the radius from the short axis. No entry animation —
@@ -249,9 +246,6 @@ export component VolumePopup inherits Rectangle {
                             if (self.dragged-since-press) {
                                 Player.commit-volume();
                             }
-                            // A slider release stays inside the popup, so restore the
-                            // highlight the winit Release filter just cleared.
-                            PopupHighlight.id = "volume";
                         }
                     }
                     moved => {
