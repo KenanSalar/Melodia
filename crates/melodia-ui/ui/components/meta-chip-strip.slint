@@ -17,12 +17,11 @@ export component MetaChipStrip inherits Rectangle {
     // boundary clips the next row away whole rather than slicing it.
     in property <int> max-rows: 0;
 
-    // `MetaChip`'s height.
-    property <length> row-h: 26px;
     // Tighter than the gap between chips: a wrapped row is the same strip continuing, not a
     // second one, which is what lets a hero band absorb it without growing.
     property <length> row-gap: Theme.pad-xs;
-    property <length> capped-h: root.max-rows * root.row-h + (root.max-rows - 1) * root.row-gap;
+    property <length> capped-h:
+        root.max-rows * Theme.meta-chip-h + (root.max-rows - 1) * root.row-gap;
     property <length> rows-h: root.max-rows > 0
         ? min(rows-box.preferred-height, root.capped-h)
         : rows-box.preferred-height;
@@ -30,7 +29,7 @@ export component MetaChipStrip inherits Rectangle {
     // Bound to what the rows need at this width, so a host short of height can't squeeze a
     // wrapped row over whatever follows. One row is reserved whether or not there are chips,
     // which keeps a track with no metadata, or a slow fetch, from reflowing what sits above.
-    height: max(root.row-h, root.rows-h);
+    height: max(Theme.meta-chip-h, root.rows-h);
     // A scissor rather than a layer, the clip having no radius.
     clip: root.max-rows > 0;
 

@@ -310,6 +310,10 @@ this file is what builds, looks right, and is wrong.
   answers in the tree: bind the root's `height` to the flex's `preferred-height` (`ChipGroup`), set
   `cross-axis-line-alignment: start` (the mosaic picker, whose viewport outgrows one row of tiles),
   or hand the flex no surplus (`alignment: start` on `RecentSearches`' root).
+  **The width half is the opposite trap**: a wrapping flex's `preferred-width` is a near-square
+  block (`flexbox_layout_info_main_axis`), not its items on one line, so a host that hands a strip
+  only its preferred width (`alignment: start`, a zero-stretch cell) wraps it where a line would
+  fit. Every strip in the tree fills a column; one moved into a row beside a control won't.
 
 - **`GridLayout` honours a runtime expression for `row`/`col` on a plain child, and forces `Auto`
   on a repeated one.** `convert_row_col_expr` lowers `RowColExpr::Named` to a `PropertyReference`
@@ -708,7 +712,7 @@ this file is what builds, looks right, and is wrong.
   Symptom: `called Option::unwrap() on a None value` at `app-window.rs` in
   `InnerFoo::user_init::{closure#N}`, on a frame with no obvious cause, naming a component nowhere
   near what you touched; the tell in the generated source is a
-  `change_tracker<N>.init` whose *eval* closure reads a `_width` / `_height` / `_watched_w`.
+  `change_tracker<N>.init` whose *eval* closure reads a `_width` / `_height` / `_watched_cols`.
   The shape to copy is `library-tab-band.slint`: everything tracker-free rides one
   `hero-shown: root.detail-open || root.hero-t > 0` (which also stops the two halves mounting a
   frame apart), and a piece carrying a layout-watching tracker stays mounted for the life of the

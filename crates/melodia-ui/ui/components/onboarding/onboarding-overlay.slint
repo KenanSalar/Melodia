@@ -13,9 +13,10 @@ import { OnboardingFeaturesPanel } from "features-panel.slint";
 // close, and a tracker watching anything that outlives the branch — a global, or a property owned
 // above the mount — stays registered against it and panics the next time it moves, which
 // re-running the card from Settings does directly. That rules out `TabBar` (hence the hand-drawn
-// dots below), `SearchBar`, `GridColumnsSync`, `FilterThrottle` and `FocusLossWatcher`. A tracker on a property local to the branch is fine and one is already here:
-// `IconButton` brings a `Tooltip`, whose `changed hovered` dies with the button — `NowPlayingView`
-// is `if`-mounted too and drops the same one on every close.
+// dots below), `SearchBar`, `GridColumnsSync`, `FilterThrottle` and `FocusLossWatcher`. A tracker
+// on a property local to the branch is fine and one is already here: `IconButton` brings a
+// `Tooltip`, whose `changed hovered` dies with the button — `NowPlayingView` is `if`-mounted too
+// and drops the same one on every close.
 export component OnboardingOverlay inherits Rectangle {
     width: 100%;
     height: 100%;

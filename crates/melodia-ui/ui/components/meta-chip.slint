@@ -14,7 +14,7 @@ export component MetaChip inherits Rectangle {
     in property <brush> fill: Theme.surface1;
     in property <brush> label-color: Theme.text;
 
-    height: 26px;
+    height: Theme.meta-chip-h;
     // Keeps the ends circular at any height.
     border-radius: self.height / 2;
     background: root.fill;

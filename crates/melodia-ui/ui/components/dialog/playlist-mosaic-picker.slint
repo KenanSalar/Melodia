@@ -24,6 +24,8 @@ export component PlaylistMosaicPicker inherits Rectangle {
     private property <length> cand-gap: 8px;
     // Two rows visible; the ScrollView takes the overflow.
     private property <length> grid-area-h: 160px;
+    // The scrollbar's inset off the card's border, which the tiles' gutter clears as well.
+    private property <length> bar-inset: 2px;
 
     // Painted *behind* the cells, so the gaps between tiles read as gutters
     // rather than as butted-up halves; the preview's own padding picks up the
@@ -212,7 +214,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
                 VerticalLayout {
                     padding: Theme.pad-xs;
                     // A full row would otherwise run under the scrollbar.
-                    padding-right: Theme.scrollbar-slot + 2px;
+                    padding-right: Theme.scrollbar-slot + root.bar-inset;
 
                     FlexboxLayout {
                         spacing: root.cand-gap;
@@ -327,10 +329,10 @@ export component PlaylistMosaicPicker inherits Rectangle {
             OverlayScrollbar {
                 horizontal: false;
                 track-color: Theme.scrollbar-track-on-card;
-                x: parent.width - self.width - 2px;
-                y: 2px;
+                x: parent.width - self.width - root.bar-inset;
+                y: root.bar-inset;
                 width: Theme.scrollbar-slot;
-                height: parent.height - 4px;
+                height: parent.height - 2 * root.bar-inset;
                 visible-size: cand-sv.visible-height;
                 content-size: cand-sv.content-height;
                 offset: -cand-sv.content-y;

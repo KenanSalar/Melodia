@@ -171,6 +171,10 @@ export global Theme {
     // heroes first, whose right column barely clears the tile once the chips wrap.
     out property <length> hero-artwork: 140px;
 
+    // A `MetaChip`'s height, here because `MetaChipStrip` caps its rows in multiples of it: a chip
+    // and a cap that disagree slice a row instead of dropping it whole.
+    out property <length> meta-chip-h: 26px;
+
     // Typography
     out property <length> font-size-sm: 12px;
     out property <length> font-size-row: 13px;

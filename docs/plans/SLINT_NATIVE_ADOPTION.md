@@ -50,7 +50,8 @@ pass on Linux. Phase 0 is a go: on the manual run the queue sheet and the nav tr
 smooth on 1.18.1 as on 1.16.1, so the bump stays. Phase 2 passed on the manual pass, on Linux,
 once the miniplayer backdrop's fade-in was fixed on top of the bump. Phase 4 landed as `75493151`
 and passed its manual pass on a Wayland touchpad, and the composite views keep their own scrolling
-(the decision after it). Phase 3 is what remains.
+(the decision after it). Phase 3 is under way: item 1, `FlexboxLayout`, landed as `5b3aa4ac` and
+passed by hand, and items 2–7 remain.
 
 A trial on 2026-09-16 (throwaway worktree, since removed) ran
 `cargo clippy --all-targets --workspace` on Linux against 1.18.0, and the diagnostics listed in
@@ -404,4 +405,5 @@ Done 2026-10-12, every step passed by hand.
 
 *2026-09-17: the 1.18.0 migration plan replaced the re-migration checklist. 2026-10-11: retargeted
 to 1.18.1, phase 1 applied in the tree, phase 4 added. 2026-10-12: phase 4 landed and passed by
-hand, and every section waiting on an upstream Slint change moved to #127.*
+hand, and every section waiting on an upstream Slint change moved to #127. Later that day phase
+3's item 1 (`FlexboxLayout`) landed and passed by hand, its Settings-body step reverted.*
