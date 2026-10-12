@@ -166,19 +166,6 @@ this file is what builds, looks right, and is wrong.
   the upper section is a header the list belongs under, not a peer view: `browse-view.slint` and
   `ArtistDetailBody`.
 
-- **Through Slint 1.18.0 a `Flickable` claimed a whole touchpad *gesture* on
-  `TouchPhase::Started`, whatever direction it was going**, so the outermost one under the pointer
-  owned every event until `Ended`, and a card strip under Search's vertical scroller never saw a
-  sideways swipe. **Only a precision device sends the phase**: Wayland folds a discrete axis to
-  `Moved`, X11 and Win32 send nothing else, so a mouse never shows it. 1.18.1 checks the direction
-  before capturing (#13453). **Our cure for it is still in `winit_filter.rs`'s `route_wheel`, and
-  on 1.18 it costs more than it did**: it swallows the native `Started` and re-sends its delta
-  through `Window::dispatch_event_with_result(PointerScrolled)`, which lands as a one-shot
-  `Cancelled`. Slint never sees the gesture start, so it never captures it, and every touchpad
-  `Moved` takes the mouse-wheel arm instead: animated over 180 ms since 1.17, so the content trails
-  the fingers, with no kinetic fling at the end. Retire the `Unphased` arm once a touchpad swipes
-  a Search strip sideways without it.
-
 - **The same `Flickable` steals a *mouse* drag wherever it is interactive, and there the cure is
   per-list: `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture and only one
   element can own it. **Which one wins is the *style's* answer rather than Slint's**, and the
