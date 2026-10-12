@@ -576,10 +576,10 @@ three components that answer it, and each argues its geometry at its own file.
   one selected, so a right-click on an unselected row falls back to that row alone) and the
   `effective-ids` every handler reads; the host only says where, through `show-at`.
   **`view-context` is most of what a host configures** — it suppresses the entry naming the
-  surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add to Queue outright, the queue
-  being what they name. A remove label handed over by the host would ship untranslated, `@tr`
-  resolving literals at codegen, so a third list's arm is one more `if` here rather than a
-  property.
+  surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add to
+  Queue outright, the queue being what they name. A remove label handed over by the host would ship
+  untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
+  rather than a property.
 
 - **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
@@ -587,9 +587,10 @@ three components that answer it, and each argues its geometry at its own file.
   parts (`MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `ContextMenuMetrics`), and
   `components/track-copy-items.slint` the track Copy rows the row and card menus share; each menu
   argues its own entries.
-  - **A menu opens on the right button's release and keeps its own anchor.** Every surface asks
-    `ContextClick.raises-menu`, whose comment argues the release, and calls the menu's
-    `show-at(x, y)`; none binds an `at-x` from its live `mouse-x`, which an open popup would follow
+  - **A menu opens on the right button's release and takes its anchor once, there.** Every
+    surface asks `ContextClick.raises-menu`, whose comment argues the release, and stores where it
+    landed: the four menu components through `show-at(x, y)`, the history list in its own
+    `menu-x`/`menu-y`. None binds its anchor to a live `mouse-x`, which an open popup would follow
     for as long as the button is held (`slint-pitfalls.md`). `crates/melodia/tests/context_click.rs`
     holds the first half: only the predicate may name the right button.
   - **Copy opens a flyout inside the menu's own popup** where the surface has more than one field

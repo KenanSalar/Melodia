@@ -8,15 +8,20 @@
 // and Slint hands that release to whatever lies beneath: a right-click there raises its own menu
 // (`ContextClick`). A left click keeps closing on its release, which would otherwise land on the
 // item beneath as a stray one.
-export component PopupDismissCatcher inherits TouchArea {
+//
+// A `Rectangle` round the area, so a mount can spell only `close-requested`: a `clicked` or
+// `pointer-event` of its own would silently replace the handler carrying the close.
+export component PopupDismissCatcher inherits Rectangle {
     callback close-requested();
 
-    clicked => {
-        root.close-requested();
-    }
-    pointer-event(ev) => {
-        if (ev.kind == PointerEventKind.down && ev.button != PointerEventButton.left) {
+    TouchArea {
+        clicked => {
             root.close-requested();
+        }
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down && ev.button != PointerEventButton.left) {
+                root.close-requested();
+            }
         }
     }
 }

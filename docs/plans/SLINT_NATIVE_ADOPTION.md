@@ -330,6 +330,8 @@ Done 2026-10-12, every step passed by hand.
 - [ ] Manual: right-click a song, then another near and far from the menu, moving it in one click;
       a held right button opens nothing until released and the menu stays put; a press dragged off
       its row raises nothing; the same on a card, a text field and the queue.
+- [ ] Manual: a right-click on a flyout menu's padding or a separator moves the menu to the row
+      beneath; the radio facet chip's search field raises an edit menu that stays open.
 
 ## 🟢 `animate { enabled: … }` → replace duration-zero gating
 

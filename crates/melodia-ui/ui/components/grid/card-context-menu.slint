@@ -60,7 +60,7 @@ export component CardContextMenu inherits Rectangle {
     // field from the row itself, and their menu holds no room for a column it never opens.
     property <bool> has-flyout: root.is-track || root.card-kind == "album";
     property <bool> copy-open;
-    // Kept here rather than bound by the host, for `TrackContextMenu.show-at`'s reason.
+    // Stored by `show-at`, not bound by the host: `TrackContextMenu`'s header says why.
     property <length> at-x;
     property <length> at-y;
 
