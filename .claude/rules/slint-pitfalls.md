@@ -277,12 +277,13 @@ this file is what builds, looks right, and is wrong.
   `preferred: 0`, took its 26 px floor, and drew every wrapped row *outside* the box — only wrong
   once content wraps, i.e. a narrow window or a long-plural locale. The wrapper is also the one
   thing outside the `if` the root can read its height off, an id inside an `if` being unreadable
-  from out there. **The fold runs in *both* orientations**, and `layout_items` never shrinks a cell
-  past its `min`, so a wrapper's `min-width` becomes a floor under whatever holds the root. An
-  explicit `min-width` **replaces** the merged constraint rather than maxing with it, so one line is
-  the whole cure (`settings/chip-group.slint`, whose flex would otherwise floor the card at its
-  widest chip). Nothing higher up saves you: the same replacement happens on the root `Window`.
-  Pinned by `ui::hero_chips::tests::the_strip_rows_hang_off_a_layout_not_off_the_root`.
+  from out there. **Not for a flex**, which inside an `if` answers at the wrong width (the entry
+  on a flex inside an `if`, below). **The fold runs in *both* orientations**, and `layout_items`
+  never shrinks a cell past its `min`, so a wrapper's `min-width` becomes a floor under whatever
+  holds the root. An explicit `min-width` **replaces** the merged constraint rather than maxing
+  with it, so one line is the whole cure (`settings/chip-group.slint`, whose flex would otherwise
+  floor the card at its widest chip). Nothing higher up saves you: the same replacement happens on
+  the root `Window`.
 
 - **A box layout holds a stretched child to that child's own `min`/`max` on the cross axis, and the
   std `ScrollView` floors itself at 50 px.** `clamp_cross_stretch_size` (`passes/lower_layout.rs`)
@@ -366,6 +367,20 @@ this file is what builds, looks right, and is wrong.
   block (`flexbox_layout_info_main_axis`), not its items on one line, so a host that hands a strip
   only its preferred width (`alignment: start`, a zero-stretch cell) wraps it where a line would
   fit. Every strip in the tree fills a column; one moved into a row beside a control won't.
+
+- **A `FlexboxLayout` inside an `if` reports its height at that near-square width, not at the
+  width it is drawn.** The repeated component's `layout_info(Vertical)` calls its
+  `fn_layoutinfo_v_with_constraint` with its own `layoutinfo_h.preferred`, so a root reading its
+  height off a wrapper round the `if` reserves the lines a block a few chips across needs while
+  the chips draw on one. A flex that is a direct child is measured at its own `width`. It bit
+  `MetaChipStrip` twice over: Now Playing carried a band of blank lines under its chips, and the
+  strip unmounted its flex while a track change's metadata loaded, dropping to one row and
+  jumping back, so the centred column moved down and up on every song. Cure: the flex as a direct
+  child, and where it has to go away, `visible` rather than an `if`, which also keeps its lines
+  reserved while hidden. Tell: in `app-window.rs` the repeated flex's `layout_info` hands
+  `fn_layoutinfo_v_with_constraint` its own `…_layoutinfo_h ()` … `.preferred`, where a direct
+  child's `flexbox_layout_info_cross_axis` ends on its root's `…_width ()`. Pinned by
+  `ui::hero_chips::tests::the_strip_measures_its_rows_at_the_width_it_draws`.
 
 - **`GridLayout` honours a runtime expression for `row`/`col` on a plain child, and forces `Auto`
   on a repeated one.** `convert_row_col_expr` lowers `RowColExpr::Named` to a `PropertyReference`

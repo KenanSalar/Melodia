@@ -784,25 +784,30 @@ fn no_publisher_reads_its_facts_back_off_a_slint_global() {
     }
 }
 
-/// The strip's rows must sit under a plain layout, and the root's height must come off it.
+/// The strip's height must come off a flex measured at the width the strip draws it.
 ///
-/// An id inside an `if` is unreadable from outside it, so the wrapper is the one thing the
-/// root can measure its rows by. A root sized any other way once drew every wrapped row past
-/// the first *outside* its box: nothing fails to build, and it only shows once the chips
-/// actually wrap, on a narrow window or in a locale whose plurals run long.
+/// A flex inside an `if` reports its height at its own preferred width, a near-square block a
+/// few chips across, so the strip reserved lines it never drew; unmounted for the metadata gap,
+/// it then dropped to one row and jumped back, moving the centred Now Playing column down and up
+/// on every track change. Both halves build and look plausible on a single screenshot.
 #[test]
-fn the_strip_rows_hang_off_a_layout_not_off_the_root() {
+fn the_strip_measures_its_rows_at_the_width_it_draws() {
     let code = code_tokens(STRIP);
 
     assert!(
-        code.contains("rows-box := VerticalLayout { if root.show-rows: FlexboxLayout {"),
-        "MetaChipStrip must wrap its conditional rows in a plain layout, the one thing outside \
-         the `if` that can report how tall they are"
+        code.contains("rows := FlexboxLayout {") && !code.contains("if root.show-rows"),
+        "MetaChipStrip's flex must be a direct child: inside an `if` it is measured at its \
+         near-square preferred width rather than the width it is drawn"
     );
     assert!(
-        binding_value(&code, "property <length> rows-h:").contains("rows-box.preferred-height"),
-        "MetaChipStrip must take its height off the rows wrapper, which is the height its chips \
+        binding_value(&code, "property <length> rows-h:").contains("rows.preferred-height"),
+        "MetaChipStrip must take its height off the flex itself, which is the height its chips \
          need at the width the strip is drawn"
+    );
+    assert!(
+        code.contains("rows := FlexboxLayout { visible: root.show-rows;"),
+        "`show-rows` must hide the flex rather than unmount it, so the lines it took stay \
+         reserved while Now Playing waits on the next track's metadata"
     );
 }
 

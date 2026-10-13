@@ -10,8 +10,9 @@ export component MetaChipStrip inherits Rectangle {
     in property <brush> chip-label-color;
     // Now Playing centres its rows under the cover; a hero's text column is left-aligned.
     in property <bool> centred: false;
-    // Lets a host hide the chips while keeping the row reserved — Now Playing drops a metadata
-    // fetch landing after a rapid track change, and a vanishing row would reflow the artwork.
+    // Hides the chips and keeps every line they take reserved. Now Playing hides the outgoing
+    // track's until the new metadata lands, and a strip that shrank for the gap would move the
+    // centred column down and back on every track change.
     in property <bool> show-rows: true;
     // How many rows are drawn, zero for all of them. The chips are one height, so a cap at a row
     // boundary clips the next row away whole rather than slicing it.
@@ -23,28 +24,29 @@ export component MetaChipStrip inherits Rectangle {
     property <length> capped-h:
         root.max-rows * Theme.meta-chip-h + (root.max-rows - 1) * root.row-gap;
     property <length> rows-h: root.max-rows > 0
-        ? min(rows-box.preferred-height, root.capped-h)
-        : rows-box.preferred-height;
+        ? min(rows.preferred-height, root.capped-h)
+        : rows.preferred-height;
 
     // Bound to what the rows need at this width, so a host short of height can't squeeze a
-    // wrapped row over whatever follows. One row is reserved whether or not there are chips,
-    // which keeps a track with no metadata, or a slow fetch, from reflowing what sits above.
+    // wrapped row over whatever follows. One row is reserved even with no chips, so a track with
+    // no metadata doesn't reflow what sits above.
     height: max(Theme.meta-chip-h, root.rows-h);
     // A scissor rather than a layer, the clip having no radius.
     clip: root.max-rows > 0;
 
-    // What the root reads its height off, an id inside the `if` being unreadable from out here.
-    rows-box := VerticalLayout {
-        if root.show-rows: FlexboxLayout {
-            spacing-horizontal: Theme.pad-sm;
-            spacing-vertical: root.row-gap;
-            alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;
+    // **Never inside an `if`.** A repeated flex reports its height at its own preferred width, a
+    // near-square block a few chips across, so the strip reserved lines it never drew. As a
+    // direct child it is measured at the width it is drawn.
+    rows := FlexboxLayout {
+        visible: root.show-rows;
+        spacing-horizontal: Theme.pad-sm;
+        spacing-vertical: root.row-gap;
+        alignment: root.centred ? LayoutAlignment.center : LayoutAlignment.start;
 
-            for t in root.chips: MetaChip {
-                text: t;
-                fill: root.chip-fill;
-                label-color: root.chip-label-color;
-            }
+        for t in root.chips: MetaChip {
+            text: t;
+            fill: root.chip-fill;
+            label-color: root.chip-label-color;
         }
     }
 }
