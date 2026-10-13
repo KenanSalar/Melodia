@@ -146,7 +146,7 @@ export component EntityCard inherits Rectangle {
         // their own pace, and a selected card brightens under the pointer the way a selected
         // row does rather than answering it with nothing.
         background: root.card-hovered ? Theme.surface0 : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
         // The ring and the hover fill on **one** element, so the renderer tucks that fill under
         // the stroke. An `EdgeOutline` is the answer where there is a rounded clip to cut its
         // bleed away; there is none here.
@@ -337,7 +337,7 @@ export component EntityCard inherits Rectangle {
             // The two brushes `IconButton` crosses between, on its curve, so the corner answers
             // the pointer exactly as the controls beside it do.
             background: box-touch.has-hover ? Theme.surface0 : Theme.floating-chrome-bg;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
             // **`opacity` here and brush alpha on the badge, and the difference is `Checkbox`.** It
             // `animate`s its own fill and rim to cross-fade a tick, and folds `fade` into both of

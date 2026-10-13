@@ -148,9 +148,12 @@ export component LibraryTabBand inherits Rectangle {
     property <brush> hero-hover:
         root.detail-open ? HeroBackdrop.on-backdrop.transparentize(0.88) : Theme.surface0;
     property <brush> hero-divider: root.detail-open ? HeroBackdrop.tile-edge : Theme.surface1;
+    // A detail open puts them on `HeroBackdrop`, which Rust writes once a solve, so only the idle
+    // half reads the palette a fade restarts.
     animate hero-label, hero-active, hero-hover, hero-divider {
         duration: Theme.dur-med;
         easing: ease-in-out;
+        enabled: root.detail-open || !Theme.recoloring;
     }
 
     // **Split `in` / `out` to take the morph's two curves** — the colour is the same gesture as the

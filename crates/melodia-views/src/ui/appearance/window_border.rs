@@ -23,6 +23,7 @@ use melodia_core::themes::{self, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings, Theme, WindowChrome};
 
 use super::theme_apply::{accent_brushes, brush, brush_to_rgb};
+use super::theme_paint;
 
 /// The neutral border's share of the text colour, out of [`NEUTRAL_PARTS`] with the rest the
 /// window surface: enough to read as an edge against the desktop, little enough not to read as a
@@ -130,8 +131,12 @@ fn paint(ui: &AppWindow, (focused, unfocused): (u32, u32)) {
     chrome.set_border_color_unfocused(brush(unfocused));
 }
 
-/// The neutral border for the palette `Theme` holds now.
+/// The neutral border for the palette `Theme` is settling on, which mid-fade is not the blend the
+/// global holds.
 fn palette_neutral(ui: &AppWindow) -> u32 {
+    if let Some(settled) = theme_paint::settled() {
+        return neutral_border(settled.palette.mantle, settled.palette.text);
+    }
     let theme = ui.global::<Theme>();
     neutral_border(brush_to_rgb(&theme.get_mantle()), brush_to_rgb(&theme.get_text()))
 }

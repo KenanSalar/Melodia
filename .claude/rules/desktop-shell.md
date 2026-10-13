@@ -7,7 +7,7 @@ paths:
   - crates/melodia-integrations/src/services/integrations/media_controls/**/*.rs
   - crates/melodia-platform/src/services/platform/always_on_top/**/*.rs
   - crates/melodia-platform/src/services/platform/dwm_titlebar.rs
-  - crates/melodia-views/src/ui/appearance/theme_apply.rs
+  - crates/melodia-views/src/ui/appearance/theme_paint.rs
   - crates/melodia/src/main.rs
   - crates/melodia/src/shutdown.rs
   - crates/melodia/src/boot/**/*.rs

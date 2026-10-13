@@ -16,7 +16,7 @@ export component FlyoutOption inherits Rectangle {
     height: FlyoutMetrics.option-row-h;
     border-radius: Theme.radius-sm;
     background: touch.has-hover && root.option-enabled ? Theme.surface1 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;

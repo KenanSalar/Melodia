@@ -89,10 +89,13 @@ export component MiniPlayerView inherits Rectangle {
     private property <brush> caption-ink: root.on-backdrop
         ? Player.np-accent-dim
         : (Theme.window-focused ? Theme.text : Theme.overlay1);
+    // On the backdrop these read the `Player` tier, written once a track, so only the theme arm
+    // stands down for a palette fade.
     animate ink, ink-muted, list-muted, row-hover, empty-glyph, accent, tile-fill, tile-glyph,
         chip-fill, chip-label, seam-mask, track, disc-ink, caption-ink {
         duration: root.recolor;
         easing: ease-in-out;
+        enabled: root.on-backdrop || !Theme.recoloring;
     }
 
     // The artist line's sizes in the card and on the strip. A pair of its own rather than the

@@ -29,8 +29,8 @@ export component SelectIndicator inherits Rectangle {
     background: (root.active ? Theme.accent : transparent).transparentize(1.0 - root.fade);
     border-width: root.active ? 0px : 2px;
     border-color: Theme.overlay0.transparentize(1.0 - root.fade);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     if root.active: MaterialIcon {
         x: (parent.width - self.width) / 2;
@@ -66,7 +66,7 @@ export component SelectableRow inherits Rectangle {
             ? Theme.accent.with-alpha(0.16)
             : (touch.has-hover && !root.disabled ? Theme.surface1 : transparent))
         .transparentize(1.0 - root.fade);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
@@ -101,7 +101,7 @@ export component SelectableRow inherits Rectangle {
                 color: (root.selected ? Theme.accent : Theme.subtext0).transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-sm;
                 overflow: elide;
-                animate color { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
         }
 
@@ -128,7 +128,7 @@ export component SelectAllHeader inherits Rectangle {
     height: 52px;
     border-radius: Theme.radius-md;
     background: header-touch.has-hover ? Theme.surface1 : Theme.surface0;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-md;
@@ -155,7 +155,7 @@ export component SelectAllHeader inherits Rectangle {
             background: root.selected-count > 0
                 ? Theme.accent.with-alpha(0.18)
                 : Theme.surface1;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
             chip-l := HorizontalLayout {
                 padding-left: 12px;

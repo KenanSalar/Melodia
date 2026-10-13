@@ -49,7 +49,7 @@ export component SectionButton inherits Rectangle {
         ? transparent
         : Theme.surface2;
     border-width: 1px;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-md;

@@ -105,7 +105,7 @@ export component NowPlayingBar inherits Rectangle {
                 background: track-info-touch.has-hover && track-info-cell.has-source
                     ? Theme.accent.with-alpha(0.12)
                     : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
 
             // Shares `press-scale` with the fill, so the row inside contracts toward the

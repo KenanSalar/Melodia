@@ -24,7 +24,7 @@ component StepperButton inherits Rectangle {
     // The content views' darker page fill, lifting on hover.
     background: (touch.has-hover && !root.at-bound ? Theme.surface0 : Theme.base)
         .transparentize(1.0 - root.fade);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     MaterialIcon {
         name: root.icon;
@@ -167,7 +167,7 @@ export component SleepTimerFlyout inherits PopupSurface {
                 height: 28px;
                 border-radius: self.height / 2;
                 background: start-touch.has-hover ? Theme.accent.brighter(8%) : Theme.accent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                 Text {
                     text: @tr("Start");
                     color: Theme.crust;

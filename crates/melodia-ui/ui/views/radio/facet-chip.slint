@@ -18,7 +18,7 @@ component FacetOption inherits Rectangle {
     height: 34px;
     border-radius: Theme.radius-sm;
     background: touch.has-hover ? Theme.surface1 : transparent;
-    animate background { duration: 100ms; easing: ease-in-out; }
+    animate background { duration: 100ms; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
@@ -100,7 +100,7 @@ export component FacetChip inherits Rectangle {
         background: root.is-set
             ? Theme.accent
             : (touch.has-hover || popup.is-open ? Theme.surface2 : Theme.surface1);
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         HorizontalLayout {
             padding-left: Theme.pad-md;

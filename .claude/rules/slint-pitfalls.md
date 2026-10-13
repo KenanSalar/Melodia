@@ -88,7 +88,8 @@ this file is what builds, looks right, and is wrong.
   layers at `t` and `1 - t` composite to three quarters coverage at the midpoint and the text
   thins; keep them identical in everything but colour or the crossing ghosts. The exemption is the
   opposite case — a host that never eases what it hands over, hence `icon-button.slint`'s two
-  `animate`s. Pinned by `ui::tab_bar::tests::`
+  `animate`s, which stand down for the one writer that does step their defaults, the palette fade
+  below. Pinned by `ui::tab_bar::tests::`
   `{the_cell_eases_floats_and_never_a_brush, the_selected_colour_crosses_over_two_matched_layers}`.
   **The mirror image bites the host**: a layer may not ease *out of* a value nothing was painting.
   `HeroBackdrop` is held across a My Library tab leave, so a mirror bound to it unconditionally
@@ -96,6 +97,20 @@ this file is what builds, looks right, and is wrong.
   pink under a playlist. Cure at the source, not the animation: make the idle value honest
   (`root.detail-open ? <tier> : <idle token>`), suppressing the ease on the right frame being
   impossible when the colour and the id land in the same tick. See `ui-patterns.md`.
+
+- **`Theme`'s palette brushes are stepped every frame while one Material You palette fades into the
+  next, so an `animate` whose binding can read one carries `enabled: !Theme.recoloring`.** Slint
+  can't animate a global, so `ui::appearance::theme_paint` writes a blend each frame and holds
+  `Theme.recoloring` up for the fade. An ungated `animate` on a palette brush restarts on every
+  write and lands after the window: the entry above, at the scale of the whole window. Disabled, it
+  takes each written value as it comes and so rides the fade. **"Can read" includes a defaulted
+  input**: `IconButton`, `OverlayScrollbar`, `ToggleSwitch` and `StarRating` ease brushes their
+  hosts hand over, and every one of those defaults to a `Theme` token. A float, an `np-*` or
+  `HeroBackdrop` tier Rust writes once a solve, and a `states` transition, whose timeline survives
+  the dirt, need no gate. Where one binding switches between the two kinds, gate on the switch:
+  `library-tab-band.slint`'s mirrors take `root.detail-open || !Theme.recoloring` and the
+  miniplayer's `root.on-backdrop || !Theme.recoloring`, so a hero or backdrop tier keeps easing
+  through a fade. Missing, it shows only during a fade, as one control settling after the rest.
 
 - **Drag handles inside resized element need absolute coords.** Snapshot
   `start_abs = self.absolute-position.x + self.pressed-x` on `down`, then

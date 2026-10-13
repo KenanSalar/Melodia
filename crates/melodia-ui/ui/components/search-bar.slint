@@ -153,6 +153,7 @@ export component SearchBar inherits Rectangle {
                 drop-shadow-blur, drop-shadow-offset-y {
             duration: Theme.dur-fast;
             easing: ease-in-out;
+            enabled: !Theme.recoloring;
         }
 
         // **Wraps the content rather than sitting beside it.** As a sibling its `has-hover` only
@@ -181,7 +182,7 @@ export component SearchBar inherits Rectangle {
                 icon-color: input.has-focus
                     ? Theme.accent
                     : Theme.text.transparentize(0.3);
-                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
 
             // The bar's full height rather than a line-sized box centred in it: the same centre,
@@ -203,7 +204,7 @@ export component SearchBar inherits Rectangle {
                 height: 22px;
                 border-radius: self.height / 2;
                 background: clear-touch.has-hover ? Theme.surface1 : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                 MaterialIcon {
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;

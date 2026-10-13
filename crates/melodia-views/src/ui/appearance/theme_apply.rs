@@ -1,18 +1,18 @@
 //! Apply pipeline: resolve `(theme_id, variant_id, accent_id)` against the
-//! registry and the OS / Material You signals, then write every theme-
-//! dependent brush into the Slint `Theme` global.
+//! registry and the OS / Material You signals, then hand the palette to
+//! [`theme_paint`](super::theme_paint), which writes it into the Slint `Theme` global.
 //!
 //! It lives here rather than under `themes/` because it is the only half of that directory that
 //! names a Slint type, and carrying it there would put `melodia-ui` under every crate wanting a
 //! palette. What it reads is `melodia_core::themes`: tables, the registry, and the two derivations.
 
-use slint::{Brush, Color, ComponentHandle};
+use slint::{Brush, Color};
 
-use melodia_core::themes::palette::{
-    MATERIAL_YOU_ACCENT_ID, Palette, ThemeDef, Variant, on_accent_hex,
-};
+use melodia_core::themes::palette::{MATERIAL_YOU_ACCENT_ID, ThemeDef, Variant};
 use melodia_core::themes::system_color_state::SystemColorState;
-use melodia_ui::{AppWindow, Theme as ThemeGlobal};
+use melodia_ui::AppWindow;
+
+use super::theme_paint::{self, Painted, Source};
 
 /// Brushes for the colour-dot picker — one per accent in `theme`, each
 /// rendered in `variant_id`'s shade.
@@ -20,8 +20,8 @@ pub fn accent_brushes(theme: &ThemeDef, variant_id: &str) -> Vec<Brush> {
     theme.accents.iter().map(|a| brush(a.hex_in(variant_id).unwrap_or(0x88_88_88))).collect()
 }
 
-/// Resolve `(theme_id, variant_id, accent_id)` with fallbacks and write every
-/// theme-dependent brush into the Slint `Theme` global.
+/// Resolve `(theme_id, variant_id, accent_id)` with fallbacks and paint the
+/// palette it lands on.
 ///
 /// The synthetic system variant maps onto one of the theme's real ones, for a
 /// theme that opts in. KDE Breeze additionally bypasses its static palette and
@@ -51,7 +51,8 @@ pub fn apply(
         };
         // A palette generated from artwork has no OS inactive-titlebar colour
         // to offer, so the unfocused surface falls back to `base`.
-        write_palette(ui, palette, accent_hex, palette.base);
+        let painted = Painted::new(*palette, accent_hex, palette.base);
+        theme_paint::paint(ui, painted, Source::Dynamic);
         return;
     }
 
@@ -73,76 +74,19 @@ pub fn apply(
             .get("mantle_unfocused")
             .and_then(|s| melodia_core::themes::kde::parse_hex_color(s))
             .unwrap_or(palette.base);
-        write_palette(ui, &palette, accent_hex, mantle_unfocused_hex);
+        let painted = Painted::new(palette, accent_hex, mantle_unfocused_hex);
+        theme_paint::paint(ui, painted, Source::Static);
         return;
     }
 
     let variant = theme.shade_for(variant_id, &system.theme);
     let accent_hex = theme.resolved_accent_hex(accent_id, variant.id);
-    write_palette(ui, &variant.palette, accent_hex, unfocused_mantle(variant));
+    let painted = Painted::new(variant.palette, accent_hex, unfocused_mantle(variant));
+    theme_paint::paint(ui, painted, Source::Static);
 }
 
 fn unfocused_mantle(variant: &Variant) -> u32 {
     variant.mantle_unfocused.unwrap_or(variant.palette.base)
-}
-
-fn write_palette(ui: &AppWindow, p: &Palette, accent_hex: u32, mantle_unfocused_hex: u32) {
-    let g = ui.global::<ThemeGlobal>();
-
-    // Surfaces / structure
-    g.set_base(brush(p.base));
-    g.set_mantle(brush(p.mantle));
-    g.set_mantle_unfocused(brush(mantle_unfocused_hex));
-    g.set_crust(brush(p.crust));
-    g.set_surface0(brush(p.surface0));
-    g.set_surface1(brush(p.surface1));
-    g.set_surface2(brush(p.surface2));
-
-    // Overlays / text
-    g.set_overlay0(brush(p.overlay0));
-    g.set_overlay1(brush(p.overlay1));
-    g.set_overlay2(brush(p.overlay2));
-    g.set_text(brush(p.text));
-    g.set_subtext0(brush(p.subtext0));
-    g.set_subtext1(brush(p.subtext1));
-    g.set_border(brush(p.border));
-
-    // Semantic palette slots
-    g.set_red(brush(p.red));
-    g.set_green(brush(p.green));
-    g.set_yellow(brush(p.yellow));
-
-    // Accent + on-accent text
-    g.set_accent(brush(accent_hex));
-    g.set_accent_text(brush(on_accent_hex(accent_hex)));
-
-    // `danger` / `danger-text` stay bound to red / accent-text via the Slint
-    // declarative defaults — re-evaluated whenever the source brushes update,
-    // so we don't write them here.
-
-    // Paint the OS-drawn caption in the same mantle so it blends into the chrome
-    // below. Nothing to paint until the window is shown, which boot's
-    // post-show one-shot covers. See [`melodia_platform::services::platform::dwm_titlebar`].
-    #[cfg(target_os = "windows")]
-    if let Some(hwnd) = crate::ui::window_chrome::win32_hwnd(ui) {
-        melodia_platform::services::platform::dwm_titlebar::apply(hwnd, p.mantle);
-    }
-}
-
-/// Read `Theme.mantle` back off the Slint global and repaint the OS caption from it.
-///
-/// Called once at startup after the window is shown, the boot-time [`apply`] having had no `HWND`
-/// to paint; every later palette write drives the DWM call from `write_palette` directly. It reads
-/// the global rather than taking a `Palette` because by then the resolved one is only on the Slint
-/// side — which is also why it is here and not in `dwm_titlebar`, whose half of this names no
-/// Slint type.
-#[cfg(target_os = "windows")]
-pub fn reapply_from_theme(app: &AppWindow) {
-    let Some(hwnd) = crate::ui::window_chrome::win32_hwnd(app) else {
-        return;
-    };
-    let mantle = color_to_rgb(app.global::<ThemeGlobal>().get_mantle().color());
-    melodia_platform::services::platform::dwm_titlebar::apply(hwnd, mantle);
 }
 
 /// A `0x00RRGGBB` value as an opaque solid `Brush`. `pub(crate)` because Now

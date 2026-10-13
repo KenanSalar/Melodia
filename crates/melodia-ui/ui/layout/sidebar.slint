@@ -55,7 +55,7 @@ component SidebarItem inherits Rectangle {
         background: root.selected
             ? Theme.surface1
             : (touch.has-hover ? Theme.surface0 : transparent);
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         HorizontalLayout {
             // Collapsed, it centres the icon in the content row; expanded, it tracks a
@@ -165,7 +165,7 @@ export component Sidebar inherits Rectangle {
                 y: (parent.height - self.height) / 2;
                 border-radius: Theme.radius-md;
                 background: collapse-touch.has-hover ? Theme.surface0 : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                 HorizontalLayout {
                     // `SidebarItem`'s padding, so this icon stays on the same vertical
                     // line as the nav icons below it.
@@ -255,7 +255,7 @@ export component Sidebar inherits Rectangle {
         width: 4px;
         height: parent.height;
         background: resize-touch.pressed ? Theme.accent : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         resize-touch := TouchArea {
             mouse-cursor: ew-resize;

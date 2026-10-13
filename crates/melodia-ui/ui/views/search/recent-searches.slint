@@ -30,7 +30,7 @@ component RecentChip inherits Rectangle {
         : Theme.surface0;
     border-width: 1px;
     border-color: Theme.surface2;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     term-text := Text {
         x: 10px;
@@ -63,7 +63,7 @@ component RecentChip inherits Rectangle {
         background: close-touch.has-hover
             ? Theme.surface2
             : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
         MaterialIcon {
             name: "close";
             icon-size: 14px;
@@ -104,7 +104,7 @@ export component RecentSearches inherits VerticalLayout {
             background: clear-touch.has-hover
                 ? Theme.surface1
                 : transparent;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             clear-label := Text {
                 x: 8px;
                 y: (parent.height - self.height) / 2;

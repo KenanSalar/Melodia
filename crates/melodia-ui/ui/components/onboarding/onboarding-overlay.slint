@@ -105,7 +105,7 @@ export component OnboardingOverlay inherits Rectangle {
                     height: 8px;
                     border-radius: 4px;
                     background: i == Onboarding.step ? Theme.accent : Theme.surface2;
-                    animate width, background { duration: Theme.dur-fast; easing: ease-out; }
+                    animate width, background { duration: Theme.dur-fast; easing: ease-out; enabled: !Theme.recoloring; }
                 }
             }
 

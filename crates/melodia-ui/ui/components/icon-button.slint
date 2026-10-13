@@ -111,7 +111,7 @@ export component IconButton inherits Rectangle {
         // the animated binding below and restart the crossfade every frame.
         opacity: root.fade;
 
-        animate background { duration: root.recolor-duration; easing: ease-in-out; }
+        animate background { duration: root.recolor-duration; easing: ease-in-out; enabled: !Theme.recoloring; }
     }
 
     // **Centred by hand rather than by a layout, and that is not a style preference.**
@@ -138,7 +138,7 @@ export component IconButton inherits Rectangle {
         // The disabled dim rides the same float rather than a second `opacity`: this root wraps a
         // `Text`, so an `opacity` here layered and cropped the glyph to its line box.
         fade: root.fade * (root.button-enabled ? 1.0 : root.disabled-fade) * root.lit-level;
-        animate icon-color { duration: root.recolor-duration; easing: ease-in-out; }
+        animate icon-color { duration: root.recolor-duration; easing: ease-in-out; enabled: !Theme.recoloring; }
     }
 
     Tooltip {

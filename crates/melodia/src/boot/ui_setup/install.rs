@@ -322,8 +322,8 @@ fn attach_media_controls_after_show(app: &AppWindow, state: &AppState) {
 
 /// Boot's `theme_apply::apply` ran inside `appearance::install`, where the DWM
 /// hook no-op'd with no HWND yet. By the time this one-shot fires the window
-/// is up and `Theme.mantle` carries the resolved palette; every later change
-/// drives DWM from `write_palette`.
+/// is up and the palette is resolved; every later change drives DWM from
+/// `theme_paint`'s write.
 ///
 /// The same closure pushes the embedded icon onto the winit window — the
 /// taskbar reads it out of the EXE directly, but the *caption* icon comes
@@ -334,7 +334,7 @@ fn polish_titlebar_after_show(app: &AppWindow) {
     if let Err(e) = slint::invoke_from_event_loop(move || {
         let Some(app) = weak.upgrade() else { return };
         install_window_icon(&app);
-        ui::appearance::theme_apply::reapply_from_theme(&app);
+        ui::appearance::theme_paint::reapply_from_theme(&app);
     }) {
         log::warn!("Failed to schedule Windows titlebar polish: {}", describe(&e));
     }

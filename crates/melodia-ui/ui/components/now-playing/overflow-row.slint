@@ -28,7 +28,7 @@ export component OverflowRow inherits Rectangle {
     height: FlyoutMetrics.menu-row-h;
     border-radius: Theme.radius-sm;
     background: touch.has-hover && root.button-enabled ? Theme.surface1 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;

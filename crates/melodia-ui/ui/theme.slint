@@ -206,6 +206,12 @@ export global Theme {
     out property <duration> dur-med: 250ms;
     out property <duration> dur-spatial: 400ms;
 
+    // Up while `ui::appearance::theme_paint` eases one palette into the next by writing the brushes
+    // above every frame. **An `animate` whose binding reads a palette brush is `enabled` only while
+    // this is down**: each write restarts its curve, so easing alongside leaves that control landing
+    // after the window, and switched off it simply follows the fade.
+    in property <bool> recoloring: false;
+
     // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.show()`**: Slint applies
     // `no-frame` live, so a later write maps the window with the wrong frame and swaps it on screen.
     in-out property <bool> use-native-titlebar: false;

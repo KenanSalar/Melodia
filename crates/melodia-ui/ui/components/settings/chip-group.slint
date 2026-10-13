@@ -13,7 +13,7 @@ component Chip inherits Rectangle {
     background: root.selected
         ? Theme.accent
         : (touch.has-hover ? Theme.surface2 : Theme.surface1);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-md;

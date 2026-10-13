@@ -32,7 +32,7 @@ export component TopResultCard inherits VerticalLayout {
         border-radius: Theme.radius-lg;
         border-width: 1px;
         border-color: Theme.surface2;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         VerticalLayout {
             padding: Theme.pad-md;

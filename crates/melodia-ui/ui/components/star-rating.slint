@@ -73,10 +73,10 @@ export component StarRating {
                         filled: parent.lit;
                         fade: parent.level;
                         // Animating a brush a host hands over is safe here for `IconButton`'s
-                        // reason: neither host eases the pair, writing both discretely on a theme
-                        // or artwork change. Read `slint-pitfalls.md` before giving one of them a
-                        // crossfade.
-                        animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+                        // reason: neither host eases the pair, writing both discretely on an
+                        // artwork change, and a palette fade raises `Theme.recoloring`. Read
+                        // `slint-pitfalls.md` before giving one of them a crossfade.
+                        animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                     }
                 }
             }

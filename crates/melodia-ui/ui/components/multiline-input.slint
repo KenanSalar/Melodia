@@ -24,7 +24,7 @@ export component MultilineInput inherits Rectangle {
     border-radius: Theme.radius-md;
     border-width: 1px;
     border-color: ti.has-focus ? Theme.accent : Theme.border;
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     sv := ScrollView {
         x: root.pad;

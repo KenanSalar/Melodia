@@ -9,9 +9,8 @@
 //! **It takes an `HWND`, not a window.** Both callers already sit above this module and can do
 //! the `WinitWindowAccessor` hop themselves, and keeping it on their side is what leaves this file
 //! naming no Slint type at all; `ui::window_chrome::win32_hwnd` is the one place that hop is
-//! written. Applied after window-show from boot, and again at the end of every
-//! `ui::appearance::theme_apply::write_palette`, so theme / variant / accent changes update the
-//! caption live.
+//! written. Applied after window-show from boot, and again on every palette write in
+//! `ui::appearance::theme_paint`, so theme / variant / accent changes update the caption live.
 //!
 //! **Fails open**: every `DwmSetWindowAttribute` error is logged and dropped. Pre-Win11 22000
 //! builds reject `DWMWA_CAPTION_COLOR` with `E_INVALIDARG` while the immersive-dark flag still

@@ -24,7 +24,7 @@ component ColorDot inherits Rectangle {
     background: root.swatch;
     border-color: root.selected ? Theme.text : transparent;
     border-width: 4px;
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     // A 1 px ring stands in for a hover lift, Slint applying no `transform-scale`
     // on a component's root. Its radius follows the dot's, or the squircle stops

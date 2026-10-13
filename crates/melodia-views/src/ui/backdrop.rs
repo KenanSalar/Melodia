@@ -24,6 +24,7 @@ use material_colors::contrast;
 use slint::{Brush, ComponentHandle};
 
 use crate::ui::appearance::theme_apply::{brush, brush_to_rgb, brush_with_alpha};
+use crate::ui::appearance::theme_paint;
 use crate::ui::artwork_cache::BlurSpec;
 use melodia_artwork::media::image::material_you::{
     clamp_to_tone_band, population_seeds, to_tone_capped_chroma,
@@ -568,7 +569,9 @@ pub(crate) fn blur_spec(ui: &AppWindow, tier: BlurSpec) -> Option<BlurSpec> {
 ///
 /// Read in one place rather than at each publisher so the hero and Now Playing tiers can't disagree
 /// about what the theme is — and read at *solve* time rather than cached, a palette change reaching
-/// an already-open surface only on its next open either way.
+/// an already-open surface only on its next open either way. **Read off the palette `Theme` is
+/// settling on, not off the global**: mid-fade the global holds a blend, and a tier solved from it
+/// would stop part way while the window carried on.
 pub(crate) struct ThemeTokens {
     /// The surface the aurora is washed over, and both floor stops, so `Theme.mantle` is nothing
     /// this solve needs.
@@ -581,6 +584,11 @@ pub(crate) struct ThemeTokens {
 }
 
 pub(crate) fn theme_tokens(ui: &AppWindow) -> ThemeTokens {
+    if let Some(settled) = theme_paint::settled() {
+        let palette = settled.palette;
+        return ThemeTokens { base: palette.base, text: palette.text, accent: settled.accent };
+    }
+    // Nothing painted yet, so the global still holds its declared defaults.
     let theme = ui.global::<ThemeGlobal>();
     ThemeTokens {
         base: brush_to_rgb(&theme.get_base()),

@@ -7,7 +7,7 @@
 /// are. `apply()` writes three more that don't:
 /// `mantle_unfocused` (an OS signal, which a [`Variant`] may snapshot), and
 /// `accent` / `accent_text` (picked independently of the variant).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Palette {
     // 13 base / structure
     pub base: u32,

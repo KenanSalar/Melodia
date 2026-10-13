@@ -83,7 +83,7 @@ export component PillButton inherits Rectangle {
         background: (touch.has-hover || root.force-bg)
             ? Theme.surface1
             : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         layout := HorizontalLayout {
             padding-left: root.icon-only ? 0px : 10px;
@@ -107,7 +107,7 @@ export component PillButton inherits Rectangle {
                 icon-color: root.danger
                     ? (touch.has-hover ? Theme.danger : Theme.text)
                     : (root.active ? Theme.accent : Theme.text);
-                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
             // The patched Vazirmatn metrics land the glyph mass at the line-box
             // centre, so centring the line box is enough.
@@ -116,7 +116,7 @@ export component PillButton inherits Rectangle {
                 color: root.danger
                     ? (touch.has-hover ? Theme.danger : Theme.text)
                     : (root.active ? Theme.accent : Theme.text);
-                animate color { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                 font-size: Theme.font-size-sm;
                 font-weight: 500;
                 vertical-alignment: center;

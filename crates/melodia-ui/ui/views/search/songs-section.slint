@@ -94,7 +94,7 @@ export component SongsSection inherits VerticalLayout {
                 : transparent;
             border-width: 1px;
             border-color: Theme.surface2;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             show-more-label := Text {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;

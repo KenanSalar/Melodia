@@ -42,7 +42,7 @@ export component SuggestionPill inherits Rectangle {
         height: 100%;
         border-radius: self.height / 2;
         background: touch.has-hover ? Theme.surface2 : Theme.surface1;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         HorizontalLayout {
             padding-left: Theme.pad-sm;

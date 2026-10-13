@@ -13,7 +13,7 @@ component DropdownOption inherits Rectangle {
     height: 32px;
     border-radius: Theme.radius-sm;
     background: touch.has-hover ? Theme.surface2 : transparent;
-    animate background { duration: 100ms; easing: ease-in-out; }
+    animate background { duration: 100ms; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
@@ -125,8 +125,8 @@ export component Dropdown inherits Rectangle {
         // antialias the corners twice for as long as it eases.
         border-color: touch.has-hover ? Theme.accent : Theme.surface1;
         border-width: 1px;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-        animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+        animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         HorizontalLayout {
             padding-left: Theme.pad-md;

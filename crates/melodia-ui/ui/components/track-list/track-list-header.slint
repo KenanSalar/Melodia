@@ -23,7 +23,7 @@ component ResizeHandle inherits Rectangle {
         background: touch.pressed
             ? Theme.accent
             : (touch.has-hover ? Theme.surface1 : Theme.border);
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
     }
 
     touch := TouchArea {
@@ -67,7 +67,7 @@ component HeaderCell inherits Rectangle {
         width: 100%;
         height: parent.height - 2 * Theme.pad-xs;
         background: touch.has-hover ? Theme.surface0 : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
         border-radius: Theme.radius-md;
     }
 

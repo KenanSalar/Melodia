@@ -128,7 +128,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
                         background: i < Dialog.mosaic-selection.length
                             ? Theme.accent
                             : Theme.surface2;
-                        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                     }
                 }
 

@@ -21,7 +21,7 @@ component ColumnToggleRow inherits Rectangle {
     height: 32px;
     border-radius: Theme.radius-sm;
     background: !root.locked && touch.has-hover ? Theme.surface2 : transparent;
-    animate background { duration: 100ms; easing: ease-in-out; }
+    animate background { duration: 100ms; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;

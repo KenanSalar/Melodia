@@ -20,7 +20,7 @@ export component ControlledInput inherits Rectangle {
     border-color: field.has-focus ? Theme.accent : Theme.border;
     border-width: 1px;
     border-radius: Theme.radius-md;
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;

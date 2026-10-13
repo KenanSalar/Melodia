@@ -18,7 +18,7 @@ component OverflowCheckCell inherits Rectangle {
 
     background: touch.has-hover ? Theme.surface1 : transparent;
     border-radius: Theme.radius-sm;
-    animate background { duration: 100ms; easing: ease-in-out; }
+    animate background { duration: 100ms; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding: Theme.pad-sm;

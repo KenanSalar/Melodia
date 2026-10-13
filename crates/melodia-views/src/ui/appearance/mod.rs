@@ -13,6 +13,7 @@ mod material_you_sync;
 mod repaint;
 mod system_watcher;
 pub mod theme_apply;
+pub mod theme_paint;
 mod theme_picker;
 pub mod window_border;
 mod window_settings;

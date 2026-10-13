@@ -13,7 +13,7 @@ component BreadcrumbPill inherits Rectangle {
     width: layout.preferred-width;
     border-radius: self.height / 2;
     background: touch.has-hover ? Theme.surface0 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     layout := HorizontalLayout {
         padding-left: 8px;
