@@ -44,14 +44,12 @@ component UpNextRow inherits Rectangle {
             spacing: Theme.pad-sm;
             alignment: stretch;
 
-            VerticalLayout {
-                alignment: center;
-                ArtworkImage {
-                    artwork-path: root.data.artwork_path;
-                    cover: NowPlaying.request-cover(root.data.artwork_path);
-                    tile-size: compact ? 34px : 38px;
-                    tile-radius: Theme.radius-md;
-                }
+            ArtworkImage {
+                cross-axis-self-alignment: center;
+                artwork-path: root.data.artwork_path;
+                cover: NowPlaying.request-cover(root.data.artwork_path);
+                tile-size: compact ? 34px : 38px;
+                tile-radius: Theme.radius-md;
             }
 
             // Clips bidi overflow so elide fires — the bar's track-info pattern.
@@ -77,13 +75,11 @@ component UpNextRow inherits Rectangle {
                 }
             }
 
-            VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.data.display_duration;
-                    color: root.ink-muted;
-                    font-size: Theme.font-size-sm;
-                }
+            Text {
+                text: root.data.display_duration;
+                color: root.ink-muted;
+                font-size: Theme.font-size-sm;
+                vertical-alignment: center;
             }
         }
 

@@ -24,16 +24,14 @@ export component FlyoutOption inherits Rectangle {
         spacing: Theme.pad-sm;
         alignment: stretch;
 
-        VerticalLayout {
-            alignment: center;
+        Text {
             horizontal-stretch: 1;
-            Text {
-                text: root.label;
-                color: !root.option-enabled
-                    ? Theme.overlay0
-                    : (root.active ? Theme.accent : Theme.text);
-                font-size: Theme.font-size-md;
-            }
+            text: root.label;
+            color: !root.option-enabled
+                ? Theme.overlay0
+                : (root.active ? Theme.accent : Theme.text);
+            font-size: Theme.font-size-md;
+            vertical-alignment: center;
         }
         VerticalLayout {
             alignment: center;

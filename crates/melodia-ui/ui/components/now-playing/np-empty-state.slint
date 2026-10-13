@@ -50,50 +50,45 @@ export component NpEmptyState inherits Rectangle {
 
     VerticalLayout {
         alignment: center;
+        cross-axis-alignment: center;
 
-        HorizontalLayout {
-            alignment: center;
+        // One cell per part, moved rather than remounted: `row`/`col` are read per layout pass.
+        GridLayout {
+            spacing: Theme.pad-sm;
 
-            // One cell per part, moved rather than remounted: `row`/`col` are read per layout pass.
-            GridLayout {
+            HorizontalLayout {
+                row: 0;
+                col: 0;
+                alignment: center;
+                cross-axis-alignment: center;
+
+                MaterialIcon {
+                    name: root.glyph;
+                    icon-size: root.glyph-size;
+                    icon-color: root.glyph-color;
+                }
+            }
+
+            VerticalLayout {
+                row: root.beside ? 0 : 1;
+                col: root.beside ? 1 : 0;
+                alignment: center;
                 spacing: Theme.pad-sm;
 
-                HorizontalLayout {
-                    row: 0;
-                    col: 0;
-                    alignment: center;
-
-                    VerticalLayout {
-                        alignment: center;
-                        MaterialIcon {
-                            name: root.glyph;
-                            icon-size: root.glyph-size;
-                            icon-color: root.glyph-color;
-                        }
-                    }
+                Text {
+                    text: root.heading;
+                    color: root.ink;
+                    font-size: root.heading-size;
+                    horizontal-alignment: root.beside ? left : center;
+                    wrap: root.wrap;
                 }
 
-                VerticalLayout {
-                    row: root.beside ? 0 : 1;
-                    col: root.beside ? 1 : 0;
-                    alignment: center;
-                    spacing: Theme.pad-sm;
-
-                    Text {
-                        text: root.heading;
-                        color: root.ink;
-                        font-size: root.heading-size;
-                        horizontal-alignment: root.beside ? left : center;
-                        wrap: root.wrap;
-                    }
-
-                    if root.hint != "": Text {
-                        text: root.hint;
-                        color: root.ink.transparentize(0.35);
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: root.beside ? left : center;
-                        wrap: root.wrap;
-                    }
+                if root.hint != "": Text {
+                    text: root.hint;
+                    color: root.ink.transparentize(0.35);
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: root.beside ? left : center;
+                    wrap: root.wrap;
                 }
             }
         }

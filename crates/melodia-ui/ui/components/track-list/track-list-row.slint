@@ -353,10 +353,10 @@ export component TrackListRowItem inherits Rectangle {
             }
 
             // Title cell: artwork, title, favourite, rating strip. `horizontal-stretch: 1` on the
-            // text column is what makes `overflow: elide` fire at all — without it, under
-            // `alignment: start` the column takes its intrinsic width (the full string) and the
-            // Text never learns it should elide, which RTL scripts make visible by overflowing left
-            // into the # column. The cell's `clip` guards whatever still escapes.
+            // title is what makes `overflow: elide` fire at all — without it, under
+            // `alignment: start` the Text takes its intrinsic width (the full string) and never
+            // learns it should elide, which RTL scripts make visible by overflowing left into the
+            // # column. The cell's `clip` guards whatever still escapes.
             Rectangle {
                 x: root.layout.title_x;
                 y: 0;
@@ -366,58 +366,47 @@ export component TrackListRowItem inherits Rectangle {
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
                     alignment: start;
-                    if root.columns.show_artwork: VerticalLayout {
-                        alignment: center;
-                        ArtworkImage {
-                            artwork-path: root.row-data.artwork_path;
-                            // Lazy per-instantiated-row lookup, so only the visible rows of a
-                            // virtualized list reach the shared row-tier LRU. A miss paints the
-                            // placeholder and schedules; `generation` is what repaints it.
-                            cover: RowCovers.request(root.row-data.artwork_path,
-                                RowCovers.generation);
-                            tile-size: 36px;
-                            tile-radius: Theme.radius-sm;
-                            fade: root.fade;
-                        }
+                    cross-axis-alignment: center;
+                    if root.columns.show_artwork: ArtworkImage {
+                        artwork-path: root.row-data.artwork_path;
+                        // Lazy per-instantiated-row lookup, so only the visible rows of a
+                        // virtualized list reach the shared row-tier LRU. A miss paints the
+                        // placeholder and schedules; `generation` is what repaints it.
+                        cover: RowCovers.request(root.row-data.artwork_path,
+                            RowCovers.generation);
+                        tile-size: 36px;
+                        tile-radius: Theme.radius-sm;
+                        fade: root.fade;
                     }
-                    VerticalLayout {
+                    Text {
                         horizontal-stretch: 1;
-                        alignment: center;
-                        Text {
-                            // The leading U+200E forces the string's BiDi base
-                            // direction to LTR. Without it a title starting in Arabic
-                            // or Hebrew takes an RTL base and Slint's elide drops the
-                            // `…` entirely, leaving a gap at the cell's left edge with
-                            // no truncation marker. Arabic substrings still render RTL
-                            // inline — only the base direction moves, so the indicator
-                            // anchors right for every row whatever the script.
-                            text: "‎" + root.row-data.title;
-                            color: root.ink;
-                            font-size: Theme.font-size-row;
-                            overflow: elide;
-                        }
+                        // The leading U+200E forces the string's BiDi base
+                        // direction to LTR. Without it a title starting in Arabic
+                        // or Hebrew takes an RTL base and Slint's elide drops the
+                        // `…` entirely, leaving a gap at the cell's left edge with
+                        // no truncation marker. Arabic substrings still render RTL
+                        // inline — only the base direction moves, so the indicator
+                        // anchors right for every row whatever the script.
+                        text: "‎" + root.row-data.title;
+                        color: root.ink;
+                        font-size: Theme.font-size-row;
+                        overflow: elide;
                     }
-                    if root.row-data.is_favorite: VerticalLayout {
-                        alignment: center;
-                        MaterialIcon {
-                            name: "favorite";
-                            icon-size: 18px;
-                            icon-color: Theme.red;
-                            filled: true;
-                            fade: root.fade;
-                        }
+                    if root.row-data.is_favorite: MaterialIcon {
+                        name: "favorite";
+                        icon-size: 18px;
+                        icon-color: Theme.red;
+                        filled: true;
+                        fade: root.fade;
                     }
                     // Revealed on hover to the right of the title, which elides to make room rather
                     // than being swapped out the way the Length cell's duration is. Gated on
                     // `enabled` so disk-only Browse rows can't be rated. The strip's TouchArea
                     // descends from `touch`, so hovering a star keeps this strip mounted.
-                    if touch.has-hover && root.enabled: VerticalLayout {
-                        alignment: center;
-                        StarRating {
-                            rating: root.row-data.rating;
-                            star-size: 16px;
-                            rated(n) => { root.set-row-rating([root.row-data.id], n); }
-                        }
+                    if touch.has-hover && root.enabled: StarRating {
+                        rating: root.row-data.rating;
+                        star-size: 16px;
+                        rated(n) => { root.set-row-rating([root.row-data.id], n); }
                     }
                 }
             }
@@ -485,21 +474,18 @@ export component TrackListRowItem inherits Rectangle {
                 HorizontalLayout {
                     spacing: Theme.pad-xs;
                     alignment: start;
-                    if !touch.has-hover: VerticalLayout {
-                        alignment: center;
-                        Text {
-                            // Precomputed in Rust at row build, so this binding doesn't
-                            // re-run a Slint pure function on every invalidation.
-                            text: root.row-data.display_duration;
-                            color: root.ink;
-                            font-size: Theme.font-size-row;
-                            horizontal-alignment: left;
-                        }
+                    cross-axis-alignment: center;
+                    if !touch.has-hover: Text {
+                        // Precomputed in Rust at row build, so this binding doesn't
+                        // re-run a Slint pure function on every invalidation.
+                        text: root.row-data.display_duration;
+                        color: root.ink;
+                        font-size: Theme.font-size-row;
+                        horizontal-alignment: left;
                     }
                     if touch.has-hover: Rectangle {
                         width: 26px;
                         height: 26px;
-                        y: (parent.height - self.height) / 2;
                         border-radius: self.height / 2;
                         background: fav-touch.has-hover ? Theme.surface1 : transparent;
                         MaterialIcon {

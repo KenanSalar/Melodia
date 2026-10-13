@@ -269,36 +269,28 @@ export component OverflowMenu inherits Rectangle {
                         padding-right: Theme.pad-sm;
                         spacing: Theme.pad-sm;
                         alignment: stretch;
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: "star";
-                                icon-size: 20px;
-                                icon-color: Player.vm.track.rating > 0 ? Theme.accent : Theme.text;
-                                filled: Player.vm.track.rating > 0;
-                                fade: rating-row.fade;
-                            }
+                        cross-axis-alignment: center;
+                        MaterialIcon {
+                            name: "star";
+                            icon-size: 20px;
+                            icon-color: Player.vm.track.rating > 0 ? Theme.accent : Theme.text;
+                            filled: Player.vm.track.rating > 0;
+                            fade: rating-row.fade;
                         }
-                        VerticalLayout {
-                            alignment: center;
+                        Text {
                             horizontal-stretch: 1;
-                            Text {
-                                text: @tr("Rating");
-                                color: Theme.text.transparentize(1.0 - rating-row.fade);
-                                font-size: Theme.font-size-md;
-                            }
+                            text: @tr("Rating");
+                            color: Theme.text.transparentize(1.0 - rating-row.fade);
+                            font-size: Theme.font-size-md;
                         }
-                        VerticalLayout {
-                            alignment: center;
-                            StarRating {
-                                rating: Player.vm.track.rating;
-                                star-size: 18px;
-                                enabled: Player.vm.has_track;
-                                filled-color: Theme.yellow.transparentize(1.0 - rating-row.fade);
-                                empty-color: Theme.subtext0.transparentize(1.0 - rating-row.fade);
-                                rated(n) => {
-                                    Player.set-current-rating(n);
-                                }
+                        StarRating {
+                            rating: Player.vm.track.rating;
+                            star-size: 18px;
+                            enabled: Player.vm.has_track;
+                            filled-color: Theme.yellow.transparentize(1.0 - rating-row.fade);
+                            empty-color: Theme.subtext0.transparentize(1.0 - rating-row.fade);
+                            rated(n) => {
+                                Player.set-current-rating(n);
                             }
                         }
                     }

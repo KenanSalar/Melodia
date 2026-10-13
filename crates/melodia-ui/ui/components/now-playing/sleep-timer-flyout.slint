@@ -133,35 +133,27 @@ export component SleepTimerFlyout inherits PopupSurface {
             padding-right: Theme.pad-sm;
             spacing: Theme.pad-sm;
             alignment: stretch;
+            cross-axis-alignment: center;
 
-            VerticalLayout {
-                alignment: center;
-                StepperButton {
-                    icon: "remove";
-                    at-bound: root.pending-seconds <= root.min-seconds;
-                    pressed-changed(down) => {
-                        if (down) { root.press(-1); } else { root.release(); }
-                    }
+            StepperButton {
+                icon: "remove";
+                at-bound: root.pending-seconds <= root.min-seconds;
+                pressed-changed(down) => {
+                    if (down) { root.press(-1); } else { root.release(); }
                 }
             }
-            VerticalLayout {
-                alignment: center;
+            Text {
                 horizontal-stretch: 1;
-                Text {
-                    text: Theme.format-duration(root.pending-seconds * 1000);
-                    color: Theme.text;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                }
+                text: Theme.format-duration(root.pending-seconds * 1000);
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
             }
-            VerticalLayout {
-                alignment: center;
-                StepperButton {
-                    icon: "add";
-                    at-bound: root.pending-seconds >= root.max-seconds;
-                    pressed-changed(down) => {
-                        if (down) { root.press(1); } else { root.release(); }
-                    }
+            StepperButton {
+                icon: "add";
+                at-bound: root.pending-seconds >= root.max-seconds;
+                pressed-changed(down) => {
+                    if (down) { root.press(1); } else { root.release(); }
                 }
             }
         }

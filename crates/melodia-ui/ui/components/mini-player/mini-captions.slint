@@ -130,30 +130,28 @@ export component MiniCaptionsRow inherits Rectangle {
             padding-right: (captions.style == CaptionStyle.kde
                 ? Theme.kde-caption-edge-pad
                 : 0px) - root.edge-pad;
+            cross-axis-alignment: center;
 
             // Gone on a station, which has no track to look a sheet up for.
-            if !Player.vm.has_station: VerticalLayout {
-                alignment: center;
-                MiniIconButton {
-                    icon: "lyrics";
-                    // **The glyph's own size rather than a `transform-scale`**, as `press-shrink`
-                    // does it: FemtoVG draws glyphs under a scaling transform as paths rather than
-                    // from its atlas, and this one comes out filled there. The captions beside it
-                    // draw no glyph at rest.
-                    icon-size: round(18px * root.button-scale / Theme.text-size-step)
-                        * Theme.text-size-step;
-                    active: Lyrics.enabled;
-                    filled: Lyrics.enabled;
-                    tooltip-text: Lyrics.enabled
-                        ? @tr("Show Up Next") : @tr("Show lyrics");
-                    tooltip-side: TooltipSide.right;
-                    // Both halves, the full view's switch and the visualizer picker's shape: the
-                    // property so the panel swaps on the press, the callback so it is still swapped
-                    // next launch.
-                    clicked => {
-                        Lyrics.enabled = !Lyrics.enabled;
-                        Lyrics.set-enabled(Lyrics.enabled);
-                    }
+            if !Player.vm.has_station: MiniIconButton {
+                icon: "lyrics";
+                // **The glyph's own size rather than a `transform-scale`**, as `press-shrink`
+                // does it: FemtoVG draws glyphs under a scaling transform as paths rather than
+                // from its atlas, and this one comes out filled there. The captions beside it
+                // draw no glyph at rest.
+                icon-size: round(18px * root.button-scale / Theme.text-size-step)
+                    * Theme.text-size-step;
+                active: Lyrics.enabled;
+                filled: Lyrics.enabled;
+                tooltip-text: Lyrics.enabled
+                    ? @tr("Show Up Next") : @tr("Show lyrics");
+                tooltip-side: TooltipSide.right;
+                // Both halves, the full view's switch and the visualizer picker's shape: the
+                // property so the panel swaps on the press, the callback so it is still swapped
+                // next launch.
+                clicked => {
+                    Lyrics.enabled = !Lyrics.enabled;
+                    Lyrics.set-enabled(Lyrics.enabled);
                 }
             }
 

@@ -68,31 +68,26 @@ component SidebarItem inherits Rectangle {
             padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
             spacing: Theme.pad-md;
             alignment: start;
+            cross-axis-alignment: center;
             animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
 
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: root.icon;
-                    // Scaled directly so the wobble is visible on a collapsed rail too:
-                    // otherwise only the row's fill shrinks, by a pixel or so, and the
-                    // press feels inert with the label hidden.
-                    icon-size: 22px * root.press-scale;
-                    icon-color: root.selected ? Theme.accent : Theme.text;
-                    filled: root.selected;
-                }
+            MaterialIcon {
+                name: root.icon;
+                // Scaled directly so the wobble is visible on a collapsed rail too:
+                // otherwise only the row's fill shrinks, by a pixel or so, and the
+                // press feels inert with the label hidden.
+                icon-size: 22px * root.press-scale;
+                icon-color: root.selected ? Theme.accent : Theme.text;
+                filled: root.selected;
             }
 
-            if !Nav.sidebar-collapsed: VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.label;
-                    color: root.selected ? Theme.text : Theme.subtext0;
-                    font-size: Theme.font-size-md * root.press-scale;
-                    font-weight: root.selected ? 600 : 500;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
+            if !Nav.sidebar-collapsed: Text {
+                text: root.label;
+                color: root.selected ? Theme.text : Theme.subtext0;
+                font-size: Theme.font-size-md * root.press-scale;
+                font-weight: root.selected ? 600 : 500;
+                vertical-alignment: center;
+                overflow: elide;
             }
         }
     }
@@ -180,25 +175,20 @@ export component Sidebar inherits Rectangle {
                     padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
                     spacing: Theme.pad-md;
                     alignment: start;
+                    cross-axis-alignment: center;
                     animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
-                    VerticalLayout {
-                        alignment: center;
-                        MaterialIcon {
-                            name: Nav.sidebar-collapsed ? "dock_to_right" : "dock_to_left";
-                            icon-size: 22px;
-                            icon-color: Theme.text;
-                            filled: true;
-                        }
+                    MaterialIcon {
+                        name: Nav.sidebar-collapsed ? "dock_to_right" : "dock_to_left";
+                        icon-size: 22px;
+                        icon-color: Theme.text;
+                        filled: true;
                     }
-                    if !Nav.sidebar-collapsed: VerticalLayout {
-                        alignment: center;
-                        Text {
-                            text: @tr("Collapse");
-                            color: Theme.subtext0;
-                            font-size: Theme.font-size-md;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
+                    if !Nav.sidebar-collapsed: Text {
+                        text: @tr("Collapse");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-md;
+                        vertical-alignment: center;
+                        overflow: elide;
                     }
                 }
             }

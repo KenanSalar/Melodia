@@ -66,35 +66,30 @@ export component CustomTitleBar inherits Rectangle {
             HorizontalLayout {
                 spacing: 6px;
                 alignment: stretch;
+                cross-axis-alignment: center;
 
                 // Buttons left ⇒ leading spacer ⇒ brand pins right.
                 if root.captions-left: Rectangle { horizontal-stretch: 1; }
 
-                VerticalLayout {
-                    alignment: center;
+                Image {
                     horizontal-stretch: 0;
-                    Image {
-                        source: @image-url("../assets/icons/logo-without-background.svg");
-                        // The asset's gradient is Mocha's, so the mark is the one thing in the
-                        // bar not tracking the palette. A brush rather than a second asset:
-                        // `colorize` composites it through the alpha, so the ramp survives.
-                        colorize: Theme.brand-mark;
-                        width: 18px;
-                        height: 18px;
-                        image-fit: contain;
-                    }
+                    source: @image-url("../assets/icons/logo-without-background.svg");
+                    // The asset's gradient is Mocha's, so the mark is the one thing in the
+                    // bar not tracking the palette. A brush rather than a second asset:
+                    // `colorize` composites it through the alpha, so the ramp survives.
+                    colorize: Theme.brand-mark;
+                    width: 18px;
+                    height: 18px;
+                    image-fit: contain;
                 }
 
-                VerticalLayout {
-                    alignment: center;
+                // Regular weight, as an OS caption sets its title: Medium beside the
+                // native caption's Segoe UI reads as bold once focus darkens the ink.
+                Text {
                     horizontal-stretch: 0;
-                    // Regular weight, as an OS caption sets its title: Medium beside the
-                    // native caption's Segoe UI reads as bold once focus darkens the ink.
-                    Text {
-                        text: "Melodia";
-                        color: Theme.window-focused ? Theme.text : Theme.overlay2;
-                        font-size: 12px;
-                    }
+                    text: "Melodia";
+                    color: Theme.window-focused ? Theme.text : Theme.overlay2;
+                    font-size: 12px;
                 }
 
                 // Buttons right ⇒ trailing spacer ⇒ brand pins left.

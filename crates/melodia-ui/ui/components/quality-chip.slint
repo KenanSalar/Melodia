@@ -27,21 +27,16 @@ export component QualityChip inherits Rectangle {
         padding-left: Theme.pad-sm;
         padding-right: Theme.pad-md;
         spacing: Theme.pad-sm;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            GradeDot { grade: SignalPathUi.verdict; }
-        }
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: SignalPathUi.verdict-label + " · " + SignalPathUi.device-rate;
-                color: Theme.text;
-                font-size: Theme.font-size-sm;
-                // The bar can squeeze it, and a clipped line box would cut the marks off a
-                // translated word.
-                overflow: elide;
-            }
+        GradeDot { grade: SignalPathUi.verdict; }
+        Text {
+            text: SignalPathUi.verdict-label + " · " + SignalPathUi.device-rate;
+            color: Theme.text;
+            font-size: Theme.font-size-sm;
+            // The bar can squeeze it, and a clipped line box would cut the marks off a
+            // translated word.
+            overflow: elide;
         }
     }
 

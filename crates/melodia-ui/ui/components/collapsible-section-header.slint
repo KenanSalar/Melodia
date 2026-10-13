@@ -23,23 +23,18 @@ export component CollapsibleSectionHeader inherits Rectangle {
         padding-right: 10px;
         spacing: 2px;
         alignment: start;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.label;
-                color: Theme.text;
-                font-size: Theme.font-size-lg;
-                font-weight: 600;
-            }
+        Text {
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.font-size-lg;
+            font-weight: 600;
         }
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.collapsed ? "expand_more" : "expand_less";
-                icon-size: 20px;
-                icon-color: Theme.subtext0;
-            }
+        MaterialIcon {
+            name: root.collapsed ? "expand_more" : "expand_less";
+            icon-size: 20px;
+            icon-color: Theme.subtext0;
         }
     }
 

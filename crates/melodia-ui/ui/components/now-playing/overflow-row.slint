@@ -35,42 +35,31 @@ export component OverflowRow inherits Rectangle {
         padding-right: Theme.pad-sm;
         spacing: Theme.pad-sm;
         alignment: stretch;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: 20px;
-                icon-color: root.active ? Theme.accent : Theme.text;
-                filled: root.filled;
-                fade: root.fade;
-            }
+        MaterialIcon {
+            name: root.icon;
+            icon-size: 20px;
+            icon-color: root.active ? Theme.accent : Theme.text;
+            filled: root.filled;
+            fade: root.fade;
         }
-        VerticalLayout {
-            alignment: center;
+        Text {
             horizontal-stretch: 1;
-            Text {
-                text: root.label;
-                color: (root.active ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
-                font-size: Theme.font-size-md;
-            }
+            text: root.label;
+            color: (root.active ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
+            font-size: Theme.font-size-md;
         }
-        if root.trailing-text != "": VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.trailing-text;
-                color: (root.active ? Theme.accent : Theme.subtext0).transparentize(1.0 - root.fade);
-                font-size: Theme.font-size-md;
-            }
+        if root.trailing-text != "": Text {
+            text: root.trailing-text;
+            color: (root.active ? Theme.accent : Theme.subtext0).transparentize(1.0 - root.fade);
+            font-size: Theme.font-size-md;
         }
-        if root.trailing-icon != "": VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.trailing-icon;
-                icon-size: 18px;
-                icon-color: root.active ? Theme.accent : Theme.subtext0;
-                fade: root.fade;
-            }
+        if root.trailing-icon != "": MaterialIcon {
+            name: root.trailing-icon;
+            icon-size: 18px;
+            icon-color: root.active ? Theme.accent : Theme.subtext0;
+            fade: root.fade;
         }
     }
 

@@ -25,29 +25,24 @@ component SortMenuRow inherits Rectangle {
         padding-left: Theme.pad-sm;
         padding-right: Theme.pad-sm;
         spacing: Theme.pad-sm;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
+        Text {
             horizontal-stretch: 1;
-            Text {
-                text: root.label;
-                color: root.active ? Theme.accent : Theme.text;
-                font-size: Theme.font-size-md;
-                overflow: elide;
-            }
+            text: root.label;
+            color: root.active ? Theme.accent : Theme.text;
+            font-size: Theme.font-size-md;
+            overflow: elide;
         }
 
         // Always rendered, transparent off the sorted field, so a pick shifts no row. Never an
         // arrow concatenated into the label: a glyph Vazirmatn lacks pulls a fallback font whose
         // line box pushes the patched glyphs off centre.
-        VerticalLayout {
-            alignment: center;
+        MaterialIcon {
             horizontal-stretch: 0;
-            MaterialIcon {
-                name: root.direction == "asc" ? "arrow_drop_up" : "arrow_drop_down";
-                icon-size: 16px;
-                icon-color: root.active ? Theme.accent : transparent;
-            }
+            name: root.direction == "asc" ? "arrow_drop_up" : "arrow_drop_down";
+            icon-size: 16px;
+            icon-color: root.active ? Theme.accent : transparent;
         }
     }
 

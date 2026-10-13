@@ -378,15 +378,13 @@ export component LibraryTabBand inherits Rectangle {
                         alignment: start;
 
                         // Playlist Detail's smart badge, matching the grid card's corner.
-                        if root.title-badge: VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: "auto_awesome";
-                                icon-size: 22px;
-                                // Multiplied, not set: `chrome` carries its own alpha on the aurora.
-                                icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);
-                                filled: true;
-                            }
+                        if root.title-badge: MaterialIcon {
+                            cross-axis-self-alignment: center;
+                            name: "auto_awesome";
+                            icon-size: 22px;
+                            // Multiplied, not set: `chrome` carries its own alpha on the aurora.
+                            icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);
+                            filled: true;
                         }
 
                         Text {

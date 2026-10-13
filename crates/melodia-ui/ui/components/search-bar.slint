@@ -172,18 +172,16 @@ export component SearchBar inherits Rectangle {
             spacing: Theme.pad-xs;
             alignment: stretch;
 
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "search";
-                    icon-size: root.icon-size;
-                    // Rest matches the placeholder beside it, so the two halves of
-                    // an empty bar sit on one rung.
-                    icon-color: input.has-focus
-                        ? Theme.accent
-                        : Theme.text.transparentize(0.3);
-                    animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
-                }
+            MaterialIcon {
+                cross-axis-self-alignment: center;
+                name: "search";
+                icon-size: root.icon-size;
+                // Rest matches the placeholder beside it, so the two halves of
+                // an empty bar sit on one rung.
+                icon-color: input.has-focus
+                    ? Theme.accent
+                    : Theme.text.transparentize(0.3);
+                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
             }
 
             // The bar's full height rather than a line-sized box centred in it: the same centre,
@@ -200,9 +198,9 @@ export component SearchBar inherits Rectangle {
             }
 
             if root.text != "": Rectangle {
+                cross-axis-self-alignment: center;
                 width: 22px;
                 height: 22px;
-                y: (parent.height - self.height) / 2;
                 border-radius: self.height / 2;
                 background: clear-touch.has-hover ? Theme.surface1 : transparent;
                 animate background { duration: Theme.dur-fast; easing: ease-in-out; }

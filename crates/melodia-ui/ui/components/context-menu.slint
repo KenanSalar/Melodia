@@ -89,43 +89,35 @@ export component MenuItem inherits Rectangle {
         padding-left: Theme.pad-sm;
         padding-right: Theme.pad-sm;
         spacing: Theme.pad-sm;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: 16px;
-                icon-color: root.destructive ? Theme.red : Theme.subtext1;
-            }
+        MaterialIcon {
+            name: root.icon;
+            icon-size: 16px;
+            icon-color: root.destructive ? Theme.red : Theme.subtext1;
         }
 
-        VerticalLayout {
-            alignment: center;
+        // Elided, so a row past the menu's ceiling shortens inside it. Its preferred width
+        // stays the whole label, which is what the menu sizes itself off.
+        Text {
             horizontal-stretch: 1;
-            // Elided, so a row past the menu's ceiling shortens inside it. Its preferred width
-            // stays the whole label, which is what the menu sizes itself off.
-            Text {
-                text: root.label;
-                color: root.destructive ? Theme.red : Theme.text;
-                font-size: Theme.font-size-md;
-                overflow: elide;
-            }
+            text: root.label;
+            color: root.destructive ? Theme.red : Theme.text;
+            font-size: Theme.font-size-md;
+            overflow: elide;
         }
 
         // **A fixed box round the chevron**: the side it points to is decided off the menu's
         // width, so the width may not read back the glyph that side picks.
-        if root.submenu: VerticalLayout {
-            alignment: center;
-            Rectangle {
-                width: 16px;
-                height: 16px;
-                MaterialIcon {
-                    x: 0px;
-                    y: 0px;
-                    name: root.submenu-left ? "chevron_left" : "chevron_right";
-                    icon-size: 16px;
-                    icon-color: Theme.subtext1;
-                }
+        if root.submenu: Rectangle {
+            width: 16px;
+            height: 16px;
+            MaterialIcon {
+                x: 0px;
+                y: 0px;
+                name: root.submenu-left ? "chevron_left" : "chevron_right";
+                icon-size: 16px;
+                icon-color: Theme.subtext1;
             }
         }
     }

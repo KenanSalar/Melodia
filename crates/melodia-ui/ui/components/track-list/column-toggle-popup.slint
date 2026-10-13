@@ -28,22 +28,17 @@ component ColumnToggleRow inherits Rectangle {
         padding-right: Theme.pad-sm;
         spacing: Theme.pad-sm;
         alignment: start;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            Checkbox {
-                checked: root.checked;
-                fade: root.fade;
-            }
+        Checkbox {
+            checked: root.checked;
+            fade: root.fade;
         }
 
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.label;
-                color: Theme.text.transparentize(1.0 - root.fade);
-                font-size: Theme.font-size-md;
-            }
+        Text {
+            text: root.label;
+            color: Theme.text.transparentize(1.0 - root.fade);
+            font-size: Theme.font-size-md;
         }
     }
 

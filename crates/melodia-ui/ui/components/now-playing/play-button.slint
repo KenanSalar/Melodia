@@ -99,18 +99,12 @@ export component PlayButton inherits Rectangle {
 
         // Hidden rather than unmounted: the bars below are a fixed-size overlay
         // and claim no layout of their own either way.
-        HorizontalLayout {
-            alignment: center;
+        MaterialIcon {
             visible: !root.equalizer-active;
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: root.is-playing ? "pause" : (root.is-stopped ? "stop" : "play_arrow");
-                    filled: true;
-                    icon-size: root.icon-size;
-                    icon-color: root.icon-color;
-                }
-            }
+            name: root.is-playing ? "pause" : (root.is-stopped ? "stop" : "play_arrow");
+            filled: true;
+            icon-size: root.icon-size;
+            icon-color: root.icon-color;
         }
 
         // Anchored to the disc's bottom edge, so the bars grow up from a
