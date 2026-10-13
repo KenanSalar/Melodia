@@ -54,7 +54,9 @@ and passed its manual pass on a Wayland touchpad, and the composite views keep t
 (`FlexboxLayout` as `5b3aa4ac`, `PopupWindow.is-open` as `22c4a775` with `2c0ea226` and
 `a49c7309` on top, then `animate { enabled }`, then `cross-axis-alignment` from `309f8b57` on).
 Item 5 was dropped on 2026-10-13 and moved to #127, since `WindowMoveArea` leaves hover stuck after
-a move until upstream fixes it, and items 6 and 7 remain.
+a move until upstream fixes it. Item 6 was dropped the same day, with nothing upstream to wait on:
+a row binding writes only the clicked row, so every model walk it was meant to retire stays. Item 7
+remains.
 
 A trial on 2026-09-16 (throwaway worktree, since removed) ran
 `cargo clippy --all-targets --workspace` on Linux against 1.18.0, and the diagnostics listed in
@@ -211,7 +213,8 @@ One change per section, in this order, each on a tree already on 1.18:
 4. 🟢 `cross-axis-alignment` → drop centering wrapper layouts. **Done 2026-10-13.**
 5. ~~🟢 `WindowMoveArea` → retire the drag-region press intercept~~ **Dropped 2026-10-13**: it
    waits on an upstream fix, tracked in #127.
-6. 🟢 Two-way model row bindings → slim the model-patch walkers (prototype first)
+6. ~~🟢 Two-way model row bindings → slim the model-patch walkers~~ **Dropped 2026-10-13**: a row
+   binding writes only the clicked row, and every walk exists for a row that isn't it.
 7. 🟡 Hangul measuring workaround → retire if 1.18's text stack composes the syllables
 
 Legend: 🟢 adoptable once on 1.18 · 🟡 shipped upstream but wait/verify first.
@@ -381,9 +384,11 @@ Done 2026-10-13, every step passed by hand.
   queue row, where the cross-axis solve would clamp the duration cell to the hover heart.
   `slint-pitfalls.md`'s cross-axis entry carries the mechanism.
 
-## 🟢 Two-way model row bindings → slim the model-patch walkers
+## ~~🟢 Two-way model row bindings → slim the model-patch walkers~~
 
-- **Today:** optimistic favorite/rating flips walk the `VecModel` from Rust via
+Dropped 2026-10-13, before the prototype.
+
+- **Today:** favorite/rating flips walk the `VecModel` from Rust once the save lands, via
   `crates/melodia-views/src/ui/model_patch.rs::patch_track_row_by_id` (+ per-view `apply_*` one-liners, `wire_row_flag!`
   macro); queue-sheet selection mirrors through `ShadowEntry` snapshots.
 - **Upstream in 1.17:** two-way bindings to model row data — a row's control can write back
@@ -391,9 +396,24 @@ Done 2026-10-13, every step passed by hand.
 - **Migration:** evaluate whether star-rating / favorite toggles can bind row-fields two-way and
   let Slint propagate, keeping Rust as persistence-only. The `ShadowEntry` selection mirror is a
   UI-thread/`Send` issue, not a binding issue — likely stays.
-- **Risk:** our flow is optimistic-UI + async persist + cross-surface sync
+- **Risk:** our flow is async persist, then patch, plus cross-surface sync
   (`sync_current_track_if_in`); two-way bindings must not bypass the persistence path. Prototype
   on one view (ratings) before committing.
+- **Outcome:** the feature works. `link_two_way_to_model_data`
+  (`i-slint-core-1.18.1/properties/two_way_binding.rs:345`) hands a write to the repeater's
+  `model_set_row_data`, so a row's control can rewrite its own row. That row is all it reaches,
+  and every walk exists for another one:
+  - the row menu's Favourite acts on the whole selection, and `.slint` has no loop to find the
+    other rows (the 1.18.1 grammar's only statements are `let` and `return`);
+  - the queue can hold one track several times, and `queue_sheet::rows::apply_row_favorite`
+    patches every copy;
+  - `wire_row_flag!` patches only once the save returns `Ok`, so a refused write leaves the row
+    showing what is stored, where a two-way write lands first and needs a walk to undo;
+  - the lists rebuild from Rust caches on every filter keystroke and re-sort, so the
+    `flip_favorite`/`flip_rating` calls stay whatever paints the row.
+
+  Adopted, it adds a second write path for the clicked row and deletes nothing. No Slint release
+  changes that, so nothing went to #127.
 
 ## 🟡 Hangul measuring workaround → retire if the new text stack composes syllables
 
@@ -416,5 +436,6 @@ to 1.18.1, phase 1 applied in the tree, phase 4 added. 2026-10-12: phase 4 lande
 hand, and every section waiting on an upstream Slint change moved to #127. Later that day phase
 3's items 1 (`FlexboxLayout`, its Settings-body step reverted), 2 (`PopupWindow.is-open`, the
 right-click menus reworked on top) and 3 (`animate { enabled }`) landed and passed by hand.
-2026-10-13: item 4 (`cross-axis-alignment`) landed and passed by hand, and item 5
-(`WindowMoveArea`) was dropped and moved to #127.*
+2026-10-13: item 4 (`cross-axis-alignment`) landed and passed by hand, item 5
+(`WindowMoveArea`) was dropped and moved to #127, and item 6 (two-way row bindings) was dropped
+outright.*
