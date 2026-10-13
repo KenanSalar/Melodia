@@ -40,6 +40,7 @@ fn vm(status: &'static str, current_track: Option<Arc<TrackSummary>>) -> PlayerV
         current_track,
         position_ms: 0,
         duration_ms: 0,
+        position_stamp: 0,
         progress_percent: 0.0,
         volume: 100,
         is_muted: false,
@@ -55,7 +56,7 @@ fn vm(status: &'static str, current_track: Option<Arc<TrackSummary>>) -> PlayerV
 }
 
 fn tick(position_ms: u64, duration_ms: u64) -> PositionTick {
-    PositionTick { position_ms, duration_ms }
+    PositionTick { position_ms, duration_ms, stamp: 0 }
 }
 
 /// Feed position ticks from the play's start up to `target_ms` in

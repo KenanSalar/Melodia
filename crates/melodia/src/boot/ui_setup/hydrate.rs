@@ -32,17 +32,6 @@ pub fn seed_initial_view_model(
     let dur = i32::try_from(light.duration_ms).unwrap_or(i32::MAX);
     player.set_position_ms(pos);
     player.set_duration_ms(dur);
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_precision_loss,
-        reason = "u64 → f64 → f32: ms positions stay below f53 mantissa range, f32 progress is for UI display only"
-    )]
-    let progress = if light.duration_ms > 0 {
-        (light.position_ms as f64 / light.duration_ms as f64) as f32
-    } else {
-        0.0
-    };
-    player.set_progress(progress);
     player.set_queue(ui::shell::bridge::to_slint_queue_vm(&qvm));
 
     // The row tier is empty this early, so the seed above is guaranteed to be the cache-only

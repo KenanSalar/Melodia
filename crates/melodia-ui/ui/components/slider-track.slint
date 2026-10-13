@@ -146,6 +146,10 @@ export component SliderTrack inherits Rectangle {
                 if (root.dragged-since-press) {
                     root.committed(root.drag-value);
                 }
+                // `pressed` is already true when the next `down` runs, so a flag
+                // left set here turns `dragging` on and the band test above
+                // measures against this press's value instead of the thumb.
+                root.dragged-since-press = false;
             }
         }
         moved => {

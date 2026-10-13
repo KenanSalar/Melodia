@@ -76,6 +76,7 @@ pub fn test_view_model(
         current_track,
         position_ms: 0,
         duration_ms,
+        position_stamp: 0,
         progress_percent: 0.0,
         volume: 100,
         is_muted: false,

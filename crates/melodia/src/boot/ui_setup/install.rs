@@ -98,16 +98,18 @@ fn install_shell(
 /// miniplayer.
 fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles) -> AppResult<()> {
     let weak = app.as_weak();
+    let shown = ui::shell::bridge::ShownPosition::default();
     ui::shell::bridge::spawn_view_model_subscriber(
         weak.clone(),
         &state.sinks,
         views.cover_thumbs.clone(),
         state.runtime.clone(),
+        shown.clone(),
     )
     .map_err(|e| AppError::io("view-model subscriber", e))?;
     ui::shell::bridge::spawn_queue_subscriber(weak.clone(), &state.sinks)
         .map_err(|e| AppError::io("queue subscriber", e))?;
-    ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx)
+    ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx, shown)
         .map_err(|e| AppError::io("position subscriber", e))?;
     // Reads the same view model as the first of those, for the ICY titles a station announces.
     // Beside them rather than inside `radio::install`, so every subscription to a player channel

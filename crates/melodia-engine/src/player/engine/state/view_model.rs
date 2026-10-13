@@ -14,6 +14,8 @@ use melodia_core::entities::track::TrackSummary;
 pub struct PositionTick {
     pub position_ms: u64,
     pub duration_ms: u64,
+    /// [`PlayerState::position_stamp`] at the read, for ordering against the view model.
+    pub stamp: u64,
 }
 
 /// Full `ViewModel`, built only by the test-only `PlayerState::to_view_model`.
@@ -57,6 +59,8 @@ pub struct PlayerViewModelLight {
     pub current_track: Option<Arc<TrackSummary>>,
     pub position_ms: u64,
     pub duration_ms: u64,
+    /// [`PlayerState::position_stamp`] at the emit, for ordering against the position ticks.
+    pub position_stamp: u64,
     pub progress_percent: f64,
     pub volume: u32,
     pub is_muted: bool,
@@ -139,6 +143,7 @@ impl PlayerState {
             current_track: self.current_track().cloned(),
             position_ms: self.position_ms,
             duration_ms: self.duration_ms,
+            position_stamp: self.position_stamp,
             progress_percent: self.progress_percent(),
             volume: self.volume,
             is_muted: self.is_muted,

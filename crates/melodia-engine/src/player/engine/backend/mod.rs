@@ -17,6 +17,7 @@ mod reads;
 
 pub use output::OutputChoice;
 pub use player_backend::PlayerBackend;
+pub use reads::DeckClock;
 
 use output::EngineOutput;
 
@@ -640,15 +641,17 @@ impl PlaybackEngine {
     pub fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain) {
         self.abort_crossfade();
 
-        // Nothing on the deck is nothing to seek, which is what moving the mounted source answered
-        // too. Asked before the open so a seek against a drained deck costs no I/O.
-        let mounted = {
+        // Nothing on the deck is nothing to seek, and a successor that has taken it is a track the
+        // state has yet to advance onto, so the file named here is the one that just ended. Both
+        // read as other than `Playing`, and both are asked before the open so they cost no I/O.
+        let handovers = {
             let decks = self.lock_decks();
             let voice = &decks.active().voice;
-            if voice.is_empty() {
+            let gapless = self.gapless_pending.load(Ordering::Acquire);
+            if evaluate_playback_check(gapless, voice.len()) != PlaybackCheck::Playing {
                 return;
             }
-            voice.mounted()
+            voice.handovers()
         };
 
         let position = Duration::from_millis(position_ms);
@@ -666,7 +669,7 @@ impl PlaybackEngine {
 
         let decks = self.lock_decks();
         let deck = decks.active();
-        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, mounted);
+        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, handovers);
     }
 
     /// Both decks must run at the same speed or a crossfade would drift.
@@ -758,17 +761,19 @@ impl PlaybackEngine {
     /// Reads the **active** deck only. During a crossfade that deck holds
     /// exactly the incoming track and this reports `Playing`; the outgoing deck
     /// draining is [`Self::is_crossfading`]'s business.
+    ///
+    /// Observes a handover without acknowledging it: the flag stays up until the advance claims
+    /// it under the emit, so a seek landing in between still sees a deck the state is behind.
     pub fn check_playback_state(&self) -> PlaybackCheck {
         let was_gapless = self.gapless_pending.load(Ordering::Acquire);
-        let decks = self.lock_decks();
-        let sources = decks.active().voice.len();
-        drop(decks);
+        let sources = self.lock_decks().active().voice.len();
+        evaluate_playback_check(was_gapless, sources)
+    }
 
-        let result = evaluate_playback_check(was_gapless, sources);
-        if result == PlaybackCheck::GaplessTransition {
-            self.gapless_pending.store(false, Ordering::Release);
-        }
-        result
+    /// Take the staged successor's handover for the advance, `false` where a track start or a stop
+    /// has cleared it since [`Self::check_playback_state`] saw it.
+    pub fn claim_gapless_handover(&self) -> bool {
+        self.gapless_pending.swap(false, Ordering::AcqRel)
     }
 
     /// Lock the decks mutex, recovering from poison rather than panicking.

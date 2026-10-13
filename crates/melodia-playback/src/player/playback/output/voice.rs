@@ -106,12 +106,12 @@ enum Command {
     /// This is what a seek is. Moving a *mounted* source meant running the demuxer's scan inside
     /// the callback, on a thread that may not read a file, and blocking the caller on the result;
     /// building the sought source first leaves this side a pointer swap. `frames` comes with it
-    /// because the clock is re-anchored by whoever knows where the source now is, and `mounted`
-    /// because the swap has to be refused if what it was built against has since been replaced.
+    /// because the clock is re-anchored by whoever knows where the source now is, and `handovers`
+    /// because the swap has to be refused if a staged successor has since taken the deck.
     Replace {
         loaded: Loaded,
         frames: u64,
-        mounted: u64,
+        handovers: u64,
     },
 }
 
@@ -155,13 +155,16 @@ struct VoiceShared {
     /// returns waits for the second to reach the first.
     issued: AtomicU64,
     serviced: AtomicU64,
-    /// A ticket per source that has taken over as the playing one, so a control op prepared
-    /// against what was mounted can be refused if something else has since taken the deck.
+    /// A ticket per staged successor that has taken the deck over, so a control op prepared
+    /// against the playing source can be refused if a handover has since replaced it.
     ///
     /// The seek is why it exists: it reads the file on its own thread, and the source under it can
     /// be replaced meanwhile by a *gapless* handover, which happens in this callback and so is
-    /// under neither `exec_lock` nor `deck_epoch`. Written by the callback alone.
-    mounted: AtomicU64,
+    /// under neither `exec_lock` nor `deck_epoch`. **Only that mount counts.** Every other one is
+    /// an append or a replace sent under `exec_lock`, which the seek holds too, so the channel
+    /// already orders it ahead of the swap, and a seek sent before the callback has taken the
+    /// track it targets has to land on that track. Written by the callback alone.
+    handovers: AtomicU64,
 }
 
 /// The control side of one voice.
@@ -188,33 +191,32 @@ impl Voice {
     /// position turned into on the first tick after mounting.
     ///
     /// **The anchor lands on the callback**, so [`Self::position`] still reads zero for up to one
-    /// device period after this returns; a monitor tick inside that window republishes zero and
-    /// the next one corrects it. [`Self::clear`] zeroes its half of the clock on this side too,
-    /// which this cannot copy: the anchor is a pair with the rate, and the callback owns the
-    /// ordering between them.
+    /// device period after this returns, which is why [`Self::is_settled`] stays false until it
+    /// has. [`Self::clear`] zeroes its half of the clock on this side too, which this cannot copy:
+    /// the anchor is a pair with the rate, and the callback owns the ordering between them.
     pub fn append_at<S: AudioSource + 'static>(&self, source: S, position: Duration) {
         let frames = frames_in(position, source.sample_rate());
         let loaded = Self::load(source);
         self.send_counted(Command::Append { loaded, frames });
     }
 
-    /// Put `source` on this voice in place of the one `mounted` names, with the clock anchored at
+    /// Put `source` on this voice in place of the playing one, with the clock anchored at
     /// `position` of it.
     ///
     /// How a seek is spelled: `source` is already positioned, so the callback does a pointer swap
     /// rather than a demuxer scan, and nothing here waits on it. The ticket is what makes that
-    /// safe over the gap — see [`VoiceShared::mounted`] — and a voice that has moved on, or run
-    /// dry, takes no source from this.
-    pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, mounted: u64) {
+    /// safe over the gap — see [`VoiceShared::handovers`] — and a voice that has handed over, or
+    /// run dry, takes no source from this.
+    pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, handovers: u64) {
         let frames = frames_in(position, source.sample_rate());
         let loaded = Self::load(source);
-        self.send_counted(Command::Replace { loaded, frames, mounted });
+        self.send_counted(Command::Replace { loaded, frames, handovers });
     }
 
-    /// The ticket of the source last mounted here, for a later [`Self::replace`] to be matched
-    /// against. Read it against the same observation of the deck the seek is decided on.
-    pub fn mounted(&self) -> u64 {
-        self.shared.mounted.load(Ordering::Acquire)
+    /// How many staged successors have taken this voice over, for a later [`Self::replace`] to be
+    /// matched against. Read it against the same observation of the deck the seek is decided on.
+    pub fn handovers(&self) -> u64 {
+        self.shared.handovers.load(Ordering::Acquire)
     }
 
     /// Pair `source` with the converter that brings it to whatever device is open when it plays.
@@ -504,8 +506,8 @@ impl VoicePull {
             match self.commands.try_recv() {
                 Ok(Command::Append { loaded, frames }) => self.accept(loaded, frames),
                 Ok(Command::Clear) => self.clear(),
-                Ok(Command::Replace { loaded, frames, mounted }) => {
-                    self.replace(loaded, frames, mounted);
+                Ok(Command::Replace { loaded, frames, handovers }) => {
+                    self.replace(loaded, frames, handovers);
                 }
                 Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
             }
@@ -525,8 +527,7 @@ impl VoicePull {
 
     /// Make `loaded` the playing source, with the clock anchored `frames` into it.
     ///
-    /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`]. The
-    /// ticket is its own `Release`, the control side comparing it and nothing else.
+    /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`].
     fn start_at(&mut self, loaded: Loaded, frames: u64) {
         let source = &loaded.source;
         let format = source.format();
@@ -537,7 +538,6 @@ impl VoicePull {
         self.shared.frames.store(frames, Ordering::Relaxed);
         self.shared.anchor.store(frames, Ordering::Relaxed);
         self.shared.rate.store(source.sample_rate().get(), Ordering::Release);
-        self.shared.mounted.fetch_add(1, Ordering::Release);
         self.current = Some(loaded);
     }
 
@@ -546,16 +546,15 @@ impl VoicePull {
         self.start_at(loaded, 0);
     }
 
-    /// Swap the source `mounted` names for `loaded`, which the control thread has already
-    /// positioned.
+    /// Swap the playing source for `loaded`, which the control thread has already positioned.
     ///
     /// **A deck that moved on takes nothing.** It drained, or a staged gapless successor took it
     /// over from under the caller — and a swap there would restart a track that is either already
-    /// over or not the one the caller was looking at. The ticket catches both, where the
-    /// in-place seek this replaced silently moved whatever it found. Either way one source is
-    /// dropped, which is the count `Voice::send_counted` added for.
-    fn replace(&mut self, loaded: Loaded, frames: u64, mounted: u64) {
-        let moved_on = self.shared.mounted.load(Ordering::Relaxed) != mounted;
+    /// over or not the one the caller was looking at. The empty slot catches the first and the
+    /// ticket the second, where the in-place seek this replaced silently moved whatever it found.
+    /// Either way one source is dropped, which is the count `Voice::send_counted` added for.
+    fn replace(&mut self, loaded: Loaded, frames: u64, handovers: u64) {
+        let moved_on = self.shared.handovers.load(Ordering::Relaxed) != handovers;
         let taken = if moved_on { None } else { self.current.take() };
         // Whichever source the swap leaves over: the one it displaces, or `loaded` itself where
         // there is nothing left to displace it against.
@@ -602,6 +601,7 @@ impl VoicePull {
         }
         if let Some(next) = self.staged.pop_front() {
             self.start(next);
+            self.shared.handovers.fetch_add(1, Ordering::Release);
         }
     }
 
@@ -649,7 +649,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         dsp_engaged: AtomicBool::new(false),
         issued: AtomicU64::new(0),
         serviced: AtomicU64::new(0),
-        mounted: AtomicU64::new(0),
+        handovers: AtomicU64::new(0),
     });
 
     let voice = Voice { shared: shared.clone(), commands: command_tx, spent: Mutex::new(spent_rx) };

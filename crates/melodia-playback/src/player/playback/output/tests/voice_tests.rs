@@ -293,7 +293,7 @@ fn a_replace_anchors_the_clock_where_the_caller_asked() {
     pump(&mut pull, 64);
 
     let seek = Duration::from_secs(2);
-    voice.replace(seconds_of(4, RATE), seek, voice.mounted());
+    voice.replace(seconds_of(4, RATE), seek, voice.handovers());
     pump(&mut pull, 64);
 
     let got = voice.position();
@@ -310,7 +310,7 @@ fn a_replace_anchors_the_clock_where_the_caller_asked() {
 fn replacing_on_an_empty_voice_mounts_nothing() {
     let (voice, mut pull) = pair(mono(RATE));
 
-    voice.replace(seconds_of(4, RATE), Duration::from_secs(1), voice.mounted());
+    voice.replace(seconds_of(4, RATE), Duration::from_secs(1), voice.handovers());
     pump(&mut pull, 64);
 
     assert!(voice.is_empty(), "a replace mounted a source on a voice with nothing playing");
@@ -332,7 +332,7 @@ fn a_seek_keeps_a_source_that_had_just_reached_its_end() {
     assert_eq!(pump(&mut pull, FRAMES - 1).len(), FRAMES - 1);
     assert_eq!(voice.len(), 1, "the source must still be on the voice to be seekable");
 
-    voice.replace(TestSource::new(vec![0.5; FRAMES], 1, RATE), Duration::ZERO, voice.mounted());
+    voice.replace(TestSource::new(vec![0.5; FRAMES], 1, RATE), Duration::ZERO, voice.handovers());
 
     assert_eq!(
         pump(&mut pull, 64).len(),
@@ -354,16 +354,15 @@ fn a_replace_prepared_against_a_source_that_has_since_ended_mounts_nothing() {
     voice.append(TestSource::new(vec![0.75; FRAMES], 1, RATE));
 
     // Mount the first source and stage the second, then read what a seek would have seen before
-    // going off to open its file. Read before anything is mounted the ticket is only its initial
-    // value, which is not the observation being tested.
+    // going off to open its file.
     assert_eq!(pump(&mut pull, 64).len(), 64);
-    let mounted = voice.mounted();
+    let handovers = voice.handovers();
 
     // Drain the rest of the first source, which hands the deck to the staged one.
     assert_eq!(pump(&mut pull, FRAMES - 64).len(), FRAMES - 64);
     assert_eq!(voice.len(), 1, "the staged source should have taken over");
 
-    voice.replace(TestSource::new(vec![0.25; FRAMES], 1, RATE), Duration::ZERO, mounted);
+    voice.replace(TestSource::new(vec![0.25; FRAMES], 1, RATE), Duration::ZERO, handovers);
 
     let after = pump(&mut pull, 64);
     assert!(
@@ -385,9 +384,9 @@ fn a_replace_lands_while_a_successor_is_only_staged() {
     voice.append(TestSource::new(vec![0.75; FRAMES], 1, RATE));
 
     assert_eq!(pump(&mut pull, 64).len(), 64);
-    let mounted = voice.mounted();
+    let handovers = voice.handovers();
 
-    voice.replace(TestSource::new(vec![0.5; FRAMES], 1, RATE), Duration::ZERO, mounted);
+    voice.replace(TestSource::new(vec![0.5; FRAMES], 1, RATE), Duration::ZERO, handovers);
 
     let after = pump(&mut pull, 64);
     assert!(
