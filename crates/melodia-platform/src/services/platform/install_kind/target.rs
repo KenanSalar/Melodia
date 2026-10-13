@@ -2,8 +2,8 @@
 //! that matches the current binary's platform + install format.
 //!
 //! Per-format keys (`linux-x86_64-appimage` vs `linux-x86_64-tarball`
-//! vs `linux-x86_64-rpm` vs `linux-x86_64-deb`) rather than Tauri-style
-//! flat `linux-x86_64` lets every Linux install format update in-place
+//! vs `linux-x86_64-rpm` vs `linux-x86_64-deb`) rather than one flat
+//! `linux-x86_64` lets every Linux install format update in-place
 //! without server-side disambiguation. Format selection priority is
 //! cheapest-probe-first: `$APPIMAGE` env var (free), then
 //! [`super::linux_pkg::detect`] (one subprocess), then tarball

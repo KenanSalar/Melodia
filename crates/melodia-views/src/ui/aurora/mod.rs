@@ -94,7 +94,7 @@ pub(crate) fn tints(seeds: [Option<u32>; SEED_COUNT], theme: &ThemeTokens) -> [T
     let origin = seeds.iter().flatten().next().copied().unwrap_or(theme.accent);
 
     std::array::from_fn(|wash| match seeds[wash] {
-        Some(argb) => Tint { rgb: argb, weight: 1.0 },
+        Some(rgb) => Tint { rgb, weight: 1.0 },
         None => Tint { rgb: rotate_hue(origin, FILL_HUES[wash]), weight: FILL_WEIGHT },
     })
 }

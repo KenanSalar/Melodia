@@ -17,7 +17,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
     let weak = ui.as_weak();
 
     // Every keystroke: mirror the trimmed text into Rust state, reset
-    // `show-all-tracks` (Tauri parity: every new query starts compact),
+    // `show-all-tracks` (every new query starts compact),
     // bump the history token (defers any pending 2-second history-add
     // for a previous query), and fast-path the empty case so the
     // recent-searches branch re-mounts as soon as the user clears

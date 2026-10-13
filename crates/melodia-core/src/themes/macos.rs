@@ -1,5 +1,4 @@
 //! macOS theme: 2 variants (Dark / Light), 8 accents.
-//! Ported verbatim from `Melodia-tauri/src/themes/macos-theme.ts`.
 
 #![allow(clippy::unreadable_literal)]
 

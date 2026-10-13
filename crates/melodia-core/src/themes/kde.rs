@@ -1,5 +1,4 @@
 //! KDE Breeze theme: 2 variants (Dark / Light), 8 accents.
-//! Ported verbatim from `Melodia-tauri/src/themes/kde-breeze.ts`.
 //!
 //! The static tables are half of it. The other half is [`palette_from_kde`], which re-sources
 //! every slot from the live `kdeglobals` so the player matches Plasma's active scheme rather than

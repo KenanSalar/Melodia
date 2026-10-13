@@ -175,7 +175,7 @@ fn measure_takes_the_hue_off_the_sharp_buffer_and_the_percentile_off_the_painted
     assert_ne!(sample.luma, luma_p90(sharp.as_bytes()), "...and must not read the sharp one");
 
     // Grey would be the answer off `painted`, so a red seed can only have come off `sharp`.
-    let (r, g, b) = unpack(sample.accent_argb.unwrap_or(0));
+    let (r, g, b) = unpack(sample.accent_rgb.unwrap_or(0));
     assert!(r > g && r > b, "the seed must quantize the sharp buffer, got rgb({r}, {g}, {b})");
 }
 
@@ -185,7 +185,7 @@ fn measure_takes_the_hue_off_the_sharp_buffer_and_the_percentile_off_the_painted
 #[test]
 fn measure_of_an_empty_buffer_leaves_both_halves_empty() {
     let sample = measured(&SharedPixelBuffer::<Rgb8Pixel>::new(0, 0));
-    assert_eq!(sample.accent_argb, None);
+    assert_eq!(sample.accent_rgb, None);
     assert_eq!(sample.luma, None);
 }
 
@@ -198,7 +198,7 @@ fn a_measured_cover_hue_outranks_the_theme_accent() {
     let sample = measured(&buffer_from(32, |_, _| [220, 30, 30]));
     // `None` collapses onto the accent too, which is the same failure — so
     // falling back to `SEED` here makes the assertion below cover both.
-    let seed = sample.accent_argb.unwrap_or(SEED);
+    let seed = sample.accent_rgb.unwrap_or(SEED);
     let luma = sample.luma.unwrap_or(f64::NAN);
     assert_ne!(
         solve(seed, luma).chrome,

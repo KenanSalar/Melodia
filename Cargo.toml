@@ -188,9 +188,9 @@ fast_image_resize = { version = "6.1.0", features = ["image"] }
 # IDCTs by coefficient content, not by request). Every tier draws a cover far smaller
 # than the store holds; `image_decode::decode_capped_to` falls back to `image`.
 jpeg-decoder = "0.3.2"
-# Material 3 dynamic colour. Its `image`/`serde`/`libm` features stay off; we feed
-# it quantized pixel data ourselves.
-material-colors = "0.4.2"
+# Material 3 dynamic colour. `quantize` is turned on by melodia-artwork alone, the one
+# crate that picks a seed from pixels; `serde` and `libm` stay off.
+material-colors = "0.5.0"
 # The backdrop's quantizer, beside rather than instead of the one above: median-cut
 # over a fixed histogram answers "what is this cover mostly made of" in a fraction of
 # a millisecond, where Celebi's k-means costs tens on photographic art.

@@ -3,8 +3,8 @@
 //! signals in `system_color_state.rs`.
 
 /// The theme-dependent brush slots that come from a palette table. Stored as
-/// packed `0x00RRGGBB` so the data tables stay readable next to the
-/// Tauri-source hex strings. `apply()` writes three more that don't:
+/// packed `0x00RRGGBB` so the data tables read as the hex colours they
+/// are. `apply()` writes three more that don't:
 /// `mantle_unfocused` (an OS signal, which a [`Variant`] may snapshot), and
 /// `accent` / `accent_text` (picked independently of the variant).
 #[derive(Clone, Copy, Debug)]

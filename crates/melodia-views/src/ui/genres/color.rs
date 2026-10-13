@@ -4,10 +4,9 @@
 //! hash-derived gradient. The derivation is [`crate::ui::name_palette`]'s,
 //! shared with the station tile; this file is only the stops built on top.
 //!
-//! The *gradient shape* deliberately diverges from the Tauri original, which
-//! used one hue plus a fixed +30° offset at constant saturation and value —
-//! under that scheme hue 120° and hue 140° both just read as "green-ish".
-//! Three independent name-derived axes separate them instead:
+//! The *gradient shape* is not one hue plus a fixed +30° offset at constant
+//! saturation and value, under which hue 120° and hue 140° both read as
+//! "green-ish". Three independent name-derived axes separate them instead:
 //!
 //!   1. **Hue 1** — the primary, 0..360°.
 //!   2. **Hue offset** — 60..120°, so a wide-offset card carries two clearly
@@ -38,9 +37,8 @@ pub struct GenreAccent {
     pub hero_color_2: Color,
 }
 
-/// Hash the name into a `GenreAccent`. Deterministic — same name in,
-/// same colours out, across runs and across the Tauri build (hash) /
-/// this build (composition).
+/// Hash the name into a `GenreAccent`. Deterministic: the same name gives
+/// the same colours across runs and releases.
 pub fn genre_accent(name: &str) -> GenreAccent {
     let hash = hash_name(name);
     let hue1 = hue_from_hash(hash);

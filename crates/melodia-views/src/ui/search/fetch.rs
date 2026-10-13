@@ -69,9 +69,8 @@ pub async fn kick_search(
     apply_results_to_slint(search_ui, weak, &results, &trimmed);
     set_loading_on_ui(weak, false);
 
-    // Schedule the 2-second delayed history add. The 2 s window is
-    // Tauri parity — a query the user paused on long enough is worth
-    // remembering; a fast typo isn't.
+    // Schedule the 2-second delayed history add: a query the user paused
+    // on long enough is worth remembering; a fast typo isn't.
     schedule_history_add(state, search_ui, weak, query);
     Ok(())
 }

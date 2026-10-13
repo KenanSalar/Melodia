@@ -1,5 +1,4 @@
 //! GNOME Adwaita theme: 2 variants (Dark / Light), 9 accents.
-//! Ported verbatim from `Melodia-tauri/src/themes/gnome-adwaita.ts`.
 
 #![allow(clippy::unreadable_literal)]
 

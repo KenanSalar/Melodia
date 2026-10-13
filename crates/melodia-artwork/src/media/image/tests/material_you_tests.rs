@@ -5,7 +5,7 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 use tempfile::NamedTempFile;
 
 use crate::media::image::material_you::{
-    SchemeStyle, SeedCache, clamp_to_tone_band, extract_source_argb, extract_source_argb_from_rgb8,
+    SchemeStyle, SeedCache, clamp_to_tone_band, extract_source_rgb, extract_source_rgb_from_rgb8,
     generate_palette, to_tone_capped_chroma,
 };
 
@@ -47,7 +47,7 @@ fn scheme_style_all_starts_with_none() {
 
 #[test]
 fn generate_palette_dark_produces_distinct_text_and_base() {
-    // Google Blue seed (matches Tauri's fallback) — every variant should
+    // Google Blue seed (the scorer's own fallback) — every variant should
     // produce a usable dark palette where text is meaningfully separable
     // from the base surface, regardless of which dynamic style is picked.
     let seed = 0x0042_85F4_u32;
@@ -168,7 +168,7 @@ fn generate_palette_semantics_do_not_follow_the_album() {
     reason = "test setup failures should abort the test; not production code"
 )]
 #[test]
-fn extract_source_argb_rejects_oversized_source() {
+fn extract_source_rgb_rejects_oversized_source() {
     // `decode_capped` bounds the decode at the cap its caller passes, here
     // `MATERIAL_YOU_MAX_SOURCE_DIM` (2048) — emit a 2200×2200
     // uniform-colour PNG to a temp file and assert the decoder bails before
@@ -179,7 +179,7 @@ fn extract_source_argb_rejects_oversized_source() {
     let tmp = NamedTempFile::with_suffix(".png").expect("tempfile");
     img.save(tmp.path()).expect("encode oversized PNG");
 
-    let seed = extract_source_argb(tmp.path());
+    let seed = extract_source_rgb(tmp.path());
     assert!(
         seed.is_none(),
         "expected Limits to reject 2200x2200, got seed 0x{:08X}",
@@ -192,7 +192,7 @@ fn extract_source_argb_rejects_oversized_source() {
     reason = "test setup failures should abort the test; not production code"
 )]
 #[test]
-fn extract_source_argb_decodes_in_bounds_source() {
+fn extract_source_rgb_decodes_in_bounds_source() {
     // Sanity check the path-based fallback still works for in-bounds
     // dimensions — a 256×256 vibrant uniform colour passes Limits and
     // produces a usable seed that the palette generator can consume.
@@ -200,16 +200,16 @@ fn extract_source_argb_decodes_in_bounds_source() {
     let tmp = NamedTempFile::with_suffix(".png").expect("tempfile");
     img.save(tmp.path()).expect("encode in-bounds PNG");
 
-    let seed = extract_source_argb(tmp.path()).expect("in-bounds source should produce a seed");
+    let seed = extract_source_rgb(tmp.path()).expect("in-bounds source should produce a seed");
     let r = (seed >> 16) & 0xFF;
     let b = seed & 0xFF;
     assert!(r > b, "expected red-dominant seed for orange input, got 0x{seed:06X}");
 }
 
 #[test]
-fn extract_source_argb_from_rgb8_rejects_empty_buffer() {
+fn extract_source_rgb_from_rgb8_rejects_empty_buffer() {
     let buf = SharedPixelBuffer::<Rgb8Pixel>::new(0, 0);
-    assert_eq!(extract_source_argb_from_rgb8(&buf), None);
+    assert_eq!(extract_source_rgb_from_rgb8(&buf), None);
 }
 
 #[expect(
@@ -217,7 +217,7 @@ fn extract_source_argb_from_rgb8_rejects_empty_buffer() {
     reason = "test setup failures should abort the test; not production code"
 )]
 #[test]
-fn extract_source_argb_from_rgb8_produces_seed_for_uniform_colour() {
+fn extract_source_rgb_from_rgb8_produces_seed_for_uniform_colour() {
     // 72×72 mirrors `cover_thumbs::THUMB_SIZE` — the actual buffer the
     // production path consumes. Filling with a vibrant orange exercises
     // the full quantize+score pipeline and confirms the seed is in the
@@ -230,7 +230,7 @@ fn extract_source_argb_from_rgb8_produces_seed_for_uniform_colour() {
         px[2] = 30;
     }
     let seed =
-        extract_source_argb_from_rgb8(&buf).expect("uniform vibrant buffer should produce a seed");
+        extract_source_rgb_from_rgb8(&buf).expect("uniform vibrant buffer should produce a seed");
     let r = (seed >> 16) & 0xFF;
     let b = seed & 0xFF;
     assert!(r > b, "expected red-dominant seed for orange input, got 0x{seed:06X}");
@@ -260,7 +260,7 @@ fn a_greyscale_cover_seeds_from_its_own_grey() {
         px[2] = grey;
     }
 
-    let seed = extract_source_argb_from_rgb8(&buf).expect("a grey ramp should produce a seed");
+    let seed = extract_source_rgb_from_rgb8(&buf).expect("a grey ramp should produce a seed");
     assert_ne!(
         seed, SCORER_FALLBACK,
         "a greyscale cover must not seed from the scorer's Google Blue default"

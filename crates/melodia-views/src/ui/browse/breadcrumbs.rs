@@ -12,8 +12,7 @@ use melodia_ui::BreadcrumbRow as UiBreadcrumbRow;
 /// Build a breadcrumb trail that starts at the **library folder root**
 /// and walks down to `path`. The leading filesystem prefix is hidden so
 /// the user sees `Music › sport` rather than `home › kenan › Music ›
-/// sport` — matches Tauri's behaviour, where the library folder is
-/// presented as the conceptual root.
+/// sport`, the library folder being the conceptual root.
 ///
 /// When `path` is empty (root view) returns an empty Vec. When `path`
 /// isn't under any enabled library folder (defensive — shouldn't

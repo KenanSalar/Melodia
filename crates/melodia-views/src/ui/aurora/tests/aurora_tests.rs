@@ -1,12 +1,10 @@
-use material_colors::color::Argb;
+use material_colors::color::Rgb;
 use material_colors::hct::Hct;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use super::{WASH_COUNT, WASH_MAX_TONE, WASH_SHADE_FACTOR, tints};
 use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
-use melodia_artwork::media::image::material_you::{
-    extract_source_argb_from_rgb8, population_seeds,
-};
+use melodia_artwork::media::image::material_you::{extract_source_rgb_from_rgb8, population_seeds};
 
 /// The default accent, standing in for "no artwork" wherever a fallback is exercised.
 const THEME_ACCENT: u32 = 0x00cb_a6f7;
@@ -29,7 +27,7 @@ const ONE_HUE: [Option<u32>; SEED_COUNT] = [Some(0x00c0_3030), None, None, None]
 const FIXTURE_SIDE: u32 = 32;
 
 fn hct_of(rgb: u32) -> Hct {
-    Hct::new(Argb::from_u32(rgb))
+    Hct::new(Rgb::from_u32(rgb))
 }
 
 /// Smallest distance between two hue angles, so a rotation across 0° measures as the step it is.
@@ -124,7 +122,7 @@ fn an_empty_buffer_and_a_white_one_are_told_apart() {
 /// about this record.
 #[test]
 fn a_monochrome_sleeve_seeds_from_its_own_grey() {
-    let seed = extract_source_argb_from_rgb8(&buffer_of(&[[90, 90, 90], [120, 120, 120]]));
+    let seed = extract_source_rgb_from_rgb8(&buffer_of(&[[90, 90, 90], [120, 120, 120]]));
 
     let chroma = seed.map(|first| hct_of(first).get_chroma());
     assert!(chroma.is_some(), "the dominant fallback means a grey buffer still answers");

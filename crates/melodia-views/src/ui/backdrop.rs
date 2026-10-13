@@ -268,7 +268,7 @@ pub(crate) enum BackdropKind {
 pub(crate) struct BackdropSample {
     /// Most prominent colour quantized out of the cover, supplying the *hue* for every colour
     /// [`solve`] returns. Always `seeds[0]`, keeping this tier and the washes on one hue family.
-    pub(crate) accent_argb: Option<u32>,
+    pub(crate) accent_rgb: Option<u32>,
     /// The same quantize's list, most prominent first, and short whenever the artwork had fewer
     /// regions. `ui::aurora` owns the filling rule.
     pub(crate) seeds: [Option<u32>; SEED_COUNT],
@@ -286,7 +286,7 @@ impl BackdropSample {
     /// it a sharp buffer, never a blurred one** — blur averages the cover's regions into each other,
     /// which is exactly what median cut is looking for.
     ///
-    /// An empty `accent_argb` means there was no buffer at all, so [`Self::solve`]'s `Theme.accent`
+    /// An empty `accent_rgb` means there was no buffer at all, so [`Self::solve`]'s `Theme.accent`
     /// path is for a missing cover and never a monochrome one.
     pub(crate) fn quantize(cover: &[u8]) -> Self {
         let mut seeds = [None; SEED_COUNT];
@@ -294,7 +294,7 @@ impl BackdropSample {
             *slot = Some(seed);
         }
 
-        Self { accent_argb: seeds[0], seeds, luma: None }
+        Self { accent_rgb: seeds[0], seeds, luma: None }
     }
 
     /// [`Self::quantize`] plus the brightness a scrim is solved against — **the blur arm's, and
@@ -318,10 +318,9 @@ impl BackdropSample {
     pub(crate) fn solve(self, theme: &ThemeTokens, kind: BackdropKind) -> BackdropColors {
         match kind {
             BackdropKind::Aurora => theme_backdrop(theme),
-            BackdropKind::Blur => solve(
-                self.accent_argb.unwrap_or(theme.accent),
-                self.luma.unwrap_or_else(floor_luma),
-            ),
+            BackdropKind::Blur => {
+                solve(self.accent_rgb.unwrap_or(theme.accent), self.luma.unwrap_or_else(floor_luma))
+            }
         }
     }
 }
@@ -387,14 +386,13 @@ fn composited_tone(backdrop_luma: f64, alpha: f32) -> f64 {
 
 /// Lowest tone above `backdrop_tone` that reaches `ratio`, clamped into `min..=max`.
 ///
-/// `contrast::lighter` inverts the WCAG ratio algebraically. It answers `-1.0` when the ratio is
+/// `contrast::lighter` inverts the WCAG ratio algebraically. It answers `None` when the ratio is
 /// unreachable, which can only happen if the scrim under-darkened, and the band floor is the right
 /// degradation there.
 fn solve_tone(backdrop_tone: f64, ratio: f64, min: f64, max: f64) -> f64 {
-    let wanted = contrast::lighter(backdrop_tone, ratio);
-    if wanted < 0.0 {
+    let Some(wanted) = contrast::lighter(backdrop_tone, ratio) else {
         return min;
-    }
+    };
     wanted.clamp(min, max)
 }
 
@@ -454,18 +452,18 @@ pub(crate) struct BackdropColors {
 /// Reach for [`BackdropSample::solve`] rather than calling this directly — it resolves both
 /// fallbacks in one place *and* picks the arm. Genre Detail's procedural gradient is the sole caller
 /// here, having stops of its own to measure where a sample has a cover.
-pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
+pub(crate) fn solve(seed_rgb: u32, backdrop_luma: f64) -> BackdropColors {
     let alpha = scrim_alpha(backdrop_luma);
     let tone = composited_tone(backdrop_luma, alpha);
     // *Clamps* rather than sets: a cover already brighter than the solve asks for keeps its own
     // tone, and so its own chroma, up to `CHROME_MAX_TONE`.
-    let chrome = clamp_to_tone_band(seed_argb, chrome_tone(tone), CHROME_MAX_TONE);
+    let chrome = clamp_to_tone_band(seed_rgb, chrome_tone(tone), CHROME_MAX_TONE);
 
     BackdropColors {
-        scrim: to_tone_capped_chroma(seed_argb, SCRIM_TONE, BACKDROP_MAX_CHROMA),
+        scrim: to_tone_capped_chroma(seed_rgb, SCRIM_TONE, BACKDROP_MAX_CHROMA),
         scrim_alpha: alpha,
-        floor_start: to_tone_capped_chroma(seed_argb, FLOOR_TONE_START, BACKDROP_MAX_CHROMA),
-        floor_end: to_tone_capped_chroma(seed_argb, FLOOR_TONE_END, BACKDROP_MAX_CHROMA),
+        floor_start: to_tone_capped_chroma(seed_rgb, FLOOR_TONE_START, BACKDROP_MAX_CHROMA),
+        floor_end: to_tone_capped_chroma(seed_rgb, FLOOR_TONE_END, BACKDROP_MAX_CHROMA),
         chrome,
         chrome_alpha: 1.0,
         chrome_text_alpha: 1.0,
@@ -474,8 +472,8 @@ pub(crate) fn solve(seed_argb: u32, backdrop_luma: f64) -> BackdropColors {
         // This tier is hue-carrying and solved against the floor already, so the placeholder has
         // nothing of its own to want here.
         placeholder: chrome,
-        text: to_tone_capped_chroma(seed_argb, text_tone(tone), TEXT_MAX_CHROMA),
-        muted: to_tone_capped_chroma(seed_argb, muted_tone(tone), MUTED_MAX_CHROMA),
+        text: to_tone_capped_chroma(seed_rgb, text_tone(tone), TEXT_MAX_CHROMA),
+        muted: to_tone_capped_chroma(seed_rgb, muted_tone(tone), MUTED_MAX_CHROMA),
         text_alpha: 1.0,
         muted_alpha: 1.0,
     }

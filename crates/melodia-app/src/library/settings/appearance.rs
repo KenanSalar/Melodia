@@ -34,7 +34,7 @@ pub fn seed_theme_preference(paths: &Paths) -> Result<(), AppError> {
 /// Persist the user's appearance picks (theme / variant / accent) into
 /// `settings.json`. Updates the three top-level fields *and*
 /// `theme_preferences[theme_id]` so each theme remembers its last
-/// variant + accent across switches (Tauri's per-theme memory). The
+/// variant + accent across switches. The
 /// read-mutate-write window is serialized by `mutate_settings`, so a
 /// burst of accent / variant clicks can't lose updates. A Material You pick
 /// keeps the theme's last real accent, as [`ThemePreference::new`] argues.

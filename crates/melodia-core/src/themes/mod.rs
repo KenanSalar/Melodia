@@ -2,8 +2,8 @@
 //! variants (palette + semantic colours) and accent definitions (one hex per
 //! variant).
 //!
-//! Palette data is ported verbatim from the legacy Tauri app
-//! (`Melodia-tauri/src/themes/<name>.ts`). No heap allocation, no
+//! Palette data is hand-kept hex, except Material 3's variants, generated
+//! from the colour spec as [`material3`] describes. No heap allocation, no
 //! `lazy_static` — themes are zero-cost static data referenced by
 //! `&'static ThemeDef`.
 //!

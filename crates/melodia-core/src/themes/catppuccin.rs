@@ -1,6 +1,5 @@
 //! Catppuccin theme: 4 variants (Latte / Frappe / Macchiato / Mocha) and
-//! 14 accent colours, each defined per-variant. Ported verbatim from
-//! `Melodia-tauri/src/themes/catppuccin.ts`.
+//! 14 accent colours, each defined per-variant.
 
 // Palette data files are dense by design — every literal is a six-digit
 // `0xRRGGBB` hex colour. `unreadable_literal` fires on anything ≥ 5
