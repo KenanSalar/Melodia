@@ -61,10 +61,9 @@ pub struct PlayerState {
     pub source: Option<PlaybackSource>,
     pub position_ms: u64,
     pub duration_ms: u64,
-    /// Orders every publish of `position_ms` — each view model and each monitor tick — across the
-    /// two channels they travel on. Their subscribers wake independently, so one woken early can
-    /// read the newest view model while a tick read before it is still queued; this is what lets
-    /// the reader drop the older of the two. Moved only by [`Self::stamp_position`].
+    /// Orders every publish of `position_ms`, each view model and each monitor tick, across the
+    /// two channels they travel on, so the reader (`ui::shell::bridge::ShownPosition`) can drop
+    /// the older of two that reach it out of order. Moved only by [`Self::stamp_position`].
     pub position_stamp: u64,
     pub volume: u32,
     pub is_muted: bool,

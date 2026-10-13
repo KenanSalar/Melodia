@@ -93,11 +93,18 @@ enum Command {
     ///
     /// `frames` is non-zero for a resume, whose source the control thread positioned before
     /// handing it over — the same reason [`Command::Replace`] carries one. A source that lands
-    /// behind something still playing is a gapless stage, which starts from its own top whenever
-    /// the current one drains, so the anchor only applies to an immediate mount.
+    /// behind something still playing starts from its own top whenever the current one drains, so
+    /// the anchor only applies to an immediate mount.
     Append {
         loaded: Loaded,
         frames: u64,
+    },
+    /// Queue a gapless successor behind the playing source.
+    ///
+    /// Not an [`Command::Append`], because every mount it makes is a handover, including one onto a
+    /// voice that ran dry before it landed. See [`VoiceShared::handovers`].
+    Stage {
+        loaded: Loaded,
     },
     Clear,
     /// Swap the playing source for one the control thread has already positioned, anchoring the
@@ -123,8 +130,8 @@ struct VoiceShared {
     /// the pair's sake and narrows at its one use, where the multiply is in [`Sample`].
     volume: AtomicF64,
     speed: AtomicF64,
-    /// Sources appended and not yet finished. Bumped by `append` before the callback can see the
-    /// source, so a just-fed voice never reads as empty.
+    /// Sources sent and not yet finished. Bumped by `Voice::send_counted` before the callback can
+    /// see the source, so a just-fed voice never reads as empty.
     sources: AtomicUsize,
     /// Frames the current source has been pulled for, on its own timeline, and that source's rate.
     /// The pair is the clock: media position is one divided by the other.
@@ -160,10 +167,11 @@ struct VoiceShared {
     ///
     /// The seek is why it exists: it reads the file on its own thread, and the source under it can
     /// be replaced meanwhile by a *gapless* handover, which happens in this callback and so is
-    /// under neither `exec_lock` nor `deck_epoch`. **Only that mount counts.** Every other one is
-    /// an append or a replace sent under `exec_lock`, which the seek holds too, so the channel
-    /// already orders it ahead of the swap, and a seek sent before the callback has taken the
-    /// track it targets has to land on that track. Written by the callback alone.
+    /// under neither `exec_lock` nor `deck_epoch`. **Only that mount counts**, including a stage
+    /// that lands on a voice already dry, since the monitor stages outside `exec_lock`. Every other
+    /// mount is an append or a replace sent under `exec_lock`, which the seek holds too, so the
+    /// channel already orders it ahead of the swap, and a seek sent before the callback has taken
+    /// the track it targets has to land on that track. Written by the callback alone.
     handovers: AtomicU64,
 }
 
@@ -183,7 +191,15 @@ impl Voice {
         self.append_at(source, Duration::ZERO);
     }
 
-    /// [`Self::append`], with the clock anchored at `position` of `source` when it mounts.
+    /// Queue `source` as the gapless successor of the playing one: a handover wherever it mounts,
+    /// which [`Self::append`] is not, so a track start sent this way would refuse the seek behind it.
+    pub fn stage<S: AudioSource + 'static>(&self, source: S) {
+        let loaded = Self::load(source);
+        self.send_counted(Command::Stage { loaded });
+    }
+
+    /// Put `source` on this voice with the clock anchored at `position` of it when it mounts: a
+    /// track start.
     ///
     /// A resume hands over a source the control thread has already seeked, so the frames it will
     /// hand out start part way in — and the clock counts what it hands out. Without the anchor the
@@ -505,6 +521,7 @@ impl VoicePull {
         loop {
             match self.commands.try_recv() {
                 Ok(Command::Append { loaded, frames }) => self.accept(loaded, frames),
+                Ok(Command::Stage { loaded }) => self.stage(loaded),
                 Ok(Command::Clear) => self.clear(),
                 Ok(Command::Replace { loaded, frames, handovers }) => {
                     self.replace(loaded, frames, handovers);
@@ -525,6 +542,16 @@ impl VoicePull {
         }
     }
 
+    /// Queue a gapless successor, or mount it at once where the playing source has already
+    /// drained. The state is behind the deck either way.
+    fn stage(&mut self, loaded: Loaded) {
+        if self.current.is_some() {
+            self.staged.push_back(loaded);
+        } else {
+            self.mount_successor(loaded);
+        }
+    }
+
     /// Make `loaded` the playing source, with the clock anchored `frames` into it.
     ///
     /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`].
@@ -541,9 +568,11 @@ impl VoicePull {
         self.current = Some(loaded);
     }
 
-    /// [`Self::start_at`] from the top, which is where a staged successor begins.
-    fn start(&mut self, loaded: Loaded) {
-        self.start_at(loaded, 0);
+    /// [`Self::start_at`] from the top, which is where a staged successor begins, counting the
+    /// handover a seek's ticket is matched against.
+    fn mount_successor(&mut self, next: Loaded) {
+        self.start_at(next, 0);
+        self.shared.handovers.fetch_add(1, Ordering::Release);
     }
 
     /// Swap the playing source for `loaded`, which the control thread has already positioned.
@@ -600,8 +629,7 @@ impl VoicePull {
             self.shared.sources.fetch_sub(1, Ordering::SeqCst);
         }
         if let Some(next) = self.staged.pop_front() {
-            self.start(next);
-            self.shared.handovers.fetch_add(1, Ordering::Release);
+            self.mount_successor(next);
         }
     }
 

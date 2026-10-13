@@ -34,6 +34,7 @@ const SEEK_HOLD_SLACK_MS: i32 = 2_000;
 /// The view model and the position ticks arrive on separate channels whose subscribers wake
 /// independently, so one woken early can apply the newest view model ahead of a tick read before
 /// it. The engine stamps every position it publishes on either, and only a newer one is shown.
+/// The duration goes with it, since a view model a tick outranks is never applied.
 #[derive(Clone, Default)]
 pub struct ShownPosition(Rc<Cell<u64>>);
 
@@ -48,8 +49,11 @@ impl ShownPosition {
     }
 }
 
-/// Show a reported position, releasing a seek hold it has caught up with.
-fn show_position(player: &Player<'_>, position_ms: i32) {
+/// Show a reported position and the length it is out of, releasing a seek hold the position has
+/// caught up with.
+fn show_position(player: &Player<'_>, position_ms: u64, duration_ms: u64) {
+    let position_ms = clamp_to_i32(position_ms);
+    player.set_duration_ms(clamp_to_i32(duration_ms));
     player.set_position_ms(position_ms);
     let pending = player.get_seek_pending_ms();
     if pending >= 0 && (position_ms - pending).abs() < SEEK_HOLD_SLACK_MS {
@@ -109,8 +113,7 @@ pub fn spawn_view_model_subscriber(
                 // We push them here too so a track change resets the slider
                 // immediately instead of waiting for the next tick.
                 if shown.admits(vm.position_stamp) {
-                    player.set_duration_ms(clamp_to_i32(vm.duration_ms));
-                    show_position(&player, clamp_to_i32(vm.position_ms));
+                    show_position(&player, vm.position_ms, vm.duration_ms);
                 }
                 // `Property::set` is value-compared, so this guard spares only the move into the
                 // setter and the binding-handle access it opens with, and pays a second compare
@@ -185,11 +188,7 @@ pub fn spawn_position_subscriber(
             if !shown.admits(tick.stamp) {
                 continue;
             }
-            let player = ui.global::<Player>();
-            if tick.duration_ms > 0 {
-                player.set_duration_ms(clamp_to_i32(tick.duration_ms));
-            }
-            show_position(&player, clamp_to_i32(tick.position_ms));
+            show_position(&ui.global::<Player>(), tick.position_ms, tick.duration_ms);
         }
         log::debug!("ui::shell::bridge position subscriber stopped");
     }))?;

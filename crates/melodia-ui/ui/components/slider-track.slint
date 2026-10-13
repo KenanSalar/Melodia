@@ -125,6 +125,11 @@ export component SliderTrack inherits Rectangle {
         mouse-cursor: pointer;
 
         pointer-event(ev) => {
+            // Left only, as `pressed` and so `moved` are, or a right click moves the value. A
+            // cancel carries no button.
+            if (ev.button != PointerEventButton.left && ev.kind != PointerEventKind.cancel) {
+                return;
+            }
             if (ev.kind == PointerEventKind.down) {
                 // Inside the mask region the press is captured without jumping —
                 // that band is the perceived thumb, and a 1–2 px nudge there

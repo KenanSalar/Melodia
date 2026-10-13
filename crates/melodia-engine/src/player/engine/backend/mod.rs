@@ -264,10 +264,10 @@ impl PlaybackEngine {
     ) -> Result<(), AppError> {
         let fade_ms = self.manual_fade_ms(start_position_ms);
 
-        // Decode outside the deck lock — the position monitor's `query_position`
-        // shares this mutex, so a synchronous Symphonia probe under it stalls
-        // position publication. It is the only step that can be hoisted out;
-        // everything depending on *which* deck we land on is `start_track`'s.
+        // Decode outside the deck lock: the monitor's poll takes this mutex every
+        // tick, so a synchronous Symphonia probe under it stalls the poll. It is the
+        // only step that can be hoisted out; everything depending on *which* deck we
+        // land on is `start_track`'s.
         let mut decoded = FileDecoder::open(Path::new(file_path))?;
 
         // One value for the decoder's seek and the deck's clock anchor both, so the two cannot

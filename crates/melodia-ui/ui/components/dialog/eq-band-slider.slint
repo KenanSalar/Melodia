@@ -109,6 +109,11 @@ export component EqBandSlider inherits Rectangle {
         }
 
         pointer-event(ev) => {
+            // Left only, as `pressed` and so `moved` are, or a right click moves the band. A
+            // cancel carries no button.
+            if (ev.button != PointerEventButton.left && ev.kind != PointerEventKind.cancel) {
+                return;
+            }
             if (ev.kind == PointerEventKind.down) {
                 root.changed(self.value-from-y(self.mouse-y));
                 self.moved-since-press = true;

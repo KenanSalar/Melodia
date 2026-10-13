@@ -214,11 +214,11 @@ export struct SmartRuleRow {
     value-text: string,
 }
 
-// **`position_ms`, `duration_ms` and `progress` deliberately live on the `Player` global as
-// separate scalars, not here.** Bundled in, each 500 ms monitor tick invalidated the whole
+// **`position_ms` and `duration_ms` deliberately live on the `Player` global as separate
+// scalars, not here.** Bundled in, each 500 ms monitor tick invalidated the whole
 // `Player.vm` and dirty-marked every binding reading *any* field — a recursive walk of the
 // dependency list twice a second, for as long as playback lasted. Kept out, a tick's dirty
-// set is the three readers that care.
+// set is the readers that care.
 // The station on the deck, as every Now-Playing surface draws it. `PlayerVm`'s `track` half at
 // the same altitude, and mutually exclusive with it: `has_track` and `has_station` are never both
 // true, so a surface reads whichever says yes.

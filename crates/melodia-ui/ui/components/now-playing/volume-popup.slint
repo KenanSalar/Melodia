@@ -228,6 +228,12 @@ export component VolumePopup inherits Rectangle {
                     }
 
                     pointer-event(ev) => {
+                        // Left only, as `pressed` and so `moved` are, or a right click moves
+                        // the volume. A cancel carries no button.
+                        if (ev.button != PointerEventButton.left
+                            && ev.kind != PointerEventKind.cancel) {
+                            return;
+                        }
                         if (ev.kind == PointerEventKind.down) {
                             // The grab zone is the mask region, which is the thumb's
                             // perceived hit area: inside it a press captures without

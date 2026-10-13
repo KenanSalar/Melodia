@@ -61,7 +61,7 @@ impl Deck {
     where
         S: AudioSource + 'static,
     {
-        self.voice.append(build(self));
+        self.voice.stage(build(self));
     }
 
     /// Drop everything on this deck and disarm its ramp.
