@@ -175,6 +175,10 @@ export global Theme {
     // and a cap that disagree slice a row instead of dropping it whole.
     out property <length> meta-chip-h: 26px;
 
+    // A `Dropdown` trigger's height, here because the smart editor's value fields sit beside its
+    // pickers at the same height.
+    out property <length> dropdown-h: 32px;
+
     // Typography
     out property <length> font-size-sm: 12px;
     out property <length> font-size-row: 13px;
@@ -196,7 +200,7 @@ export global Theme {
     // text line nest it inside the title row, so raising this spends the slack a chip row needs.
     out property <length> hero-title-size: 22px;
 
-    // Easing is inlined at each `animate` site: Slint 1.16 can't expose an `easing` property
+    // Easing is inlined at each `animate` site: Slint can't expose an `easing` property
     // across the Rust boundary, and a global one warns at build time.
     out property <duration> dur-fast: 200ms;
     out property <duration> dur-med: 250ms;

@@ -5,9 +5,8 @@ use melodia_core::entities::track::TrackMeta;
 use melodia_ui::TrackMetaRow;
 use slint::SharedString;
 
-/// Format the `TrackMeta` projection into the pre-formatted display
-/// strings the `TrackMetaRow` chip row reads. `""` for any absent field —
-/// the view gates each chip on `field != ""`.
+/// Formats `t` into the strings the Now Playing chips are built from, `""` where a
+/// field is absent so [`visible_chip_texts`] leaves it out.
 pub(super) fn to_slint_track_meta(t: &TrackMeta) -> TrackMetaRow {
     TrackMetaRow {
         track_id: i32::try_from(t.id).unwrap_or(i32::MAX),
@@ -21,9 +20,7 @@ pub(super) fn to_slint_track_meta(t: &TrackMeta) -> TrackMetaRow {
     }
 }
 
-/// Walks `TrackMetaRow` fields in the same order the declarative chip block
-/// in `now-playing-view.slint` declared them and returns the non-empty
-/// texts.
+/// The non-empty fields of `m` as the Now Playing chips, in reading order.
 pub(super) fn visible_chip_texts(m: &TrackMetaRow) -> Vec<SharedString> {
     let fields =
         [&m.codec, &m.bitrate, &m.sample_rate, &m.bit_depth, &m.channels, &m.year, &m.genre];

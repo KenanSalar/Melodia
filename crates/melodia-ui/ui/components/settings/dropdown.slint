@@ -117,7 +117,7 @@ export component Dropdown inherits Rectangle {
 
     trigger := Rectangle {
         width: root.trigger-width;
-        height: 32px;
+        height: Theme.dropdown-h;
         border-radius: Theme.radius-md;
         background: touch.has-hover ? Theme.surface2 : Theme.surface1;
         // The resting fill rather than `transparent`, which reads the same: the renderer tucks a

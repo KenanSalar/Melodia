@@ -27,7 +27,6 @@ component SmartRuleRowView inherits Rectangle {
     in property <[string]> field-names;
     // Resolved by the host, so the four operator arrays live in one place.
     in property <[string]> ops;
-    in property <length> control-h;
     callback set-field(int /*field index*/);
     callback set-op(int /*op index*/);
     callback set-value(string);
@@ -75,7 +74,7 @@ component SmartRuleRowView inherits Rectangle {
         // keeps what's typed. Do NOT collapse the branches into one with a ternary
         // placeholder — that boundary *is* the remount key that resyncs the input.
         if root.rule.input-kind == 1: ControlledInput {
-            height: root.control-h;
+            height: Theme.dropdown-h;
             horizontal-stretch: 1;
             min-width: 90px;
             preferred-width: root.value-basis;
@@ -86,7 +85,7 @@ component SmartRuleRowView inherits Rectangle {
         // Digits only where the field is whole. A tempo can be fractional, and `decimal` would
         // take the locale's comma, which the Rust parse rejects.
         if root.rule.input-kind == 2: ControlledInput {
-            height: root.control-h;
+            height: Theme.dropdown-h;
             horizontal-stretch: 1;
             min-width: 90px;
             preferred-width: root.value-basis;
@@ -155,9 +154,6 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         @tr("highest rated"), @tr("random"),
     ];
 
-    // The `Dropdown` trigger's height, so a value field lines up with the pickers beside it.
-    property <length> control-h: 32px;
-
     // Raised by Add rule, lowered once the new row has been scrolled to.
     property <bool> reveal-end;
 
@@ -225,7 +221,6 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
                             rule: rule;
                             field-names: root.field-names;
                             ops: root.ops-for-kind(rule.field-kind);
-                            control-h: root.control-h;
                             set-field(idx) => {
                                 SmartEditor.set-rule-field(i, idx);
                                 root.criteria-changed();
@@ -278,7 +273,7 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
             RowLabel { text: @tr("Limit to"); }
             if SmartEditor.limit-enabled: ControlledInput {
                 width: 64px;
-                height: root.control-h;
+                height: Theme.dropdown-h;
                 input-type: InputType.number;
                 text: SmartEditor.limit-count-text;
                 placeholder: @tr("N");

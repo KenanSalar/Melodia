@@ -157,7 +157,7 @@ the version Cargo.lock pins.
 
 Slint
 -----
-Version 1.16.1, by the Slint Developers.
+Version 1.18.1, by the Slint Developers.
 https://github.com/slint-ui/slint
 
 Licensed under the GNU General Public License, Version 3 -- full text in

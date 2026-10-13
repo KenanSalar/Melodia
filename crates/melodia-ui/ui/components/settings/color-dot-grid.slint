@@ -26,9 +26,9 @@ component ColorDot inherits Rectangle {
     border-width: 4px;
     animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
 
-    // Slint 1.16 has no transform on a Rectangle, so a 1 px ring stands in for
-    // the hover lift. Its radius follows the dot's, or the squircle stops being
-    // one on hover.
+    // A 1 px ring stands in for a hover lift, Slint applying no `transform-scale`
+    // on a component's root. Its radius follows the dot's, or the squircle stops
+    // being one on hover.
     if touch.has-hover && !root.selected: Rectangle {
         x: -2px;
         y: -2px;
