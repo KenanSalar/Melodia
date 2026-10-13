@@ -314,9 +314,9 @@ export component NowPlayingView inherits Rectangle {
                             chip-label-color: Player.np-chrome-text;
                         }
 
-                        // The base under the whole cover → title → chips group. Wrapped in a
-                        // centring layout, a fixed-width child not centring in a wider column;
-                        // both dimensions come off the view root above.
+                        // The base under the whole cover → title → chips group, in a row of its
+                        // own because the drop above it is padding, which a bare cell can't
+                        // carry; both dimensions come off the view root above.
                         if Visualizer.enabled: HorizontalLayout {
                             alignment: center;
                             // Well below the column's shared spacing, so it reads as the base of

@@ -288,12 +288,12 @@ this file is what builds, looks right, and is wrong.
     of such cells. Otherwise the row stays on the plain path and keeps its wrappers
     (`queue-row-item.slint`, whose duration cell reports the hover heart's 26 px).
   - **An explicit `x`/`y` on a cell is a build error**, the solve owning every position.
-  - **A removed wrapper can cap the row.** Layout info ignores alignment, so a row's cross max is
-    the least of its cells', and a wrapper with non-stretch `alignment` reported an unbounded one
-    where its fixed child reports its own size. A row with an explicit cross size never notices; a
-    host with surplus to hand out finds the row has stopped growing. That is what the
-    `alignment: start` wrappers round fixed children are for, no-ops in position that keep the max
-    open.
+  - **A removed wrapper can cap the row.** A row's cross-axis info ignores `cross-axis-alignment`
+    and takes the least of its cells' maxes, and a wrapper whose own `alignment` wasn't `stretch`
+    reported an unbounded one where its fixed child reports its own size. A row with an explicit
+    cross size never notices; a host with surplus to hand out finds the row has stopped growing.
+    That is what the `alignment: start` wrappers round fixed children are for, no-ops in position
+    that keep the max open.
   A lone `Text` centres its own lines with `vertical-alignment` and stays on the plain path, and a
   sized child of a plain `Rectangle` is already centred (the default-geometry entry below), so
   neither wants a layout round it. Tell: a converted layout calls `solve_box_layout_ortho` in
@@ -325,16 +325,19 @@ this file is what builds, looks right, and is wrong.
   (`passes/lower_layout.rs`), and a host treats a child as height-for-width only when the child's
   component root has one (`llr/lower_layout_expression.rs`, `is_height_for_width_cell`). A
   `Rectangle`-rooted component whose height follows its width (`ChipGroup`, `SettingRow` with its
-  wrapped label, `SettingSlider`, …) is read at its *drawn* height instead, which
+  wrapped label, …) is read at its *drawn* height instead, which
   depends on its drawn width, which comes from the solve still in progress. Symptom: `Recursion
   detected` at `i-slint-core/properties.rs`, at run time only and on the first layout, through
   `layout_item_info_at_cross_width` and `*_layoutinfo_v_with_constraint` frames; the build and
   every test stay green. A flex Settings body of two card columns hit it on opening Interface and
   went back to the `GridLayout` above, which solves widths before heights. **What a flex may hold
-  is fixed-height or layout-rooted**, which every flex in the tree keeps to: chips, pills, swatches,
-  tiles, and the smart editor's rule rows, whose `Dropdown`s, value field and remove button each
-  bind a constant height. A root `height` bound to its own flex's `preferred-height` (`ChipGroup`,
-  `MetaChipStrip`) is read at the drawn width too, so neither may sit in a flex itself.
+  is fixed-height, layout-rooted or `Text`-rooted**, wrapped or not: a `Text` is a builtin
+  height-for-width cell, so the flex hands it the trial width as its `cross_axis_constraint`, which
+  `text_layout_info` (`items/text.rs`) reads ahead of the drawn `width`. Every flex in the tree
+  keeps to that: chips, pills, swatches, tiles, and the smart editor's rule rows, whose `Dropdown`s,
+  value field and remove button each bind a constant height beside a `Text`-rooted `RowLabel`. A
+  root `height` bound to its own flex's `preferred-height` (`ChipGroup`, `MetaChipStrip`) is read
+  at the drawn width too, so neither may sit in a flex itself.
 
 - **A `FlexboxLayout` reports no maximum height and stretches its lines into whatever it is
   given**, `cross-axis-line-alignment` defaulting to `stretch` (taffy's `align-content`). A host

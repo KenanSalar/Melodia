@@ -26,7 +26,7 @@ component NameRowView inherits HorizontalLayout {
 
     // Hidden on a lone row for `CreditRowView`'s reason: a field with no entries is a state the
     // editor should not be able to reach, the save reading it as "cleared" rather than as the
-    // removal it was. Unmounted rather than hidden — a hidden button still claims its spacing.
+    // removal it was. Unmounted rather than hidden, since a hidden button still claims its spacing.
     if !root.is-only: IconButton {
         icon: "close";
         icon-size: 16px;

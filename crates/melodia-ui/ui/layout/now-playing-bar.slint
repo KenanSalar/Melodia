@@ -57,8 +57,8 @@ export component NowPlayingBar inherits Rectangle {
     // No divider here: the content panel's own bottom border draws the seam, so it
     // follows the panel's rounded corners cleanly.
 
-    // Each section wraps in a centring `VerticalLayout`, so its content sits centred
-    // against the bar height whatever its intrinsic size.
+    // The transport, seek and trailing columns each wrap in a centring `VerticalLayout`, so their
+    // content sits centred against the bar height whatever its intrinsic size.
     HorizontalLayout {
         padding-left: clamp(root.bar-w * 0.02, 10px, 16px);
         padding-right: clamp(root.bar-w * 0.02, 10px, 16px);
