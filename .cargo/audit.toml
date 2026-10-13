@@ -21,9 +21,9 @@ ignore = [
     "RUSTSEC-2025-0141",
 
     # ttf-parser 0.25.1 unmaintained: via winit's Wayland decorations (sctk-adwaita → ab_glyph →
-    # owned_ttf_parser) and `melodia`'s own dev-dependency for `tests/translations.rs`, with no
-    # newer ttf-parser to update to. Parses the bundled faces and installed system fonts, never
-    # downloaded content.
+    # owned_ttf_parser), Linux only, with no newer ttf-parser to update to. Parses installed
+    # system fonts, never downloaded content. Leaves once Slint's winit backend asks for the
+    # skrifa-drawn decorations rather than ab_glyph's.
     # revisit: 2026-12-11
     "RUSTSEC-2026-0192",
 

@@ -174,7 +174,7 @@ const FONT_EXTENSIONS: [&str; 3] = ["ttc", "ttf", "otf"];
 /// under a new subdirectory is found with no edit here.
 ///
 /// Every container format the compiler takes, not just the one committed today: an `.otf`'s CFF
-/// outlines and a `.ttc`'s several faces reach the same `ttf-parser` a `.ttf` does, and nothing
+/// outlines and a `.ttc`'s several faces reach the same `skrifa` a `.ttf` does, and nothing
 /// past the `import` cares which arrived. A filter narrower than [`FONT_EXTENSIONS`] is a list
 /// wearing a walk's clothes.
 ///
