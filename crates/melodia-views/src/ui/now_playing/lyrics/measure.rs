@@ -47,7 +47,7 @@ pub(super) fn is_full_width(ch: char) -> bool {
 
 /// How wide a Hangul syllable that carries no final consonant is drawn: two ems, not one.
 ///
-/// **Slint 1.16 sets those as two loose jamo rather than one block**, so `안` comes out square and
+/// **Slint 1.18 sets those as two loose jamo rather than one block**, so `안` comes out square and
 /// `아` comes out twice as wide as it is written. Charging both a square em under-measured a
 /// Korean line by half, which is a wrap the panel never allowed room for: the words rode up over
 /// the row above and the tail of the line was dropped. Retires when a Slint release shapes Hangul
