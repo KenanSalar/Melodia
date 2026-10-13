@@ -10,17 +10,9 @@ import { IconButton } from "../icon-button.slint";
 import { ControlledInput } from "./controlled-input.slint";
 import { DialogScrollPane } from "./dialog-scroll-pane.slint";
 
-// A dialog-row label centred against its sibling controls. Wraps the
-// "fixed-width children don't centre in a wider layout" pitfall once, rather
-// than hand-rolling the centring layout at every label site.
-component RowLabel inherits VerticalLayout {
-    in property <string> text;
-    alignment: center;
-    Text {
-        text: root.text;
-        color: Theme.subtext0;
-        font-size: Theme.font-size-md;
-    }
+component RowLabel inherits Text {
+    color: Theme.subtext0;
+    font-size: Theme.font-size-md;
 }
 
 // One editable rule, a row of the rules card. Purely presentational: Rust owns the model and
@@ -204,6 +196,7 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         HorizontalLayout {
             spacing: Theme.pad-sm;
             alignment: start;
+            cross-axis-alignment: center;
             RowLabel { text: @tr("Match"); }
             Dropdown {
                 trigger-width: 90px;
@@ -277,12 +270,10 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         HorizontalLayout {
             spacing: Theme.pad-sm;
             alignment: start;
-            VerticalLayout {
-                alignment: center;
-                ToggleSwitch {
-                    checked <=> SmartEditor.limit-enabled;
-                    toggled(on) => { root.criteria-changed(); }
-                }
+            cross-axis-alignment: center;
+            ToggleSwitch {
+                checked <=> SmartEditor.limit-enabled;
+                toggled(on) => { root.criteria-changed(); }
             }
             RowLabel { text: @tr("Limit to"); }
             if SmartEditor.limit-enabled: ControlledInput {

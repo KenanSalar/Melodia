@@ -14,6 +14,7 @@ component NameRowView inherits HorizontalLayout {
     callback remove();
 
     spacing: Theme.pad-sm;
+    cross-axis-alignment: center;
 
     ControlledInput {
         horizontal-stretch: 1;
@@ -25,17 +26,14 @@ component NameRowView inherits HorizontalLayout {
 
     // Hidden on a lone row for `CreditRowView`'s reason: a field with no entries is a state the
     // editor should not be able to reach, the save reading it as "cleared" rather than as the
-    // removal it was. Unmounted rather than emptied — an empty wrapper still claims its spacing.
-    if !root.is-only: VerticalLayout {
-        alignment: center;
-        IconButton {
-            icon: "close";
-            icon-size: 16px;
-            diameter: 28px;
-            idle-bg: Theme.surface1;
-            hover-fg: Theme.danger;
-            clicked => { root.remove(); }
-        }
+    // removal it was. Unmounted rather than hidden — a hidden button still claims its spacing.
+    if !root.is-only: IconButton {
+        icon: "close";
+        icon-size: 16px;
+        diameter: 28px;
+        idle-bg: Theme.surface1;
+        hover-fg: Theme.danger;
+        clicked => { root.remove(); }
     }
 }
 

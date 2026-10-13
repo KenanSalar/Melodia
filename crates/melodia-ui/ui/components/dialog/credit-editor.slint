@@ -21,6 +21,7 @@ component CreditRowView inherits HorizontalLayout {
     callback remove();
 
     spacing: Theme.pad-sm;
+    cross-axis-alignment: center;
 
     ControlledInput {
         horizontal-stretch: 1;
@@ -30,36 +31,30 @@ component CreditRowView inherits HorizontalLayout {
         edited(t) => { root.set-name(t); }
     }
 
-    if !root.is-last: VerticalLayout {
-        alignment: center;
-        Dropdown {
-            trigger-width: 112px;
-            options: TagEditor.join-phrases;
-            // One-way plus `manual` keeps Rust the single source of truth: a row removed above
-            // this one shifts every index down, and a self-writing Dropdown would orphan the
-            // binding that re-reads them.
-            manual: true;
-            selected-index: root.credit.join-index;
-            selected(idx) => { root.set-join(idx); }
-        }
+    if !root.is-last: Dropdown {
+        trigger-width: 112px;
+        options: TagEditor.join-phrases;
+        // One-way plus `manual` keeps Rust the single source of truth: a row removed above
+        // this one shifts every index down, and a self-writing Dropdown would orphan the
+        // binding that re-reads them.
+        manual: true;
+        selected-index: root.credit.join-index;
+        selected(idx) => { root.set-join(idx); }
     }
     // Keeps the × flush-right on a list's last row, which draws no picker. **Not on a lone
     // credit**: there is no row above to line up with, and reserving the two slots anyway is what
     // left the field visibly short of the `LabeledInput`s either side of it. Both trailing
-    // elements go rather than emptying, an unmounted branch claiming no layout where an empty
-    // wrapper still claims its share of the spacing.
+    // elements go rather than hiding, an unmounted branch claiming no layout where a hidden one
+    // still claims its share of the spacing.
     if root.is-last && !root.is-only: Rectangle { width: 112px; }
 
-    if !root.is-only: VerticalLayout {
-        alignment: center;
-        IconButton {
-            icon: "close";
-            icon-size: 16px;
-            diameter: 28px;
-            idle-bg: Theme.surface1;
-            hover-fg: Theme.danger;
-            clicked => { root.remove(); }
-        }
+    if !root.is-only: IconButton {
+        icon: "close";
+        icon-size: 16px;
+        diameter: 28px;
+        idle-bg: Theme.surface1;
+        hover-fg: Theme.danger;
+        clicked => { root.remove(); }
     }
 }
 
@@ -101,6 +96,7 @@ export component CreditEditor inherits VerticalLayout {
     HorizontalLayout {
         spacing: Theme.pad-sm;
         alignment: start;
+        cross-axis-alignment: center;
 
         // `PillButton` rather than a stadium with a `"+"` in its label: a literal plus is a text
         // glyph at label weight and reads a size smaller than the control around it. This is the
@@ -114,14 +110,11 @@ export component CreditEditor inherits VerticalLayout {
             clicked => { TagEditor.add-credit(root.field); }
         }
 
-        if root.credits.length > 1: VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.preview;
-                color: Theme.subtext0;
-                font-size: Theme.font-size-sm;
-                overflow: elide;
-            }
+        if root.credits.length > 1: Text {
+            text: root.preview;
+            color: Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            overflow: elide;
         }
     }
 }

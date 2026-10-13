@@ -182,13 +182,11 @@ export component UpdateSection inherits Rectangle {
                 ProgressBar {
                     value: MelodiaUpdater.download-progress / 100;
                 }
-                HorizontalLayout {
-                    alignment: end;
-                    Text {
-                        text: MelodiaUpdater.download-progress + "%";
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                    }
+                Text {
+                    text: MelodiaUpdater.download-progress + "%";
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: right;
                 }
             }
         }

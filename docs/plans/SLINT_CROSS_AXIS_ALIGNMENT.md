@@ -2,7 +2,7 @@
 
 Working doc. Delete when every phase has shipped and passed by hand.
 
-Status: **phase 1 done, phase 2 next** · Owner: Kenan · Created: 2026-10-12
+Status: **phases 1 and 2 done, phase 3 next** · Owner: Kenan · Created: 2026-10-12
 
 > **Validated 2026-10-12** against the Slint 1.18.1 sources in the local cargo registry
 > (`i-slint-compiler-1.18.1/passes/{lower_layout,default_geometry}.rs`,
@@ -171,7 +171,16 @@ way:
 
 ## Phase 2: settings, dialogs, onboarding
 
-Status: **not started**
+Status: **done 2026-10-13, passed by hand.** Done as listed below. Onboarding needed no
+edit of its own: its icons are K2 and its control slot K5, and it takes the `ScanProgress` and
+`SectionButton` changes through their mounts. Cap checks:
+
+- `ScanProgress`'s two hosts size to content: the welcome card is bound to its layout's preferred
+  height, and the Library card sits in a column that hands out no surplus.
+- `DialogToggleRow`'s tag-editor mount sits in a details pane that always overflows its 360 px
+  body, so the pane has no spare height to share.
+- Two notes that argued an empty *wrapper* claiming spacing (`NameRowView`, `CreditRowView`) now
+  say a *hidden* control does, since the wrappers are gone.
 
 - **`components/settings/`:**
   - R1: `folder-row.slint`, `section-button.slint` (its `if`s move onto the glyph and image),
@@ -196,8 +205,11 @@ Status: **not started**
   - `overflow-menu-section.slint` `OverflowCheckCell`: R1.
   - `update-section.slint`: R3 (`horizontal-alignment: right`).
 
-- [ ] Static gates
-- [ ] Manual pass
+- [x] Static gates (2026-10-13). fmt, clippy and `cargo test` are clean, and no test needed
+      changing. In the generated tree, the smart editor's flex measures the `Text`-rooted
+      `RowLabel` at its trial width, so it is clear of the flex measuring panic. The mosaic
+      preview's stretched siblings all report an unbounded max, the candidate scroller included.
+- [x] Manual pass (2026-10-13). Every card, dialog and picker read as before.
 
 ## Phase 3: pages
 

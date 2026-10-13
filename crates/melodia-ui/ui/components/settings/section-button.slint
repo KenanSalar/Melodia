@@ -56,40 +56,32 @@ export component SectionButton inherits Rectangle {
         padding-right: Theme.pad-md;
         spacing: Theme.pad-xs;
         alignment: center;
+        cross-axis-alignment: center;
 
-        if root.icon != "": VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: 18px;
-                icon-color: root.ink;
-            }
+        if root.icon != "": MaterialIcon {
+            name: root.icon;
+            icon-size: 18px;
+            icon-color: root.ink;
         }
 
-        if root.icon == "" && root.leading-image.width > 0 && root.leading-image.height > 0: VerticalLayout {
-            alignment: center;
-            Image {
-                source: root.leading-image;
-                // Height matches the glyph branch; the width follows the source aspect,
-                // since `contain` inside a square box letterboxes a wide mark and paints
-                // it smaller than the icon beside it would be.
-                height: 18px;
-                width: 18px * root.leading-image.width / root.leading-image.height;
-                image-fit: contain;
-                // Free on a childless `Image`, which never gets a texture for it.
-                opacity: root.fade;
-            }
+        if root.icon == "" && root.leading-image.width > 0 && root.leading-image.height > 0: Image {
+            source: root.leading-image;
+            // Height matches the glyph branch; the width follows the source aspect,
+            // since `contain` inside a square box letterboxes a wide mark and paints
+            // it smaller than the icon beside it would be.
+            height: 18px;
+            width: 18px * root.leading-image.width / root.leading-image.height;
+            image-fit: contain;
+            // Free on a childless `Image`, which never gets a texture for it.
+            opacity: root.fade;
         }
 
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.label;
-                color: root.ink;
-                font-size: Theme.font-size-sm;
-                font-weight: 600;
-                vertical-alignment: center;
-            }
+        Text {
+            text: root.label;
+            color: root.ink;
+            font-size: Theme.font-size-sm;
+            font-weight: 600;
+            vertical-alignment: center;
         }
     }
 

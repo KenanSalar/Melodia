@@ -21,17 +21,15 @@ component DropdownOption inherits Rectangle {
         spacing: Theme.pad-sm;
         alignment: stretch;
 
-        VerticalLayout {
-            alignment: center;
+        // Elided, not clipped: a clipped label's layout minimum is the whole string, and
+        // Slint widens a popup to its content's minimum past the width bound on it.
+        Text {
             horizontal-stretch: 1;
-            // Elided, not clipped: a clipped label's layout minimum is the whole string, and
-            // Slint widens a popup to its content's minimum past the width bound on it.
-            Text {
-                text: root.label;
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                overflow: elide;
-            }
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            vertical-alignment: center;
+            overflow: elide;
         }
         VerticalLayout {
             alignment: center;
@@ -134,24 +132,19 @@ export component Dropdown inherits Rectangle {
             padding-left: Theme.pad-md;
             padding-right: Theme.pad-sm;
             spacing: Theme.pad-sm;
+            cross-axis-alignment: center;
 
-            VerticalLayout {
-                alignment: center;
+            Text {
                 horizontal-stretch: 1;
-                Text {
-                    text: root.current-label();
-                    color: root.has-selection() ? Theme.text : Theme.overlay2;
-                    font-size: Theme.font-size-md;
-                    overflow: elide;
-                }
+                text: root.current-label();
+                color: root.has-selection() ? Theme.text : Theme.overlay2;
+                font-size: Theme.font-size-md;
+                overflow: elide;
             }
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "arrow_drop_down";
-                    icon-size: 22px;
-                    icon-color: Theme.text;
-                }
+            MaterialIcon {
+                name: "arrow_drop_down";
+                icon-size: 22px;
+                icon-color: Theme.text;
             }
         }
 

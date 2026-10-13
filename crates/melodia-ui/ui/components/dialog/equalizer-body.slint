@@ -28,23 +28,17 @@ export component EqualizerBody inherits VerticalLayout {
         checked <=> Equalizer.enabled;
         toggled(v) => { Equalizer.set-enabled(v); }
 
-        VerticalLayout {
-            alignment: center;
-            Dropdown {
-                options: root.preset-names;
-                trigger-width: 150px;
-                selected-index <=> Equalizer.preset-idx;
-                selected(i) => { Equalizer.select-preset(i); }
-            }
+        Dropdown {
+            options: root.preset-names;
+            trigger-width: 150px;
+            selected-index <=> Equalizer.preset-idx;
+            selected(i) => { Equalizer.select-preset(i); }
         }
-        VerticalLayout {
-            alignment: center;
-            SectionButton {
-                label: @tr("Reset");
-                icon: "";
-                primary: false;
-                clicked => { Equalizer.reset(); }
-            }
+        SectionButton {
+            label: @tr("Reset");
+            icon: "";
+            primary: false;
+            clicked => { Equalizer.reset(); }
         }
     }
 

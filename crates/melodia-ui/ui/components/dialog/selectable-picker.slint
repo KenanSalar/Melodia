@@ -73,24 +73,21 @@ export component SelectableRow inherits Rectangle {
         padding-right: Theme.pad-md;
         spacing: Theme.pad-md;
         alignment: start;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            ArtworkImage {
-                tile-size: 44px;
-                tile-radius: Theme.radius-md;
-                artwork-path: root.artwork-path;
-                cover: root.cover;
-                fallback-icon: root.fallback-icon;
-                // The grid cards' hover zoom, skipped while disabled.
-                cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
-                fade: root.fade;
-            }
+        ArtworkImage {
+            tile-size: 44px;
+            tile-radius: Theme.radius-md;
+            artwork-path: root.artwork-path;
+            cover: root.cover;
+            fallback-icon: root.fallback-icon;
+            // The grid cards' hover zoom, skipped while disabled.
+            cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
+            fade: root.fade;
         }
 
         VerticalLayout {
             horizontal-stretch: 1;
-            alignment: center;
             spacing: 2px;
             Text {
                 text: root.name;
@@ -108,12 +105,9 @@ export component SelectableRow inherits Rectangle {
             }
         }
 
-        VerticalLayout {
-            alignment: center;
-            SelectIndicator {
-                checked: root.selected;
-                fade: root.fade;
-            }
+        SelectIndicator {
+            checked: root.selected;
+            fade: root.fade;
         }
     }
 
@@ -141,48 +135,40 @@ export component SelectAllHeader inherits Rectangle {
         padding-right: Theme.pad-md;
         spacing: Theme.pad-md;
         alignment: start;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            SelectIndicator {
-                checked: root.checked;
-                indeterminate: root.indeterminate;
-            }
+        SelectIndicator {
+            checked: root.checked;
+            indeterminate: root.indeterminate;
         }
-        VerticalLayout {
+        Text {
             horizontal-stretch: 1;
-            alignment: center;
-            Text {
-                text: @tr("Select all");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 600;
-            }
+            text: @tr("Select all");
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 600;
         }
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                height: 26px;
-                width: chip-l.preferred-width;
-                border-radius: self.height / 2;
-                background: root.selected-count > 0
-                    ? Theme.accent.with-alpha(0.18)
-                    : Theme.surface1;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        Rectangle {
+            height: 26px;
+            width: chip-l.preferred-width;
+            border-radius: self.height / 2;
+            background: root.selected-count > 0
+                ? Theme.accent.with-alpha(0.18)
+                : Theme.surface1;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
-                chip-l := HorizontalLayout {
-                    padding-left: 12px;
-                    padding-right: 12px;
-                    alignment: center;
-                    Text {
-                        text: @tr("{} selected", root.selected-count);
-                        color: root.selected-count > 0
-                            ? Theme.accent
-                            : Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        font-weight: 600;
-                        vertical-alignment: center;
-                    }
+            chip-l := HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                alignment: center;
+                Text {
+                    text: @tr("{} selected", root.selected-count);
+                    color: root.selected-count > 0
+                        ? Theme.accent
+                        : Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    font-weight: 600;
+                    vertical-alignment: center;
                 }
             }
         }

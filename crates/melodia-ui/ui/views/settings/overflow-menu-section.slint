@@ -24,31 +24,23 @@ component OverflowCheckCell inherits Rectangle {
         padding: Theme.pad-sm;
         spacing: Theme.pad-sm;
         alignment: stretch;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            Checkbox {
-                checked: root.checked;
-                unchecked-border: Theme.text-muted;
-            }
+        Checkbox {
+            checked: root.checked;
+            unchecked-border: Theme.text-muted;
         }
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: 20px;
-                icon-color: Theme.text;
-            }
+        MaterialIcon {
+            name: root.icon;
+            icon-size: 20px;
+            icon-color: Theme.text;
         }
-        VerticalLayout {
-            alignment: center;
+        // Every mount below passes a translated literal, so no `@tr()` here.
+        Text {
             horizontal-stretch: 1;
-            // Every mount below passes a translated literal, so no `@tr()` here.
-            Text {
-                text: root.label;
-                color: Theme.text;
-                font-size: Theme.font-size-sm;
-            }
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.font-size-sm;
         }
     }
 

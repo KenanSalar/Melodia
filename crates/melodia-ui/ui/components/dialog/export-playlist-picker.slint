@@ -31,22 +31,17 @@ export component ExportPlaylistPicker inherits Rectangle {
             background: Theme.surface0;
             VerticalLayout {
                 alignment: center;
+                cross-axis-alignment: center;
                 spacing: Theme.pad-xs;
-                HorizontalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: "playlist_add";
-                        icon-size: 28px;
-                        icon-color: Theme.overlay0;
-                    }
+                MaterialIcon {
+                    name: "playlist_add";
+                    icon-size: 28px;
+                    icon-color: Theme.overlay0;
                 }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("No playlists to export");
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                    }
+                Text {
+                    text: @tr("No playlists to export");
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
                 }
             }
         }

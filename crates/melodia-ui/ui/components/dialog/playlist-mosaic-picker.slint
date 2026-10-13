@@ -35,85 +35,76 @@ export component PlaylistMosaicPicker inherits Rectangle {
     VerticalLayout {
         spacing: Theme.pad-md;
 
-        // Centred preview.
-        HorizontalLayout {
-            alignment: center;
+        // The fill is square and the border an `EdgeOutline`, so the clip is the only
+        // antialiased pass on the curve a cover fills to.
+        preview := Rectangle {
+            cross-axis-self-alignment: center;
             vertical-stretch: 0;
+            width: 220px;
+            height: 220px;
+            border-radius: Theme.radius-lg;
+            clip: true;
 
-            // The fill is square and the border an `EdgeOutline`, so the clip is the only
-            // antialiased pass on the curve a cover fills to.
-            preview := Rectangle {
-                width: 220px;
-                height: 220px;
-                border-radius: Theme.radius-lg;
-                clip: true;
+            Rectangle {
+                x: 0;
+                y: 0;
+                width: 100%;
+                height: 100%;
+                background: Theme.surface1;
+            }
 
-                Rectangle {
-                    x: 0;
-                    y: 0;
-                    width: 100%;
-                    height: 100%;
-                    background: Theme.surface1;
-                }
+            // The saved cover, shown until the first pick or Clear flips
+            // `mosaic-touched` and unmounts this branch.
+            if Dialog.mosaic-selection.length == 0
+                    && !Dialog.mosaic-touched
+                    && Dialog.current-artwork.width > 0: Image {
+                width: 100%;
+                height: 100%;
+                source: Dialog.current-artwork;
+                image-fit: ImageFit.cover;
+            }
 
-                // The saved cover, shown until the first pick or Clear flips
-                // `mosaic-touched` and unmounts this branch.
-                if Dialog.mosaic-selection.length == 0
-                        && !Dialog.mosaic-touched
-                        && Dialog.current-artwork.width > 0: Image {
-                    width: 100%;
-                    height: 100%;
-                    source: Dialog.current-artwork;
-                    image-fit: ImageFit.cover;
-                }
-
-                // Empty state — nothing picked, and either cleared or never saved.
-                if Dialog.mosaic-selection.length == 0
-                        && (Dialog.mosaic-touched || Dialog.current-artwork.width == 0): Rectangle {
-                    background: @linear-gradient(180deg,
-                        Theme.accent.with-alpha(0.10) 0%,
-                        Theme.accent.with-alpha(0.04) 100%);
-                    VerticalLayout {
-                        alignment: center;
-                        spacing: Theme.pad-sm;
-                        HorizontalLayout {
-                            alignment: center;
-                            ArtworkImage {
-                                tile-size: 130px;
-                                tile-radius: Theme.radius-md;
-                            }
-                        }
-                        HorizontalLayout {
-                            alignment: center;
-                            Text {
-                                text: @tr("No artwork");
-                                color: Theme.subtext0;
-                                font-size: Theme.font-size-sm;
-                                font-weight: 600;
-                            }
-                        }
+            // Empty state — nothing picked, and either cleared or never saved.
+            if Dialog.mosaic-selection.length == 0
+                    && (Dialog.mosaic-touched || Dialog.current-artwork.width == 0): Rectangle {
+                background: @linear-gradient(180deg,
+                    Theme.accent.with-alpha(0.10) 0%,
+                    Theme.accent.with-alpha(0.04) 100%);
+                VerticalLayout {
+                    alignment: center;
+                    cross-axis-alignment: center;
+                    spacing: Theme.pad-sm;
+                    ArtworkImage {
+                        tile-size: 130px;
+                        tile-radius: Theme.radius-md;
+                    }
+                    Text {
+                        text: @tr("No artwork");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-sm;
+                        font-weight: 600;
                     }
                 }
+            }
 
-                // The empty cases above stay local: `CoverMosaic` is empty-state-agnostic,
-                // drawing only tiles so a caller can own what "none" looks like.
-                if Dialog.mosaic-selection.length >= 1: CoverMosaic {
-                    width: 100%;
-                    height: 100%;
-                    artwork-paths: Dialog.mosaic-selection;
-                    gutter-size: root.mosaic-gap;
-                    request-cover(p) => {
-                        return Playlists.request-cover(p, Playlists.covers-generation);
-                    }
+            // The empty cases above stay local: `CoverMosaic` is empty-state-agnostic,
+            // drawing only tiles so a caller can own what "none" looks like.
+            if Dialog.mosaic-selection.length >= 1: CoverMosaic {
+                width: 100%;
+                height: 100%;
+                artwork-paths: Dialog.mosaic-selection;
+                gutter-size: root.mosaic-gap;
+                request-cover(p) => {
+                    return Playlists.request-cover(p, Playlists.covers-generation);
                 }
+            }
 
-                EdgeOutline {
-                    width: 100%;
-                    height: 100%;
-                    radius: Theme.radius-lg;
-                    stroke-width: 1px;
-                    stroke-color: Theme.border;
-                }
+            EdgeOutline {
+                width: 100%;
+                height: 100%;
+                radius: Theme.radius-lg;
+                stroke-width: 1px;
+                stroke-color: Theme.border;
             }
         }
 
@@ -126,30 +117,25 @@ export component PlaylistMosaicPicker inherits Rectangle {
             HorizontalLayout {
                 spacing: Theme.pad-sm;
                 alignment: start;
+                cross-axis-alignment: center;
 
-                VerticalLayout {
-                    alignment: center;
-                    HorizontalLayout {
-                        spacing: 6px;
-                        for i in [0, 1, 2, 3]: Rectangle {
-                            width: 8px;
-                            height: 8px;
-                            border-radius: 4px;
-                            background: i < Dialog.mosaic-selection.length
-                                ? Theme.accent
-                                : Theme.surface2;
-                            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-                        }
+                HorizontalLayout {
+                    spacing: 6px;
+                    for i in [0, 1, 2, 3]: Rectangle {
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: i < Dialog.mosaic-selection.length
+                            ? Theme.accent
+                            : Theme.surface2;
+                        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
                     }
                 }
 
-                VerticalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("{} / 4 selected", Dialog.mosaic-selection.length);
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                    }
+                Text {
+                    text: @tr("{} / 4 selected", Dialog.mosaic-selection.length);
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
                 }
             }
 
@@ -173,15 +159,12 @@ export component PlaylistMosaicPicker inherits Rectangle {
             height: 80px;
             VerticalLayout {
                 alignment: center;
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("Add tracks to this playlist to pick artwork.");
-                        color: Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        horizontal-alignment: center;
-                        wrap: word-wrap;
-                    }
+                Text {
+                    text: @tr("Add tracks to this playlist to pick artwork.");
+                    color: Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
                 }
             }
         }

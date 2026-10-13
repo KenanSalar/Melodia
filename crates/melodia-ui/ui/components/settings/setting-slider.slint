@@ -15,25 +15,20 @@ export component SettingSlider inherits HorizontalLayout {
 
     spacing: Theme.pad-md;
     alignment: stretch;
+    cross-axis-alignment: center;
 
-    VerticalLayout {
-        alignment: center;
+    SliderTrack {
         horizontal-stretch: 1;
-        SliderTrack {
-            value: root.value;
-            seam-mask-color: SettingsPage.card-fill;
-            changed(v) => { root.changed(v); }
-            committed(v) => { root.committed(v); }
-        }
+        value: root.value;
+        seam-mask-color: SettingsPage.card-fill;
+        changed(v) => { root.changed(v); }
+        committed(v) => { root.committed(v); }
     }
-    VerticalLayout {
-        alignment: center;
-        Text {
-            text: root.readout;
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-            min-width: root.readout-width;
-            horizontal-alignment: right;
-        }
+    Text {
+        text: root.readout;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        min-width: root.readout-width;
+        horizontal-alignment: right;
     }
 }

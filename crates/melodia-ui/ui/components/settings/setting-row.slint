@@ -33,14 +33,12 @@ export component SettingRow inherits Rectangle {
         alignment: stretch;
 
         // Pinned, so the labels start at the same x however narrow a glyph is.
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: SettingsPage.row-icon-w;
-                icon-color: Theme.text;
-                fade: 1.0 - root.dim;
-            }
+        MaterialIcon {
+            cross-axis-self-alignment: center;
+            name: root.icon;
+            icon-size: SettingsPage.row-icon-w;
+            icon-color: Theme.text;
+            fade: 1.0 - root.dim;
         }
 
         VerticalLayout {

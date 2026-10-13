@@ -22,35 +22,27 @@ export component PreampSliderRow inherits HorizontalLayout {
 
     spacing: Theme.pad-md;
     alignment: stretch;
+    cross-axis-alignment: center;
 
-    VerticalLayout {
-        alignment: center;
-        Text {
-            text: @tr("Preamp");
-            color: Theme.text;
-            font-size: Theme.font-size-md;
-        }
+    Text {
+        text: @tr("Preamp");
+        color: Theme.text;
+        font-size: Theme.font-size-md;
     }
-    VerticalLayout {
-        alignment: center;
+    SliderTrack {
         horizontal-stretch: 1;
-        SliderTrack {
-            value: root.preamp-to-frac(root.preamp);
-            is-disabled: !root.enabled;
-            seam-mask-color: Theme.surface0;
-            changed(v) => { root.changed(root.frac-to-preamp(v)); }
-            committed(v) => { root.committed(root.frac-to-preamp(v)); }
-        }
+        value: root.preamp-to-frac(root.preamp);
+        is-disabled: !root.enabled;
+        seam-mask-color: Theme.surface0;
+        changed(v) => { root.changed(root.frac-to-preamp(v)); }
+        committed(v) => { root.committed(root.frac-to-preamp(v)); }
     }
-    VerticalLayout {
-        alignment: center;
-        Text {
-            // A unit symbol, so untranslated.
-            text: (root.preamp > 0 ? "+" : "") + round(root.preamp) + " dB";
-            color: root.enabled ? Theme.subtext0 : Theme.overlay0;
-            font-size: Theme.font-size-sm;
-            min-width: 48px;
-            horizontal-alignment: right;
-        }
+    Text {
+        // A unit symbol, so untranslated.
+        text: (root.preamp > 0 ? "+" : "") + round(root.preamp) + " dB";
+        color: root.enabled ? Theme.subtext0 : Theme.overlay0;
+        font-size: Theme.font-size-sm;
+        min-width: 48px;
+        horizontal-alignment: right;
     }
 }

@@ -11,10 +11,10 @@ import { SectionButton } from "section-button.slint";
 // under the pointer the moment it is pressed.
 export component ScanProgress inherits HorizontalLayout {
     spacing: Theme.pad-md;
+    cross-axis-alignment: center;
 
     VerticalLayout {
         horizontal-stretch: 1;
-        alignment: center;
         spacing: Theme.pad-sm;
 
         ProgressBar {
@@ -42,16 +42,13 @@ export component ScanProgress inherits HorizontalLayout {
         }
     }
 
-    VerticalLayout {
-        alignment: center;
-        SectionButton {
-            label: @tr("Cancel");
-            icon: "close";
-            primary: false;
-            button-enabled: LibrarySettings.scan-cancellable;
-            clicked => {
-                LibrarySettings.cancel-scan();
-            }
+    SectionButton {
+        label: @tr("Cancel");
+        icon: "close";
+        primary: false;
+        button-enabled: LibrarySettings.scan-cancellable;
+        clicked => {
+            LibrarySettings.cancel-scan();
         }
     }
 }
