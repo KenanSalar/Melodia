@@ -311,6 +311,7 @@ export component LibraryTabBand inherits Rectangle {
                     idle-bg: HeroBackdrop.disc-fill;
                     hover-bg: HeroBackdrop.disc-hover;
                     idle-fg: HeroBackdrop.chrome;
+                    on-backdrop: true;
                     // **A bias off the morph, not the morph itself** — this is the only piece of
                     // the hero whose *size* also rides `hero-t`, so a plain alpha puts its
                     // presence at `hero-t` squared and the entry reads as a pop at the end.

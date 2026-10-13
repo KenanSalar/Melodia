@@ -19,6 +19,8 @@ export component ToggleSwitch inherits Rectangle {
     in property <brush> track-off: Theme.surface1;
     in property <brush> thumb-on: Theme.accent-text;
     in property <brush> thumb-off: Theme.text;
+    // `IconButton`'s, set by that host.
+    in property <bool> on-backdrop: false;
 
     // For a host mounting its own `Tooltip`, a switch having no label to carry the name.
     out property <bool> has-hover: touch.has-hover;
@@ -36,7 +38,7 @@ export component ToggleSwitch inherits Rectangle {
     track := Rectangle {
         background: root.checked ? root.track-on : root.track-off;
         border-radius: root.height / 2;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
     }
 
     property <float> a: root.checked ? 1.0 : 0.0;
@@ -49,7 +51,7 @@ export component ToggleSwitch inherits Rectangle {
         height: root.height - 2 * root.thumb-inset;
         border-radius: self.width / 2;
         background: root.checked ? root.thumb-on : root.thumb-off;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
     }
 
     touch := TouchArea {

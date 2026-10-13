@@ -108,9 +108,11 @@ this file is what builds, looks right, and is wrong.
   hosts hand over, and every one of those defaults to a `Theme` token. A float, an `np-*` or
   `HeroBackdrop` tier Rust writes once a solve, and a `states` transition, whose timeline survives
   the dirt, need no gate. Where one binding switches between the two kinds, gate on the switch:
-  `library-tab-band.slint`'s mirrors take `root.detail-open || !Theme.recoloring` and the
-  miniplayer's `root.on-backdrop || !Theme.recoloring`, so a hero or backdrop tier keeps easing
-  through a fade. Missing, it shows only during a fade, as one control settling after the rest.
+  `library-tab-band.slint`'s mirrors take `root.detail-open || !Theme.recoloring`, and the
+  miniplayer's mirrors and those four leaves `root.on-backdrop || !Theme.recoloring`, so a hero or
+  backdrop tier keeps easing through a fade. A leaf can't see which kind it was handed, so a host
+  passing it a tier sets its `on-backdrop`. Missing, either gate shows only during a fade: an
+  ungated control settles after the rest, and a tier-fed leaf left unset jumps ahead of it.
 
 - **Drag handles inside resized element need absolute coords.** Snapshot
   `start_abs = self.absolute-position.x + self.pressed-x` on `down`, then

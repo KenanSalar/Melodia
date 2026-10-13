@@ -121,6 +121,7 @@ export component NowPlayingView inherits Rectangle {
                 // which the rest of the row is, says why the group shares one colour.
                 filled-color: Player.np-accent-bright;
                 empty-color: Player.np-accent-dim;
+                on-backdrop: true;
                 // The glyph family to the right answers the pointer; a star row that did not
                 // would be the one dead control in the header.
                 hover-preview: true;
@@ -426,6 +427,7 @@ export component NowPlayingView inherits Rectangle {
                                 action-idle-fg: Player.np-accent-dim;
                                 action-hover-fg: Player.np-accent-bright;
                                 action-hover-bg: Player.np-accent-pill;
+                                action-on-backdrop: true;
                                 open-homepage(url) => { Radio.open-homepage(url); }
                             }
 

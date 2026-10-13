@@ -43,6 +43,8 @@ export component OverlayScrollbar inherits Rectangle {
     // for its reason: every value above is eased here, so a host easing one too restarts that
     // curve every frame, and one repainting in step with a longer fade hands over this instead.
     in property <duration> recolor-duration: Theme.dur-fast;
+    // `IconButton`'s, for a host handing over a tier Rust writes once.
+    in property <bool> on-backdrop: false;
 
     out property <bool> dragging: touch.pressed;
 
@@ -77,7 +79,7 @@ export component OverlayScrollbar inherits Rectangle {
         opacity: root.active ? root.track-opacity-active : root.track-opacity;
         // The colour eases with the thumb's rather than snapping under it, so a host repainting
         // the bar sees both halves cross together.
-        animate background, opacity { duration: root.recolor-duration; easing: ease-in-out; enabled: !Theme.recoloring; }
+        animate background, opacity { duration: root.recolor-duration; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
     }
 
     // Only the colour transitions. **The position is deliberately un-animated**: derived
@@ -89,7 +91,7 @@ export component OverlayScrollbar inherits Rectangle {
         height: root.horizontal ? root.bar-thickness : root.thumb-len;
         border-radius: root.bar-radius;
         background: root.active ? root.thumb-active-color : root.thumb-color;
-        animate background { duration: root.recolor-duration; easing: ease-in-out; enabled: !Theme.recoloring; }
+        animate background { duration: root.recolor-duration; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
     }
 
     touch := TouchArea {

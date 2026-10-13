@@ -34,6 +34,7 @@ component DetailRow inherits HorizontalLayout {
     in property <brush> action-idle-fg;
     in property <brush> action-hover-fg;
     in property <brush> action-hover-bg;
+    in property <bool> action-on-backdrop;
     callback action-clicked();
 
     spacing: Theme.pad-md;
@@ -71,6 +72,7 @@ component DetailRow inherits HorizontalLayout {
         idle-fg: root.action-idle-fg;
         hover-fg: root.action-hover-fg;
         hover-bg: root.action-hover-bg;
+        on-backdrop: root.action-on-backdrop;
         tooltip-text: root.action-tooltip;
         tooltip-side: TooltipSide.left;
         clicked => { root.action-clicked(); }
@@ -96,10 +98,11 @@ export component StationFacts inherits VerticalLayout {
     in property <brush> label-color: Theme.subtext0;
     in property <brush> value-color: Theme.text;
     // `IconButton`'s own defaults, which the station page takes; Now Playing hands over the tier
-    // it solves against the artwork.
+    // it solves against the artwork, and sets `action-on-backdrop` for `IconButton`'s reason.
     in property <brush> action-idle-fg: Theme.text;
     in property <brush> action-hover-fg: root.action-idle-fg;
     in property <brush> action-hover-bg: Theme.surface0;
+    in property <bool> action-on-backdrop: false;
 
     callback open-homepage(string);
 
@@ -120,6 +123,7 @@ export component StationFacts inherits VerticalLayout {
         action-idle-fg: root.action-idle-fg;
         action-hover-fg: root.action-hover-fg;
         action-hover-bg: root.action-hover-bg;
+        action-on-backdrop: root.action-on-backdrop;
     }
     if root.homepage != "": DetailRow {
         label: @tr("Website");
@@ -133,6 +137,7 @@ export component StationFacts inherits VerticalLayout {
         action-idle-fg: root.action-idle-fg;
         action-hover-fg: root.action-hover-fg;
         action-hover-bg: root.action-hover-bg;
+        action-on-backdrop: root.action-on-backdrop;
     }
     if root.codec != "": DetailRow {
         label: @tr("Format");
