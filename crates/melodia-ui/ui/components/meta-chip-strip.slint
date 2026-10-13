@@ -34,9 +34,8 @@ export component MetaChipStrip inherits Rectangle {
     // A scissor rather than a layer, the clip having no radius.
     clip: root.max-rows > 0;
 
-    // **Never inside an `if`.** A repeated flex reports its height at its own preferred width, a
-    // near-square block a few chips across, so the strip reserved lines it never drew. As a
-    // direct child it is measured at the width it is drawn.
+    // **Never inside an `if`**, where a flex reports its height at its own near-square preferred
+    // width rather than the width it is drawn and the strip reserves lines it never draws.
     rows := FlexboxLayout {
         visible: root.show-rows;
         spacing-horizontal: Theme.pad-sm;

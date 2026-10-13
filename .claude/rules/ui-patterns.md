@@ -542,13 +542,11 @@ three components that answer it, and each argues its geometry at its own file.
     rest away whole, the chips being one height. **Two is measured rather than picked** and argued
     at `HeroChipStrip`'s binding. If a wrapped row ever clips wrongly, the fix is a per-hero cap,
     **not** a taller band — the band clips, so the failure is bounded.
-  - **The flex is the root's direct child, and the root's `height` is read off it.** Inside an
-    `if` it is measured at its near-square preferred width and reserves lines the strip never
-    draws (`slint-pitfalls.md`). `show-rows` hides it through `visible` rather than unmounting it,
-    so Now Playing keeps the outgoing track's lines while the next one's metadata loads and the
-    centred column holds still across a track change. The height is bound so a host short of
-    height can't squeeze a row over what follows, which also keeps the strip out of any
-    `FlexboxLayout` (`slint-pitfalls.md`'s flex measuring entry).
+  - **The flex is the root's direct child and the root's `height` is read off it**, never through
+    an `if` (`slint-pitfalls.md`'s entry on a flex inside an `if`), so `show-rows` hides it rather
+    than unmounting it. The height is bound so a host short of height can't squeeze a row over
+    what follows, which also keeps the strip out of any `FlexboxLayout` (`slint-pitfalls.md`'s
+    flex measuring entry).
   - **`Theme.hero-title-size` is the one number all six titles read.** Pinned over **`HERO_VIEWS`**
     (two bands, six banners), with **`MOSAIC_HOSTS`**/**`BAND_HOSTS`** holding each page to mounting
     its band and growing no title, chip strip or artwork size of its own — the detail bodies being

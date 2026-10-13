@@ -302,11 +302,9 @@ export component NowPlayingView inherits Rectangle {
                             }
                         }
 
-                        // **The strip holds the outgoing track's lines until the new metadata
-                        // lands**, so the centred group doesn't reflow across a track change, and
-                        // reserves a row for a track with no metadata. Contents are gated on the
-                        // track id, so a fetch landing after a rapid track change is never shown
-                        // against the wrong track.
+                        // Contents are gated on the track id, so a fetch landing after a rapid
+                        // track change is never shown against the wrong track; the strip keeps the
+                        // hidden lines reserved until it lands (its `show-rows`).
                         if Player.vm.has_track: MetaChipStrip {
                             chips: Player.chips;
                             show-rows: Player.track-meta.track_id == Player.vm.track.id;

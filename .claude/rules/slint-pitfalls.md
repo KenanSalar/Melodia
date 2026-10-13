@@ -368,19 +368,19 @@ this file is what builds, looks right, and is wrong.
   only its preferred width (`alignment: start`, a zero-stretch cell) wraps it where a line would
   fit. Every strip in the tree fills a column; one moved into a row beside a control won't.
 
-- **A `FlexboxLayout` inside an `if` reports its height at that near-square width, not at the
-  width it is drawn.** The repeated component's `layout_info(Vertical)` calls its
-  `fn_layoutinfo_v_with_constraint` with its own `layoutinfo_h.preferred`, so a root reading its
-  height off a wrapper round the `if` reserves the lines a block a few chips across needs while
-  the chips draw on one. A flex that is a direct child is measured at its own `width`. It bit
-  `MetaChipStrip` twice over: Now Playing carried a band of blank lines under its chips, and the
-  strip unmounted its flex while a track change's metadata loaded, dropping to one row and
-  jumping back, so the centred column moved down and up on every song. Cure: the flex as a direct
-  child, and where it has to go away, `visible` rather than an `if`, which also keeps its lines
-  reserved while hidden. Tell: in `app-window.rs` the repeated flex's `layout_info` hands
-  `fn_layoutinfo_v_with_constraint` its own `…_layoutinfo_h ()` … `.preferred`, where a direct
-  child's `flexbox_layout_info_cross_axis` ends on its root's `…_width ()`. Pinned by
-  `ui::hero_chips::tests::the_strip_measures_its_rows_at_the_width_it_draws`.
+- **A `FlexboxLayout` inside an `if` reports its height at its near-square preferred width, not
+  at the width it is drawn.** The repeated component's `layout_info(Vertical)` hands its
+  `fn_layoutinfo_v_with_constraint` its own `layoutinfo_h.preferred`. A box layout's solve asks
+  `layout_item_info_at_cross_width` instead and places the flex right, which is why Radio's
+  suggestion row draws correctly; what goes wrong is anything reading the layout's *reported*
+  height, so a root binding its height to a wrapper round the `if` reserves the lines a block a
+  few chips across needs. It gave Now Playing a band of blank lines under its chips. Cure: the
+  flex as a direct child, measured at its root's width, hidden through `visible` where its lines
+  should stay reserved (`MetaChipStrip`'s `show-rows`). Tell, in `app-window.rs`: a repeated
+  flex's `layout_info` hands `fn_layoutinfo_v_with_constraint` its own `…_layoutinfo_h ()` …
+  `.preferred`, where a direct child's `flexbox_layout_info_cross_axis` ends on its root's
+  `…_width ()`; the first is a bug only where something reads that layout's reported height.
+  Pinned by `ui::hero_chips::tests::the_strip_measures_its_rows_at_the_width_it_draws`.
 
 - **`GridLayout` honours a runtime expression for `row`/`col` on a plain child, and forces `Auto`
   on a repeated one.** `convert_row_col_expr` lowers `RowColExpr::Named` to a `PropertyReference`

@@ -795,9 +795,9 @@ fn the_strip_measures_its_rows_at_the_width_it_draws() {
     let code = code_tokens(STRIP);
 
     assert!(
-        code.contains("rows := FlexboxLayout {") && !code.contains("if root.show-rows"),
-        "MetaChipStrip's flex must be a direct child: inside an `if` it is measured at its \
-         near-square preferred width rather than the width it is drawn"
+        !code.contains(": FlexboxLayout"),
+        "MetaChipStrip's flex must not be mounted through an `if` or `for`: repeated, it is \
+         measured at its near-square preferred width rather than the width it is drawn"
     );
     assert!(
         binding_value(&code, "property <length> rows-h:").contains("rows.preferred-height"),
