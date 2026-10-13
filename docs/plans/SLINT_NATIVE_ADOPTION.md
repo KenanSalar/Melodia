@@ -52,8 +52,9 @@ once the miniplayer backdrop's fade-in was fixed on top of the bump. Phase 4 lan
 and passed its manual pass on a Wayland touchpad, and the composite views keep their own scrolling
 (the decision after it). Phase 3 is under way: items 1–4 landed and passed by hand
 (`FlexboxLayout` as `5b3aa4ac`, `PopupWindow.is-open` as `22c4a775` with `2c0ea226` and
-`a49c7309` on top, then `animate { enabled }`, then `cross-axis-alignment` from `309f8b57` on),
-and items 5–7 remain.
+`a49c7309` on top, then `animate { enabled }`, then `cross-axis-alignment` from `309f8b57` on).
+Item 5 was dropped on 2026-10-13 and moved to #127, since `WindowMoveArea` leaves hover stuck after
+a move until upstream fixes it, and items 6 and 7 remain.
 
 A trial on 2026-09-16 (throwaway worktree, since removed) ran
 `cargo clippy --all-targets --workspace` on Linux against 1.18.0, and the diagnostics listed in
@@ -208,7 +209,8 @@ One change per section, in this order, each on a tree already on 1.18:
 2. 🟢 `PopupWindow.is-open` → slim the `PopupHighlight` plumbing. **Done 2026-10-12.**
 3. 🟢 `animate { enabled }` → replace duration-zero gating. **Done 2026-10-12.**
 4. 🟢 `cross-axis-alignment` → drop centering wrapper layouts. **Done 2026-10-13.**
-5. 🟢 `WindowMoveArea` → retire the drag-region press intercept
+5. ~~🟢 `WindowMoveArea` → retire the drag-region press intercept~~ **Dropped 2026-10-13**: it
+   waits on an upstream fix, tracked in #127.
 6. 🟢 Two-way model row bindings → slim the model-patch walkers (prototype first)
 7. 🟡 Hangul measuring workaround → retire if 1.18's text stack composes the syllables
 
@@ -379,44 +381,6 @@ Done 2026-10-13, every step passed by hand.
   queue row, where the cross-axis solve would clamp the duration cell to the hover heart.
   `slint-pitfalls.md`'s cross-axis entry carries the mechanism.
 
-## 🟢 `WindowMoveArea` → retire the drag-region press intercept
-
-- **Today:** dragging the custom titlebar and the miniplayer goes through the winit layer,
-  because `drag_window()` called from a Slint `pointer-event(down)` leaks the input grab. The
-  titlebar and miniplayer `TouchArea`s report hover as a `DragRegion` via
-  `WindowChrome.drag-region-changed` into a cell. `winit_filter.rs` intercepts
-  `MouseInput { Pressed, Left }` over a region, calls `drag_window()` and returns
-  `PreventDefault`. Slint never sees those presses, so the titlebar's double press to maximize is
-  read in Rust too (`window_chrome/drag_region.rs`'s `DoublePress`).
-- **Upstream in 1.18:** `WindowMoveArea`. Verified in `i-slint-core-1.18.0`
-  (`items/input_items.rs`, `items/drag_n_drop.rs`):
-  - A left press is forwarded to the children first (`ForwardAndInterceptGrab`), so buttons
-    inside stay clickable.
-  - The element takes over only once the pointer passes `Flickable`'s drag threshold, then calls
-    `drag_window()` through the backend's `start_window_move`. A plain click never moves the
-    window, and the move starts on the drag, not on the press.
-  - It has an `enabled` property, and no double-click or resize handling.
-- **Migration:** wrap the titlebar and miniplayer drag regions in `WindowMoveArea`, and give the
-  titlebar a `double-clicked` on its `TouchArea`, which fires once Slint sees the presses. The
-  miniplayer gets none, since a double press there only moves the window. Delete:
-  - `window_chrome/drag_region.rs`
-  - the `DragRegion` enum and `WindowChrome.drag-region-changed`
-  - the drag-region `MouseInput` arm in `winit_filter.rs`
-
-  The **resize** arm, `resize_grab.rs`, `resize_release.rs` and `ResizeZone` stay: nothing in
-  1.18 starts an OS resize. The DnD arms and the `MouseWheel` / `CompositeScroll` arm are
-  unrelated and stay. Set the new `window-title-bar` accessible role on the titlebar in the same
-  change.
-- **Risks, all manual checks:**
-  - The OS owns the pointer for the move, so Slint never sees that press's release. Check that
-    the next click on a titlebar button lands on the button.
-  - The miniplayer's region runs to the window edge. The resize arm keeps running in the winit
-    filter ahead of Slint's dispatch, so a press on a grab still resizes, but check the handoff
-    at the edge.
-  - On Windows the move now starts from inside Slint's item dispatch rather than the winit
-    filter. Check `parked_loop` still ticks during a drag.
-  - A move that starts after a few pixels, not on press, is a feel change on the custom titlebar.
-
 ## 🟢 Two-way model row bindings → slim the model-patch walkers
 
 - **Today:** optimistic favorite/rating flips walk the `VecModel` from Rust via
@@ -451,4 +415,6 @@ Done 2026-10-13, every step passed by hand.
 to 1.18.1, phase 1 applied in the tree, phase 4 added. 2026-10-12: phase 4 landed and passed by
 hand, and every section waiting on an upstream Slint change moved to #127. Later that day phase
 3's items 1 (`FlexboxLayout`, its Settings-body step reverted), 2 (`PopupWindow.is-open`, the
-right-click menus reworked on top) and 3 (`animate { enabled }`) landed and passed by hand.*
+right-click menus reworked on top) and 3 (`animate { enabled }`) landed and passed by hand.
+2026-10-13: item 4 (`cross-axis-alignment`) landed and passed by hand, and item 5
+(`WindowMoveArea`) was dropped and moved to #127.*
