@@ -233,6 +233,9 @@ export component QueueRowItem inherits Rectangle {
                 }
             }
 
+            // Kept off the cross-axis solve, so the artwork and remove button keep their own
+            // centring layouts: under it the duration cell would be held to the heart's 26 px
+            // while the heart shows.
             HorizontalLayout {
                 padding-left: Theme.pad-md;
                 padding-right: Theme.pad-md;
@@ -243,43 +246,31 @@ export component QueueRowItem inherits Rectangle {
                 // on hover or selection.
                 Rectangle {
                     width: 28px;
-                    if !root.show-checkbox: VerticalLayout {
-                        alignment: center;
-                        HorizontalLayout {
-                            alignment: center;
-                            Text {
-                                text: root.row-index + 1;
-                                // `Theme.text` throughout, as in the track lists: same
-                                // body copy on the same background, and reading dimmer
-                                // than the lists behind the sheet is the one thing
-                                // these rows shouldn't do.
-                                color: root.playing ? Theme.accent : Theme.text;
-                                font-size: Theme.font-size-row;
-                                horizontal-alignment: center;
-                            }
-                        }
+                    if !root.show-checkbox: Text {
+                        text: root.row-index + 1;
+                        // `Theme.text` throughout, as in the track lists: same
+                        // body copy on the same background, and reading dimmer
+                        // than the lists behind the sheet is the one thing
+                        // these rows shouldn't do.
+                        color: root.playing ? Theme.accent : Theme.text;
+                        font-size: Theme.font-size-row;
+                        horizontal-alignment: center;
                     }
-                    if root.show-checkbox: VerticalLayout {
-                        alignment: center;
-                        HorizontalLayout {
-                            alignment: center;
-                            Rectangle {
-                                width: 16px;
-                                height: 16px;
-                                Checkbox {
-                                    checked: root.selected;
-                                }
-                                // The box starts a selection; once one is live the row body
-                                // picks too. Modifiers ride through `ev.modifiers`.
-                                cb-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    pointer-event(ev) => {
-                                        if (ev.kind == PointerEventKind.up
-                                            && ev.button == PointerEventButton.left) {
-                                            root.pick(
-                                                ev.modifiers.control, ev.modifiers.shift);
-                                        }
-                                    }
+                    if root.show-checkbox: Rectangle {
+                        width: 16px;
+                        height: 16px;
+                        Checkbox {
+                            checked: root.selected;
+                        }
+                        // The box starts a selection; once one is live the row body
+                        // picks too. Modifiers ride through `ev.modifiers`.
+                        cb-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            pointer-event(ev) => {
+                                if (ev.kind == PointerEventKind.up
+                                    && ev.button == PointerEventButton.left) {
+                                    root.pick(
+                                        ev.modifiers.control, ev.modifiers.shift);
                                 }
                             }
                         }
@@ -328,19 +319,16 @@ export component QueueRowItem inherits Rectangle {
                     clip: true;
                     HorizontalLayout {
                         alignment: end;
-                        if !touch.has-hover: VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: root.row-data.display_duration;
-                                color: Theme.text;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: right;
-                            }
+                        cross-axis-alignment: center;
+                        if !touch.has-hover: Text {
+                            text: root.row-data.display_duration;
+                            color: Theme.text;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: right;
                         }
                         if touch.has-hover: Rectangle {
                             width: 26px;
                             height: 26px;
-                            y: (parent.height - self.height) / 2;
                             border-radius: self.height / 2;
                             background: fav-touch.has-hover ? Theme.surface1 : transparent;
                             MaterialIcon {

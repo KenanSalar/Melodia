@@ -104,9 +104,6 @@ this file is what builds, looks right, and is wrong.
 - **Material Symbols glyphs need a collapsed line-box.** `Text` defaults to ~1.2× `font-size`;
   pin inside fixed `icon-size × icon-size` Rectangle. `MaterialIcon` does this.
 
-- **Fixed-width children don't center in a wider `VerticalLayout`.** Let column track child's
-  natural width, or wrap in `HorizontalLayout { alignment: center; … }`.
-
 - **`parent` not accessible from component's root binding.** Take host metric as explicit
   `in property <length> host-width;`.
 
@@ -278,6 +275,29 @@ this file is what builds, looks right, and is wrong.
   drew their fill past the rail. A wide column never shows it and nothing warns. Cure:
   `min-width: 0px` at the mount, which replaces the widget's own (`layout/sidebar.slint`'s
   `nav-scroll`). Tell: `.max (50f64` on the binding in `app-window.rs`.
+
+- **A sized cell of a box layout sits at the start of the cross axis, and centring it moves every
+  cell of that layout onto another solve.** On the plain path a cell is stretched and clamped to
+  its explicit constraints (the entry above), which pins a fixed one to the start edge.
+  `cross-axis-alignment: center` on the layout, or `cross-axis-self-alignment: center` on one cell,
+  sends the whole layout through `solve_box_layout_ortho` (`i-slint-core/layout.rs`), and three
+  things change with it:
+  - **A stretched sibling is clamped to its implicit min/max too**, so a cell that has to fill the
+    row stops at whatever max its contents report. Self-align only where every stretched sibling's
+    max is unbounded: a `Text` or `TextInput`, a `Rectangle` whose children are all `if`s, a layout
+    of such cells. Otherwise the row stays on the plain path and keeps its wrappers
+    (`queue-row-item.slint`, whose duration cell reports the hover heart's 26 px).
+  - **An explicit `x`/`y` on a cell is a build error**, the solve owning every position.
+  - **A removed wrapper can cap the row.** Layout info ignores alignment, so a row's cross max is
+    the least of its cells', and a wrapper with non-stretch `alignment` reported an unbounded one
+    where its fixed child reports its own size. A row with an explicit cross size never notices; a
+    host with surplus to hand out finds the row has stopped growing. That is what the
+    `alignment: start` wrappers round fixed children are for, no-ops in position that keep the max
+    open.
+  A lone `Text` centres its own lines with `vertical-alignment` and stays on the plain path, and a
+  sized child of a plain `Rectangle` is already centred (the default-geometry entry below), so
+  neither wants a layout round it. Tell: a converted layout calls `solve_box_layout_ortho` in
+  `app-window.rs`.
 
 - **`VerticalLayout` divides surplus equally when every child has `vertical-stretch: 0`.** Append
   trailing `Rectangle { vertical-stretch: 1; }`, or set `alignment: start`, which hands out no

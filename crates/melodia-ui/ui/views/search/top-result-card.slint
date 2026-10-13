@@ -13,19 +13,14 @@ export component TopResultCard inherits VerticalLayout {
     // Pinned to the same height as the Songs heading, which its `ActionPill` stretches.
     // That keeps the two headings aligned *and* the spacing below them equal, so the card
     // and the list header start at the same y.
-    HorizontalLayout {
+    Text {
         height: 32px;
-        alignment: start;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("Top Result");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 700;
-                letter-spacing: 0.4px;
-            }
-        }
+        text: @tr("Top Result");
+        color: Theme.text;
+        font-size: Theme.font-size-md;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        vertical-alignment: center;
     }
 
     top-card := Rectangle {

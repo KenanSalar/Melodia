@@ -7,32 +7,24 @@ import { MaterialIcon } from "../../components/material-icon.slint";
 export component NoResults inherits VerticalLayout {
     vertical-stretch: 0;
     alignment: center;
+    cross-axis-alignment: center;
     padding-top: 48px;
     spacing: Theme.pad-sm;
 
-    HorizontalLayout {
-        alignment: center;
-        MaterialIcon {
-            name: "search_off";
-            icon-size: 42px;
-            icon-color: Theme.subtext0;
-        }
+    MaterialIcon {
+        name: "search_off";
+        icon-size: 42px;
+        icon-color: Theme.subtext0;
     }
-    HorizontalLayout {
-        alignment: center;
-        Text {
-            text: @tr("No results found");
-            color: Theme.text;
-            font-size: Theme.font-size-lg;
-            font-weight: 600;
-        }
+    Text {
+        text: @tr("No results found");
+        color: Theme.text;
+        font-size: Theme.font-size-lg;
+        font-weight: 600;
     }
-    HorizontalLayout {
-        alignment: center;
-        Text {
-            text: @tr("Try a different search term");
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-        }
+    Text {
+        text: @tr("Try a different search term");
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
     }
 }

@@ -48,39 +48,31 @@ export component SuggestionPill inherits Rectangle {
             padding-left: Theme.pad-sm;
             padding-right: Theme.pad-md;
             spacing: Theme.pad-xs;
+            cross-axis-alignment: center;
 
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "filter_alt";
-                    icon-size: 16px;
-                    icon-color: Theme.subtext0;
-                }
+            MaterialIcon {
+                name: "filter_alt";
+                icon-size: 16px;
+                icon-color: Theme.subtext0;
             }
 
-            VerticalLayout {
-                alignment: center;
-                Text {
-                    // Leading U+200E, as `FacetOption` marks the same names: the value is the
-                    // directory's and can be any script, and the mark is what pins the line's
-                    // direction and its elide edge whatever arrives.
-                    text: "\u{200e}" + @tr("{}: {}", root.scope-label, root.scope-value);
-                    color: Theme.text;
-                    font-size: Theme.font-size-sm;
-                    overflow: elide;
-                }
+            Text {
+                // Leading U+200E, as `FacetOption` marks the same names: the value is the
+                // directory's and can be any script, and the mark is what pins the line's
+                // direction and its elide edge whatever arrives.
+                text: "\u{200e}" + @tr("{}: {}", root.scope-label, root.scope-value);
+                color: Theme.text;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
             }
 
             // `-1` is a scope read off the needle's own shape — a bitrate floor, a frequency —
             // which nothing has counted. `0` would be a real answer and is not what this hides.
-            if root.data.station_count >= 0: VerticalLayout {
-                alignment: center;
-                Text {
-                    text: @tr("{n} station" | "{n} stations" % root.data.station_count);
-                    color: Theme.subtext0;
-                    font-size: Theme.font-size-sm;
-                    overflow: elide;
-                }
+            if root.data.station_count >= 0: Text {
+                text: @tr("{n} station" | "{n} stations" % root.data.station_count);
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
             }
         }
 

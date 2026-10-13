@@ -16,15 +16,13 @@ export component SongsSection inherits VerticalLayout {
     HorizontalLayout {
         height: 32px;
         alignment: space-between;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("Songs");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 700;
-                letter-spacing: 0.4px;
-            }
+        Text {
+            text: @tr("Songs");
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            vertical-alignment: center;
         }
 
         // **No Shuffle pill here**: Search has no single "all of these tracks" the way

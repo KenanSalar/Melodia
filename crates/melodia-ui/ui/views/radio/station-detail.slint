@@ -15,22 +15,20 @@ component StatusLine inherits HorizontalLayout {
     alignment: start;
     spacing: Theme.pad-xs;
     vertical-stretch: 0;
+    // The glyph sits in a collapsed em-box and the text in a line box, so the two share a centre
+    // line rather than a top edge.
+    cross-axis-alignment: center;
 
     MaterialIcon {
         name: root.icon;
         icon-size: 16px;
         icon-color: root.tint;
     }
-    // The glyph sits in a collapsed em-box and the text in a line box, so the two need a
-    // centring wrapper to share a baseline.
-    VerticalLayout {
-        alignment: center;
-        Text {
-            text: root.text;
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-            overflow: elide;
-        }
+    Text {
+        text: root.text;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        overflow: elide;
     }
 }
 

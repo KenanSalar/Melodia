@@ -50,9 +50,10 @@ pass on Linux. Phase 0 is a go: on the manual run the queue sheet and the nav tr
 smooth on 1.18.1 as on 1.16.1, so the bump stays. Phase 2 passed on the manual pass, on Linux,
 once the miniplayer backdrop's fade-in was fixed on top of the bump. Phase 4 landed as `75493151`
 and passed its manual pass on a Wayland touchpad, and the composite views keep their own scrolling
-(the decision after it). Phase 3 is under way: items 1–3 landed and passed by hand
+(the decision after it). Phase 3 is under way: items 1–4 landed and passed by hand
 (`FlexboxLayout` as `5b3aa4ac`, `PopupWindow.is-open` as `22c4a775` with `2c0ea226` and
-`a49c7309` on top, then `animate { enabled }`), and items 4–7 remain.
+`a49c7309` on top, then `animate { enabled }`, then `cross-axis-alignment` from `309f8b57` on),
+and items 5–7 remain.
 
 A trial on 2026-09-16 (throwaway worktree, since removed) ran
 `cargo clippy --all-targets --workspace` on Linux against 1.18.0, and the diagnostics listed in
@@ -206,7 +207,7 @@ One change per section, in this order, each on a tree already on 1.18:
    2026-10-12.**
 2. 🟢 `PopupWindow.is-open` → slim the `PopupHighlight` plumbing. **Done 2026-10-12.**
 3. 🟢 `animate { enabled }` → replace duration-zero gating. **Done 2026-10-12.**
-4. 🟢 `cross-axis-alignment` → drop centering wrapper layouts
+4. 🟢 `cross-axis-alignment` → drop centering wrapper layouts. **Done 2026-10-13.**
 5. 🟢 `WindowMoveArea` → retire the drag-region press intercept
 6. 🟢 Two-way model row bindings → slim the model-patch walkers (prototype first)
 7. 🟡 Hangul measuring workaround → retire if 1.18's text stack composes the syllables
@@ -356,6 +357,8 @@ Done 2026-10-12, every step passed by hand.
 
 ## 🟢 `cross-axis-alignment` on box layouts → drop centering wrapper layouts
 
+Done 2026-10-13, every step passed by hand.
+
 - **Today:** the "fixed-width children don't center in a wider VerticalLayout" pitfall is worked
   around by wrapping children in `HorizontalLayout { alignment: center; … }`.
 - **Upstream:** `cross-axis-alignment` on `VerticalLayout`/`HorizontalLayout` (1.17). 1.18 adds
@@ -364,6 +367,17 @@ Done 2026-10-12, every step passed by hand.
   carrying a `min-width` or `max-width`.
 - **Migration:** replace the wrapper layouts that exist purely for cross-axis centering.
   Cosmetic cleanup; do opportunistically.
+- **Outcome:** three passes (shared chrome and rows, then settings and dialogs, then pages), every
+  row reading as before. A wrapper that only centred went: `cross-axis-alignment: center` on a row
+  whose children all centre, `cross-axis-self-alignment` on the fixed children of a row whose other
+  cells keep stretching, a lone `Text`'s own `vertical-alignment`, and nothing at all for a sized
+  child of a plain `Rectangle`, which default geometry already centres. Two things that sat off
+  their row's centre line now sit on it: Station Facts' action button and the station page's status
+  glyph. No speed came of it, the compiler already folding single-cell layouts.
+- **Kept on purpose:** `alignment: start` wrappers, which hold a row's max open; wrappers carrying
+  padding or a slot for an `if`; real groups; `OnboardingFeatureRow`'s `@children` slot; and the
+  queue row, where the cross-axis solve would clamp the duration cell to the hover heart.
+  `slint-pitfalls.md`'s cross-axis entry carries the mechanism.
 
 ## 🟢 `WindowMoveArea` → retire the drag-region press intercept
 

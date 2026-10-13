@@ -89,37 +89,32 @@ export component RecentSearches inherits VerticalLayout {
 
     HorizontalLayout {
         alignment: space-between;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("Recent");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 700;
-                letter-spacing: 0.4px;
-            }
+        cross-axis-alignment: center;
+        Text {
+            text: @tr("Recent");
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            letter-spacing: 0.4px;
         }
-        VerticalLayout {
-            alignment: center;
-            clear-target := Rectangle {
-                width: clear-label.preferred-width + 16px;
-                height: 24px;
-                border-radius: self.height / 2;
-                background: clear-touch.has-hover
-                    ? Theme.surface1
-                    : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-                clear-label := Text {
-                    x: 8px;
-                    y: (parent.height - self.height) / 2;
-                    text: @tr("Clear all");
-                    color: Theme.subtext0;
-                    font-size: Theme.font-size-sm;
-                }
-                clear-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => { Search.recent-clear(); }
-                }
+        clear-target := Rectangle {
+            width: clear-label.preferred-width + 16px;
+            height: 24px;
+            border-radius: self.height / 2;
+            background: clear-touch.has-hover
+                ? Theme.surface1
+                : transparent;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            clear-label := Text {
+                x: 8px;
+                y: (parent.height - self.height) / 2;
+                text: @tr("Clear all");
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+            }
+            clear-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { Search.recent-clear(); }
             }
         }
     }

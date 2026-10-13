@@ -148,7 +148,7 @@ fn the_picker_reserves_the_scrollbars_lane_beside_the_count() {
 fn a_facet_row_with_no_count_paints_no_slot() {
     let src = picker();
     assert!(
-        src.contains("if root.count > 0: VerticalLayout {"),
+        src.contains("if root.count > 0: Text {"),
         "the picker paints its count unconditionally — every bitrate row reads `0`"
     );
     assert!(

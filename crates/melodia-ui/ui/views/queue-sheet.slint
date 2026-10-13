@@ -205,12 +205,12 @@ export component QueueSheet inherits Rectangle {
                     padding-right: 8px;
                     spacing: 12px;
                     alignment: stretch;
+                    cross-axis-alignment: center;
 
                     // A title over a count, the shape the My Library band states in its
                     // idle row — restacked, and keeping its own font sizes: the band's
                     // are tuned for a full page, where this sits in a single short row.
                     VerticalLayout {
-                        alignment: center;
                         spacing: 0;
                         Text {
                             text: @tr("Queue");
@@ -234,32 +234,26 @@ export component QueueSheet inherits Rectangle {
 
                     // `if` rather than `visible:` so the absent branch leaves no phantom
                     // layout slot.
-                    if root.has-rows: VerticalLayout {
-                        alignment: center;
-                        ActionPill {
-                            PillButton {
-                                text: @tr("Clear queue");
-                                clicked => {
-                                    Dialog.title = @tr("Clear queue?");
-                                    Dialog.message = @tr("Remove all tracks from the queue? Playback will stop.");
-                                    Dialog.confirm-label = @tr("Clear");
-                                    Dialog.cancel-label = @tr("Cancel");
-                                    Dialog.destructive = true;
-                                    Dialog.kind = DialogKind.clear-queue;
-                                    Dialog.target-id = -1;
-                                    Dialog.open = true;
-                                }
+                    if root.has-rows: ActionPill {
+                        PillButton {
+                            text: @tr("Clear queue");
+                            clicked => {
+                                Dialog.title = @tr("Clear queue?");
+                                Dialog.message = @tr("Remove all tracks from the queue? Playback will stop.");
+                                Dialog.confirm-label = @tr("Clear");
+                                Dialog.cancel-label = @tr("Cancel");
+                                Dialog.destructive = true;
+                                Dialog.kind = DialogKind.clear-queue;
+                                Dialog.target-id = -1;
+                                Dialog.open = true;
                             }
                         }
                     }
-                    VerticalLayout {
-                        alignment: center;
-                        IconButton {
-                            icon: "close";
-                            diameter: 32px;
-                            icon-size: 18px;
-                            clicked => { Queue.dismiss(); }
-                        }
+                    IconButton {
+                        icon: "close";
+                        diameter: 32px;
+                        icon-size: 18px;
+                        clicked => { Queue.dismiss(); }
                     }
                 }
             }
@@ -349,25 +343,18 @@ export component QueueSheet inherits Rectangle {
                 // Empty state.
                 if Queue.rows.length == 0: VerticalLayout {
                     alignment: center;
-                    HorizontalLayout {
-                        alignment: center;
-                        VerticalLayout {
-                            spacing: Theme.pad-sm;
-                            HorizontalLayout {
-                                alignment: center;
-                                MaterialIcon {
-                                    name: "queue_music";
-                                    icon-size: 40px;
-                                    icon-color: Theme.surface2;
-                                }
-                            }
-                            Text {
-                                text: @tr("Queue is empty");
-                                color: Theme.subtext0;
-                                font-size: Theme.font-size-md;
-                                horizontal-alignment: center;
-                            }
-                        }
+                    cross-axis-alignment: center;
+                    spacing: Theme.pad-sm;
+                    MaterialIcon {
+                        name: "queue_music";
+                        icon-size: 40px;
+                        icon-color: Theme.surface2;
+                    }
+                    Text {
+                        text: @tr("Queue is empty");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-md;
+                        horizontal-alignment: center;
                     }
                 }
             }
@@ -388,26 +375,19 @@ export component QueueSheet inherits Rectangle {
 
             VerticalLayout {
                 alignment: center;
-                HorizontalLayout {
-                    alignment: center;
-                    VerticalLayout {
-                        spacing: Theme.pad-md;
-                        HorizontalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: "library_add";
-                                icon-size: 40px;
-                                icon-color: Theme.accent;
-                            }
-                        }
-                        Text {
-                            text: @tr("Drop to add to queue");
-                            color: Theme.text;
-                            font-size: Theme.font-size-md;
-                            font-weight: 600;
-                            horizontal-alignment: center;
-                        }
-                    }
+                cross-axis-alignment: center;
+                spacing: Theme.pad-md;
+                MaterialIcon {
+                    name: "library_add";
+                    icon-size: 40px;
+                    icon-color: Theme.accent;
+                }
+                Text {
+                    text: @tr("Drop to add to queue");
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    font-weight: 600;
+                    horizontal-alignment: center;
                 }
             }
         }

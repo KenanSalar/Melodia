@@ -99,48 +99,40 @@ export component NowPlayingView inherits Rectangle {
             padding-left: Theme.pad-lg;
             padding-right: Theme.pad-lg;
             spacing: Theme.pad-sm;
+            cross-axis-alignment: center;
 
-            VerticalLayout {
-                alignment: center;
-                AccentDiscButton {
-                    icon: "arrow_back";
-                    // Lateral: the view underneath remounts and samples this. See the
-                    // bar's own track-info card, which is the other half of the toggle.
-                    clicked => {
-                        Nav.pending-enter-from = NavEnterFrom.above;
-                        Nav.now-playing-open = false;
-                    }
+            AccentDiscButton {
+                icon: "arrow_back";
+                // Lateral: the view underneath remounts and samples this. See the
+                // bar's own track-info card, which is the other half of the toggle.
+                clicked => {
+                    Nav.pending-enter-from = NavEnterFrom.above;
+                    Nav.now-playing-open = false;
                 }
             }
 
             Rectangle { horizontal-stretch: 1; }
 
             // Left of the favourite heart.
-            if Player.vm.has_track: VerticalLayout {
-                alignment: center;
-                StarRating {
-                    rating: Player.vm.track.rating;
-                    star-size: 22px;
-                    // Accent-tinted rather than the list views' yellow; `AccentGlyphButton`,
-                    // which the rest of the row is, says why the group shares one colour.
-                    filled-color: Player.np-accent-bright;
-                    empty-color: Player.np-accent-dim;
-                    // The glyph family to the right answers the pointer; a star row that did not
-                    // would be the one dead control in the header.
-                    hover-preview: true;
-                    rated(n) => { Player.set-current-rating(n); }
-                }
+            if Player.vm.has_track: StarRating {
+                rating: Player.vm.track.rating;
+                star-size: 22px;
+                // Accent-tinted rather than the list views' yellow; `AccentGlyphButton`,
+                // which the rest of the row is, says why the group shares one colour.
+                filled-color: Player.np-accent-bright;
+                empty-color: Player.np-accent-dim;
+                // The glyph family to the right answers the pointer; a star row that did not
+                // would be the one dead control in the header.
+                hover-preview: true;
+                rated(n) => { Player.set-current-rating(n); }
             }
 
-            if !Player.vm.has_station: VerticalLayout {
-                alignment: center;
-                AccentGlyphButton {
-                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
-                    filled: Player.vm.track.is_favorite;
-                    active: Player.vm.track.is_favorite;
-                    button-enabled: Player.vm.has_track;
-                    clicked => { Player.toggle-favorite(); }
-                }
+            if !Player.vm.has_station: AccentGlyphButton {
+                icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+                filled: Player.vm.track.is_favorite;
+                active: Player.vm.track.is_favorite;
+                button-enabled: Player.vm.has_track;
+                clicked => { Player.toggle-favorite(); }
             }
 
             // **A station takes the vote in the heart's slot.** The favourite toggle acts on a
@@ -155,36 +147,27 @@ export component NowPlayingView inherits Rectangle {
             // The heart's own slot, not a new kind of control. Labelled on the station page,
             // where three segments fit and a reader can weigh them; here there is room for one
             // glyph, so it takes the tooltip.
-            if Player.vm.has_station && Player.vm.radio.uuid != "": VerticalLayout {
-                alignment: center;
-                AccentGlyphButton {
-                    icon: "thumb_up";
-                    tooltip-text: @tr("Vote");
-                    // Left, for the station page's own reason: this row is the panel's top edge,
-                    // so an above-pill is cut off by it. The left arm centres vertically and
-                    // clears inward over the header's own spacer.
-                    tooltip-side: TooltipSide.left;
-                    clicked => {
-                        Radio.vote(Player.vm.radio.uuid, Player.vm.radio.station_id);
-                    }
+            if Player.vm.has_station && Player.vm.radio.uuid != "": AccentGlyphButton {
+                icon: "thumb_up";
+                tooltip-text: @tr("Vote");
+                // Left, for the station page's own reason: this row is the panel's top edge,
+                // so an above-pill is cut off by it. The left arm centres vertically and
+                // clears inward over the header's own spacer.
+                tooltip-side: TooltipSide.left;
+                clicked => {
+                    Radio.vote(Player.vm.radio.uuid, Player.vm.radio.station_id);
                 }
             }
 
             // The visualizer's style on its own glyph, its label a tooltip.
             //
             // Not gated on `vm.has_track` — a style means something with an empty queue.
-            VerticalLayout {
-                alignment: center;
-                VisualizerPicker { }
-            }
+            VisualizerPicker { }
 
             // **Gone rather than disabled on a station**, the vote's rule directly above: the
             // column keeps its panel whatever the switch says, a stream having no track to look a
             // sheet up for, so here it could only ever swap nothing for nothing.
-            if !Player.vm.has_station: VerticalLayout {
-                alignment: center;
-                LyricsControls { }
-            }
+            if !Player.vm.has_station: LyricsControls { }
         }
 
         // The centred artwork group left, the Up Next column right, both floating on the backdrop

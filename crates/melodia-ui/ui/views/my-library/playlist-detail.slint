@@ -100,23 +100,18 @@ export component PlaylistDetailBody inherits Rectangle {
 
             VerticalLayout {
                 alignment: center;
+                cross-axis-alignment: center;
                 spacing: Theme.pad-sm;
-                HorizontalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: "playlist_add";
-                        icon-size: 56px;
-                        icon-color: Theme.accent;
-                    }
+                MaterialIcon {
+                    name: "playlist_add";
+                    icon-size: 56px;
+                    icon-color: Theme.accent;
                 }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("Drop files to add to this playlist");
-                        color: Theme.text;
-                        font-size: Theme.font-size-lg;
-                        font-weight: 600;
-                    }
+                Text {
+                    text: @tr("Drop files to add to this playlist");
+                    color: Theme.text;
+                    font-size: Theme.font-size-lg;
+                    font-weight: 600;
                 }
             }
         }
