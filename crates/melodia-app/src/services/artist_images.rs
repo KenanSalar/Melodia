@@ -13,9 +13,10 @@ use melodia_store::database::queries;
 
 /// How long a definitive "no match" stands before the artist is searched again.
 ///
-/// Recorded on the artist's row, because `spawn_fetch` runs after every scan, a launch's
-/// no-change re-scan included: kept for the session alone, every launch searched again for every
-/// artist the directory doesn't know. It lapses because the directory keeps adding artists.
+/// Recorded on the artist's row rather than in memory: `spawn_fetch` runs after every scan, a
+/// launch's no-change re-scan included, so a per-session record would search every artist the
+/// directory doesn't know again on each launch. It lapses because the directory keeps adding
+/// artists.
 const NO_MATCH_RETRY_AFTER: Duration = Duration::from_hours(30 * 24);
 
 /// Per-artist result of one Deezer round-trip.

@@ -37,8 +37,8 @@ impl SectionState {
     ///
     /// **That only holds for a section whose pre-fetch fills everything it needs.** Browse
     /// seeds `dirty` itself when the boot doesn't land on it, for the card view's cover tier,
-    /// which an off-screen prewarm releases rather than keeps. The four My Library grids seed
-    /// it for a hidden tab too, whose pre-fetch the boot skips.
+    /// which an off-screen prewarm releases rather than keeps. Every My Library tab seeds it
+    /// too when the launch leaves it hidden, the boot skipping its pre-fetch.
     pub fn new() -> Self {
         Self {
             active: AtomicBool::new(false),

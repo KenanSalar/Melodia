@@ -203,7 +203,8 @@ async fn strip_windows_verbatim_paths(pool: &SqlitePool) -> Result<(), AppError>
 }
 
 /// The map every connection reads through, so a library-sized read stays in the file-backed page
-/// cache instead of being copied into that connection's heap. Larger than any library's file.
+/// cache instead of being copied into that connection's heap. A file past it reads the remainder
+/// through the connection's cache.
 const MMAP_SIZE: &str = "268435456";
 
 /// How long a pooled connection may sit idle before it closes, taking its page cache with it.
@@ -239,7 +240,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .pragma("cache_size", "-16000")
         .pragma("temp_store", "MEMORY")
         // The writer reads whole tables too, a scan's orphan check walking every path. Unmapped,
-        // each page it read was copied into its cache and held there for the session.
+        // each page it read was copied into its cache and held until the connection closed.
         .pragma("mmap_size", MMAP_SIZE);
 
     // Reaped like the read pool, so the pages a scan's writes leave cached don't outlive it.
