@@ -156,17 +156,17 @@ Measured with [`scripts/measure-linux-footprint.sh`](scripts/measure-linux-footp
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 32 MiB | 87 MiB | 81 MiB | 157 MiB | 39 MiB | 0.08% | 0.01% | 0.00% |
-| Playing, list view | 33 MiB | 89 MiB | 84 MiB | 157 MiB | 35 MiB | 0.67% | 0.04% | 1.21% |
-| Playing, visualizer live | 33 MiB | 90 MiB | 85 MiB | 158 MiB | 35 MiB | 3.88% | 0.24% | 1.86% |
+| Idle | 32.54 MiB | 94.53 MiB | 87.95 MiB | 167.86 MiB | 36.00 MiB | 0.12% | 0.01% | 0.00% |
+| Playing, list view | 33.41 MiB | 94.08 MiB | 89.57 MiB | 164.67 MiB | 36.00 MiB | 0.57% | 0.04% | 0.32% |
+| Playing, visualizer live | 33.57 MiB | 94.36 MiB | 89.69 MiB | 165.14 MiB | 37.00 MiB | 2.58% | 0.16% | 0.69% |
 
 #### Native titlebar
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 32 MiB | 87 MiB | 81 MiB | 157 MiB | 24 MiB | 0.08% | 0.01% | 0.00% |
-| Playing, list view | 33 MiB | 90 MiB | 84 MiB | 156 MiB | 24 MiB | 0.57% | 0.04% | 0.00% |
-| Playing, visualizer live | 33 MiB | 91 MiB | 86 MiB | 157 MiB | 29 MiB | 3.92% | 0.24% | 0.78% |
+| Idle | 32.34 MiB | 91.26 MiB | 84.83 MiB | 166.24 MiB | 28.00 MiB | 0.12% | 0.01% | 0.00% |
+| Playing, list view | 32.97 MiB | 92.85 MiB | 88.44 MiB | 163.30 MiB | 24.00 MiB | 0.52% | 0.03% | 0.00% |
+| Playing, visualizer live | 33.05 MiB | 93.58 MiB | 89.09 MiB | 163.94 MiB | 29.00 MiB | 2.27% | 0.14% | 1.69% |
 
 Linux keeps no commit charge per process, so **Anonymous** is the figure to compare: the memory Melodia allocated itself, in RAM or in swap, which nothing another process does can move. It is also the number that stays flat, since grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it. **PSS** is KDE System Monitor's Memory column. It adds a share of the file-backed pages, mostly the binary and the shared graphics stack rather than anything Melodia allocated, and that share shrinks whenever another program maps the same libraries. **USS** is the part no other process maps, what closing Melodia gives back, and System Monitor's Private column. **RSS** counts every shared page in full. **GPU memory** is the video memory the NVIDIA driver charges to Melodia, where FemtoVG keeps its textures and framebuffers, counted apart from the rest. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as System Monitor's CPU column does. **GPU** is the utilization the NVIDIA driver reports for Melodia, in whole percents each second.
 
