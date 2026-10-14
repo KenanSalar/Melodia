@@ -74,7 +74,8 @@ fn install_grid_covers(app: &AppWindow) {
 }
 
 /// Install every view slice and its callbacks. Seeds the persisted nav index
-/// and reopens each view's persisted detail (if any). Returns the per-view
+/// and reopens each view's persisted detail (if any), a My Library tab the launch
+/// doesn't show keeping its own until its first enter. Returns the per-view
 /// handles for downstream wiring.
 pub fn install_views(
     app: &AppWindow,

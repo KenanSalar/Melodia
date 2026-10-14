@@ -234,24 +234,33 @@ fn apply_filtered_detail(g: &ArtistDetail<'_>, artists_ui: &ArtistsUi) {
     write_albums_model(g, album_rows);
 }
 
-/// Reopen the artist that was visible at the last shutdown, if any.
+/// Reopen the artist that was visible at the last shutdown, if any: now if the launch shows the
+/// Artists tab, otherwise on that tab's first enter.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
         s.last_detail_ids.get(crate::ui::track_list_view::view_id::ARTIST_DETAIL).copied()
     }) else {
         return;
     };
-    // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
+    if !tab_is_mounted(ui, MyLibraryTab::Artists) {
+        artists_ui.section.defer_restore(id);
+        return;
+    }
+    restore_detail(ui, state, artists_ui, id);
+}
+
+/// Reopen a persisted artist, at launch or on the first enter of a tab the launch left hidden.
+pub fn restore_detail(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>, id: i64) {
+    // Synchronously, so it is up before the tab's first frame; see `AlbumDetail.restoring`.
     ui.global::<ArtistDetail>().set_restoring(true);
     artists_ui.section.begin_restore();
     let s = state.clone();
     let au = artists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Above = first-launch fade-down, not a drill-in slide: the user didn't navigate, this is
-        // restoring their last view.
+        // Above, not a drill-in slide: nobody navigated into this artist, it is their last view.
         if let Err(e) = open_artist(&s, &au, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!("artists::seed_detail_from_settings open_artist({id}): {}", describe(&e));
+            log::warn!("artists::restore_detail open_artist({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_artist`'s own hop so the id is already in: an
         // artist gone since the last session owes the grid back rather than an empty body.

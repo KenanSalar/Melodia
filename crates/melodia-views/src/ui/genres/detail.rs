@@ -210,25 +210,34 @@ pub async fn refresh_detail(
     Ok(())
 }
 
-/// Reopen the genre that was visible in the Genre Detail view at the last shutdown, if any. Called
-/// once at startup *after* [`super::install`] so the `GenreDetail` callbacks are already live by
-/// the time `open_genre`'s `upgrade_in_event_loop` lands. No-ops on a missing genre.
+/// Reopen the genre that was visible in the Genre Detail view at the last shutdown, if any: now if
+/// the launch shows the Genres tab, otherwise on that tab's first enter. Called once at startup
+/// *after* [`super::install`] so the `GenreDetail` callbacks are already live by the time
+/// `open_genre`'s `upgrade_in_event_loop` lands. No-ops on a missing genre.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
     let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
         s.last_detail_ids.get(crate::ui::track_list_view::view_id::GENRE_DETAIL).copied()
     }) else {
         return;
     };
-    // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
+    if !tab_is_mounted(ui, MyLibraryTab::Genres) {
+        genres_ui.section.defer_restore(id);
+        return;
+    }
+    restore_detail(ui, state, genres_ui, id);
+}
+
+/// Reopen a persisted genre, at launch or on the first enter of a tab the launch left hidden.
+pub fn restore_detail(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>, id: i64) {
+    // Synchronously, so it is up before the tab's first frame; see `AlbumDetail.restoring`.
     ui.global::<GenreDetail>().set_restoring(true);
     let s = state.clone();
     let gu = genres_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Above = first-launch fade-down, not a drill-in slide: the user didn't navigate, this is
-        // restoring their last view.
+        // Above, not a drill-in slide: nobody navigated into this genre, it is their last view.
         if let Err(e) = open_genre(&s, &gu, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!("genres::seed_detail_from_settings open_genre({id}): {}", describe(&e));
+            log::warn!("genres::restore_detail open_genre({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_genre`'s own hop so the id is already in: a
         // genre gone since the last session owes the grid back rather than an empty body.

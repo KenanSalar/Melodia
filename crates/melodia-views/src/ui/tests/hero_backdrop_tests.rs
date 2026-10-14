@@ -129,37 +129,61 @@ fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
     }
 }
 
-/// The gate's counterpart: a section whose boot pre-fetch was gated off has to re-fetch on
-/// its first enter, or the band it could not publish stays empty until the user opens the
-/// detail by hand. `SectionState::new` starts `dirty: false` so a boot pre-fetch wins the
-/// first enter — a real optimisation, and exactly the wrong one for a section pre-fetched
-/// *off-screen*, since the half it could not write is the shared half.
+/// The gate's counterpart: a hero may publish only while its tab is mounted, so a launch
+/// that doesn't show a tab leaves that tab's persisted detail to its first enter. Reopened
+/// at launch instead, it decodes a hero and covers nothing draws; deferred with no gate to
+/// resume it, the detail is lost.
 #[test]
-fn a_section_pre_fetched_off_screen_re_fetches_on_its_first_enter() {
-    // The handle's name is part of the anchor: a bare `if !` latches onto whichever
-    // negated guard comes first, and the *negation* is the half to pin —
-    // `if handle.section_active() { mark_dirty() }` is the inverted bug and reads alike.
-    const LIFECYCLES: [(&str, &str, &str); 4] = [
-        (include_str!("../albums/callbacks/lifecycle.rs"), "albums/lifecycle.rs", "albums_ui"),
-        (include_str!("../artists/callbacks/lifecycle.rs"), "artists/lifecycle.rs", "artists_ui"),
-        (include_str!("../genres/callbacks/lifecycle.rs"), "genres/lifecycle.rs", "genres_ui"),
+fn a_tab_the_launch_hides_restores_its_detail_on_its_first_enter() {
+    // The tab is part of the anchor: a bare `if !` latches onto whichever negated guard
+    // comes first, and the *negation* is the half to pin — deferring while the tab is on
+    // screen is the inverted bug and reads alike.
+    const SLICES: [(&str, &str, &str, &str, &str); 4] = [
         (
+            include_str!("../albums/detail.rs"),
+            include_str!("../albums/callbacks/lifecycle.rs"),
+            "albums",
+            "albums_ui",
+            "Albums",
+        ),
+        (
+            include_str!("../artists/detail.rs"),
+            include_str!("../artists/callbacks/lifecycle.rs"),
+            "artists",
+            "artists_ui",
+            "Artists",
+        ),
+        (
+            include_str!("../genres/detail.rs"),
+            include_str!("../genres/callbacks/lifecycle.rs"),
+            "genres",
+            "genres_ui",
+            "Genres",
+        ),
+        (
+            include_str!("../playlists/detail.rs"),
             include_str!("../playlists/callbacks/lifecycle.rs"),
-            "playlists/lifecycle.rs",
+            "playlists",
             "playlists_ui",
+            "Playlists",
         ),
     ];
 
-    for (src, name, handle) in LIFECYCLES {
-        let seeded = src
-            .split_once(&format!("if !{handle}.section_active() {{"))
+    for (seed, lifecycle, name, handle, tab) in SLICES {
+        let hidden_arm = seed
+            .split_once(&format!("if !tab_is_mounted(ui, MyLibraryTab::{tab}) {{"))
             .and_then(|(_, rest)| rest.split_once('}'))
             .map_or("", |(body, _)| body);
         assert!(
-            seeded.contains(&format!("{handle}.mark_dirty()")),
-            "{name} must seed `if !{handle}.section_active() {{ {handle}.mark_dirty() }}` — \
-             without it an off-screen boot pre-fetch publishes nothing to the shared hero \
-             globals and the first enter takes the no-re-fetch path, leaving the band empty"
+            hidden_arm.contains(&format!("{handle}.section.defer_restore(id)")),
+            "{name}'s seed must defer its restore while the tab is hidden, or the launch \
+             decodes a detail nothing draws"
+        );
+        assert!(
+            lifecycle.contains(".section.take_deferred_restore(")
+                && lifecycle.contains("_ui_mod::restore_detail("),
+            "{name}'s section gate must resume the restore its seed deferred, or the detail \
+             the user left open never comes back"
         );
     }
 }
@@ -371,8 +395,8 @@ fn the_collapsed_teardown_hands_back_only_what_closed() {
 ///
 /// **What the mirror costs is that it fires on every nav change, so the handler owes a
 /// latch.** A `changed` handler cannot ask which index it moved *from*, so an unlatched
-/// teardown also runs on Search → Browse, where the ids are untouched and the slots hold
-/// what `seed_detail_from_settings` wrote at boot *because* the page was hidden.
+/// teardown also runs on Favorites → Recently Played, clearing the shared hero globals
+/// those two bands publish into.
 #[test]
 fn the_page_leave_is_gated_on_the_nav_index_rather_than_on_the_gate() {
     const APP: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");

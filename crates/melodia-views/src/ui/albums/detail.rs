@@ -219,27 +219,35 @@ pub async fn refresh_detail(
     Ok(())
 }
 
-/// Reopen the album that was visible at the last shutdown. Runs once at startup
-/// *after* [`super::install`], so the `AlbumDetail` callbacks are live by the
-/// time `open_album`'s closure lands. A deleted album just logs and leaves
-/// `album-id` at `-1`, so the grid renders.
+/// Reopen the album that was visible at the last shutdown: now if the launch shows the Albums
+/// tab, otherwise on that tab's first enter. Runs once at startup *after* [`super::install`], so
+/// the `AlbumDetail` callbacks are live by the time `open_album`'s closure lands. A deleted album
+/// just logs and leaves `album-id` at `-1`, so the grid renders.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
     let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
         s.last_detail_ids.get(crate::ui::track_list_view::view_id::ALBUM_DETAIL).copied()
     }) else {
         return;
     };
-    // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
+    if !tab_is_mounted(ui, MyLibraryTab::Albums) {
+        albums_ui.section.defer_restore(id);
+        return;
+    }
+    restore_detail(ui, state, albums_ui, id);
+}
+
+/// Reopen a persisted album, at launch or on the first enter of a tab the launch left hidden.
+pub fn restore_detail(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>, id: i64) {
+    // Synchronously, so it is up before the tab's first frame; see `AlbumDetail.restoring`.
     ui.global::<AlbumDetail>().set_restoring(true);
     albums_ui.section.begin_restore();
     let s = state.clone();
     let au = albums_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // `Above` is the first-launch fade-down rather than a drill-in slide —
-        // nobody navigated, this is a restore.
+        // Above, not a drill-in slide: nobody navigated into this album, it is their last view.
         if let Err(e) = open_album(&s, &au, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!("albums::seed_detail_from_settings open_album({id}): {}", describe(&e));
+            log::warn!("albums::restore_detail open_album({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_album`'s own hop so the id is already in: an
         // album gone since the last session owes the grid back rather than an empty body.

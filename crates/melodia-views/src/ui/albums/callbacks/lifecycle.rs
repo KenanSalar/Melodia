@@ -33,15 +33,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     // this shadow. See the `SectionActiveGate` bullet in
     // `.claude/rules/ui-patterns.md`.
     albums_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Albums));
-    // `seed_detail_from_settings` runs for every persisted detail id whichever
-    // section the boot lands on, but it can only publish the two shared hero
-    // globals for the one that is *on screen* — so off-screen its band and its
-    // chips never land, and `SectionState::new`'s "the boot pre-fetch wins the
-    // first enter" would leave them empty until the user opened the detail by
-    // hand. Force that first enter to re-fetch instead.
-    if !albums_ui.section_active() {
-        albums_ui.mark_dirty();
-    }
     wire_section_gate(ui, state, albums_ui);
     install_library_refresher(ui, state, albums_ui);
 }
@@ -92,6 +83,11 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
+            if let Some(id) = au.section.take_deferred_restore(|| au.detail_album_id() >= 0)
+                && let Some(ui) = weak.upgrade()
+            {
+                albums_ui_mod::restore_detail(&ui, &s, &au, id);
+            }
             s.runtime.spawn(reenter(s.clone(), au.clone(), weak.clone()));
         } else {
             let au = au.clone();

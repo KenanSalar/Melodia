@@ -29,12 +29,6 @@ use melodia_ui::{
 /// Wire the Genres section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
     genres_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Genres));
-    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
-    // section that isn't on screen can't publish the shared hero globals, so
-    // its first enter has to re-fetch rather than take the cheap path.
-    if !genres_ui.section_active() {
-        genres_ui.mark_dirty();
-    }
     wire_section_gate(ui, state, genres_ui);
     install_library_refresher(ui, state, genres_ui);
 }
@@ -77,6 +71,11 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
+            if let Some(id) = gu.section.take_deferred_restore(|| gu.detail_genre_id() >= 0)
+                && let Some(ui) = weak.upgrade()
+            {
+                genres_ui_mod::restore_detail(&ui, &s, &gu, id);
+            }
             s.runtime.spawn(reenter(s.clone(), gu.clone(), weak.clone()));
         } else {
             let gu = gu.clone();

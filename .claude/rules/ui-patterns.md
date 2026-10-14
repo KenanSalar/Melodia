@@ -232,6 +232,9 @@ three components that answer it, and each argues its geometry at its own file.
   list into grid-row structs of N, **`GridColumnsSync`** computes N from the width and fires
   `columns-changed` so a resize rebuilds the model without touching the database. Detail views own
   no header — the four under My Library are bodies, the banner being the page's own band.
+  My Library's mount re-chunks only the mounted tab, so a grid chunked while hidden enters at a
+  stale N. The launch therefore fetches only the shown tab's grid (`spawn_initial_*_fetch`), and
+  every other tab fetches on its first enter.
 
 - **`EntityCard` goes inside `grid/card-cell.slint`'s `CardCell`, which owns everything a card owes
   its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame, so
@@ -475,15 +478,14 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
   on every arm, Slint having no empty-`image` literal, and Genre owns no cover — so the Genre hero
-  painted whichever other detail was open, which `seed_detail_from_settings` makes routine.
+  painted whichever other detail was open, which a tab left with its detail open makes routine.
   `ArtworkImage` takes `has-cover` defaulting `true`. Neither the blur quartet nor the washes need
   an equivalent: `has-blur: false` is exactly what a procedural backdrop is for, and a tint is
   always a colour — an entry with nothing of its own substitutes a seed rather than going absent.
 
-- **A hero may publish into either shared global only while it is the one on screen.**
-  `install_views` seeds **all four** detail views unconditionally, so a cold start fetches up to
-  four details whichever section it restores and the last to finish would win. The gate is passed
-  to `apply_detail_artwork` (guarding the `HeroBackdrop` write **and only that** — the cover and
+- **A hero may publish into either shared global only while it is the one on screen.** Every My
+  Library tab keeps its detail across a leave, so several are routinely open and only the mounted
+  one may write. The gate is passed to `apply_detail_artwork` (guarding the `HeroBackdrop` write **and only that** — the cover and
   blur slots either side are the view's own, and writing those while hidden is what leaves the
   page ready to paint), `apply_genre_hero` and `hero_chips::publish`.
   - **On the four details it is a live `tab_is_mounted` read *after* `on_applied`, and both halves
@@ -491,11 +493,11 @@ three components that answer it, and each argues its geometry at its own file.
     which moves the tab from inside the closure that publishes — answers for the tab being left;
     and the shadow is the wrong *question* besides, going false when Now Playing covers the band.
     Hoisting the binding above `on_applied` compiles, reads correctly, and puts the bug back.
-  - **Dropping a publish is only free if something later replaces it.** `SectionState::new` starts
-    `dirty: false` so the boot pre-fetch wins the first enter, but a pre-fetch that ran off-screen
-    filled nothing shared — so the four detail sections seed the flag themselves at wire time
-    (`if !section_active() { mark_dirty() }`), reading `tab_is_mounted` rather than the nav index,
-    five sections sharing index 3.
+  - **A launch reopens only the shown tab's detail.** A hidden tab's reopen could publish nothing
+    shared and would decode a hero and covers no frame draws, so its seed parks the id
+    (`SectionState::defer_restore`) and the tab's first enter reopens it
+    (`take_deferred_restore`, dropped if a drill landed a detail first). The seed asks
+    `tab_is_mounted` rather than the nav index, five sections sharing index 3.
 
 - **A leave is not a teardown on a tabbed page.** Nothing clears a detail id on a tab switch, so
   the band is either collapsing out of that banner or one pick away from morphing it back open,
@@ -914,7 +916,8 @@ three components that answer it, and each argues its geometry at its own file.
   - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from
     the UI thread, and a redraw winning that race paints an empty grid. It keeps its card model
     across the leave, which is why the covers under it are shrunk rather than dropped and why it
-    still owes a `mark_dirty()` on leave and the same wire-time seed, having no enter-time fetch.
+    still owes a `mark_dirty()` on leave and a wire-time `mark_dirty()` while hidden, having no
+    enter-time fetch.
   - **The Rust half is `grid_prewarm::grid_cover(path)`** — one tier, one lookup, no branch. Reach
     for it at a new surface: a copy that grew a **decoding** arm reads correctly and puts the
     UI-thread decode straight back, which is the one thing it will not do.
@@ -1141,8 +1144,8 @@ three components that answer it, and each argues its geometry at its own file.
     `changed watched-nav-idx` instead, which also makes "covered" and "left" different events.
   - **A mirror fires on every nav change where a gate fired only on its own predicate, so the hook
     owes a latch** — the half a later edit reads as redundant. A `changed` handler cannot ask which
-    index it moved *from*, so unlatched the teardown also runs on Search → Browse and discards what
-    `seed_detail_from_settings` wrote at boot precisely *because* the page was hidden. The latch is
+    index it moved *from*, so unlatched the teardown also runs on Favorites → Recently Played and
+    clears the `HeroBackdrop` and `HeroChips` those two bands publish into. The latch is
     a `Cell<bool>` in Rust, not a `prev-nav-idx` mirror: `Nav.selected-index` is declared `: 3` and
     the persisted index lands after `AppWindow::new()`, so a Slint seed is either a constant firing
     one spurious teardown per boot or a binding that re-evaluates to the *new* index inside the

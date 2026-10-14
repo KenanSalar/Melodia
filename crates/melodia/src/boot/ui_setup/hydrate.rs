@@ -161,8 +161,11 @@ pub fn spawn_initial_tracks_fetch(
     });
 }
 
-/// Kick off an entity grid's initial fetch so its cards are populated by the
-/// time the user navigates to it.
+/// Kick off an entity grid's initial fetch, if the launch shows its My Library tab.
+///
+/// A hidden tab is marked dirty instead and fetches on its first enter, as after a leave.
+/// Fetched now, it would be chunked at the column count of this moment, and `GridColumnsSync`
+/// re-chunks only the mounted tab while the window settles.
 ///
 /// A macro rather than a generic `fn` because each `fetch_grid` is a free function in
 /// its own module, and no trait the four `*Ui` types share carries it. Tracks is
@@ -172,6 +175,10 @@ macro_rules! initial_grid_fetch {
     ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty, $label:literal) => {
         $(#[$doc])*
         pub fn $name(state: &AppState, handle: &Arc<$handle>, weak: slint::Weak<AppWindow>) {
+            if !handle.section_active() {
+                handle.mark_dirty();
+                return;
+            }
             let s = state.clone();
             let h = handle.clone();
             state.runtime.spawn(async move {

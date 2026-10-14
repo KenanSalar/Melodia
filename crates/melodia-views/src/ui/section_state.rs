@@ -21,10 +21,13 @@ use parking_lot::{Mutex, MutexGuard};
 /// * [`grid_on_screen`](Self::grid_on_screen) narrows `active` to the section's card grid,
 ///   which a detail can cover while the section stays up. `restoring` answers the window no
 ///   detail id can: a launch reopening the last detail writes the id only once its rows are in.
+/// * [`take_deferred_restore`](Self::take_deferred_restore) holds that reopen for a section the
+///   launch left hidden, until its first enter.
 pub struct SectionState {
     active: AtomicBool,
     dirty: AtomicBool,
     restoring: AtomicBool,
+    deferred_restore: Mutex<Option<i64>>,
     gate: Mutex<()>,
 }
 
@@ -32,17 +35,16 @@ impl SectionState {
     /// A fresh state: not on screen, not dirty. `dirty` starts `false` so a boot pre-fetch
     /// wins the first section-enter without re-fetching.
     ///
-    /// **That only holds for a section whose pre-fetch fills everything it needs.** The
-    /// four detail sections seed `dirty` themselves when the boot doesn't land on them
-    /// (`if !section_active() { mark_dirty() }`): a hero may only write `HeroBackdrop` /
-    /// `HeroChips` while it is the mounted one, so an off-screen pre-fetch fills that
-    /// section's own state but not the band. **Browse takes the same seed for the card
-    /// view's cover tier**, which an off-screen prewarm releases rather than keeps.
+    /// **That only holds for a section whose pre-fetch fills everything it needs.** Browse
+    /// seeds `dirty` itself when the boot doesn't land on it, for the card view's cover tier,
+    /// which an off-screen prewarm releases rather than keeps. The four My Library grids seed
+    /// it for a hidden tab too, whose pre-fetch the boot skips.
     pub fn new() -> Self {
         Self {
             active: AtomicBool::new(false),
             dirty: AtomicBool::new(false),
             restoring: AtomicBool::new(false),
+            deferred_restore: Mutex::new(None),
             gate: Mutex::new(()),
         }
     }
@@ -77,6 +79,21 @@ impl SectionState {
     /// so the two can't both read clear mid-restore.
     pub fn grid_on_screen(&self, detail_open: impl FnOnce() -> bool) -> bool {
         self.active() && !self.restoring.load(Ordering::Acquire) && !detail_open()
+    }
+
+    /// Keeps the launch's reopen of `id` for the first enter, the section being hidden.
+    ///
+    /// A hidden detail can't publish the band it belongs under, so reopening it at launch
+    /// decodes its hero and covers for nothing on screen.
+    pub fn defer_restore(&self, id: i64) {
+        *self.deferred_restore.lock() = Some(id);
+    }
+
+    /// The deferred reopen, handed out once. Dropped if a detail is open by then, a drill
+    /// that landed first being the newer intent.
+    pub fn take_deferred_restore(&self, detail_open: impl FnOnce() -> bool) -> Option<i64> {
+        let id = self.deferred_restore.lock().take()?;
+        (!detail_open()).then_some(id)
     }
 
     /// Mark the cached grid and detail data as needing a re-fetch on the next enter.

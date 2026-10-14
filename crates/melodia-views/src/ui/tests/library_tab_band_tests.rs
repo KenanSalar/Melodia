@@ -892,8 +892,8 @@ fn the_morph_is_driven_by_the_sheets_own_derivation() {
 /// Slint has no empty-`image` literal, so the sheet's `cover` ternary has to bind *some*
 /// global's cover on the Genre arm, whose tile is a name-hashed gradient with no image
 /// behind it. `ArtworkImage` gates on `cover.width` alone, and more than one detail is
-/// routinely open — `seed_detail_from_settings` restores one per view whichever tab boot
-/// resumes — so ungated, a genre hero paints whichever sibling happened to be restored.
+/// routinely open, a tab left with its detail open keeping it, so ungated, a genre hero
+/// paints whichever sibling was left open.
 #[test]
 fn the_hero_tile_suppresses_a_cover_the_open_detail_does_not_own() {
     let tile = code()

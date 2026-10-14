@@ -146,8 +146,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
     // `SectionState` starts clean so the boot pre-fetch wins the first enter, but a station page
     // restored from `views.json` while Radio is off screen publishes into neither shared global —
     // and with nothing marked, the first enter would consume no flag and never republish, leaving
-    // the band on a hero with no chips and no backdrop. The four detail sections seed it the same
-    // way.
+    // the band on a hero with no chips and no backdrop.
     if !radio_ui.section_active() {
         radio_ui.mark_dirty();
     }

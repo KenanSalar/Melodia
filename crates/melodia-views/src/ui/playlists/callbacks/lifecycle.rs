@@ -26,12 +26,6 @@ use melodia_ui::{
 /// [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     playlists_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Playlists));
-    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
-    // section that isn't on screen can't publish the shared hero globals, so
-    // its first enter has to re-fetch rather than take the cheap path.
-    if !playlists_ui.section_active() {
-        playlists_ui.mark_dirty();
-    }
     wire_section_gate(ui, state, playlists_ui);
     install_library_refresher(ui, state, playlists_ui);
     install_stats_refresher(ui, state, playlists_ui);
@@ -66,6 +60,11 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
+            if let Some(id) = pu.section.take_deferred_restore(|| pu.detail_playlist_id() >= 0)
+                && let Some(ui) = weak.upgrade()
+            {
+                playlists_ui_mod::restore_detail(&ui, &s, &pu, id);
+            }
             s.runtime.spawn(reenter(s.clone(), pu.clone(), weak.clone()));
         } else {
             let pu = pu.clone();

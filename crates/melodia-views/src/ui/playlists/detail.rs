@@ -341,6 +341,8 @@ fn apply_filtered_detail(g: &PlaylistDetail<'_>, playlists_ui: &PlaylistsUi) {
     }
 }
 
+/// Reopen the playlist that was visible at the last shutdown, if any: now if the launch shows the
+/// Playlists tab, otherwise on that tab's first enter.
 pub fn seed_detail_from_settings(
     ui: &AppWindow,
     state: &AppState,
@@ -351,20 +353,25 @@ pub fn seed_detail_from_settings(
     }) else {
         return;
     };
-    // Synchronously, so it is up before `app.show()` — see `PlaylistDetail.restoring`.
+    if !tab_is_mounted(ui, MyLibraryTab::Playlists) {
+        playlists_ui.section.defer_restore(id);
+        return;
+    }
+    restore_detail(ui, state, playlists_ui, id);
+}
+
+/// Reopen a persisted playlist, at launch or on the first enter of a tab the launch left hidden.
+pub fn restore_detail(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>, id: i64) {
+    // Synchronously, so it is up before the tab's first frame; see `PlaylistDetail.restoring`.
     ui.global::<PlaylistDetail>().set_restoring(true);
     playlists_ui.section.begin_restore();
     let s = state.clone();
     let pu = playlists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Above = first-launch fade-down, not a drill-in slide. The user
-        // didn't navigate — we're just restoring their last view.
+        // Above, not a drill-in slide: nobody navigated into this playlist, it is their last view.
         if let Err(e) = open_playlist(&s, &pu, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!(
-                "playlists::seed_detail_from_settings open_playlist({id}): {}",
-                describe(&e)
-            );
+            log::warn!("playlists::restore_detail open_playlist({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_playlist`'s own hop so the id is already in:
         // a playlist deleted since the last session owes the grid back rather than an empty body.

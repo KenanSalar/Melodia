@@ -189,9 +189,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     //
     // **And the edge is latched, because the seam it rides fires on every nav change.** A
     // `changed` handler cannot ask which index it moved *from*, so an unlatched teardown
-    // runs on Search → Browse too — and `seed_detail_from_settings` writes each detail's
-    // cover and blur pair at boot precisely *because* the page is hidden. Seeded from the
-    // handler's own question, sound because `install_views` hydrates the nav index first.
+    // runs on Favorites → Recently Played too, and clears the `HeroBackdrop` and `HeroChips`
+    // those two bands publish into. Seeded from the handler's own question, sound because
+    // `install_views` hydrates the nav index first.
     {
         let weak = weak.clone();
         let was_up = Cell::new(my_library_mod::the_band_is_up(ui));

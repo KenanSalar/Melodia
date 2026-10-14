@@ -5,6 +5,7 @@
 
 const UI_SETUP: &str = include_str!("../ui_setup/views.rs");
 const INSTALL: &str = include_str!("../ui_setup/install.rs");
+const HYDRATE: &str = include_str!("../ui_setup/hydrate.rs");
 
 /// The persisted nav index has to reach `Nav.selected-index` before any
 /// `wire_*` runs.
@@ -96,6 +97,29 @@ fn the_persisted_my_library_tab_is_seeded_before_any_view_is_wired() {
         seed < wire_all,
         "the persisted My Library tab must be written before `wire_all`: all five of \
          that page's sections seed `section_active` from it"
+    );
+}
+
+/// The launch fetches only the grid of the My Library tab it shows.
+///
+/// A grid fetched while hidden is chunked at the column count of the launch's first layout, and
+/// `GridColumnsSync` re-chunks only the mounted tab as the window settles, so the hidden tab
+/// entered a column short until a leave forced a re-fetch. Skipping the fetch alone is the other
+/// half of the bug: unmarked, the first enter finds the flag clean and the grid empty.
+///
+/// The anchor carries the negation, fetching only the hidden tabs being the inverted bug.
+#[test]
+fn the_launch_fetches_only_the_grid_of_the_tab_it_shows() {
+    let fetch = HYDRATE.split_once("macro_rules! initial_grid_fetch").map_or("", |(_, body)| body);
+    let (before_spawn, _) = fetch.split_once("state.runtime.spawn(").unwrap_or(("", ""));
+    let hidden_arm = before_spawn
+        .split_once("if !handle.section_active() {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(arm, _)| arm);
+    assert!(
+        hidden_arm.contains("handle.mark_dirty();") && hidden_arm.contains("return;"),
+        "a hidden tab must skip the launch fetch and mark itself dirty, or it enters at the \
+         column count of the launch's first layout"
     );
 }
 

@@ -25,12 +25,6 @@ use melodia_ui::{
 /// Wire the Artists section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     artists_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Artists));
-    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
-    // section that isn't on screen can't publish the shared hero globals, so
-    // its first enter has to re-fetch rather than take the cheap path.
-    if !artists_ui.section_active() {
-        artists_ui.mark_dirty();
-    }
     wire_section_gate(ui, state, artists_ui);
     install_library_refresher(ui, state, artists_ui);
 }
@@ -72,6 +66,11 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsU
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
+            if let Some(id) = au.section.take_deferred_restore(|| au.detail_artist_id() >= 0)
+                && let Some(ui) = weak.upgrade()
+            {
+                artists_ui_mod::restore_detail(&ui, &s, &au, id);
+            }
             s.runtime.spawn(reenter(s.clone(), au.clone(), weak.clone()));
         } else {
             let au = au.clone();

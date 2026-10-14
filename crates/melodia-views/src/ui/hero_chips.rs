@@ -225,9 +225,8 @@ fn band_owner(ui: &AppWindow) -> Option<ChipOwner> {
 }
 
 /// Which detail the mounted My Library tab has open, given the four live ids — the pure
-/// half of [`band_owner`]. **The tab is what discriminates, not the id**:
-/// `seed_detail_from_settings` runs for all four detail views at boot whichever tab is
-/// restored, so more than one can be `>= 0` at a time.
+/// half of [`band_owner`]. **The tab is what discriminates, not the id**: a tab left with
+/// its detail open keeps the id, so more than one can be `>= 0` at a time.
 fn my_library_owner(
     tab: MyLibraryTab,
     album_id: i32,

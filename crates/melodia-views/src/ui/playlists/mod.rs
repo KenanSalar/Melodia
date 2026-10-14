@@ -60,7 +60,7 @@ pub use grid::fetch_grid;
 // Reached from this slice's own `callbacks/`. `pub(super)` is `pub(in crate::ui)`
 // here, one notch wider than that.
 pub(super) use detail::{
-    apply_optimistic_reorder, open_playlist, refresh_detail, rollback_reorder,
+    apply_optimistic_reorder, open_playlist, refresh_detail, restore_detail, rollback_reorder,
 };
 pub(super) use grid::{fetch_grid_stats, rebuild_grid};
 

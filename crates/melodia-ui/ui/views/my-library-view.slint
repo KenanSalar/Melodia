@@ -27,9 +27,9 @@ import { PlaylistDetailBody } from "my-library/playlist-detail.slint";
 // sheet — the band, the grid geometry the four card tabs share, which body is on screen, and the
 // two tooltip frames the band and the pills publish anchors for.
 //
-// **The tab index is what routes, not the detail id.** `seed_detail_from_settings` runs for all
-// four detail views at boot whichever section is restored, so more than one `*Detail.*-id` can be
-// `>= 0` at once and splitting on the id alone would mount two.
+// **The tab index is what routes, not the detail id.** A tab left with its detail open keeps the
+// id, so more than one `*Detail.*-id` can be `>= 0` at once and splitting on the id alone would
+// mount two.
 export component MyLibraryView inherits Rectangle {
     // Bumped by the band's `SearchBar`, settled 130 ms later — the list-view shape, where
     // the cost being debounced is a model rebuild in Rust rather than Slint's own

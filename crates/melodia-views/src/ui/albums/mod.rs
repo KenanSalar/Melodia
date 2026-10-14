@@ -50,7 +50,7 @@ pub use grid::fetch_grid;
 
 // `pub(super)` is `pub(in crate::ui)` here, which is exactly the reach these
 // need: this slice's own `callbacks/` and the drill in `callbacks::cross_tab_nav`.
-pub(super) use detail::{open_album, refresh_detail};
+pub(super) use detail::{open_album, refresh_detail, restore_detail};
 pub(super) use grid::rebuild_grid;
 
 /// Install the Albums grid + detail models, build the handle, and wire every

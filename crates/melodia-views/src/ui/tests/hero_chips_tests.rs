@@ -1015,9 +1015,9 @@ fn only_the_mounted_tabs_own_id_names_the_hero() {
     use crate::ui::my_library::MyLibraryTab::{Albums, Artists, Genres, Playlists, Songs};
 
     // One id set at a time, so a tab reading a sibling's is a failure rather than a
-    // coincidence — the shape a `match` arm gets wrong. Boot makes that reachable
-    // rather than theoretical: `seed_detail_from_settings` restores one detail per
-    // view whichever tab is resumed, so several ids are `>= 0` at once.
+    // coincidence — the shape a `match` arm gets wrong. Tab switches make that reachable
+    // rather than theoretical: a tab left with its detail open keeps the id, so several
+    // ids are `>= 0` at once.
     for (tab, ids, owner) in [
         (Albums, [7, -1, -1, -1], ChipOwner::Album(7)),
         (Artists, [-1, 7, -1, -1], ChipOwner::Artist(7)),
