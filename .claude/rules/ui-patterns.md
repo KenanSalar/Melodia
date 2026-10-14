@@ -632,6 +632,12 @@ three components that answer it, and each argues its geometry at its own file.
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
+- **A list holding its whole set in a `TrackListCache` shows it through
+  `ui::track_list_model::TrackListModel`, never a `VecModel` copy.** My Library's Songs tab and
+  Favorites' are the two today. A favourite or rating change writes the cache and asks the model to
+  `repaint` the row, where the `VecModel` lists go through `model_patch`; the `list_selection`
+  helpers take either model.
+
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
   rows in a `DetailCache`. A fifth detail implements both traits rather than copying a
@@ -1363,7 +1369,8 @@ block first; each page's section below is deltas only.** The nav-index map is in
   Tracks' leave releases nothing, so it owes none.
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
-  `ui::grid_rows::chunk_entity_rows`, `ui::model_diff::replace_rows`, `ui::track_list_cache`,
+  `ui::grid_rows::chunk_entity_rows`, `ui::model_diff::replace_rows`, `ui::track_list_cache`
+  with the `ui::track_list_model` that shows it,
   `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 

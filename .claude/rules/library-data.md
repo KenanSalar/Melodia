@@ -30,7 +30,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `insert_tracks_batch` — ids mapped back **by path**, RETURNING order being unspecified while
   DnD import relies on input order. Small deltas keep the stats triggers enabled and skip
   `recalculate_all_stats` entirely. Orphans, the cover roll-ups (`queries::scan::roll_up_covers`)
-  and the recalc land in one final tx; `library_changed` bumps once after it.
+  and the recalc land in one final tx; `library_changed` bumps once after it, and only if the scan
+  changed something, a launch scanning every folder.
 
 - **The artwork sweep runs *after* that tx commits, never inside it** (`tasks::artwork_sweep`,
   spawned beside `retroactive_hash`, and once per launch, since a launch with no library scans
@@ -151,11 +152,12 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   - **The other half of narrowing is `ui::track_list_cache`**: the two views that retain a whole
     list resident (My Library's Songs tab, Favorites') keep *converted* rows rather than
     `TrackListRow`s, so the columns a list doesn't render are freed at fetch rather than held for
-    the session. **Recently Played's Songs tab retains a list too and deliberately stays off it** —
-    `get_recently_played` is capped at 200 rows, so what the cache is for (a resident set whose
-    second copy in the Slint model is the larger half of the view's footprint) doesn't apply, and
-    it keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped* fourth view
-    belongs on the cache, not on a sixth projection.
+    the session, and `ui::track_list_model` shows them to Slint in place, so the set is held once
+    rather than again as a `VecModel` copy. **Recently Played's Songs tab retains a list too and
+    deliberately stays off it** — `get_recently_played` is capped at 200 rows, so what the cache is
+    for (a resident set large enough that a second copy of it is the view's footprint) doesn't
+    apply, and it keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped*
+    fourth view belongs on the cache and its model, not on a sixth projection.
 
   - **It is also why the whole-table fetches take no sort**: `get_all_tracks_for_list` and
     `get_favorite_tracks_for_list` lost their `sort_by`/`sort_dir` when their callers started

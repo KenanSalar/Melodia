@@ -46,6 +46,9 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     // up and re-fetches the list — covers the un-toggle-then-toggle race
     // where the user undoes the change quickly. Multi-select arrives
     // as `[int]`; single-row mode sends a 1-element array.
+    //
+    // A removal re-walks, being a new snapshot the model has to be shown;
+    // a re-favourite only patches the one it already holds, so it repaints.
     {
         let fu = fav_ui.clone();
         wire_row_flag!(g, on_toggle_row_favorite, state, "favorites::set_favorite",
@@ -54,8 +57,13 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
         after: |id_vec, fav| {
             for id in &id_vec {
                 fu.flip_or_remove_track(*id, fav);
+                if fav {
+                    favorites_ui_mod::repaint_row(&weak, *id);
+                }
             }
-            favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
+            if !fav {
+                favorites_ui_mod::apply_filtered_tracks(&fu, &weak);
+            }
         });
     }
 
@@ -73,7 +81,7 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
             // instead of rebuilding the whole filtered list.
             for id in &id_vec {
                 fu.flip_track_rating(*id, rating);
-                favorites_ui_mod::apply_row_rating(&weak, *id, rating);
+                favorites_ui_mod::repaint_row(&weak, *id);
             }
         });
     }

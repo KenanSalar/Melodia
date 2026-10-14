@@ -21,17 +21,17 @@ const SONGS_TAB: &str =
 const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
 
 /// `Favorites.tracks` feeds one element in the whole tree, under the Songs
-/// tab's `if` — so off that tab, every prepared row the Songs path builds
-/// reaches nothing and every row it leaves in the model is pinned behind a view
-/// nobody can see.
+/// tab's `if` — so off that tab, every filter walk the Songs path runs
+/// reaches nothing and every snapshot it leaves in the model is pinned behind a
+/// view nobody can see.
 ///
 /// Four things hold that, and each fails differently. `build_filtered_tracks`'
 /// bail is what skips the cost; drop it and the tab gate becomes decorative,
-/// with the whole favourites list still prepared per keystroke on the UI thread.
+/// with the whole favourites list still walked per keystroke on the UI thread.
 /// `write_filtered_tracks`' is what survives a pick landing mid-post; drop it
 /// and the retention comes back on exactly the race the first one can't see. The
 /// tab-leave **clear** is what empties what the last visit left; drop it and the
-/// rows simply stay. And the tab pick writing through the **non-hopping**
+/// snapshot simply stays. And the tab pick writing through the **non-hopping**
 /// `apply_filtered_tracks_now` is what stops that clear becoming visible: the
 /// entering tab mounts on the next frame, and a posted write that loses the race
 /// paints a `TrackList` of headers over nothing.
@@ -60,9 +60,7 @@ fn the_songs_model_is_written_only_while_its_tab_is_mounted() {
     );
 
     assert!(
-        SUBVIEWS.contains(
-            r#"clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: leave songs tab")"#
-        ),
+        SUBVIEWS.contains("favorites_ui_mod::hide_tracks(&g);"),
         "leaving the Songs tab must empty `Favorites.tracks`, the way `write_filtered_grids` empties the grid it isn't mounting"
     );
     assert!(

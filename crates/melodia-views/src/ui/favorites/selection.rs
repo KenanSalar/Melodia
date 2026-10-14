@@ -10,7 +10,7 @@ use slint::ComponentHandle;
 
 use super::FavoritesUi;
 use crate::ui::list_selection;
-use melodia_ui::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
+use melodia_ui::{AppWindow, Favorites};
 
 /// Compute the new selection set for a row click and apply it. Click semantics match
 /// `tracks::handle_select_row` exactly. Runs on the UI thread (called from `on_select_row`).
@@ -43,11 +43,4 @@ pub fn select_all(ui: &AppWindow, fav_ui: &FavoritesUi) {
 pub fn clear_selection(ui: &AppWindow, fav_ui: &FavoritesUi) {
     let g = ui.global::<Favorites>();
     list_selection::clear_curated_selection(&g, &fav_ui.state().applied_selection);
-}
-
-/// UI-thread-only: re-stamp selection onto a freshly-built row list before it's pushed into the
-/// Slint model. Invoked from `songs::apply_filtered_tracks` so a filter change / library refresh
-/// doesn't drop the user's existing selection.
-pub fn restamp_rows(g: &Favorites, rows: &mut [UiTrackListRow]) {
-    list_selection::restamp_curated_rows(g, rows);
 }

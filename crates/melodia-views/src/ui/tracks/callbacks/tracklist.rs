@@ -100,7 +100,7 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
         after: |id_vec, fav| {
             for id in &id_vec {
                 tu.flip_favorite(*id, fav);
-                tracks_ui_mod::apply_row_favorite(&weak, *id, fav);
+                tracks_ui_mod::repaint_row(&weak, *id);
             }
         });
     }
@@ -112,7 +112,7 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
         after: |id_vec, rating| {
             for id in &id_vec {
                 tu.flip_rating(*id, rating);
-                tracks_ui_mod::apply_row_rating(&weak, *id, rating);
+                tracks_ui_mod::repaint_row(&weak, *id);
             }
         });
     }
@@ -120,7 +120,7 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
 
 /// select-row: modifier-aware click handler. Computes the new selected
 /// set in Rust (Slint expressions can't iterate a model for a membership
-/// check) and walks the visible `VecModel` to flip per-row `selected` flags.
+/// check) and hands it to the model, which repaints the rows whose flag moved.
 fn wire_selection(ui: &AppWindow, tracks_ui: &Arc<TracksUi>) {
     let tracks = ui.global::<Tracks>();
     {

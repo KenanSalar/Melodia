@@ -39,7 +39,7 @@ struct CurrentTrackMirrors {
 impl CurrentTrackMirrors {
     fn mirror_favorite(&self, id: i64, fav: bool) {
         self.tracks.flip_favorite(id, fav);
-        tracks_ui_mod::apply_row_favorite(&self.weak, id, fav);
+        tracks_ui_mod::repaint_row(&self.weak, id);
         self.browse.flip_favorite(id, fav);
         browse_ui_mod::apply_row_favorite(&self.weak, id, fav);
         self.albums.mirror_favorite(id, fav);
@@ -52,7 +52,7 @@ impl CurrentTrackMirrors {
 
     fn mirror_rating(&self, id: i64, rating: i32) {
         self.tracks.flip_rating(id, rating);
-        tracks_ui_mod::apply_row_rating(&self.weak, id, rating);
+        tracks_ui_mod::repaint_row(&self.weak, id);
         self.browse.flip_rating(id, rating);
         browse_ui_mod::apply_row_rating(&self.weak, id, rating);
         self.albums.mirror_rating(id, rating);

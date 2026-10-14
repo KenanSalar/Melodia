@@ -102,8 +102,8 @@ impl Drop for PassClaim<'_> {
 ///
 /// Sequential per folder: `SQLite` has a single writer, and the scan
 /// progress is one `watch` slot that parallel scans would clobber. Each
-/// folder's scan already bumps `library_changed`, so Browse/Tracks views
-/// auto-refresh per folder as scans complete.
+/// folder's scan bumps `library_changed` when it changed something, so
+/// Browse/Tracks views refresh per folder as scans complete.
 ///
 /// One token for the whole pass, so a cancel stops the folders still to
 /// come as well as the one being scanned. Tracked on `TaskSpawner` so

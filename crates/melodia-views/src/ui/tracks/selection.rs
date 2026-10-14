@@ -12,8 +12,8 @@ use crate::ui::util::clamp_i64_to_i32;
 use melodia_ui::{AppWindow, Tracks};
 
 /// Compute the new selection state for a row click and apply it: write back
-/// `selected-ids` + `selection-anchor` on the global, then walk the visible
-/// `VecModel<TrackListRow>` to flip per-row `selected` flags.
+/// `selected-ids` + `selection-anchor` on the global, then hand the set to
+/// the row model so the per-row `selected` flags follow.
 ///
 /// Runs on the UI thread (called from `on_select_row`); no
 /// `upgrade_in_event_loop` indirection is needed.
@@ -48,7 +48,6 @@ pub fn handle_select_row(
     write_selection(&g, new_selected);
     g.set_selection_anchor(new_anchor);
 
-    // Update per-row flags so the visual reflects the new selection.
     list_selection::stamp_rows_selected(&g.get_rows(), &id_set);
 }
 

@@ -184,7 +184,7 @@ fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec
 
 /// Flip `is_favorite` on a single row in the Slint `VecModel`. Recency membership is independent
 /// of the favorite flag, so an in-place patch is always correct here — no re-fetch, no full-list
-/// rebuild. Mirrors [`crate::ui::tracks::apply_row_favorite`].
+/// rebuild.
 pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         crate::ui::model_patch::patch_track_row_by_id(

@@ -1,11 +1,12 @@
 //! Surgical in-place patches on a Slint row `VecModel`.
 //!
-//! Every list surface (Tracks, Browse, the four detail views, Favorites,
-//! Recently Played, Search) patches a favorite/rating change into its visible rows
-//! the same way, and the queue sheet patches two of its own: walk the model, mutate
-//! the rows that matter, write back only those. This module owns that walk; the
-//! per-view `apply_row_*` wrappers keep only their `upgrade_in_event_loop`
-//! hop and the global they read.
+//! Every `VecModel` list surface (Browse, the four detail views, Recently Played,
+//! Search) patches a favorite/rating change into its visible rows the same way, and
+//! the queue sheet patches two of its own: walk the model, mutate the rows that
+//! matter, write back only those. This module owns that walk; the per-view
+//! `apply_row_*` wrappers keep only their `upgrade_in_event_loop` hop and the global
+//! they read. The two Songs lists patch their cache instead and ask its
+//! [`TrackListModel`](crate::ui::track_list_model::TrackListModel) to repaint.
 
 use slint::{Model, ModelRc, VecModel};
 

@@ -17,6 +17,7 @@ use std::hash::BuildHasher;
 use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
+use crate::ui::track_list_model::TrackListModel;
 use melodia_ui::{
     AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed, Search,
     TrackListRow as UiTrackListRow,
@@ -64,15 +65,19 @@ pub fn compute_click_selection(
     }
 }
 
-/// Re-stamp `selected: bool` on every row in the visible
-/// `VecModel<TrackListRow>` to match `desired`. Rows whose flag already
-/// matches are skipped — `set_row_data` invalidates the `ListView` delegate
-/// cache for that row, so a full rewrite would re-build every row component
-/// on every click. UI-thread only.
+/// Re-stamp `selected: bool` on every visible row to match `desired`. Rows
+/// whose flag already matches are skipped — `set_row_data` invalidates the
+/// `ListView` delegate cache for that row, so a full rewrite would re-build
+/// every row component on every click. A [`TrackListModel`] keeps the set
+/// itself and makes the same skip without cloning a row. UI-thread only.
 pub fn stamp_rows_selected<S: BuildHasher>(
     rows: &ModelRc<UiTrackListRow>,
     desired: &HashSet<i32, S>,
 ) {
+    if let Some(model) = TrackListModel::of(rows) {
+        model.select(desired);
+        return;
+    }
     let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
         return;
     };
@@ -111,9 +116,13 @@ pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
 /// accessor to make either clone free. Keeps that function's skip-if-unchanged guard for the
 /// same reason it has one.
 ///
-/// Falls back to [`displayed_ids`] where the model isn't the `VecModel` the views install, which
-/// is [`stamp_rows_selected`]'s own early return: there is nothing to stamp either way.
+/// A [`TrackListModel`] answers from its snapshot, every row it holds being a library row.
+/// Falls back to [`displayed_ids`] where the model is neither, which is [`stamp_rows_selected`]'s
+/// own early return: there is nothing to stamp either way.
 pub fn select_all_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
+    if let Some(model) = TrackListModel::of(rows) {
+        return model.select_all();
+    }
     let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
         return displayed_ids(rows);
     };
@@ -234,10 +243,7 @@ pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
         // as the Slint `tracks` model). Read ids straight from the model rather than re-walking
         // the cached `tracks_all` + filter, so the range matches what the user is looking at even
         // mid-debounce — where a detail view, whose cache *is* the display order, indexes that.
-        || {
-            let rows = view.track_rows();
-            (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect()
-        },
+        || row_ids(&view.track_rows()),
         idx,
         id,
         shift,
@@ -295,6 +301,14 @@ pub fn clear_curated_selection<V: RowSelectionView, S: BuildHasher>(
 pub fn restamp_curated_rows<V: RowSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
     let selected: HashSet<i32> = view.selected_ids().iter().collect();
     restamp_selected(rows, &selected);
+}
+
+/// Every row's id in display order, one per row so a click's index still names its row.
+fn row_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
+    match TrackListModel::of(rows) {
+        Some(model) => model.ids(),
+        None => (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect(),
+    }
 }
 
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place.

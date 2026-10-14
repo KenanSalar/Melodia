@@ -13,10 +13,7 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{
-    AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Favorites, Nav,
-    TrackListRow as UiTrackListRow,
-};
+use melodia_ui::{AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Favorites, Nav};
 
 /// Wire the Favorites section-lifecycle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
@@ -66,7 +63,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 g.set_artist_count(UNFETCHED_COUNT);
-                clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: clear tracks");
+                favorites_ui_mod::release_tracks(&g);
                 clear_vec_model::<UiEntityGridRow>(
                     &g.get_most_played_rows(),
                     "favorites: clear most-played",

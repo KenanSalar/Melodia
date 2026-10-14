@@ -1,8 +1,8 @@
 //! Tracks-view glue between Rust and Slint.
 //!
-//! The Slint `Tracks` global owns a `Rc<VecModel<TrackListRow>>` set
-//! once at startup via `install_tracks_model`. The canonical (unfiltered) list
-//! lives in `TracksUi::cache` so client-side filter changes don't hit the DB.
+//! The Slint `Tracks` global owns a [`TrackListModel`] set once at startup
+//! via `install_tracks_model`. The canonical (unfiltered) list lives in
+//! `TracksUi::cache` so client-side filter changes don't hit the DB.
 //!
 //! Cross-thread layout:
 //! * `TracksUi` is `Send + Sync` — `Arc<TracksUi>` cloned into callback
@@ -12,9 +12,8 @@
 //!
 //! Allocation strategy is [`crate::ui::track_list_cache`]'s and is argued
 //! there: this is the largest list in the app, so it retains *converted*
-//! rows and a rebuild clones them (refcounted `SharedString`s) rather than
-//! rebuilding them from DB rows. A refilter takes one lock and one
-//! `Arc::clone`, and allocates nothing per row.
+//! rows once and the model reads them in place. A refilter takes one lock
+//! and one `Arc::clone`, and copies no row.
 
 mod callbacks;
 mod fetch;
@@ -27,6 +26,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::track_list_cache::TrackListCache;
+use crate::ui::track_list_model::TrackListModel;
 use crate::ui::util::{StringPool, clamp_i64_to_i32};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -38,10 +38,10 @@ use melodia_ui::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 pub use fetch::fetch_and_apply;
 
 // Reached only from this slice's own `callbacks.rs`, which used to live two
-// modules away, plus the cross-slice `apply_row_*` mirrors in
+// modules away, plus the cross-slice `repaint_row` mirror in
 // `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
 // exactly that reach.
-pub(super) use fetch::{apply_row_favorite, apply_row_rating, refilter, resort_and_apply};
+pub(super) use fetch::{refilter, repaint_row, resort_and_apply};
 pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// Install the Tracks models, build the handle, and wire every `Tracks.*`
@@ -92,14 +92,14 @@ impl TracksUi {
     }
 
     /// Surgical mutation of `is_favorite` on the cached row. Combined with
-    /// `apply_row_favorite` below, lets us avoid re-fetching the whole list
-    /// on a single-row favourite toggle (preserves scroll position + no flash).
+    /// `repaint_row`, lets us avoid re-fetching the whole list on a
+    /// single-row favourite toggle (preserves scroll position + no flash).
     pub fn flip_favorite(&self, id: i64, fav: bool) {
         self.cache.set_favorite(id, fav);
     }
 
     /// Surgical mutation of `rating` on the cached row — the star-rating
-    /// analogue of [`Self::flip_favorite`]. Paired with `apply_row_rating` so a
+    /// analogue of [`Self::flip_favorite`]. Paired with `repaint_row` so a
     /// hover-set rating doesn't re-fetch the whole list.
     pub fn flip_rating(&self, id: i64, rating: i32) {
         self.cache.set_rating(id, rating);
@@ -108,11 +108,10 @@ impl TracksUi {
 
 impl_section_state_helpers!(TracksUi);
 
-/// Build an empty `VecModel<TrackListRow>`, hand it to the Slint `Tracks`
-/// global as a `ModelRc`. Subsequent updates locate it by downcasting
-/// `Tracks.rows` back to `VecModel<TrackListRow>`.
+/// Hand the Slint `Tracks` global an empty [`TrackListModel`]. Subsequent
+/// updates locate it by downcasting `Tracks.rows` back to one.
 fn install_tracks_model(ui: &AppWindow) {
-    let model: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
+    let model: Rc<TrackListModel> = Rc::new(TrackListModel::default());
     ui.global::<Tracks>().set_rows(ModelRc::from(model));
 }
 

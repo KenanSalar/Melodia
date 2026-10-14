@@ -248,7 +248,11 @@ async fn scan_one(
     queries::scan::commit_scan(&state.db, &folder, &orphans, &ingested).await?;
     finish::absorb_nested(&state.db, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
-    state.library_changed.bump();
+    // Only for a change: every list showing the library re-fetches on a bump, and a launch scans
+    // every folder. The folder's new `last_scanned` reaches Settings when the run ends instead.
+    if ingested.any() || !orphans.is_empty() || !scope.nested.is_empty() {
+        state.library_changed.bump();
+    }
 
     Ok(ScanOutcome::Completed { inserted: ingested.inserted })
 }

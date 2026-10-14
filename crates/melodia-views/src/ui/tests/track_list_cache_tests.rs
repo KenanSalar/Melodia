@@ -178,10 +178,16 @@ fn the_cache_sorts_exactly_as_the_db_rows_do() {
     }
 }
 
+/// Every row a list showing `snap` under `needle` would paint, in order.
+fn shown(snap: &Arc<CacheData>, needle: &str) -> Vec<UiTrackListRow> {
+    let visible = VisibleRows::new(Arc::clone(snap), &row_match::fold_needle(needle));
+    (0..visible.len()).filter_map(|pos| visible.row(pos)).collect()
+}
+
 #[test]
-fn a_stored_set_leaves_its_four_vectors_aligned() {
-    // `order` indexes `rows`, `search` and `sort` alike, and the whole reason
-    // they share one lock is that a reader must never see them disagree.
+fn a_stored_set_leaves_its_vectors_aligned() {
+    // `order` indexes `rows`, `marks`, `search` and `sort` alike, and the whole
+    // reason they share one lock is that a reader must never see them disagree.
     let rows = sortable_rows();
     let cache = TrackListCache::new();
     cache.store(rows.clone(), "title", "asc");
@@ -197,13 +203,12 @@ fn a_stored_set_leaves_its_four_vectors_aligned() {
     seen.sort_unstable();
     assert_eq!(seen, [1, 2, 3, 4]);
 
-    let titles: Vec<String> =
-        snap.visible(&row_match::fold_needle("")).iter().map(|r| r.title.to_string()).collect();
+    let titles: Vec<String> = shown(&snap, "").iter().map(|r| r.title.to_string()).collect();
     let by_id: Vec<String> = ids
         .iter()
         .map(|id| rows.iter().find(|r| r.id == *id).map_or_else(String::new, |r| r.title.clone()))
         .collect();
-    assert_eq!(titles, by_id, "visible() and ids_filtered() disagree on order");
+    assert_eq!(titles, by_id, "VisibleRows and ids_filtered() disagree on order");
 }
 
 #[test]
@@ -214,7 +219,7 @@ fn a_filter_narrows_both_walks_the_same_way() {
 
     let needle = row_match::fold_needle("mango");
     assert_eq!(snap.ids_filtered(&needle), [3, 4]);
-    assert_eq!(snap.visible(&needle).len(), 2);
+    assert_eq!(shown(&snap, "mango").len(), 2);
     // The unfiltered count is the view's `total-count` and must not follow
     // the filter — the header states the library, not the query.
     assert_eq!(snap.total(), 4);
@@ -240,7 +245,7 @@ fn a_removal_keeps_the_order_pointing_at_the_rows_it_names() {
     assert_eq!(seen, [1, 2, 4]);
 
     // The surviving rows still line up with the ids beside them.
-    let visible = snap.visible(&row_match::fold_needle(""));
+    let visible = shown(&snap, "");
     assert_eq!(visible.len(), ids.len());
     for (row, id) in visible.iter().zip(&ids) {
         assert_eq!(i64::from(row.id), *id);
@@ -252,10 +257,11 @@ fn a_removal_keeps_the_order_pointing_at_the_rows_it_names() {
 }
 
 #[test]
-fn a_single_row_patch_leaves_a_live_snapshot_alone() {
-    // The patches are copy-on-write so a rebuild already holding a snapshot
-    // keeps a consistent view. That is the property the `Arc` is for; without
-    // it a star click mid-refilter would mutate the set being walked.
+fn a_single_row_patch_reaches_a_live_snapshot() {
+    // The list on screen always holds a snapshot, so a patch that stopped at
+    // the cache's own copy would leave the row it repaints showing the old
+    // value. Writing through costs nothing a walk could see: the marks sit
+    // outside the rows and keys a filter or a sort reads.
     let cache = TrackListCache::new();
     cache.store(sortable_rows(), "title", "asc");
 
@@ -264,14 +270,11 @@ fn a_single_row_patch_leaves_a_live_snapshot_alone() {
     cache.set_favorite(1, true);
     let after = cache.snapshot();
 
-    let rating_of = |snap: &CacheData| {
-        snap.visible(&row_match::fold_needle(""))
-            .into_iter()
-            .find(|r| r.id == 1)
-            .map(|r| (r.rating, r.is_favorite))
+    let rating_of = |snap: &Arc<CacheData>| {
+        shown(snap, "").into_iter().find(|r| r.id == 1).map(|r| (r.rating, r.is_favorite))
     };
 
-    assert_eq!(rating_of(&before), Some((0, false)));
+    assert_eq!(rating_of(&before), Some((5, true)));
     assert_eq!(rating_of(&after), Some((5, true)));
 }
 
@@ -287,7 +290,7 @@ fn a_cleared_cache_reads_as_empty_rather_than_stale() {
     assert!(snap.is_empty());
     assert_eq!(snap.total(), 0);
     assert!(snap.ids_filtered(&row_match::fold_needle("")).is_empty());
-    assert!(snap.visible(&row_match::fold_needle("")).is_empty());
+    assert!(shown(&snap, "").is_empty());
 }
 
 #[test]

@@ -52,8 +52,8 @@ pub(super) use hero::refresh_hero;
 pub(super) use rows::{to_slint_fav_artist_row, to_slint_most_played_row};
 pub(super) use selection::{clear_selection, handle_select_row, select_all};
 pub(super) use songs::{
-    apply_filtered_tracks, apply_filtered_tracks_now, apply_row_rating, refresh_tracks,
-    resort_and_apply, set_filter, set_sort,
+    apply_filtered_tracks, apply_filtered_tracks_now, hide_tracks, refresh_tracks, release_tracks,
+    repaint_row, resort_and_apply, set_filter, set_sort,
 };
 pub use tabs::FavoritesTab;
 pub(super) use tabs::{seed_tab, tab_from_index};
