@@ -120,9 +120,13 @@ fn apply_mini_backdrop(app: &AppWindow, settings: &services::settings::SettingsD
     app.global::<MiniPlayer>().set_backdrop_shown(settings.backdrop.mini_backdrop);
 }
 
-/// Kick off the initial Tracks fetch so the list is populated by the time the
-/// user navigates to it. A fresh install falls back to title ascending, matching
-/// the `Tracks` global default and the header `ui::tracks::install` seeds.
+/// Kick off the initial Tracks fetch, if the launch shows the Songs tab. A fresh install falls
+/// back to title ascending, matching the `Tracks` global default and the header
+/// `ui::tracks::install` seeds.
+///
+/// A hidden tab is marked dirty instead and fetches through `request-refresh` on its first
+/// enter: the whole library, converted and with its covers decoded, is the largest thing the
+/// launch could hold for nothing on screen.
 ///
 /// Off the same snapshot that header is seeded from, rather than `resolve_view_sort`'s own
 /// `views.json` read: the two have to agree, and one source is what makes that structural.
@@ -132,6 +136,10 @@ pub fn spawn_initial_tracks_fetch(
     view_state: Option<&services::view_state::ViewStateData>,
     weak: slint::Weak<AppWindow>,
 ) {
+    if !tracks_ui.section_active() {
+        tracks_ui.mark_dirty();
+        return;
+    }
     let (sort_field, sort_dir) =
         ui::callbacks::persisted_sort(view_state, ui::track_list_view::view_id::TRACKS)
             .map_or_else(

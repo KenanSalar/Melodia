@@ -76,8 +76,8 @@ fn a_quota_answer_is_named_rather_than_reported_as_a_parse_failure() {
 
 /// The reason [`classify`] can try the error shape first and lose nothing: the two
 /// are disjoint, because neither `data` nor `error` carries a serde default. Adding
-/// one to `data` would turn every refusal into an empty result set — memoized as a
-/// definitive "no match" for the rest of the session.
+/// one to `data` would turn every refusal into an empty result set — recorded as a
+/// definitive "no match" on the artist's row for the whole retry window.
 #[test]
 fn a_quota_body_does_not_decode_as_an_empty_result_set() {
     assert!(serde_json::from_str::<DeezerSearchResponse>(QUOTA_BODY).is_err());

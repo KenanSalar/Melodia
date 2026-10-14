@@ -49,7 +49,8 @@ async fn get_artist_by_id_not_found() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_artists_without_images() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let artists = queries::artist::get_artists_without_images(&db).await?;
+    // A cutoff every recorded miss is older than; the seed records none.
+    let artists = queries::artist::get_artists_without_images(&db, i64::MAX).await?;
     // The seed's two, and not the schema's Unknown Artist sentinel, which has no image either:
     // a directory search for its name answers with a stranger's photo.
     assert_eq!(artists.len(), 2);
@@ -75,7 +76,7 @@ async fn update_artist_image_path() -> Result<(), AppError> {
     assert_eq!(updated.image_path.as_deref(), Some("/images/artist_a.jpg"));
 
     // Should no longer appear in "without images"
-    let without = queries::artist::get_artists_without_images(&db).await?;
+    let without = queries::artist::get_artists_without_images(&db, i64::MAX).await?;
     assert!(!without.iter().any(|a| a.id == artist.id));
     Ok(())
 }

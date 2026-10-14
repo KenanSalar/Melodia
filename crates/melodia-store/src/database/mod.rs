@@ -202,6 +202,13 @@ async fn strip_windows_verbatim_paths(pool: &SqlitePool) -> Result<(), AppError>
     Ok(())
 }
 
+/// The map every connection reads through, so a library-sized read stays in the file-backed page
+/// cache instead of being copied into that connection's heap. Larger than any library's file.
+const MMAP_SIZE: &str = "268435456";
+
+/// How long a pooled connection may sit idle before it closes, taking its page cache with it.
+const IDLE_TIMEOUT: Duration = Duration::from_mins(1);
+
 pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     let db_path = paths.db_path.clone();
     let db_url = format!("sqlite:{}", db_path.display());
@@ -230,9 +237,17 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         // Sized for a single-user desktop library rather than a server: the
         // working set fits, and oversizing only inflates idle resident memory.
         .pragma("cache_size", "-16000")
-        .pragma("temp_store", "MEMORY");
+        .pragma("temp_store", "MEMORY")
+        // The writer reads whole tables too, a scan's orphan check walking every path. Unmapped,
+        // each page it read was copied into its cache and held there for the session.
+        .pragma("mmap_size", MMAP_SIZE);
 
-    let write_pool = SqlitePoolOptions::new().max_connections(1).connect_with(write_opts).await?;
+    // Reaped like the read pool, so the pages a scan's writes leave cached don't outlive it.
+    let write_pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .idle_timeout(IDLE_TIMEOUT)
+        .connect_with(write_opts)
+        .await?;
 
     let migrator = sqlx::migrate!("../../migrations");
     let (has_pending, applied_version) = {
@@ -302,14 +317,14 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         // cache here is idle overhead multiplied across the pool.
         .pragma("cache_size", "-16000")
         .pragma("temp_store", "MEMORY")
-        .pragma("mmap_size", "268435456");
+        .pragma("mmap_size", MMAP_SIZE);
 
     // `idle_timeout` reaps the connections the boot prefetch burst opens after a
     // minute idle rather than sqlx's default ten. `min_connections` stays at
     // its default — a cold reopen costs nothing at this scale.
     let read_pool = SqlitePoolOptions::new()
         .max_connections(read_conns)
-        .idle_timeout(Duration::from_mins(1))
+        .idle_timeout(IDLE_TIMEOUT)
         .connect_with(read_opts)
         .await?;
 

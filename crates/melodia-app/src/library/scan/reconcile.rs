@@ -14,6 +14,7 @@ use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::folder::Folder;
 use melodia_core::error::describe;
+use melodia_platform::services::platform::allocator::trim;
 use melodia_store::database::queries;
 
 /// Which folders a pass reads.
@@ -140,10 +141,13 @@ pub(super) fn start(state: &AppState, reach: Reach, restoring: Option<RestoreNot
                 return;
             }
             let Some(next) = claim.next_round(reach) else {
-                return;
+                break;
             };
             reach = next;
         }
+        // Each walk and orphan check holds a path per file and frees them all at once. On a large
+        // library that outlasts the startup trim, so the pass hands its own slack back.
+        trim();
     });
 }
 

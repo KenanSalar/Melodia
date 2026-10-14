@@ -70,9 +70,10 @@ pub struct TracksUi {
     pub(super) cover_thumbs: Arc<CoverThumbs>,
     /// Visibility and staleness bookkeeping (`section-active-changed`
     /// shadow plus dirty flag). Unlike the entity-grid views, Tracks
-    /// releases nothing on leave — `dirty` is set only by the
-    /// `library_changed` refresher when a bump arrives while the section
-    /// is hidden, and consumed on re-enter to run one deferred re-fetch.
+    /// releases nothing on leave — `dirty` is set by a launch that doesn't
+    /// show the tab and by the `library_changed` refresher when a bump
+    /// arrives while the section is hidden, and consumed on re-enter to run
+    /// one deferred fetch.
     section: SectionState,
 }
 

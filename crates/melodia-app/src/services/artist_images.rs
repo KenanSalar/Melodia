@@ -1,10 +1,7 @@
-use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
-use std::time::Duration;
-
-use parking_lot::Mutex;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use melodia_artwork::media::image::artwork;
 use melodia_core::config::Paths;
@@ -14,36 +11,31 @@ use melodia_net::media::fetch::deezer::{self, DeezerAnswer};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 
-/// Session-scoped negative memo: artist ids whose Deezer search returned a
-/// definitive "no match" this session. `spawn_fetch` runs after every scan
-/// completion, so without this every image-less artist is re-queried over
-/// the network per scan — and the answer won't change until tags change
-/// (which usually creates new artist rows anyway). Transient failures
-/// (transport/HTTP errors, failed downloads) are deliberately NOT memoized
-/// so a later scan retries them. Cleared only by process restart; bounded
-/// by the artist-table size (bare `i64`s).
-fn attempted_no_match() -> &'static Mutex<HashSet<i64>> {
-    static ATTEMPTED: OnceLock<Mutex<HashSet<i64>>> = OnceLock::new();
-    ATTEMPTED.get_or_init(|| Mutex::new(HashSet::new()))
-}
+/// How long a definitive "no match" stands before the artist is searched again.
+///
+/// Recorded on the artist's row, because `spawn_fetch` runs after every scan, a launch's
+/// no-change re-scan included: kept for the session alone, every launch searched again for every
+/// artist the directory doesn't know. It lapses because the directory keeps adding artists.
+const NO_MATCH_RETRY_AFTER: Duration = Duration::from_hours(30 * 24);
 
 /// Per-artist result of one Deezer round-trip.
 enum FetchOutcome {
     /// Image found, downloaded, and cached at this path.
     Cached(String),
-    /// Deezer answered definitively with no usable result — memoized.
+    /// Deezer answered definitively with no usable result, recorded for
+    /// [`NO_MATCH_RETRY_AFTER`].
     NoMatch,
     /// Transport/HTTP/download failure — retry on a later scan. Also where a
     /// Deezer error code that isn't [`deezer::halts_a_batch`] lands: those answer
     /// the query rather than the pace, so the pass keeps going and the answer is
-    /// deliberately not memoized. A name that reliably draws one therefore costs
-    /// a request per scan for the session, which is the right way round —
-    /// memoizing would strand a genuinely transient failure for just as long, and
-    /// it is one request either way.
+    /// deliberately not recorded. A name that reliably draws one therefore costs
+    /// a request per scan, which is the right way round: recording it would
+    /// strand a genuinely transient failure for the whole retry window, and it is
+    /// one request either way.
     Transient,
     /// Deezer refused the search itself, carrying its own reason. In practice a
     /// tripped quota, which the remaining batches would spend on refusals too —
-    /// so this stops the pass. Nothing is memoized, so the next scan retries.
+    /// so this stops the pass. Nothing is recorded, so the next scan retries.
     Refused(String),
 }
 
@@ -133,11 +125,9 @@ pub async fn fetch_artist_images(
 /// Runs one [`BATCH_SIZE`] batch of concurrent searches per [`BATCH_INTERVAL`],
 /// and abandons the rest if Deezer refuses on a code that says to stop asking.
 async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppResult<PassOutcome> {
-    let mut artists = queries::artist::get_artists_without_images(db).await?;
-    {
-        let attempted = attempted_no_match().lock();
-        artists.retain(|a| !attempted.contains(&a.id));
-    }
+    let now = unix_now();
+    let missed_before = now.saturating_sub_unsigned(NO_MATCH_RETRY_AFTER.as_secs());
+    let artists = queries::artist::get_artists_without_images(db, missed_before).await?;
     if artists.is_empty() {
         return Ok(PassOutcome { fetched: 0, halted: false });
     }
@@ -198,6 +188,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
         // refusal rather than five identical warnings.
         let mut refusal: Option<String> = None;
         let mut refused = 0usize;
+        let mut missed: Vec<i64> = Vec::with_capacity(batch.len());
 
         while let Some(result) = set.join_next().await {
             match result {
@@ -211,9 +202,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
                         fetched_count += 1;
                     }
                 }
-                Ok((id, _name, FetchOutcome::NoMatch)) => {
-                    attempted_no_match().lock().insert(id);
-                }
+                Ok((id, _name, FetchOutcome::NoMatch)) => missed.push(id),
                 Ok((_id, _name, FetchOutcome::Transient)) => {}
                 Ok((_id, _name, FetchOutcome::Refused(reason))) => {
                     refused += 1;
@@ -221,6 +210,10 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
                 }
                 Err(e) => log::error!("Artist image fetch task failed: {}", describe(&e)),
             }
+        }
+
+        if let Err(e) = queries::artist::mark_image_search_missed(db, &missed, now).await {
+            log::warn!("Failed to record artist image misses: {}", describe(&e));
         }
 
         // Refusals don't count: Deezer declined to answer for those, so they sit
@@ -241,6 +234,13 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
     // Fetched images land in the DB but nothing signals the UI, so a grid
     // that's already painted won't pick them up until its next refresh.
     Ok(PassOutcome { fetched: fetched_count, halted })
+}
+
+/// Seconds since the Unix epoch, the unit the miss column holds.
+fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| i64::try_from(since.as_secs()).unwrap_or(i64::MAX))
 }
 
 /// Download one artist image into the artists store, returning where it landed.
