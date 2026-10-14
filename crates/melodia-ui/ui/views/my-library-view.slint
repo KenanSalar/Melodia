@@ -6,6 +6,7 @@ import { GenreDetail, Genres } from "../globals/genres.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 import { PlaylistDetail, Playlists } from "../globals/playlists.slint";
 import { Tracks } from "../globals/tracks.slint";
+import { DetailArrival } from "../components/detail-arrival.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
@@ -109,44 +110,33 @@ export component MyLibraryView inherits Rectangle {
         if (!root.detail-open) { root.latch-count(); }
     }
 
-    // **The latches need a *write* to own their binding, and no guard fires on a page that
+    // **Both latches need a *write* to own their binding, and neither guard fires on a page that
     // mounts already in the state it holds for.** A view entered straight onto a detail has never
     // run `latch-hero` — `detail-open` is false on exactly the close that needs the hold — so the
     // first back would follow the live binding through the whole collapse; `latch-count`'s
-    // complement guard strands a page mounted onto a grid the same way, and `restore-landing` a
-    // page mounted mid-restore. Writing here moves nothing: `init` runs after the bindings resolve.
+    // complement guard strands a page mounted onto a grid the same way. Writing here moves
+    // nothing: `init` runs after the bindings resolve.
     init => {
         root.latch-hero();
         root.latch-count();
-        root.restore-landing = root.detail-restoring;
     }
 
     // **May a mounting body animate at all.** The page's own `ViewTransition` is still in flight
     // when its first body mounts, so a body moving into it is the same diagonal one level up.
-    // `tab-anim-armed` covers every arrival through the bar; the two that don't are armed by the
-    // handlers below — the first drill out of the tab the page opened on, and a tab move that isn't
-    // a pick, which `detail-open` can't cover because it lands the id and the tab in **one** tick.
-    // Seeded by the binding and owned by the handlers, `hero-t`'s idiom; it re-disarms for free on
-    // the next entry, and `changed` skips a first evaluation.
+    // `tab-anim-armed` covers every arrival through the bar. The two that don't are armed below:
+    // a drill or close by `DetailArrival`, which leaves out a restore's landing, and a tab move
+    // that isn't a pick by `watched-tab-idx`, a cross-tab drill landing the id and the tab in
+    // **one** tick so `detail-open` never moves. Seeded by the binding and owned by the handlers,
+    // `hero-t`'s idiom; it re-disarms for free on the next entry, and `changed` skips a first
+    // evaluation.
     property <bool> body-anim-armed: band.tab-anim-armed;
-    changed detail-open => {
-        if (!root.restore-landing) { root.body-anim-armed = true; }
-        root.restore-landing = false;
-        if (!root.detail-open) { root.latch-count(); }
+    DetailArrival {
+        open: root.detail-open;
+        restoring: root.detail-restoring;
+        arrived => { root.body-anim-armed = true; }
     }
-
-    // **A restore lands its detail with nobody navigating, so it arms nothing.** Its fade would
-    // only add a page-sized layer to the launch's first frames. Latched on the rise and taken by
-    // the open that ends it, never read off `detail-restoring` at the open: Rust lowers that in
-    // the hop right behind the id, which usually lands before this handler runs. A restore that
-    // finds nothing lowers it with no open to take the latch, so the fall clears it.
-    property <bool> restore-landing: root.detail-restoring;
-    changed detail-restoring => {
-        if (root.detail-restoring) {
-            root.restore-landing = true;
-        } else if (!root.detail-open) {
-            root.restore-landing = false;
-        }
+    changed detail-open => {
+        if (!root.detail-open) { root.latch-count(); }
     }
 
     changed album-open => {

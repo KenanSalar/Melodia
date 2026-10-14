@@ -1093,8 +1093,8 @@ three components that answer it, and each argues its geometry at its own file.
     the settled page straight back out, which is also why the hand-back can't be Rust's. Gated on
     **`enabled`**, since a nested body mounted at boot runs the same `Timer` and would otherwise
     drop the flag for the page above it. Pinned by `ui::startup_motion_tests`.
-    **A restored My Library detail arms no body fade either** (`my-library-view.slint`'s
-    `restore-landing`), its layer otherwise stacking on the launch's first frames.
+    **A restored detail arms no body fade either**, on My Library or Radio
+    (`components/detail-arrival.slint`), its layer otherwise stacking on the launch's first frames.
     **`MiniPlayerSwitch`'s swap timer raises the same flag** on the way out of the miniplayer, ahead
     of the flip that rebuilds the full UI. That rebuild is already crossfading, and a page sliding in
     under it put a second full-window layer over the most expensive frames of the swap. The setting
@@ -1116,7 +1116,7 @@ three components that answer it, and each argues its geometry at its own file.
     `hero-t != (detail-open ? 1.0 : 0.0)`** — deliberately not `hero-t > 0`, which is `false` on a
     drill-in's first frame, the one frame the answer must be `true`; same-axis is not enough to
     skip it, the body's 32 px being made of a curve that disagrees with the morph's, so the sum
-    runs the wrong way before it turns. **`body-anim-armed`** is written from `changed detail-open`
+    runs the wrong way before it turns. **`body-anim-armed`** is written from `DetailArrival.arrived`
     **and** the `watched-tab-idx` mirror: the seed answers "a tab has been picked in this mount",
     and the two arrivals that aren't picks each need one handler, a cross-tab drill writing the id
     and moving the tab in *one* tick so `detail-open` never transitions.
@@ -1408,7 +1408,7 @@ edit would otherwise reverse.
 
 ## The Settings page
 
-- **The page is tabbed** — 5 tabs over the same 18 section cards. `settings-view.slint` is page
+- **The page is tabbed** — 5 tabs over the same section cards. `settings-view.slint` is page
   chrome only, `settings-tabs.slint` the router, `views/settings/pages/*.slint` the five pages,
   each owning its section list *and* an aggregate `has-matches`. **Search escapes the tabs**: a
   non-empty query mounts all five pages at once, which is how the cross-tab flat list comes back
