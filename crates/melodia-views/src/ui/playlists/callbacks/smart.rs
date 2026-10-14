@@ -445,3 +445,7 @@ fn open_editor(
     se.invoke_recount();
     ui.global::<Dialog>().set_open(true);
 }
+
+#[cfg(test)]
+#[path = "tests/smart_tests.rs"]
+mod tests;

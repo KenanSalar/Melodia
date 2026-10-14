@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use melodia_engine::player::engine::backend::PlaybackEngine;
+use melodia_engine::player::engine::backend::{PlaybackCheck, PlaybackEngine};
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::mixer::{self, MixerPull};
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
@@ -512,7 +512,7 @@ async fn stopping_a_paused_deck_clears_it_immediately() -> std::io::Result<()> {
 
     assert_eq!(
         engine.check_playback_state(),
-        melodia_engine::player::engine::backend::PlaybackCheck::EndOfStream,
+        PlaybackCheck::EndOfStream,
         "the decks must be cleared by the time `stop_with_fade` returns, not \
          behind a deferred clear waiting on a ramp that can never advance"
     );
@@ -577,7 +577,7 @@ async fn stopping_with_a_gapless_track_staged_clears_both_decks_at_once() -> std
     // still reporting `Playing`.
     assert_eq!(
         engine.check_playback_state(),
-        melodia_engine::player::engine::backend::PlaybackCheck::EndOfStream,
+        PlaybackCheck::EndOfStream,
         "both decks — staged source included — must be cleared by the time \
          `stop_with_fade` returns, not behind a deferred clear"
     );
@@ -645,7 +645,7 @@ async fn a_deferred_clear_takes_a_late_preload_with_it() -> std::io::Result<()> 
 
     assert_eq!(
         engine.check_playback_state(),
-        melodia_engine::player::engine::backend::PlaybackCheck::EndOfStream,
+        PlaybackCheck::EndOfStream,
         "the deferred clear must empty both decks, staged source included"
     );
     Ok(())
@@ -680,10 +680,104 @@ async fn a_preload_that_outlives_the_stop_it_raced_is_refused() -> std::io::Resu
     );
     assert_eq!(
         engine.check_playback_state(),
-        melodia_engine::player::engine::backend::PlaybackCheck::EndOfStream,
+        PlaybackCheck::EndOfStream,
         "and the decks must stay empty — a source staged here would read as a \
          `GaplessTransition` off a stopped player"
     );
+    Ok(())
+}
+
+/// The level [`past_a_gapless_handover`]'s successor plays at, apart from the first track's so a
+/// restart of either shows.
+const SUCCESSOR_LEVEL: f32 = AMPLITUDE / 2.0;
+
+struct Handover {
+    _tmp: tempfile::TempDir,
+    engine: Arc<PlaybackEngine>,
+    mix: MixerPull,
+    /// The track the deck has left and the state still holds.
+    first: String,
+}
+
+/// A one-second track run out into a staged successor, the monitor's advance yet to claim the
+/// handover: the window a seek or a track start can land in.
+fn past_a_gapless_handover() -> std::io::Result<Handover> {
+    let tmp = tempfile::tempdir()?;
+    let first = tmp.path().join("first.wav");
+    let next = tmp.path().join("next.wav");
+    write_dc_wav(&first, 1, AMPLITUDE, AMPLITUDE)?;
+    write_dc_wav(&next, 6, SUCCESSOR_LEVEL, SUCCESSOR_LEVEL)?;
+    let first = first.to_string_lossy().into_owned();
+
+    let (engine, mut mix) = player()?;
+    start(&engine, &first);
+    let _ = pull(&mut mix, WARMUP_FRAMES);
+    engine.preload_gapless(Some(&next.to_string_lossy()), TrackReplayGain::default());
+    assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
+
+    pull_lenient(&mut mix, frames_for_ms(1_100));
+    assert_eq!(
+        engine.check_playback_state(),
+        PlaybackCheck::GaplessTransition,
+        "the successor never took the deck over"
+    );
+    Ok(Handover { _tmp: tmp, engine, mix, first })
+}
+
+/// The advance claims the handover under the emit, so the check ahead of it must not: a seek or a
+/// track start landing between the two has to find the deck still ahead of the state.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_gapless_handover_stays_observed_until_the_advance_claims_it() -> std::io::Result<()> {
+    let fx = past_a_gapless_handover()?;
+
+    let observed = [fx.engine.check_playback_state(), fx.engine.check_playback_state()];
+    let claims = [fx.engine.claim_gapless_handover(), fx.engine.claim_gapless_handover()];
+    let after = fx.engine.check_playback_state();
+
+    assert_eq!(
+        (observed, claims, after),
+        (
+            [PlaybackCheck::GaplessTransition, PlaybackCheck::GaplessTransition],
+            [true, false],
+            PlaybackCheck::Playing
+        ),
+        "(observed twice, claimed twice, after the claim)"
+    );
+    Ok(())
+}
+
+/// A track start between the check and the advance has put a track of its own on the deck, and an
+/// advance going ahead would step the queue past it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_track_start_before_the_advance_leaves_it_nothing_to_claim() -> std::io::Result<()> {
+    let mut fx = past_a_gapless_handover()?;
+
+    // A cut clears the live deck, which blocks on the audio thread, and that is us.
+    let starter = Arc::clone(&fx.engine);
+    let track = fx.first.clone();
+    drive_until(&mut fx.mix, move || start(&starter, &track));
+
+    assert!(
+        !fx.engine.claim_gapless_handover(),
+        "the advance claimed a handover the track start had replaced"
+    );
+    Ok(())
+}
+
+/// The file a seek names is the track the state still holds, which the handover has already ended,
+/// so a seek landing ahead of the advance would restart it under the successor.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_seek_over_an_unclaimed_handover_is_refused() -> std::io::Result<()> {
+    /// Inside the first track, where a seek that landed would restart it.
+    const SEEK_MS: u64 = 500;
+
+    let mut fx = past_a_gapless_handover()?;
+
+    fx.engine.seek(&fx.first, SEEK_MS, TrackReplayGain::default());
+    pull_lenient(&mut fx.mix, frames_for_ms(20));
+
+    let after = pull(&mut fx.mix, frames_for_ms(50));
+    assert_holds_at(&after, SUCCESSOR_LEVEL, 1e-3, "the successor after a seek over its handover");
     Ok(())
 }
 
@@ -771,7 +865,7 @@ async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io
     );
     assert_eq!(
         engine.check_playback_state(),
-        melodia_engine::player::engine::backend::PlaybackCheck::GaplessTransition,
+        PlaybackCheck::GaplessTransition,
         "the staged track must take over the voice rather than the deck running dry"
     );
 

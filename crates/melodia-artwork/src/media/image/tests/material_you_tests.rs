@@ -8,6 +8,7 @@ use crate::media::image::material_you::{
     SchemeStyle, SeedCache, clamp_to_tone_band, extract_source_rgb, extract_source_rgb_from_rgb8,
     generate_palette, to_tone_capped_chroma,
 };
+use melodia_core::themes::material3::MATERIAL3;
 
 /// sRGB relative luminance of a `0x00RRGGBB` value, 0..1. Independent of the
 /// HCT machinery under test, so the assertions below can't pass by agreeing
@@ -161,6 +162,21 @@ fn generate_palette_semantics_do_not_follow_the_album() {
         assert_ne!(first.green, opposite.green, "dark={is_dark}: green ignored polarity");
         assert_ne!(first.yellow, opposite.yellow, "dark={is_dark}: yellow ignored polarity");
     }
+}
+
+/// Material 3's two variants are written out in `melodia-core`, which can't call the generator they
+/// came from. A change to the mapping or a spec bump moves every colour in them, and this is what
+/// says they owe a regenerate.
+#[test]
+fn material3s_variants_are_the_generator_over_the_baseline_seed() {
+    /// The spec's baseline seed, which is also the Purple accent's light value.
+    const BASELINE_SEED: u32 = 0x0067_50a4;
+    let table = |id: &str| MATERIAL3.variants.iter().find(|v| v.id == id).map(|v| v.palette);
+
+    let (dark, _) = generate_palette(BASELINE_SEED, true, SchemeStyle::TonalSpot);
+    let (light, _) = generate_palette(BASELINE_SEED, false, SchemeStyle::TonalSpot);
+
+    assert_eq!((table("dark"), table("light")), (Some(dark), Some(light)), "(dark, light)");
 }
 
 #[expect(

@@ -257,3 +257,7 @@ pub fn reapply_from_theme(app: &AppWindow) {
     };
     melodia_platform::services::platform::dwm_titlebar::apply(hwnd, shown.palette.mantle);
 }
+
+#[cfg(test)]
+#[path = "tests/theme_paint_tests.rs"]
+mod tests;

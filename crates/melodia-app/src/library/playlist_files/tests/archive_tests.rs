@@ -199,6 +199,41 @@ fn an_entry_named_outside_the_archive_counts_as_unreadable() -> Result<(), AppEr
     Ok(())
 }
 
+/// A name written on Windows climbs out with `\` as readily as with `/`.
+#[test]
+fn a_climb_spelled_with_backslashes_counts_as_unreadable() -> Result<(), AppError> {
+    let bytes = crafted(&[
+        Crafted::File("..\\escaped.m3u8", b"#EXTM3U\n"),
+        Crafted::File("Kept.m3u8", b"#EXTM3U\n"),
+    ])?;
+
+    let (entries, unreadable) = read_back(bytes)?;
+
+    assert_eq!(entries, [("Kept.m3u8".to_owned(), "#EXTM3U\n".to_owned())]);
+    assert_eq!(unreadable, 1);
+    Ok(())
+}
+
+/// A root or a drive prefix is stripped and a `..` that stays inside folds away, so each of these
+/// names a folder inside the archive rather than counting as unreadable.
+#[test]
+fn entry_names_are_resolved_inside_the_archive() -> Result<(), AppError> {
+    let bytes = crafted(&[
+        Crafted::File("/abs/Rooted.m3u8", b"#EXTM3U\n"),
+        Crafted::File("C:\\abs\\Drive.m3u8", b"#EXTM3U\n"),
+        Crafted::File("Sub/../Inside.m3u8", b"#EXTM3U\n"),
+    ])?;
+    let inside = |folder: &str, file: &str| Path::new(folder).join(file).display().to_string();
+    let expected =
+        [inside("abs", "Rooted.m3u8"), inside("abs", "Drive.m3u8"), inside("", "Inside.m3u8")];
+
+    let (entries, unreadable) = read_back(bytes)?;
+
+    let names: Vec<String> = entries.into_iter().map(|(name, _)| name).collect();
+    assert_eq!((names, unreadable), (expected.to_vec(), 0));
+    Ok(())
+}
+
 #[test]
 fn a_playlist_that_is_not_utf8_counts_as_unreadable() -> Result<(), AppError> {
     let bytes = crafted(&[Crafted::File("Latin1.m3u8", &[0x23, 0xff, 0xfe, 0x0a])])?;

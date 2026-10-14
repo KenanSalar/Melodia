@@ -44,3 +44,7 @@ pub fn brush_to_rgb(brush: &Brush) -> u32 {
 pub fn color_to_rgb(c: Color) -> u32 {
     (u32::from(c.red()) << 16) | (u32::from(c.green()) << 8) | u32::from(c.blue())
 }
+
+#[cfg(test)]
+#[path = "tests/rgb_tests.rs"]
+mod tests;

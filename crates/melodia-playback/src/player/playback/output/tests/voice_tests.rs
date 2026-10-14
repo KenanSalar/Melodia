@@ -351,7 +351,7 @@ fn a_replace_prepared_against_a_source_that_has_since_ended_mounts_nothing() {
 
     let (voice, mut pull) = pair(mono(RATE));
     voice.append(TestSource::new(vec![0.25; FRAMES], 1, RATE));
-    voice.append(TestSource::new(vec![0.75; FRAMES], 1, RATE));
+    voice.stage(TestSource::new(vec![0.75; FRAMES], 1, RATE));
 
     // Mount the first source and stage the second, then read what a seek would have seen before
     // going off to open its file.
@@ -381,7 +381,7 @@ fn a_replace_lands_while_a_successor_is_only_staged() {
 
     let (voice, mut pull) = pair(mono(RATE));
     voice.append(TestSource::new(vec![0.25; FRAMES], 1, RATE));
-    voice.append(TestSource::new(vec![0.75; FRAMES], 1, RATE));
+    voice.stage(TestSource::new(vec![0.75; FRAMES], 1, RATE));
 
     assert_eq!(pump(&mut pull, 64).len(), 64);
     let handovers = voice.handovers();
@@ -394,6 +394,49 @@ fn a_replace_lands_while_a_successor_is_only_staged() {
         "the seek was refused behind a source that had only been staged"
     );
     assert_eq!(voice.len(), 2, "the staged successor should still be waiting behind the seek");
+}
+
+/// A seek sent right after a track start reads the ticket before the callback has taken the track.
+/// Counted as a handover, that mount refused the seek, and a click on the bar just after a skip was
+/// lost.
+#[test]
+fn a_seek_sent_behind_a_track_start_lands_on_that_track() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(seconds_of(4, RATE));
+    let handovers = voice.handovers();
+
+    let seek = Duration::from_secs(2);
+    voice.replace(seconds_of(4, RATE), seek, handovers);
+    pump(&mut pull, 64);
+
+    let got = voice.position();
+    assert!(
+        got.abs_diff(seek) < Duration::from_millis(50),
+        "the seek behind the track start was refused: the voice read {got:?}"
+    );
+}
+
+/// The monitor stages outside `exec_lock`, so its successor can land on a voice that has already run
+/// dry. Mounted there it is still the deck moving past the state, and a seek prepared before it must
+/// not restart the track that ended.
+#[test]
+fn a_successor_staged_onto_a_drained_voice_is_a_handover() {
+    const FRAMES: usize = 512;
+
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.append(TestSource::new(vec![0.25; FRAMES], 1, RATE));
+    pump(&mut pull, FRAMES * 2);
+    assert!(voice.is_empty(), "the first source never drained");
+    let handovers = voice.handovers();
+
+    voice.stage(TestSource::new(vec![0.75; FRAMES], 1, RATE));
+    voice.replace(TestSource::new(vec![0.25; FRAMES], 1, RATE), Duration::ZERO, handovers);
+
+    let after = pump(&mut pull, 64);
+    assert!(
+        after.iter().all(|s| (*s - 0.75).abs() < 1e-6),
+        "the seek restarted the track the deck had already left"
+    );
 }
 
 /// A seek's swap re-anchors the clock only once the callback takes it, so until then the voice

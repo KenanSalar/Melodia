@@ -386,3 +386,7 @@ pub fn to_slint_queue_vm(qvm: &QueueViewModel) -> QueueVm {
 fn clamp_to_i32(v: u64) -> i32 {
     i32::try_from(v).unwrap_or(i32::MAX)
 }
+
+#[cfg(test)]
+#[path = "tests/bridge_tests.rs"]
+mod tests;

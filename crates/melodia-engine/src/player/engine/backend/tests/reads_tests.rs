@@ -1,4 +1,5 @@
-//! Tests for the settled position a long-pause release resumes from.
+//! Tests for the settled reads: the position a long-pause release resumes from, and the clock the
+//! monitor publishes.
 //!
 //! The mixer has no device under it and only the test pulls it, so nothing sent to a deck is taken
 //! until the test says.
@@ -97,6 +98,20 @@ async fn a_seek_the_deck_has_taken_settles_where_it_landed() -> Result<(), AppEr
     let settled = engine.query_settled_position(HELD_MS);
 
     assert_eq!(settled, Some(SEEK_MS));
+    Ok(())
+}
+
+/// The monitor publishes the clock, so a reading taken before the deck takes a seek's swap would
+/// put the position the seek moved off back on screen.
+#[tokio::test]
+async fn a_seek_the_deck_has_yet_to_take_has_no_settled_clock() -> Result<(), AppError> {
+    let (engine, mut pull) = sought_while_paused()?;
+
+    let sent = engine.query_settled_clock().map(|clock| clock.pulled_ms);
+    pull_ms(&mut pull, 10);
+    let taken = engine.query_settled_clock().map(|clock| clock.pulled_ms);
+
+    assert_eq!((sent, taken), (None, Some(SEEK_MS)), "(sent, taken)");
     Ok(())
 }
 
