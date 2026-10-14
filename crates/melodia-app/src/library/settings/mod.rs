@@ -12,7 +12,6 @@
 //! - [`radio`]: the Radio section's master switch and its two sub-toggles.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
 //! - [`diagnostics`]: the Verbose Logging switch.
-//! - [`motion`]: the Skip Startup Animation switch.
 //! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
 //! - [`onboarding`]: the revision the welcome card has been shown at.
 //!
@@ -30,7 +29,6 @@ pub mod discord;
 pub mod equalizer;
 pub mod folders;
 pub mod lyrics;
-pub mod motion;
 pub mod onboarding;
 pub mod playback;
 pub mod radio;
@@ -60,7 +58,6 @@ pub use folders::{
     toggle_folder_watching,
 };
 pub use lyrics::{set_lyrics_enabled, set_lyrics_online_enabled, set_lyrics_romanization_shown};
-pub use motion::set_skip_startup_animation;
 pub use onboarding::set_onboarding_seen;
 pub use playback::{
     reset_for_bit_perfect, set_gapless_playback, set_output_choice, set_output_follow_rate,

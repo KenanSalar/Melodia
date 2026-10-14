@@ -415,17 +415,21 @@ fn test_resume_on_startup_defaults_false() -> Result<(), AppError> {
     Ok(())
 }
 
-/// `MotionFlags` is `#[serde(flatten)]`ed like every other substruct, so its key sits at
-/// the top level of `settings.json` — a nested object here would be a shape change on
-/// installs that already have a file.
+/// Releases with the Skip Startup Animation switch wrote `skip_startup_animation` at the top
+/// level, so installed files still carry it. Such a file keeps every other value, and the next
+/// write leaves the key behind.
 #[test]
-fn test_skip_startup_animation_defaults_false_and_reads_a_top_level_key() -> Result<(), AppError> {
-    let absent: SettingsData = serde_json::from_str("{}").map_err(|e| json_err(&e))?;
-    assert!(!absent.motion.skip_startup_animation);
+fn a_file_carrying_the_retired_startup_animation_key_still_loads() -> Result<(), AppError> {
+    let json = r#"{"volume": 80, "skip_startup_animation": true}"#;
 
-    let present: SettingsData =
-        serde_json::from_str(r#"{"skip_startup_animation": true}"#).map_err(|e| json_err(&e))?;
-    assert!(present.motion.skip_startup_animation);
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(settings.volume, 80);
+    let written = serde_json::to_value(&settings).map_err(|e| json_err(&e))?;
+    assert!(
+        written.get("skip_startup_animation").is_none(),
+        "the retired key is written back, so it outlives the switch that read it"
+    );
     Ok(())
 }
 

@@ -148,17 +148,6 @@ fn default_match_unfocused_to_system_bg() -> bool {
     is_kde_desktop()
 }
 
-/// Motion the shell plays for its own sake.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct MotionFlags {
-    /// Drop the entrance animation of the view mounted at launch, so the window
-    /// opens with its content already in place. `boot::ui_setup` turns it into
-    /// `Nav.suppress-enter-animation` before the window is shown and the mount
-    /// hands that back once settled; later navigation animates either way.
-    pub skip_startup_animation: bool,
-}
-
 /// Which backdrop the artwork-derived surfaces paint.
 ///
 /// Its own struct rather than a fourth bool on [`LayoutFlags`], which is already at clippy's

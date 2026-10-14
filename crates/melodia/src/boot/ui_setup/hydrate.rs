@@ -93,7 +93,6 @@ pub fn hydrate_ui_from_settings(
     };
     apply_sidebar_width(app, settings);
     apply_sidebar_collapsed(app, settings);
-    apply_startup_animation_suppression(app, settings);
     apply_mini_backdrop(app, settings);
     app.global::<ArtistDetail>().set_albums_collapsed(vs.artist_albums_collapsed);
     ui::settings::settings_page::seed_tab(app, vs.settings_tab);
@@ -112,17 +111,6 @@ fn apply_sidebar_width(app: &AppWindow, settings: &services::settings::SettingsD
 
 fn apply_sidebar_collapsed(app: &AppWindow, settings: &services::settings::SettingsData) {
     app.global::<Nav>().set_sidebar_collapsed(settings.layout.sidebar_collapsed);
-}
-
-/// Raise the entrance-animation suppression for the launch mount. The flag only
-/// has to be up before the first painted frame, and `ViewTransition` reads it
-/// live and hands it back once settled — so this reaches exactly the view the
-/// window opens on. A failed settings read leaves it down and the animation plays.
-fn apply_startup_animation_suppression(
-    app: &AppWindow,
-    settings: &services::settings::SettingsData,
-) {
-    app.global::<Nav>().set_suppress_enter_animation(settings.motion.skip_startup_animation);
 }
 
 /// Seed the miniplayer's backdrop switch. Ordinary hydration, unlike its restart-gated neighbour

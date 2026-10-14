@@ -806,6 +806,10 @@ msgid "Folder"
 msgstr "Folder"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Artis - Album"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -933,10 +937,6 @@ msgstr "Hapus {} Playlist"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Hapus Playlist"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Artis - Album"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -2680,18 +2680,6 @@ msgstr "Latar Album"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Warnai pemutar mini dengan warna album yang sedang diputar, seperti tampilan Sedang Diputar."
-
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Gerakan"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Lewati Animasi Pembuka"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Buka dengan pustaka langsung tampil di layar, alih-alih memudar dan bergeser ke tempatnya. Halaman detail yang Anda biarkan terbuka tetap membentang setelah dimuat."
 
 #: ui/views/settings/output-section.slint
 msgid "Output"

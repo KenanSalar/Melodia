@@ -810,6 +810,10 @@ msgid "Folder"
 msgstr "Папка"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Исполнитель - Альбом"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -937,10 +941,6 @@ msgstr "Удалить плейлисты ({})"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Удалить плейлист"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Исполнитель - Альбом"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -2732,18 +2732,6 @@ msgstr "Фон из обложки"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Окрашивать мини-плеер в цвета играющего альбома, как это делает экран «Сейчас играет»."
-
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Анимация"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Без анимации при запуске"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Открываться сразу с медиатекой на экране, без плавного появления и сдвига на место. Оставленная открытой подробная страница всё равно развернётся, когда загрузится."
 
 #: ui/views/settings/output-section.slint
 msgid "Output"

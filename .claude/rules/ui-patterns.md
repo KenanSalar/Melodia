@@ -1082,17 +1082,19 @@ three components that answer it, and each argues its geometry at its own file.
     this view animate at all", `slide: false` is "is anything *else* already translating it" —
     fade, don't move. Both default on, so a mount that owns its motion says nothing.
   - **The launch mount has a third off-switch, and it is a global rather than an input.**
-    `Nav.suppress-enter-animation` carries the "Skip Startup Animation" setting, raised by
-    `boot::ui_setup` before `app.show()` and handed back by the first mount that settles — so the
-    window opens on its content and every later navigation still slides. A **live read inside
-    `settled`** rather than a property captured at `init`, and the capture would work — no branch
-    exists until the first layout pass, which is inside `app.show()` and long after
-    `hydrate_ui_from_settings` — but it spends a property and a handler to dodge the one thing the
-    live read owes: **the hand-back sits one statement after `shown` flips**, a clear landing on a
-    frame where `shown` is still false fading the settled page straight back out. That is also why
-    the hand-back can't be Rust's. Gated on **`enabled`**, since a nested body mounted at boot runs
-    the same `Timer` and would otherwise drop the flag for the page above it. Pinned by
-    `ui::startup_motion_tests`.
+    `Nav.suppress-enter-animation` is declared raised and handed back by the first mount that
+    settles, so the window opens on its content and every later navigation still slides.
+    **Declared, never written from Rust before the show**: `AppWindow::new()` already instantiates
+    the branch for the declared nav index, whose `init` reads its opacity at 0 under a lowered flag,
+    so a raise from `boot::ui_setup` faded that page in anyway. `app.show()` instantiates again
+    after the nav index is hydrated, still ahead of any `Timer`, so a launch elsewhere mounts its
+    own page under the flag too. A **live read inside `settled`**, and the hand-back **sits one
+    statement after `shown` flips**: a clear landing on a frame where `shown` is still false fades
+    the settled page straight back out, which is also why the hand-back can't be Rust's. Gated on
+    **`enabled`**, since a nested body mounted at boot runs the same `Timer` and would otherwise
+    drop the flag for the page above it. Pinned by `ui::startup_motion_tests`.
+    **A restored My Library detail arms no body fade either** (`my-library-view.slint`'s
+    `restore-landing`), its layer otherwise stacking on the launch's first frames.
     **`MiniPlayerSwitch`'s swap timer raises the same flag** on the way out of the miniplayer, ahead
     of the flip that rebuilds the full UI. That rebuild is already crossfading, and a page sliding in
     under it put a second full-window layer over the most expensive frames of the swap. The setting

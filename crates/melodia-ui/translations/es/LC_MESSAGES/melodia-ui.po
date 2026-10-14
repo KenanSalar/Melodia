@@ -808,6 +808,10 @@ msgid "Folder"
 msgstr "Carpeta"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Artista - Álbum"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -935,10 +939,6 @@ msgstr "Eliminar {} listas"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Eliminar lista"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Artista - Álbum"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -2706,18 +2706,6 @@ msgstr "Fondo del álbum"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Pinta el minirreproductor con los colores del álbum que suena, como hace la vista «Reproduciendo»."
-
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Movimiento"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Omitir la animación de inicio"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Abrir con la biblioteca ya en pantalla, en lugar de mostrarla con un fundido y un deslizamiento. Una página de detalles que dejaste abierta se sigue desplegando al cargarse."
 
 #: ui/views/settings/output-section.slint
 msgid "Output"

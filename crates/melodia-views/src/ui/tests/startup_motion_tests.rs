@@ -2,8 +2,8 @@
 //! miniplayer.
 //!
 //! Two components decide that, and neither has a Rust module the contract could sit beside.
-//! `ViewTransition` fades and slides the view mounted at launch, which is what "Skip
-//! Startup Animation" turns off; `MiniPlayerSwitch` reads the construction-time 0×0 window
+//! `ViewTransition` fades and slides every view it mounts except the one mounted at launch;
+//! `MiniPlayerSwitch` reads the construction-time 0×0 window
 //! as miniplayer size, so the first real layout looks like a swap out of it. Pinned
 //! together because they are one symptom — a window that spends its first moments dark —
 //! and restoring either half puts that symptom back on its own. The swap's own crossfade sits
@@ -67,8 +67,7 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     assert!(
         settled.contains("Nav.suppress-enter-animation"),
         "`settled` no longer reads the suppression: {settled}\n\
-         Nothing else consults the flag, so the launch mount animates as though the \
-         setting were off."
+         Nothing else consults the flag, so the launch mount fades and slides in."
     );
 
     let shown = index_of(&lines, "root.shown = true;");

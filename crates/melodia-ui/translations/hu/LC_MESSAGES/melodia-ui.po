@@ -810,6 +810,10 @@ msgid "Folder"
 msgstr "Mappa"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Előadó - Album"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -937,10 +941,6 @@ msgstr "{} lejátszási lista törlése"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Lejátszási lista törlése"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Előadó - Album"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -2708,18 +2708,6 @@ msgstr "Albumháttér"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "A minilejátszó a lejátszott album színeit kapja, ahogy a Most szól nézet is."
-
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Mozgás"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Indítási animáció kihagyása"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Indításkor a könyvtár azonnal a képernyőn van, nem úszik be áttűnéssel. A nyitva hagyott részletező oldal betöltés után továbbra is kinyílik."
 
 #: ui/views/settings/output-section.slint
 msgid "Output"

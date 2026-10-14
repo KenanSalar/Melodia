@@ -1248,7 +1248,8 @@ fn the_fade_only_mode_suppresses_both_offsets() {
 /// arrivals the band's own `tab-anim-armed` doesn't cover.
 ///
 /// The seed is one, the two handlers are the others: `changed detail-open` arms the
-/// first drill out of the tab the page opened on, and the `watched-tab-idx` mirror arms
+/// first drill out of the tab the page opened on (a restore landing is no arrival and
+/// arms nothing), and the `watched-tab-idx` mirror arms
 /// a tab move that isn't a pick, which `detail-open` cannot — a cross-tab drill writes
 /// the new id and moves the tab in one tick, so that property never transitions. Neither
 /// fires on the page's own mount, `changed` not running on a first evaluation, which is

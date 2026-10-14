@@ -109,15 +109,16 @@ export component MyLibraryView inherits Rectangle {
         if (!root.detail-open) { root.latch-count(); }
     }
 
-    // **Both latches need a *write* to own their binding, and neither guard fires on a page that
+    // **The latches need a *write* to own their binding, and no guard fires on a page that
     // mounts already in the state it holds for.** A view entered straight onto a detail has never
     // run `latch-hero` — `detail-open` is false on exactly the close that needs the hold — so the
     // first back would follow the live binding through the whole collapse; `latch-count`'s
-    // complement guard strands a page mounted onto a grid the same way. Writing here moves
-    // nothing: `init` runs after the bindings resolve.
+    // complement guard strands a page mounted onto a grid the same way, and `restore-landing` a
+    // page mounted mid-restore. Writing here moves nothing: `init` runs after the bindings resolve.
     init => {
         root.latch-hero();
         root.latch-count();
+        root.restore-landing = root.detail-restoring;
     }
 
     // **May a mounting body animate at all.** The page's own `ViewTransition` is still in flight
@@ -129,8 +130,23 @@ export component MyLibraryView inherits Rectangle {
     // the next entry, and `changed` skips a first evaluation.
     property <bool> body-anim-armed: band.tab-anim-armed;
     changed detail-open => {
-        root.body-anim-armed = true;
+        if (!root.restore-landing) { root.body-anim-armed = true; }
+        root.restore-landing = false;
         if (!root.detail-open) { root.latch-count(); }
+    }
+
+    // **A restore lands its detail with nobody navigating, so it arms nothing.** Its fade would
+    // only add a page-sized layer to the launch's first frames. Latched on the rise and taken by
+    // the open that ends it, never read off `detail-restoring` at the open: Rust lowers that in
+    // the hop right behind the id, which usually lands before this handler runs. A restore that
+    // finds nothing lowers it with no open to take the latch, so the fall clears it.
+    property <bool> restore-landing: root.detail-restoring;
+    changed detail-restoring => {
+        if (root.detail-restoring) {
+            root.restore-landing = true;
+        } else if (!root.detail-open) {
+            root.restore-landing = false;
+        }
     }
 
     changed album-open => {

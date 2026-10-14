@@ -25,10 +25,11 @@ export global Nav {
     // Written synchronously **immediately before** the flip that triggers the new mount. Typed
     // so a Rust typo is a compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
     in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.above;
-    // Raised before `app.show()` for "Skip Startup Animation", and by `MiniPlayerSwitch` for the
-    // full UI remounting on the way out of the miniplayer. The mount hands it back itself once
-    // settled — `view-transition.slint` says why Rust can't.
-    in-out property <bool> suppress-enter-animation: false;
+    // Raised from construction, so the launch opens on its content, and by `MiniPlayerSwitch` for
+    // the full UI remounting on the way out of the miniplayer. The mount hands it back itself once
+    // settled; `view-transition.slint` says why Rust can't. Declared rather than written by Rust
+    // because `AppWindow::new()` already builds the default page, which a later raise would fade in.
+    in-out property <bool> suppress-enter-animation: true;
     in-out property <bool> sidebar-collapsed: false;
     in-out property <length> sidebar-width: 180px;
     // Switches off the rail's width ease and the rows' padding ease for a handle drag, which
