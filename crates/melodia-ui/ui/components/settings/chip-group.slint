@@ -1,19 +1,12 @@
 import { Theme } from "../../theme.slint";
+import { FilledChip } from "../filled-chip.slint";
 
 // One pill in a `ChipGroup`. Unexported — it's useful nowhere else.
-component Chip inherits Rectangle {
+component Chip inherits FilledChip {
     in property <string> label;
-    in property <bool>   selected;
-
-    callback clicked();
 
     height: 32px;
     horizontal-stretch: 0;
-    border-radius: self.height / 2;
-    background: root.selected
-        ? Theme.accent
-        : (touch.has-hover ? Theme.surface2 : Theme.surface1);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-md;
@@ -21,14 +14,9 @@ component Chip inherits Rectangle {
         Text {
             text: root.label;
             vertical-alignment: center;
-            color: root.selected ? Theme.accent-text : Theme.text;
+            color: root.ink;
             font-size: Theme.font-size-sm;
         }
-    }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
     }
 }
 

@@ -28,10 +28,7 @@ pub fn seed_initial_view_model(
     player.set_vm(ui::shell::bridge::to_slint_player_vm(&light, cover_thumbs));
     // Seed the position scalars too, so a restored session shows its saved
     // position before the first playback-monitor tick lands.
-    let pos = i32::try_from(light.position_ms).unwrap_or(i32::MAX);
-    let dur = i32::try_from(light.duration_ms).unwrap_or(i32::MAX);
-    player.set_position_ms(pos);
-    player.set_duration_ms(dur);
+    ui::shell::bridge::show_position(&player, light.position_ms, light.duration_ms);
     player.set_queue(ui::shell::bridge::to_slint_queue_vm(&qvm));
 
     // The row tier is empty this early, so the seed above is guaranteed to be the cache-only

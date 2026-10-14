@@ -71,8 +71,7 @@ fn crossfade_on(duration_ms: u32) -> CrossfadeSettings {
 /// A backend with no device lead, so the ear and the pull read alike.
 fn backend(position_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
     BackendSnapshot {
-        position_ms,
-        pulled_ms: position_ms,
+        clock: DeckClock { heard_ms: position_ms, pulled_ms: position_ms },
         already_preloaded: false,
         crossfading: false,
         xf,
@@ -82,7 +81,7 @@ fn backend(position_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
 
 /// A backend whose device still holds what was pulled past `heard_ms`.
 fn backend_behind(heard_ms: u64, pulled_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
-    BackendSnapshot { pulled_ms, ..backend(heard_ms, xf) }
+    BackendSnapshot { clock: DeckClock { heard_ms, pulled_ms }, ..backend(heard_ms, xf) }
 }
 
 /// The position at which `remaining_ms` of the 180 s fixture track are left.

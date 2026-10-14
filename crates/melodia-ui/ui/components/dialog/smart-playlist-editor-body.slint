@@ -6,9 +6,9 @@ import { ToggleSwitch } from "../settings/toggle-switch.slint";
 import { SectionButton } from "../settings/section-button.slint";
 import { SectionDivider } from "../settings/section-divider.slint";
 import { LabeledInput } from "../labeled-input.slint";
-import { IconButton } from "../icon-button.slint";
 import { ControlledInput } from "./controlled-input.slint";
 import { DialogScrollPane } from "./dialog-scroll-pane.slint";
+import { RemoveRowButton } from "./remove-row-button.slint";
 
 component RowLabel inherits Text {
     color: Theme.subtext0;
@@ -101,12 +101,7 @@ component SmartRuleRowView inherits Rectangle {
         // Keeps the remove button flush-right when the operator takes no value.
         if root.rule.input-kind == 0: Rectangle { horizontal-stretch: 1; }
 
-        IconButton {
-            icon: "close";
-            icon-size: 16px;
-            diameter: 28px;
-            idle-bg: Theme.surface1;
-            hover-fg: Theme.danger;
+        RemoveRowButton {
             clicked => { root.remove(); }
         }
     }

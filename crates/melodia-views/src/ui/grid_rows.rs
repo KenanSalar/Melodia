@@ -16,7 +16,7 @@
 
 use std::rc::Rc;
 
-use slint::{Model, ModelRc, VecModel};
+use slint::{ModelRc, VecModel};
 
 use melodia_ui::{EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow};
 
@@ -72,17 +72,6 @@ where
 /// the tabbed pages, whose cards are built by the walk that filters them.
 pub fn chunk_entity_rows(rows: Vec<UiEntityStripRow>, columns: i32) -> Vec<UiEntityGridRow> {
     chunk_built_rows(rows, columns, |entities| UiEntityGridRow { entities })
-}
-
-/// Swap a grid's rows in, or log and leave the model alone if the downcast fails. `label`
-/// names the model in that line, four grids sharing this. Generic over the row type
-/// because Browse's grid holds `BrowseCardGridRow` rather than `EntityGridRow`.
-pub fn write_grid<R: Clone + 'static>(model: &ModelRc<R>, rows: Vec<R>, label: &str) {
-    let Some(vec) = model.as_any().downcast_ref::<VecModel<R>>() else {
-        log::warn!("{label}: VecModel<{}> downcast failed", std::any::type_name::<R>());
-        return;
-    };
-    vec.set_vec(rows);
 }
 
 #[cfg(test)]

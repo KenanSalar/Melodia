@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use crate::ui::grid_rows::write_grid;
+use crate::ui::model_diff::replace_rows;
 use crate::ui::row_match::{self, Needle};
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{Facet, StationSearch};
@@ -206,7 +206,7 @@ pub(super) fn refresh(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     } else {
         Vec::new()
     };
-    write_grid(&g.get_suggestions(), rows, "radio::suggest");
+    replace_rows(&g.get_suggestions(), rows, "radio::suggest");
 }
 
 /// Whether the page is somewhere a scope pill would mean anything: Browse, with no station page

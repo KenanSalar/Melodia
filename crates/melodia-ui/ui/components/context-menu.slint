@@ -1,6 +1,8 @@
 import { Theme } from "../theme.slint";
 import { WindowChrome } from "../globals/shell.slint";
+import { FocusLossWatcher } from "focus-loss-watcher.slint";
 import { MaterialIcon } from "material-icon.slint";
+import { PopupDismissCatcher } from "popup-dismiss-catcher.slint";
 import { PopupSurface } from "popup-surface.slint";
 
 // The one answer to whether a pointer event raises a right-click menu, read by every surface that
@@ -166,5 +168,95 @@ export component MenuSeparator inherits Rectangle {
         width: parent.width - 2 * Theme.pad-xs;
         height: 1px;
         background: Theme.surface2;
+    }
+}
+
+// One field a Copy flyout offers. `token` travels to Rust as the field the copy action parses.
+export struct CopyField {
+    token: string,
+    label: string,
+    icon: string,
+}
+
+// The popup the track, card and station menus open: the column of entries each passes in as
+// children, and the Copy flyout beside it. The anchor and the flyout's open state stay on the
+// host's root, outside the popup, where its `show-at` and `dismiss()` can reset them.
+//
+// **Grows by the flyout while it is open, on whichever side has room**, the left side holding its
+// room from the start (`ContextMenuMetrics` says why). The column stays under the pointer either
+// way: opening leftward, the popup opens that much further left.
+//
+// The flyout's rows are data rather than children because the popup reserves their height before
+// the flyout mounts: counted off a list's length, a row added to it can't be clipped.
+export component ContextMenuPopup inherits PopupWindow {
+    // Where the menu was raised, in the host root's frame, and the same point's `x` in the
+    // window's, which only the host can read, `absolute-position` inside a popup being the popup's.
+    in property <length> anchor-x;
+    in property <length> anchor-y;
+    in property <length> anchor-window-x;
+    // Off for a menu whose Copy entry acts on its one field, which then holds no room for a column
+    // it never opens.
+    in property <bool> has-copy-flyout: true;
+    in property <bool> copy-open;
+    in property <[CopyField]> copy-fields;
+    // The Copy entry's `y` in the column, which the flyout lines up against.
+    in property <length> copy-row-y;
+
+    out property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
+    out property <bool> flyout-left: root.has-copy-flyout
+        && ContextMenuMetrics.opens-left(root.anchor-window-x, root.menu-w);
+
+    callback dismiss-requested();
+    callback copy-picked(string /*token*/);
+
+    property <length> menu-h: menu-vl.preferred-height;
+    property <length> flyout-h: ContextMenuMetrics.flyout-h(root.copy-fields.length);
+    property <length> flyout-room:
+        root.copy-open || root.flyout-left ? ContextMenuMetrics.flyout-room : 0px;
+
+    x: root.anchor-x - (root.flyout-left ? root.flyout-room : 0px);
+    y: root.anchor-y;
+    width: root.menu-w + root.flyout-room;
+    height: max(root.menu-h, root.copy-open ? root.flyout-h : 0px);
+    close-policy: close-on-click-outside;
+
+    // Ungated: `show()` builds the popup's body and `close()` drops it, so only the open menu
+    // watches, however many rows or cards mount one.
+    FocusLossWatcher {
+        close => { root.dismiss-requested(); }
+    }
+
+    // First, so every row drawn over it wins its own click and a click beside the column, or on
+    // the room held for the flyout, still closes the menu.
+    PopupDismissCatcher {
+        width: parent.width;
+        height: parent.height;
+        close-requested => { root.dismiss-requested(); }
+    }
+
+    PopupSurface {
+        x: root.flyout-left ? root.flyout-room : 0px;
+        y: 0px;
+        width: root.menu-w;
+        height: root.menu-h;
+
+        menu-vl := VerticalLayout {
+            padding: ContextMenuMetrics.inset;
+            spacing: 0;
+            @children
+        }
+    }
+
+    // Mounted only while open, so its rows aren't built for every menu.
+    if root.copy-open: MenuFlyout {
+        x: ContextMenuMetrics.flyout-x(root.flyout-left, root.menu-w);
+        y: ContextMenuMetrics.flyout-y(root.copy-row-y, root.height, root.flyout-h);
+        height: root.flyout-h;
+
+        for field in root.copy-fields: MenuItem {
+            label: field.label;
+            icon: field.icon;
+            clicked => { root.copy-picked(field.token); }
+        }
     }
 }

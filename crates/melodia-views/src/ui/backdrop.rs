@@ -23,7 +23,7 @@ use material_colors::color::{linearized, lstar_from_y, y_from_lstar};
 use material_colors::contrast;
 use slint::{Brush, ComponentHandle};
 
-use crate::ui::appearance::theme_apply::{brush, brush_to_rgb, brush_with_alpha};
+use crate::ui::appearance::rgb::{brush, brush_to_rgb, brush_with_alpha};
 use crate::ui::appearance::theme_paint;
 use crate::ui::artwork_cache::BlurSpec;
 use melodia_artwork::media::image::material_you::{

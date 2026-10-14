@@ -161,7 +161,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
 
 /// Hand the global its empty `VecModel`s. Every later write finds them by downcasting back, so a
 /// property left on the declared default is a silent no-op: an unbound array is a model of its own
-/// kind, `write_grid`'s downcast misses, and the grid stays empty with one warning per attempt.
+/// kind, `replace_rows`'s downcast misses, and the grid stays empty with one warning per attempt.
 fn install_models(ui: &AppWindow) {
     let g = ui.global::<Radio>();
 

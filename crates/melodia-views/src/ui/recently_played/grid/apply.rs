@@ -7,7 +7,8 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Weak};
 
 use super::warm::mounted_content;
-use crate::ui::grid_rows::{chunk_entity_rows, write_grid};
+use crate::ui::grid_rows::chunk_entity_rows;
+use crate::ui::model_diff::replace_rows;
 use crate::ui::recently_played::{
     RecentlyPlayedTab, RecentlyPlayedUi, tab_from_index, to_slint_most_played_row,
 };
@@ -93,7 +94,7 @@ pub(super) fn build_filtered_grid(rp_ui: &RecentlyPlayedUi) -> PreparedGrid {
 /// emptied this model deliberately. An apply carrying another tab's rows is dropped,
 /// [`build_filtered_grid`] materializing only the mounted tab, so a pick landing in the gap would
 /// empty the grid it just filled. And an apply that would repaint what is already on screen is
-/// dropped, `write_grid` being a `set_vec` reset that tears down every mounted card.
+/// dropped, `replace_rows` being a `set_vec` reset that tears down every mounted card.
 fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: PreparedGrid) {
     if !rp_ui.section_active() {
         return;
@@ -121,7 +122,7 @@ fn write_filtered_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, prepared: Prepa
     // On Songs this empties the model rather than leaving it pinning a `SharedString` per field of
     // every card behind a tab the user has left. No branch needed: `build_filtered_grid`
     // materialized rows only for `MostPlayed`, so the Vec is already empty.
-    write_grid(
+    replace_rows(
         &g.get_most_played_rows(),
         chunk_entity_rows(prepared.most_played, columns),
         "RecentlyPlayed.most-played-rows",

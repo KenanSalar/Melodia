@@ -18,7 +18,7 @@ use slint::{ComponentHandle, Image, ModelRc, VecModel, Weak};
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
 use super::{NowPlayingSource, NowPlayingState, SourceKey};
-use crate::ui::appearance::theme_apply::color;
+use crate::ui::appearance::rgb::color;
 use crate::ui::aurora;
 use crate::ui::backdrop::{self, BackdropSample};
 use crate::ui::now_playing_artwork::NowPlayingArtwork;

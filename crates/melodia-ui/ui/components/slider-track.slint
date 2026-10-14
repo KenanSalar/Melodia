@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { SliderPointer } from "slider-pointer.slint";
 
 // Horizontal M3 Expressive slider — twin slim bars meeting at the thumb, a parent-background
 // stadium masking the seam, and a vertical-pill thumb that shrinks along the value axis on press.
@@ -19,17 +20,14 @@ export component SliderTrack inherits Rectangle {
 
     // Gated on movement, so a no-move grab inside the mask doesn't flip the
     // visuals and the time text into drag mode.
-    out property <bool>  dragging: touch.pressed && root.dragged-since-press;
-    out property <float> drag-value;    // valid only while dragging
+    out property <bool>  dragging: touch.dragging;
+    out property <float> drag-value: touch.drag-value;    // valid only while dragging
     // So a host can gate a floating badge on hover without wrapping this in an
     // outer TouchArea, which would steal the pointer events.
     out property <bool>  has-hover: touch.has-hover;
 
     callback changed(float);
     callback committed(float);
-
-    // Set by a jump-to-click or any `moved`; a no-move grab must not fire a seek.
-    private property <bool> dragged-since-press: false;
 
     // Tall enough to host the 24 px vertical thumb without clipping.
     min-height: 24px;
@@ -120,49 +118,12 @@ export component SliderTrack inherits Rectangle {
         background: root.is-disabled ? Theme.overlay0 : root.fill-color;
     }
 
-    touch := TouchArea {
+    // The mask region is the grab band, being the thumb as the eye reads it.
+    touch := SliderPointer {
         enabled: !root.is-disabled;
-        mouse-cursor: pointer;
-
-        pointer-event(ev) => {
-            // Left only, as `pressed` and so `moved` are, or a right click moves the value. A
-            // cancel carries no button.
-            if (ev.button != PointerEventButton.left && ev.kind != PointerEventKind.cancel) {
-                return;
-            }
-            if (ev.kind == PointerEventKind.down) {
-                // Inside the mask region the press is captured without jumping —
-                // that band is the perceived thumb, and a 1–2 px nudge there
-                // must not teleport the value. Outside, jump to the click.
-                if (self.mouse-x < root.thumb-cx - root.thumb-bg-w / 2
-                    || self.mouse-x > root.thumb-cx + root.thumb-bg-w / 2) {
-                    root.drag-value = clamp(self.mouse-x / root.width, 0, 1);
-                    root.changed(root.drag-value);
-                    root.dragged-since-press = true;
-                } else {
-                    root.dragged-since-press = false;
-                }
-            }
-            // Commit on up or cancel, but never on a no-move grab: the player
-            // advances during the hold, so committing the captured value would
-            // seek backwards to the click instant.
-            if (ev.kind == PointerEventKind.up
-                || ev.kind == PointerEventKind.cancel) {
-                if (root.dragged-since-press) {
-                    root.committed(root.drag-value);
-                }
-                // `pressed` is already true when the next `down` runs, so a flag
-                // left set here turns `dragging` on and the band test above
-                // measures against this press's value instead of the thumb.
-                root.dragged-since-press = false;
-            }
-        }
-        moved => {
-            if (self.pressed) {
-                root.drag-value = clamp(self.mouse-x / root.width, 0, 1);
-                root.changed(root.drag-value);
-                root.dragged-since-press = true;
-            }
-        }
+        thumb-center: root.thumb-cx;
+        grab-half: root.thumb-bg-w / 2;
+        changed(v) => { root.changed(v); }
+        committed(v) => { root.committed(v); }
     }
 }

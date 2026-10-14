@@ -1,6 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { Radio } from "../../globals/radio.slint";
 import { RadioSuggestionRow } from "../../models.slint";
+import { FilledChip } from "../../components/filled-chip.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
 // One scope the typed needle could be asking for: "Language: Turkish · 281 stations".
@@ -12,7 +13,7 @@ import { MaterialIcon } from "../../components/material-icon.slint";
 // **The five scope names are the chips' own msgids**, not new strings: a pill and the chip it fills
 // must not end up called different things in a locale that translated only one of them.
 //
-// **`FacetChip`'s chrome rather than `ActionPill`'s**, and for `FacetChip`'s reason — an
+// **`FacetChip`'s `FilledChip` rather than an `ActionPill`**, and for `FacetChip`'s reason — an
 // `ActionPill` binds its root `width`, which Slint reports as both `min` and `max`, so the widest
 // locale-sized label would become a floor under the window's own resize. Spelled as the
 // split below instead: no floor, content width where there is room, and the label elides under it.
@@ -38,11 +39,9 @@ export component SuggestionPill inherits Rectangle {
     preferred-width: chip.preferred-width;
     max-width: chip.preferred-width;
 
-    chip := Rectangle {
+    chip := FilledChip {
         height: 100%;
-        border-radius: self.height / 2;
-        background: touch.has-hover ? Theme.surface2 : Theme.surface1;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+        clicked => { root.picked(); }
 
         HorizontalLayout {
             padding-left: Theme.pad-sm;
@@ -74,11 +73,6 @@ export component SuggestionPill inherits Rectangle {
                 font-size: Theme.font-size-sm;
                 overflow: elide;
             }
-        }
-
-        touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => { root.picked(); }
         }
     }
 }

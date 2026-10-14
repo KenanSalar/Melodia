@@ -92,7 +92,10 @@ silently miss the other.
   readout is up on the frame the drag starts, where the reveal delay is for a label you linger
   for. **Both pass `in-popup: true`**, being the only mounts inside a `PopupWindow`, whose
   `absolute-position` would have the pill fit a window that isn't there (`slint-pitfalls.md`). A
-  third mount inside a popup owes the same.
+  third mount inside a popup owes the same. **The disc both popups open from is
+  `components/now-playing/volume-trigger.slint`'s `VolumeTrigger`**, which also owns the keyboard
+  readout (the `Player.volume-hud-tick` countdown force-showing the disc's own tooltip), so a
+  popup keeps only its slider's readout. `placeholder_tests` holds each file to one percentage.
 
 ### Pills, chips, sort rows
 
@@ -153,8 +156,10 @@ silently miss the other.
   `card-is-smart` to that one entry.
 
 - **`MetaChip`/`MetaChipStrip` are decorative** — no `TouchArea`, no selected state. The
-  *interactive* pill is `chip-group.slint`'s `Chip`. Deliberately not one component: one states a
-  fact, the other configures something.
+  *interactive* pill is `components/filled-chip.slint`'s `FilledChip`, under `ChipGroup`'s `Chip`,
+  Radio's `FacetChip` and its `SuggestionPill`; its header says what is the shell's and what each
+  host keeps. Deliberately not one component with `MetaChip`: one states a fact, the other
+  configures something.
 
 - **`QualityChip` is the third, and neither of those**: it states the signal path's verdict and
   opens the Output card, in the player bar only. It is outlined on the bar's ground so its dot is
@@ -285,8 +290,9 @@ three components that answer it, and each argues its geometry at its own file.
   for the borrowing form with `Clone::clone` as the projection is the trap the split closes — a
   second full pass cloning every card into the chunk about to replace it. `columns` is floored at
   one in both: a grid mid-layout can report zero, and one card per row is a visible wrong where a
-  zero-width `chunks` is a panic. Grid tabs take `chunk_entity_rows` + `write_grid` (generic over
-  the row type, so Browse uses it too). Don't re-roll either.
+  zero-width `chunks` is a panic. Grid tabs take `chunk_entity_rows` + `model_diff::replace_rows`
+  (generic over the row type, so Browse, Radio's grids and the recent searches use it too). Don't
+  re-roll either.
 
 - **The play-count badge is its own leaf** (`grid/play-count-badge.slint`) with **one** mount,
   `EntityCard` — Radio's `StationCard` hosts one now, so what a station card owes is the count and
@@ -584,9 +590,14 @@ three components that answer it, and each argues its geometry at its own file.
 - **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
   `components/context-menu.slint` holds the
-  parts (`MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `ContextMenuMetrics`), and
-  `components/track-copy-items.slint` the track Copy rows the row and card menus share; each menu
-  argues its own entries.
+  parts (`MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `ContextMenuMetrics`, `CopyField`) and
+  `ContextMenuPopup`, and `components/track-copy-items.slint` the track Copy fields the row and
+  card menus share; each menu argues its own entries.
+  - **The row, card and station menus open `ContextMenuPopup`, never a `PopupWindow` of their
+    own.** Its header says what it owns and what stays on the menu's root. **The flyout's rows are
+    a `[CopyField]` list** (`TrackCopyFields.list`, the card's album fields, the station's), for the
+    reason that header gives, and `crates/melodia-app/src/library/tests/clipboard_tests.rs` reads
+    each list's `token:` literals against the parser behind it.
   - **A menu opens on the right button's release and takes its anchor once, there.** Every
     surface asks `ContextClick.raises-menu`, whose comment argues the release, and stores where it
     landed: the four menu components through `show-at(x, y)`, the history list in its own
@@ -599,7 +610,7 @@ three components that answer it, and each argues its geometry at its own file.
     the popup grows by it while it is open, leftward it holds the room from the start, an open
     popup moving its origin a frame late (`slint-pitfalls.md`). A second `PopupWindow` is not an
     option (same file).
-  - **The three with a flyout take `close-on-click-outside`, and every entry calls the menu's
+  - **`ContextMenuPopup` takes `close-on-click-outside`, and every entry calls the menu's
     `dismiss()` after acting.** `close-on-click` closes on any release inside the popup, the click
     that opens the flyout included. After, because `pop.effective-ids` goes with the popup. The
     history list's menu and `TextEditMenu` are flat and keep `close-on-click`.
@@ -688,7 +699,20 @@ three components that answer it, and each argues its geometry at its own file.
   to behave differently. The scan walks the seek keys' relative run, which is why that run's
   functions live on `Player` too and `ShortcutScope` keeps only the timer landing it.
 
+- **A slider's pointer goes through `components/slider-pointer.slint`'s `SliderPointer`**, never a
+  hand-rolled `TouchArea`; its header says what it decides. `SliderTrack`, the volume popup's
+  vertical slider and `EqBandSlider` each draw their own track over one, the EQ turning
+  `grabs-thumb` off. One place deciding it is what lets a fix land for all three.
+
 ### Dialogs, pickers, toasts
+
+- **A dialog's text field sits in `components/field-frame.slint`'s `FieldFrame`**. Three hosts,
+  each padding its input as it needs:
+  `LabeledInput` (a caption over a two-way field), `ControlledInput` (a value the host owns, one-way
+  in and every keystroke out through `edited`, which its header argues) and `MultilineInput` (the
+  one wrapping box). `FieldLabel` is the caption, shared with the credit and genre editors, whose
+  rows close on `components/dialog/remove-row-button.slint`'s `RemoveRowButton` as the smart
+  playlist rules do.
 
 - **Selectable-picker dialogs share one toolkit** (`components/dialog/selectable-picker.slint`).
   Both the Export and Add-to-Playlist pickers are thin wiring over it, toolkit components staying
@@ -1003,10 +1027,12 @@ three components that answer it, and each argues its geometry at its own file.
 ## Popups, native dialogs, input
 
 - **PopupWindow auto-dismiss on OS focus loss** is `FocusLossWatcher`, mounted ungated inside the
-  popup's own `PopupWindow` (or through `MenuSurface`), whose body Slint builds in `show()` and
-  drops in `close()`, so only the open popup has a live watcher. A trigger lights off its own
-  popup's `is-open`, which every close path resets, Escape and an outside click included.
-  `crates/melodia/tests/popup_dismiss.rs` walks every popup for the watcher.
+  popup's own `PopupWindow` (or through `MenuSurface`, or `ContextMenuPopup` for the three
+  right-click menus with a flyout), whose body Slint builds in `show()` and drops in `close()`, so
+  only the open popup has a live watcher. A trigger lights off its own popup's `is-open`, which
+  every close path resets, Escape and an outside click included.
+  `crates/melodia/tests/popup_dismiss.rs` walks every popup for the watcher, a component that
+  `inherits PopupWindow` being read through its own body.
 
 - **An empty region inside a popup takes `PopupDismissCatcher`**, never a bare `TouchArea`: the
   room a menu holds for its flyout, the volume popups' strips. Its comment argues which button
@@ -1332,7 +1358,7 @@ block first; each page's section below is deltas only.** The nav-index map is in
   Tracks' leave releases nothing, so it owes none.
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
-  `ui::grid_rows::{chunk_entity_rows, write_grid}`, `ui::track_list_cache`,
+  `ui::grid_rows::chunk_entity_rows`, `ui::model_diff::replace_rows`, `ui::track_list_cache`,
   `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 

@@ -1,3 +1,5 @@
+use slint::Model;
+
 use super::*;
 
 /// Read a chunked result back as plain nested `Vec`s.

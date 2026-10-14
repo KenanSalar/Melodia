@@ -1,6 +1,7 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { RadioFacetRow } from "../../models.slint";
+import { FilledChip } from "../../components/filled-chip.slint";
 import { FocusLossWatcher } from "../../components/focus-loss-watcher.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
@@ -92,15 +93,18 @@ export component FacetChip inherits Rectangle {
     preferred-width: chip.preferred-width;
     max-width: chip.preferred-width;
 
-    chip := Rectangle {
+    chip := FilledChip {
         height: 100%;
-        border-radius: self.height / 2;
-        // `has-hover` goes false the moment the picker takes input, so an open chip reads its
-        // popup's state instead: without it the fill drops out from under the pointer.
-        background: root.is-set
-            ? Theme.accent
-            : (touch.has-hover || popup.is-open ? Theme.surface2 : Theme.surface1);
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+        selected: root.is-set;
+        held: popup.is-open;
+        clicked => {
+            if (root.is-set) {
+                root.cleared(root.kind);
+            } else {
+                root.opened(root.kind);
+                popup.show();
+            }
+        }
 
         HorizontalLayout {
             padding-left: Theme.pad-md;
@@ -110,7 +114,7 @@ export component FacetChip inherits Rectangle {
 
             Text {
                 text: root.is-set ? root.value : root.label;
-                color: root.is-set ? Theme.accent-text : Theme.text;
+                color: chip.ink;
                 font-size: Theme.font-size-sm;
                 overflow: elide;
             }
@@ -118,19 +122,7 @@ export component FacetChip inherits Rectangle {
                 // A set chip offers the clear; an unset one says it opens something.
                 name: root.is-set ? "close" : "expand_more";
                 icon-size: 18px;
-                icon-color: root.is-set ? Theme.accent-text : Theme.text;
-            }
-        }
-
-        touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => {
-                if (root.is-set) {
-                    root.cleared(root.kind);
-                } else {
-                    root.opened(root.kind);
-                    popup.show();
-                }
+                icon-color: chip.ink;
             }
         }
     }

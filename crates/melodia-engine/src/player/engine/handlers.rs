@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use super::actions::emit_and_execute;
-use super::backend::{PlaybackCheck, PlaybackEngine};
+use super::backend::{DeckClock, PlaybackCheck, PlaybackEngine};
 use super::event_sink::PlayerSinks;
 use super::signal_path::{SignalPath, Transport};
 use super::state::{
@@ -127,11 +127,9 @@ impl PauseWatch {
 /// would nest the decks mutex inside it.
 #[derive(Copy, Clone)]
 pub struct BackendSnapshot {
-    /// Where the ear is, which is what the tick publishes and the state keeps.
-    pub position_ms: u64,
-    /// Where the deck has been pulled to, a device's worth ahead of the ear. What the crossfade
-    /// and the gapless stage are timed against, since both act on what is pulled next.
-    pub pulled_ms: u64,
+    /// The ear's position is what the tick publishes and the state keeps; the crossfade and the
+    /// gapless stage time against the pull, since both act on what is pulled next.
+    pub clock: DeckClock,
     pub already_preloaded: bool,
     pub crossfading: bool,
     pub xf: crossfade::CrossfadeSettings,
@@ -160,8 +158,7 @@ pub fn evaluate_playing_tick(
     backend: BackendSnapshot,
 ) -> Option<PlayingTick> {
     let BackendSnapshot {
-        position_ms,
-        pulled_ms,
+        clock: DeckClock { heard_ms: position_ms, pulled_ms },
         already_preloaded,
         crossfading,
         xf,
@@ -598,10 +595,8 @@ impl Monitor {
         xf: crossfade::CrossfadeSettings,
         next_needs_reopen: bool,
     ) -> Option<BackendSnapshot> {
-        let clock = self.engine.query_settled_clock()?;
         Some(BackendSnapshot {
-            position_ms: clock.heard_ms,
-            pulled_ms: clock.pulled_ms,
+            clock: self.engine.query_settled_clock()?,
             already_preloaded: self.engine.is_gapless_preloaded(),
             crossfading: self.engine.is_crossfading(),
             xf,

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use super::{Presence, PresenceState, Update, clamp_field};
 use melodia_core::entities::integrations::DiscordFlags;
 use melodia_core::entities::track::TrackSummary;
+use melodia_engine::player::engine::fixtures::test_view_model;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
-use melodia_engine::player::engine::types::RepeatMode;
 
 /// A fixed UNIX-seconds "now" for anchor arithmetic.
 const NOW: i64 = 1_700_000_000;
@@ -45,21 +45,8 @@ fn vm(
 ) -> PlayerViewModelLight {
     PlayerViewModelLight {
         status,
-        current_track,
         position_ms,
-        duration_ms,
-        position_stamp: 0,
-        progress_percent: 0.0,
-        volume: 100,
-        is_muted: false,
-        playback_speed: 1.0,
-        gapless_enabled: false,
-        sleep_at_track_end: false,
-        radio: None,
-        has_next: false,
-        has_previous: false,
-        shuffle_enabled: false,
-        repeat_mode: RepeatMode::Off,
+        ..test_view_model(current_track, None, duration_ms)
     }
 }
 

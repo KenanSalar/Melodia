@@ -18,7 +18,8 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Weak};
 
-use crate::ui::grid_rows::{chunk_built_rows, write_grid};
+use crate::ui::grid_rows::chunk_built_rows;
+use crate::ui::model_diff::replace_rows;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
@@ -208,7 +209,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi, tab: RadioTab) {
     if !rows::patch_grid(&model, &station_rows, columns) {
         let grid =
             chunk_built_rows(station_rows, columns, |stations| RadioStationGridRow { stations });
-        write_grid(&model, grid, "radio::kept");
+        replace_rows(&model, grid, "radio::kept");
     }
 
     // `browse::apply`'s reason: the station page draws a station this cache owns, so it follows

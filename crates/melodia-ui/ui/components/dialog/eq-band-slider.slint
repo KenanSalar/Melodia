@@ -1,4 +1,5 @@
 import { Theme } from "../../theme.slint";
+import { SliderPointer } from "../slider-pointer.slint";
 
 // Vertical EQ band slider, on the volume popup's shape. The fill runs from the
 // 0 dB centre line to the thumb, so a boost and a cut read apart at a glance.
@@ -95,40 +96,12 @@ export component EqBandSlider inherits Rectangle {
         background: root.is-disabled ? Theme.overlay0 : Theme.accent;
     }
 
-    touch := TouchArea {
+    // Graphic-EQ sliders jump to the click, so every press moves the band and commits.
+    touch := SliderPointer {
         enabled: !root.is-disabled;
-        mouse-cursor: pointer;
-
-        // Set on the jump-to-click `down` and any `moved`; gates `committed`
-        // so a dead-zone press without movement still commits the clicked
-        // value (graphic-EQ sliders jump-to-click).
-        property <bool> moved-since-press: false;
-
-        function value-from-y(y: length) -> float {
-            return root.min-db + clamp(1 - y / parent.height, 0, 1) * root.span;
-        }
-
-        pointer-event(ev) => {
-            // Left only, as `pressed` and so `moved` are, or a right click moves the band. A
-            // cancel carries no button.
-            if (ev.button != PointerEventButton.left && ev.kind != PointerEventKind.cancel) {
-                return;
-            }
-            if (ev.kind == PointerEventKind.down) {
-                root.changed(self.value-from-y(self.mouse-y));
-                self.moved-since-press = true;
-            }
-            if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
-                if (self.moved-since-press) {
-                    root.committed(self.value-from-y(self.mouse-y));
-                }
-            }
-        }
-        moved => {
-            if (self.pressed) {
-                root.changed(self.value-from-y(self.mouse-y));
-                self.moved-since-press = true;
-            }
-        }
+        orientation: Orientation.vertical;
+        grabs-thumb: false;
+        changed(v) => { root.changed(root.min-db + v * root.span); }
+        committed(v) => { root.committed(root.min-db + v * root.span); }
     }
 }

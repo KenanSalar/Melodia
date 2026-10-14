@@ -1,12 +1,12 @@
 import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { WindowChrome } from "../../globals/shell.slint";
-import { IconButton } from "../icon-button.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { SliderTrack } from "../slider-track.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
+import { VolumeTrigger } from "volume-trigger.slint";
 
 // `VolumePopup` rotated 90°, for the miniplayer, whose short strip and card clip
 // the vertical one. Same `SliderTrack` in the same `PopupSurface` chrome, laid
@@ -27,14 +27,8 @@ export component VolumePopupHorizontal inherits Rectangle {
     in property <duration> trigger-recolor-duration: Theme.dur-fast;
     in property <bool> trigger-on-backdrop: false;
 
-    width: btn.width;
-    height: btn.height;
-
-    // The vertical popup's keyboard-HUD wiring: a volume key bumps the tick,
-    // this counts down from it and forces the trigger's tooltip open on the
-    // current percentage. A drag doesn't bump it — it raises the chrome itself.
-    property <int> hud-tick-mirror: Player.volume-hud-tick;
-    property <int> tooltip-ticks-remaining: 0;
+    width: trigger.width;
+    height: trigger.height;
 
     // How long the flyout can be and still clear the window's own left edge, holding the gap it
     // keeps from the disc on that side too. Slint answers an overhang by sliding the popup back
@@ -43,42 +37,15 @@ export component VolumePopupHorizontal inherits Rectangle {
     private property <length> max-flyout-width:
         root.absolute-position.x - WindowChrome.shell-x - 2 * Theme.popup-gap;
 
-    changed hud-tick-mirror => {
-        root.tooltip-ticks-remaining = 15;
-    }
-
-    tooltip-hide-timer := Timer {
-        interval: 100ms;
-        running: root.tooltip-ticks-remaining > 0;
-        triggered => {
-            root.tooltip-ticks-remaining = max(0, root.tooltip-ticks-remaining - 1);
-        }
-    }
-
-    function volume-icon-name() -> string {
-        if (Player.vm.is_muted || Player.vm.volume == 0) {
-            return "volume_off";
-        }
-        if (Player.vm.volume < 50) {
-            return "volume_down";
-        }
-        return "volume_up";
-    }
-
-    btn := IconButton {
-        icon: root.volume-icon-name();
-        press-shrink: true;
+    trigger := VolumeTrigger {
         diameter: root.diameter;
         icon-size: root.icon-size;
-        filled: true;
-        idle-fg: root.trigger-fg;
+        fg: root.trigger-fg;
         hover-fg: root.trigger-hover-fg;
         hover-bg: root.trigger-hover-bg;
         recolor-duration: root.trigger-recolor-duration;
         on-backdrop: root.trigger-on-backdrop;
-        tooltip-text: round(Player.vm.volume) + "%";
-        force-tooltip: root.tooltip-ticks-remaining > 0;
-        force-bg: pop.is-open;
+        popup-open: pop.is-open;
         clicked => { pop.show(); }
     }
 
@@ -87,7 +54,7 @@ export component VolumePopupHorizontal inherits Rectangle {
         // which puts the slider chrome along the bottom at the disc's own Y and
         // leaves the badge floating above.
         x: -self.width - Theme.popup-gap;
-        y: (btn.height - self.height) / 2;
+        y: (trigger.height - self.height) / 2;
         // The vertical popup's slider length rotated, so one travel serves both. Floored as well
         // as capped: the room left of the disc is what a window narrower than its own minimum
         // takes away, and a negative width is not a shorter slider.
@@ -117,7 +84,8 @@ export component VolumePopupHorizontal inherits Rectangle {
             pill: true;
 
             // `SliderTrack.changed` fires per pixel of movement, so this gates
-            // on integer steps and a full drag costs at most 100 emits.
+            // on integer steps and a full drag costs at most 100 emits. Forgotten
+            // at the commit, for `VolumePopup`'s reason.
             property <int> last-emitted: -1;
             function emit-volume(v: int) {
                 if (v != self.last-emitted) {
@@ -141,6 +109,7 @@ export component VolumePopupHorizontal inherits Rectangle {
                     chrome.emit-volume(round(v * 100));
                 }
                 committed(v) => {
+                    chrome.last-emitted = -1;
                     Player.commit-volume();
                 }
             }
@@ -163,7 +132,7 @@ export component VolumePopupHorizontal inherits Rectangle {
                 side: TooltipSide.above;
                 in-popup: true;
                 // No reveal delay — the readout has to be up on the frame the
-                // drag starts. Same hook the keyboard HUD above takes.
+                // drag starts. Same hook `VolumeTrigger`'s keyboard readout takes.
                 force-shown: slider.dragging || slider.has-hover;
             }
         }

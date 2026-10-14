@@ -511,9 +511,10 @@ this file is what builds, looks right, and is wrong.
   while open (end-aligned, opening upward, growing leftward) draws one frame of its new layout at
   the old origin. Two answers in the tree. Keep the origin fixed: `OverflowMenu` reserves its
   widest flyout, and a right-click menu opening left holds its flyout's room from the start
-  (`ContextMenuMetrics`). Or keep the content still while open: `Dropdown`'s `about-to-open`
-  returns the revision its refresh will publish and shows the popup once that lands, the output
-  device picker being the host that needed it (`components/settings/dropdown.slint`).
+  (`ContextMenuMetrics`, applied by `ContextMenuPopup`). Or keep the content still while open:
+  `Dropdown`'s `about-to-open` returns the revision its refresh will publish and shows the popup
+  once that lands, the output device picker being the host that needed it
+  (`components/settings/dropdown.slint`).
 
 - **A press outside an open `PopupWindow` closes it and reaches nothing else.**
   `WindowInner::process_mouse_input` closes the popup on that press and, the pointer being outside
@@ -528,14 +529,15 @@ this file is what builds, looks right, and is wrong.
   `mouse-x`/`mouse-y` keep tracking the pointer until that button comes up, wherever it goes, and
   an open popup follows its `x`/`y` (the entry above). A menu anchored to a host's live
   `touch.mouse-x` dragged after a held right button. A menu takes its anchor once, through
-  `show-at`.
+  `show-at`. A slider's `pointer-event` arms on that same press of any button, so it filters the
+  button itself: `SliderPointer` is the one place that does, and a right click moves no value.
 
 - **A child with no `x`/`y` in a non-layout parent is *centred*, not at the origin** — Slint
   generates `(parent.width - self.width) / 2`, which reads as 0 only for a child as wide as its
   parent. **A zero-size wrapper therefore lands at half the parent**, and anything positioned
-  against it goes with it: `TrackContextMenu` is a `PopupWindow` in such a wrapper, and the row
-  passed a pointer position measured in the row's own frame, so the menu opened half a row right
-  of the cursor on both its hosts. A wrapper meant to be a coordinate frame pins `x: 0px; y: 0px`
+  against it goes with it: `TrackContextMenu` holds its `ContextMenuPopup` in such a wrapper, and
+  the row passed a pointer position measured in the row's own frame, so the menu opened half a row
+  right of the cursor on both its hosts. A wrapper meant to be a coordinate frame pins `x: 0px; y: 0px`
   **inside the component**, where a host cannot forget it.
 
 - **`absolute-position` inside a `PopupWindow` is measured from the popup's corner, not the

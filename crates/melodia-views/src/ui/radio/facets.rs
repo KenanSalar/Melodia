@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
-use crate::ui::grid_rows::write_grid;
+use crate::ui::model_diff::replace_rows;
 use crate::ui::row_match;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -210,7 +210,7 @@ pub fn request(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, idx: i
 
     // Emptied on the way out rather than left holding the previous chip's list, which would paint
     // under the new label for as long as the fetch took.
-    write_grid(&g.get_facet_options(), Vec::new(), "radio::facets");
+    replace_rows(&g.get_facet_options(), Vec::new(), "radio::facets");
     radio_ui.facet_list.lock().take();
     g.set_facet_shown(idx);
     g.set_facet_loading(true);
@@ -287,7 +287,7 @@ fn write_filtered(g: &Radio<'_>, facets: &[Facet], needle: &str) {
         .take(PICKER_ROW_CAP)
         .map(|facet| rows::to_slint_facet_row(chip, facet))
         .collect();
-    write_grid(&g.get_facet_options(), facet_rows, "radio::facets");
+    replace_rows(&g.get_facet_options(), facet_rows, "radio::facets");
 }
 
 /// The value the directory sent, as the pair a row carries: what to draw, and what to send back.

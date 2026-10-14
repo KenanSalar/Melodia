@@ -2,11 +2,8 @@ import { CardActions } from "../../globals/card-actions.slint";
 import { CopyActions } from "../../globals/copy-actions.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
-import { ContextMenuMetrics, FavoriteMenuItem, MenuFlyout, MenuItem, MenuSeparator } from "../context-menu.slint";
-import { TrackCopyFields, TrackCopyItems } from "../track-copy-items.slint";
-import { PopupSurface } from "../popup-surface.slint";
-import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
-import { FocusLossWatcher } from "../focus-loss-watcher.slint";
+import { ContextMenuPopup, CopyField, FavoriteMenuItem, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { TrackCopyFields } from "../track-copy-items.slint";
 
 // The right-click menu every entity card raises, and the only place its entries are mounted.
 //
@@ -59,6 +56,12 @@ export component CardContextMenu inherits Rectangle {
     // **Only the kinds with more than one field to copy open a flyout.** The rest copy their one
     // field from the row itself, and their menu holds no room for a column it never opens.
     property <bool> has-flyout: root.is-track || root.card-kind == "album";
+    // A track card offers what a track row does; an album its own name and credit.
+    property <[CopyField]> album-copy-fields: [
+        { token: "name", label: @tr("Album"), icon: "album" },
+        { token: "artist", label: @tr("Artist"), icon: "person" },
+        { token: "artist-name", label: @tr("Artist - Album"), icon: "music_note" },
+    ];
     property <bool> copy-open;
     // Stored by `show-at`, not bound by the host: `TrackContextMenu`'s header says why.
     property <length> at-x;
@@ -101,356 +104,292 @@ export component CardContextMenu inherits Rectangle {
     // file imports no view global, as the row menu's "Go to …" set doesn't either.
     callback go-to-artist(int /*artist_id*/);
 
-    // **Pinned at the origin, and the zero size is why** — the `TrackContextMenu` argument
-    // verbatim: a child with no `x`/`y` in a non-layout parent is *centred*, so at zero width the
-    // wrapper lands at half the card and carries the popup with it, `at-x` being measured from
-    // here. Set inside the component, where a host cannot forget it.
+    // `TrackContextMenu`'s reason for the pinned, zero-size root, measured here from the card.
     x: 0px;
     y: 0px;
     width: 0px;
     height: 0px;
 
-    // One PopupWindow per mounted card. The grids virtualize by row, so this stays a screenful of
-    // popups whatever the library size. Makes room for its Copy flyout where it has one, as
-    // `TrackContextMenu` does.
-    pop := PopupWindow {
-        // On the popup, so it can read its own descendant's layout.
-        property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
-        property <length> menu-h: menu-vl.preferred-height;
-        property <length> flyout-h:
-            ContextMenuMetrics.flyout-h(root.is-track ? TrackCopyFields.list.length : 3);
-        property <length> flyout-room:
-            root.copy-open || self.flyout-left ? ContextMenuMetrics.flyout-room : 0px;
+    // One popup per mounted card. The grids virtualize by row, so this stays a screenful of popups
+    // whatever the library size.
+    pop := ContextMenuPopup {
+        anchor-x: root.at-x;
+        anchor-y: root.at-y;
         // Off the root's position, which sits outside the popup and so still means the window.
-        property <bool> flyout-left: root.has-flyout
-            && ContextMenuMetrics.opens-left(root.absolute-position.x + root.at-x, self.menu-w);
-
-        x: root.at-x - (self.flyout-left ? self.flyout-room : 0px);
-        y: root.at-y;
-        width: self.menu-w + self.flyout-room;
-        height: max(self.menu-h, root.copy-open ? self.flyout-h : 0px);
-        close-policy: close-on-click-outside;
+        anchor-window-x: root.absolute-position.x + root.at-x;
+        has-copy-flyout: root.has-flyout;
+        copy-open: root.copy-open;
+        copy-fields: root.is-track ? TrackCopyFields.list : root.album-copy-fields;
+        copy-row-y: copy-row.y;
+        dismiss-requested => { root.dismiss(); }
+        copy-picked(token) => {
+            if (root.is-track) {
+                CopyActions.copy-tracks(token, pop.effective-ids);
+            } else {
+                CopyActions.copy-entities("album", token, pop.effective-ids);
+            }
+            root.dismiss();
+        }
 
         // This card alone in single mode, the whole selection in multi. Computed once so every
         // handler reads the same list.
         property <[int]> effective-ids:
             root.multi-active ? root.effective-selection : [root.card-id];
 
-        // Ungated, as on the row menu: the popup's body exists only while it is shown.
-        FocusLossWatcher {
-            close => { root.dismiss(); }
+        // **Play stays in multi mode here, unlike the row menu.** There it is dropped
+        // because "play a selection" is ambiguous against "queue it"; on the entity grids
+        // nothing else plays at all — a card click opens the detail — so dropping it would
+        // remove what the selection is for.
+        //
+        // A lone track card is the exception, its grid playing on activation, and it goes
+        // through the host's own path rather than `CardActions`.
+        MenuItem {
+            label: @tr("Play");
+            icon: "play_arrow";
+            clicked => {
+                if (root.is-folder) {
+                    root.play-folder(root.card-path);
+                } else if (root.is-track && !root.multi-active) {
+                    root.play-single();
+                } else {
+                    CardActions.play(root.card-kind, pop.effective-ids);
+                }
+                root.dismiss();
+            }
         }
-
-        // First, so every row drawn over it wins its own click and a click beside the column,
-        // or on the room held for the flyout, still closes the menu.
-        PopupDismissCatcher {
-            width: parent.width;
-            height: parent.height;
-            close-requested => { root.dismiss(); }
+        if !root.is-folder: MenuItem {
+            label: @tr("Shuffle");
+            icon: "shuffle";
+            clicked => {
+                CardActions.shuffle(root.card-kind, pop.effective-ids);
+                root.dismiss();
+            }
         }
-
-        PopupSurface {
-            x: pop.flyout-left ? pop.flyout-room : 0px;
-            y: 0px;
-            width: pop.menu-w;
-            height: pop.menu-h;
-
-            menu-vl := VerticalLayout {
-                padding: ContextMenuMetrics.inset;
-                spacing: 0;
-
-                // **Play stays in multi mode here, unlike the row menu.** There it is dropped
-                // because "play a selection" is ambiguous against "queue it"; on the entity grids
-                // nothing else plays at all — a card click opens the detail — so dropping it would
-                // remove what the selection is for.
-                //
-                // A lone track card is the exception, its grid playing on activation, and it goes
-                // through the host's own path rather than `CardActions`.
-                MenuItem {
-                    label: @tr("Play");
-                    icon: "play_arrow";
-                    clicked => {
-                        if (root.is-folder) {
-                            root.play-folder(root.card-path);
-                        } else if (root.is-track && !root.multi-active) {
-                            root.play-single();
-                        } else {
-                            CardActions.play(root.card-kind, pop.effective-ids);
-                        }
-                        root.dismiss();
-                    }
+        MenuItem {
+            label: root.multi-active
+                ? @tr("Play {} Next", root.multi-count)
+                : @tr("Play Next");
+            icon: "queue_play_next";
+            clicked => {
+                if (root.is-folder) {
+                    root.play-folder-next(root.card-path);
+                } else {
+                    CardActions.play-next(root.card-kind, pop.effective-ids);
                 }
-                if !root.is-folder: MenuItem {
-                    label: @tr("Shuffle");
-                    icon: "shuffle";
-                    clicked => {
-                        CardActions.shuffle(root.card-kind, pop.effective-ids);
-                        root.dismiss();
-                    }
+                root.dismiss();
+            }
+        }
+        MenuItem {
+            label: root.multi-active
+                ? @tr("Add {} to Queue", root.multi-count)
+                : @tr("Add to Queue");
+            icon: "queue_music";
+            clicked => {
+                if (root.is-folder) {
+                    root.queue-folder(root.card-path);
+                } else {
+                    CardActions.add-to-queue(root.card-kind, pop.effective-ids);
                 }
-                MenuItem {
-                    label: root.multi-active
-                        ? @tr("Play {} Next", root.multi-count)
-                        : @tr("Play Next");
-                    icon: "queue_play_next";
-                    clicked => {
-                        if (root.is-folder) {
-                            root.play-folder-next(root.card-path);
-                        } else {
-                            CardActions.play-next(root.card-kind, pop.effective-ids);
-                        }
-                        root.dismiss();
-                    }
-                }
-                MenuItem {
-                    label: root.multi-active
-                        ? @tr("Add {} to Queue", root.multi-count)
-                        : @tr("Add to Queue");
-                    icon: "queue_music";
-                    clicked => {
-                        if (root.is-folder) {
-                            root.queue-folder(root.card-path);
-                        } else {
-                            CardActions.add-to-queue(root.card-kind, pop.effective-ids);
-                        }
-                        root.dismiss();
-                    }
-                }
-
-                // The playlist entries below need a real track list, which a folder reaches only
-                // through Browse's own callbacks — so the whole block sits out for a folder card.
-                if !root.is-folder: MenuSeparator {}
-                if !root.is-folder: MenuItem {
-                    label: @tr("New Playlist…");
-                    icon: "add";
-                    clicked => {
-                        // Unlike the row menu's, this can't fill `Dialog` inline: the opener wants
-                        // the *track* ids, which only Rust knows. It sets its own `@tr` chrome and
-                        // raises the card once they land.
-                        CardActions.create-playlist-from(root.card-kind, pop.effective-ids);
-                        root.dismiss();
-                    }
-                }
-                if !root.is-folder: MenuItem {
-                    label: @tr("Add to Playlist");
-                    icon: "playlist_add";
-                    clicked => {
-                        // A plain heading even over a selection: the count here is *cards*, and
-                        // the track total only exists once Rust has resolved them.
-                        Dialog.prepare-add-to-playlist(@tr("Add to Playlist"));
-                        CardActions.add-to-playlist(root.card-kind, pop.effective-ids);
-                        root.dismiss();
-                    }
-                }
-
-                if !root.is-folder: MenuSeparator {}
-                // **One entry where the card's state is known**, the row menu's toggle.
-                if root.favorite-known: FavoriteMenuItem {
-                    is-favorite: root.card-is-favorite;
-                    multi-active: root.multi-active;
-                    multi-count: root.multi-count;
-                    clicked => {
-                        CardActions.set-favorites(
-                            root.card-kind, pop.effective-ids, !root.card-is-favorite);
-                        root.dismiss();
-                    }
-                }
-                // **Two entries where it isn't.** An album, artist, genre or playlist is a set of
-                // tracks, so the state the row menu reads off `row-is-favorite` has no honest
-                // answer here: half a playlist favourited would make either label a lie, and
-                // resolving the truth means a query per menu open, per card. Both operations are
-                // well defined over a set whatever its mixture, so offering them retires the
-                // question rather than answering it.
-                if !root.is-folder && !root.favorite-known: MenuItem {
-                    label: @tr("Add to Favorites");
-                    icon: "favorite";
-                    clicked => {
-                        CardActions.set-favorites(root.card-kind, pop.effective-ids, true);
-                        root.dismiss();
-                    }
-                }
-                if !root.is-folder && !root.favorite-known: MenuItem {
-                    label: @tr("Remove from Favorites");
-                    icon: "heart_minus";
-                    clicked => {
-                        CardActions.set-favorites(root.card-kind, pop.effective-ids, false);
-                        root.dismiss();
-                    }
-                }
-                if !root.is-folder: MenuItem {
-                    label: root.multi-active
-                        ? @tr("Edit Tags for {}", root.multi-count)
-                        : @tr("Edit Tags…");
-                    icon: "edit";
-                    clicked => {
-                        CardActions.edit-tags(
-                            root.card-kind,
-                            pop.effective-ids,
-                            root.multi-active
-                                ? @tr("Edit {} Tracks", root.multi-count)
-                                : @tr("Edit Track Information"));
-                        root.dismiss();
-                    }
-                }
-
-                // Copy heads the group of entries that read the card rather than act on its
-                // tracks, the single-target ones below it. Every kind has it, so the separator
-                // above needs no gate. Not behind an `if`, the flyout lining up against its `y`.
-                MenuSeparator {}
-                copy-row := MenuItem {
-                    label: root.has-flyout
-                        ? @tr("Copy")
-                        : (root.is-folder ? @tr("Copy Path") : @tr("Copy Name"));
-                    icon: "content_copy";
-                    submenu: root.has-flyout;
-                    submenu-open: root.copy-open;
-                    submenu-left: pop.flyout-left;
-                    clicked => {
-                        if (root.has-flyout) {
-                            root.copy-open = !root.copy-open;
-                        } else {
-                            if (root.is-folder) {
-                                CopyActions.copy-text(root.card-path);
-                            } else {
-                                CopyActions.copy-entities(root.card-kind, "name", pop.effective-ids);
-                            }
-                            root.dismiss();
-                        }
-                    }
-                }
-                if root.folder-single: MenuItem {
-                    label: @tr("Open Folder");
-                    icon: "folder_open";
-                    clicked => {
-                        root.open-folder(root.card-path);
-                        root.dismiss();
-                    }
-                }
-                if root.folder-single: MenuItem {
-                    label: @tr("Show in File Manager");
-                    icon: "drive_file_move";
-                    clicked => {
-                        root.reveal-folder(root.card-path);
-                        root.dismiss();
-                    }
-                }
-                if root.is-track && !root.multi-active: MenuItem {
-                    label: @tr("Open Containing Folder");
-                    icon: "folder_open";
-                    clicked => {
-                        Nav.reveal-in-folder(root.card-id);
-                        root.dismiss();
-                    }
-                }
-                if !root.multi-active && root.card-artist-id != 0: MenuItem {
-                    label: @tr("Go to Artist");
-                    icon: "person";
-                    clicked => {
-                        root.go-to-artist(root.card-artist-id);
-                        root.dismiss();
-                    }
-                }
-
-                // The selection group. **Clear is gated on the scope holding a set rather than on
-                // this card being in it.** That is the row menu's gate and a grid cannot borrow
-                // it: a card has no second activation, so a set scrolled or filtered out of view
-                // leaves every visible card picking instead of opening, with no card left able to
-                // offer the way back. Both go through the host, five grids keeping their set on
-                // `CardSelection` while Browse keeps its cards' on `Browse`, its cards being its
-                // list rows.
-                MenuSeparator {}
-                MenuItem {
-                    label: @tr("Select all");
-                    icon: "select_all";
-                    clicked => {
-                        root.select-all();
-                        root.dismiss();
-                    }
-                }
-                if root.selection-count > 0: MenuItem {
-                    label: @tr("Clear selection");
-                    icon: "close";
-                    clicked => {
-                        root.clear-selection();
-                        root.dismiss();
-                    }
-                }
-
-                // The playlist block mirrors the card's own hover trio, which stays: the buttons
-                // are the discoverable path and these are the right-click one. Mirrors it for a
-                // smart playlist too, the buttons being ungated there.
-                if root.is-playlist: MenuSeparator {}
-                if root.playlist-edits: MenuItem {
-                    label: @tr("Rename…");
-                    icon: "edit";
-                    clicked => {
-                        root.rename();
-                        root.dismiss();
-                    }
-                }
-                if root.playlist-edits: MenuItem {
-                    label: @tr("Edit Artwork…");
-                    icon: "image";
-                    clicked => {
-                        root.edit-artwork();
-                        root.dismiss();
-                    }
-                }
-                if root.is-playlist && !root.multi-active && root.card-is-smart: MenuItem {
-                    label: @tr("Edit Rules…");
-                    icon: "auto_awesome";
-                    clicked => {
-                        root.edit-rules();
-                        root.dismiss();
-                    }
-                }
-                if root.is-playlist: MenuItem {
-                    label: root.multi-active
-                        ? @tr("Delete {} Playlists", root.multi-count)
-                        : @tr("Delete Playlist");
-                    icon: "delete";
-                    destructive: true;
-                    clicked => {
-                        root.delete-cards(pop.effective-ids);
-                        root.dismiss();
-                    }
-                }
+                root.dismiss();
             }
         }
 
-        // A track card offers what a track row does; an album its own name and credit.
-        if root.copy-open: MenuFlyout {
-            x: ContextMenuMetrics.flyout-x(pop.flyout-left, pop.menu-w);
-            y: ContextMenuMetrics.flyout-y(copy-row.y, pop.height, pop.flyout-h);
-            height: pop.flyout-h;
+        // The playlist entries below need a real track list, which a folder reaches only
+        // through Browse's own callbacks — so the whole block sits out for a folder card.
+        if !root.is-folder: MenuSeparator {}
+        if !root.is-folder: MenuItem {
+            label: @tr("New Playlist…");
+            icon: "add";
+            clicked => {
+                // Unlike the row menu's, this can't fill `Dialog` inline: the opener wants
+                // the *track* ids, which only Rust knows. It sets its own `@tr` chrome and
+                // raises the card once they land.
+                CardActions.create-playlist-from(root.card-kind, pop.effective-ids);
+                root.dismiss();
+            }
+        }
+        if !root.is-folder: MenuItem {
+            label: @tr("Add to Playlist");
+            icon: "playlist_add";
+            clicked => {
+                // A plain heading even over a selection: the count here is *cards*, and
+                // the track total only exists once Rust has resolved them.
+                Dialog.prepare-add-to-playlist(@tr("Add to Playlist"));
+                CardActions.add-to-playlist(root.card-kind, pop.effective-ids);
+                root.dismiss();
+            }
+        }
 
-            if root.is-track: TrackCopyItems {
-                track-ids: pop.effective-ids;
-                copied => { root.dismiss(); }
+        if !root.is-folder: MenuSeparator {}
+        // **One entry where the card's state is known**, the row menu's toggle.
+        if root.favorite-known: FavoriteMenuItem {
+            is-favorite: root.card-is-favorite;
+            multi-active: root.multi-active;
+            multi-count: root.multi-count;
+            clicked => {
+                CardActions.set-favorites(
+                    root.card-kind, pop.effective-ids, !root.card-is-favorite);
+                root.dismiss();
             }
-            if !root.is-track: MenuItem {
-                label: @tr("Album");
-                icon: "album";
-                clicked => {
-                    CopyActions.copy-entities("album", "name", pop.effective-ids);
+        }
+        // **Two entries where it isn't.** An album, artist, genre or playlist is a set of
+        // tracks, so the state the row menu reads off `row-is-favorite` has no honest
+        // answer here: half a playlist favourited would make either label a lie, and
+        // resolving the truth means a query per menu open, per card. Both operations are
+        // well defined over a set whatever its mixture, so offering them retires the
+        // question rather than answering it.
+        if !root.is-folder && !root.favorite-known: MenuItem {
+            label: @tr("Add to Favorites");
+            icon: "favorite";
+            clicked => {
+                CardActions.set-favorites(root.card-kind, pop.effective-ids, true);
+                root.dismiss();
+            }
+        }
+        if !root.is-folder && !root.favorite-known: MenuItem {
+            label: @tr("Remove from Favorites");
+            icon: "heart_minus";
+            clicked => {
+                CardActions.set-favorites(root.card-kind, pop.effective-ids, false);
+                root.dismiss();
+            }
+        }
+        if !root.is-folder: MenuItem {
+            label: root.multi-active
+                ? @tr("Edit Tags for {}", root.multi-count)
+                : @tr("Edit Tags…");
+            icon: "edit";
+            clicked => {
+                CardActions.edit-tags(
+                    root.card-kind,
+                    pop.effective-ids,
+                    root.multi-active
+                        ? @tr("Edit {} Tracks", root.multi-count)
+                        : @tr("Edit Track Information"));
+                root.dismiss();
+            }
+        }
+
+        // Copy heads the group of entries that read the card rather than act on its
+        // tracks, the single-target ones below it. Every kind has it, so the separator
+        // above needs no gate. Not behind an `if`, the flyout lining up against its `y`.
+        MenuSeparator {}
+        copy-row := MenuItem {
+            label: root.has-flyout
+                ? @tr("Copy")
+                : (root.is-folder ? @tr("Copy Path") : @tr("Copy Name"));
+            icon: "content_copy";
+            submenu: root.has-flyout;
+            submenu-open: root.copy-open;
+            submenu-left: pop.flyout-left;
+            clicked => {
+                if (root.has-flyout) {
+                    root.copy-open = !root.copy-open;
+                } else {
+                    if (root.is-folder) {
+                        CopyActions.copy-text(root.card-path);
+                    } else {
+                        CopyActions.copy-entities(root.card-kind, "name", pop.effective-ids);
+                    }
                     root.dismiss();
                 }
             }
-            if !root.is-track: MenuItem {
-                label: @tr("Artist");
-                icon: "person";
-                clicked => {
-                    CopyActions.copy-entities("album", "artist", pop.effective-ids);
-                    root.dismiss();
-                }
+        }
+        if root.folder-single: MenuItem {
+            label: @tr("Open Folder");
+            icon: "folder_open";
+            clicked => {
+                root.open-folder(root.card-path);
+                root.dismiss();
             }
-            if !root.is-track: MenuItem {
-                label: @tr("Artist - Album");
-                icon: "music_note";
-                clicked => {
-                    CopyActions.copy-entities("album", "artist-name", pop.effective-ids);
-                    root.dismiss();
-                }
+        }
+        if root.folder-single: MenuItem {
+            label: @tr("Show in File Manager");
+            icon: "drive_file_move";
+            clicked => {
+                root.reveal-folder(root.card-path);
+                root.dismiss();
+            }
+        }
+        if root.is-track && !root.multi-active: MenuItem {
+            label: @tr("Open Containing Folder");
+            icon: "folder_open";
+            clicked => {
+                Nav.reveal-in-folder(root.card-id);
+                root.dismiss();
+            }
+        }
+        if !root.multi-active && root.card-artist-id != 0: MenuItem {
+            label: @tr("Go to Artist");
+            icon: "person";
+            clicked => {
+                root.go-to-artist(root.card-artist-id);
+                root.dismiss();
+            }
+        }
+
+        // The selection group. **Clear is gated on the scope holding a set rather than on
+        // this card being in it.** That is the row menu's gate and a grid cannot borrow
+        // it: a card has no second activation, so a set scrolled or filtered out of view
+        // leaves every visible card picking instead of opening, with no card left able to
+        // offer the way back. Both go through the host, five grids keeping their set on
+        // `CardSelection` while Browse keeps its cards' on `Browse`, its cards being its
+        // list rows.
+        MenuSeparator {}
+        MenuItem {
+            label: @tr("Select all");
+            icon: "select_all";
+            clicked => {
+                root.select-all();
+                root.dismiss();
+            }
+        }
+        if root.selection-count > 0: MenuItem {
+            label: @tr("Clear selection");
+            icon: "close";
+            clicked => {
+                root.clear-selection();
+                root.dismiss();
+            }
+        }
+
+        // The playlist block mirrors the card's own hover trio, which stays: the buttons
+        // are the discoverable path and these are the right-click one. Mirrors it for a
+        // smart playlist too, the buttons being ungated there.
+        if root.is-playlist: MenuSeparator {}
+        if root.playlist-edits: MenuItem {
+            label: @tr("Rename…");
+            icon: "edit";
+            clicked => {
+                root.rename();
+                root.dismiss();
+            }
+        }
+        if root.playlist-edits: MenuItem {
+            label: @tr("Edit Artwork…");
+            icon: "image";
+            clicked => {
+                root.edit-artwork();
+                root.dismiss();
+            }
+        }
+        if root.is-playlist && !root.multi-active && root.card-is-smart: MenuItem {
+            label: @tr("Edit Rules…");
+            icon: "auto_awesome";
+            clicked => {
+                root.edit-rules();
+                root.dismiss();
+            }
+        }
+        if root.is-playlist: MenuItem {
+            label: root.multi-active
+                ? @tr("Delete {} Playlists", root.multi-count)
+                : @tr("Delete Playlist");
+            icon: "delete";
+            destructive: true;
+            clicked => {
+                root.delete-cards(pop.effective-ids);
+                root.dismiss();
             }
         }
     }

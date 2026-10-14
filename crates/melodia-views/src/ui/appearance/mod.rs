@@ -11,6 +11,7 @@ mod accent_picker;
 mod install;
 mod material_you_sync;
 mod repaint;
+pub mod rgb;
 mod system_watcher;
 pub mod theme_apply;
 pub mod theme_paint;

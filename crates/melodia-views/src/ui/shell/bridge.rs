@@ -51,7 +51,7 @@ impl ShownPosition {
 
 /// Show a reported position and the length it is out of, releasing a seek hold the position has
 /// caught up with.
-fn show_position(player: &Player<'_>, position_ms: u64, duration_ms: u64) {
+pub fn show_position(player: &Player<'_>, position_ms: u64, duration_ms: u64) {
     let position_ms = clamp_to_i32(position_ms);
     player.set_duration_ms(clamp_to_i32(duration_ms));
     player.set_position_ms(position_ms);

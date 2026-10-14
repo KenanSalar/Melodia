@@ -14,7 +14,7 @@
 
 use slint::Color;
 
-use crate::ui::appearance::theme_apply::color_with_alpha;
+use crate::ui::appearance::rgb::color_with_alpha;
 use crate::ui::backdrop::{SEED_COUNT, ThemeTokens};
 use melodia_artwork::media::image::material_you::{clamp_to_tone_band, rotate_hue, scale_tone};
 

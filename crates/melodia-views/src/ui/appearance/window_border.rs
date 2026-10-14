@@ -22,7 +22,8 @@ use melodia_app::state::AppState;
 use melodia_core::themes::{self, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings, Theme, WindowChrome};
 
-use super::theme_apply::{accent_brushes, brush, brush_to_rgb};
+use super::rgb::{brush, brush_to_rgb};
+use super::theme_apply::accent_brushes;
 use super::theme_paint;
 
 /// The neutral border's share of the text colour, out of [`NEUTRAL_PARTS`] with the rest the
@@ -44,7 +45,7 @@ pub(super) fn seed(ui: &AppWindow, window: &WindowFlags) {
     COLOR_ID.with_borrow_mut(|id| id.clone_from(&window.window_border_color));
 }
 
-/// Re-seed the swatch grid and repaint the outline against the palette `theme_apply` just wrote.
+/// Re-seed the swatch grid and repaint the outline against the palette `theme_paint` just painted.
 pub(super) fn republish_for_palette(
     ui: &AppWindow,
     theme_id: &str,

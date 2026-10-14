@@ -9,7 +9,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, SharedString, Weak};
 
 use super::{GenresUi, genre_accent, to_slint_genre_row};
-use crate::ui::appearance::theme_apply::color_to_rgb;
+use crate::ui::appearance::rgb::color_to_rgb;
 use crate::ui::detail_view::resolve_view_sort;
 use crate::ui::hero_backdrop::GenreStops;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};

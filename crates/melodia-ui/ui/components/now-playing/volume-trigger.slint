@@ -1,0 +1,69 @@
+import { Theme } from "../../theme.slint";
+import { Player } from "../../globals/player.slint";
+import { IconButton } from "../icon-button.slint";
+
+// The button both volume popups open from, and the keyboard readout they share. A volume key bumps
+// `Player.volume-hud-tick`; this counts down from it and force-shows the button's own tooltip on
+// the current percentage, the same pill and anchor as the hover one.
+export component VolumeTrigger inherits Rectangle {
+    in property <length> diameter: 36px;
+    in property <length> icon-size: 22px;
+    in property <brush> fg: Theme.text;
+    // Its own input rather than always `fg`: a glyph with no hover pill has only its colour to
+    // answer the pointer with.
+    in property <brush> hover-fg: root.fg;
+    in property <brush> hover-bg: Theme.surface0;
+    // For a host repainting the button in step with a longer fade.
+    in property <duration> recolor-duration: Theme.dur-fast;
+    in property <bool> on-backdrop: false;
+    // Holds the pressed fill for as long as the host's popup is up.
+    in property <bool> popup-open;
+
+    callback clicked();
+
+    width: btn.width;
+    height: btn.height;
+
+    property <int> hud-tick-mirror: Player.volume-hud-tick;
+    property <int> tooltip-ticks-remaining: 0;
+
+    changed hud-tick-mirror => {
+        // Reset on every keystroke, so rapid taps keep the tooltip up smoothly.
+        root.tooltip-ticks-remaining = 15;
+    }
+
+    Timer {
+        interval: 100ms;
+        running: root.tooltip-ticks-remaining > 0;
+        triggered => {
+            root.tooltip-ticks-remaining = max(0, root.tooltip-ticks-remaining - 1);
+        }
+    }
+
+    function volume-icon-name() -> string {
+        if (Player.vm.is_muted || Player.vm.volume == 0) {
+            return "volume_off";
+        }
+        if (Player.vm.volume < 50) {
+            return "volume_down";
+        }
+        return "volume_up";
+    }
+
+    btn := IconButton {
+        icon: root.volume-icon-name();
+        press-shrink: true;
+        diameter: root.diameter;
+        icon-size: root.icon-size;
+        filled: true;
+        idle-fg: root.fg;
+        hover-fg: root.hover-fg;
+        hover-bg: root.hover-bg;
+        recolor-duration: root.recolor-duration;
+        on-backdrop: root.on-backdrop;
+        tooltip-text: round(Player.vm.volume) + "%";
+        force-tooltip: root.tooltip-ticks-remaining > 0;
+        force-bg: root.popup-open;
+        clicked => { root.clicked(); }
+    }
+}

@@ -18,7 +18,7 @@ use slint::{ComponentHandle, Timer, TimerMode};
 use melodia_core::themes::{Palette, on_accent_hex};
 use melodia_ui::{AppWindow, Theme as ThemeGlobal};
 
-use super::theme_apply::{brush, color, color_to_rgb};
+use super::rgb::{brush, color, color_to_rgb};
 
 /// Every colour the palette half of `Theme` holds.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -73,6 +73,12 @@ impl Shown {
             && source == Source::Dynamic
             && self.target.palette != target.palette
     }
+
+    /// A repaint of what is already fading in. Snapping to it would jump the fade to its end, and
+    /// leaving it to the ticker lands the same palette anyway.
+    fn is_fading_to(&self, target: &Painted, source: Source) -> bool {
+        self.fade.is_some() && self.source == source && self.target == *target
+    }
 }
 
 thread_local! {
@@ -82,6 +88,11 @@ thread_local! {
 
 /// Paint `target`, easing it in where it replaces a different dynamic palette.
 pub(super) fn paint(ui: &AppWindow, target: Painted, source: Source) {
+    let already_fading =
+        SHOWN.with_borrow(|shown| shown.as_ref().is_some_and(|s| s.is_fading_to(&target, source)));
+    if already_fading {
+        return;
+    }
     let length = Duration::from_millis(
         u64::try_from(ui.global::<ThemeGlobal>().get_dur_med()).unwrap_or_default(),
     );

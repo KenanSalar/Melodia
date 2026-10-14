@@ -90,8 +90,7 @@ fn wire_set_rule_field(ui: &AppWindow) {
         let Some(ui) = weak.upgrade() else { return };
         patch_rule_row(&ui, row, |old| {
             let field = field_at(field_idx);
-            let op = first_op(field.value_type());
-            rebuilt_row(field, field_idx, op, 0, &old)
+            rebuilt_row(field, first_op(field.value_type()), &old)
         });
     });
 }
@@ -103,8 +102,7 @@ fn wire_set_rule_op(ui: &AppWindow) {
         let Some(ui) = weak.upgrade() else { return };
         patch_rule_row(&ui, row, |old| {
             let field = field_at(old.field_index);
-            let op = op_at(field.value_type(), op_idx);
-            rebuilt_row(field, old.field_index, op, op_idx, &old)
+            rebuilt_row(field, op_at(field.value_type(), op_idx), &old)
         });
     });
 }
@@ -272,27 +270,35 @@ fn patch_rule_row(ui: &AppWindow, row: i32, f: impl FnOnce(SmartRuleRow) -> Smar
     });
 }
 
-/// Rebuild a rule row after a field or operator change: recompute the
-/// `field-kind` / `input-kind` codes from `(field, op)` and keep the old value
+/// Rebuild a rule row after a field or operator change, keeping the old value
 /// text only when the input kind is unchanged (else the remounted input reads
 /// empty). Shared by the `set-rule-field` / `set-rule-op` handlers.
-fn rebuilt_row(
-    field: sc::RuleField,
-    field_index: i32,
-    op: sc::RuleOp,
-    op_index: i32,
-    old: &SmartRuleRow,
-) -> SmartRuleRow {
-    let vt = field.value_type();
-    let input_kind = op.input_kind(vt).as_index();
+fn rebuilt_row(field: sc::RuleField, op: sc::RuleOp, old: &SmartRuleRow) -> SmartRuleRow {
+    let row = rule_row(field, op);
     SmartRuleRow {
-        field_index,
-        op_index,
-        field_kind: vt.as_index(),
-        input_kind,
-        fractional: field.holds_fractions(),
-        value_text: keep_or_clear(input_kind, old.input_kind, &old.value_text),
+        value_text: keep_or_clear(row.input_kind, old.input_kind, &old.value_text),
+        ..row
     }
+}
+
+/// The row `field` and `op` mount as, value empty: both dropdown indices and the
+/// `field-kind` / `input-kind` codes the row's widgets switch on.
+fn rule_row(field: sc::RuleField, op: sc::RuleOp) -> SmartRuleRow {
+    let vt = field.value_type();
+    SmartRuleRow {
+        field_index: dropdown_index(sc::FIELDS, &field),
+        op_index: dropdown_index(sc::ops_for(vt), &op),
+        field_kind: vt.as_index(),
+        input_kind: op.input_kind(vt).as_index(),
+        fractional: field.holds_fractions(),
+        value_text: SharedString::default(),
+    }
+}
+
+/// `item`'s index in the dropdown listing `items`. Every caller hands over an item off that list,
+/// so the `0` is only the fallback `field_at` and `op_at` already take.
+fn dropdown_index<T: PartialEq>(items: &[T], item: &T) -> i32 {
+    items.iter().position(|i| i == item).and_then(|i| i32::try_from(i).ok()).unwrap_or(0)
 }
 
 /// The first (default) operator for a value type.
@@ -303,15 +309,7 @@ fn first_op(vt: sc::ValueType) -> sc::RuleOp {
 /// The default blank rule row: `Title contains …`.
 fn default_rule_row() -> SmartRuleRow {
     let field = sc::RuleField::Title;
-    let vt = field.value_type();
-    SmartRuleRow {
-        field_index: 0,
-        op_index: 0,
-        field_kind: vt.as_index(),
-        input_kind: first_op(vt).input_kind(vt).as_index(),
-        fractional: field.holds_fractions(),
-        value_text: SharedString::default(),
-    }
+    rule_row(field, first_op(field.value_type()))
 }
 
 /// Field at a dropdown index (falling back to `Title` on an out-of-range index).
@@ -336,25 +334,21 @@ fn keep_or_clear(new_kind: i32, old_kind: i32, old_text: &SharedString) -> Share
     if new_kind == old_kind { old_text.clone() } else { SharedString::default() }
 }
 
-/// Build an editor row from a stored rule.
+/// Build an editor row from a stored rule, dropping one naming a field or operator the dropdowns
+/// don't offer.
 fn rule_to_row(rule: &sc::Rule) -> Option<SmartRuleRow> {
-    let field_index = i32::try_from(sc::FIELDS.iter().position(|f| *f == rule.field)?).ok()?;
-    let vt = rule.field.value_type();
-    let op_index = i32::try_from(sc::ops_for(vt).iter().position(|o| *o == rule.op)?).ok()?;
+    let offered =
+        sc::FIELDS.contains(&rule.field) && sc::ops_for(rule.field.value_type()).contains(&rule.op);
+    if !offered {
+        return None;
+    }
     let value_text = match &rule.value {
         Some(sc::RuleValue::Text(s)) => SharedString::from(s.as_str()),
         Some(sc::RuleValue::Number(n)) => SharedString::from(n.to_string()),
         Some(sc::RuleValue::Days(d)) => SharedString::from(d.to_string()),
         None => SharedString::default(),
     };
-    Some(SmartRuleRow {
-        field_index,
-        op_index,
-        field_kind: vt.as_index(),
-        input_kind: rule.op.input_kind(vt).as_index(),
-        fractional: rule.field.holds_fractions(),
-        value_text,
-    })
+    Some(SmartRuleRow { value_text, ..rule_row(rule.field, rule.op) })
 }
 
 /// Rebuild a rule from an editor row (dropping incoherent / incomplete rows).

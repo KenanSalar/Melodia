@@ -55,6 +55,10 @@ const VOLUME_READOUTS: [(&str, &str); 2] = [
     ),
 ];
 
+/// The disc both popups open from, which reads the percentage out on the keyboard path.
+const VOLUME_TRIGGER: &str =
+    include_str!("../../../../melodia-ui/ui/components/now-playing/volume-trigger.slint");
+
 /// The one row that budgets against the bar's floor. It was three — Settings and the two
 /// hero bands each spelling the same clamp — and they are one component now, which is the
 /// point of pinning it here rather than at each mount.
@@ -283,11 +287,12 @@ fn the_tooltip_clears_its_host_on_all_four_sides() {
 }
 
 /// Both volume popups read their percentage out through the shared pill — including the
-/// slider's, which each used to hand-roll while the trigger disc a few lines above
-/// rendered the *same string* through `Tooltip` on the keyboard-HUD path. Two readouts
-/// per file is the whole count: the disc's and the slider's.
+/// slider's, which each used to hand-roll while the trigger disc rendered the *same string*
+/// through `Tooltip` on the keyboard-HUD path. One readout per popup is the slider's, and the
+/// disc's lives once in the `VolumeTrigger` both mount.
 #[test]
 fn the_volume_readouts_are_the_shared_tooltip() {
+    const PERCENT: &str = "round(Player.vm.volume) + \"%\"";
     for (name, src) in VOLUME_READOUTS {
         let src = normalized(&code(src));
         assert!(src.contains("Tooltip {"), "{name} no longer mounts the shared Tooltip");
@@ -297,10 +302,16 @@ fn the_volume_readouts_are_the_shared_tooltip() {
              the drag starts, not half a second later"
         );
         assert_eq!(
-            src.matches("round(Player.vm.volume) + \"%\"").count(),
-            2,
-            "{name} should read the percentage out exactly twice — once on the disc's \
-             tooltip, once on the slider's"
+            src.matches(PERCENT).count(),
+            1,
+            "{name} should read the percentage out exactly once, on the slider's tooltip"
         );
+        assert!(src.contains("VolumeTrigger {"), "{name} no longer opens from the shared trigger");
     }
+    let trigger = normalized(&code(VOLUME_TRIGGER));
+    assert_eq!(
+        trigger.matches(PERCENT).count(),
+        1,
+        "the trigger should read the percentage out exactly once, on the disc's tooltip"
+    );
 }

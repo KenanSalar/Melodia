@@ -1,0 +1,71 @@
+// What a slider does with the pointer, under whatever the slider draws. `SliderTrack`, the volume
+// popup's vertical slider and `EqBandSlider` each mount one at their full size.
+//
+// A press inside the grab band captures the thumb without moving it: that band is the perceived
+// thumb, and a 1–2 px nudge there must not teleport the value. Outside it the value jumps to the
+// press. A release commits only what a jump or a drag moved, since the player advances during a
+// hold and committing a no-move grab would seek backwards to the click instant.
+export component SliderPointer inherits TouchArea {
+    in property <Orientation> orientation: Orientation.horizontal;
+    // The thumb's centre along the value axis, in this area's own coordinates, and how far either
+    // side of it a press grabs rather than jumps.
+    in property <length> thumb-center;
+    in property <length> grab-half;
+    // Off where every press jumps, as a graphic EQ's bands do.
+    in property <bool> grabs-thumb: true;
+
+    // Gated on movement, so a no-move grab doesn't flip a host's visuals into drag mode.
+    out property <bool> dragging: self.pressed && self.moved-since-press;
+    // The fraction the pointer last moved the value to, 0 at the start of the axis and 1 at its
+    // end. Valid only while dragging.
+    out property <float> drag-value;
+
+    callback changed(float);
+    callback committed(float);
+
+    property <bool> moved-since-press: false;
+
+    mouse-cursor: pointer;
+
+    function along-axis() -> length {
+        return root.orientation == Orientation.vertical ? self.mouse-y : self.mouse-x;
+    }
+
+    // A vertical slider's value grows upward, against the y axis.
+    function pointer-fraction() -> float {
+        return root.orientation == Orientation.vertical
+            ? clamp(1 - self.mouse-y / self.height, 0, 1)
+            : clamp(self.mouse-x / self.width, 0, 1);
+    }
+
+    function move-to-pointer() {
+        root.drag-value = root.pointer-fraction();
+        root.changed(root.drag-value);
+        root.moved-since-press = true;
+    }
+
+    pointer-event(ev) => {
+        // Left only, as `pressed` and so `moved` are, or a right click moves the value. A cancel
+        // carries no button.
+        if (ev.button != PointerEventButton.left && ev.kind != PointerEventKind.cancel) {
+            return;
+        }
+        if (ev.kind == PointerEventKind.down) {
+            // `pressed` is already true here, so a flag left from the last press would turn
+            // `dragging` on and the grab test would measure against that press's value.
+            root.moved-since-press = false;
+            if (!root.grabs-thumb || abs(root.along-axis() - root.thumb-center) > root.grab-half) {
+                root.move-to-pointer();
+            }
+        }
+        if ((ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel)
+            && root.moved-since-press) {
+            root.committed(root.drag-value);
+        }
+    }
+    moved => {
+        if (self.pressed) {
+            root.move-to-pointer();
+        }
+    }
+}

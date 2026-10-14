@@ -17,7 +17,8 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
 
 use crate::ui::callbacks::card_selection;
-use crate::ui::grid_rows::{chunk_built_rows, write_grid};
+use crate::ui::grid_rows::chunk_built_rows;
+use crate::ui::model_diff::replace_rows;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -267,7 +268,7 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
     if !rows::patch_grid(&g.get_browse_rows(), &station_rows, columns) {
         let grid =
             chunk_built_rows(station_rows, columns, |stations| RadioStationGridRow { stations });
-        write_grid(&g.get_browse_rows(), grid, "radio::browse");
+        replace_rows(&g.get_browse_rows(), grid, "radio::browse");
     }
 
     // The station page draws the same station some card here does, off the same cache, so it is

@@ -1,30 +1,25 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { FieldFrame } from "field-frame.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 
 // The tree's only multi-line, word-wrapping text box — every other `TextInput`
 // is single-line, and std-widgets' `TextEdit` forwards no appearance properties,
 // so it can't be themed to match a dialog. The scrolling recipe comes from
-// Slint's own `widgets/common/textedit-base.slint`; the chrome from
-// `labeled-input.slint`.
+// Slint's own `widgets/common/textedit-base.slint`; the chrome is `FieldFrame`'s.
 //
 // **Never put `border-radius` + `clip: true` on the box holding the
 // `TextInput`**: a rounded clip renders the text into a texture. The root paints
 // the rounded fill and border as one shape, which the renderer antialiases once,
 // and the inner `ScrollView` clips its viewport rectangularly, inset by `pad` so
 // nothing it scrolls reaches the border. The `PickerListCard` shape.
-export component MultilineInput inherits Rectangle {
+export component MultilineInput inherits FieldFrame {
     in property <string> placeholder;
     in-out property <string> text;
-    callback edited();
 
     private property <length> pad: Theme.pad-sm;
 
-    background: Theme.surface1;
-    border-radius: Theme.radius-md;
-    border-width: 1px;
-    border-color: ti.has-focus ? Theme.accent : Theme.border;
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+    focused: ti.has-focus;
 
     sv := ScrollView {
         x: root.pad;
@@ -48,7 +43,6 @@ export component MultilineInput inherits Rectangle {
             single-line: false;
             wrap: word-wrap;
             page-height: sv.visible-height;
-            edited => { root.edited(); }
             // Keeps the caret on screen. Word-wrap makes the x-axis inert, so
             // only upstream's y-branch survives — with the line height derived
             // from the font size rather than hardcoded as upstream does.

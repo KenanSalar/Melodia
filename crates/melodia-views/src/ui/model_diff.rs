@@ -1,5 +1,5 @@
 //! Reusable `VecModel<T>` swap helpers. [`apply_rows_keyed`] prefers per-row updates over
-//! full-model replacement; [`permute_rows_by_id`] and [`clear_vec_model`] are the two whose
+//! full-model replacement; [`permute_rows_by_id`] and [`replace_rows`] are the two whose
 //! job the replacement is.
 //!
 //! Slint's `VecModel::set_vec` fires a `reset()` that tears down and re-instantiates every
@@ -84,15 +84,21 @@ where
     vec_model.set_vec(reordered);
 }
 
+/// Swap `rows` into a `VecModel<T>`-backed model, or log under `label` and leave the model alone
+/// if the downcast fails. Generic over the row type, every grid and list holding its own.
+pub fn replace_rows<T: Clone + 'static>(model: &ModelRc<T>, rows: Vec<T>, label: &str) {
+    let Some(vm) = model.as_any().downcast_ref::<VecModel<T>>() else {
+        log::warn!("{label}: VecModel<{}> downcast failed", std::any::type_name::<T>());
+        return;
+    };
+    vm.set_vec(rows);
+}
+
 /// Empty a `VecModel<T>`-backed model in place, logging a downcast miss under `label`.
 /// Section-leave teardown uses this so the model's `SharedString`s drop on the same UI
 /// tick as the Image-property release.
 pub fn clear_vec_model<T: Clone + 'static>(model: &ModelRc<T>, label: &str) {
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<T>>() {
-        vm.set_vec(Vec::new());
-    } else {
-        log::warn!("{label}: VecModel downcast failed");
-    }
+    replace_rows(model, Vec::new(), label);
 }
 
 #[cfg(test)]

@@ -10,10 +10,11 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::SearchUi;
 use super::apply::{apply_results_to_slint, clear_results_on_ui, set_loading_on_ui};
+use crate::ui::model_diff::replace_rows;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::search::SearchResults;
@@ -171,11 +172,7 @@ pub fn push_recent_rows_to_slint(weak: &Weak<AppWindow>, rows: Vec<String>) {
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        let model = ui.global::<Search>().get_recent_rows();
-        let Some(vm) = model.as_any().downcast_ref::<VecModel<SharedString>>() else {
-            log::warn!("Search.recent-rows: VecModel<SharedString> downcast failed");
-            return;
-        };
-        vm.set_vec(rows.into_iter().map(SharedString::from).collect::<Vec<_>>());
+        let rows = rows.into_iter().map(SharedString::from).collect();
+        replace_rows(&ui.global::<Search>().get_recent_rows(), rows, "Search.recent-rows");
     });
 }
