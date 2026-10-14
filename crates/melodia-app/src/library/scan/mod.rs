@@ -21,24 +21,21 @@ mod run;
 pub use reconcile::{finish_interrupted_imports, reconcile_watched_folders};
 pub use repair::restore_missing_artwork;
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
-use rayon::prelude::*;
 
 use crate::library::settings::folders::{NestedFolder, folders_inside};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::folder::Folder;
-use melodia_core::entities::scan::{ExistingTrackSummary, ScannedFile};
+use melodia_core::entities::scan::ScannedFile;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_store::database::queries::ingest::Ingested;
 use melodia_store::database::{DbPool, queries};
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::scanner::{
-    MediaWalk, ScanObserver, collect_media_files, scan_files_parallel, track_is_current,
+    ScanObserver, WalkIndex, collect_media_files, scan_files_parallel,
 };
 use reconcile::Reach;
 use repair::RestoreNotice;
@@ -176,23 +173,17 @@ async fn scan_one(
     }
     let scope = Arc::new(ScanScope::of(&state.db, &folder).await?);
 
-    // Read-side pre-load through the read pool (before the writer tx opens):
-    // size + mtime for every track already in this folder. Doesn't contend
-    // with the scan's writes.
-    let existing_summaries =
-        queries::scan::get_existing_track_summaries_for_folder(&state.db, folder.id).await?;
-
-    let Some(Discovery { walk, to_scan, pool }) =
-        discover(Arc::clone(&scope), existing_summaries, Arc::clone(run)).await?
+    let Some(Discovery { walked, to_scan, orphans, pool }) =
+        discover(&state.db, folder.id, Arc::clone(&scope), Arc::clone(run)).await?
     else {
         return Ok(ScanOutcome::Stopped { rewrote_existing: false });
     };
-    if walk.files.is_empty() {
+    if walked == 0 {
         finish::after_completed(state, folder.id).await?;
         return Ok(ScanOutcome::Completed { inserted: 0 });
     }
 
-    let skipped = walk.files.len() - to_scan.len();
+    let skipped = walked - to_scan.len();
     if skipped > 0 {
         log::info!(
             "Incremental scan of '{}': {skipped} file(s) skipped as unchanged or a nested folder's, \
@@ -252,12 +243,12 @@ async fn scan_one(
     // --- Stage 2. `queries::scan::commit_scan` argues what a stopped scan still owes.
     if !run.try_begin_finishing() {
         if ingested.any() {
-            queries::scan::commit_scan(&state.db, &folder, None, &ingested).await?;
+            queries::scan::commit_scan(&state.db, &folder, &[], &ingested).await?;
             state.library_changed.bump();
         }
         return Ok(ScanOutcome::Stopped { rewrote_existing: ingested.rewrote_existing() });
     }
-    queries::scan::commit_scan(&state.db, &folder, Some(walk), &ingested).await?;
+    queries::scan::commit_scan(&state.db, &folder, &orphans, &ingested).await?;
     finish::absorb_nested(&state.db, &folder, &scope.nested).await?;
     finish::after_completed(state, folder.id).await?;
     state.library_changed.bump();
@@ -291,19 +282,25 @@ impl ScanScope {
 
 /// What the walk found, and what the incremental filter left to read.
 struct Discovery {
-    walk: MediaWalk,
+    /// How many audio files the walk found.
+    walked: usize,
     to_scan: Vec<PathBuf>,
-    /// One pool serves the filter, the parse and the ingest's stat, and ends with the ingest.
+    /// The folder's rows the walk didn't find, for the commit to purge.
+    orphans: Vec<String>,
+    /// One pool serves the sort, the filter, the parse and the ingest's stat, and ends with the
+    /// ingest.
     pool: ScanPool,
 }
 
-/// Walks the folder and filters it down to the files that need reading, or answers `None` once
-/// the scan is cancelled.
+/// Walks the folder, pairs each file with its row, and filters the walk down to the files that
+/// need reading, or answers `None` once the scan is cancelled.
 ///
-/// Both halves go to the blocking pool. They are synchronous syscall loops (`WalkDir` over the
-/// whole tree, then one `fs::metadata` per already-known file inside `track_is_current`), and
-/// inline in the async caller they would pin one of the runtime's few workers for the duration
-/// on a cold-cache disk, stalling position ticks and watcher deliveries during boot reconciles.
+/// The walk and the filter go to the blocking pool. They are synchronous syscall loops
+/// (`WalkDir` over the whole tree, then one `fs::metadata` per already-known file inside
+/// `track_is_current`), and inline in the async caller they would pin one of the runtime's few
+/// workers for the duration on a cold-cache disk, stalling position ticks and watcher deliveries
+/// during boot reconciles. The rows are read between them through the read pool, one at a time
+/// against the sorted walk, so the folder's paths are never held twice.
 ///
 /// The incremental filter only (re)parses files that are new, or whose
 /// size or mtime no longer matches the stored row. Byte-unchanged files
@@ -314,34 +311,41 @@ struct Discovery {
 /// *every* file in the library reaches it and almost none proceed past it, so
 /// its per-file `stat` is what a rescan-with-nothing-changed — the common case
 /// — actually spends its time on, and a serial syscall loop is the worst shape
-/// for it on a cold cache or a network mount. Rayon's `collect` preserves the
-/// sequential order, so `to_scan` stays byte-for-byte what it was before.
+/// for it on a cold cache or a network mount. `to_scan` comes out in path order.
 async fn discover(
+    db: &DbPool,
+    folder_id: i64,
     scope: Arc<ScanScope>,
-    existing: HashMap<String, ExistingTrackSummary>,
     run: Arc<ScanRun>,
 ) -> Result<Option<Discovery>, AppError> {
-    tokio::task::spawn_blocking(move || {
-        let walk = collect_media_files(&scope.root, run.as_ref())?;
+    let walk_scope = Arc::clone(&scope);
+    let walk_run = Arc::clone(&run);
+    let walked = tokio::task::spawn_blocking(move || {
+        let walk = collect_media_files(&walk_scope.root, walk_run.as_ref())?;
         let pool = ScanPool::for_files(walk.files.len());
-        let to_scan: Vec<PathBuf> = pool.install(|| {
-            // Reads only what this folder owns, but the walk stays whole: the purge checks the
-            // folder's rows against it, and some can sit inside a nested folder's directory.
-            walk.files
-                .par_iter()
-                .filter(|path| {
-                    !run.is_cancelled() && scope.owns(path) && !track_is_current(path, &existing)
-                })
-                .cloned()
-                .collect()
-        });
+        let index = pool.install(|| WalkIndex::new(walk));
+        Some((index, pool))
+    })
+    .await
+    .map_err(|e| AppError::scanner("Scan walk task failed", e))?;
+    let Some((mut index, pool)) = walked else {
+        return Ok(None);
+    };
+
+    queries::scan::visit_folder_tracks(db, folder_id, |path, row| index.add_row(path, row)).await?;
+
+    tokio::task::spawn_blocking(move || {
+        // Reads only what this folder owns, but the walk stays whole: the purge checks the
+        // folder's rows against it, and some can sit inside a nested folder's directory.
+        let to_scan =
+            pool.install(|| index.changed(|path| !run.is_cancelled() && scope.owns(path)));
         if run.is_cancelled() {
             return None;
         }
-        Some(Discovery { walk, to_scan, pool })
+        Some(Discovery { walked: index.len(), to_scan, orphans: index.into_orphans(), pool })
     })
     .await
-    .map_err(|e| AppError::scanner("Scan walk task failed", e))
+    .map_err(|e| AppError::scanner("Scan filter task failed", e))
 }
 
 /// Parses one chunk of a scan on its pool, reporting through `run`.

@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
@@ -126,24 +125,94 @@ pub fn scan_files_parallel(
         .collect()
 }
 
-/// True when the on-disk file matches its existing DB row and needs no
-/// re-scan: a track already exists at this path and the file's size **and**
-/// mtime are both unchanged. Size + mtime unchanged is a heuristic — not a
-/// byte-identity guarantee — but it reliably catches tag and artwork edits,
-/// since any normal write bumps the mtime. Callers use this as an
-/// incremental-scan filter: a `true` result means Lofty can be skipped
-/// entirely for the file.
+/// A folder's walk sorted by path, each file paired with the row it already has, if any.
 ///
-/// A `false` result — no row, or a changed size/mtime — means the file must
-/// be (re)parsed in full so its metadata and cover are brought up to date.
-pub fn track_is_current<S: std::hash::BuildHasher>(
-    path: &Path,
-    existing: &HashMap<String, ExistingTrackSummary, S>,
-) -> bool {
-    let path_str = path.to_string_lossy();
-    let Some(row) = existing.get(path_str.as_ref()) else {
-        return false;
-    };
+/// What the incremental filter and the orphan purge need, without a second copy of every path:
+/// rows arrive one at a time and find their files by binary search, and only an orphan's path is
+/// kept. Sorted by the same lossy string a row stores, so a file and its row compare equal.
+///
+/// Orphans are the rows the **whole** walk didn't find, never the rows of the files left to
+/// parse: the filter leaves unchanged files out of those, and a no-change rescan would read the
+/// entire library as gone.
+pub struct WalkIndex {
+    files: Vec<PathBuf>,
+    rows: Vec<Option<ExistingTrackSummary>>,
+    unreadable: Vec<PathBuf>,
+    orphans: Vec<String>,
+}
+
+impl WalkIndex {
+    /// Sorts `walk` on the current rayon pool.
+    pub fn new(walk: MediaWalk) -> Self {
+        let MediaWalk { mut files, unreadable } = walk;
+        files.par_sort_unstable_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+        let rows = files.iter().map(|_| None).collect();
+        Self { files, rows, unreadable, orphans: Vec::new() }
+    }
+
+    /// How many audio files the walk found.
+    pub fn len(&self) -> usize {
+        self.files.len()
+    }
+
+    /// Whether the walk found no audio file at all.
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
+
+    /// Pairs a stored row with the files at its path, or keeps it as an orphan when there are
+    /// none. A row under a path the walk couldn't read is spared: its file is as likely there as
+    /// gone, and purging it takes the track's rating and play count with it.
+    pub fn add_row(&mut self, path: String, row: ExistingTrackSummary) {
+        let start =
+            self.files.partition_point(|file| file.to_string_lossy().as_ref() < path.as_str());
+        let matching = self.files[start..]
+            .partition_point(|file| file.to_string_lossy().as_ref() == path.as_str());
+        if matching == 0 {
+            if !self.unreadable.iter().any(|dir| Path::new(&path).starts_with(dir)) {
+                self.orphans.push(path);
+            }
+            return;
+        }
+        // More than one only for paths that aren't valid UTF-8 and read back alike.
+        if let Some((last, others)) = self.rows[start..start + matching].split_last_mut() {
+            for slot in others {
+                *slot = Some(row.clone());
+            }
+            *last = Some(row);
+        }
+    }
+
+    /// The files `keep` admits that need reading: no row yet, or a size or mtime that has moved
+    /// since. Runs on the current rayon pool, a `stat` per file that has a row.
+    pub fn changed(&self, keep: impl Fn(&Path) -> bool + Sync) -> Vec<PathBuf> {
+        self.files
+            .par_iter()
+            .zip(&self.rows)
+            .filter(|(file, row)| {
+                keep(file) && !row.as_ref().is_some_and(|row| track_is_current(file, row))
+            })
+            .map(|(file, _)| file.clone())
+            .collect()
+    }
+
+    /// The rows the walk didn't find.
+    pub fn into_orphans(self) -> Vec<String> {
+        self.orphans
+    }
+}
+
+/// True when the on-disk file matches its existing DB row and needs no
+/// re-scan: the file's size **and** mtime both match `row`. Size + mtime
+/// unchanged is a heuristic — not a byte-identity guarantee — but it reliably
+/// catches tag and artwork edits, since any normal write bumps the mtime.
+/// Callers use this as an incremental-scan filter: a `true` result means Lofty
+/// can be skipped entirely for the file.
+///
+/// A `false` result — a changed size or mtime, or a file that can't be stat'ed
+/// — means the file must be (re)parsed in full so its metadata and cover are
+/// brought up to date.
+pub fn track_is_current(path: &Path, row: &ExistingTrackSummary) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
         return false;
     };

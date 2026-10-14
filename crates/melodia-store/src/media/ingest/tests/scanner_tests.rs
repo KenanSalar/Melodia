@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -283,28 +282,32 @@ fn a_cancelled_parse_reads_nothing() -> Result<(), AppError> {
     Ok(())
 }
 
-// ── track_is_current (incremental-scan filter) ──
+// ── track_is_current and the walk index (incremental-scan filter) ──
 
-/// Build an `ExistingTrackSummary` map with one entry whose size + mtime
-/// match `path` on disk.
-fn existing_for(path: &Path) -> Result<HashMap<String, ExistingTrackSummary>, AppError> {
+/// The row a scan would hold for `path` as it stands on disk.
+fn row_for(path: &Path) -> Result<ExistingTrackSummary, AppError> {
     let meta = std::fs::metadata(path)?;
     let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
     let mtime = crate::media::ingest::metadata::date_modified_from_metadata(&meta);
-    let mut map = HashMap::new();
-    map.insert(
-        path.to_string_lossy().into_owned(),
-        ExistingTrackSummary { file_size: Some(size), date_modified: mtime },
-    );
-    Ok(map)
+    Ok(ExistingTrackSummary { file_size: Some(size), date_modified: mtime })
+}
+
+/// A row's path as the store spells it, which is what the index compares against.
+fn stored(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+fn any_row() -> ExistingTrackSummary {
+    ExistingTrackSummary { file_size: None, date_modified: None }
 }
 
 #[test]
-fn track_is_current_false_when_no_row() -> Result<(), AppError> {
+fn a_file_with_no_row_is_read() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
-    assert!(!track_is_current(&f, &HashMap::new()));
+    let index = WalkIndex::new(MediaWalk { files: vec![f.clone()], unreadable: Vec::new() });
+    assert_eq!(index.changed(|_| true), [f]);
     Ok(())
 }
 
@@ -313,7 +316,7 @@ fn track_is_current_true_when_size_and_mtime_match() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
-    assert!(track_is_current(&f, &existing_for(&f)?));
+    assert!(track_is_current(&f, &row_for(&f)?));
     Ok(())
 }
 
@@ -322,12 +325,10 @@ fn track_is_current_false_when_size_differs() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
-    let mut existing = existing_for(&f)?;
+    let mut row = row_for(&f)?;
     // Simulate a content edit: stored size no longer matches the file.
-    if let Some(row) = existing.get_mut(&f.to_string_lossy().into_owned()) {
-        row.file_size = row.file_size.map(|s| s + 1);
-    }
-    assert!(!track_is_current(&f, &existing));
+    row.file_size = row.file_size.map(|s| s + 1);
+    assert!(!track_is_current(&f, &row));
     Ok(())
 }
 
@@ -336,11 +337,43 @@ fn track_is_current_false_when_mtime_differs() -> Result<(), AppError> {
     let tmp = TempDir::new()?;
     let f = tmp.path().join("a.wav");
     create_minimal_wav(&f)?;
-    let mut existing = existing_for(&f)?;
+    let mut row = row_for(&f)?;
     // Stored mtime no longer matches — e.g. tags were rewritten in place.
-    if let Some(row) = existing.get_mut(&f.to_string_lossy().into_owned()) {
-        row.date_modified = Some("1999-01-01T00:00:00Z".to_owned());
-    }
-    assert!(!track_is_current(&f, &existing));
+    row.date_modified = Some("1999-01-01T00:00:00Z".to_owned());
+    assert!(!track_is_current(&f, &row));
     Ok(())
+}
+
+/// The incremental filter leaves an unchanged file unread, so a row is checked against the walk.
+/// Checked against what was parsed, a rescan with nothing new would purge the whole library. The
+/// walk arrives unsorted and the rows in yet another order, the index owing both its own sort.
+#[test]
+fn only_a_row_the_walk_did_not_find_is_an_orphan() {
+    let root = PathBuf::from("music");
+    let (early, found, gone, late) =
+        (root.join("a.mp3"), root.join("m.mp3"), root.join("n.mp3"), root.join("z.mp3"));
+    let files = vec![late.clone(), found.clone(), early.clone()];
+    let mut index = WalkIndex::new(MediaWalk { files, unreadable: Vec::new() });
+
+    for path in [&found, &gone, &late, &early] {
+        index.add_row(stored(path), any_row());
+    }
+
+    assert_eq!(index.into_orphans(), [stored(&gone)]);
+}
+
+/// A directory the walk couldn't read says nothing about the files in it, and a row purged there
+/// takes its rating and play count with it.
+#[test]
+fn a_row_under_a_path_the_walk_could_not_read_is_spared() {
+    let root = PathBuf::from("music");
+    let unreadable = root.join("locked");
+    let inside = unreadable.join("a.mp3");
+    let gone = root.join("gone.mp3");
+    let mut index = WalkIndex::new(MediaWalk { files: Vec::new(), unreadable: vec![unreadable] });
+
+    index.add_row(stored(&inside), any_row());
+    index.add_row(stored(&gone), any_row());
+
+    assert_eq!(index.into_orphans(), [stored(&gone)]);
 }

@@ -2,7 +2,6 @@
 //! `AppState`, no player) against a `test_pool` and real fixtures copied out of
 //! `test-assets/` into a `TempDir`. Never write to the checked-in asset.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -404,11 +403,8 @@ async fn a_tag_edit_leaves_the_row_describing_the_file_it_wrote() -> Result<(), 
 
     // And so the incremental filter agrees the row is current, which is exactly what makes any
     // one of the three being stale permanent rather than self-correcting.
-    let existing = HashMap::from([(
-        path_str,
-        ExistingTrackSummary { file_size: Some(size), date_modified: Some(mtime) },
-    )]);
-    assert!(track_is_current(&path, &existing), "the next scan must have nothing left to do");
+    let row = ExistingTrackSummary { file_size: Some(size), date_modified: Some(mtime) };
+    assert!(track_is_current(&path, &row), "the next scan must have nothing left to do");
     Ok(())
 }
 

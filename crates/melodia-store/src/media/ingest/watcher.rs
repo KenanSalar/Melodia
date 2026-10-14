@@ -33,9 +33,10 @@ pub enum FileEvent {
 /// The recommended watcher, minus the access events nothing here reads.
 ///
 /// notify's inotify backend watches `IN_OPEN` with no way to leave it out, so every folder a walk
-/// reads raises an open on each watch that sees it: three per folder on a launch, between notify's
-/// own recursive registration and the startup re-scan. [`classify_event`] would drop them anyway;
-/// dropping them here keeps them out of the debouncer's queues as well.
+/// reads and every file a scan, hash or playback opens raises an event on each watch that sees it.
+/// [`classify_event`] would drop them anyway; dropping them here keeps them out of the debouncer's
+/// queues as well. notify-rs/notify#736 moves the filter into the kernel's watch mask, and this
+/// wrapper goes once a stable notify carries it.
 struct ChangeWatcher(RecommendedWatcher);
 
 /// Hands every event but an access on to the debouncer, rescan flags and errors included.

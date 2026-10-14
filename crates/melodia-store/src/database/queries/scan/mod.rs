@@ -18,11 +18,8 @@ mod upserts;
 mod watch_batch;
 
 pub use finish::commit_scan;
-pub use lookups::get_existing_track_summaries_for_folder;
-pub(crate) use lookups::{
-    find_folder_for_path, get_all_track_paths_for_folder, get_track_id_by_path,
-    track_exists_by_path,
-};
+pub use lookups::visit_folder_tracks;
+pub(crate) use lookups::{find_folder_for_path, get_track_id_by_path, track_exists_by_path};
 pub use mutations::{INSERT_CHUNK_ROWS, NewTrackRow};
 pub(crate) use mutations::{
     delete_track_by_path, delete_tracks_by_paths_batch, insert_track, insert_tracks_batch,

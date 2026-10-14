@@ -490,14 +490,14 @@ async fn find_folder_for_path_returns_none_for_unknown() -> Result<(), AppError>
     Ok(())
 }
 
-// === Tests for get_all_track_paths_for_folder ===
+// === Tests for visit_folder_tracks ===
 
 #[tokio::test]
-async fn get_all_track_paths_for_folder_returns_correct_paths() -> Result<(), AppError> {
+async fn visit_folder_tracks_hands_over_every_row_of_the_folder() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
 
-    let mut tx = db.write().begin().await?;
-    let paths = queries::scan::get_all_track_paths_for_folder(&mut tx, 1).await?;
+    let mut paths = Vec::new();
+    queries::scan::visit_folder_tracks(&db, 1, |path, _row| paths.push(path)).await?;
 
     assert_eq!(paths.len(), 3);
     assert!(paths.contains(&"/music/track1.mp3".to_owned()));
@@ -507,11 +507,11 @@ async fn get_all_track_paths_for_folder_returns_correct_paths() -> Result<(), Ap
 }
 
 #[tokio::test]
-async fn get_all_track_paths_for_folder_empty_for_nonexistent() -> Result<(), AppError> {
+async fn visit_folder_tracks_visits_nothing_for_an_unknown_folder() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
-    let mut tx = db.write().begin().await?;
-    let paths = queries::scan::get_all_track_paths_for_folder(&mut tx, 999).await?;
-    assert!(paths.is_empty());
+    let mut visited = 0;
+    queries::scan::visit_folder_tracks(&db, 999, |_path, _row| visited += 1).await?;
+    assert_eq!(visited, 0);
     Ok(())
 }
 

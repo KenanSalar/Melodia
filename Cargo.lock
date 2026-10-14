@@ -3803,6 +3803,7 @@ dependencies = [
  "blake3",
  "chrono",
  "dunce",
+ "futures-util",
  "image",
  "lofty",
  "log",
