@@ -6,9 +6,9 @@
 //! filter, each file of a read, and the head of every chunk. **A stopped scan keeps what it read
 //! and deletes nothing**, the one exception being the import of a folder just added, which a
 //! cancel takes back out ([`OnStop::Withdraw`]). Otherwise committed chunks stay, and so does the
-//! part of the chunk read when the cancel landed. The orphan purge doesn't run, its walk being
-//! incomplete, and the folder isn't stamped as scanned. The next scan of the folder reads only the
-//! rest, the size and mtime gate skipping everything already stored.
+//! part of the chunk read when the cancel landed. The orphan purge doesn't run, and the folder
+//! isn't stamped as scanned. The next scan of the folder reads only the rest, the size and mtime
+//! gate skipping everything already stored.
 //!
 //! A scan leaves alone the files of a library folder nested inside its own, which stay that
 //! folder's until a completed scan absorbs it.
@@ -149,8 +149,8 @@ pub fn cancel(state: &AppState) {
 /// end. At or below it the triggers stay enabled: per-row maintenance on a
 /// handful of inserts/updates/deletes is far cheaper than the full 3-table
 /// correlated-subquery recalc the drop would force. Same value and
-/// rationale as the watcher reconcile path's `BULK_THRESHOLD`
-/// (`tasks/file_event_processor/reconcile.rs`).
+/// rationale as the watcher batch's `BULK_THRESHOLD` (`melodia-store`'s
+/// `queries/scan/watch_batch.rs`).
 const SCAN_BULK_THRESHOLD: usize = 20;
 
 /// Files a scan parses and then ingests in one write transaction. Large
@@ -193,12 +193,9 @@ async fn scan_one(
         );
     }
 
-    // Decided before the chunk loop consumes `to_scan`. Edge: a tiny
-    // `to_scan` combined with a huge orphan purge (folder emptied
-    // externally) runs the delete trigger per orphaned row — rare, still
-    // correct, and accepted over plumbing the orphan count (unknown until
-    // inside the transaction) into this decision.
-    let mut ingested = Ingested::new(to_scan.len() > SCAN_BULK_THRESHOLD);
+    // Decided before the chunk loop consumes `to_scan`. The orphans count too, so a purge of
+    // most of a folder runs with the triggers dropped rather than paying them per row.
+    let mut ingested = Ingested::new(to_scan.len() + orphans.len() > SCAN_BULK_THRESHOLD);
     run.begin_reading(u32::try_from(to_scan.len()).unwrap_or(u32::MAX));
 
     let scan_timestamp = melodia_core::utils::now_rfc3339();
@@ -332,7 +329,11 @@ async fn discover(
         return Ok(None);
     };
 
-    queries::scan::visit_folder_tracks(db, folder_id, |path, row| index.add_row(path, row)).await?;
+    // `scan_one` purges nothing after an empty walk, so its rows would be read only to be dropped.
+    if !index.is_empty() {
+        queries::scan::visit_folder_tracks(db, folder_id, |path, row| index.add_row(path, row))
+            .await?;
+    }
 
     tokio::task::spawn_blocking(move || {
         // Reads only what this folder owns, but the walk stays whole: the purge checks the

@@ -10,10 +10,11 @@ use melodia_core::error::AppError;
 /// Orphan pruning, the cover roll-ups and the stats recalc, in one transaction.
 ///
 /// `orphans` are the rows the folder's complete walk didn't find, from
-/// [`WalkIndex`](crate::media::ingest::scanner::WalkIndex). A stopped scan passes none: every row
-/// its walk didn't reach would read as one. It still owes the rest, since on the bulk path each
-/// chunk committed with the stats triggers dropped and only the recalc here brings the counts
-/// back.
+/// [`WalkIndex`](crate::media::ingest::scanner::WalkIndex). A stopped scan passes none: an orphan
+/// may be a file moved to a path the stop left unread, and purging it loses the rating and play
+/// count the next scan would have carried across. It still owes the rest, since on the bulk path
+/// each chunk committed with the stats triggers dropped and only the recalc here brings the
+/// counts back.
 pub async fn commit_scan(
     db: &DbPool,
     folder: &Folder,

@@ -146,7 +146,7 @@ impl WalkIndex {
     pub fn new(walk: MediaWalk) -> Self {
         let MediaWalk { mut files, unreadable } = walk;
         files.par_sort_unstable_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
-        let rows = files.iter().map(|_| None).collect();
+        let rows = vec![None; files.len()];
         Self { files, rows, unreadable, orphans: Vec::new() }
     }
 
