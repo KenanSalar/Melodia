@@ -2,8 +2,11 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
-use notify::{EventKind, RecursiveMode};
-use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
+use notify::{
+    Config, Event, EventHandler, EventKind, PathsMut, RecommendedWatcher, RecursiveMode, Watcher,
+    WatcherKind,
+};
+use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer_opt};
 use tokio::sync::mpsc;
 
 use melodia_core::error::{AppError, describe};
@@ -27,8 +30,54 @@ pub enum FileEvent {
     RescanNeeded,
 }
 
+/// The recommended watcher, minus the access events nothing here reads.
+///
+/// notify's inotify backend watches `IN_OPEN` with no way to leave it out, so every folder a walk
+/// reads raises an open on each watch that sees it: three per folder on a launch, between notify's
+/// own recursive registration and the startup re-scan. [`classify_event`] would drop them anyway;
+/// dropping them here keeps them out of the debouncer's queues as well.
+struct ChangeWatcher(RecommendedWatcher);
+
+/// Hands every event but an access on to the debouncer, rescan flags and errors included.
+struct SkipAccess<H>(H);
+
+impl<H: EventHandler> EventHandler for SkipAccess<H> {
+    fn handle_event(&mut self, event: notify::Result<Event>) {
+        if matches!(&event, Ok(event) if event.kind.is_access()) {
+            return;
+        }
+        self.0.handle_event(event);
+    }
+}
+
+impl Watcher for ChangeWatcher {
+    fn new<F: EventHandler>(event_handler: F, config: Config) -> notify::Result<Self> {
+        RecommendedWatcher::new(SkipAccess(event_handler), config).map(Self)
+    }
+
+    fn watch(&mut self, path: &Path, recursive_mode: RecursiveMode) -> notify::Result<()> {
+        self.0.watch(path, recursive_mode)
+    }
+
+    fn unwatch(&mut self, path: &Path) -> notify::Result<()> {
+        self.0.unwatch(path)
+    }
+
+    fn paths_mut<'me>(&'me mut self) -> Box<dyn PathsMut + 'me> {
+        self.0.paths_mut()
+    }
+
+    fn configure(&mut self, option: Config) -> notify::Result<bool> {
+        self.0.configure(option)
+    }
+
+    fn kind() -> WatcherKind {
+        RecommendedWatcher::kind()
+    }
+}
+
 pub struct FolderWatcher {
-    debouncer: Option<Debouncer<notify::RecommendedWatcher, RecommendedCache>>,
+    debouncer: Option<Debouncer<ChangeWatcher, RecommendedCache>>,
     /// Roots the running debouncer holds a recursive watch on.
     roots: Vec<PathBuf>,
     tx: mpsc::Sender<FileEvent>,
@@ -44,8 +93,10 @@ impl FolderWatcher {
 
         let tx = self.tx.clone();
 
-        let debouncer =
-            new_debouncer(Duration::from_secs(2), None, move |result: DebounceEventResult| {
+        let debouncer = new_debouncer_opt::<_, ChangeWatcher, _>(
+            Duration::from_secs(2),
+            None,
+            move |result: DebounceEventResult| {
                 match result {
                     Ok(events) => {
                         // Any rescan flag in the batch means the kernel dropped events
@@ -84,8 +135,11 @@ impl FolderWatcher {
                         }
                     }
                 }
-            })
-            .map_err(|e| AppError::watcher("Failed to create watcher", e))?;
+            },
+            RecommendedCache::new(),
+            Config::default(),
+        )
+        .map_err(|e| AppError::watcher("Failed to create watcher", e))?;
 
         self.debouncer = Some(debouncer);
         self.retarget(paths);
