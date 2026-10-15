@@ -1,5 +1,5 @@
 use super::*;
-use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::entities::track::{FileColumns, TrackListRow as RsTrackListRow};
 use melodia_testkit::write_test_png;
 
 fn folder(name: &str, path: &str) -> BrowseFolder {
@@ -10,8 +10,11 @@ fn file(id: i64, title: &str, artist: Option<&str>, in_library: bool) -> BrowseF
     BrowseFile {
         row: RsTrackListRow {
             id,
-            file_path: format!("/music/{title}.flac"),
-            file_name: format!("{title}.flac"),
+            file: FileColumns {
+                file_path: format!("/music/{title}.flac"),
+                file_name: format!("{title}.flac"),
+                date_added: "2026-01-01T00:00:00Z".to_owned(),
+            },
             title: title.to_owned(),
             artist: artist.map(str::to_owned),
             album_artist: None,
@@ -27,7 +30,6 @@ fn file(id: i64, title: &str, artist: Option<&str>, in_library: bool) -> BrowseF
             album_id: None,
             artist_id: None,
             genre_id: None,
-            date_added: "2026-01-01T00:00:00Z".to_owned(),
             sort_key: Some(title.to_lowercase()),
         },
         in_library,

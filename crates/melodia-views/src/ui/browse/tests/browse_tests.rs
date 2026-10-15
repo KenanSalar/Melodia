@@ -5,7 +5,7 @@
 //! the row conversion are the halves that decide, respectively, where Back lands and whether a
 //! row can be interacted with at all.
 
-use melodia_core::entities::track::TrackListRow;
+use melodia_core::entities::track::{FileColumns, TrackListRow};
 
 use super::*;
 
@@ -18,8 +18,11 @@ fn browse_ui() -> BrowseUi {
 fn library_row(id: i64) -> TrackListRow {
     TrackListRow {
         id,
-        file_path: "/m/ghost.flac".to_owned(),
-        file_name: "ghost.flac".to_owned(),
+        file: FileColumns {
+            file_path: "/m/ghost.flac".to_owned(),
+            file_name: "ghost.flac".to_owned(),
+            date_added: "2026-01-01T00:00:00Z".to_owned(),
+        },
         title: "Ghost Town".to_owned(),
         artist: Some("The Specials".to_owned()),
         album_artist: Some("Various Artists".to_owned()),
@@ -35,7 +38,6 @@ fn library_row(id: i64) -> TrackListRow {
         album_id: Some(7),
         artist_id: Some(8),
         genre_id: Some(9),
-        date_added: "2026-01-01T00:00:00Z".to_owned(),
         sort_key: None,
     }
 }

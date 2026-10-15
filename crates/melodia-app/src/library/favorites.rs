@@ -194,7 +194,9 @@ fn provider_name(target: LoveTarget) -> &'static str {
     }
 }
 
-pub async fn get_favorite_tracks(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
+pub async fn get_favorite_tracks(
+    db: &DbPool,
+) -> Result<Vec<track::TrackListRow<track::NoFileColumns>>, AppError> {
     queries::track::get_favorite_tracks_for_list(db).await
 }
 

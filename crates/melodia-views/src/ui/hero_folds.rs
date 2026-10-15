@@ -44,7 +44,7 @@ pub struct MostPlayedTotals {
 /// names: an `i64` hashes far cheaper over a list this size, and a track with no album
 /// belongs to none — so `None` is skipped rather than pooled into an "unknown" bucket
 /// that would read as one more album.
-pub fn fold_tracks(rows: &[TrackListRow]) -> HeroFold {
+pub fn fold_tracks<F>(rows: &[TrackListRow<F>]) -> HeroFold {
     let mut artists: HashSet<i64> = HashSet::new();
     let mut albums: HashSet<i64> = HashSet::new();
     for row in rows {

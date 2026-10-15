@@ -41,7 +41,7 @@ pub trait TrackSortFields {
     fn sort_key(&self) -> &str;
 }
 
-impl TrackSortFields for RsTrackListRow {
+impl<F> TrackSortFields for RsTrackListRow<F> {
     fn disc(&self) -> i32 {
         match self.disc_number {
             Some(d) if d != 0 => d,

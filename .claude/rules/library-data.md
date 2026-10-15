@@ -135,7 +135,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `TrackSummary` (17 cols; queue/NP/playback, incl. 4 ReplayGain + `rating`); `TrackListRow` (20;
   lists incl. Files/Browse, which render through the shared `TrackList` so there is no narrower
   browse slice; incl.
-  `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36; Edit-Tags dialog — the only production
+  `rating`), and the same struct as `TrackListRow<NoFileColumns>` (17, without `file_path`,
+  `file_name` and `date_added`) for the two whole-library fetches; `TrackMeta` (8; NP chips); `TagEditRow` (36; Edit-Tags dialog — the only production
   by-id multi-fetch, every single-valued tag column + the technical Summary cols); `PlaylistExportRow` (5;
   `file_path`/`file_hash`/`title`/`artist`/`duration_ms`, M3U8 export only); `Track` (60; scan
   ingest, hash backfill, detail, fixtures). Pick the slimmest — `SELECT *` into `Track` for a list
@@ -150,9 +151,10 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     that permanent.
 
   - **The other half of narrowing is `ui::track_list_cache`**: the two views that retain a whole
-    list resident (My Library's Songs tab, Favorites') keep *converted* rows rather than
-    `TrackListRow`s, so the columns a list doesn't render are freed at fetch rather than held for
-    the session, and `ui::track_list_model` shows them to Slint in place, so the set is held once
+    list resident (My Library's Songs tab, Favorites') fetch without the file columns and keep
+    *converted* rows rather than `TrackListRow`s, so the columns a list doesn't render are never
+    decoded or are freed at fetch rather than held for the session, and `ui::track_list_model`
+    shows them to Slint in place, so the set is held once
     rather than again as a `VecModel` copy. **Recently Played's Songs tab retains a list too and
     deliberately stays off it** — `get_recently_played` is capped at 200 rows, so what the cache is
     for (a resident set large enough that a second copy of it is the view's footprint) doesn't

@@ -674,7 +674,7 @@ async fn the_export_holds_the_tracks_the_list_shows_in_the_same_order() -> Resul
     let s = seed().await?;
     let c = one(RuleField::Rating, RuleOp::Gte, Some(RuleValue::Number(2.0)));
     let listed: Vec<String> =
-        resolve(&s.db, &c).await?.into_iter().map(|row| row.file_path).collect();
+        resolve(&s.db, &c).await?.into_iter().map(|row| row.file.file_path).collect();
     assert_eq!(listed.len(), 3, "test setup: the rule matches three of the four tracks");
 
     assert_eq!(exported_paths(&s.db, &c).await?, listed);

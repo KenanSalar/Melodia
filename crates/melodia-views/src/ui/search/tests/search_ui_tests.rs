@@ -5,6 +5,7 @@
 use std::collections::BTreeSet;
 
 use melodia_core::entities::search::SearchResults;
+use melodia_core::entities::track::FileColumns;
 use melodia_testkit::{block_after, strip_line_comments};
 
 use super::*;
@@ -15,8 +16,11 @@ const MOD: &str = include_str!("../mod.rs");
 fn row(id: i64) -> RsTrackListRow {
     RsTrackListRow {
         id,
-        file_path: String::new(),
-        file_name: String::new(),
+        file: FileColumns {
+            file_path: String::new(),
+            file_name: String::new(),
+            date_added: String::new(),
+        },
         title: format!("Track {id}"),
         artist: None,
         album_artist: None,
@@ -32,7 +36,6 @@ fn row(id: i64) -> RsTrackListRow {
         album_id: None,
         artist_id: None,
         genre_id: None,
-        date_added: String::new(),
         sort_key: None,
     }
 }

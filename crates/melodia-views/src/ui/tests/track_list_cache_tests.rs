@@ -15,8 +15,7 @@ use super::*;
 fn row(id: i64) -> RsTrackListRow {
     RsTrackListRow {
         id,
-        file_path: "/m/1.flac".to_owned(),
-        file_name: "1.flac".to_owned(),
+        file: NoFileColumns,
         title: "Ghost Town".to_owned(),
         artist: Some("The Specials".to_owned()),
         album_artist: Some("Various Artists".to_owned()),
@@ -32,7 +31,6 @@ fn row(id: i64) -> RsTrackListRow {
         album_id: None,
         artist_id: None,
         genre_id: None,
-        date_added: "2026-01-01T00:00:00Z".to_owned(),
         sort_key: None,
     }
 }

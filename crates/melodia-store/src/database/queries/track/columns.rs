@@ -86,6 +86,27 @@ pub(crate) static TRACK_LIST: Columns = Columns::new(&[
     "sort_key",
 ]);
 
+/// `TrackListRow<NoFileColumns>`: the lists that keep the whole library resident.
+pub(crate) static TRACK_LIST_WITHOUT_FILES: Columns = Columns::new(&[
+    "id",
+    "title",
+    "artist",
+    "album_artist",
+    "album",
+    "genre",
+    "track_number",
+    "disc_number",
+    "year",
+    "duration_ms",
+    "artwork_path",
+    "is_favorite",
+    "rating",
+    "album_id",
+    "artist_id",
+    "genre_id",
+    "sort_key",
+]);
+
 /// `PlaylistExportRow`: one Extended-M3U8 line.
 pub(crate) static PLAYLIST_EXPORT: Columns =
     Columns::new(&["file_path", "file_hash", "title", "artist", "duration_ms"]);

@@ -27,15 +27,19 @@ use melodia_core::error::AppError;
 /// reads as an index scan rather than a sort.
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
-/// Lightweight version of `get_all_tracks` returning only list-view columns.
+/// Every track as the Songs list retains it: list-view columns without the file ones, which
+/// over the whole library are the larger half of the text decoded and none of it drawn.
 ///
 /// The display order is the caller's: this hands back [`TRACK_LIST_ORDER`] and
 /// `ui::track_list_cache` permutes it.
-pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
+pub async fn get_all_tracks_for_list(
+    db: &DbPool,
+) -> Result<Vec<track::TrackListRow<track::NoFileColumns>>, AppError> {
+    let cols = columns::TRACK_LIST_WITHOUT_FILES.joined();
     let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
-    let tracks =
-        sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
+    let tracks = sqlx::query_as::<_, track::TrackListRow<track::NoFileColumns>>(AssertSqlSafe(sql))
+        .fetch_all(db.read())
+        .await?;
     Ok(tracks)
 }
 
@@ -99,18 +103,19 @@ pub async fn get_tracks_by_genre_for_list(
     Ok(tracks)
 }
 
-/// Fetch all favorite tracks (lightweight list-view columns).
+/// Every favorite track, as Favorites' Songs tab retains it.
 ///
-/// Ordered like [`get_all_tracks_for_list`] and for the same reason — the Songs tab's own sort is
-/// resolved over the retained rows, not here.
+/// Shaped and ordered like [`get_all_tracks_for_list`] and for the same reasons — the tab draws no
+/// file column, and its own sort is resolved over the retained rows, not here.
 pub async fn get_favorite_tracks_for_list(
     db: &DbPool,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
+) -> Result<Vec<track::TrackListRow<track::NoFileColumns>>, AppError> {
+    let cols = columns::TRACK_LIST_WITHOUT_FILES.joined();
     let sql =
         format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {TRACK_LIST_ORDER}");
-    let tracks =
-        sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
+    let tracks = sqlx::query_as::<_, track::TrackListRow<track::NoFileColumns>>(AssertSqlSafe(sql))
+        .fetch_all(db.read())
+        .await?;
     Ok(tracks)
 }
 

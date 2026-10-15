@@ -6,14 +6,17 @@
 
 use super::{HeroFold, MostPlayedTotals, dominant_genre, fold_most_played, fold_tracks, year_span};
 use melodia_core::entities::album::AlbumStats;
-use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
+use melodia_core::entities::track::{FileColumns, MostPlayedFavorite, TrackListRow};
 
 /// Only the four fields the folds and the genre tally read.
 fn track(artist_id: Option<i64>, album_id: Option<i64>, genre: Option<&str>) -> TrackListRow {
     TrackListRow {
         id: 0,
-        file_path: String::new(),
-        file_name: String::new(),
+        file: FileColumns {
+            file_path: String::new(),
+            file_name: String::new(),
+            date_added: String::new(),
+        },
         title: String::new(),
         artist: None,
         album_artist: None,
@@ -29,7 +32,6 @@ fn track(artist_id: Option<i64>, album_id: Option<i64>, genre: Option<&str>) -> 
         album_id,
         artist_id,
         genre_id: None,
-        date_added: String::new(),
         sort_key: None,
     }
 }
@@ -86,7 +88,7 @@ fn the_fold_counts_distinct_ids_and_skips_the_untagged() {
         track(None, None, None),
     ];
     assert_eq!(fold_tracks(&rows), HeroFold { artists: 2, albums: 2 });
-    assert_eq!(fold_tracks(&[]), HeroFold::default());
+    assert_eq!(fold_tracks::<FileColumns>(&[]), HeroFold::default());
 }
 
 #[test]

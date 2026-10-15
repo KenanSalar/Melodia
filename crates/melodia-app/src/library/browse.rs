@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder, BrowseResult};
 use melodia_core::entities::folder::Folder;
-use melodia_core::entities::track::TrackListRow;
+use melodia_core::entities::track::{FileColumns, TrackListRow};
 use melodia_core::error::AppError;
 use melodia_core::utils::audio_ext::is_audio_extension;
 use melodia_store::database::{DbPool, queries};
@@ -102,7 +102,7 @@ pub async fn browse_directory(
     // only per-row clone is the `file_path` key (one `String` vs ~6 heap
     // allocs for a full row clone).
     let mut track_map: HashMap<String, TrackListRow> =
-        tracks.into_iter().map(|t| (t.file_path.clone(), t)).collect();
+        tracks.into_iter().map(|t| (t.file.file_path.clone(), t)).collect();
 
     let mut files: Vec<BrowseFile> = Vec::with_capacity(scan.audio_paths.len());
     for audio_path in &scan.audio_paths {
@@ -120,8 +120,11 @@ pub async fn browse_directory(
             files.push(BrowseFile {
                 row: TrackListRow {
                     id: 0,
-                    file_path: path_str.into_owned(),
-                    file_name: file_name.clone(),
+                    file: FileColumns {
+                        file_path: path_str.into_owned(),
+                        file_name: file_name.clone(),
+                        date_added: String::new(),
+                    },
                     title: file_name,
                     artist: None,
                     album_artist: None,
@@ -137,7 +140,6 @@ pub async fn browse_directory(
                     album_id: None,
                     artist_id: None,
                     genre_id: None,
-                    date_added: String::new(),
                     sort_key: None,
                 },
                 in_library: false,
@@ -145,7 +147,7 @@ pub async fn browse_directory(
         }
     }
 
-    files.sort_by_cached_key(|f| f.row.file_name.to_lowercase());
+    files.sort_by_cached_key(|f| f.row.file.file_name.to_lowercase());
 
     let name = scan
         .canonical

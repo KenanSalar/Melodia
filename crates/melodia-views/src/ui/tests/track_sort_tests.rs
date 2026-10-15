@@ -11,6 +11,7 @@
 //! field so expected orders are exact.
 
 use super::*;
+use melodia_core::entities::track::FileColumns;
 
 #[expect(clippy::too_many_arguments, reason = "test row builder mirrors TrackListRow")]
 fn mk(
@@ -26,8 +27,11 @@ fn mk(
 ) -> RsTrackListRow {
     RsTrackListRow {
         id,
-        file_path: format!("/m/{id}.flac"),
-        file_name: format!("{id}.flac"),
+        file: FileColumns {
+            file_path: format!("/m/{id}.flac"),
+            file_name: format!("{id}.flac"),
+            date_added: "2026-01-01T00:00:00Z".to_owned(),
+        },
         title: format!("title{id}"),
         artist: artist.map(str::to_owned),
         album_artist: None,
@@ -43,7 +47,6 @@ fn mk(
         album_id: None,
         artist_id: None,
         genre_id: None,
-        date_added: "2026-01-01T00:00:00Z".to_owned(),
         sort_key: Some(sort_key.to_owned()),
     }
 }
@@ -177,7 +180,7 @@ fn custom_secondary_key_breaks_ties() {
         mk(1, "same", Some("A"), None, None, None, 0, None, None),
         mk(2, "same", Some("A"), None, None, None, 0, None, None),
     ];
-    sort_track_rows_by(&mut rows, "artist", "asc", |r| r, |r| r.file_name.to_lowercase());
+    sort_track_rows_by(&mut rows, "artist", "asc", |r| r, |r| r.file.file_name.to_lowercase());
     // file_name "1.flac" < "2.flac".
     assert_eq!(ids(&rows), [1, 2]);
 }

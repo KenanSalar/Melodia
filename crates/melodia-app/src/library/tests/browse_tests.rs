@@ -137,7 +137,8 @@ async fn folders_and_files_sort_case_insensitively() -> Result<(), AppError> {
     let result = browse(&db, tmp.path(), &folders).await?;
     let folder_names: Vec<&str> = result.folders.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(folder_names, ["alpha", "Beta", "Zebra"]);
-    let file_names: Vec<&str> = result.files.iter().map(|f| f.row.file_name.as_str()).collect();
+    let file_names: Vec<&str> =
+        result.files.iter().map(|f| f.row.file.file_name.as_str()).collect();
     assert_eq!(file_names, ["alpha.mp3", "Bravo.mp3", "Zulu.mp3"]);
     Ok(())
 }
@@ -164,7 +165,7 @@ async fn a_file_carries_its_row_only_when_the_library_holds_one() -> Result<(), 
     let listed: Vec<(&str, bool, i64, &str)> = result
         .files
         .iter()
-        .map(|f| (f.row.file_name.as_str(), f.in_library, f.row.id, f.row.title.as_str()))
+        .map(|f| (f.row.file.file_name.as_str(), f.in_library, f.row.id, f.row.title.as_str()))
         .collect();
     assert_eq!(
         listed,
