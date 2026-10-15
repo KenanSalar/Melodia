@@ -53,8 +53,9 @@ pub struct AppState {
     pub position_tx: watch::Sender<Option<PositionTick>>,
     /// What the playing source goes through on its way to the device, `None` while stopped.
     pub signal_path_tx: watch::Sender<Option<SignalPath>>,
-    /// Bumped whenever the track library is mutated by a scan or watcher
-    /// event. UI subscribers re-fetch the Tracks model on each tick.
+    /// Bumped after a write that changes what a library list shows: a scan or watcher batch,
+    /// a user edit, a fetched artist image. Each subscriber re-fetches what it shows, so a
+    /// write that changes nothing on screen doesn't bump it.
     pub library_changed: Signal,
     /// Bumped after every play-count flush. Split from `library_changed`
     /// so the per-song flush (every track completion) doesn't imply

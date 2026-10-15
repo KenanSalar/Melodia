@@ -30,11 +30,7 @@ pub(super) async fn after_completed(state: &AppState, folder_id: i64) -> Result<
     let now = melodia_core::utils::now_rfc3339();
     queries::folder::update_folder_last_scanned(&state.db, folder_id, &now).await?;
 
-    services::artist_images::spawn_fetch(
-        state.paths.clone(),
-        state.db.clone(),
-        state.http_client().clone(),
-    );
+    services::artist_images::spawn_fetch(state);
     let spawner = TaskSpawner::from_state(state);
     tasks::retroactive_hash::spawn(&spawner, state);
     // After the orphan pass committed, so the rows it deleted are already gone from the

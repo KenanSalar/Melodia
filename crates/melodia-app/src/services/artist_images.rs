@@ -11,6 +11,8 @@ use melodia_net::media::fetch::deezer::{self, DeezerAnswer};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 
+use crate::state::AppState;
+
 /// How long a definitive "no match" stands before the artist is searched again.
 ///
 /// Recorded on the artist's row rather than in memory: `spawn_fetch` runs after every scan, a
@@ -232,8 +234,6 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
         }
     }
 
-    // Fetched images land in the DB but nothing signals the UI, so a grid
-    // that's already painted won't pick them up until its next refresh.
     Ok(PassOutcome { fetched: fetched_count, halted })
 }
 
@@ -261,11 +261,20 @@ async fn download_and_store(
 }
 
 /// Spawn a background task to fetch artist images. Fire-and-forget.
-/// `client` is the shared client from `AppState::http_client()`.
-pub fn spawn_fetch(paths: Arc<Paths>, db: DbPool, client: reqwest::Client) {
+///
+/// Bumps `library_changed` once if the pass stored any image. Nothing else tells a painted
+/// Artists grid its rows now have one, and the pass outlives the scan whose bump it would
+/// otherwise have to ride.
+pub fn spawn_fetch(state: &AppState) {
+    let paths = Arc::clone(&state.paths);
+    let db = state.db.clone();
+    let client = state.http_client().clone();
+    let library_changed = state.library_changed.clone();
     tokio::spawn(async move {
-        if let Err(e) = fetch_artist_images(&paths, &db, &client).await {
-            log::warn!("Background artist image fetch failed: {}", describe(&e));
+        match fetch_artist_images(&paths, &db, &client).await {
+            Ok(0) => {}
+            Ok(_) => library_changed.bump(),
+            Err(e) => log::warn!("Background artist image fetch failed: {}", describe(&e)),
         }
     });
 }
