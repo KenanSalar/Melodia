@@ -207,7 +207,9 @@ async fn strip_windows_verbatim_paths(pool: &SqlitePool) -> Result<(), AppError>
 /// through the connection's cache.
 const MMAP_SIZE: &str = "268435456";
 
-/// How long a pooled connection may sit idle before it closes, taking its page cache with it.
+/// How long a pooled connection sits idle before it may close, taking its page cache with it.
+/// sqlx's reaper checks once per this period, so one can stay open up to twice as long, which
+/// `scripts/measure-linux-footprint.sh` sizes its settle past.
 const IDLE_TIMEOUT: Duration = Duration::from_mins(1);
 
 pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {

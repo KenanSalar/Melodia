@@ -146,41 +146,55 @@ Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Braz
 
 ## Footprint
 
-Release builds against the same 512-track library on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display. On both platforms Melodia opened on the same playlist, its detail view showing the hero banner, and the visualizer ran in the Mirrored style. After 30 s to settle, each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
+Release builds on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display, against the same 512-track library on both platforms, and again with a second library of 50,500 tracks added beside it, 51,012 tracks in all. On both platforms Melodia opened on the same playlist, its detail view showing the hero banner, and the visualizer ran in the Mirrored style. Each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
 
 ### Linux (Fedora)
 
-Measured with [`scripts/measure-linux-footprint.sh`](scripts/measure-linux-footprint.sh) on KDE Plasma under Wayland.
-
-#### Custom titlebar
-
-| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 32.54 MiB | 94.53 MiB | 87.95 MiB | 167.86 MiB | 36.00 MiB | 0.12% | 0.01% | 0.00% |
-| Playing, list view | 33.41 MiB | 94.08 MiB | 89.57 MiB | 164.67 MiB | 36.00 MiB | 0.57% | 0.04% | 0.32% |
-| Playing, visualizer live | 33.57 MiB | 94.36 MiB | 89.69 MiB | 165.14 MiB | 37.00 MiB | 2.58% | 0.16% | 0.69% |
+Measured with [`scripts/measure-linux-footprint.sh`](scripts/measure-linux-footprint.sh) on KDE Plasma under Wayland. Startup is sampled from the moment Melodia launches, and the other scenarios start 150 s after it, once the database connections opened while loading the library have closed.
 
 #### Native titlebar
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 32.34 MiB | 91.26 MiB | 84.83 MiB | 166.24 MiB | 28.00 MiB | 0.12% | 0.01% | 0.00% |
-| Playing, list view | 32.97 MiB | 92.85 MiB | 88.44 MiB | 163.30 MiB | 24.00 MiB | 0.52% | 0.03% | 0.00% |
-| Playing, visualizer live | 33.05 MiB | 93.58 MiB | 89.09 MiB | 163.94 MiB | 29.00 MiB | 2.27% | 0.14% | 1.69% |
+| Startup | 29.72 MiB | 87.27 MiB | 80.60 MiB | 159.91 MiB | 29.00 MiB | 0.97% | 0.06% | 0.00% |
+| Idle | 29.86 MiB | 85.04 MiB | 80.27 MiB | 155.33 MiB | 29.00 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 30.43 MiB | 87.18 MiB | 81.81 MiB | 156.86 MiB | 29.00 MiB | 0.45% | 0.03% | 0.00% |
+| Playing, visualizer live | 30.69 MiB | 89.65 MiB | 84.69 MiB | 159.81 MiB | 27.00 MiB | 2.33% | 0.15% | 2.64% |
+
+With both libraries, 51,012 tracks. The higher PSS and RSS at startup are the library's database, which every connection that read it keeps mapped until it closes; RSS counts it once per connection.
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 36.02 MiB | 147.60 MiB | 86.11 MiB | 333.03 MiB | 28.00 MiB | 2.08% | 0.13% | 0.00% |
+| Idle | 35.91 MiB | 91.01 MiB | 85.96 MiB | 160.76 MiB | 28.00 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 36.75 MiB | 92.50 MiB | 87.77 MiB | 162.57 MiB | 28.00 MiB | 0.48% | 0.03% | 0.00% |
+| Playing, visualizer live | 36.28 MiB | 94.83 MiB | 90.11 MiB | 164.97 MiB | 27.00 MiB | 2.35% | 0.15% | 4.31% |
+
+---
+
+#### Custom titlebar
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 29.78 MiB | 89.87 MiB | 82.90 MiB | 162.55 MiB | 33.00 MiB | 1.00% | 0.06% | 0.10% |
+| Idle | 29.78 MiB | 87.86 MiB | 82.43 MiB | 157.83 MiB | 33.00 MiB | 0.07% | 0.00% | 0.00% |
+| Playing, list view | 30.31 MiB | 89.48 MiB | 84.05 MiB | 159.45 MiB | 33.00 MiB | 0.58% | 0.04% | 0.00% |
+| Playing, visualizer live | 30.70 MiB | 90.61 MiB | 85.19 MiB | 160.59 MiB | 34.00 MiB | 2.92% | 0.18% | 4.24% |
+
+With both libraries, 51,012 tracks:
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 34.02 MiB | 148.61 MiB | 86.67 MiB | 387.08 MiB | 33.00 MiB | 2.13% | 0.13% | 0.08% |
+| Idle | 33.95 MiB | 91.46 MiB | 86.62 MiB | 162.00 MiB | 33.00 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 34.63 MiB | 92.73 MiB | 87.89 MiB | 163.27 MiB | 33.00 MiB | 0.52% | 0.03% | 0.14% |
+| Playing, visualizer live | 35.81 MiB | 94.78 MiB | 89.94 MiB | 165.32 MiB | 32.00 MiB | 2.70% | 0.17% | 3.12% |
 
 Linux keeps no commit charge per process, so **Anonymous** is the figure to compare: the memory Melodia allocated itself, in RAM or in swap, which nothing another process does can move. **PSS** is KDE System Monitor's Memory column. It adds a share of the file-backed pages, mostly the binary and the shared graphics stack rather than anything Melodia allocated, and that share shrinks whenever another program maps the same libraries. **USS** is the part no other process maps, what closing Melodia gives back, and System Monitor's Private column. **RSS** counts every shared page in full. **GPU memory** is the video memory the NVIDIA driver charges to Melodia, where FemtoVG keeps its textures and framebuffers, counted apart from the rest. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as System Monitor's CPU column does. **GPU** is the utilization the NVIDIA driver reports for Melodia, in whole percents each second.
 
 ### Windows
 
-Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1).
-
-#### Custom titlebar
-
-| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 105 MiB | 60 MiB | 119 MiB | 26 MiB | 13 MiB | 0.13% | 0.01% | 0.00% |
-| Playing, list view | 112 MiB | 64 MiB | 123 MiB | 28 MiB | 17 MiB | 0.91% | 0.06% | 0.12% |
-| Playing, visualizer live | 116 MiB | 67 MiB | 126 MiB | 29 MiB | 17 MiB | 6.33% | 0.40% | 2.36% |
+Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1), the scenarios starting after 30 s to settle.
 
 #### Native titlebar
 
@@ -189,6 +203,16 @@ Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-
 | Idle | 102 MiB | 59 MiB | 118 MiB | 23 MiB | 13 MiB | 0.16% | 0.01% | 0.00% |
 | Playing, list view | 103 MiB | 59 MiB | 118 MiB | 24 MiB | 13 MiB | 0.89% | 0.06% | 0.10% |
 | Playing, visualizer live | 115 MiB | 67 MiB | 126 MiB | 27 MiB | 19 MiB | 9.06% | 0.57% | 2.17% |
+
+---
+
+#### Custom titlebar
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Idle | 105 MiB | 60 MiB | 119 MiB | 26 MiB | 13 MiB | 0.13% | 0.01% | 0.00% |
+| Playing, list view | 112 MiB | 64 MiB | 123 MiB | 28 MiB | 17 MiB | 0.91% | 0.06% | 0.12% |
+| Playing, visualizer live | 116 MiB | 67 MiB | 126 MiB | 29 MiB | 17 MiB | 6.33% | 0.40% | 2.36% |
 
 Windows keeps no PSS, so **Commit** is the figure to compare: the private memory Windows has set aside for Melodia, in RAM or paged out, which doesn't fall when Windows trims the process. **Private WS** is Task Manager's Memory column, the private memory in RAM at that moment. **Working set** adds the pages Melodia shares with other processes, mostly system DLLs. **GPU dedicated** and **GPU shared** are the video memory Task Manager lists per process, where FemtoVG keeps its textures and framebuffers, counted apart from commit. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as Task Manager's Details tab does. **GPU** is the busiest GPU engine, Task Manager's per-process figure.
 

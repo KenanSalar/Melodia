@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Measures Melodia's memory, CPU and GPU footprint on Linux the same way every run.
 #
-# Launches Melodia (or attaches to a running one), lets it settle, then samples one window per
-# scenario while you switch between scenarios by hand. Every sample goes to samples.csv and the
-# per-scenario figures to summary.md. Run with --help for the options.
+# Launches Melodia and samples its startup straight away, or attaches to a running one. Once it has
+# settled, it samples one window per scenario while you switch between scenarios by hand. Every
+# sample goes to samples.csv and the per-scenario figures to summary.md. Run with --help for the
+# options.
 #
 # Anonymous is the headline figure: anonymous memory in RAM plus what of it sits in swap, zram
 # included. Linux overcommits and keeps no commit charge per process, so this is the nearest it
@@ -31,8 +32,8 @@
 # engine's running time over wall time. NVIDIA publishes only a per-process utilization in whole
 # percents each second, so there it is the average of those.
 #
-# Threads, file descriptors and memory maps should hold flat from one scenario to the next. A climb
-# is a leak.
+# Threads, file descriptors and memory maps should hold flat from one prompted scenario to the
+# next, Startup's sitting higher while its database connections are open. A climb is a leak.
 
 set -euo pipefail
 shopt -s nullglob
@@ -41,8 +42,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly SCRIPT_DIR
 readonly REPO_ROOT="${SCRIPT_DIR%/*}"
 
+readonly STARTUP_SCENARIO='Startup'
 readonly DEFAULT_SCENARIOS=('Idle' 'Playing, list view' 'Playing, visualizer live')
-readonly DEFAULT_SETTLE_SECONDS=30
+# Counted from the launch, past the database pool's reap. Every connection maps melodia.db, and the
+# reaper, looking once a minute for ones idle over a minute, closes those startup opened about two
+# minutes in (IDLE_TIMEOUT in crates/melodia-store/src/database/mod.rs).
+readonly DEFAULT_SETTLE_SECONDS=150
 readonly DEFAULT_SWITCH_SETTLE_SECONDS=10
 readonly DEFAULT_DURATION_SECONDS=60
 readonly DEFAULT_INTERVAL_SECONDS=1
@@ -112,6 +117,7 @@ out_dir=''
 
 melodia_pid=''
 launched_melodia=''
+settle_started=0
 origin=''
 work_dir=''
 nvidia_log=''
@@ -121,6 +127,7 @@ countdown_started=0
 countdown_total=0
 progress_enabled=''
 progress_visible=''
+saved_terminal_settings=''
 terminal_columns=$FALLBACK_TERMINAL_COLUMNS
 declare -A summary=()
 
@@ -135,6 +142,7 @@ main() {
   work_dir="$(mktemp -d)"
   trap cleanup EXIT
   trap 'exit 130' INT TERM
+  stop_echoing_keys
 
   if [[ -n $attach_pid ]]; then
     attach_melodia
@@ -156,11 +164,14 @@ Options:
                              cargo build --release -p melodia
   --data-dir DIR             Data root to launch against, passed as MELODIA_DATA_DIR, so every run
                              sees the same library.
-  --pid PID                  Measure an already running Melodia instead of launching one.
+  --pid PID                  Measure an already running Melodia instead of launching one. Its
+                             startup is past, so there is no "$STARTUP_SCENARIO" window.
   --scenario NAME            One measurement window per name, in order; repeat it for more. You are
                              prompted before each. Defaults to "${DEFAULT_SCENARIOS[0]}", "${DEFAULT_SCENARIOS[1]}"
-                             and "${DEFAULT_SCENARIOS[2]}".
-  --settle-seconds N         Wait before the first scenario, so startup work stays out of every
+                             and "${DEFAULT_SCENARIOS[2]}". A launch samples "$STARTUP_SCENARIO" before
+                             them, unprompted.
+  --settle-seconds N         Time from the launch, or the attach, to the first prompt, so startup
+                             work and the database connections it opens stay out of every prompted
                              window. Default $DEFAULT_SETTLE_SECONDS.
   --switch-settle-seconds N  Wait after each prompt, so the switch itself (a view being built,
                              covers decoding) stays out of the window. Default $DEFAULT_SWITCH_SETTLE_SECONDS.
@@ -256,11 +267,17 @@ read_terminal_columns() {
 measure_footprint() {
   echo "Measuring Melodia (pid $melodia_pid), $origin."
   start_nvidia_monitor
-  wait_countdown 'Waiting for Melodia to settle' "$settle_seconds"
+
+  local first_prompted=0
+  if [[ -n $launched_melodia ]]; then
+    measure_startup
+    first_prompted=1
+  fi
+  wait_for_settle
 
   local index title
-  for index in "${!scenarios[@]}"; do
-    title="Scenario $(( index + 1 ))/${#scenarios[@]}: ${scenarios[index]}"
+  for (( index = first_prompted; index < ${#scenarios[@]}; index++ )); do
+    title="$(scenario_title "$index")"
     read_confirmation "$title"
     wait_countdown "$title, settling after the switch" "$switch_settle_seconds"
     measure_scenario "$index" "$title"
@@ -269,6 +286,28 @@ measure_footprint() {
 
   save_report
   echo "Melodia (pid $melodia_pid) is still running. Close it before the next run."
+}
+
+measure_startup() {
+  scenarios=("$STARTUP_SCENARIO" "${scenarios[@]}")
+  local title
+  title="$(scenario_title 0)"
+  print_title "$title"
+  echo '  Sampled from the launch. Leave Melodia alone until the next prompt.'
+  measure_scenario 0 "$title"
+  write_scenario_result 0
+}
+
+wait_for_settle() {
+  start_countdown 'Waiting for Melodia to settle' "$settle_seconds"
+  # From the launch or the attach, so the startup window counts toward the settle.
+  countdown_started=$settle_started
+  wait_until "$countdown_total"
+  complete_progress
+}
+
+scenario_title() {
+  echo "Scenario $(( $1 + 1 ))/${#scenarios[@]}: ${scenarios[$1]}"
 }
 
 start_melodia() {
@@ -289,6 +328,7 @@ start_melodia() {
   env "${environment[@]}" setsid "$exe" </dev/null >/dev/null 2>&1 &
   melodia_pid=$!
   launched_melodia=yes
+  read_clock settle_started
 
   if [[ -n $data_dir ]]; then
     origin="launched with MELODIA_DATA_DIR=$data_dir"
@@ -302,6 +342,7 @@ attach_melodia() {
     die "No process with pid $attach_pid."
   fi
   melodia_pid=$attach_pid
+  read_clock settle_started
   origin="attached to pid $attach_pid"
 }
 
@@ -376,13 +417,39 @@ complete_progress() {
   fi
 }
 
-read_confirmation() {
+print_title() {
   printf '\n%s%s%s\n' "$COLOR_TITLE" "$1" "$COLOR_RESET"
+}
+
+# An Enter echoed during a countdown moves the progress bar down a line and leaves its last frame
+# behind. Restored by cleanup.
+stop_echoing_keys() {
+  if [[ ! -t 0 ]]; then
+    return 0
+  fi
+  saved_terminal_settings="$(stty -g)"
+  stty -echo
+}
+
+read_confirmation() {
+  print_title "$1"
   echo '  Set Melodia up for it, keep its window visible and unminimized, then press Enter.'
+  discard_typeahead
   # A closed stdin reads end-of-input at once, which would sample a scenario nobody set up.
   if ! read -r; then
     die 'No input to confirm the scenario with. Run the script from an interactive terminal.'
   fi
+}
+
+# An Enter pressed before the prompt would confirm a scenario nobody has set up yet. A terminal
+# only: piped input is the confirmations themselves.
+discard_typeahead() {
+  if [[ ! -t 0 ]]; then
+    return 0
+  fi
+  while read -r -t 0; do
+    read -r || break
+  done
 }
 
 measure_scenario() {
@@ -689,7 +756,7 @@ format_report() {
   echo "- CPU: $(cpu_model), $LOGICAL_PROCESSORS logical processors"
   echo "- GPU: $(describe_gpus)"
   echo "- Display: $(describe_display)"
-  echo "- Method: $settle_seconds s settle, $switch_settle_seconds s after each switch, $duration_seconds s per scenario sampled every $interval_seconds s. Memory is the median sample, CPU and GPU the total over the window."
+  echo "- Method: $(describe_method)"
   echo
   echo '| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |'
   echo '| --- | --- | --- | --- | --- | --- | --- | --- | --- |'
@@ -711,6 +778,14 @@ format_report() {
       "$(format_mib "${summary[peak_rss]}")" "$(format_mib "${summary[swap]}")" \
       "${summary[threads]}" "${summary[file_descriptors]}" "${summary[memory_maps]}"
   done
+}
+
+describe_method() {
+  local settle="$settle_seconds s settle"
+  if [[ -n $launched_melodia ]]; then
+    settle="$STARTUP_SCENARIO sampled from the launch, $settle_seconds s from the launch to the first prompt"
+  fi
+  echo "$settle, $switch_settle_seconds s after each switch, $duration_seconds s per scenario sampled every $interval_seconds s. Memory is the median sample, CPU and GPU the total over the window."
 }
 
 # Read through /proc/<pid>/exe, which still opens the binary that is running after a rebuild has
@@ -894,6 +969,9 @@ describe_output() {
 
 cleanup() {
   complete_progress
+  if [[ -n $saved_terminal_settings ]]; then
+    stty "$saved_terminal_settings"
+  fi
   if [[ -n $nvidia_monitor_pid ]]; then
     kill "$nvidia_monitor_pid" 2>/dev/null || true
     wait "$nvidia_monitor_pid" 2>/dev/null || true
