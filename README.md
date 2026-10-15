@@ -194,15 +194,27 @@ Linux keeps no commit charge per process, so **Anonymous** is the figure to comp
 
 ### Windows
 
-Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1), the scenarios starting after 30 s to settle.
+Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1), on an output device Windows mixes at 192 kHz, so every track passes through the sample-rate conversion. Startup is sampled from the moment Melodia launches, and the other scenarios start 150 s after it, once the database connections opened while loading the library have closed.
 
 #### Native titlebar
 
 | Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 102 MiB | 59 MiB | 118 MiB | 23 MiB | 13 MiB | 0.16% | 0.01% | 0.00% |
-| Playing, list view | 103 MiB | 59 MiB | 118 MiB | 24 MiB | 13 MiB | 0.89% | 0.06% | 0.10% |
-| Playing, visualizer live | 115 MiB | 67 MiB | 126 MiB | 27 MiB | 19 MiB | 9.06% | 0.57% | 2.17% |
+| Startup | 113.20 MiB | 63.09 MiB | 120.83 MiB | 27.95 MiB | 23.60 MiB | 1.46% | 0.09% | 0.07% |
+| Idle | 109.66 MiB | 62.09 MiB | 118.38 MiB | 24.63 MiB | 23.60 MiB | 0.21% | 0.01% | 0.02% |
+| Playing, list view | 111.03 MiB | 62.75 MiB | 119.64 MiB | 24.63 MiB | 23.61 MiB | 0.78% | 0.05% | 0.04% |
+| Playing, visualizer live | 115.18 MiB | 65.93 MiB | 123.69 MiB | 25.56 MiB | 25.61 MiB | 7.08% | 0.44% | 1.03% |
+
+With both libraries, 51,012 tracks. The higher commit and working set at startup are the library's database: every connection that read it holds a page cache of its own, which commit counts, and maps the file, which the working set counts, until it closes.
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 151.14 MiB | 98.89 MiB | 299.16 MiB | 27.95 MiB | 23.60 MiB | 6.48% | 0.41% | 0.05% |
+| Idle | 128.27 MiB | 79.36 MiB | 135.66 MiB | 24.63 MiB | 23.60 MiB | 0.08% | 0.00% | 0.00% |
+| Playing, list view | 131.38 MiB | 81.04 MiB | 138.01 MiB | 24.63 MiB | 23.60 MiB | 0.83% | 0.05% | 0.04% |
+| Playing, visualizer live | 139.70 MiB | 87.04 MiB | 144.91 MiB | 25.56 MiB | 25.61 MiB | 6.72% | 0.42% | 1.83% |
+
+Both tables use the default Linear sample-rate conversion. Band-Limited costs more CPU while playing: with the 512-track library, about 1.9% of one core in the list view and about 7.9% with the visualizer live.
 
 ---
 
@@ -210,9 +222,21 @@ Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-
 
 | Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 105 MiB | 60 MiB | 119 MiB | 26 MiB | 13 MiB | 0.13% | 0.01% | 0.00% |
-| Playing, list view | 112 MiB | 64 MiB | 123 MiB | 28 MiB | 17 MiB | 0.91% | 0.06% | 0.12% |
-| Playing, visualizer live | 116 MiB | 67 MiB | 126 MiB | 29 MiB | 17 MiB | 6.33% | 0.40% | 2.36% |
+| Startup | 117.05 MiB | 64.64 MiB | 122.35 MiB | 33.64 MiB | 23.73 MiB | 0.21% | 0.01% | 0.00% |
+| Idle | 110.19 MiB | 63.34 MiB | 119.68 MiB | 27.94 MiB | 23.73 MiB | 0.57% | 0.04% | 0.06% |
+| Playing, list view | 112.29 MiB | 64.17 MiB | 121.40 MiB | 27.94 MiB | 23.73 MiB | 0.86% | 0.05% | 0.07% |
+| Playing, visualizer live | 120.08 MiB | 68.23 MiB | 126.04 MiB | 30.75 MiB | 25.73 MiB | 6.33% | 0.40% | 2.33% |
+
+With both libraries, 51,012 tracks:
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 155.99 MiB | 101.66 MiB | 301.97 MiB | 33.64 MiB | 23.72 MiB | 6.01% | 0.38% | 0.06% |
+| Idle | 131.93 MiB | 82.12 MiB | 138.78 MiB | 27.95 MiB | 23.73 MiB | 0.36% | 0.02% | 0.02% |
+| Playing, list view | 133.88 MiB | 83.73 MiB | 141.07 MiB | 27.95 MiB | 23.73 MiB | 0.62% | 0.04% | 0.06% |
+| Playing, visualizer live | 141.16 MiB | 88.91 MiB | 146.86 MiB | 29.36 MiB | 25.73 MiB | 5.49% | 0.34% | 2.21% |
+
+Both tables use the default Linear sample-rate conversion. Band-Limited costs more CPU while playing: with the 512-track library, about 2.1% of one core in the list view and about 6.2% with the visualizer live.
 
 Windows keeps no PSS, so **Commit** is the figure to compare: the private memory Windows has set aside for Melodia, in RAM or paged out, which doesn't fall when Windows trims the process. **Private WS** is Task Manager's Memory column, the private memory in RAM at that moment. **Working set** adds the pages Melodia shares with other processes, mostly system DLLs. **GPU dedicated** and **GPU shared** are the video memory Task Manager lists per process, where FemtoVG keeps its textures and framebuffers, counted apart from commit. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as Task Manager's Details tab does. **GPU** is the busiest GPU engine, Task Manager's per-process figure.
 
