@@ -37,7 +37,7 @@ export component SearchBar inherits Rectangle {
         input.placeholder-width + root.chrome-overhead;
 
     // Recessed into a surface rather than floating over content: the host's corner instead of a
-    // stadium, and no lift or swell — inside a popup there is nothing to be above. Fills, border
+    // stadium, and no swell — inside a popup there is nothing to be above. Fills, border
     // tint, placeholder and icon are unchanged, so both shapes read as one control.
     in property <bool> inset: false;
 
@@ -119,29 +119,15 @@ export component SearchBar inherits Rectangle {
 
         // Rest matches the `ActionPill` chip's fill, so adjacent bars and pills read as
         // one family; engagement closes it to opaque, as a hovered `PillButton` does.
-        // **Out to the edge, not a `TuckedFill`**, although the focus ring is translucent: the focus
-        // shadow sits under the whole bar, and a fill stopping at the ring's middle lets it darken
-        // the rim. Under a translucent border the renderer runs the fill out to the edge for exactly
-        // that, at the price of a second antialiased pass while the bar has focus.
         background: root.engaged
             ? Theme.surface0
             : Theme.floating-chrome-bg;
-        // The `ActionPill` outline at rest; focus lifts it with a glow and tints the
-        // ring faintly toward the accent.
+        // The `ActionPill` outline at rest; focus tints the ring faintly toward the accent.
         border-radius: root.inset ? Theme.radius-md : self.height / 2;
         border-width: 1px;
         border-color: input.has-focus
             ? Theme.accent.with-alpha(0.18)
             : Theme.surface2;
-        // An inset bar drops the shadow through the *colour*: the renderer bails on a transparent
-        // one, where a zeroed blur still paints an occluded rect under this fill's translucency.
-        drop-shadow-color: root.inset
-            ? transparent
-            : (input.has-focus
-                ? Theme.crust.with-alpha(0.45)
-                : Theme.crust.with-alpha(0.15));
-        drop-shadow-blur: input.has-focus ? 16px : 2px;
-        drop-shadow-offset-y: input.has-focus ? 4px : 1px;
         // **The ease belongs on the scale, not on the dimensions.** Animating a binding derived
         // from another animating property phase-lags, and `width`/`height` derive from this while
         // `x`/`y` derive from those. Second reason: `width` also multiplies `root.width`, which the
@@ -149,8 +135,7 @@ export component SearchBar inherits Rectangle {
         // on dependency *dirtiness* — so an eased `width` re-based on every event of a resize drag.
         // `focus-scale` reads the focus flag and a mount-constant variant, so it only ever sees
         // the toggle.
-        animate background, border-color, drop-shadow-color,
-                drop-shadow-blur, drop-shadow-offset-y {
+        animate background, border-color {
             duration: Theme.dur-fast;
             easing: ease-in-out;
             enabled: !Theme.recoloring;

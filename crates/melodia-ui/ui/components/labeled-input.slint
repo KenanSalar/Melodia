@@ -23,16 +23,6 @@ export component LabeledInput inherits VerticalLayout {
     FieldFrame {
         height: 40px;
         focused: input.has-focus;
-        drop-shadow-color: input.has-focus
-            ? Theme.accent.with-alpha(0.22)
-            : transparent;
-        drop-shadow-blur: input.has-focus ? 12px : 0px;
-        drop-shadow-offset-y: input.has-focus ? 2px : 0px;
-        animate drop-shadow-color, drop-shadow-blur, drop-shadow-offset-y {
-            duration: Theme.dur-fast;
-            easing: ease-in-out;
-            enabled: !Theme.recoloring;
-        }
 
         HorizontalLayout {
             padding-left: Theme.pad-md;

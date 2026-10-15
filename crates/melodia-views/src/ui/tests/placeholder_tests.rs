@@ -214,13 +214,10 @@ fn an_inset_bar_takes_the_popup_surfaces_own_corner() {
     );
 }
 
-/// A shadow and a focus swell both say "above the content", and inside a popup there is nothing
-/// to be above — so the two are one decision and a bar keeping either reads as a pill dropped on
-/// a panel. The lift goes through the shadow's **colour** because the renderer bails on a
-/// transparent one, where a zeroed blur still paints an occluded rect under a fill that is
-/// translucent at rest.
+/// A focus swell says "above the content", and inside a popup there is nothing to be above, so a
+/// bar keeping it reads as a pill dropped on a panel.
 #[test]
-fn an_inset_bar_neither_lifts_nor_swells() {
+fn an_inset_bar_does_not_swell() {
     let src = normalized(SEARCH_BAR);
     assert!(
         src.contains("in property <bool> inset: false;"),
@@ -230,10 +227,6 @@ fn an_inset_bar_neither_lifts_nor_swells() {
     assert!(
         src.contains("focus-scale: input.has-focus && !root.inset ? 1.015 : 1.0;"),
         "an inset SearchBar swells on focus, shoving whatever the surface seats beside it"
-    );
-    assert!(
-        src.contains("drop-shadow-color: root.inset ? transparent :"),
-        "an inset SearchBar casts onto the surface it is recessed into"
     );
 }
 

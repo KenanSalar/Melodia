@@ -603,8 +603,7 @@ this file is what builds, looks right, and is wrong.
   border (the lyrics pill, a focus ring, a colour fading through `transparent`) stacks again. Tuck
   the fill yourself with a `TuckedFill`, or keep the border opaque (the dropdown rests on its fill
   colour). **Except over a drop shadow**: the shadow sits under the whole element, and a tucked fill
-  lets it show through the rim, which reads worse than the second pass. The search bar keeps its
-  fill out to the edge for that.
+  lets it show through the rim, which reads worse than the second pass.
 
 - **Nothing that draws text may be cut to its layout box — the box is a line box and the ink is
   not. Two mechanisms cut, and both are invisible in Latin.** The shipped Vazirmatn faces are
@@ -719,6 +718,17 @@ this file is what builds, looks right, and is wrong.
   moving the stop to `100%` retired the slab. `aurora-backdrop.slint` argues why the stops sit at
   the extents and `ui::aurora_backdrop_tests` pins them, an inset stop looking like nothing on
   screen and only a measurement or that test catching one coming back.
+
+- **A drop shadow that changes over an animation leaves a texture per frame resident.** Since
+  1.18 the renderer keeps shadows across frames in a `BoxShadowCache`
+  (`i-slint-core/graphics/boxshadowcache.rs`) keyed by size, colour, blur, radius and offset, up to
+  sixteen, each a texture plus the stencil buffer it was drawn with; 1.16 rebuilt it every frame.
+  So easing any `drop-shadow-*`, or easing the size of the element casting it, fills all sixteen
+  slots, and they stay after the animation ends. A colour-only ease is no escape, the colour being
+  baked into the texture. A shadow has to be switched rather than eased and cast from an element
+  whose size holds still, which is why the search bar and the labeled input, the two that eased
+  theirs on focus, dropped them instead. Nothing looks wrong on screen; only the process's GPU
+  memory shows it.
 
 - **Generated `Path` geometry has to arrive as an SVG `commands` string, and needs an explicit
   viewbox with `fit: fill`.** `for`-`in` inside a `Path` is rejected outright (slint-ui/slint#754),

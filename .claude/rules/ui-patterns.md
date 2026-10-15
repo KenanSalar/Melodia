@@ -222,9 +222,8 @@ three components that answer it, and each argues its geometry at its own file.
   border, inset to the stroke's middle: where the renderer puts a fill under an *opaque* border,
   and where it doesn't under a translucent one. Mounted first, at full size. Two mounts: the lyrics
   pill, whose border is translucent, and the toast, whose accent bar has to sit between the fill
-  and the border. **Not under a drop shadow**: the search bar keeps its `background` out to the
-  edge, since a fill stopping half a pixel in lets its focus shadow darken the rim, and
-  `search-bar.slint` argues that at the binding.
+  and the border. **Not under a drop shadow**: a fill stopping half a pixel in lets the shadow
+  darken the rim, so a shadowed element keeps its `background` out to the edge.
 
 ### Grids, strips, cards
 
