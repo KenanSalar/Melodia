@@ -44,7 +44,8 @@ const CONNECT_BACKOFF_MAX: Duration = Duration::from_mins(1);
 /// Read deadline so a wedged Discord surfaces as an error → reconnect, rather
 /// than parking the worker thread forever. Unix only — a `std` named-pipe handle
 /// has no read-timeout API, so Windows inherits the blocking edge (survivable:
-/// the worker is a detached thread nobody waits on).
+/// only the next worker waits on it, and a Discord that wedged this one would
+/// wedge that one too).
 #[cfg(unix)]
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -61,7 +62,8 @@ type Connection = std::fs::File;
 pub(crate) enum Command {
     /// Feature turned on — start connecting (and repaint any held presence).
     Enable,
-    /// Feature turned off — clear the card and park until re-enabled.
+    /// Feature turned off — clear the card and close the socket. The service drops the channel
+    /// right after, which ends the worker.
     Disable,
     /// Show this card.
     Apply(Presence),
@@ -71,9 +73,9 @@ pub(crate) enum Command {
 
 /// Outcome of the connected serve loop.
 enum ServeOutcome {
-    /// All senders dropped — the process is exiting; end the worker.
+    /// All senders dropped — end the worker.
     Exit,
-    /// A `Disable` arrived — park until re-enabled.
+    /// A `Disable` arrived — close the socket.
     Disabled,
     /// The socket died mid-session — reconnect.
     Disconnected,
@@ -91,7 +93,8 @@ pub(crate) fn run_worker(rx: &mpsc::Receiver<Command>, status: &Arc<StatusCell>)
     let mut backoff = CONNECT_BACKOFF_MIN;
 
     loop {
-        // Parked while disabled: no polling thread, no socket probing.
+        // Blocks without probing until enabled. Past a `Disable` the channel is already closed,
+        // so this returns.
         while !enabled {
             match rx.recv() {
                 Ok(cmd) => handle_command(cmd, &mut desired, &mut enabled),

@@ -5,7 +5,8 @@
 //! and imports no `ui::*`.
 //!
 //! Always spawned; inert while the feature is disabled (self-gates on
-//! `service.armed()`). Self-throttled between writes (see
+//! `service.armed()`), which is why it logs its start and stop at debug: at info
+//! they read as Discord having been in use. Self-throttled between writes (see
 //! `MIN_UPDATE_INTERVAL`): an update landing inside the window is deferred to
 //! the window's end and re-read from the (latest-only) watch, so suppressed
 //! intermediates collapse into a single write on current truth — the progress
@@ -39,7 +40,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let db = state.db.clone();
     let vm_rx = state.sinks.view_model.subscribe();
     spawner.spawn_cancellable(move |shutdown| run_detector(shutdown, service, db, vm_rx));
-    log::info!("Discord presence task started");
+    log::debug!("Discord presence task started");
 }
 
 fn now_ts() -> i64 {
@@ -149,7 +150,7 @@ impl Detector {
     /// Clear the card on shutdown, logging the stop once.
     fn shutdown_clear(&self) {
         self.service.clear();
-        log::info!("Discord presence task stopped");
+        log::debug!("Discord presence task stopped");
     }
 
     /// Read current truth from the watch, project it through the model, and push

@@ -305,10 +305,10 @@ async fn a_missing_row_answers_nothing_and_leaves_the_cache_alone() -> TestResul
     Ok(())
 }
 
-/// The now-playing effect queues nothing, and its load is the point: it is what fills the cache the
-/// scrobble reuses. Disconnected on purpose, an armed provider turning this into a POST.
+/// With no provider ready the service would drop the effect, so the row it would be built from is
+/// never read.
 #[tokio::test]
-async fn a_now_playing_effect_loads_the_row_the_scrobble_will_reuse() -> TestResult {
+async fn an_effect_reads_no_row_while_no_provider_is_ready() -> TestResult {
     let dir = tempfile::tempdir()?;
     let db = DbPool::test_pool().await?;
     let ids = seeded_tracks(&db, &dir, &["Artist"]).await?;
@@ -318,7 +318,7 @@ async fn a_now_playing_effect_loads_the_row_the_scrobble_will_reuse() -> TestRes
     process_effects(vec![Effect::NowPlaying { track_id: ids[0] }], &service, &db, &mut cached)
         .await;
 
-    assert_eq!(cached.map(|(id, _)| id), Some(ids[0]));
+    assert_eq!(cached.map(|(id, _)| id), None);
     Ok(())
 }
 

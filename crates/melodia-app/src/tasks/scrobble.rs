@@ -9,6 +9,9 @@
 //! Both run off the same seam OS media controls use, so nothing here touches the
 //! player state machine. No `ui::*` imports — a backend failure would surface via
 //! `utils::toast` if it ever needed to (routine submit failures stay silent).
+//!
+//! Neither waits for a provider to be connected, so each logs its stop at debug:
+//! at info it reads as scrobbling having been in use.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -93,7 +96,7 @@ async fn run_detector(
             () = shutdown.cancelled() => {
                 let effects = detector.on_shutdown();
                 process_effects(effects, &service, &db, &mut last_row).await;
-                log::info!("Scrobble detector stopped");
+                log::debug!("Scrobble detector stopped");
                 return;
             }
             result = vm_rx.changed() => {
@@ -126,6 +129,11 @@ async fn process_effects(
     db: &DbPool,
     last_row: &mut Option<(i64, ScrobbleRow)>,
 ) {
+    // With no provider ready the service drops every effect anyway, so skip the row read. The
+    // detector still timed the play, so a provider connected mid-track gets its listen.
+    if !service.scrobbling_active() {
+        return;
+    }
     for effect in effects {
         match effect {
             Effect::NowPlaying { track_id } => {
@@ -195,7 +203,7 @@ async fn run_submitter(shutdown: CancellationToken, service: Arc<ScrobbleService
         let stop = CancellationToken::new();
         let retry = run_with_grace(service.submit_pending(&stop), &stop, &shutdown).await;
         if shutdown.is_cancelled() {
-            log::info!("Scrobble submitter stopped");
+            log::debug!("Scrobble submitter stopped");
             return;
         }
 
