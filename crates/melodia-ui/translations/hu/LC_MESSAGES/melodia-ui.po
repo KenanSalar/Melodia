@@ -2794,6 +2794,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "A hangeszköz újranyitása minden szám saját frekvenciáján, hogy a rendszer ne mintavételezze át. A rendszernek engedélyeznie kell ezt a frekvenciát"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Mintavételi frekvencia átalakítása"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Hogyan alakul át egy szám, ha a mintavételi frekvenciája nem egyezik az eszközével, vagy a sebesség nem 1×. A Lineáris kevesebb CPU-t használ, és tompítja a legmagasabb frekvenciákat; a Sávkorlátozott a teljes magas tartományt megőrzi"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Jelút"
@@ -2880,6 +2888,14 @@ msgid "The device is running at {}"
 msgstr "Az eszköz {} periódussal működik"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Lineáris"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Sávkorlátozott"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Bitpontossá tétel"
 
@@ -2947,6 +2963,10 @@ msgstr "Áttűnés a számok között"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Nincs áttűnés"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} lineárisan átmintavételezve {} értékre"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

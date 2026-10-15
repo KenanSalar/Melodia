@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
+use super::super::convert::Resampler;
 use super::{PlayingSource, Voice, VoicePull, pair};
 use crate::player::playback::tests::helpers::{TestSource, bits, fill_sine, shape};
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
@@ -474,6 +475,7 @@ fn a_second_source_is_converted_from_its_own_rate() {
 /// over, window, fraction and weights. Restarting the kernel at the seam would leave half its width
 /// of silence either side, a tick on every continuous album the device can't play at its own rate.
 /// A whole-number step is a row of its own, being the one that keeps its weights frame to frame.
+/// Band-limited, since only the kernel has weights to carry over.
 #[test]
 fn a_gapless_seam_at_another_rate_renders_exactly_like_the_unsplit_source() {
     const SEAM: usize = 1_001;
@@ -482,8 +484,10 @@ fn a_gapless_seam_at_another_rate_renders_exactly_like_the_unsplit_source() {
         let mut tone = vec![0.0; 4_410];
         fill_sine(&mut tone, 1_000.0, rate_hz, 0.5);
         let (unsplit, mut unsplit_pull) = pair(device);
+        unsplit.set_resampler(Resampler::BandLimited);
         unsplit.append(TestSource::new(tone.clone(), 1, rate));
         let (split, mut split_pull) = pair(device);
+        split.set_resampler(Resampler::BandLimited);
         split.append(TestSource::new(tone[..SEAM].to_vec(), 1, rate));
         split.append(TestSource::new(tone[SEAM..].to_vec(), 1, rate));
 

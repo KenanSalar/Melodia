@@ -2792,6 +2792,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Reabre o dispositivo de áudio na taxa de cada faixa, para que o sistema não a reamostre. O sistema precisa permitir essa taxa"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Conversão da taxa de amostragem"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Como uma faixa é convertida quando sua taxa de amostragem não é a do dispositivo, ou a velocidade não é 1×. Linear usa menos CPU e suaviza as frequências mais altas; Limitada em banda mantém todos os agudos"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Caminho do sinal"
@@ -2878,6 +2886,14 @@ msgid "The device is running at {}"
 msgstr "O dispositivo está operando a {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Linear"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Limitada em banda"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Tornar bit-perfect"
 
@@ -2945,6 +2961,10 @@ msgstr "Crossfade entre faixas"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Sem crossfade"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} reamostrado linearmente para {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

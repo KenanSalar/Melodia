@@ -2792,6 +2792,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Open het audioapparaat opnieuw met de eigen frequentie van elk nummer, zodat het systeem het niet hersamplet. Het systeem moet die frequentie toestaan"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Samplefrequentieconversie"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Hoe een nummer wordt omgezet als de samplefrequentie niet die van het apparaat is, of de snelheid niet 1×. Lineair gebruikt minder CPU en verzacht de hoogste frequenties; Bandbegrensd behoudt de volledige hoge tonen"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Signaalpad"
@@ -2878,6 +2886,14 @@ msgid "The device is running at {}"
 msgstr "Het apparaat werkt op {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Lineair"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Bandbegrensd"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Bit-perfect maken"
 
@@ -2945,6 +2961,10 @@ msgstr "Overvloeien tussen nummers"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Geen overvloeiing"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} lineair gehersampled naar {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

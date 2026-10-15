@@ -2792,6 +2792,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr ""
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr ""
@@ -2878,6 +2886,14 @@ msgid "The device is running at {}"
 msgstr ""
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr ""
 
@@ -2944,6 +2960,10 @@ msgstr ""
 
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
 msgstr ""
 
 #: ui/views/settings/output-section.slint

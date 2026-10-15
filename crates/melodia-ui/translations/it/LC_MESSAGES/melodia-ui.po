@@ -2792,6 +2792,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Riapre il dispositivo audio alla frequenza di ogni brano, così il sistema non la ricampiona. Il sistema deve consentire quella frequenza"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Conversione della frequenza di campionamento"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Come viene convertito un brano quando la sua frequenza di campionamento non è quella del dispositivo, o la velocità non è 1×. Lineare usa meno CPU e attenua le frequenze più alte; A banda limitata conserva tutti gli acuti"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Percorso del segnale"
@@ -2878,6 +2886,14 @@ msgid "The device is running at {}"
 msgstr "Il dispositivo lavora a {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Lineare"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "A banda limitata"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Rendi bit-perfect"
 
@@ -2945,6 +2961,10 @@ msgstr "Dissolvenza tra i brani"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Nessuna dissolvenza"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} ricampionato linearmente a {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

@@ -24,7 +24,8 @@ use std::time::{Duration, Instant};
 use parking_lot::Mutex;
 
 use super::super::dsp::AtomicF64;
-use super::convert::{Converter, Filled};
+use super::convert::{Conversion, Converter, Filled, Resampler};
+use super::resample;
 use melodia_audio::player::source::audio::{
     AudioSource, ChannelCount, Sample, SampleRate, Shape, SourceFormat, frames_in,
     frames_to_duration,
@@ -130,6 +131,10 @@ struct VoiceShared {
     /// the pair's sake and narrows at its one use, where the multiply is in [`Sample`].
     volume: AtomicF64,
     speed: AtomicF64,
+    /// Whether the converter interpolates through the band-limited kernel rather than linearly.
+    /// Stored `Release` after the kernel is prepared and loaded `Acquire`, so a callback that sees
+    /// it set finds the table built.
+    band_limited: AtomicBool,
     /// Sources sent and not yet finished. Bumped by `Voice::send_counted` before the callback can
     /// see the source, so a just-fed voice never reads as empty.
     sources: AtomicUsize,
@@ -322,6 +327,15 @@ impl Voice {
         self.shared.speed.store(speed);
     }
 
+    /// Interpolate with `resampler` from the next block on, mid-source included.
+    pub fn set_resampler(&self, resampler: Resampler) {
+        let band_limited = resampler == Resampler::BandLimited;
+        if band_limited {
+            resample::prepare();
+        }
+        self.shared.band_limited.store(band_limited, Ordering::Release);
+    }
+
     /// Where the playing source has been pulled to, on its own timeline.
     ///
     /// Media time directly: the frames counted are the source's, and playback speed is applied
@@ -455,7 +469,13 @@ impl VoicePull {
         if self.shared.paused.load(Ordering::SeqCst) {
             return 0;
         }
-        let speed = self.shared.speed.load();
+        let resampler = if self.shared.band_limited.load(Ordering::Acquire) {
+            Resampler::BandLimited
+        } else {
+            Resampler::Linear
+        };
+        let conversion =
+            Conversion { device: self.device, speed: self.shared.speed.load(), resampler };
         // Read once, so the whole block renders against one observation, and compared as a bit
         // pattern because the short circuit above has to be exact: an epsilon would take it a shade
         // off unity.
@@ -467,12 +487,8 @@ impl VoicePull {
             let Some(loaded) = self.current.as_mut() else {
                 break;
             };
-            let Filled { samples, source_frames } = loaded.converter.fill(
-                &mut block[written..],
-                &mut *loaded.source,
-                self.device,
-                speed,
-            );
+            let Filled { samples, source_frames } =
+                loaded.converter.fill(&mut block[written..], &mut *loaded.source, conversion);
             written += samples;
             self.shared.frames.fetch_add(source_frames, Ordering::Relaxed);
             if loaded.converter.is_done() {
@@ -665,6 +681,7 @@ pub fn pair(device: Shape) -> (Voice, VoicePull) {
         paused: AtomicBool::new(false),
         volume: AtomicF64::new(1.0),
         speed: AtomicF64::new(1.0),
+        band_limited: AtomicBool::new(false),
         sources: AtomicUsize::new(0),
         frames: AtomicU64::new(0),
         rate: AtomicU32::new(0),

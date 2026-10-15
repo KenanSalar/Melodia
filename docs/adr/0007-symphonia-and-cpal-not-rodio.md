@@ -63,3 +63,13 @@ server for the card and handing it back, and carrying the volume on the device's
 cost is that each backend compiles only on its own platform, so a change to what they share has to
 pass CI's Linux and Windows jobs, no single build checking both. macOS has no backend, so the mode
 is not offered there.
+
+**Amendment, 2026-10-15:** the conversion stopped being linear on 2026-09-30, when the windowed
+sinc in `output::resample` replaced it. That kernel is ours and safe code, so the reason for taking
+no library still holds. Its cost is per output frame rather than per source frame, so it follows
+the device's rate, and on a device the system mixes at a high rate it became most of what playing
+a track cost, which a lower-rate device never showed. Linear interpolation is the default again and
+the kernel is a setting (`output::convert::Resampler`), its table built only once it is chosen.
+What the default costs is a softened top octave, and on a downsample whatever lands past Nyquist
+folds back into the band. The setting's description says so, and the stopband cases in
+`output::convert`'s tests are pinned to the kernel.

@@ -2803,6 +2803,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece sistem yeniden örneklemez. Sistemin bu hıza izin vermesi gerekir"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Örnekleme Hızı Dönüşümü"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Bir parçanın örnekleme hızı aygıtınkinden farklıysa ya da hız 1× değilse nasıl dönüştürüleceği. Doğrusal daha az CPU kullanır ve en yüksek frekansları yumuşatır; Bant Sınırlı tizleri eksiksiz korur"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Sinyal Yolu"
@@ -2889,6 +2897,14 @@ msgid "The device is running at {}"
 msgstr "Aygıt {} ile çalışıyor"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Doğrusal"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Bant Sınırlı"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Bit-Perfect Yap"
 
@@ -2956,6 +2972,10 @@ msgstr "Parçalar arasında geçiş yapılıyor"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Geçiş yok"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{}, {} hızına doğrusal olarak yeniden örneklenir"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

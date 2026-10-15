@@ -101,6 +101,9 @@ export component OutputSection inherits Rectangle {
     property <string> follow-rate-label: @tr("Match the File's Sample Rate");
     property <string> follow-rate-desc: @tr("Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate");
 
+    property <string> resampler-label: @tr("Sample-Rate Conversion");
+    property <string> resampler-desc: @tr("How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble");
+
     property <string> signal-label: @tr("Signal Path");
     property <string> signal-desc: @tr("What reaches the audio device, and what changes it on the way. Bit-perfect means nothing does");
 
@@ -115,6 +118,7 @@ export component OutputSection inherits Rectangle {
     property <bool> show-hardware-volume: Settings.exclusive-chosen && Settings.hardware-volume-supported
         && row-visible(hardware-volume-label, hardware-volume-desc);
     property <bool> show-release: Settings.exclusive-chosen && row-visible(release-label, release-desc);
+    property <bool> show-resampler: row-visible(resampler-label, resampler-desc);
     // Exclusive output always follows the file's rate, so the toggle has nothing to add there.
     property <bool> show-follow-rate: Settings.follow-rate-supported && !Settings.exclusive-chosen
         && row-visible(follow-rate-label, follow-rate-desc);
@@ -131,7 +135,7 @@ export component OutputSection inherits Rectangle {
 
     // What the rows above the signal path hand the divider under them.
     property <bool> shows-exclusive-rows: root.any-above-release || root.show-release;
-    property <bool> shows-rate-rows: root.show-follow-rate || root.show-resync;
+    property <bool> shows-rate-rows: root.show-resampler || root.show-follow-rate || root.show-resync;
 
     out property <bool> has-matches: shows-exclusive-rows || shows-rate-rows || show-signal-path;
 
@@ -299,7 +303,24 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if root.shows-exclusive-rows && root.show-follow-rate: SectionDivider {}
+        if root.shows-exclusive-rows && root.show-resampler: SectionDivider {}
+
+        if root.show-resampler: SettingRowStacked {
+            icon: "show_chart";
+            label: root.resampler-label;
+            description: root.resampler-desc;
+            ChipGroup {
+                // The order is `ui::settings::output_settings::resampler_index`'.
+                options: [
+                    @tr("Linear"),
+                    @tr("Band-Limited"),
+                ];
+                selected-index <=> Settings.output-resampler-idx;
+                selected(i) => { Settings.output-resampler-changed(i); }
+            }
+        }
+
+        if (root.shows-exclusive-rows || root.show-resampler) && root.show-follow-rate: SectionDivider {}
 
         if root.show-follow-rate: SettingRow {
             icon: "speed";
@@ -311,7 +332,7 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if (root.shows-exclusive-rows || root.show-follow-rate) && root.show-resync: SectionDivider {}
+        if (root.shows-exclusive-rows || root.show-resampler || root.show-follow-rate) && root.show-resync: SectionDivider {}
 
         if root.show-resync: SettingRowStacked {
             icon: "volume_off";
@@ -390,7 +411,9 @@ export component OutputSection inherits Rectangle {
             StageRow {
                 grade: SignalPathUi.rate-grade;
                 label: @tr("Sample Rate");
+                // Index 0 is linear, in `ui::settings::output_settings::resampler_index`' order.
                 value: SignalPathUi.rate-grade == 0 ? SignalPathUi.source-rate
+                    : Settings.output-resampler-idx == 0 ? @tr("{} resampled linearly to {}", SignalPathUi.source-rate, SignalPathUi.device-rate)
                     : @tr("{} resampled to {}", SignalPathUi.source-rate, SignalPathUi.device-rate);
             }
             StageRow {

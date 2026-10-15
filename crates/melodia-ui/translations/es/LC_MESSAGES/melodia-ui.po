@@ -2792,6 +2792,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Reabre el dispositivo de audio a la frecuencia de cada pista para que el sistema no la remuestree. El sistema debe admitir esa frecuencia"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Conversión de frecuencia de muestreo"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Cómo se convierte una pista cuando su frecuencia de muestreo no es la del dispositivo o la velocidad no es 1×. Lineal usa menos CPU y suaviza las frecuencias más altas; Limitada en banda conserva todos los agudos"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Ruta de la señal"
@@ -2878,6 +2886,14 @@ msgid "The device is running at {}"
 msgstr "El dispositivo funciona a {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Lineal"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Limitada en banda"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Hacerlo bit-perfect"
 
@@ -2945,6 +2961,10 @@ msgstr "Fundido entre pistas"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Sin fundido"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} remuestreado linealmente a {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

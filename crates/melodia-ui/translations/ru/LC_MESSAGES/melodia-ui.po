@@ -2818,6 +2818,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Заново открывать аудиоустройство с частотой каждого трека, чтобы система не передискретизировала его. Система должна разрешать эту частоту"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Преобразование частоты дискретизации"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Как преобразуется трек, если его частота дискретизации не совпадает с частотой устройства или скорость не равна 1×. Линейная меньше нагружает процессор и смягчает самые высокие частоты; С ограничением полосы сохраняет верхние частоты целиком"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Тракт сигнала"
@@ -2904,6 +2912,14 @@ msgid "The device is running at {}"
 msgstr "Устройство работает с периодом {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Линейная"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "С ограничением полосы"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Сделать бит-в-бит"
 
@@ -2971,6 +2987,10 @@ msgstr "Плавный переход между треками"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Без плавного перехода"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} линейно передискретизировано в {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

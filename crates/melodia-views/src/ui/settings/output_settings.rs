@@ -1,5 +1,5 @@
-//! The Output card's settings: following the file's rate and the silence a rate change writes
-//! first, then the exclusive pickers (shared or exclusive, which card a claim takes, and shared
+//! The Output card's settings: how a conversion interpolates, following the file's rate and the
+//! silence a rate change writes first, then the exclusive pickers (shared or exclusive, which card a claim takes, and shared
 //! output too where the platform can aim it, what a claim does about a rate the card lacks, how its
 //! writer paces the card, and whether the card's own control carries the volume), and whether a
 //! long pause gives the card back. The card's live readout is [`super::signal_path`]'s.
@@ -23,6 +23,7 @@ use melodia_app::library;
 use melodia_app::services::settings::OutputFlags;
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::backend::OutputChoice;
+use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{
     self, Drive, ExclusiveTuning, OutputDevice, OutputMode, RateFallback,
 };
@@ -81,14 +82,17 @@ fn install_release_row(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
     ));
 }
 
-/// Following the file's rate and the resync hold, which apply whether or not a card can be claimed.
+/// The interpolation, following the file's rate and the resync hold, which apply whether or not a
+/// card can be claimed.
 fn install_rate_rows(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
     let g = ui.global::<Settings>();
     // The range first, so the value seeded after it lands inside the slider's track.
     g.set_output_resync_max_ms(millis(output::MAX_RESYNC_HOLD));
+    g.set_output_resampler_idx(resampler_index(flags.output_resampler));
     g.set_output_follow_rate(flags.output_follow_rate);
     g.set_output_resync_ms(millis(flags.resync_hold().min(output::MAX_RESYNC_HOLD)));
 
+    install_resampler_row(state, &g, flags.output_resampler);
     g.on_output_follow_rate_changed(toggle_binding(
         state,
         "persist output_follow_rate",
@@ -104,6 +108,23 @@ fn install_rate_rows(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
         state.persist_blocking("persist output_resync_ms", move |paths| {
             library::playback::player_set_resync_hold(&ctx, Duration::from_millis(u64::from(ms)));
             library::settings::set_output_resync_ms(paths, ms)
+        });
+    });
+}
+
+/// The conversion chips. Applied on the pool, the engine taking the decks lock a reopen holds, and
+/// through a shadow, so of two picks in flight whichever task runs last applies the later one.
+fn install_resampler_row(state: &AppState, g: &Settings<'_>, saved: Resampler) {
+    let state = state.clone();
+    let shadow = Arc::new(Mutex::new(saved));
+    g.on_output_resampler_changed(move |idx| {
+        *shadow.lock() = resampler_from_index(idx);
+        let ctx = state.playback_ctx();
+        let shadow = Arc::clone(&shadow);
+        state.persist_blocking("persist output_resampler", move |paths| {
+            let resampler = *shadow.lock();
+            library::playback::player_set_resampler(&ctx, resampler);
+            library::settings::set_output_resampler(paths, resampler)
         });
     });
 }
@@ -349,6 +370,22 @@ fn rate_fallback_from_index(idx: i32) -> RateFallback {
     match idx {
         1 => RateFallback::Resample,
         _ => RateFallback::Shared,
+    }
+}
+
+/// The chip's index, in the order of the inline list in `output-section.slint`, whose Signal Path
+/// row reads index 0 as linear.
+fn resampler_index(resampler: Resampler) -> i32 {
+    match resampler {
+        Resampler::Linear => 0,
+        Resampler::BandLimited => 1,
+    }
+}
+
+fn resampler_from_index(idx: i32) -> Resampler {
+    match idx {
+        1 => Resampler::BandLimited,
+        _ => Resampler::Linear,
     }
 }
 

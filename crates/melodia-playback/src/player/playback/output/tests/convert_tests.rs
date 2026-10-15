@@ -8,7 +8,8 @@ use melodia_audio::player::source::audio::Shape;
 
 use std::f32::consts::TAU;
 
-use super::{Converter, Filled};
+use super::super::resample;
+use super::{Conversion, Converter, Filled, Resampler};
 use crate::player::playback::dsp::index_to_f32;
 use crate::player::playback::tests::helpers::{TestSource, bits, shape};
 
@@ -35,6 +36,13 @@ fn ramp(count: usize) -> Vec<f32> {
     (0..count).map(|i| f32::from(u16::try_from(i).unwrap_or(u16::MAX)) / 1024.0).collect()
 }
 
+/// A conversion to `device` at `speed` through the band-limited kernel, which these cases were
+/// written against, its table prepared as a voice prepares it.
+fn band_limited(device: Shape, speed: f64) -> Conversion {
+    resample::prepare();
+    Conversion { device, speed, resampler: Resampler::BandLimited }
+}
+
 /// Fill `block` samples at a time until the converter is done, draining it once `src` runs dry, as
 /// a voice does with nothing staged behind the source.
 fn run_out(
@@ -44,11 +52,12 @@ fn run_out(
     speed: f64,
     block: usize,
 ) -> (Vec<f32>, u64) {
+    let conversion = band_limited(device, speed);
     let mut out = Vec::new();
     let mut piece = vec![0.0; block];
     let mut frames = 0;
     while !converter.is_done() {
-        let Filled { samples, source_frames } = converter.fill(&mut piece, src, device, speed);
+        let Filled { samples, source_frames } = converter.fill(&mut piece, src, conversion);
         out.extend_from_slice(&piece[..samples]);
         frames += source_frames;
         if converter.is_starved() {
@@ -266,7 +275,7 @@ fn a_drained_converter_stays_drained() {
     let (out, _) = run_out(&mut converter, &mut src, device, 1.0, 16);
     assert_eq!(out.len(), 2);
 
-    let again = converter.fill(&mut [0.0; 16], &mut src, device, 1.0);
+    let again = converter.fill(&mut [0.0; 16], &mut src, band_limited(device, 1.0));
     assert_eq!(again, Filled { samples: 0, source_frames: 0 });
 }
 
@@ -333,10 +342,10 @@ const FRAMES_BEFORE_THE_REOPEN: usize = 256;
 fn after_a_reopen_from(before: Shape, before_frames: usize) -> Vec<f32> {
     let mut src = TestSource::new(clean_tone(30_000, HI_RES_RATE), 1, HI_RES_RATE);
     let mut converter = Converter::new(shape(1, HI_RES_RATE));
-    converter.fill(&mut vec![0.0; before_frames], &mut src, before, 1.0);
+    converter.fill(&mut vec![0.0; before_frames], &mut src, band_limited(before, 1.0));
 
     let mut after = vec![0.0; 512];
-    converter.fill(&mut after, &mut src, shape(1, 48_000), 1.0);
+    converter.fill(&mut after, &mut src, band_limited(shape(1, 48_000), 1.0));
     after
 }
 
@@ -374,7 +383,8 @@ fn steps_across_live_speed_changes() -> Vec<f32> {
     let mut written = Vec::new();
     for speed in LIVE_SPEEDS {
         let mut block = vec![0.0; 800];
-        let Filled { samples, .. } = converter.fill(&mut block, &mut src, device, speed);
+        let Filled { samples, .. } =
+            converter.fill(&mut block, &mut src, band_limited(device, speed));
         written.extend_from_slice(&block[..samples]);
     }
     written.windows(2).map(|pair| pair[1] - pair[0]).collect()

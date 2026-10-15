@@ -21,6 +21,7 @@ use std::time::{Duration, Instant};
 
 use melodia_engine::player::engine::backend::{PlaybackCheck, PlaybackEngine};
 use melodia_playback::player::playback::decks::DECK_COUNT;
+use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::mixer::{self, MixerPull};
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
@@ -832,9 +833,9 @@ async fn a_crossfade_carries_on_through_an_output_reopen() -> std::io::Result<()
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io::Result<()> {
     const NEXT_LEVEL: f32 = AMPLITUDE / 2.0;
-    /// The reopened rate puts the seam through the band-limited kernel, which rings on the step
-    /// between the two levels by up to the Gibbs overshoot of a sharp filter. A frame of silence
-    /// dips almost to zero, far past that.
+    /// The reopened rate puts the seam through the band-limited kernel, chosen below as the
+    /// harder case, which rings on the step between the two levels by up to the Gibbs overshoot of
+    /// a sharp filter. A frame of silence dips almost to zero, far past that.
     const RINGING: f32 = (AMPLITUDE - NEXT_LEVEL) * 0.09;
     /// How far into the successor the pull runs past the first track's one second.
     const INTO_NEXT_MS: u64 = 500;
@@ -848,6 +849,7 @@ async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io
     write_dc_wav(&next, 6, NEXT_LEVEL, NEXT_LEVEL)?;
 
     let (engine, mut mix) = player()?;
+    engine.set_resampler(Resampler::BandLimited);
     start(&engine, &first.to_string_lossy());
     let _ = pull(&mut mix, WARMUP_FRAMES);
     engine.preload_gapless(Some(&next.to_string_lossy()), TrackReplayGain::default());

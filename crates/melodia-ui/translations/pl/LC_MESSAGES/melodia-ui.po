@@ -2818,6 +2818,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Otwieraj urządzenie audio ponownie z częstotliwością każdego utworu, aby system go nie przepróbkowywał. System musi zezwalać na tę częstotliwość"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Konwersja częstotliwości próbkowania"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Jak utwór jest konwertowany, gdy jego częstotliwość próbkowania nie jest częstotliwością urządzenia lub prędkość nie wynosi 1×. Liniowa mniej obciąża procesor i łagodzi najwyższe częstotliwości; Z ograniczonym pasmem zachowuje pełnię wysokich tonów"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Ścieżka sygnału"
@@ -2904,6 +2912,14 @@ msgid "The device is running at {}"
 msgstr "Urządzenie działa z okresem {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Liniowa"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Z ograniczonym pasmem"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Włącz bit-perfect"
 
@@ -2971,6 +2987,10 @@ msgstr "Przenikanie między utworami"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Bez przenikania"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} przepróbkowano liniowo do {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

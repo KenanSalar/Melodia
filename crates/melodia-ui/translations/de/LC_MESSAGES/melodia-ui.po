@@ -2793,6 +2793,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Öffnet das Audiogerät für jedes Lied mit dessen eigener Rate neu, damit das System es nicht umrechnet. Das System muss diese Rate zulassen"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Abtastratenwandlung"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Wie ein Titel umgerechnet wird, wenn seine Abtastrate nicht die des Geräts ist oder die Geschwindigkeit nicht 1×. Linear braucht weniger CPU und dämpft die höchsten Frequenzen; Bandbegrenzt behält die vollen Höhen"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Signalweg"
@@ -2879,6 +2887,14 @@ msgid "The device is running at {}"
 msgstr "Das Gerät läuft mit {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Linear"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Bandbegrenzt"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Bitgenau machen"
 
@@ -2946,6 +2962,10 @@ msgstr "Überblendet zwischen Titeln"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Keine Überblendung"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} linear umgerechnet auf {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

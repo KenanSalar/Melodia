@@ -8,6 +8,7 @@ use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_playback::player::playback::crossfade::DEFAULT_CROSSFADE_MS;
 use melodia_playback::player::playback::equalizer::{DEFAULT_PRESET, NUM_BANDS};
+use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{
     DEFAULT_RESYNC_HOLD, Drive, ExclusiveTuning, OutputMode, RateFallback,
 };
@@ -140,6 +141,10 @@ impl Default for CrossfadeFlags {
 /// `output_paused_device` gives a claimed device back once a pause has held it for a while. It
 /// ships keeping it, since play then has to reopen the device, and it sits outside the choice so
 /// a toggle never reopens a claim.
+///
+/// `output_resampler` is how every conversion interpolates, a rate mismatch and a speed other than
+/// one alike. It ships linear: the band-limited kernel's cost follows the device's rate, so on a
+/// device mixing at a high rate it is most of what playback costs.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputFlags {
@@ -154,6 +159,8 @@ pub struct OutputFlags {
     #[serde(with = "RateFallbackKey")]
     pub output_rate_fallback: RateFallback,
     pub output_paused_device: PausedDevice,
+    #[serde(with = "ResamplerKey")]
+    pub output_resampler: Resampler,
 }
 
 impl Default for OutputFlags {
@@ -168,6 +175,7 @@ impl Default for OutputFlags {
             output_hardware_volume: false,
             output_rate_fallback: RateFallback::default(),
             output_paused_device: PausedDevice::default(),
+            output_resampler: Resampler::default(),
         }
     }
 }
@@ -218,6 +226,14 @@ enum OutputModeKey {
 enum RateFallbackKey {
     Shared,
     Resample,
+}
+
+/// [`Resampler`] as persisted, mirrored for the same reasons as [`OutputModeKey`].
+#[derive(Serialize, Deserialize)]
+#[serde(remote = "Resampler", rename_all = "snake_case")]
+enum ResamplerKey {
+    Linear,
+    BandLimited,
 }
 
 /// What a long pause does with an exclusive device. A token rather than a `bool`, [`OutputFlags`]

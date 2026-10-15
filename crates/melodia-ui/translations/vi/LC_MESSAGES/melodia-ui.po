@@ -2766,6 +2766,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Mở lại thiết bị âm thanh theo tần số riêng của từng bản nhạc, để hệ thống không lấy mẫu lại. Hệ thống phải cho phép tần số đó"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Chuyển đổi tần số lấy mẫu"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Cách một bản nhạc được chuyển đổi khi tần số lấy mẫu của nó khác với thiết bị, hoặc tốc độ không phải 1×. Tuyến tính tốn ít CPU hơn và làm dịu các tần số cao nhất; Giới hạn băng tần giữ trọn dải âm cao"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Đường tín hiệu"
@@ -2852,6 +2860,14 @@ msgid "The device is running at {}"
 msgstr "Thiết bị đang chạy ở {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Tuyến tính"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Giới hạn băng tần"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Chuyển sang Bit-perfect"
 
@@ -2919,6 +2935,10 @@ msgstr "Đang chuyển tiếp mượt giữa các bản nhạc"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Không chuyển tiếp mượt"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} được lấy mẫu lại tuyến tính thành {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

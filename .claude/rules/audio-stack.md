@@ -47,7 +47,7 @@ Fixed order, innermost first — everything up to the tap lives inside one `EqSo
 a file  → FileDecoder ────────┐
 a station → StreamDecoder → ring → PrebufferSource ─┴→ EqSource:
     ReplayGain pre-gain → EQ bands → limiter → clamp → crossfade ramp → VisualizerTap
-        → [deck: rate + channel conversion (speed lives here) → pause → volume] → mixer sum
+        → [deck: rate + channel conversion (speed lives here, linear or band-limited) → pause → volume] → mixer sum
             → dither, where a block the chain changed is narrowed to 16 or 24 bits
                 → cpal's shared stream, or encode → an exclusive claim (ALSA hw:, WASAPI)
 ```

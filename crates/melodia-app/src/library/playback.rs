@@ -11,6 +11,7 @@ use melodia_engine::player::engine::state::{
     MAX_VOLUME, PlayerAction, PlayerState, lock_state, play_track_inner, with_state_emit,
 };
 use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
+use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{self, OutputDevice};
 use melodia_store::database::queries;
 
@@ -513,6 +514,12 @@ pub fn player_set_release_when_paused(ctx: &PlaybackContext, on: bool) {
 /// waits out any reopen in flight, so it belongs on the blocking pool.
 pub fn player_set_resync_hold(ctx: &PlaybackContext, hold: Duration) {
     ctx.engine.set_resync_hold(hold);
+}
+
+/// Convert with `resampler` from the next block on, mid-track included. Blocking: it takes the
+/// decks lock a reopen holds, so it belongs on the blocking pool.
+pub fn player_set_resampler(ctx: &PlaybackContext, resampler: Resampler) {
+    ctx.engine.set_resampler(resampler);
 }
 
 /// Whether this platform has an exclusive backend. Where it doesn't, an exclusive choice falls

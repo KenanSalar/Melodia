@@ -2796,6 +2796,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Ανοίγει ξανά τη συσκευή ήχου στον ρυθμό κάθε κομματιού, ώστε το σύστημα να μην τον μετατρέπει. Το σύστημα πρέπει να επιτρέπει αυτόν τον ρυθμό"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Μετατροπή ρυθμού δειγματοληψίας"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Πώς μετατρέπεται ένα κομμάτι όταν ο ρυθμός δειγματοληψίας του δεν είναι αυτός της συσκευής ή η ταχύτητα δεν είναι 1×. Η Γραμμική χρειάζεται λιγότερη CPU και αμβλύνει τις υψηλότερες συχνότητες, ενώ η Περιορισμένου εύρους κρατά όλα τα πρίμα"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Διαδρομή σήματος"
@@ -2882,6 +2890,14 @@ msgid "The device is running at {}"
 msgstr "Η συσκευή λειτουργεί στα {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Γραμμική"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Περιορισμένου εύρους"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Κάνε το bit-perfect"
 
@@ -2949,6 +2965,10 @@ msgstr "Σταδιακή μετάβαση μεταξύ κομματιών"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Χωρίς μετάβαση"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} με γραμμική μετατροπή σε {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

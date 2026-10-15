@@ -106,6 +106,11 @@ export global Settings {
     callback output-follow-rate-changed(bool);
     in property <bool> follow-rate-supported;
 
+    // Linear (0) or band-limited (1), for every conversion: a rate mismatch, either mode, and any
+    // speed other than one. Applied off the UI thread, the engine waiting out a reopen for it.
+    in-out property <int> output-resampler-idx: 0;
+    callback output-resampler-changed(int);
+
     // Shared (0) or exclusive (1), and which card an exclusive claim takes, and shared output too
     // where `shared-device-supported`. Rust lists the cards, whose names are data, and applies a
     // pick off the UI thread, since claiming a card blocks. The rows are hidden where the platform

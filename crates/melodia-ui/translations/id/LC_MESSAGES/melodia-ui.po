@@ -2766,6 +2766,14 @@ msgid "Reopen the audio device at each track's own rate, so the system doesn't r
 msgstr "Buka ulang perangkat audio pada laju masing-masing lagu, sehingga sistem tidak melakukan resampling. Sistem harus mengizinkan laju tersebut"
 
 #: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Konversi Laju Sampel"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Cara lagu dikonversi saat laju sampelnya bukan laju perangkat, atau kecepatannya bukan 1×. Linear memakai lebih sedikit CPU dan melembutkan frekuensi tertinggi; Terbatas Pita mempertahankan nada tinggi sepenuhnya"
+
+#: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Signal Path"
 msgstr "Jalur Sinyal"
@@ -2852,6 +2860,14 @@ msgid "The device is running at {}"
 msgstr "Perangkat berjalan pada {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Linear"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Terbatas Pita"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Jadikan Bit-Perfect"
 
@@ -2919,6 +2935,10 @@ msgstr "Memudarkan antarlagu"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Tidak memudarkan"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} di-resample secara linear ke {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

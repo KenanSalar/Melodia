@@ -53,10 +53,16 @@ const WINDOW_TERMS: [f64; 4] = [0.358_75, 0.488_29, 0.141_28, 0.011_68];
 
 static KERNEL: LazyLock<Kernel> = LazyLock::new(Kernel::build);
 
-/// The shared kernel. Its first call builds the table, so a converter asks for it on the control
-/// thread and the audio thread only ever reads it.
-pub fn kernel() -> &'static Kernel {
-    &KERNEL
+/// Build the shared kernel's table, on the control thread, before anything asks the audio thread
+/// to interpolate through it. An install that never picks the kernel never builds it.
+pub fn prepare() {
+    LazyLock::force(&KERNEL);
+}
+
+/// The shared kernel once [`prepare`] has built it. Never builds it, being what the audio thread
+/// asks.
+pub fn prepared() -> Option<&'static Kernel> {
+    LazyLock::get(&KERNEL)
 }
 
 /// Frames the kernel reaches either side of the point it interpolates, stepping `step` source

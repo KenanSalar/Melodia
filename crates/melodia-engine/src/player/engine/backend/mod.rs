@@ -38,6 +38,7 @@ use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
 use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
 use melodia_playback::player::playback::output::AudioOutput;
+use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::mixer::Mixer;
 use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
@@ -684,6 +685,13 @@ impl PlaybackEngine {
         // them scaled: the analyzer needs the factor to place band edges on the pitch you hear.
         // Sole writer of that cell — see `VisualizerShared::set_speed`.
         self.viz.set_speed(speed);
+    }
+
+    /// Interpolate with `resampler` wherever a rate or the speed calls for conversion, from the
+    /// next block on. No reopen and no seek, the converters carrying their position across the
+    /// change, but it waits out a reopen in flight for the decks lock.
+    pub fn set_resampler(&self, resampler: Resampler) {
+        self.lock_decks().set_resampler_all(resampler);
     }
 
     /// Whether a gapless source is currently staged behind the playing one.

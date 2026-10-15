@@ -19,6 +19,7 @@ use std::time::Duration;
 use melodia_core::error::AppError;
 
 use super::crossfade::FadeShared;
+use super::output::convert::Resampler;
 use super::output::mixer::Mixer;
 use super::output::voice::Voice;
 use melodia_audio::player::source::audio::AudioSource;
@@ -146,6 +147,12 @@ impl Decks {
     pub fn set_speed_all(&self, speed: f64) {
         for deck in &self.decks {
             deck.voice.set_speed(speed);
+        }
+    }
+
+    pub fn set_resampler_all(&self, resampler: Resampler) {
+        for deck in &self.decks {
+            deck.voice.set_resampler(resampler);
         }
     }
 
