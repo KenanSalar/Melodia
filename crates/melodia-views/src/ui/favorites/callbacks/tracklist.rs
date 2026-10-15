@@ -24,7 +24,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     wire_filter(ui, fav_ui);
     wire_sort(ui, state, fav_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_selection(ui, fav_ui);
+    wire_selection(ui);
 }
 
 /// Loads the filtered list into the queue and starts on the clicked track;
@@ -130,30 +130,27 @@ fn wire_sort(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
 /// highlight reflect each click. Mirrors `tracks::handle_select_row`
 /// exactly so range-select (Shift), toggle (Ctrl), and the
 /// single-row default all behave the same as in the Tracks view.
-fn wire_selection(ui: &AppWindow, fav_ui: &Arc<FavoritesUi>) {
+fn wire_selection(ui: &AppWindow) {
     let g = ui.global::<Favorites>();
     {
         let weak = ui.as_weak();
-        let fu = fav_ui.clone();
         g.on_select_row(move |idx, id, shift, ctrl| {
             let Some(ui) = weak.upgrade() else { return };
-            favorites_ui_mod::handle_select_row(&ui, &fu, idx, id, shift, ctrl);
+            favorites_ui_mod::handle_select_row(&ui, idx, id, shift, ctrl);
         });
     }
     {
         let weak = ui.as_weak();
-        let fu = fav_ui.clone();
         g.on_select_all(move || {
             let Some(ui) = weak.upgrade() else { return };
-            favorites_ui_mod::select_all(&ui, &fu);
+            favorites_ui_mod::select_all(&ui);
         });
     }
     {
         let weak = ui.as_weak();
-        let fu = fav_ui.clone();
         g.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
-            favorites_ui_mod::clear_selection(&ui, &fu);
+            favorites_ui_mod::clear_selection(&ui);
         });
     }
 }

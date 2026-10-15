@@ -4,43 +4,25 @@
 //! Thin adapter over [`crate::ui::list_selection`] — the `TrackList` component reads each row's
 //! `selected: bool` for its checkbox tick and accent-tinted background, so a click that only
 //! updates `selected-ids` (without re-stamping the per-row flag) leaves the row visually
-//! un-selected even though it counts toward the "{n} selected" chip.
+//! un-selected even though the row menu acts on it.
 
 use slint::ComponentHandle;
 
-use super::FavoritesUi;
 use crate::ui::list_selection;
 use melodia_ui::{AppWindow, Favorites};
 
 /// Compute the new selection set for a row click and apply it. Click semantics match
 /// `tracks::handle_select_row` exactly. Runs on the UI thread (called from `on_select_row`).
-pub fn handle_select_row(
-    ui: &AppWindow,
-    fav_ui: &FavoritesUi,
-    idx: i32,
-    id: i32,
-    shift: bool,
-    ctrl: bool,
-) {
-    let g = ui.global::<Favorites>();
-    list_selection::handle_curated_click(
-        &g,
-        &fav_ui.state().applied_selection,
-        idx,
-        id,
-        shift,
-        ctrl,
-    );
+pub fn handle_select_row(ui: &AppWindow, idx: i32, id: i32, shift: bool, ctrl: bool) {
+    list_selection::handle_curated_click(&ui.global::<Favorites>(), idx, id, shift, ctrl);
 }
 
 /// Take every displayed row into the selection.
-pub fn select_all(ui: &AppWindow, fav_ui: &FavoritesUi) {
-    let g = ui.global::<Favorites>();
-    list_selection::select_all_curated(&g, &fav_ui.state().applied_selection);
+pub fn select_all(ui: &AppWindow) {
+    list_selection::select_all_curated(&ui.global::<Favorites>());
 }
 
 /// Reset selection (Escape, the row menu's "Clear selection", and section-leave).
-pub fn clear_selection(ui: &AppWindow, fav_ui: &FavoritesUi) {
-    let g = ui.global::<Favorites>();
-    list_selection::clear_curated_selection(&g, &fav_ui.state().applied_selection);
+pub fn clear_selection(ui: &AppWindow) {
+    list_selection::clear_curated_selection(&ui.global::<Favorites>());
 }

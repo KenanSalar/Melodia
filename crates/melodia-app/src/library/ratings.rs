@@ -27,7 +27,7 @@ fn clamp_rating(rating: i32) -> i32 {
 /// [`crate::library::favorites::set_favorite`]: persist to DB, then bump
 /// `library_changed` so the visibility-gated list views re-fetch. Rating is
 /// orthogonal to list membership (unlike un-favoriting), so callers pair this
-/// with an optimistic per-row `VecModel` patch for instant feedback.
+/// with an optimistic per-row patch for instant feedback.
 pub async fn set_rating(state: &AppState, ids: Vec<i64>, rating: i32) -> Result<(), AppError> {
     let rating = clamp_rating(rating);
     queries::track::set_rating(&state.db, &ids, rating).await?;

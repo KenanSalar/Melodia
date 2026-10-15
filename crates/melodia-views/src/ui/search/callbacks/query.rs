@@ -41,7 +41,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
             if text.trim().is_empty() {
                 apply::clear_results_on_ui(&weak);
                 if let Some(ui) = weak.upgrade() {
-                    search_ui_mod::clear_selection(&ui, &su);
+                    search_ui_mod::clear_selection(&ui);
                 }
                 let su = su.clone();
                 s.runtime.spawn_blocking(move || su.release_for_empty_query());
@@ -72,7 +72,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
             if q.trim() != su.state().last_query.lock().as_str()
                 && let Some(ui) = weak.upgrade()
             {
-                search_ui_mod::clear_selection(&ui, &su);
+                search_ui_mod::clear_selection(&ui);
             }
             spawn_logged!(s, "search::commit", fetch::kick_search(&s, &su, &weak, q));
         });

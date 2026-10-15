@@ -4,41 +4,23 @@
 
 use slint::ComponentHandle;
 
-use super::RecentlyPlayedUi;
 use crate::ui::list_selection;
 use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Compute the new selection set for a row click and apply it. Click semantics match
 /// `favorites::handle_select_row`. Runs on the UI thread.
-pub fn handle_select_row(
-    ui: &AppWindow,
-    rp_ui: &RecentlyPlayedUi,
-    idx: i32,
-    id: i32,
-    shift: bool,
-    ctrl: bool,
-) {
-    let g = ui.global::<RecentlyPlayed>();
-    list_selection::handle_curated_click(
-        &g,
-        &rp_ui.state().applied_selection,
-        idx,
-        id,
-        shift,
-        ctrl,
-    );
+pub fn handle_select_row(ui: &AppWindow, idx: i32, id: i32, shift: bool, ctrl: bool) {
+    list_selection::handle_curated_click(&ui.global::<RecentlyPlayed>(), idx, id, shift, ctrl);
 }
 
 /// Take every displayed row into the selection.
-pub fn select_all(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
-    let g = ui.global::<RecentlyPlayed>();
-    list_selection::select_all_curated(&g, &rp_ui.state().applied_selection);
+pub fn select_all(ui: &AppWindow) {
+    list_selection::select_all_curated(&ui.global::<RecentlyPlayed>());
 }
 
 /// Reset selection (Escape, the row menu's "Clear selection", and section-leave).
-pub fn clear_selection(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
-    let g = ui.global::<RecentlyPlayed>();
-    list_selection::clear_curated_selection(&g, &rp_ui.state().applied_selection);
+pub fn clear_selection(ui: &AppWindow) {
+    list_selection::clear_curated_selection(&ui.global::<RecentlyPlayed>());
 }
 
 /// UI-thread-only: re-stamp selection onto a freshly-built row list before it's pushed into the

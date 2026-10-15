@@ -186,7 +186,6 @@ impl RecentlyPlayedUi {
             *self.inner.songs_totals.lock() = SongsTotals::default();
             *self.inner.songs_fold.lock() = HeroFold::default();
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
-            self.inner.applied_selection.lock().clear();
         }
         // Re-armed where the wipe is rather than left to the caller: this empties the very cache
         // the flag guards, and relying on the leave's own `mark_dirty` is a coupling two files

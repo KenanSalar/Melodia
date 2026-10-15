@@ -133,7 +133,6 @@ impl SearchUi {
         self.artist_strip_thumbs.clear();
         *self.inner.last_results.lock() = None;
         self.inner.last_query.lock().clear();
-        self.inner.applied_selection.lock().clear();
         melodia_platform::services::platform::allocator::trim();
     }
 
@@ -151,7 +150,6 @@ impl SearchUi {
         self.artist_strip_thumbs.clear();
         *self.inner.last_results.lock() = None;
         self.inner.last_query.lock().clear();
-        self.inner.applied_selection.lock().clear();
         melodia_platform::services::platform::allocator::trim();
     }
 

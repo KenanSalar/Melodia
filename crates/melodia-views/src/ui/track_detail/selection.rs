@@ -40,9 +40,9 @@ pub fn handle_select_row<V: RowSelectionView>(
 /// Takes every displayed row into the selection. The anchor is left where the last click put
 /// it; [`crate::ui::list_selection::select_all_curated`] argues why.
 ///
-/// **Deliberately not `list_selection::select_all_ids`**, which the `VecModel` lists take: that walk
-/// clones every model row to read its id, where the cache already holds them and the stamper
-/// below touches only the rows that flip.
+/// **Deliberately not `list_selection::select_all_ids`**, which the flat lists take: on a
+/// `VecModel` that walk clones every model row to read its id, where the cache already holds them
+/// and the stamper below touches only the rows that flip.
 pub fn select_all<V: RowSelectionView>(view: &V, cache: &DetailCache) {
     write_selection(view, displayed_ids(cache));
     apply_selection_to_rows(view, cache);

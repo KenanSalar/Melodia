@@ -39,7 +39,7 @@ pub(super) fn wire(
     wire_row_flags(ui, state, search_ui);
     wire_sort(ui, state, search_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_selection(ui, search_ui);
+    wire_selection(ui);
 }
 
 fn wire_open_album(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
@@ -165,30 +165,27 @@ fn wire_sort(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
     });
 }
 
-fn wire_selection(ui: &AppWindow, search_ui: &Arc<SearchUi>) {
+fn wire_selection(ui: &AppWindow) {
     let g = ui.global::<Search>();
     {
         let weak = ui.as_weak();
-        let su = search_ui.clone();
         g.on_select_row(move |idx, id, shift, ctrl| {
             let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::handle_select_row(&ui, &su, idx, id, shift, ctrl);
+            search_ui_mod::handle_select_row(&ui, idx, id, shift, ctrl);
         });
     }
     {
         let weak = ui.as_weak();
-        let su = search_ui.clone();
         g.on_select_all(move || {
             let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::select_all(&ui, &su);
+            search_ui_mod::select_all(&ui);
         });
     }
     {
         let weak = ui.as_weak();
-        let su = search_ui.clone();
         g.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::clear_selection(&ui, &su);
+            search_ui_mod::clear_selection(&ui);
         });
     }
 }

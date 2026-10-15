@@ -30,7 +30,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     wire_row_flags(ui, state, rp_ui);
     wire_filter(ui, state, rp_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_selection(ui, rp_ui);
+    wire_selection(ui);
     wire_shuffle(&g, state, rp_ui);
 }
 
@@ -107,30 +107,27 @@ fn wire_filter(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) 
     });
 }
 
-fn wire_selection(ui: &AppWindow, rp_ui: &Arc<RecentlyPlayedUi>) {
+fn wire_selection(ui: &AppWindow) {
     let g = ui.global::<RecentlyPlayed>();
     {
         let weak = ui.as_weak();
-        let ru = rp_ui.clone();
         g.on_select_row(move |idx, id, shift, ctrl| {
             let Some(ui) = weak.upgrade() else { return };
-            recently_played_ui_mod::handle_select_row(&ui, &ru, idx, id, shift, ctrl);
+            recently_played_ui_mod::handle_select_row(&ui, idx, id, shift, ctrl);
         });
     }
     {
         let weak = ui.as_weak();
-        let ru = rp_ui.clone();
         g.on_select_all(move || {
             let Some(ui) = weak.upgrade() else { return };
-            recently_played_ui_mod::select_all(&ui, &ru);
+            recently_played_ui_mod::select_all(&ui);
         });
     }
     {
         let weak = ui.as_weak();
-        let ru = rp_ui.clone();
         g.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
-            recently_played_ui_mod::clear_selection(&ui, &ru);
+            recently_played_ui_mod::clear_selection(&ui);
         });
     }
 }

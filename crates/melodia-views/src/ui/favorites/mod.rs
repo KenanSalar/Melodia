@@ -203,7 +203,6 @@ impl FavoritesUi {
             // the one thing the band can state that is *wrong* rather than merely absent.
             *self.inner.songs_fold.lock() = HeroFold::default();
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
-            self.inner.applied_selection.lock().clear();
         }
         // Re-armed beside the caches they guard rather than left to the leave's own `mark_dirty`
         // two files away: all three sets are empty now, so the next tab entered owes a fetch

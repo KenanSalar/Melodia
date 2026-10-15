@@ -14,7 +14,6 @@
 use std::collections::HashSet;
 use std::hash::BuildHasher;
 
-use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
 use crate::ui::track_list_model::TrackListModel;
@@ -226,11 +225,9 @@ impl_row_selection_view!(RecentlyPlayed);
 impl_row_selection_view!(Search);
 
 /// Compute the new selection set for a curated page's row click and apply it, on the UI thread.
-/// Click semantics match `tracks::handle_select_row` exactly, and the selection is mirrored into
-/// `applied` so the next `apply_filtered_tracks` round can re-stamp freshly-built rows.
-pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
+/// Click semantics match `tracks::handle_select_row` exactly.
+pub fn handle_curated_click<V: RowSelectionView>(
     view: &V,
-    applied: &Mutex<HashSet<i32, S>>,
     idx: i32,
     id: i32,
     shift: bool,
@@ -253,13 +250,6 @@ pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
     let id_set: HashSet<i32> = new_selected.iter().copied().collect();
     write_curated_selection(view, new_selected);
     view.set_anchor(new_anchor);
-    {
-        // `clone_from` needs both sides on one hasher, and a public parameter may not name a
-        // concrete one (`implicit_hasher`) — so refill, which keeps the allocation just the same.
-        let mut applied = applied.lock();
-        applied.clear();
-        applied.extend(id_set.iter().copied());
-    }
 
     // Re-stamp per-row `selected` flags so the checkbox + background highlight reflect the new
     // set immediately.
@@ -271,28 +261,16 @@ pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
 /// **The anchor is left where the last click put it**, unlike the clear below: Select All is not
 /// itself a click, so a shift-click after one should still range from whatever the user picked.
 /// The queue's own select-all has said the same since it was written.
-pub fn select_all_curated<V: RowSelectionView, S: BuildHasher>(
-    view: &V,
-    applied: &Mutex<HashSet<i32, S>>,
-) {
+pub fn select_all_curated<V: RowSelectionView>(view: &V) {
     let ids = select_all_ids(&view.track_rows());
-    {
-        let mut applied = applied.lock();
-        applied.clear();
-        applied.extend(ids.iter().copied());
-    }
     write_curated_selection(view, ids);
 }
 
 /// Reset a curated page's selection (Escape, the row menu's "Clear selection", and
 /// section-leave). Same diff-then-write shape as [`handle_curated_click`].
-pub fn clear_curated_selection<V: RowSelectionView, S: BuildHasher>(
-    view: &V,
-    applied: &Mutex<HashSet<i32, S>>,
-) {
+pub fn clear_curated_selection<V: RowSelectionView>(view: &V) {
     write_curated_selection(view, Vec::new());
     view.set_anchor(-1);
-    applied.lock().clear();
     stamp_rows_selected(&view.track_rows(), &HashSet::new());
 }
 
