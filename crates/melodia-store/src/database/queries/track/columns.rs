@@ -65,30 +65,6 @@ pub(crate) static TRACK_SUMMARY: Columns = Columns::new(&[
 /// `TrackListRow`: every track list.
 pub(crate) static TRACK_LIST: Columns = Columns::new(&[
     "id",
-    "file_path",
-    "file_name",
-    "title",
-    "artist",
-    "album_artist",
-    "album",
-    "genre",
-    "track_number",
-    "disc_number",
-    "year",
-    "duration_ms",
-    "artwork_path",
-    "is_favorite",
-    "rating",
-    "album_id",
-    "artist_id",
-    "genre_id",
-    "date_added",
-    "sort_key",
-]);
-
-/// `TrackListRow<NoFileColumns>`: the lists that keep the whole library resident.
-pub(crate) static TRACK_LIST_WITHOUT_FILES: Columns = Columns::new(&[
-    "id",
     "title",
     "artist",
     "album_artist",

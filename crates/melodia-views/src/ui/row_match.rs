@@ -30,7 +30,7 @@ use melodia_core::utils::fold::{fold, fold_ascii_byte, push_folded};
 /// credits reach the index through a denormalized column no list renders, so `TrackListRow` has no
 /// slot for them, and a filename echoes the tags beside it, which an unranked substring filter has
 /// no way to de-prioritize as bm25 does.
-pub fn search_fields<F>(r: &TrackListRow<F>) -> [&str; 5] {
+pub fn search_fields(r: &TrackListRow) -> [&str; 5] {
     [
         &r.title,
         r.artist.as_deref().unwrap_or_default(),
@@ -58,7 +58,7 @@ fn any_field_matches(fields: &[&str; 5], year: Option<i32>, needle: &Needle) -> 
 
 /// Folded substring match across a track row's five text fields and its year. An empty
 /// needle matches every row, so an unfiltered list needs no branch.
-pub fn track_matches<F>(r: &TrackListRow<F>, needle: &Needle) -> bool {
+pub fn track_matches(r: &TrackListRow, needle: &Needle) -> bool {
     any_field_matches(&search_fields(r), r.year, needle)
 }
 

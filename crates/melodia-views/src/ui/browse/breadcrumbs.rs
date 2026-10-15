@@ -98,5 +98,5 @@ pub(super) fn folder_basename(path: &str) -> String {
 /// order. Delegates the shared `match field` shape to
 /// [`crate::ui::track_sort::sort_track_rows_by`].
 pub(super) fn sort_browse_files(files: &mut [BrowseFile], field: &str, dir: &str) {
-    sort_track_rows_by(files, field, dir, |f| &f.row, |f| f.row.file.file_name.to_lowercase());
+    sort_track_rows_by(files, field, dir, |f| &f.row, |f| f.file_name.to_lowercase());
 }

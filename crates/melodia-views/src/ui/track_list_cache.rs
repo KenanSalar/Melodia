@@ -29,11 +29,8 @@ use crate::ui::row_match::{self, Needle};
 use crate::ui::track_sort::{self, TrackSortFields};
 use crate::ui::tracks::to_slint_track_list_row;
 use crate::ui::util::{StringPool, len_as_i32};
-use melodia_core::entities::track::{NoFileColumns, TrackListRow};
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::TrackListRow as UiTrackListRow;
-
-/// The DB rows a cache is filled from, fetched without the file columns no list here draws.
-pub type RsTrackListRow = TrackListRow<NoFileColumns>;
 
 /// Pre-folded text columns for filtering: one packed `Box<str>` of
 /// [`row_match::search_fields`] joined by `\0`, so one heap allocation per row rather than

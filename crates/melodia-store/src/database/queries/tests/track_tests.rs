@@ -258,7 +258,7 @@ async fn get_tracks_in_directory_direct_only() -> Result<(), AppError> {
 
     let tracks = queries::track::get_tracks_in_directory(&db, &dir).await?;
     assert_eq!(tracks.len(), 1);
-    assert_eq!(tracks[0].title, "Direct");
+    assert_eq!(tracks[0].row.title, "Direct");
     Ok(())
 }
 
@@ -974,7 +974,7 @@ async fn a_folder_named_with_an_underscore_does_not_reach_its_siblings() -> Resu
 
     let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
 
-    assert_eq!(rows.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    assert_eq!(rows.iter().map(|r| r.row.title.as_str()).collect::<Vec<_>>(), ["A"]);
     Ok(())
 }
 
@@ -994,7 +994,7 @@ async fn a_folder_named_with_a_percent_does_not_reach_its_siblings() -> Result<(
 
     let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
 
-    assert_eq!(rows.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    assert_eq!(rows.iter().map(|r| r.row.title.as_str()).collect::<Vec<_>>(), ["A"]);
     Ok(())
 }
 

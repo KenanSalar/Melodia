@@ -11,7 +11,7 @@
 //! | projection | for |
 //! |---|---|
 //! | [`TrackSummary`] | queue, Now Playing, the sync playback path (carries `ReplayGain` and rating) |
-//! | [`TrackListRow`] | every track list, Files and Browse included; `TrackListRow<NoFileColumns>` for the two that keep the whole library resident |
+//! | [`TrackListRow`] | every track list, Browse included |
 //! | [`TrackMeta`] | the Now-Playing technical chips |
 //! | [`TagEditRow`] | the Edit-Track-Information dialog |
 //! | [`ScrobbleRow`] | a scrobble or love submission |
@@ -21,7 +21,7 @@
 //! A new caller takes the closest existing projection rather than adding a
 //! near-duplicate of one. Where the problem is instead a list held *resident*
 //! carrying columns it never draws, the answer is `ui::track_list_cache`, which
-//! fetches without the file columns and converts the rest at fetch.
+//! converts at fetch and frees the rest.
 
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -131,19 +131,13 @@ impl From<&Track> for TrackSummary {
 
 /// List-view shape: the columns shown in the Tracks table (and the same
 /// shape returned by per-album / per-artist / per-genre track queries).
-/// 20 fields against `Track`'s 60 — a third of the per-row decode cost for
-/// the most common queries. Includes the foreign-key ids (`album_id`,
+/// 17 fields against `Track`'s 60. Includes the foreign-key ids (`album_id`,
 /// `artist_id`, `genre_id`) so the UI can navigate from a row without a
-/// second fetch.
-///
-/// Generic over its [`FileColumns`] so a fetch that draws none of them can leave
-/// them out with [`NoFileColumns`] and still go through every helper a list row does.
+/// second fetch. No list draws the file's path or name, so neither is here;
+/// Browse, which matches rows to files on disk, fetches the path beside it.
 #[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
-pub struct TrackListRow<F = FileColumns> {
+pub struct TrackListRow {
     pub id: i64,
-    #[sqlx(flatten)]
-    #[serde(flatten)]
-    pub file: F,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artist: Option<String>,
@@ -174,26 +168,6 @@ pub struct TrackListRow<F = FileColumns> {
     pub genre_id: Option<i64>,
     #[serde(skip_serializing)]
     pub sort_key: Option<String>,
-}
-
-/// The columns of a [`TrackListRow`] that name the file rather than describe the track.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
-pub struct FileColumns {
-    pub file_path: String,
-    pub file_name: String,
-    pub date_added: String,
-}
-
-/// A [`TrackListRow`] fetched without its [`FileColumns`]. For the lists that keep the whole
-/// library resident and draw none of the three: decoding them would allocate every path in the
-/// library only for the conversion to free it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct NoFileColumns;
-
-impl<'r, R: sqlx::Row> FromRow<'r, R> for NoFileColumns {
-    fn from_row(_: &'r R) -> Result<Self, sqlx::Error> {
-        Ok(Self)
-    }
 }
 
 /// Playlist-export projection: just the fields an Extended-M3U8 line needs

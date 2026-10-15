@@ -130,7 +130,7 @@ fn install_selection_model(ui: &AppWindow) {
 /// `RowCovers.request` resolves the thumbnail per instantiated row on the Slint side — so this
 /// runs wherever the rows are, worker or event loop. It replaced a `prepare`/`finish` pair that
 /// split it across a thread hop the finished row makes just as well.
-pub fn to_slint_track_list_row<F>(r: &RsTrackListRow<F>, pool: &mut StringPool) -> UiTrackListRow {
+pub fn to_slint_track_list_row(r: &RsTrackListRow, pool: &mut StringPool) -> UiTrackListRow {
     UiTrackListRow {
         id: clamp_i64_to_i32(r.id),
         title: SharedString::from(r.title.as_str()),

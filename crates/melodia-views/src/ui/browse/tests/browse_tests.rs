@@ -5,7 +5,7 @@
 //! the row conversion are the halves that decide, respectively, where Back lands and whether a
 //! row can be interacted with at all.
 
-use melodia_core::entities::track::{FileColumns, TrackListRow};
+use melodia_core::entities::track::TrackListRow;
 
 use super::*;
 
@@ -18,11 +18,6 @@ fn browse_ui() -> BrowseUi {
 fn library_row(id: i64) -> TrackListRow {
     TrackListRow {
         id,
-        file: FileColumns {
-            file_path: "/m/ghost.flac".to_owned(),
-            file_name: "ghost.flac".to_owned(),
-            date_added: "2026-01-01T00:00:00Z".to_owned(),
-        },
         title: "Ghost Town".to_owned(),
         artist: Some("The Specials".to_owned()),
         album_artist: Some("Various Artists".to_owned()),
@@ -119,7 +114,8 @@ fn setting_the_path_directly_leaves_the_stack_alone() {
 /// working at all.
 #[test]
 fn a_file_the_library_knows_is_interactive_and_keeps_its_id() {
-    let file = BrowseFile { row: library_row(42), in_library: true };
+    let file =
+        BrowseFile { row: library_row(42), file_name: "ghost.flac".to_owned(), in_library: true };
 
     let row = to_slint_browse_track_row(&file, &mut StringPool::default());
 
@@ -135,7 +131,8 @@ fn a_file_the_library_knows_is_interactive_and_keeps_its_id() {
 /// track, and the write lands on whatever row id 0 resolves to or on nothing at all.
 #[test]
 fn a_file_the_library_does_not_know_is_sparse_and_inert() {
-    let file = BrowseFile { row: library_row(42), in_library: false };
+    let file =
+        BrowseFile { row: library_row(42), file_name: "ghost.flac".to_owned(), in_library: false };
 
     let row = to_slint_browse_track_row(&file, &mut StringPool::default());
 
@@ -149,7 +146,8 @@ fn a_file_the_library_does_not_know_is_sparse_and_inert() {
 /// any of them would state something about a track the library has never seen.
 #[test]
 fn a_sparse_row_states_nothing_it_cannot_know() {
-    let file = BrowseFile { row: library_row(42), in_library: false };
+    let file =
+        BrowseFile { row: library_row(42), file_name: "ghost.flac".to_owned(), in_library: false };
 
     let row = to_slint_browse_track_row(&file, &mut StringPool::default());
 

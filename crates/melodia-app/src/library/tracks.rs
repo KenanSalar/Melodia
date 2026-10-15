@@ -2,9 +2,7 @@ use melodia_core::entities::track;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
-pub async fn get_tracks(
-    db: &DbPool,
-) -> Result<Vec<track::TrackListRow<track::NoFileColumns>>, AppError> {
+pub async fn get_tracks(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
     queries::track::get_all_tracks_for_list(db).await
 }
 

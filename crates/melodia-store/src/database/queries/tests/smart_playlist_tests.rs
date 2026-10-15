@@ -668,16 +668,21 @@ async fn exported_paths(db: &DbPool, c: &SmartCriteria) -> Result<Vec<String>, A
 }
 
 /// A smart playlist exports what its page shows, so the two queries have to agree on membership
-/// and on order.
+/// and on order. Compared by title, which the seed keeps distinct and both rows carry.
 #[tokio::test]
 async fn the_export_holds_the_tracks_the_list_shows_in_the_same_order() -> Result<(), AppError> {
     let s = seed().await?;
     let c = one(RuleField::Rating, RuleOp::Gte, Some(RuleValue::Number(2.0)));
-    let listed: Vec<String> =
-        resolve(&s.db, &c).await?.into_iter().map(|row| row.file.file_path).collect();
+    let listed: Vec<String> = resolve(&s.db, &c).await?.into_iter().map(|row| row.title).collect();
     assert_eq!(listed.len(), 3, "test setup: the rule matches three of the four tracks");
 
-    assert_eq!(exported_paths(&s.db, &c).await?, listed);
+    let exported: Vec<String> =
+        queries::smart_playlist::get_smart_playlist_tracks_for_export(&s.db, &c)
+            .await?
+            .into_iter()
+            .map(|row| row.title)
+            .collect();
+    assert_eq!(exported, listed);
     Ok(())
 }
 
