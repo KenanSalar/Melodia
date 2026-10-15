@@ -17,17 +17,26 @@ use melodia_audio::player::source::audio::{AudioSource, Sample, Shape};
 use super::resample::{self, CENTRE, Kernel, SPAN, Weighed};
 
 /// How a converter interpolates wherever the rates differ or the speed isn't one.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resampler {
     /// Between the two frames either side of the point. Cheap at any device rate, but it softens
     /// the top octave and only attenuates the source's images, so what lands past the output's
     /// Nyquist folds back into the band, loudest on a downsample and on an upsample short of twice
     /// the source's rate (44.1 to 48 kHz among them), and fainter above that.
-    #[default]
     Linear,
     /// Through [`super::resample`]'s kernel, which keeps the whole band. Its cost per output frame
     /// is the kernel's span, so it follows the device's rate rather than the track's.
     BandLimited,
+}
+
+impl Default for Resampler {
+    /// Linear on Windows alone, whose shared mode converts every stream to the system's mix format
+    /// however high it runs. Elsewhere a shared stream can follow the file's rate, and on Linux
+    /// otherwise opens at 48 kHz, where the kernel is cheap and 44.1 kHz material is the case
+    /// linear aliases most.
+    fn default() -> Self {
+        if cfg!(target_os = "windows") { Self::Linear } else { Self::BandLimited }
+    }
 }
 
 /// What one [`Converter::fill`] converts to.

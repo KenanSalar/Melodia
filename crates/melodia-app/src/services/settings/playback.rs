@@ -143,8 +143,7 @@ impl Default for CrossfadeFlags {
 /// a toggle never reopens a claim.
 ///
 /// `output_resampler` is how every conversion interpolates, a rate mismatch and a speed other than
-/// one alike. It ships linear: the band-limited kernel's cost follows the device's rate, so on a
-/// device mixing at a high rate it is most of what playback costs.
+/// one alike. It ships as [`Resampler::default`], which argues the platform split.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputFlags {
