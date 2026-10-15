@@ -1,7 +1,6 @@
-use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct Playlist {
     pub id: i64,
     pub name: String,
@@ -15,7 +14,7 @@ pub struct Playlist {
 }
 
 /// View-backed struct with computed stats (from `playlist_stats` view)
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct PlaylistStats {
     pub id: i64,
     pub name: String,

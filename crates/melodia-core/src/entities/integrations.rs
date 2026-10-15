@@ -2,7 +2,7 @@
 //!
 //! Declared here rather than beside the rest of `settings.json`'s data model because their
 //! readers are the integration services and the Settings page, and the file they are part of
-//! belongs to neither. Plain serde data shared across tiers is what this directory is for; the
+//! belongs to neither. Plain data shared across tiers is what this directory is for; the
 //! on-disk shape is unaffected, the settings root being what flattens them.
 
 use serde::{Deserialize, Serialize};

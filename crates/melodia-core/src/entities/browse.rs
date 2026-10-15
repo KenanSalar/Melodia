@@ -1,9 +1,8 @@
-use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 use crate::entities::track::TrackListRow;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct BrowseFolder {
     pub name: String,
     pub path: String,
@@ -29,14 +28,14 @@ pub struct DirectoryTrack {
 ///   non-interactive (the UI keys interactivity off `id == 0`).
 ///
 /// `file_name` comes from disk for both, and breaks the view's sort ties.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct BrowseFile {
     pub row: TrackListRow,
     pub file_name: String,
     pub in_library: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct BrowseResult {
     pub path: String,
     pub name: String,

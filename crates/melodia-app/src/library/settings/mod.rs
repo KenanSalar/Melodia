@@ -100,13 +100,3 @@ pub fn get_settings(paths: &Paths) -> Result<SettingsData, AppError> {
 pub fn get_view_state(paths: &Paths) -> Result<ViewStateData, AppError> {
     services::view_state::read_view_state(paths)
 }
-
-#[cfg(target_os = "linux")]
-pub fn get_kde_colors() -> Option<melodia_core::themes::kde::KdeColorPalette> {
-    melodia_platform::services::platform::system_theme::get_kde_colors()
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn get_kde_colors() -> Option<serde_json::Value> {
-    None
-}

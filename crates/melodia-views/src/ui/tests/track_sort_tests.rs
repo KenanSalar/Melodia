@@ -169,10 +169,12 @@ fn track_number_desc_keeps_disc_ascending() {
 
 #[test]
 fn custom_secondary_key_breaks_ties() {
-    // Browse-style: a caller-supplied key, not sort_key, is the tie-breaker.
+    // Browse-style: a caller-supplied key, not sort_key, is the tie-breaker. Input order and
+    // sort_key both disagree with it, so a sort that ignores the key or falls back to sort_key
+    // leaves [2, 1].
     let mut rows = vec![
-        mk(1, "same", Some("A"), None, None, None, 0, None, None),
-        mk(2, "same", Some("A"), None, None, None, 0, None, None),
+        mk(2, "a", Some("A"), None, None, None, 0, None, None),
+        mk(1, "b", Some("A"), None, None, None, 0, None, None),
     ];
     sort_track_rows_by(&mut rows, "artist", "asc", |r| r, |r| r.title.to_lowercase());
     // "title1" < "title2".

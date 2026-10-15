@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use melodia_core::error::AppError;
 
 #[cfg(target_os = "linux")]
@@ -13,20 +11,17 @@ pub mod kwin;
 /// `Copy` because every variant is a unit one: it is a detected capability passed by value to
 /// whatever acts on it, and a `&AlwaysOnTopCapability` in hand should not force a clone to read
 /// which arm it is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlwaysOnTopMethod {
     Native,
     #[cfg(target_os = "linux")]
     KwinDbus,
     #[cfg(target_os = "linux")]
     GnomeExtension,
-    #[serde(other)]
     Unsupported,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct AlwaysOnTopCapability {
     pub supported: bool,
     pub reason: Option<String>,

@@ -8,8 +8,6 @@
 
 use std::collections::HashMap;
 
-use serde::Serialize;
-
 use super::{AccentDef, Palette, ThemeDef, Variant};
 
 /// A parsed `kdeglobals` colour scheme.
@@ -18,7 +16,7 @@ use super::{AccentDef, Palette, ThemeDef, Variant};
 /// that pairing are needed and only one of them can cross a crate boundary: this is plain data
 /// the palette half consumes, and the reader is a platform adapter that produces it. Naming it
 /// from there instead made the two mutually dependent.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct KdeColorPalette {
     pub colors: HashMap<String, String>,
     pub accent: String,

@@ -1,7 +1,6 @@
-use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct AlbumStats {
     pub id: i64,
     pub name: String,
@@ -30,7 +29,7 @@ pub struct AlbumStats {
 /// the track sits on and writes them back to every selected file. Strings rather than `Option`s
 /// because the form folds a selection with `common_str`, which has no third state to show for a
 /// NULL that a blank box doesn't already mean.
-#[derive(Clone, Debug, Default, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, FromRow)]
 pub struct ReleaseTagRow {
     pub label: String,
     pub catalog_number: String,

@@ -26,21 +26,6 @@ fn repeat_mode_as_str_all_variants() {
 }
 
 #[test]
-fn playback_status_serde_roundtrip() -> Result<(), AppError> {
-    for status in [
-        PlaybackStatus::Stopped,
-        PlaybackStatus::Playing,
-        PlaybackStatus::Paused,
-        PlaybackStatus::Loading,
-    ] {
-        let json = serde_json::to_string(&status).map_err(|e| json_err(&e))?;
-        let deserialized: PlaybackStatus = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
-        assert_eq!(status, deserialized);
-    }
-    Ok(())
-}
-
-#[test]
 fn repeat_mode_serde_roundtrip() -> Result<(), AppError> {
     for mode in [RepeatMode::Off, RepeatMode::All, RepeatMode::One] {
         let json = serde_json::to_string(&mode).map_err(|e| json_err(&e))?;

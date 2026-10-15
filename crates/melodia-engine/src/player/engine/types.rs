@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use melodia_core::entities::track::TrackSummary;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaybackStatus {
     Stopped,
     Playing,
@@ -65,7 +64,7 @@ impl RepeatMode {
 /// every state emit, and a volume drag emits per pointer move. That is also what makes the facts
 /// below free to carry — the two writers that mutate it in place go through `Arc::make_mut` and
 /// pay one clone a song rather than one an emit.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadioNowPlaying {
     pub station_id: i64,
     /// radio-browser.info's id, or `None` for a station the user typed in — which is what decides

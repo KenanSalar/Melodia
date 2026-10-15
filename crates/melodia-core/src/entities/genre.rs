@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
 /// A track's genres, in the two shapes the rest of the tree needs: the line every display surface
@@ -81,7 +80,7 @@ impl GenreList {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct GenreStats {
     pub id: i64,
     pub name: String,

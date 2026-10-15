@@ -8,16 +8,14 @@ use sqlx::FromRow;
 /// Favorites, hand-typed URLs and play history are the same row at different
 /// points in its life, so the flags below are what tell them apart rather than
 /// the table a row sits in.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct RadioStation {
     pub id: i64,
     /// radio-browser.info's id, or `None` for a station the user typed in.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub station_uuid: Option<String>,
     pub name: String,
     pub stream_url: String,
     /// The directory's, and rewritten in full on every re-import.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub homepage: Option<String>,
     /// The user's own, for a directory entry that carries no homepage — roughly
     /// one in fifteen, and nothing can be derived from a stream URL that is
@@ -25,30 +23,24 @@ pub struct RadioStation {
     /// folded into [`Self::homepage`] it would either be blanked by the next
     /// re-import or block the directory from ever correcting a site that moved.
     /// Read through [`Self::website`], never directly.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub local_homepage: Option<String>,
     /// Where the logo came from, kept so a re-download can be retried after the
     /// stored file is swept.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub favicon_url: Option<String>,
     /// The user's own logo URL, for the third of the directory that ships none.
     /// [`Self::local_homepage`]'s twin in every respect — read through
     /// [`Self::logo_source`].
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub local_favicon_url: Option<String>,
     /// The user's own genre, read through [`Self::genre`].
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub local_tags: Option<String>,
     /// The user's own country, read through [`Self::country_name`]. A hand-typed
     /// station has none of its own: a stream announces no country, and guessing
     /// one from the host would be wrong more often than blank is.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub local_country: Option<String>,
     /// The logo in the radio-logo store, which is its own directory precisely
     /// because this is the one artwork column whose file cannot be re-derived
     /// from the user's own library. Still one of the six the sweep reads
     /// through — the reference set spans every store.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_path: Option<String>,
     /// The directory's free-form comma-separated tags, stored verbatim.
     pub tags: String,
@@ -66,7 +58,6 @@ pub struct RadioStation {
     /// pointed the other way: the re-import that rewrites [`Self::codec`]
     /// wholesale must not be able to take this with it. Never read alone —
     /// [`Self::format`] is what folds the two together.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub probed_codec: Option<String>,
     /// Advertised kbps, `0` where the directory does not know. A display hint
     /// only: it is zero on a large share of live stations, so nothing may divide
@@ -77,10 +68,8 @@ pub struct RadioStation {
     /// setting still keyed to it filters directory pages by it.
     pub hls: bool,
     pub is_favorite: bool,
-    #[serde(default, skip_serializing)]
     pub sort_key: String,
     pub date_added: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_played: Option<String>,
     pub play_count: i32,
 }

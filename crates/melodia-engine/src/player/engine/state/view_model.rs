@@ -2,15 +2,13 @@
 
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
-
 use super::PlayerState;
 use crate::player::engine::queue::current_index_to_i32;
 use crate::player::engine::types::{PlaybackSource, RadioNowPlaying, RepeatMode};
 use melodia_core::entities::track::TrackSummary;
 
-/// Lightweight event for 500ms position ticks — avoids serializing the full queue.
-#[derive(Debug, Clone, Serialize)]
+/// The 500 ms position tick, on its own channel so a tick doesn't republish the view model.
+#[derive(Debug, Clone)]
 pub struct PositionTick {
     pub position_ms: u64,
     pub duration_ms: u64,
@@ -27,7 +25,7 @@ pub struct PositionTick {
     clippy::struct_excessive_bools,
     reason = "ViewModel mirrors Slint struct shape across the FFI boundary"
 )]
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct PlayerViewModel {
     pub status: String,
     pub current_track: Option<Arc<TrackSummary>>,
@@ -53,7 +51,7 @@ pub struct PlayerViewModel {
     clippy::struct_excessive_bools,
     reason = "ViewModel mirrors Slint struct shape across the FFI boundary"
 )]
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct PlayerViewModelLight {
     pub status: &'static str,
     pub current_track: Option<Arc<TrackSummary>>,
@@ -80,7 +78,7 @@ pub struct PlayerViewModelLight {
 }
 
 /// Queue-specific `ViewModel` emitted only when the queue changes.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct QueueViewModel {
     pub queue_tracks: Vec<Arc<TrackSummary>>,
     pub queue_index: i32,

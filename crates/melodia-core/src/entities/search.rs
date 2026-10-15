@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use crate::entities::{album, artist, genre, track};
 
 /// Everything one search query matched, across the four kinds the Search page
@@ -10,7 +8,7 @@ use crate::entities::{album, artist, genre, track};
 /// [`BrowseResult`](super::browse::BrowseResult) has the same shape for the
 /// same reason. It is the return type of `library::search::search_all`, so it
 /// is a boundary value the UI names directly.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct SearchResults {
     pub tracks: Vec<track::TrackListRow>,
     pub albums: Vec<album::AlbumStats>,

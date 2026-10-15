@@ -23,51 +23,37 @@
 //! carrying columns it never draws, the answer is `ui::track_list_cache`, which
 //! converts at fetch and frees the rest.
 
-use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-/// Queue + `ViewModel` shape: what the player and the now-playing bar render,
-/// and what the queue-persistence file round-trips. It is cloned into every
-/// published `ViewModel` and serialized on every queue save, so it carries
-/// playback identity and nothing a list draws. Use [`TrackListRow`] for those.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+/// Queue + `ViewModel` shape: what the player and the now-playing bar render.
+/// It is cloned into every published `ViewModel`, so it carries playback
+/// identity and nothing a list draws. Use [`TrackListRow`] for those.
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TrackSummary {
     pub id: i64,
     pub file_path: String,
     pub file_name: String,
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artist: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub album: Option<String>,
     pub duration_ms: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub track_number: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub disc_number: Option<i32>,
     /// Last playback position — used for queue restore on startup.
-    #[serde(default)]
     pub last_position: i64,
-    #[serde(default)]
     pub is_favorite: bool,
     /// 0–5 star rating (0 = unrated). Carried on the playback projection so
     /// the Now-Playing controls can display/edit the current track's rating
-    /// without an async fetch, and the queue round-trip preserves it.
-    #[serde(default)]
+    /// without an async fetch.
     pub rating: i32,
     // ReplayGain — carried here (not just on the full `Track`) so the sync
     // playback path can bake per-track gain into the audio source without an
     // async DB fetch. Stored as `f32` (the DB column is REAL/f64) since the DSP
     // math is `f32` anyway. All `None` for untagged tracks → unity gain.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaygain_track_gain: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaygain_track_peak: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaygain_album_gain: Option<f32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub replaygain_album_peak: Option<f32>,
 }
 
@@ -135,38 +121,26 @@ impl From<&Track> for TrackSummary {
 /// `artist_id`, `genre_id`) so the UI can navigate from a row without a
 /// second fetch. No list draws the file's path or name, so neither is here;
 /// Browse, which matches rows to files on disk, fetches the path beside it.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TrackListRow {
     pub id: i64,
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artist: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub album_artist: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub album: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub track_number: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub disc_number: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub year: Option<i32>,
     pub duration_ms: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_path: Option<String>,
     pub is_favorite: bool,
     /// 0–5 star rating (0 = unrated). Surfaced in list rows for the
     /// hover-revealed star control.
     pub rating: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub album_id: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artist_id: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub genre_id: Option<i64>,
-    #[serde(skip_serializing)]
     pub sort_key: Option<String>,
 }
 
@@ -176,23 +150,19 @@ pub struct TrackListRow {
 /// column decodes per row when writing a playlist file. `file_hash` is
 /// nullable (tracks before retroactive hashing); the writer omits the hash
 /// line when it is `None`.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct PlaylistExportRow {
     pub file_path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub file_hash: Option<String>,
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artist: Option<String>,
     pub duration_ms: i64,
 }
 
-/// Technical-metadata projection for the full-screen Now Playing view's
-/// chip row — just the 8 columns `TrackMetaRow` renders. Reading these
-/// instead of a full `Track` saves ~33 unused column decodes (most of them
-/// `Option<String>`) per track change. See "track projections by use case"
-/// in CLAUDE.md.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+/// Technical-metadata projection for the full-screen Now Playing view's chip
+/// row: the columns `TrackMetaRow` renders, so a track change decodes those
+/// rather than the whole [`Track`] row.
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TrackMeta {
     pub id: i64,
     pub codec: Option<String>,
@@ -213,7 +183,7 @@ pub struct TrackMeta {
 /// credits and the artist credits are rows, and the dialog reads them through the queries that
 /// return rows. `tracks.genre` and `tracks.credits` are the rendered halves those rows produce,
 /// and an editor populated from a rendered line is what splits `Chanson, Francaise` in two.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct TagEditRow {
     pub id: i64,
     pub file_path: String,
@@ -258,7 +228,7 @@ pub struct TagEditRow {
 /// text), so the fetch needs no joins. `title` is the track name;
 /// the two `musicbrainz_*` ids map to a `ScrobbleTrack`'s recording/release
 /// MBIDs. `ScrobbleTrack::from_row` does the conversion.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct ScrobbleRow {
     pub id: i64,
     pub title: String,
@@ -276,7 +246,7 @@ pub struct ScrobbleRow {
 /// sheet's context menu. A struct rather than the 4-tuple
 /// `get_track_paths_by_ids` gets away with: three same-typed `Option<i64>` in
 /// positional form let a swapped album and artist compile.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromRow)]
 pub struct TrackLinks {
     pub id: i64,
     pub album_id: Option<i64>,
@@ -289,112 +259,70 @@ pub struct TrackLinks {
 /// the complete row (track-detail page, scan-time updates, hash backfill);
 /// otherwise prefer `TrackListRow` (list views), `TrackSummary` (queue /
 /// `ViewModel`), or `TrackMeta` (Now Playing chips) — all are far cheaper to
-/// clone and serialize.
-#[derive(Clone, Debug, PartialEq, FromRow, Serialize, Deserialize)]
+/// clone.
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct Track {
     pub id: i64,
     pub file_path: String,
     pub file_name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub file_hash: Option<String>,
 
     // Core metadata
     pub title: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artist: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub album_artist: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub album: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub genre: Option<String>,
     /// The role credits as one rendered string. The structured rows are `track_credits`, read
     /// through `queries::track::get_track_role_credits_by_ids`; this column is what the FTS index
     /// searches, which is why it is denormalized here at all.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub credits: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub track_number: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub track_total: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub disc_number: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub disc_total: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub disc_subtitle: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub subtitle: Option<String>,
     /// The whole release date; `year` is the integer derived from it and is what every index and
     /// smart-playlist rule reads.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub release_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub year: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub original_date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub original_year: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub comment: Option<String>,
 
     // Extended metadata
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bpm: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub initial_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub mood: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub grouping: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub work: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub movement: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub movement_number: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub movement_total: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub copyright: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub isrc: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub musicbrainz_track_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub musicbrainz_release_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub musicbrainz_release_track_id: Option<String>,
 
     // ReplayGain
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub replaygain_track_gain: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub replaygain_track_peak: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub replaygain_album_gain: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub replaygain_album_peak: Option<f64>,
 
     // Technical info
     pub duration_ms: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub file_size: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub codec: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bitrate: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub channels: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_rate: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub bit_depth: Option<i32>,
 
     // Artwork
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artwork_path: Option<String>,
 
     // Playback state
@@ -402,31 +330,25 @@ pub struct Track {
     pub skip_count: i32,
     pub rating: i32,
     pub is_favorite: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_played: Option<String>,
     pub last_position: i64,
 
     // Relations
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub album_id: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub artist_id: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub genre_id: Option<i64>,
     pub folder_id: i64,
 
     // Timestamps
     pub date_added: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub date_modified: Option<String>,
 
     // Precomputed natural sort key
-    #[serde(skip_serializing)]
     pub sort_key: Option<String>,
 }
 
 /// Aggregate stats for the Favorites hero header.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FavoriteStats {
     pub count: i64,
     pub total_duration_ms: i64,
@@ -448,7 +370,7 @@ pub struct FavoriteStats {
 /// mutually exclusive with its track list and cleared on every switch, so
 /// there the reason is only the general one: a query means the same thing on
 /// every page that offers a filter box.
-#[derive(Clone, Debug, PartialEq, Hash, FromRow, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Hash, FromRow)]
 pub struct MostPlayedFavorite {
     pub id: i64,
     pub title: String,
