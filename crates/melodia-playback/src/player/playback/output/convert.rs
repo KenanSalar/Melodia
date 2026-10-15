@@ -20,7 +20,9 @@ use super::resample::{self, CENTRE, Kernel, SPAN, Weighed};
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Resampler {
     /// Between the two frames either side of the point. Cheap at any device rate, but it softens
-    /// the top octave, and what a downsample puts past Nyquist folds back into the band.
+    /// the top octave and only attenuates the source's images, so what lands past the output's
+    /// Nyquist folds back into the band, loudest on a downsample and on an upsample short of twice
+    /// the source's rate (44.1 to 48 kHz among them), and fainter above that.
     #[default]
     Linear,
     /// Through [`super::resample`]'s kernel, which keeps the whole band. Its cost per output frame

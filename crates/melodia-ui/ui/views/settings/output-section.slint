@@ -411,9 +411,8 @@ export component OutputSection inherits Rectangle {
             StageRow {
                 grade: SignalPathUi.rate-grade;
                 label: @tr("Sample Rate");
-                // Index 0 is linear, in `ui::settings::output_settings::resampler_index`' order.
                 value: SignalPathUi.rate-grade == 0 ? SignalPathUi.source-rate
-                    : Settings.output-resampler-idx == 0 ? @tr("{} resampled linearly to {}", SignalPathUi.source-rate, SignalPathUi.device-rate)
+                    : Settings.resampler-linear ? @tr("{} resampled linearly to {}", SignalPathUi.source-rate, SignalPathUi.device-rate)
                     : @tr("{} resampled to {}", SignalPathUi.source-rate, SignalPathUi.device-rate);
             }
             StageRow {

@@ -1,13 +1,17 @@
 //! The Output card's settings: how a conversion interpolates, following the file's rate and the
-//! silence a rate change writes first, then the exclusive pickers (shared or exclusive, which card a claim takes, and shared
-//! output too where the platform can aim it, what a claim does about a rate the card lacks, how its
-//! writer paces the card, and whether the card's own control carries the volume), and whether a
-//! long pause gives the card back. The card's live readout is [`super::signal_path`]'s.
+//! silence a rate change writes first, then the exclusive pickers (shared or exclusive, which card
+//! a claim takes, and shared output too where the platform can aim it, what a claim does about a
+//! rate the card lacks, how its writer paces the card, and whether the card's own control carries
+//! the volume), and whether a long pause gives the card back. The card's live readout is
+//! [`super::signal_path`]'s.
 //!
-//! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back
-//! opens a device. Every picker changes the one choice, so each writes a synchronous shadow and
-//! the task reads the shadow when it runs rather than capturing a value. Whichever task runs last
-//! then applies and persists the latest pick, in whatever order the pool ran them.
+//! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back opens
+//! a device. Each picker writes a synchronous shadow, the choice's or the conversion's own, and the
+//! task reads it when it runs rather than capturing a value, under the shadow's apply lock, which
+//! it holds through the persist. Whichever task takes that lock last applies and persists the
+//! latest pick, in whatever order the pool ran them. Ordering only the read would let a task that
+//! read an older pick still land after a newer one, the engine and the settings file each taking a
+//! lock of its own.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -50,7 +54,19 @@ struct Picked {
     listing_applied: i32,
 }
 
-type Shadow = Arc<Mutex<Picked>>;
+/// A pick as last made, and the lock a task holds from reading it through the persist.
+struct Shadowed<T> {
+    picked: Mutex<T>,
+    applying: Mutex<()>,
+}
+
+impl<T> Shadowed<T> {
+    fn new(value: T) -> Self {
+        Self { picked: Mutex::new(value), applying: Mutex::new(()) }
+    }
+}
+
+type Shadow = Arc<Shadowed<Picked>>;
 
 pub fn install(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
@@ -112,17 +128,18 @@ fn install_rate_rows(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
     });
 }
 
-/// The conversion chips. Applied on the pool, the engine taking the decks lock a reopen holds, and
-/// through a shadow, so of two picks in flight whichever task runs last applies the later one.
+/// The conversion chips, applied on the pool through a shadow of their own, the engine taking the
+/// decks lock a reopen holds.
 fn install_resampler_row(state: &AppState, g: &Settings<'_>, saved: Resampler) {
     let state = state.clone();
-    let shadow = Arc::new(Mutex::new(saved));
+    let shadow = Arc::new(Shadowed::new(saved));
     g.on_output_resampler_changed(move |idx| {
-        *shadow.lock() = resampler_from_index(idx);
+        *shadow.picked.lock() = resampler_from_index(idx);
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist output_resampler", move |paths| {
-            let resampler = *shadow.lock();
+            let _applying = shadow.applying.lock();
+            let resampler = *shadow.picked.lock();
             library::playback::player_set_resampler(&ctx, resampler);
             library::settings::set_output_resampler(paths, resampler)
         });
@@ -136,7 +153,7 @@ fn install_pickers(ui: &AppWindow, state: &AppState, choice: OutputChoice) {
     g.set_output_period_idx(period_index(choice.tuning.period));
     g.set_output_polling(choice.tuning.drive == Drive::Polling);
     g.set_output_hardware_volume(choice.hardware_volume);
-    let shadow: Shadow = Arc::new(Mutex::new(Picked::new(choice)));
+    let shadow: Shadow = Arc::new(Shadowed::new(Picked::new(choice)));
 
     let state_list = state.clone();
     let shadow_list = Arc::clone(&shadow);
@@ -166,11 +183,12 @@ fn install_bit_perfect_switch(ui: &AppWindow, state: &AppState, shadow: &Shadow)
     ui.global::<Settings>().on_output_switch_to_bit_perfect(move || {
         let Some(ui) = weak.upgrade() else { return };
         ui.global::<Settings>().set_output_mode_idx(mode_index(OutputMode::Exclusive));
-        shadow.lock().choice.mode = OutputMode::Exclusive;
+        shadow.picked.lock().choice.mode = OutputMode::Exclusive;
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist bit-perfect switch", move |paths| {
-            let choice = shadow.lock().choice.clone();
+            let _applying = shadow.applying.lock();
+            let choice = shadow.picked.lock().choice.clone();
             library::playback::player_set_output_choice(&ctx, choice.clone());
             let volume = library::playback::player_make_bit_perfect(&ctx);
             library::settings::switch_to_bit_perfect(paths, &choice, volume)
@@ -188,7 +206,7 @@ fn pick<T>(
     let state = state.clone();
     let shadow = Arc::clone(shadow);
     move |value| {
-        edit(&mut shadow.lock(), value);
+        edit(&mut shadow.picked.lock(), value);
         apply(&state, &shadow);
     }
 }
@@ -198,7 +216,8 @@ fn apply(state: &AppState, shadow: &Shadow) {
     let ctx = state.playback_ctx();
     let shadow = Arc::clone(shadow);
     state.persist_blocking("persist output choice", move |paths| {
-        let choice = shadow.lock().choice.clone();
+        let _applying = shadow.applying.lock();
+        let choice = shadow.picked.lock().choice.clone();
         library::playback::player_set_output_choice(&ctx, choice.clone());
         library::settings::set_output_choice(paths, &choice)
     });
@@ -210,10 +229,10 @@ fn list_devices(weak: Weak<AppWindow>, state: &AppState, shadow: &Shadow) -> i32
     // The picker's timer keeps firing behind a window hidden to the tray, where nobody reads it.
     // The listing it already shows is the answer, so a waiting dropdown opens at once.
     if !tray_bridge::is_window_visible() {
-        return shadow.lock().listing_applied;
+        return shadow.picked.lock().listing_applied;
     }
     let revision = {
-        let mut picked = shadow.lock();
+        let mut picked = shadow.picked.lock();
         picked.listing_asked = picked.listing_asked.saturating_add(1);
         picked.listing_asked
     };
@@ -233,7 +252,7 @@ fn apply_listing(ui: &AppWindow, shadow: &Shadow, devices: Vec<OutputDevice>, re
     let g = ui.global::<Settings>();
     let default_label =
         library::playback::SHARED_DEVICE_SUPPORTED.then(|| g.invoke_output_device_system_default());
-    let Some(listing) = shadow.lock().take_listing(devices, default_label, revision) else {
+    let Some(listing) = shadow.picked.lock().take_listing(devices, default_label, revision) else {
         return;
     };
     if let Some(names) = listing.names {
@@ -373,8 +392,8 @@ fn rate_fallback_from_index(idx: i32) -> RateFallback {
     }
 }
 
-/// The chip's index, in the order of the inline list in `output-section.slint`, whose Signal Path
-/// row reads index 0 as linear.
+/// The chip's index, in the order of the inline list in `output-section.slint`, which
+/// `Settings.resampler-linear` reads as well.
 fn resampler_index(resampler: Resampler) -> i32 {
     match resampler {
         Resampler::Linear => 0,

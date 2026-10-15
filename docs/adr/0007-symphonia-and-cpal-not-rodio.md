@@ -70,6 +70,8 @@ no library still holds. Its cost is per output frame rather than per source fram
 the device's rate, and on a device the system mixes at a high rate it became most of what playing
 a track cost, which a lower-rate device never showed. Linear interpolation is the default again and
 the kernel is a setting (`output::convert::Resampler`), its table built only once it is chosen.
-What the default costs is a softened top octave, and on a downsample whatever lands past Nyquist
-folds back into the band. The setting's description says so, and the stopband cases in
-`output::convert`'s tests are pinned to the kernel.
+What the default costs is a softened top octave, and images it only attenuates, so whatever lands
+past the output's Nyquist folds back into the band: loudest on a downsample and on an upsample short
+of twice the source's rate, which 44.1 to 48 kHz is, and fainter above it. The setting's
+description names the softening, and the stopband cases in `output::convert`'s tests are pinned to
+the kernel.

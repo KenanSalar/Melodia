@@ -109,6 +109,7 @@ export global Settings {
     // Linear (0) or band-limited (1), for every conversion: a rate mismatch, either mode, and any
     // speed other than one. Applied off the UI thread, the engine waiting out a reopen for it.
     in-out property <int> output-resampler-idx: 0;
+    out property <bool> resampler-linear: root.output-resampler-idx == 0;
     callback output-resampler-changed(int);
 
     // Shared (0) or exclusive (1), and which card an exclusive claim takes, and shared output too
