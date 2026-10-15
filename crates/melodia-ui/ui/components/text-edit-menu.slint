@@ -10,6 +10,7 @@ import { FocusLossWatcher } from "focus-loss-watcher.slint";
 export component TextEditMenu inherits Rectangle {
     // An empty field has nothing to cut, copy or select.
     in property <bool> has-text;
+    out property <bool> is-open: menu.is-open;
 
     callback cut();
     callback copy();

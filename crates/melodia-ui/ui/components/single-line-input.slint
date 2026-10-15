@@ -17,7 +17,9 @@ export component SingleLineInput inherits Rectangle {
     in property <string> placeholder;
     in property <brush> placeholder-color: Theme.overlay2;
     in property <InputType> input-type: InputType.text;
-    out property <bool> has-focus: ti.has-focus;
+    // The edit menu holds the keyboard while it is up and hands it back on close, so the field
+    // reads as focused across it rather than dimming under its own menu.
+    out property <bool> has-focus: ti.has-focus || menu.is-open;
     // The placeholder's natural width, for a host sizing itself to its hint.
     out property <length> placeholder-width: hint.preferred-width;
 
