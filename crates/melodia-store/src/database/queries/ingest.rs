@@ -406,34 +406,32 @@ impl<'a> InsertBuffer<'a> {
 const STAT_PAR_THRESHOLD: usize = 32;
 
 /// The subset of `paths` still on disk under their own spelling. A batch past
-/// [`STAT_PAR_THRESHOLD`] stats on the scan pool from a blocking thread, keeping the syscalls off
-/// the async worker; the caller's transaction stays open across the await either way.
+/// [`STAT_PAR_THRESHOLD`] is answered from a blocking thread, its stats fanned out on the scan
+/// pool, keeping the syscalls and directory reads off the async worker; the caller's transaction
+/// stays open across the await either way.
 ///
 /// **Under their own spelling**, because a case-insensitive or normalizing filesystem answers
 /// `exists()` for a spelling no entry carries: a rename that changed only case or Unicode
 /// normalization leaves the old path resolving to the renamed file, and that is a move. A copy or
-/// a hard link keeps an entry of its own and stays a duplicate.
+/// a hard link keeps an entry of its own and stays a duplicate. Only the file name is asked: the
+/// path above it starts at a folder root spelled as the user added it, which no listing has to
+/// match, so a directory renamed by case alone still reads as a copy.
 async fn batch_still_on_disk(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
     if paths.is_empty() {
         return HashSet::new();
     }
-    let existing = if paths.len() < STAT_PAR_THRESHOLD {
-        paths.into_iter().filter(|p| Path::new(p).exists()).collect()
-    } else {
-        let pool = pool.clone();
-        tokio::task::spawn_blocking(move || {
-            pool.install(|| {
-                paths
-                    .par_iter()
-                    .filter(|p| Path::new(p).exists())
-                    .cloned()
-                    .collect::<HashSet<String>>()
-            })
-        })
-        .await
-        .unwrap_or_default()
-    };
-    listed_as_spelled(existing)
+    if paths.len() < STAT_PAR_THRESHOLD {
+        return listed_as_spelled(paths.into_iter().filter(|p| Path::new(p).exists()).collect());
+    }
+    let pool = pool.clone();
+    tokio::task::spawn_blocking(move || {
+        let existing = pool.install(|| {
+            paths.par_iter().filter(|p| Path::new(p).exists()).cloned().collect::<HashSet<String>>()
+        });
+        listed_as_spelled(existing)
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// Keeps the paths their directory lists under exactly that name, reading each directory once. A

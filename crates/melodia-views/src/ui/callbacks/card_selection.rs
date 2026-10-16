@@ -6,10 +6,9 @@
 //! grid onto another whatever any mount forgets. The section leaves still hand it back, for the
 //! different question `card-selection.slint` argues: a set no grid is showing.
 //!
-//! Not [`crate::ui::list_selection`]: that layer anchors a shift-range on a **row index**, which a
-//! grid cannot offer. Its cards live in chunked rows and a re-sort moves every position, so the
-//! anchor here is an **id** and the range resolves both endpoints against the model at the moment
-//! of the click.
+//! The click itself is [`compute_click_selection`]'s, anchored on an id as the track lists are.
+//! What a grid adds is the scope, and a card order read by flattening its chunked rows, a card
+//! having no flat position to offer.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -17,6 +16,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
+use crate::ui::list_selection::{NO_ANCHOR, compute_click_selection};
 use melodia_ui::{
     Albums, AppWindow, Artists, CardSelection, Favorites, Genres, Playlists, Radio, RecentlyPlayed,
 };
@@ -65,7 +65,7 @@ struct Selection {
     /// `ids` makes one publish cost mounted cards times selected ids. Built beside the `ids` it
     /// mirrors, in [`Selection::new`].
     members: HashSet<i32>,
-    /// The id a shift-range measures from, `0` for none. No card carries id 0.
+    /// The id a shift-range measures from, or [`NO_ANCHOR`].
     anchor: i32,
 }
 
@@ -81,7 +81,7 @@ impl Selection {
 impl Default for Selection {
     /// The empty selection: no scope, so every grid's `selected` reads back `false`.
     fn default() -> Self {
-        Self::new(String::new(), Vec::new(), 0)
+        Self::new(String::new(), Vec::new(), NO_ANCHOR)
     }
 }
 
@@ -135,7 +135,7 @@ pub fn wire(ui: &AppWindow) {
             // whichever card happens to share the number.
             let anchor = {
                 let current = selection.borrow();
-                if current.scope == scope { current.anchor } else { 0 }
+                if current.scope == scope { current.anchor } else { NO_ANCHOR }
             };
             publish(&ui, &selection, Selection::new(scope, ids, anchor));
         });
@@ -150,15 +150,15 @@ pub fn wire(ui: &AppWindow) {
     }
 }
 
+/// The position a card's click passes, a card having none: the grids chunk their rows, so a range
+/// finds the clicked card by its id.
+const NO_POSITION: i32 = -1;
+
 /// The new selection for a click, or `None` where there is nothing to change.
 ///
-/// Plain click selects the one card and moves the anchor, ctrl toggles it, shift takes the range
-/// from the anchor to it in displayed order. A click in a scope that isn't the live one starts
-/// that scope's selection fresh, whatever the modifiers say.
-///
-/// `visible` supplies the displayed-order id list and is only invoked in the shift branch, which
-/// is the whole of what a range costs: [`crate::ui::list_selection::compute_click_selection`]'s
-/// shape, and what keeps the grid walk out of a plain click.
+/// [`compute_click_selection`]'s click within the live scope, `visible` walked only for a range. A
+/// click in a scope that isn't the live one starts that scope's selection fresh, whatever the
+/// modifiers say, the set and anchor held naming another grid's cards.
 fn pick(
     current: &Selection,
     asking_scope: &str,
@@ -170,40 +170,19 @@ fn pick(
     if id == 0 || unnamed_scope(asking_scope) {
         return None;
     }
-    let same_scope = current.scope == asking_scope;
-    // Owned per branch rather than once above them: the plain-click path takes `single`'s own
-    // copy, so a binding up here is an allocation it never reads.
-    let single = |anchor| Selection::new(asking_scope.to_owned(), vec![id], anchor);
-
-    if shift && same_scope && current.anchor != 0 {
-        let visible = visible();
-        let from = visible.iter().position(|&card| card == current.anchor);
-        let to = visible.iter().position(|&card| card == id);
-        // A missing endpoint means the grid re-filtered under the anchor. Fall back to the one
-        // card rather than taking a range measured against a list nobody is looking at.
-        let (Some(from), Some(to)) = (from, to) else {
-            return Some(single(id));
-        };
-        let (lo, hi) = if from <= to { (from, to) } else { (to, from) };
-        return Some(Selection::new(
-            asking_scope.to_owned(),
-            visible[lo..=hi].to_vec(),
-            current.anchor,
-        ));
+    if current.scope != asking_scope {
+        return Some(Selection::new(asking_scope.to_owned(), vec![id], id));
     }
-
-    if ctrl && same_scope {
-        let mut ids = current.ids.clone();
-        match ids.iter().position(|&card| card == id) {
-            Some(at) => {
-                ids.remove(at);
-            }
-            None => ids.push(id),
-        }
-        return Some(Selection::new(asking_scope.to_owned(), ids, id));
-    }
-
-    Some(single(id))
+    let (ids, anchor) = compute_click_selection(
+        current.anchor,
+        current.ids.clone(),
+        visible,
+        NO_POSITION,
+        id,
+        shift,
+        ctrl,
+    );
+    Some(Selection::new(asking_scope.to_owned(), ids, anchor))
 }
 
 /// Store the new selection and mirror it into Slint, bumping the generation that re-runs every

@@ -304,7 +304,7 @@ pub fn restamp_row_selection<V: RowSelectionView>(view: &V, rows: &mut [UiTrackL
 ///
 /// `held` is the whole set, never the rows a filter left on screen: a filter hides a selection,
 /// which the next refilter paints again, where a track gone from the set is one the next batch
-/// action would otherwise still act on. Built only where there is a selection to keep.
+/// action would otherwise still act on. Built only where a selection or an anchor is held.
 pub fn keep_selection_within<V: RowSelectionView>(view: &V, held: impl FnOnce() -> HashSet<i32>) {
     let selected: Vec<i32> = view.selected_ids().iter().collect();
     let anchor = view.anchor();
