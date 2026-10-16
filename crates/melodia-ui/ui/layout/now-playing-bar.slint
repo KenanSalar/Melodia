@@ -4,8 +4,10 @@ import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { WindowChrome } from "../globals/shell.slint";
 import { Settings } from "../settings.slint";
+import { ContextClick } from "../components/context-menu.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { MetaChip } from "../components/meta-chip.slint";
+import { TrackContextMenu } from "../components/track-list/track-context-menu.slint";
 import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
 import { SeekRow } from "../components/now-playing/seek-row.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
@@ -183,6 +185,29 @@ export component NowPlayingBar inherits Rectangle {
                     Nav.pending-enter-from = NavEnterFrom.above;
                     Nav.now-playing-open = !Nav.now-playing-open;
                 }
+                // A station has no `tracks` row for the menu to act on.
+                pointer-event(ev) => {
+                    if (Player.vm.has_track
+                        && ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                        track-menu.show-at(self.mouse-x, self.mouse-y);
+                    }
+                }
+            }
+
+            // The row menu with the playing track as its row. A sibling of the TouchArea, so the
+            // popup's frame is the cell's, the one `mouse-x` reports in.
+            track-menu := TrackContextMenu {
+                row-id: Player.vm.track.id;
+                row-is-favorite: Player.vm.track.is_favorite;
+                album-id: Player.track-album-id;
+                artist-id: Player.track-artist-id;
+                genre-id: Player.track-genre-id;
+                view-context: "now-playing";
+                // The heart's path, which also repaints every list showing this track.
+                toggle-favorite(ids, on) => { Player.toggle-favorite(); }
+                go-to-album(id) => { Player.go-to-album(id); }
+                go-to-artist(id) => { Player.go-to-artist(id); }
+                go-to-genre(id) => { Player.go-to-genre(id); }
             }
         }
 

@@ -111,6 +111,8 @@ fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles)
         .map_err(|e| AppError::io("queue subscriber", e))?;
     ui::shell::bridge::spawn_position_subscriber(weak.clone(), &state.position_tx, shown)
         .map_err(|e| AppError::io("position subscriber", e))?;
+    ui::track_links::spawn_playing_links_subscriber(weak.clone(), state)
+        .map_err(|e| AppError::io("playing-track links subscriber", e))?;
     // Reads the same view model as the first of those, for the ICY titles a station announces.
     // Beside them rather than inside `radio::install`, so every subscription to a player channel
     // is spawned in one place.

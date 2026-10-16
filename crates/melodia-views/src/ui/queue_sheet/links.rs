@@ -14,56 +14,17 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, Weak};
 
 use crate::ui::model_patch::patch_rows_where;
+use crate::ui::track_links::RowLinks;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackLinks;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, Queue, QueueRow};
+use melodia_ui::{AppWindow, Queue};
 
 /// Track id → its FK trio, for every queue row resolved so far this open.
 /// Cleared beside the cover tier when the sheet tears down, so a closed sheet
 /// holds nothing.
 pub(super) type LinkCache = Arc<Mutex<HashMap<i64, TrackLinks>>>;
-
-/// The FK trio as the Slint row spells it: 0 for absent, so the menu's
-/// `album-id != 0` gate reads a missing linkage and a not-yet-fetched one the
-/// same way. That is the honest reading — until the fetch lands, we don't know.
-#[derive(Clone, Copy, Default)]
-pub(super) struct RowLinks {
-    pub album: i32,
-    pub artist: i32,
-    pub genre: i32,
-}
-
-impl RowLinks {
-    /// Write the trio onto a row, and say whether anything moved — which is what
-    /// lets the patch skip a `set_row_data` that would invalidate the
-    /// `ListView`'s delegate cache for nothing.
-    pub(super) fn stamp(self, row: &mut QueueRow) -> bool {
-        if row.album_id == self.album && row.artist_id == self.artist && row.genre_id == self.genre
-        {
-            return false;
-        }
-        row.album_id = self.album;
-        row.artist_id = self.artist;
-        row.genre_id = self.genre;
-        true
-    }
-}
-
-impl From<TrackLinks> for RowLinks {
-    fn from(l: TrackLinks) -> Self {
-        Self {
-            album: to_row_id(l.album_id),
-            artist: to_row_id(l.artist_id),
-            genre: to_row_id(l.genre_id),
-        }
-    }
-}
-
-fn to_row_id(id: Option<i64>) -> i32 {
-    id.and_then(|v| i32::try_from(v).ok()).unwrap_or(0)
-}
 
 /// Resolve the ids the cache is missing and patch them into the live rows.
 ///
@@ -143,7 +104,3 @@ fn patch_rows(ui: &AppWindow, links: &[TrackLinks]) {
         by_id.get(&row.id).is_some_and(|resolved| resolved.stamp(row))
     });
 }
-
-#[cfg(test)]
-#[path = "tests/links_tests.rs"]
-mod tests;

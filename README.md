@@ -88,6 +88,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Queue with shuffle and repeat; playing from any list queues that list behind your pick
 - Hold Previous or Next to scan through a track in short audible jumps that grow the longer you hold, and hold Play/Pause to stop, which takes the track back to its start
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
+- Right-click the playing song in the player bar for the menu its row has in a list: copy its details, add it to a playlist or your favorites, edit its tags, open its folder, or go to its album, artist or genre
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
 - Sample-rate conversion wherever a file's rate isn't the output's or the speed isn't 1×: band-limited to keep the full treble, or linear, light on the CPU at any device rate and the default on Windows, under Settings ▸ Playback ▸ Output. Either way it is carried across gapless track changes and skipped entirely where the rates already match
 - Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next or lyrics, one layout that rearranges as you resize instead of jumping between them

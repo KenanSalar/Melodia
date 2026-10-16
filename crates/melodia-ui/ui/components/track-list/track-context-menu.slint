@@ -10,9 +10,9 @@ import { TrackCopyFields } from "../track-copy-items.slint";
 //
 // **The host says where; this keeps the menu.** A row hands over where the right-click landed
 // through `show-at`, which stores it: an open popup follows its `x`/`y`, so an anchor bound to the
-// row's pointer would drag the menu after it. Two hosts today — `TrackListRowItem` and the queue
-// sheet's `QueueRowItem` — and the second is the reason the entries live here rather than inline in
-// the first.
+// row's pointer would drag the menu after it. Three hosts: `TrackListRowItem`, the queue sheet's
+// `QueueRowItem` and the now-playing bar's track card, which is why the entries live here rather
+// than inline in the first.
 //
 // **The root is zero-size on purpose.** It mounts as a free sibling of the row's TouchArea, so the
 // popup's coordinate frame is the row chrome's, which is the frame `touch.mouse-x` already reports
@@ -30,7 +30,8 @@ export component TrackContextMenu inherits Rectangle {
     in property <int> genre-id;
     // Suppresses the entry naming the surface you are already looking at, and picks the remove
     // arm. One of "tracks", "album-detail", "artist-detail", "genre-detail", "playlist-detail",
-    // "browse", "favorites", "recently_played", "search", "queue"; empty means no suppression.
+    // "browse", "favorites", "recently_played", "search", "queue", "now-playing"; empty means no
+    // suppression.
     in property <string> view-context;
     // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list filters it
     // out so "add to the playlist you're looking at" never appears. 0 = none.
@@ -49,10 +50,15 @@ export component TrackContextMenu inherits Rectangle {
     out property <bool> multi-active: root.row-selected && root.selection-count > 1;
 
     property <int> multi-count: root.selection-count;
-    // The queue *is* the target both of these name, so it takes neither. The separator under them
-    // is on a wider gate: single mode still has Play above it, and only when that is gone too
-    // would it land first in the menu.
-    property <bool> show-queue-actions: root.view-context != "queue";
+    // The bar's card is the track already playing, out of a queue already holding it, and it has
+    // no set to select from.
+    property <bool> on-now-playing: root.view-context == "now-playing";
+    property <bool> show-play: !root.multi-active && !root.on-now-playing;
+    // The queue *is* the target both of these name, so it takes neither, and the playing track is
+    // in it. The separator under them is on a wider gate: single mode still has Play above it, and
+    // only when that is gone too would it land first in the menu.
+    property <bool> show-queue-actions: root.view-context != "queue" && !root.on-now-playing;
+    property <bool> show-selection-actions: !root.on-now-playing;
 
     // One source of truth for the "Go to …" entries, read by each entry's own `if` and by the
     // preceding separator's `any-cross-tab-visible` — so the divider tracks *any* entry being
@@ -149,7 +155,7 @@ export component TrackContextMenu inherits Rectangle {
         // Single-row mode keeps "Play", matching double-click. Over a selection the verb
         // is ambiguous — queue it, or replace the queue with it — so it's dropped; Play
         // Next and Add to Queue read the same either way and stay.
-        if !root.multi-active: MenuItem {
+        if root.show-play: MenuItem {
             label: @tr("Play");
             icon: "play_arrow";
             clicked => {
@@ -179,7 +185,7 @@ export component TrackContextMenu inherits Rectangle {
                 root.dismiss();
             }
         }
-        if root.show-queue-actions || !root.multi-active: MenuSeparator {}
+        if root.show-queue-actions || root.show-play: MenuSeparator {}
 
         // Unconditional — creating a playlist is useful with none.
         MenuItem {
@@ -307,8 +313,8 @@ export component TrackContextMenu inherits Rectangle {
         // rather than a statement about the row. Both go through the host rather than a
         // global: nine list globals keep their own set and the queue a tenth, and this
         // component is deliberately told none of them.
-        MenuSeparator {}
-        MenuItem {
+        if root.show-selection-actions: MenuSeparator {}
+        if root.show-selection-actions: MenuItem {
             label: @tr("Select all");
             icon: "select_all";
             clicked => {

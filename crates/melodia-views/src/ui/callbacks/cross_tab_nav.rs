@@ -1,5 +1,6 @@
 //! Single-home wiring for the `go-to-album` / `go-to-artist` / `go-to-genre` callbacks
-//! every row context menu emits — the track-list views and the queue sheet. Its own module
+//! every row context menu emits — the track-list views, the queue sheet and the
+//! now-playing bar. Its own module
 //! because each per-view callback file would otherwise need all three target UI handles;
 //! instead this runs after every `wire_*`, so the handles are guaranteed to exist.
 //!
@@ -35,7 +36,7 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
     AlbumDetail, Albums, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
-    NavEnterFrom, PlaylistDetail, Queue, RecentlyPlayed, Search, Tracks,
+    NavEnterFrom, Player, PlaylistDetail, Queue, RecentlyPlayed, Search, Tracks,
 };
 
 /// Where the user is standing when a "Go to …" fires: the nav index, plus the My Library
@@ -99,8 +100,9 @@ pub fn wire_cross_tab_nav(
     let weak = ui.as_weak();
 
     // One trio per global, spelled once. A `macro_rules!` rather than a generic fn: these
-    // nine globals, `Tracks`, `Browse` and `Queue` among them, share these three setters and
-    // nothing else, so a trait for them would need an impl macro of its own and save nothing.
+    // ten globals, `Tracks`, `Browse`, `Queue` and `Player` among them, share these three
+    // setters and nothing else, so a trait for them would need an impl macro of its own and
+    // save nothing.
     macro_rules! wire_go_to {
         ($($global:ident),+ $(,)?) => {
             $({
@@ -114,7 +116,7 @@ pub fn wire_cross_tab_nav(
 
     // The row menu hides the entry naming the surface you are already on, so the detail
     // globals still wire all three. `Queue` is the queue sheet's row menu, which dismisses
-    // the sheet before invoking.
+    // the sheet before invoking, and `Player` the now-playing bar's.
     wire_go_to!(
         Tracks,
         Browse,
@@ -125,6 +127,7 @@ pub fn wire_cross_tab_nav(
         GenreDetail,
         RecentlyPlayed,
         Queue,
+        Player,
     );
 
     // Search is the exception: album and artist reuse `Search.open-album` / `open-artist`,

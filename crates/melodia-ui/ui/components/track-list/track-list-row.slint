@@ -65,8 +65,7 @@ export component TrackListRowItem inherits Rectangle {
 
     // Drives context-menu entry visibility (no "Go to Album" inside Album Detail, "Remove from
     // Playlist" only in Playlist Detail) and the current-playlist exclusion in the Add-to-Playlist
-    // sub-list. One of "tracks", "album-detail", "artist-detail", "genre-detail",
-    // "playlist-detail", "browse", "favorites", "search"; empty means no suppression.
+    // sub-list. `TrackContextMenu.view-context` lists the values.
     in property <string> view-context;
     // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list filters it
     // out so "add to the playlist you're looking at" never appears. 0 = none.

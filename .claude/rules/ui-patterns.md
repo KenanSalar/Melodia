@@ -105,8 +105,9 @@ silently miss the other.
   *outside* chips.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
-  the right-click menu's, on rows and cards alike: "Select all" ungated, "Clear selection" gated
-  on the clicked *row* being in the set, so a menu raised beside one still acts on that row alone.
+  the right-click menu's, on rows and cards alike: "Select all" ungated wherever the host has a set,
+  "Clear selection" gated on the clicked *row* being in the set, so a menu raised beside one still
+  acts on that row alone.
   **A card gates it on the scope holding a set instead**, a card having no second activation with
   which to reach a set it can no longer see; `card-context-menu.slint` argues it. The other exits
   are Escape (`Selection.clear-live()`), a section leave, and unpicking the last item. A surface
@@ -578,15 +579,21 @@ three components that answer it, and each argues its geometry at its own file.
 ### Lists and playback
 
 - **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
-  place its entries are mounted.** Two hosts, `TrackListRowItem` and the queue sheet's
-  `QueueRowItem`. It owns the entries, the `multi-active` gate (this row selected *and* more than
-  one selected, so a right-click on an unselected row falls back to that row alone) and the
-  `effective-ids` every handler reads; the host only says where, through `show-at`.
+  place its entries are mounted.** Three hosts: `TrackListRowItem`, the queue sheet's
+  `QueueRowItem` and the now-playing bar's track card. It owns the entries, the `multi-active` gate
+  (this row selected *and* more than one selected, so a right-click on an unselected row falls back
+  to that row alone) and the `effective-ids` every handler reads; the host only says where, through
+  `show-at`.
   **`view-context` is most of what a host configures** — it suppresses the entry naming the
   surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add to
-  Queue outright, the queue being what they name. A remove label handed over by the host would ship
+  Queue outright, the queue being what they name. `"now-playing"` drops those two and Play as well,
+  its row being the track already playing out of a queue that holds it, and the selection group
+  with them, the bar having no set. A remove label handed over by the host would ship
   untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
   rather than a property.
+  **The two hosts with no list row read the "Go to" ids through `ui::track_links`**, `TrackSummary`
+  carrying no foreign keys: the queue sheet per row, the bar once per track change onto
+  `Player.track-{album,artist,genre}-id`.
 
 - **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
