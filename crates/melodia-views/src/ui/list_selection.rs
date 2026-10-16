@@ -3,8 +3,9 @@
 //! math, the diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
 //!
 //! Every list implements the same click semantics (plain click = single, Ctrl = toggle, Shift =
-//! range over the displayed order). The four list views get the whole of it from the three
-//! `*_curated` functions below, wired once by `callbacks::track_list::wire_curated_selection`.
+//! range over the displayed order). The four list views get the whole of it from
+//! [`handle_row_click`], [`select_all_rows`] and [`clear_row_selection`], wired once by
+//! `callbacks::track_list::wire_row_selection`.
 //!
 //! [`crate::ui::track_detail::selection`] is the other consumer of the trait: same accessors,
 //! cache-indexed selection with different complexity trade-offs.
@@ -241,13 +242,7 @@ impl_row_selection_view!(Search);
 impl_row_selection_view!(Tracks, get_rows, set_rows);
 
 /// Compute the new selection set for a list view's row click and apply it, on the UI thread.
-pub fn handle_curated_click<V: RowSelectionView>(
-    view: &V,
-    idx: i32,
-    id: i32,
-    shift: bool,
-    ctrl: bool,
-) {
+pub fn handle_row_click<V: RowSelectionView>(view: &V, idx: i32, id: i32, shift: bool, ctrl: bool) {
     let (new_selected, new_anchor) = compute_click_selection(
         view.anchor(),
         view.selected_ids().iter().collect(),
@@ -262,7 +257,7 @@ pub fn handle_curated_click<V: RowSelectionView>(
     );
 
     let id_set: HashSet<i32> = new_selected.iter().copied().collect();
-    write_curated_selection(view, new_selected);
+    write_row_selection(view, new_selected);
     view.set_anchor(new_anchor);
 
     // Re-stamp per-row `selected` flags so the checkbox + background highlight reflect the new
@@ -270,27 +265,27 @@ pub fn handle_curated_click<V: RowSelectionView>(
     stamp_rows_selected(&view.track_rows(), &id_set);
 }
 
-/// Take every displayed row into a curated page's selection.
+/// Take every displayed row into a list view's selection.
 ///
 /// **The anchor is left where the last click put it**, unlike the clear below: Select All is not
 /// itself a click, so a shift-click after one should still range from whatever the user picked.
 /// The queue's own select-all has said the same since it was written.
-pub fn select_all_curated<V: RowSelectionView>(view: &V) {
+pub fn select_all_rows<V: RowSelectionView>(view: &V) {
     let ids = select_all_ids(&view.track_rows());
-    write_curated_selection(view, ids);
+    write_row_selection(view, ids);
 }
 
-/// Reset a curated page's selection (Escape, the row menu's "Clear selection", and
-/// section-leave). Same diff-then-write shape as [`handle_curated_click`].
-pub fn clear_curated_selection<V: RowSelectionView>(view: &V) {
-    write_curated_selection(view, Vec::new());
+/// Reset a list view's selection (Escape, the row menu's "Clear selection", and
+/// section-leave). Same diff-then-write shape as [`handle_row_click`].
+pub fn clear_row_selection<V: RowSelectionView>(view: &V) {
+    write_row_selection(view, Vec::new());
     view.set_anchor(-1);
     stamp_rows_selected(&view.track_rows(), &HashSet::new());
 }
 
 /// UI-thread-only: re-stamp selection onto a freshly-built row list before it's pushed into the
 /// Slint model, so a filter change / library refresh doesn't drop the user's existing selection.
-pub fn restamp_curated_rows<V: RowSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
+pub fn restamp_row_selection<V: RowSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
     let selected: HashSet<i32> = view.selected_ids().iter().collect();
     restamp_selected(rows, &selected);
 }
@@ -304,7 +299,7 @@ fn row_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
 }
 
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place.
-fn write_curated_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {
+fn write_row_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {
     write_selection_ids(&view.selected_ids(), ids, |m| view.replace_selected_ids(m));
 }
 

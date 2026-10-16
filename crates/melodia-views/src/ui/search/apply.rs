@@ -98,7 +98,7 @@ fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
     let take =
         if g.get_show_all_tracks() { rows.len() } else { rows.len().min(COMPACT_TRACK_LIMIT) };
     let mut shown: Vec<UiTrackListRow> = rows.into_iter().take(take).collect();
-    list_selection::restamp_curated_rows(g, &mut shown);
+    list_selection::restamp_row_selection(g, &mut shown);
     write_track_model(g, shown);
     g.set_tracks_total(total);
 }

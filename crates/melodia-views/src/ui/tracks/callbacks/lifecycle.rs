@@ -52,7 +52,7 @@ pub(super) fn wire(ui: &AppWindow, _state: &AppState, tracks_ui: &Arc<TracksUi>)
             if let Some(ui) = weak.upgrade()
                 && ui.global::<Tracks>().get_selected_ids().row_count() > 0
             {
-                list_selection::clear_curated_selection(&ui.global::<Tracks>());
+                list_selection::clear_row_selection(&ui.global::<Tracks>());
             }
             return;
         }

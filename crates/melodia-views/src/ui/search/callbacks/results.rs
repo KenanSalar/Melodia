@@ -13,7 +13,7 @@ use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::cross_tab_nav;
 use crate::ui::callbacks::macros::wire_row_flag;
 use crate::ui::callbacks::track_list::{
-    play_displayed, wire_curated_selection, wire_queue_actions, wire_toggle_column,
+    play_displayed, wire_queue_actions, wire_row_selection, wire_toggle_column,
 };
 use crate::ui::callbacks::{collect_track_ids, model_track_ids, next_sort, persist_view_sort};
 use crate::ui::search::{SearchUi, apply, fetch};
@@ -43,7 +43,7 @@ pub(super) fn wire(
     wire_toggle_column(&g.as_weak(), state);
     // Ranges over the displayed rows, so a shift-click follows the compact/full toggle and never
     // reaches the rows "Show all" hides.
-    wire_curated_selection(&g.as_weak());
+    wire_row_selection(&g.as_weak());
 }
 
 fn wire_open_album(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {

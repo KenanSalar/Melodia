@@ -67,7 +67,7 @@ where
 
 /// Modifier-aware row clicks, Select All and the clear, for a list view selecting over its displayed
 /// rows. The details select over their cache instead, through [`super::track_detail`].
-pub(in crate::ui) fn wire_curated_selection<G>(weak: &Weak<G>)
+pub(in crate::ui) fn wire_row_selection<G>(weak: &Weak<G>)
 where
     G: RowSelectionView + StrongHandle + 'static,
 {
@@ -76,20 +76,20 @@ where
         let weak = weak.clone();
         g.bind_select_row(move |idx, id, shift, ctrl| {
             let Some(g) = weak.upgrade() else { return };
-            list_selection::handle_curated_click(&g, idx, id, shift, ctrl);
+            list_selection::handle_row_click(&g, idx, id, shift, ctrl);
         });
     }
     {
         let weak = weak.clone();
         g.bind_select_all(move || {
             let Some(g) = weak.upgrade() else { return };
-            list_selection::select_all_curated(&g);
+            list_selection::select_all_rows(&g);
         });
     }
     let weak = weak.clone();
     g.bind_clear_selection(move || {
         let Some(g) = weak.upgrade() else { return };
-        list_selection::clear_curated_selection(&g);
+        list_selection::clear_row_selection(&g);
     });
 }
 

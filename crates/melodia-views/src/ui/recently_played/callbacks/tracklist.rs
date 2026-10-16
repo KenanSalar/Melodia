@@ -15,7 +15,7 @@ use slint::{ComponentHandle, Global as _};
 
 use crate::ui::callbacks::macros::wire_row_flag;
 use crate::ui::callbacks::track_list::{
-    play_displayed, wire_curated_selection, wire_queue_actions, wire_toggle_column,
+    play_displayed, wire_queue_actions, wire_row_selection, wire_toggle_column,
 };
 use crate::ui::callbacks::{collect_track_ids, spawn_play_then_shuffle};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
@@ -32,7 +32,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     wire_row_flags(ui, state, rp_ui);
     wire_filter(ui, state, rp_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_curated_selection(&g.as_weak());
+    wire_row_selection(&g.as_weak());
     wire_shuffle(&g, state, rp_ui);
 }
 

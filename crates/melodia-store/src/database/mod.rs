@@ -107,10 +107,11 @@ where
 pub(crate) const IDS_PER_SET: usize = MAX_BINDS_PER_STATEMENT - 1;
 
 /// One chunk of an `UPDATE … SET col = ? WHERE id IN (…)`: `update_set` with `value` bound to its
-/// one `?`, then `ids`. The caller chunks at [`IDS_PER_SET`] and runs each on its own executor,
-/// some of them holding a transaction.
+/// one `?`, then `ids`. `update_set` is a literal because it is spliced in rather than bound. The
+/// caller chunks at [`IDS_PER_SET`] and runs each on its own executor, some of them holding a
+/// transaction.
 pub(crate) fn set_where_id_in<'v, V>(
-    update_set: &str,
+    update_set: &'static str,
     value: V,
     ids: &[i64],
 ) -> sqlx::query::Query<'static, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>

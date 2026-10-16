@@ -128,7 +128,7 @@ pub fn wire(ui: &AppWindow) {
                 return;
             }
             // The anchor is left where the last pick put it, so a shift-pick after Select All
-            // still ranges from what the user chose; `list_selection::select_all_curated` argues
+            // still ranges from what the user chose; `list_selection::select_all_rows` argues
             // it for the track lists. **Only within the scope that set it**: `pick` drops the
             // anchor on a scope change and this is the one writer that could carry one across,
             // where entity ids all start at 1 and the next shift-range would measure from

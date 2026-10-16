@@ -179,7 +179,7 @@ fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec
         log::warn!("RecentlyPlayed.tracks: VecModel<TrackListRow> downcast failed");
         return;
     };
-    list_selection::restamp_curated_rows(&g, &mut rows);
+    list_selection::restamp_row_selection(&g, &mut rows);
     crate::ui::model_diff::apply_rows_keyed(vec, rows, |r| r.id);
 }
 

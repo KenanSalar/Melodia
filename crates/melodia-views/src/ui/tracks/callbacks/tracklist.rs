@@ -6,7 +6,7 @@ use slint::{ComponentHandle, Global as _, SharedString};
 
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
 use crate::ui::callbacks::track_list::{
-    play_displayed, wire_curated_selection, wire_queue_actions, wire_toggle_column,
+    play_displayed, wire_queue_actions, wire_row_selection, wire_toggle_column,
 };
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, persisted_sort};
 use crate::ui::track_list_view::view_id;
@@ -30,7 +30,7 @@ pub(super) fn wire(
     wire_play_row(ui, state, tracks_ui);
     wire_queue_actions(&tracks, state, collect_track_ids);
     wire_row_flags(ui, state, tracks_ui);
-    wire_curated_selection(&tracks.as_weak());
+    wire_row_selection(&tracks.as_weak());
     wire_toggle_column(&tracks.as_weak(), state);
     wire_refresh(ui, state, tracks_ui);
 }

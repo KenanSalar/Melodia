@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Global as _, SharedString};
 
 use crate::ui::callbacks::macros::wire_row_flag;
 use crate::ui::callbacks::track_list::{
-    play_displayed, wire_curated_selection, wire_queue_actions, wire_toggle_column,
+    play_displayed, wire_queue_actions, wire_row_selection, wire_toggle_column,
 };
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
@@ -26,7 +26,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     wire_filter(ui, fav_ui);
     wire_sort(ui, state, fav_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_curated_selection(&g.as_weak());
+    wire_row_selection(&g.as_weak());
 }
 
 /// Loads the filtered list into the queue and starts on the clicked track;

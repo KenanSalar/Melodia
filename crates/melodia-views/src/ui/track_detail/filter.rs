@@ -4,7 +4,7 @@
 use slint::{Model, ModelRc, VecModel};
 
 use super::DetailCache;
-use crate::ui::list_selection::{RowSelectionView, restamp_curated_rows};
+use crate::ui::list_selection::{RowSelectionView, restamp_row_selection};
 use crate::ui::row_match::track_matches;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::TrackListRow as UiTrackListRow;
@@ -24,7 +24,7 @@ pub fn apply_filtered_detail<V: RowSelectionView>(view: &V, cache: &DetailCache)
         all.iter().filter(|r| track_matches(r, &needle)).cloned().collect()
     };
     let mut rows: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&displayed);
-    restamp_curated_rows(view, &mut rows);
+    restamp_row_selection(view, &mut rows);
     *cache.tracks.lock() = displayed;
     // The anchor is a row index, so it only goes stale when positions moved: a refresh that
     // lands the same ids in the same slots leaves the user's shift range intact.
