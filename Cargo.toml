@@ -256,7 +256,7 @@ tempfile = "3.27.0"
 # no backend of its own: `lofty` already builds `flate2` with its pure-Rust one, and a tree
 # that lost that would fail to compile rather than misbehave. `chrono` is the conversion
 # that dates each entry, without which every extracted file reads 1980; it adds no crate.
-zip = { version = "9.0.3", default-features = false, features = ["chrono", "deflate-flate2"] }
+zip = { version = "9.0.4", default-features = false, features = ["chrono", "deflate-flate2"] }
 # Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
 glob = "0.3.4"
 # Test-only: the translations pin reads the bundled faces' character maps, which needs

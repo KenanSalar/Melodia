@@ -214,6 +214,22 @@ fn a_climb_spelled_with_backslashes_counts_as_unreadable() -> Result<(), AppErro
     Ok(())
 }
 
+/// Inside a `\\?\` path `/` is no separator, so a `../` there hides within one component until
+/// the name is joined onto a real folder.
+#[test]
+fn a_climb_inside_a_verbatim_path_counts_as_unreadable() -> Result<(), AppError> {
+    let bytes = crafted(&[
+        Crafted::File(r"\\?\C:\../escaped.m3u8", b"#EXTM3U\n"),
+        Crafted::File("Kept.m3u8", b"#EXTM3U\n"),
+    ])?;
+
+    let (entries, unreadable) = read_back(bytes)?;
+
+    assert_eq!(entries, [("Kept.m3u8".to_owned(), "#EXTM3U\n".to_owned())]);
+    assert_eq!(unreadable, 1);
+    Ok(())
+}
+
 /// A root or a drive prefix is stripped and a `..` that stays inside folds away, so each of these
 /// names a folder inside the archive rather than counting as unreadable.
 #[test]
