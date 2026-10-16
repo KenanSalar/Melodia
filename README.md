@@ -157,19 +157,19 @@ Measured with [`scripts/measure-linux-footprint.sh`](scripts/measure-linux-footp
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Startup | 29.72 MiB | 87.27 MiB | 80.60 MiB | 159.91 MiB | 29.00 MiB | 0.97% | 0.06% | 0.00% |
-| Idle | 29.86 MiB | 85.04 MiB | 80.27 MiB | 155.33 MiB | 29.00 MiB | 0.05% | 0.00% | 0.00% |
-| Playing, list view | 30.43 MiB | 87.18 MiB | 81.81 MiB | 156.86 MiB | 29.00 MiB | 0.45% | 0.03% | 0.00% |
-| Playing, visualizer live | 30.69 MiB | 89.65 MiB | 84.69 MiB | 159.81 MiB | 27.00 MiB | 2.33% | 0.15% | 2.64% |
+| Startup | 29.98 MiB | 86.83 MiB | 80.41 MiB | 159.33 MiB | 28.00 MiB | 0.98% | 0.06% | 0.03% |
+| Idle | 30.07 MiB | 84.52 MiB | 80.03 MiB | 154.71 MiB | 28.00 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 30.67 MiB | 86.03 MiB | 81.54 MiB | 156.22 MiB | 28.00 MiB | 0.52% | 0.03% | 0.00% |
+| Playing, visualizer live | 30.63 MiB | 88.75 MiB | 84.25 MiB | 159.00 MiB | 27.00 MiB | 2.52% | 0.16% | 4.31% |
 
 With both libraries, 51,012 tracks. The higher PSS and RSS at startup are the library's database, which every connection that read it keeps mapped until it closes; RSS counts it once per connection.
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Startup | 36.02 MiB | 147.60 MiB | 86.11 MiB | 333.03 MiB | 28.00 MiB | 2.08% | 0.13% | 0.00% |
-| Idle | 35.91 MiB | 91.01 MiB | 85.96 MiB | 160.76 MiB | 28.00 MiB | 0.05% | 0.00% | 0.00% |
-| Playing, list view | 36.75 MiB | 92.50 MiB | 87.77 MiB | 162.57 MiB | 28.00 MiB | 0.48% | 0.03% | 0.00% |
-| Playing, visualizer live | 36.28 MiB | 94.83 MiB | 90.11 MiB | 164.97 MiB | 27.00 MiB | 2.35% | 0.15% | 4.31% |
+| Startup | 36.93 MiB | 152.00 MiB | 90.14 MiB | 341.90 MiB | 28.00 MiB | 2.43% | 0.15% | 0.14% |
+| Idle | 36.02 MiB | 92.00 MiB | 87.43 MiB | 162.50 MiB | 28.00 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 36.34 MiB | 93.05 MiB | 88.49 MiB | 163.56 MiB | 28.00 MiB | 0.48% | 0.03% | 0.00% |
+| Playing, visualizer live | 35.21 MiB | 94.71 MiB | 90.15 MiB | 165.28 MiB | 27.00 MiB | 2.48% | 0.16% | 3.10% |
 
 ---
 
@@ -177,19 +177,19 @@ With both libraries, 51,012 tracks. The higher PSS and RSS at startup are the li
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Startup | 29.78 MiB | 89.87 MiB | 82.90 MiB | 162.55 MiB | 33.00 MiB | 1.00% | 0.06% | 0.10% |
-| Idle | 29.78 MiB | 87.86 MiB | 82.43 MiB | 157.83 MiB | 33.00 MiB | 0.07% | 0.00% | 0.00% |
-| Playing, list view | 30.31 MiB | 89.48 MiB | 84.05 MiB | 159.45 MiB | 33.00 MiB | 0.58% | 0.04% | 0.00% |
-| Playing, visualizer live | 30.70 MiB | 90.61 MiB | 85.19 MiB | 160.59 MiB | 34.00 MiB | 2.92% | 0.18% | 4.24% |
+| Startup | 30.16 MiB | 89.40 MiB | 82.90 MiB | 164.05 MiB | 32.00 MiB | 1.07% | 0.07% | 0.03% |
+| Idle | 30.16 MiB | 87.01 MiB | 82.49 MiB | 157.48 MiB | 32.00 MiB | 0.07% | 0.00% | 0.00% |
+| Playing, list view | 30.37 MiB | 88.14 MiB | 83.56 MiB | 158.54 MiB | 32.00 MiB | 0.50% | 0.03% | 0.00% |
+| Playing, visualizer live | 30.97 MiB | 89.28 MiB | 84.70 MiB | 159.68 MiB | 32.00 MiB | 2.75% | 0.17% | 4.93% |
 
 With both libraries, 51,012 tracks:
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Startup | 34.02 MiB | 148.61 MiB | 86.67 MiB | 387.08 MiB | 33.00 MiB | 2.13% | 0.13% | 0.08% |
-| Idle | 33.95 MiB | 91.46 MiB | 86.62 MiB | 162.00 MiB | 33.00 MiB | 0.05% | 0.00% | 0.00% |
-| Playing, list view | 34.63 MiB | 92.73 MiB | 87.89 MiB | 163.27 MiB | 33.00 MiB | 0.52% | 0.03% | 0.14% |
-| Playing, visualizer live | 35.81 MiB | 94.78 MiB | 89.94 MiB | 165.32 MiB | 32.00 MiB | 2.70% | 0.17% | 3.12% |
+| Startup | 34.99 MiB | 151.10 MiB | 87.46 MiB | 339.49 MiB | 36.00 MiB | 2.32% | 0.14% | 0.00% |
+| Idle | 35.05 MiB | 92.20 MiB | 87.54 MiB | 162.82 MiB | 36.00 MiB | 0.12% | 0.01% | 0.00% |
+| Playing, list view | 35.49 MiB | 93.37 MiB | 88.70 MiB | 163.98 MiB | 36.00 MiB | 0.58% | 0.04% | 0.00% |
+| Playing, visualizer live | 37.16 MiB | 95.85 MiB | 91.18 MiB | 166.46 MiB | 34.00 MiB | 3.23% | 0.20% | 2.50% |
 
 Linux keeps no commit charge per process, so **Anonymous** is the figure to compare: the memory Melodia allocated itself, in RAM or in swap, which nothing another process does can move. **PSS** is KDE System Monitor's Memory column. It adds a share of the file-backed pages, mostly the binary and the shared graphics stack rather than anything Melodia allocated, and that share shrinks whenever another program maps the same libraries. **USS** is the part no other process maps, what closing Melodia gives back, and System Monitor's Private column. **RSS** counts every shared page in full. **GPU memory** is the video memory the NVIDIA driver charges to Melodia, where FemtoVG keeps its textures and framebuffers, counted apart from the rest. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as System Monitor's CPU column does. **GPU** is the utilization the NVIDIA driver reports for Melodia, in whole percents each second.
 
