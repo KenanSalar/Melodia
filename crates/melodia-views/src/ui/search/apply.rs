@@ -95,6 +95,8 @@ fn sort_track_rows(
 /// Truncate the Songs rows against the live `show-all-tracks` flag and write
 /// them, with the untruncated total beside them.
 fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
+    // Against the whole result set: the compact view hides the rest rather than dropping it.
+    list_selection::keep_selection_within(g, || rows.iter().map(|row| row.id).collect());
     let take =
         if g.get_show_all_tracks() { rows.len() } else { rows.len().min(COMPACT_TRACK_LIMIT) };
     let mut shown: Vec<UiTrackListRow> = rows.into_iter().take(take).collect();
@@ -222,7 +224,7 @@ pub fn teardown_models_on_leave(ui: &AppWindow) {
     // clean. The user just navigated away — they can't be relying on
     // a sticky selection.
     clear_selected_ids_model(&g);
-    g.set_selection_anchor(-1);
+    g.set_selection_anchor(list_selection::NO_ANCHOR);
 }
 
 fn clear_selected_ids_model(g: &Search) {

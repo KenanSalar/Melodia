@@ -3576,6 +3576,7 @@ dependencies = [
  "melodia-ui",
  "melodia-views",
  "rayon",
+ "reqwest",
  "skrifa 0.48.0",
  "slint",
  "sqlx",

@@ -44,7 +44,7 @@ struct SkipAccess<H>(H);
 
 impl<H: EventHandler> EventHandler for SkipAccess<H> {
     fn handle_event(&mut self, event: notify::Result<Event>) {
-        if matches!(&event, Ok(event) if event.kind.is_access()) {
+        if matches!(&event, Ok(event) if event.kind.is_access() && !event.need_rescan()) {
             return;
         }
         self.0.handle_event(event);

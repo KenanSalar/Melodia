@@ -214,7 +214,6 @@ pub async fn refresh_detail(
         crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
-        selection::prune_selection_to(&g, &tracks);
         // The canonical sets only: the filter pass rewrites the displayed cache and both models,
         // so a live needle survives the refresh with no flash of unfiltered rows.
         artists_ui.detail.cache.set_all_tracks(tracks);

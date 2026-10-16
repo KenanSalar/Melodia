@@ -21,18 +21,25 @@ use melodia_ui::{
     TrackListRow as UiTrackListRow, Tracks,
 };
 
+/// The anchor of a list nothing has been clicked in since its selection was last cleared.
+pub const NO_ANCHOR: i32 = -1;
+
 /// Compute the new `(selected_ids, anchor)` for a row click.
 ///
-/// * plain click → single-row selection, anchor moves to the clicked row
-/// * Ctrl-click  → toggle this row in/out of the existing set
-/// * Shift-click → range select from the current anchor to this row, in the
-///   *displayed* order; the anchor stays put
+/// The anchor is the **id** of the row last clicked rather than its position, so a range runs from
+/// that row wherever a re-sort or a refilter has since moved it.
 ///
-/// `visible_ids` supplies the displayed-order id list and is only invoked in
-/// the Shift branch, so callers with an expensive projection don't pay it on
-/// plain clicks.
+/// * plain click → single-row selection, the anchor moving to the clicked row
+/// * Ctrl-click  → toggle this row in or out of the set, the anchor moving to it
+/// * Shift-click → the displayed rows from the anchor's to this one, the anchor staying put; with
+///   no anchor, or the anchor's row filtered out, it is a plain click
+///
+/// `visible_ids` supplies the displayed-order id list and is only invoked in the Shift branch, so
+/// callers with an expensive projection don't pay it on plain clicks. `idx` is the clicked row's
+/// position, trusted where it names `id` and looked up by id otherwise. A row listed as `0` keeps
+/// its place in that list and stays out of a range, which is how Browse's disk-only rows ride it.
 pub fn compute_click_selection(
-    cur_anchor: i32,
+    anchor: i32,
     cur_selected: Vec<i32>,
     visible_ids: impl FnOnce() -> Vec<i32>,
     idx: i32,
@@ -40,27 +47,29 @@ pub fn compute_click_selection(
     shift: bool,
     ctrl: bool,
 ) -> (Vec<i32>, i32) {
-    if shift && cur_anchor >= 0 {
+    if shift && anchor != NO_ANCHOR {
         let ids = visible_ids();
-        if ids.is_empty() {
-            (vec![id], idx)
-        } else {
-            let last = i32::try_from(ids.len().saturating_sub(1)).unwrap_or(i32::MAX);
-            let lo = usize::try_from(cur_anchor.min(idx).clamp(0, last)).unwrap_or(0);
-            let hi = usize::try_from(cur_anchor.max(idx).clamp(0, last)).unwrap_or(0);
-            (ids[lo..=hi].to_vec(), cur_anchor)
+        let from = ids.iter().position(|&shown| shown == anchor);
+        let to = usize::try_from(idx)
+            .ok()
+            .filter(|&at| ids.get(at) == Some(&id))
+            .or_else(|| ids.iter().position(|&shown| shown == id));
+        if let (Some(from), Some(to)) = (from, to) {
+            let range = ids[from.min(to)..=from.max(to)].iter().copied();
+            return (range.filter(|&shown| shown != 0).collect(), anchor);
         }
-    } else if ctrl {
+        return (vec![id], id);
+    }
+    if ctrl {
         let mut next = cur_selected;
         if let Some(pos) = next.iter().position(|&v| v == id) {
             next.remove(pos);
         } else {
             next.push(id);
         }
-        (next, idx)
-    } else {
-        (vec![id], idx)
+        return (next, id);
     }
+    (vec![id], id)
 }
 
 /// Re-stamp `selected: bool` on every visible row to match `desired`. Rows
@@ -176,7 +185,7 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
 /// [`crate::ui::track_detail::selection`] because the *logic* differs between the two layers and
 /// the accessors don't.
 pub trait RowSelectionView {
-    /// The shift-range anchor row index (`-1` = no anchor).
+    /// The id of the row a shift-range runs from, or [`NO_ANCHOR`].
     fn anchor(&self) -> i32;
     fn set_anchor(&self, anchor: i32);
     /// The currently-selected track ids model.
@@ -279,7 +288,7 @@ pub fn select_all_rows<V: RowSelectionView>(view: &V) {
 /// section-leave). Same diff-then-write shape as [`handle_row_click`].
 pub fn clear_row_selection<V: RowSelectionView>(view: &V) {
     write_row_selection(view, Vec::new());
-    view.set_anchor(-1);
+    view.set_anchor(NO_ANCHOR);
     stamp_rows_selected(&view.track_rows(), &HashSet::new());
 }
 
@@ -288,6 +297,31 @@ pub fn clear_row_selection<V: RowSelectionView>(view: &V) {
 pub fn restamp_row_selection<V: RowSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
     let selected: HashSet<i32> = view.selected_ids().iter().collect();
     restamp_selected(rows, &selected);
+}
+
+/// Drops every id the list no longer holds from a view's selection, the anchor with it, when the
+/// set behind the list changes. UI-thread only.
+///
+/// `held` is the whole set, never the rows a filter left on screen: a filter hides a selection,
+/// which the next refilter paints again, where a track gone from the set is one the next batch
+/// action would otherwise still act on. Built only where there is a selection to keep.
+pub fn keep_selection_within<V: RowSelectionView>(view: &V, held: impl FnOnce() -> HashSet<i32>) {
+    let selected: Vec<i32> = view.selected_ids().iter().collect();
+    let anchor = view.anchor();
+    if selected.is_empty() && anchor == NO_ANCHOR {
+        return;
+    }
+    let held = held();
+    if !held.contains(&anchor) {
+        view.set_anchor(NO_ANCHOR);
+    }
+    let kept: Vec<i32> = selected.iter().copied().filter(|id| held.contains(id)).collect();
+    if kept.len() == selected.len() {
+        return;
+    }
+    let kept_set: HashSet<i32> = kept.iter().copied().collect();
+    write_row_selection(view, kept);
+    stamp_rows_selected(&view.track_rows(), &kept_set);
 }
 
 /// Every row's id in display order, one per row so a click's index still names its row.

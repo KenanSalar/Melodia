@@ -9,28 +9,18 @@
 //! inputs to the shared comparator have to agree field for field.
 
 use super::*;
+use crate::ui::fixtures::{four_tracks, track_row, visible_rows};
 
 /// A row with a distinct value in every searchable field, so a needle can
 /// only be answered by the field it names.
 fn row(id: i64) -> RsTrackListRow {
     RsTrackListRow {
-        id,
-        title: "Ghost Town".to_owned(),
         artist: Some("The Specials".to_owned()),
         album_artist: Some("Various Artists".to_owned()),
         album: Some("More Specials".to_owned()),
         genre: Some("Ska".to_owned()),
-        track_number: None,
-        disc_number: None,
         year: Some(1981),
-        artwork_path: None,
-        duration_ms: 0,
-        is_favorite: false,
-        rating: 0,
-        album_id: None,
-        artist_id: None,
-        genre_id: None,
-        sort_key: None,
+        ..track_row(id, "Ghost Town")
     }
 }
 
@@ -222,6 +212,17 @@ fn a_filter_narrows_both_walks_the_same_way() {
     assert_eq!(snap.total(), 4);
 }
 
+/// A selection is kept to these on a refetch, and a filter hides a pick rather than dropping it.
+#[test]
+fn the_held_ids_are_every_stored_track_whatever_the_filter() {
+    let cache = TrackListCache::new();
+    cache.store(four_tracks(), "title", "asc");
+
+    let held = visible_rows(&cache, "ha").held_ids();
+
+    assert_eq!(held, HashSet::from([1, 2, 3, 4]));
+}
+
 #[test]
 fn a_removal_keeps_the_order_pointing_at_the_rows_it_names() {
     // Favorites removes a row when it is unfavourited, which is the one
@@ -267,12 +268,56 @@ fn a_single_row_patch_reaches_a_live_snapshot() {
     cache.set_favorite(1, true);
     let after = cache.snapshot();
 
-    let rating_of = |snap: &Arc<CacheData>| {
-        shown(snap, "").into_iter().find(|r| r.id == 1).map(|r| (r.rating, r.is_favorite))
-    };
+    assert_eq!(marks_of(&before, 1), Some((5, true)));
+    assert_eq!(marks_of(&after, 1), Some((5, true)));
+}
 
-    assert_eq!(rating_of(&before), Some((5, true)));
-    assert_eq!(rating_of(&after), Some((5, true)));
+/// The rating and favourite `snap` paints for `id`.
+fn marks_of(snap: &Arc<CacheData>, id: i32) -> Option<(i32, bool)> {
+    shown(snap, "").into_iter().find(|r| r.id == id).map(|r| (r.rating, r.is_favorite))
+}
+
+/// The marks are moved out of each converted row at store time, so a store that failed to carry
+/// the fetched values across would paint every heart and star on both Songs lists empty.
+#[test]
+fn a_fetched_rating_and_favourite_reach_the_row() {
+    let cache = TrackListCache::new();
+    let rated = RsTrackListRow { rating: 4, is_favorite: true, ..track_row(1, "Rated") };
+    cache.store(vec![rated, track_row(2, "Plain")], "title", "asc");
+
+    let snap = cache.snapshot();
+
+    assert_eq!((marks_of(&snap, 1), marks_of(&snap, 2)), (Some((4, true)), Some((0, false))));
+}
+
+/// A header click replaces only the order, so the list still holding the snapshot from before it
+/// keeps reading the marks a later patch writes.
+#[test]
+fn a_patch_after_a_resort_reaches_the_snapshot_taken_before_it() {
+    let cache = TrackListCache::new();
+    cache.store(sortable_rows(), "title", "asc");
+    let before = cache.snapshot();
+    cache.resort("title", "desc");
+
+    cache.set_rating(1, 5);
+
+    assert_eq!(marks_of(&before, 1), Some((5, false)));
+}
+
+/// A removal is the one place two snapshots stop sharing marks, so it copies them, and a copy that
+/// lost the values would blank every other row's stars when one is unfavourited. The list on
+/// screen holds a snapshot, which is what makes the removal copy rather than shorten in place.
+#[test]
+fn a_removal_carries_the_marks_it_copies() {
+    let cache = TrackListCache::new();
+    cache.store(sortable_rows(), "title", "asc");
+    cache.set_rating(1, 5);
+    cache.set_favorite(1, true);
+    let _on_screen = cache.snapshot();
+
+    cache.remove(3);
+
+    assert_eq!(marks_of(&cache.snapshot(), 1), Some((5, true)));
 }
 
 #[test]

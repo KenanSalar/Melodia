@@ -206,11 +206,9 @@ pub async fn refresh_detail(
         g.set_genre(header);
         crate::ui::hero_chips::publish_genre(&ui, &detail, fold, on_screen);
 
-        // Prune `selected-ids` to ids that still exist, then let the shared filter pass
-        // re-derive the displayed cache and the model from the canonical set. It diffs, so a
-        // scan that touched unrelated files writes back only the rows whose content moved and
-        // keeps the shift-range anchor.
-        selection::prune_selection_to(&g, &tracks);
+        // The shared filter pass re-derives the displayed cache and the model from the canonical
+        // set, and drops from the selection whatever left it. It diffs, so a scan that touched
+        // unrelated files writes back only the rows whose content moved.
         genres_ui.detail.set_all_tracks(tracks);
         filter::apply_filtered_detail(&g, &genres_ui.detail);
     });

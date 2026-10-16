@@ -6,14 +6,14 @@ use std::collections::HashSet;
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use super::BrowseUi;
+use crate::ui::list_selection::{NO_ANCHOR, compute_click_selection};
 use crate::ui::util::clamp_i64_to_i32;
+use melodia_core::entities::browse::BrowseFile;
 use melodia_ui::{AppWindow, Browse};
 
-/// Compute the new selection state for a row click and apply it. Mirrors
-/// `list_selection::handle_row_click`, with one Browse-specific guard: disk-only
-/// rows have `id == 0` (which would collide in an id-keyed selection
-/// model), so they're never selectable — the handler returns early on
-/// `id == 0` and filters `0`s out of any shift-range result.
+/// Compute the new selection state for a row click and apply it, through
+/// `list_selection`'s click semantics. Disk-only rows all share `id == 0`,
+/// which an id-keyed selection cannot hold, so a click on one is ignored.
 ///
 /// Runs on the UI thread (called from `on_select_row`).
 pub fn handle_select_row(
@@ -28,44 +28,24 @@ pub fn handle_select_row(
         return;
     }
     let g = ui.global::<Browse>();
-    let cur_anchor = g.get_selection_anchor();
-    let cur_selected: Vec<i32> = g.get_selected_ids().iter().collect();
-
-    let (new_selected, new_anchor) = if shift && cur_anchor >= 0 {
-        // Range select over the displayed rows (`last_files` order).
-        let files = browse_ui.last_files.lock();
-        if files.is_empty() {
-            (vec![id], idx)
-        } else {
-            let last = i32::try_from(files.len().saturating_sub(1)).unwrap_or(i32::MAX);
-            let lo = usize::try_from(cur_anchor.min(idx).clamp(0, last)).unwrap_or(0);
-            let hi = usize::try_from(cur_anchor.max(idx).clamp(0, last)).unwrap_or(0);
-            // Disk-only rows in the span are skipped — they aren't
-            // selectable and all share `id == 0`.
-            let range: Vec<i32> = files[lo..=hi]
-                .iter()
-                .filter_map(|f| {
-                    let rid = clamp_i64_to_i32(f.row.id);
-                    (f.in_library && rid != 0).then_some(rid)
-                })
-                .collect();
-            if range.is_empty() { (vec![id], idx) } else { (range, cur_anchor) }
-        }
-    } else if ctrl {
-        let mut next = cur_selected.clone();
-        if let Some(pos) = next.iter().position(|&v| v == id) {
-            next.remove(pos);
-        } else {
-            next.push(id);
-        }
-        (next, idx)
-    } else {
-        (vec![id], idx)
-    };
+    let (new_selected, new_anchor) = compute_click_selection(
+        g.get_selection_anchor(),
+        g.get_selected_ids().iter().collect(),
+        || row_ids(&browse_ui.last_files.lock()),
+        idx,
+        id,
+        shift,
+        ctrl,
+    );
 
     write_selection(&g, new_selected);
     g.set_selection_anchor(new_anchor);
     apply_selection_to_rows(&g);
+}
+
+/// Every displayed row's id, a disk-only row's as `0`, so a click's index still names its row.
+fn row_ids(files: &[BrowseFile]) -> Vec<i32> {
+    files.iter().map(|f| if f.in_library { clamp_i64_to_i32(f.row.id) } else { 0 }).collect()
 }
 
 /// Take every displayed row into the selection. Disk-only rows drop out inside
@@ -81,7 +61,7 @@ pub fn select_all(ui: &AppWindow) {
 pub fn clear_selection(ui: &AppWindow) {
     let g = ui.global::<Browse>();
     write_selection(&g, Vec::new());
-    g.set_selection_anchor(-1);
+    g.set_selection_anchor(NO_ANCHOR);
     crate::ui::list_selection::stamp_rows_selected(&g.get_rows(), &HashSet::new());
 }
 
@@ -90,7 +70,7 @@ pub fn clear_selection(ui: &AppWindow) {
 /// carry `selected: false`, so there's nothing per-row to undo.
 pub(super) fn reset_selection(g: &Browse) {
     write_selection(g, Vec::new());
-    g.set_selection_anchor(-1);
+    g.set_selection_anchor(NO_ANCHOR);
 }
 
 /// Flip each row's `selected` flag to match the current `selected-ids` set, this view's
@@ -114,3 +94,7 @@ pub(super) fn write_selection(g: &Browse, ids: Vec<i32>) {
     }
     g.set_selection_generation(g.get_selection_generation().wrapping_add(1));
 }
+
+#[cfg(test)]
+#[path = "tests/selection_tests.rs"]
+mod tests;

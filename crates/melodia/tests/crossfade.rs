@@ -789,6 +789,7 @@ async fn a_seek_over_an_unclaimed_handover_is_refused() -> std::io::Result<()> {
 /// Rate only, because the channel count is what [`pull`] reads a frame by. The ratio is the
 /// half of this a reopen can get wrong: a converter left stepping at the old one would play the
 /// rest of the fade pitched, which the position below would show as time running fast or slow.
+/// Both resamplers, the reshape moving each from copying the source to interpolating it.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_crossfade_carries_on_through_an_output_reopen() -> std::io::Result<()> {
     /// Device time pulled after the reshape, over which the clock has to advance as much media.
@@ -797,30 +798,46 @@ async fn a_crossfade_carries_on_through_an_output_reopen() -> std::io::Result<()
     const CLOCK_SLACK_MS: u64 = 2;
 
     let fx = fixture()?;
-    let (engine, mut mix) = player()?;
-    start(&engine, &fx.track_a);
-    let _ = pull(&mut mix, WARMUP_FRAMES * 2);
+    for resampler in [Resampler::Linear, Resampler::BandLimited] {
+        let (engine, mut mix) = player()?;
+        engine.set_resampler(resampler);
+        start(&engine, &fx.track_a);
+        let _ = pull(&mut mix, WARMUP_FRAMES * 2);
 
-    crossfade_into(&engine, &fx.track_b);
-    let before_reopen = pull(&mut mix, frames_for_ms(FADE_MS / 2));
-    assert_no_clipping(&before_reopen, "first half of the fade");
+        crossfade_into(&engine, &fx.track_b);
+        let before_reopen = pull(&mut mix, frames_for_ms(FADE_MS / 2));
+        assert_no_clipping(&before_reopen, &format!("{resampler:?}: first half of the fade"));
 
-    mix.reshape(shape(CHANNELS, REOPENED_RATE));
+        mix.reshape(shape(CHANNELS, REOPENED_RATE));
 
-    let started_at = engine.query_position();
-    let after_reopen = pull(&mut mix, frames_at(REOPENED_RATE, MEASURED_MS));
-    let advanced = engine.query_position() - started_at;
-    assert_no_clipping(&after_reopen, "the fade after a reopen");
-    assert_holds_at(&after_reopen, AMPLITUDE, AMPLITUDE * SKEW, "mid-overlap sum after a reopen");
-    assert!(
-        advanced.abs_diff(MEASURED_MS) <= CLOCK_SLACK_MS,
-        "{MEASURED_MS} ms at the new rate moved the clock {advanced} ms: the converter is stepping at the old ratio"
-    );
+        let started_at = engine.query_position();
+        let after_reopen = pull(&mut mix, frames_at(REOPENED_RATE, MEASURED_MS));
+        let advanced = engine.query_position() - started_at;
+        assert_no_clipping(&after_reopen, &format!("{resampler:?}: the fade after a reopen"));
+        assert_holds_at(
+            &after_reopen,
+            AMPLITUDE,
+            AMPLITUDE * SKEW,
+            &format!("{resampler:?}: mid-overlap sum after a reopen"),
+        );
+        assert!(
+            advanced.abs_diff(MEASURED_MS) <= CLOCK_SLACK_MS,
+            "{resampler:?}: {MEASURED_MS} ms at the new rate moved the clock {advanced} ms, the converter stepping at the old ratio"
+        );
 
-    pull_lenient(&mut mix, frames_at(REOPENED_RATE, FADE_MS / 4) + WARMUP_FRAMES);
-    let after_fade = pull(&mut mix, frames_at(REOPENED_RATE, 200));
-    assert!(!engine.is_crossfading(), "the outgoing deck must still drain when its ramp lands");
-    assert_holds_at(&after_fade, AMPLITUDE, 1e-3, "deck B alone after a reopen");
+        pull_lenient(&mut mix, frames_at(REOPENED_RATE, FADE_MS / 4) + WARMUP_FRAMES);
+        let after_fade = pull(&mut mix, frames_at(REOPENED_RATE, 200));
+        assert!(
+            !engine.is_crossfading(),
+            "{resampler:?}: the outgoing deck must still drain when its ramp lands"
+        );
+        assert_holds_at(
+            &after_fade,
+            AMPLITUDE,
+            1e-3,
+            &format!("{resampler:?}: deck B alone after a reopen"),
+        );
+    }
     Ok(())
 }
 
@@ -829,13 +846,13 @@ async fn a_crossfade_carries_on_through_an_output_reopen() -> std::io::Result<()
 /// of stream. It has to survive the reshape and take over with no gap, from its own top.
 ///
 /// The two tracks sit at different levels so the handover can be seen, and a frame of silence
-/// between them is the one thing the boundary window may not contain.
+/// between them is the one thing the boundary window may not contain. Both resamplers, since the
+/// seam carries a different converter state through the reshape under each.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io::Result<()> {
     const NEXT_LEVEL: f32 = AMPLITUDE / 2.0;
-    /// The reopened rate puts the seam through the band-limited kernel, chosen below as the
-    /// harder case, which rings on the step between the two levels by up to the Gibbs overshoot of
-    /// a sharp filter. A frame of silence dips almost to zero, far past that.
+    /// The kernel rings on the step between the two levels by up to the Gibbs overshoot of a sharp
+    /// filter, where linear doesn't ring. A frame of silence dips almost to zero, far past either.
     const RINGING: f32 = (AMPLITUDE - NEXT_LEVEL) * 0.09;
     /// How far into the successor the pull runs past the first track's one second.
     const INTO_NEXT_MS: u64 = 500;
@@ -848,35 +865,45 @@ async fn a_staged_gapless_track_takes_over_through_an_output_reopen() -> std::io
     write_dc_wav(&first, 1, AMPLITUDE, AMPLITUDE)?;
     write_dc_wav(&next, 6, NEXT_LEVEL, NEXT_LEVEL)?;
 
-    let (engine, mut mix) = player()?;
-    engine.set_resampler(Resampler::BandLimited);
-    start(&engine, &first.to_string_lossy());
-    let _ = pull(&mut mix, WARMUP_FRAMES);
-    engine.preload_gapless(Some(&next.to_string_lossy()), TrackReplayGain::default());
-    assert!(engine.is_gapless_preloaded(), "the next track must really be staged");
+    for resampler in [Resampler::Linear, Resampler::BandLimited] {
+        let (engine, mut mix) = player()?;
+        engine.set_resampler(resampler);
+        start(&engine, &first.to_string_lossy());
+        let _ = pull(&mut mix, WARMUP_FRAMES);
+        engine.preload_gapless(Some(&next.to_string_lossy()), TrackReplayGain::default());
+        assert!(
+            engine.is_gapless_preloaded(),
+            "{resampler:?}: the next track must really be staged"
+        );
 
-    let played_ms = engine.query_position();
-    mix.reshape(shape(CHANNELS, REOPENED_RATE));
+        let played_ms = engine.query_position();
+        mix.reshape(shape(CHANNELS, REOPENED_RATE));
 
-    let remaining_ms = 1_000 - played_ms;
-    let across = pull(&mut mix, frames_at(REOPENED_RATE, remaining_ms + INTO_NEXT_MS));
-    let quietest = across.iter().fold(f32::MAX, |low, s| low.min(*s));
-    assert!(
-        quietest >= NEXT_LEVEL - RINGING,
-        "the handover after a reopen dipped to {quietest}: a gap between the two tracks"
-    );
-    assert_eq!(
-        engine.check_playback_state(),
-        PlaybackCheck::GaplessTransition,
-        "the staged track must take over the voice rather than the deck running dry"
-    );
+        let remaining_ms = 1_000 - played_ms;
+        let across = pull(&mut mix, frames_at(REOPENED_RATE, remaining_ms + INTO_NEXT_MS));
+        let quietest = across.iter().fold(f32::MAX, |low, s| low.min(*s));
+        assert!(
+            quietest >= NEXT_LEVEL - RINGING,
+            "{resampler:?}: the handover after a reopen dipped to {quietest}, a gap between the two tracks"
+        );
+        assert_eq!(
+            engine.check_playback_state(),
+            PlaybackCheck::GaplessTransition,
+            "{resampler:?}: the staged track must take over the voice rather than the deck running dry"
+        );
 
-    let settled = pull(&mut mix, frames_at(REOPENED_RATE, 100));
-    assert_holds_at(&settled, NEXT_LEVEL, 1e-3, "the successor after a reopen");
-    let position = engine.query_position();
-    assert!(
-        position.abs_diff(INTO_NEXT_MS + 100) <= CLOCK_SLACK_MS,
-        "the successor reads {position} ms, not its own top plus what was pulled of it"
-    );
+        let settled = pull(&mut mix, frames_at(REOPENED_RATE, 100));
+        assert_holds_at(
+            &settled,
+            NEXT_LEVEL,
+            1e-3,
+            &format!("{resampler:?}: the successor after a reopen"),
+        );
+        let position = engine.query_position();
+        assert!(
+            position.abs_diff(INTO_NEXT_MS + 100) <= CLOCK_SLACK_MS,
+            "{resampler:?}: the successor reads {position} ms, not its own top plus what was pulled of it"
+        );
+    }
     Ok(())
 }

@@ -61,6 +61,66 @@ async fn get_artists_without_images() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The cutoff the miss tests ask at, standing for now less the retry window.
+const CUTOFF: i64 = 1_000_000;
+
+/// A search that found nothing is retried once it is older than the window, and a miss on the
+/// cutoff still counts as recent. Written raw, so the recorder isn't a second reason to fail.
+#[tokio::test]
+async fn an_artist_sits_the_search_out_until_its_miss_is_older_than_the_cutoff()
+-> Result<(), AppError> {
+    let rows =
+        [(None, true), (Some(CUTOFF - 1), true), (Some(CUTOFF), false), (Some(CUTOFF + 1), false)];
+    for (missed_at, listed) in rows {
+        let db = setup_seeded_db().await?;
+        sqlx::query("UPDATE artists SET image_search_missed_at = ? WHERE name = 'Artist A'")
+            .bind(missed_at)
+            .execute(db.write())
+            .await?;
+
+        let artists = queries::artist::get_artists_without_images(&db, CUTOFF).await?;
+
+        let artist_a_listed = artists.iter().any(|artist| artist.name == "Artist A");
+        assert_eq!(artist_a_listed, listed, "a miss recorded at {missed_at:?}");
+    }
+    Ok(())
+}
+
+/// Stamped on the artists named, at the time given, and on nothing else. A second past the
+/// cutoff, so the boundary above isn't a second reason for this to fail.
+#[tokio::test]
+async fn a_recorded_miss_names_exactly_the_artists_it_was_given() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let artist_a: i64 = sqlx::query_scalar("SELECT id FROM artists WHERE name = 'Artist A'")
+        .fetch_one(db.read())
+        .await?;
+
+    queries::artist::mark_image_search_missed(&db, &[artist_a], CUTOFF + 1).await?;
+
+    let still_searched: Vec<String> = queries::artist::get_artists_without_images(&db, CUTOFF)
+        .await?
+        .into_iter()
+        .map(|artist| artist.name)
+        .collect();
+    assert_eq!(still_searched, ["Artist B"]);
+    Ok(())
+}
+
+/// Every batch of an image pass records its misses, most of them none.
+#[tokio::test]
+async fn marking_no_artist_writes_nothing() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+
+    queries::artist::mark_image_search_missed(&db, &[], CUTOFF).await?;
+
+    let marked: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM artists WHERE image_search_missed_at IS NOT NULL")
+            .fetch_one(db.read())
+            .await?;
+    assert_eq!(marked, 0);
+    Ok(())
+}
+
 #[tokio::test]
 async fn update_artist_image_path() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;

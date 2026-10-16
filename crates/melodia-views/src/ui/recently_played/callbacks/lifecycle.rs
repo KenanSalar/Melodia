@@ -9,6 +9,7 @@ use async_compat::Compat;
 use slint::ComponentHandle;
 
 use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
+use crate::ui::list_selection::NO_ANCHOR;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::recently_played::NAV_RECENTLY_PLAYED;
 use crate::ui::recently_played::{
@@ -81,7 +82,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                     &g.get_selected_ids(),
                     "recently_played: clear selected-ids",
                 );
-                g.set_selection_anchor(-1);
+                g.set_selection_anchor(NO_ANCHOR);
                 // The card grid's set goes back with the models it describes;
                 // `card-selection.slint` argues why it cannot outlive the leave.
                 ui.global::<CardSelection>().invoke_clear();

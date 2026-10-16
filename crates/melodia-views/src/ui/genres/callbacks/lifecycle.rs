@@ -14,6 +14,7 @@ use slint::ComponentHandle;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::detail_view::release_shared_hero;
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
+use crate::ui::list_selection::NO_ANCHOR;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::signal::on_signal;
@@ -61,7 +62,7 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>
             let d = ui.global::<GenreDetail>();
             clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "genres: clear detail tracks");
             clear_vec_model::<i32>(&d.get_selected_ids(), "genres: clear detail selection");
-            d.set_selection_anchor(-1);
+            d.set_selection_anchor(NO_ANCHOR);
             // Six heroes share one colour set and one chip row; this one has
             // no images to release, so it takes the shared pair alone rather
             // than the full `release_detail_hero_images`.

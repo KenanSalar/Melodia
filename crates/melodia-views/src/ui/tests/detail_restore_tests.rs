@@ -16,7 +16,7 @@
 //! `detail-restoring` predicate its own sheet declares, where Radio's three tab bodies read
 //! `Radio.restoring` directly, so each sheet is walked on its own terms.
 
-use melodia_testkit::{strip_line_comments, tab_body_branches};
+use melodia_testkit::{block_after, strip_line_comments, tab_body_branches};
 
 const SHEET: &str = include_str!("../../../../melodia-ui/ui/views/my-library-view.slint");
 const RADIO_SHEET: &str = include_str!("../../../../melodia-ui/ui/views/radio-view.slint");
@@ -34,15 +34,37 @@ const DETAIL_TABS: [(&str, &str, &str); 4] = [
     ("tab-playlists", "playlist-open", "PlaylistDetail"),
 ];
 
-/// The five seeds, each named for the failure message. Radio is not a My Library tab and its
-/// flag lives on its own global, but the Rust half of the contract is the same one and it is the
-/// half a seed gets wrong.
-const SEEDS: [(&str, &str); 5] = [
-    ("albums", include_str!("../albums/detail.rs")),
-    ("artists", include_str!("../artists/detail.rs")),
-    ("genres", include_str!("../genres/detail.rs")),
-    ("playlists", include_str!("../playlists/detail.rs")),
-    ("radio", include_str!("../radio/detail.rs")),
+/// The five seeds, each named for the failure message beside the function that raises its flag
+/// and the open it waits on. Radio is not a My Library tab and its flag lives on its own global,
+/// but the Rust half of the contract is the same one and it is the half a seed gets wrong. The four
+/// My Library seeds reopen through `restore_detail`, which a hidden tab's first enter calls as well.
+const SEEDS: [(&str, &str, &str, &str); 5] = [
+    ("albums", include_str!("../albums/detail.rs"), "pub fn restore_detail", "open_album("),
+    ("artists", include_str!("../artists/detail.rs"), "pub fn restore_detail", "open_artist("),
+    ("genres", include_str!("../genres/detail.rs"), "pub fn restore_detail", "open_genre("),
+    (
+        "playlists",
+        include_str!("../playlists/detail.rs"),
+        "pub fn restore_detail",
+        "open_playlist(",
+    ),
+    (
+        "radio",
+        include_str!("../radio/detail.rs"),
+        "pub fn seed_detail_from_settings",
+        "open_station(",
+    ),
+];
+
+/// The launch's seed and the first enter's resume, shared by the four My Library details.
+const RESTORE: &str = include_str!("../track_detail/restore.rs");
+
+/// The four My Library tabs' section gates.
+const LIFECYCLES: [(&str, &str); 4] = [
+    ("albums", include_str!("../albums/callbacks/lifecycle.rs")),
+    ("artists", include_str!("../artists/callbacks/lifecycle.rs")),
+    ("genres", include_str!("../genres/callbacks/lifecycle.rs")),
+    ("playlists", include_str!("../playlists/callbacks/lifecycle.rs")),
 ];
 
 /// The sheet with its comments dropped, so prose about the fix can't satisfy a pin.
@@ -60,9 +82,9 @@ fn grid_branch<'a>(sheet: &'a str, tab: &str, open: &str) -> &'a str {
         .unwrap_or_default()
 }
 
-/// The body of `seed_detail_from_settings`, or the empty string where the pin has lost it.
-fn seed_body(source: &str) -> &str {
-    source.split_once("pub fn seed_detail_from_settings").map_or("", |(_, body)| body)
+/// The body of the function `entry` opens, or the empty string where the pin has lost it.
+fn restore_body(source: &str, entry: &str) -> String {
+    block_after(&strip_line_comments(source), entry).to_owned()
 }
 
 /// A grid mounted while its own detail is still being fetched paints the page the user is
@@ -96,13 +118,13 @@ fn the_predicate_answers_for_every_detail_the_page_drills_into() {
     }
 }
 
-/// **The raise has to be synchronous.** `seed_detail_from_settings` runs inside `install_views`,
-/// well before `app.show()`, and that is the whole window it has: moved inside the spawn it lands
-/// after the first paint and the flash comes back with every other line of the fix still in place.
+/// **The raise has to be synchronous.** A launch's reopen runs inside `install_views`, well before
+/// `app.show()`, and that is the whole window it has: moved inside the spawn it lands after the
+/// first paint and the flash comes back with every other line of the fix still in place.
 #[test]
 fn every_seed_raises_the_flag_before_it_spawns_the_fetch() {
-    for (view, source) in SEEDS {
-        let seed = seed_body(source);
+    for (view, source, entry, _) in SEEDS {
+        let seed = restore_body(source, entry);
         let raise = seed.find("set_restoring(true)").unwrap_or(usize::MAX);
         // `.spawn(`, not `runtime.spawn(`: a seed that moves its own `state` into the block has to
         // clone the `Arc<Runtime>` out first, so the receiver is not a fixed spelling. Narrowed
@@ -121,12 +143,83 @@ fn every_seed_raises_the_flag_before_it_spawns_the_fetch() {
 /// grid back rather than an empty page.
 #[test]
 fn every_seed_lowers_the_flag_again_whatever_the_fetch_did() {
-    for (view, source) in SEEDS {
+    for (view, source, _, _) in SEEDS {
         assert_eq!(
             source.matches("set_restoring(false)").count(),
             1,
             "{view} must hand `restoring` back exactly once, off the end of the fetch"
         );
+    }
+}
+
+/// Lowered ahead of the open's own hop, the flag hands the grid back for the length of the fetch,
+/// and the arrival latch reads a fall with nothing open as a restore that found nothing, so the
+/// detail then arrives with the body fade the restore exists to suppress.
+#[test]
+fn every_restore_lowers_the_flag_only_after_its_open() {
+    for (view, source, entry, open) in SEEDS {
+        let restore = restore_body(source, entry);
+
+        let opened = restore.find(open);
+        let lowered = restore.find("set_restoring(false)");
+
+        assert!(
+            opened.is_some() && lowered > opened,
+            "{view} lowers `restoring` at {lowered:?}, not after `{open}` at {opened:?}"
+        );
+    }
+}
+
+/// A launch onto the tab its detail sits on reopens it straight away; behind another tab it
+/// would publish into globals another tab is painting.
+#[test]
+fn the_launch_reopens_the_shown_tabs_detail_at_once() {
+    let restore = strip_line_comments(RESTORE);
+    let seed = block_after(&restore, "pub fn seed_or_defer");
+
+    assert!(
+        seed.trim_end().ends_with("restore(ui, state, view, id);"),
+        "the seed no longer ends by reopening the shown tab's detail: {seed}"
+    );
+}
+
+/// A hidden tab's seed parks the id and stops there, or the launch decodes a hero and covers for
+/// a detail nothing draws.
+#[test]
+fn a_hidden_tab_reopens_nothing_at_launch() {
+    let restore = strip_line_comments(RESTORE);
+    let seed = block_after(&restore, "pub fn seed_or_defer");
+
+    let hidden = block_after(seed, "if !tab_is_mounted(ui, V::TAB)");
+
+    assert!(hidden.contains("return;"), "the hidden arm falls through to the reopen: {hidden}");
+}
+
+/// What the first enter is handed it reopens, and a detail a drill opened first keeps it from
+/// being handed anything.
+#[test]
+fn the_first_enter_reopens_what_the_launch_parked() {
+    let restore = strip_line_comments(RESTORE);
+    let resume = block_after(&restore, "pub fn resume_deferred");
+
+    let read = (
+        resume.contains("take_deferred_restore(|| view.detail_open())"),
+        resume.contains("restore(&ui, state, view, id);"),
+    );
+
+    assert_eq!(read, (true, true), "(asks whether a detail is open, reopens): {resume}");
+}
+
+/// A gate's enter arm is the tab's first enter; in the leave arm the parked reopen would land on a
+/// tab the user just left.
+#[test]
+fn every_gate_resumes_on_its_enter_arm() {
+    for (view, lifecycle) in LIFECYCLES {
+        let lifecycle = strip_line_comments(lifecycle);
+
+        let enter = block_after(&lifecycle, "if active {");
+
+        assert!(enter.contains("restore::resume_deferred("), "{view}'s enter arm: {enter}");
     }
 }
 

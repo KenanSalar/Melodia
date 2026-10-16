@@ -123,6 +123,22 @@ fn the_launch_fetches_only_the_grid_of_the_tab_it_shows() {
     );
 }
 
+/// The Songs tab is the grids' rule over the whole library: fetched while hidden it converts
+/// every track and decodes covers nothing draws, and skipped unmarked its first enter finds the
+/// flag clean and the list empty.
+#[test]
+fn the_launch_fetches_songs_only_when_it_shows_them() {
+    let hydrate = melodia_testkit::strip_line_comments(HYDRATE);
+    let fetch = melodia_testkit::block_after(&hydrate, "pub fn spawn_initial_tracks_fetch");
+
+    let hidden_arm = melodia_testkit::block_after(fetch, "if !tracks_ui.section_active()");
+
+    assert!(
+        hidden_arm.contains("tracks_ui.mark_dirty();") && hidden_arm.contains("return;"),
+        "a hidden Songs tab must skip the launch fetch and mark itself dirty: {hidden_arm}"
+    );
+}
+
 /// The retune has to be **registered as well as scheduled**, and the two are one closure so
 /// nothing warns when only half of it survives.
 ///

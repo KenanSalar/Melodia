@@ -19,6 +19,7 @@
 //! it**, so cloning bumps five refcounts rather than duplicating a `Box<str>` per row, and a
 //! re-sort, replacing `order` alone, copies none of the others.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -309,6 +310,11 @@ impl VisibleRows {
     /// Every id in display order, read in place.
     pub fn ids(&self) -> impl Iterator<Item = i32> + '_ {
         self.indices().iter().map(|&i| self.data.rows[i].id)
+    }
+
+    /// Every id the snapshot holds, the ones the filter hides included.
+    pub fn held_ids(&self) -> HashSet<i32> {
+        self.data.rows.iter().map(|row| row.id).collect()
     }
 
     /// Whether display position `pos` paints the same row here as in `other`.

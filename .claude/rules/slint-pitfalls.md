@@ -19,8 +19,8 @@ this file is what builds, looks right, and is wrong.
   A zero-width clip is a tempting way to hide something while keeping its ids readable, but the
   clip applies while the box is open too, and a box sized to its content leaves no room for what a
   control paints outside its own geometry: a focus swell, a drop shadow, a tooltip. It bit the
-  shared tab header's search box, whose swollen ends were shaved flat and whose focus shadow was
-  cut into a box. Collapse through `visible` instead: `passes/visible.rs` lowers it to a `Clip`
+  shared tab header's search box, whose swollen ends were shaved flat. Collapse through `visible`
+  instead: `passes/visible.rs` lowers it to a `Clip`
   whose `clip` is `!visible`, so the element is clipped only while hidden, and hidden it draws
   nothing and takes no events. Layouts are lowered before that pass, so the element's own width
   constraints still collapse it (`tab-search-header.slint`).

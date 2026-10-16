@@ -647,8 +647,9 @@ three components that answer it, and each argues its geometry at its own file.
   implements beside the column state, plus the `play-row` tail as `play_displayed`. A list
   supplies only what differs: its id source, and Browse its non-zero id filter. **Selection is
   shared there too, by the four flat list views**: `wire_row_selection` over
-  `list_selection::RowSelectionView`, ranging over the rows on screen. Browse keeps its own for
-  its disk-only rows, and the details select through `track_detail::selection`.
+  `list_selection::RowSelectionView`, ranging over the rows on screen. Browse keeps its own
+  wiring for its disk-only rows and the details select through `track_detail::selection`, both
+  over the same `compute_click_selection`, whose anchor is the id of the row last clicked.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to

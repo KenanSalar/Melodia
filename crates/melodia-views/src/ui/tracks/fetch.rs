@@ -6,6 +6,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Weak};
 
 use super::TracksUi;
+use crate::ui::list_selection;
 use crate::ui::row_match::fold_needle;
 use crate::ui::track_list_cache::{CacheData, VisibleRows};
 use crate::ui::track_list_model::TrackListModel;
@@ -96,6 +97,7 @@ fn apply(weak: &Weak<AppWindow>, snapshot: Arc<CacheData>, filter: &str) {
         g.set_total_count(total);
         let rows = g.get_rows();
         if let Some(model) = TrackListModel::installed(&rows, "Tracks.rows") {
+            list_selection::keep_selection_within(&g, || visible.held_ids());
             model.show(visible);
         }
     });

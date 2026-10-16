@@ -36,6 +36,9 @@ const POPUP_SURFACE: &str =
 /// The editing half every single-line field mounts, the search bar included.
 const SINGLE_LINE_INPUT: &str =
     include_str!("../../../../melodia-ui/ui/components/single-line-input.slint");
+/// The right-click menu every single-line field mounts.
+const TEXT_EDIT_MENU: &str =
+    include_str!("../../../../melodia-ui/ui/components/text-edit-menu.slint");
 const MULTILINE_INPUT: &str =
     include_str!("../../../../melodia-ui/ui/components/multiline-input.slint");
 const TOOLTIP: &str = include_str!("../../../../melodia-ui/ui/components/tooltip.slint");
@@ -243,6 +246,22 @@ fn the_tooltip_pill_is_capped() {
         src.contains("width: parent.width - 16px; wrap: word-wrap;"),
         "tooltip.slint's label is no longer bounded and wrapped, so the cap would clip it"
     );
+}
+
+/// The edit menu takes the keyboard while it is up, so a field reading its input's focus alone
+/// dims under its own menu: the accent border goes and the search bar shrinks back. Both halves
+/// are needed, the field reading the menu's flag and the menu publishing its popup's.
+#[test]
+fn a_field_reads_as_focused_while_its_edit_menu_is_open() {
+    let field = normalized(&code(SINGLE_LINE_INPUT));
+    let menu = normalized(&code(TEXT_EDIT_MENU));
+
+    let read = (
+        binding_value(&field, "out property <bool> has-focus:").trim(),
+        binding_value(&menu, "out property <bool> is-open:").trim(),
+    );
+
+    assert_eq!(read, ("ti.has-focus || menu.is-open", "menu.is-open"), "(field, menu)");
 }
 
 /// A pill with a child under any opacity short of 1.0 renders into a layer of its own, so a

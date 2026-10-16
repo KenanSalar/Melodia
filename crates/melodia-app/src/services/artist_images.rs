@@ -12,7 +12,7 @@ use melodia_net::media::fetch::deezer::{self, DeezerAnswer};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 
-use crate::state::AppState;
+use crate::state::{AppState, Signal};
 
 /// How long a definitive "no match" stands before the artist is searched again.
 ///
@@ -41,6 +41,40 @@ enum FetchOutcome {
     /// tripped quota, which the remaining batches would spend on refusals too —
     /// so this stops the pass. Nothing is recorded, so the next scan retries.
     Refused(String),
+}
+
+/// What a search's answer leaves the pass to do for one artist.
+enum Searched {
+    /// An image to download.
+    Found(String),
+    /// Nothing to download, for this reason.
+    Settled(FetchOutcome),
+}
+
+/// Reads Deezer's answer to the search for `name`. Only a definitive "no match" becomes
+/// [`FetchOutcome::NoMatch`], the one answer recorded for the retry window, so a misfiled arm
+/// blanks an artist for a month rather than for a scan.
+fn judge(name: &str, answer: AppResult<DeezerAnswer<String>>) -> Searched {
+    match answer {
+        Ok(DeezerAnswer::Body(Some(url))) => Searched::Found(url),
+        Ok(DeezerAnswer::Body(None)) => Searched::Settled(FetchOutcome::NoMatch),
+        Ok(DeezerAnswer::HttpStatus(status)) => {
+            log::warn!("Deezer answered HTTP {status} searching for '{name}'");
+            Searched::Settled(FetchOutcome::Transient)
+        }
+        Ok(DeezerAnswer::ApiError { message, code }) => {
+            let reason = format!("{message} (code {code})");
+            if deezer::halts_a_batch(code) {
+                return Searched::Settled(FetchOutcome::Refused(reason));
+            }
+            log::warn!("Deezer refused the search for '{name}': {reason}");
+            Searched::Settled(FetchOutcome::Transient)
+        }
+        Err(e) => {
+            log::warn!("Deezer search failed for '{name}': {}", describe(&e));
+            Searched::Settled(FetchOutcome::Transient)
+        }
+    }
 }
 
 /// Deezer's ceiling is 50 requests per 5 s per IP, and the Discord presence path
@@ -110,14 +144,33 @@ pub async fn fetch_artist_images(
         return Ok(0);
     }
     let _guard = PassGuard;
+    run_passes(&PASS_REQUESTED_AGAIN, || run_pass(paths, db, client)).await
+}
 
+/// Runs `pass` until one halts or no request landed while it ran, answering with every image the
+/// passes stored.
+///
+/// A re-run that fails still answers with what the passes before it stored: those images are in
+/// the database, and the bump the caller makes for them is the only thing that repaints the lists.
+async fn run_passes<Pass, Run>(requested_again: &AtomicBool, mut pass: Pass) -> AppResult<u32>
+where
+    Pass: FnMut() -> Run,
+    Run: Future<Output = AppResult<PassOutcome>>,
+{
     let mut fetched_total: u32 = 0;
     loop {
-        PASS_REQUESTED_AGAIN.store(false, Ordering::Release);
-        let outcome = run_pass(paths, db, client).await?;
+        requested_again.store(false, Ordering::Release);
+        let outcome = match pass().await {
+            Ok(outcome) => outcome,
+            Err(e) if fetched_total > 0 => {
+                log::warn!("Artist image re-run failed: {}", describe(&e));
+                return Ok(fetched_total);
+            }
+            Err(e) => return Err(e),
+        };
         fetched_total = fetched_total.saturating_add(outcome.fetched);
 
-        if outcome.halted || !PASS_REQUESTED_AGAIN.load(Ordering::Acquire) {
+        if outcome.halted || !requested_again.load(Ordering::Acquire) {
             return Ok(fetched_total);
         }
         log::debug!("artist image fetch: re-running for a scan that landed mid-pass");
@@ -154,25 +207,10 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
             let dir = artists_dir.clone();
 
             set.spawn(async move {
-                let url = match deezer::search_artist_image_url(&client, &name).await {
-                    Ok(DeezerAnswer::Body(Some(url))) => url,
-                    Ok(DeezerAnswer::Body(None)) => return (id, name, FetchOutcome::NoMatch),
-                    Ok(DeezerAnswer::HttpStatus(status)) => {
-                        log::warn!("Deezer answered HTTP {status} searching for '{name}'");
-                        return (id, name, FetchOutcome::Transient);
-                    }
-                    Ok(DeezerAnswer::ApiError { message, code }) => {
-                        let reason = format!("{message} (code {code})");
-                        if deezer::halts_a_batch(code) {
-                            return (id, name, FetchOutcome::Refused(reason));
-                        }
-                        log::warn!("Deezer refused the search for '{name}': {reason}");
-                        return (id, name, FetchOutcome::Transient);
-                    }
-                    Err(e) => {
-                        log::warn!("Deezer search failed for '{name}': {}", describe(&e));
-                        return (id, name, FetchOutcome::Transient);
-                    }
+                let answer = deezer::search_artist_image_url(&client, &name).await;
+                let url = match judge(&name, answer) {
+                    Searched::Found(url) => url,
+                    Searched::Settled(outcome) => return (id, name, outcome),
                 };
 
                 match download_and_store(&client, &url, dir).await {
@@ -255,22 +293,28 @@ async fn download_and_store(
 }
 
 /// Spawn a background task to fetch artist images. Fire-and-forget.
-///
-/// Bumps `library_changed` once if the pass stored any image. Nothing else tells a painted
-/// Artists grid its rows now have one, and the pass outlives the scan whose bump it would
-/// otherwise have to ride.
 pub fn spawn_fetch(state: &AppState) {
     let paths = Arc::clone(&state.paths);
     let db = state.db.clone();
     let client = state.http_client().clone();
     let library_changed = state.library_changed.clone();
-    tokio::spawn(async move {
-        match fetch_artist_images(&paths, &db, &client).await {
-            Ok(0) => {}
-            Ok(_) => library_changed.bump(),
-            Err(e) => log::warn!("Background artist image fetch failed: {}", describe(&e)),
-        }
-    });
+    tokio::spawn(async move { fetch_and_announce(&paths, &db, &client, &library_changed).await });
+}
+
+/// A pass, and one bump of `library_changed` if it stored any image. Nothing else tells a painted
+/// Artists grid its rows now have one, and the pass outlives the scan whose bump it would
+/// otherwise have to ride.
+async fn fetch_and_announce(
+    paths: &Paths,
+    db: &DbPool,
+    client: &reqwest::Client,
+    library_changed: &Signal,
+) {
+    match fetch_artist_images(paths, db, client).await {
+        Ok(0) => {}
+        Ok(_) => library_changed.bump(),
+        Err(e) => log::warn!("Background artist image fetch failed: {}", describe(&e)),
+    }
 }
 
 #[cfg(test)]

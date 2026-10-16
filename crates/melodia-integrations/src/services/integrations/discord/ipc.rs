@@ -52,9 +52,9 @@ const READ_TIMEOUT: Duration = Duration::from_secs(2);
 /// A connected IPC endpoint. Both concrete types implement `Read + Write`, so
 /// the framing/worker code is generic over the platform.
 #[cfg(unix)]
-type Connection = UnixStream;
+pub(crate) type Connection = UnixStream;
 #[cfg(windows)]
-type Connection = std::fs::File;
+pub(crate) type Connection = std::fs::File;
 
 /// A request from the service to the worker. All four variants are used — the
 /// service sends `Enable`/`Disable` from the settings toggle and `Apply`/`Clear`
@@ -85,7 +85,12 @@ enum ServeOutcome {
 /// never registered with the task tracker (at quit the socket simply closes,
 /// which makes Discord drop the card). Publishes connection state through
 /// `status`; connect/reconnect failures stay silent (logged), never a toast.
-pub(crate) fn run_worker(rx: &mpsc::Receiver<Command>, status: &Arc<StatusCell>) {
+/// `connect` opens the socket, [`connect`] in the app.
+pub(crate) fn run_worker(
+    rx: &mpsc::Receiver<Command>,
+    status: &Arc<StatusCell>,
+    connect: &dyn Fn() -> Option<Connection>,
+) {
     let pid = std::process::id();
     let mut nonce: u64 = 0;
     let mut desired: Option<Presence> = None;
@@ -372,7 +377,7 @@ fn socket_bases() -> &'static [String] {
 /// Probe `discord-ipc-{0..10}` across every base/subdir and take the first that
 /// opens. `None` when Discord isn't running.
 #[cfg(unix)]
-fn connect() -> Option<Connection> {
+pub(super) fn connect() -> Option<Connection> {
     use std::fmt::Write as _;
     let mut path = String::with_capacity(64);
     for base in socket_bases() {
@@ -395,7 +400,7 @@ fn connect() -> Option<Connection> {
 /// FILE_WRITE_DATA` (the file-specific read/write pair a named pipe accepts) —
 /// **not** `GENERIC_READ | GENERIC_WRITE` (`0xC0000000`); do not "correct" it.
 #[cfg(windows)]
-fn connect() -> Option<Connection> {
+pub(super) fn connect() -> Option<Connection> {
     use std::os::windows::fs::OpenOptionsExt;
     for i in 0..10 {
         let path = format!(r"\\?\pipe\discord-ipc-{i}");

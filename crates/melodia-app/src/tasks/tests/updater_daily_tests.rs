@@ -3,37 +3,25 @@ use super::*;
 // The pure-logic helpers. Everything async, and everything needing the Slint event loop, is
 // covered a layer down in `services::updater`.
 
-#[test]
-fn needs_check_returns_true_when_never_checked() {
-    assert!(needs_check(0));
-    assert!(needs_check(-1));
-}
+/// The instant the table below is read at.
+const NOW: i64 = 1_760_000_000;
 
+/// A day to the second, and a second either side of it. A stamp ahead of now is a clock stepped
+/// back, which waits rather than checking again.
 #[test]
-fn needs_check_returns_true_after_24h() {
-    let now = now_unix();
-    assert!(needs_check(now - ONE_DAY_SECS));
-    assert!(needs_check(now - (ONE_DAY_SECS + 1)));
-}
-
-#[test]
-fn needs_check_returns_false_inside_24h() {
-    let now = now_unix();
-    // 1 minute ago.
-    assert!(!needs_check(now - 60));
-    // 23h59m ago.
-    assert!(!needs_check(now - (ONE_DAY_SECS - 60)));
-}
-
-#[test]
-fn needs_check_returns_false_for_future_timestamp() {
-    // A `last_check_unix` ahead of `now` (clock skew, NTP step)
-    // produces a negative elapsed time. `needs_check` compares
-    // against `ONE_DAY_SECS` and so returns false — we skip the
-    // check rather than re-firing, which is the safe behavior
-    // (a check from "the future" suggests an unreliable clock).
-    let future = now_unix() + 3600;
-    assert!(!needs_check(future));
+fn a_check_is_due_from_exactly_one_day_after_the_last() {
+    let rows = [
+        ("never checked", 0, true),
+        ("a stamp before the epoch", -1, true),
+        ("exactly a day ago", NOW - ONE_DAY_SECS, true),
+        ("a second short of a day", NOW - ONE_DAY_SECS + 1, false),
+        ("a second past a day", NOW - ONE_DAY_SECS - 1, true),
+        ("a minute ago", NOW - 60, false),
+        ("an hour ahead", NOW + 3_600, false),
+    ];
+    for (what, last_check, due) in rows {
+        assert_eq!(needs_check(last_check, NOW), due, "{what}");
+    }
 }
 
 #[test]

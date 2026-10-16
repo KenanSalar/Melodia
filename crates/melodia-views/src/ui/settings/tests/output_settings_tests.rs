@@ -1,22 +1,27 @@
-//! Tests for the Output card's pickers: what a pick changes, what a listing of the cards shows, and
-//! the chip orders Rust and the card each spell. Applying a pick opens a device, and is tested by
-//! hand.
+//! Tests for the Output card's pickers: what a pick changes, what a listing of the cards shows, the
+//! chip orders Rust and the card each spell, and the lock that orders two picks in flight. Applying
+//! a pick opens a device, and is tested by hand.
 
 use std::time::Duration;
 
 use slint::SharedString;
 
 use melodia_engine::player::engine::backend::OutputChoice;
+use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{
     Drive, ExclusiveTuning, OutputDevice, OutputMode,
 };
-use melodia_testkit::{array_body, binding_value, strip_line_comments};
+use melodia_testkit::{array_body, binding_value, block_body, strip_line_comments};
 
-use super::{PERIOD_PRESETS, Picked, mode_from_index, mode_index, period_index};
+use super::{
+    PERIOD_PRESETS, Picked, Shadowed, mode_from_index, mode_index, period_index,
+    resampler_from_index, resampler_index,
+};
 
 const OUTPUT_SECTION: &str =
     include_str!("../../../../../melodia-ui/ui/views/settings/output-section.slint");
 const SETTINGS: &str = include_str!("../../../../../melodia-ui/ui/settings.slint");
+const OUTPUT_SETTINGS_RS: &str = include_str!("../output_settings.rs");
 
 fn card(name: &str) -> OutputDevice {
     OutputDevice { id: format!("hw:CARD={name},DEV=0"), name: name.to_owned() }
@@ -288,4 +293,86 @@ fn the_settings_global_reads_the_exclusive_chip_as_exclusive() {
     let reads = format!("root.output-mode-idx == {}", mode_index(OutputMode::Exclusive));
 
     assert!(chosen.contains(&reads), "exclusive-chosen reads {chosen:?}");
+}
+
+/// The chip order Rust and the card each spell, as for the mode's. Drifted, the card lights Linear
+/// for a saved kernel, and picking Band-Limited picks linear.
+#[test]
+fn each_resampler_chip_names_the_resampler_at_its_index() {
+    let src = strip_line_comments(OUTPUT_SECTION);
+    let chips = chip_options(&src, "Settings.output-resampler-idx");
+    for (resampler, label) in
+        [(Resampler::Linear, "\"Linear\""), (Resampler::BandLimited, "\"Band-Limited\"")]
+    {
+        let chip = usize::try_from(resampler_index(resampler)).ok().and_then(|i| chips.get(i));
+
+        assert_eq!(chip.map(String::as_str), Some(label), "{resampler:?}");
+    }
+}
+
+/// The card is seeded from the saved resampler and a click hands back an index, so the two
+/// directions have to agree or a launch lights one chip and a click on it picks the other.
+#[test]
+fn each_saved_resampler_lights_the_chip_that_picks_it_back() {
+    for resampler in [Resampler::Linear, Resampler::BandLimited] {
+        assert_eq!(resampler_from_index(resampler_index(resampler)), resampler);
+    }
+}
+
+/// The Signal Path's sample rate row says how the rate is converted off
+/// `Settings.resampler-linear`, which reads the chip's index itself.
+#[test]
+fn the_settings_global_reads_the_linear_chip_as_linear() {
+    let src = strip_line_comments(SETTINGS);
+    let linear = binding_value(&src, "out property <bool> resampler-linear:");
+
+    let reads = format!("root.output-resampler-idx == {}", resampler_index(Resampler::Linear));
+
+    assert!(linear.contains(&reads), "resampler-linear reads {linear:?}");
+}
+
+/// Two picks in flight run on the pool in either order, and whichever takes the lock last has to
+/// apply and persist the newest. That holds only while the lock spans the apply, the engine and
+/// the settings file each taking a lock of their own.
+#[test]
+fn apply_latest_holds_the_apply_lock_until_the_apply_returns() {
+    let shadow = Shadowed::new(0);
+
+    let held = shadow.apply_latest(|picked| *picked, |_| shadow.applying.try_lock().is_none());
+
+    assert!(held, "a second task could take the apply lock while the first was applying");
+}
+
+/// A click takes the pick's own lock, and the apply behind it can be a device open.
+#[test]
+fn a_pick_can_land_while_an_apply_is_in_flight() {
+    let shadow = Shadowed::new(0);
+
+    let free = shadow.apply_latest(|picked| *picked, |_| shadow.picked.try_lock().is_some());
+
+    assert!(free, "a click would wait out the device open in flight");
+}
+
+/// A task that captured its value races the next commit's task on the pool, and either can land
+/// last, leaving the engine and the file on a value the user only passed through.
+#[test]
+fn every_pick_applied_on_the_pool_reads_its_shadow() {
+    let src = strip_line_comments(OUTPUT_SETTINGS_RS);
+    let applies: Vec<(&str, &str)> = src
+        .match_indices("persist_blocking(")
+        .filter_map(|(at, _)| {
+            let label = src[at..].split('"').nth(1)?;
+            let open = at + src[at..].find('{')?;
+            Some((label, block_body(&src, open)?))
+        })
+        .collect();
+
+    let captured: Vec<&str> = applies
+        .iter()
+        .filter(|(_, body)| !body.contains("apply_latest("))
+        .map(|(label, _)| *label)
+        .collect();
+
+    assert!(applies.len() >= 4, "the walk lost the card's pool applies: {applies:?}");
+    assert_eq!(captured, Vec::<&str>::new());
 }

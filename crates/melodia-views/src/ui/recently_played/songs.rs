@@ -13,7 +13,7 @@ use super::state::SongsTotals;
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::list_selection;
 use crate::ui::row_match::{self, Needle};
-use crate::ui::util::len_as_i32;
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
@@ -179,6 +179,9 @@ fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec
         log::warn!("RecentlyPlayed.tracks: VecModel<TrackListRow> downcast failed");
         return;
     };
+    list_selection::keep_selection_within(&g, || {
+        rp_ui.state().tracks_all.lock().iter().map(|row| clamp_i64_to_i32(row.id)).collect()
+    });
     list_selection::restamp_row_selection(&g, &mut rows);
     crate::ui::model_diff::apply_rows_keyed(vec, rows, |r| r.id);
 }

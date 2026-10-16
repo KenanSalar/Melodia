@@ -4,14 +4,15 @@
 use slint::{Model, ModelRc, VecModel};
 
 use super::DetailCache;
-use crate::ui::list_selection::{RowSelectionView, restamp_row_selection};
+use crate::ui::list_selection::{RowSelectionView, keep_selection_within, restamp_row_selection};
 use crate::ui::row_match::track_matches;
+use crate::ui::util::clamp_i64_to_i32;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Re-walks the canonical set through the needle, pushes the survivors into the model and keeps
-/// the displayed cache in lockstep. Selection is re-stamped and the shift-range anchor dropped
-/// if row positions moved. UI thread.
+/// the displayed cache in lockstep. A selection is kept to the canonical set and re-stamped. UI
+/// thread.
 ///
 /// Returns whether the model was reset. Anything a caller holds that is keyed on a row index
 /// rather than an id, Playlist Detail's in-flight drag, is stale exactly then, and the reset
@@ -19,6 +20,9 @@ use melodia_ui::TrackListRow as UiTrackListRow;
 pub fn apply_filtered_detail<V: RowSelectionView>(view: &V, cache: &DetailCache) -> bool {
     let needle = cache.needle();
 
+    keep_selection_within(view, || {
+        cache.all_tracks.lock().iter().map(|r| clamp_i64_to_i32(r.id)).collect()
+    });
     let displayed: Vec<RsTrackListRow> = {
         let all = cache.all_tracks.lock();
         all.iter().filter(|r| track_matches(r, &needle)).cloned().collect()
@@ -26,12 +30,7 @@ pub fn apply_filtered_detail<V: RowSelectionView>(view: &V, cache: &DetailCache)
     let mut rows: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&displayed);
     restamp_row_selection(view, &mut rows);
     *cache.tracks.lock() = displayed;
-    // The anchor is a row index, so it only goes stale when positions moved: a refresh that
-    // lands the same ids in the same slots leaves the user's shift range intact.
     let was_reset = install_tracks(view, rows);
-    if was_reset {
-        view.set_anchor(-1);
-    }
     *cache.applied_selection.lock() = view.selected_ids().iter().collect();
     was_reset
 }
@@ -51,3 +50,7 @@ pub fn install_tracks<V: RowSelectionView>(view: &V, rows: Vec<UiTrackListRow>) 
         true
     }
 }
+
+#[cfg(test)]
+#[path = "tests/filter_tests.rs"]
+mod tests;

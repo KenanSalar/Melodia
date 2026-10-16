@@ -10,6 +10,7 @@ use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
+use crate::ui::list_selection::NO_ANCHOR;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::signal::on_signal;
@@ -77,7 +78,7 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>
             release_detail_hero_images(&ui, &d);
             clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "albums: clear detail tracks");
             clear_vec_model::<i32>(&d.get_selected_ids(), "albums: clear detail selection");
-            d.set_selection_anchor(-1);
+            d.set_selection_anchor(NO_ANCHOR);
             // The card grid's set goes back with the models it describes;
             // `card-selection.slint` argues why it cannot outlive the leave.
             ui.global::<CardSelection>().invoke_clear();

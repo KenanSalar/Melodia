@@ -171,6 +171,25 @@ fn the_position_counts_media_frames_rather_than_output_frames() {
     }
 }
 
+/// The kernel pulls frames past the one it interpolates, and those are counted before anyone hears
+/// them. At twice the speed its reach is 128 frames, about 2.9 ms, so an ear left on the pulled
+/// count would read that far ahead; linear reads one frame ahead, too little to tell from rounding.
+#[test]
+fn the_ear_is_read_off_the_converters_lookahead() {
+    let (voice, mut pull) = pair(mono(RATE));
+    voice.set_resampler(Resampler::BandLimited);
+    voice.set_speed(2.0);
+    voice.append(seconds_of(1, RATE));
+    pump(&mut pull, 4_410);
+
+    let heard = voice.heard(Duration::ZERO);
+
+    assert!(
+        heard.abs_diff(Duration::from_millis(200)) < Duration::from_micros(500),
+        "the ear read {heard:?}, ahead of the 8,820 frames it has interpolated"
+    );
+}
+
 #[test]
 fn a_paused_voice_neither_advances_its_clock_nor_contributes() {
     let (voice, mut pull) = pair(mono(RATE));
@@ -475,27 +494,48 @@ fn a_second_source_is_converted_from_its_own_rate() {
 /// over, window, fraction and weights. Restarting the kernel at the seam would leave half its width
 /// of silence either side, a tick on every continuous album the device can't play at its own rate.
 /// A whole-number step is a row of its own, being the one that keeps its weights frame to frame.
-/// Band-limited, since only the kernel has weights to carry over.
+/// Linear carries only its one frame of lookahead across, and has to land as exactly.
 #[test]
 fn a_gapless_seam_at_another_rate_renders_exactly_like_the_unsplit_source() {
     const SEAM: usize = 1_001;
     let device = mono(48_000);
-    for (rate, rate_hz) in [(RATE, 44_100.0), (96_000, 96_000.0)] {
-        let mut tone = vec![0.0; 4_410];
-        fill_sine(&mut tone, 1_000.0, rate_hz, 0.5);
-        let (unsplit, mut unsplit_pull) = pair(device);
-        unsplit.set_resampler(Resampler::BandLimited);
-        unsplit.append(TestSource::new(tone.clone(), 1, rate));
-        let (split, mut split_pull) = pair(device);
-        split.set_resampler(Resampler::BandLimited);
-        split.append(TestSource::new(tone[..SEAM].to_vec(), 1, rate));
-        split.append(TestSource::new(tone[SEAM..].to_vec(), 1, rate));
+    for resampler in [Resampler::Linear, Resampler::BandLimited] {
+        for (rate, rate_hz) in [(RATE, 44_100.0), (96_000, 96_000.0)] {
+            let mut tone = vec![0.0; 4_410];
+            fill_sine(&mut tone, 1_000.0, rate_hz, 0.5);
+            let (unsplit, mut unsplit_pull) = pair(device);
+            unsplit.set_resampler(resampler);
+            unsplit.append(TestSource::new(tone.clone(), 1, rate));
+            let (split, mut split_pull) = pair(device);
+            split.set_resampler(resampler);
+            split.append(TestSource::new(tone[..SEAM].to_vec(), 1, rate));
+            split.append(TestSource::new(tone[SEAM..].to_vec(), 1, rate));
 
-        let whole = pump(&mut unsplit_pull, 8_192);
-        let seamed = pump(&mut split_pull, 8_192);
+            let whole = pump(&mut unsplit_pull, 8_192);
+            let seamed = pump(&mut split_pull, 8_192);
 
-        assert_eq!(bits(&seamed), bits(&whole), "{rate} Hz");
+            assert_eq!(bits(&seamed), bits(&whole), "{resampler:?} from {rate} Hz");
+        }
     }
+}
+
+/// A pick reaches the source already playing, from the next block, with nothing re-mounted. A tone
+/// at the source's Nyquist shows which converter ran: at a step of two, linear hands over every
+/// other sample at full level, where the kernel stops it.
+#[test]
+fn a_resampler_pick_reaches_the_source_already_playing() {
+    /// Output frames after the pick left out of the reading.
+    const SETTLE: usize = 256;
+    let (voice, mut pull) = pair(mono(48_000));
+    voice.append(TestSource::new([0.5, -0.5].repeat(12_000), 1, 96_000));
+    let before = pump(&mut pull, 4_000);
+    assert_eq!(bits(&before), bits(&[0.5; 4_000]), "linear, before the pick");
+
+    voice.set_resampler(Resampler::BandLimited);
+    let after = pump(&mut pull, 4_000);
+
+    let loudest = after[SETTLE..].iter().fold(0.0_f32, |loudest, s| loudest.max(s.abs()));
+    assert!(loudest < 1e-3, "the tone came through at {loudest} after a band-limited pick");
 }
 
 /// A source's own `sample_rate` is what the clock divides by, so it has to follow the source rather

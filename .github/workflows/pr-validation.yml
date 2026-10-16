@@ -181,12 +181,12 @@ jobs:
           # rust-cache appends the OS after the key, so Linux's verbatim is fine.
           shared-key: ci-test
 
-      # `headless_scan_persists_track` opens the default output device, and short
-      # of a signed virtual driver WASAPI has no equivalent of the null PCM the
-      # Linux job uses. Skipped by name, not by target selection, so a new
+      # Every `headless_scan` test opens the default output device, and short of a
+      # signed virtual driver WASAPI has no equivalent of the null PCM the Linux
+      # job uses. Skipped by that prefix, not by target selection, so a new
       # integration test runs here by default — the denylist argument again.
       - name: cargo test
-        run: cargo test --locked --workspace -- --skip headless_scan_persists_track
+        run: cargo test --locked --workspace -- --skip headless_scan
 
   # Mark THIS as the required status check in branch protection. Green iff every
   # job passed or was skipped, `skipped` as a pass being what lets a docs-only PR

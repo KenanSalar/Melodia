@@ -123,15 +123,27 @@ fn install_rate_rows(ui: &AppWindow, state: &AppState, flags: &OutputFlags) {
         library::playback::player_set_follow_rate,
         library::settings::set_output_follow_rate,
     ));
+    install_resync_row(state, &g, flags.output_resync_ms);
+}
 
-    // Engine and disk together, on the pool: setting the hold waits out any reopen in flight.
+/// The resync hold, applied with its persist on the pool through a shadow of its own: setting the
+/// hold waits out any reopen in flight.
+fn install_resync_row(state: &AppState, g: &Settings<'_>, saved_ms: u32) {
     let state = state.clone();
+    let shadow = Arc::new(Shadowed::new(saved_ms));
     g.on_output_resync_committed(move |ms| {
-        let ms = u32::try_from(ms).unwrap_or(0);
+        *shadow.picked.lock() = u32::try_from(ms).unwrap_or(0);
         let ctx = state.playback_ctx();
+        let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist output_resync_ms", move |paths| {
-            library::playback::player_set_resync_hold(&ctx, Duration::from_millis(u64::from(ms)));
-            library::settings::set_output_resync_ms(paths, ms)
+            shadow.apply_latest(
+                |picked| *picked,
+                |ms| {
+                    let hold = Duration::from_millis(u64::from(ms));
+                    library::playback::player_set_resync_hold(&ctx, hold);
+                    library::settings::set_output_resync_ms(paths, ms)
+                },
+            )
         });
     });
 }

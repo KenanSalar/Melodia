@@ -121,3 +121,7 @@ impl Model for TrackListModel {
         self
     }
 }
+
+#[cfg(test)]
+#[path = "tests/track_list_model_tests.rs"]
+mod tests;

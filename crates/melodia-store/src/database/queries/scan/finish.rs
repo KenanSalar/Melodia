@@ -66,3 +66,7 @@ pub async fn commit_scan(
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../tests/scan_finish_tests.rs"]
+mod tests;

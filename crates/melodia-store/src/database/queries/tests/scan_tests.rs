@@ -506,6 +506,47 @@ async fn visit_folder_tracks_hands_over_every_row_of_the_folder() -> Result<(), 
     Ok(())
 }
 
+/// The scan purges every row it is handed that its walk didn't find, so a row leaking in from
+/// another folder is deleted by it. The second folder's path starts with the first's.
+#[tokio::test]
+async fn visit_folder_tracks_hands_over_no_row_of_another_folder() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let sibling = queries::folder::insert_folder(&db, "/music-extra", true).await?;
+    let stray = "/music-extra/track4.mp3";
+    insert_test_track(&db, stray, "Delta Song", "Artist C", "Album Three", "Jazz").await?;
+    sqlx::query("UPDATE tracks SET folder_id = ? WHERE file_path = ?")
+        .bind(sibling.id)
+        .bind(stray)
+        .execute(db.write())
+        .await?;
+
+    let mut paths = Vec::new();
+    queries::scan::visit_folder_tracks(&db, 1, |path, _row| paths.push(path)).await?;
+
+    paths.sort_unstable();
+    assert_eq!(paths, ["/music/track1.mp3", "/music/track2.mp3", "/music/track3.mp3"]);
+    Ok(())
+}
+
+/// What the incremental filter compares a file against. Another column read in their place reads
+/// every file as changed, and a launch re-parses the whole library.
+#[tokio::test]
+async fn visit_folder_tracks_hands_each_row_its_stored_size_and_mtime() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    insert_test_track(&db, "/music/a.mp3", "Song", "Artist", "Album", "Rock").await?;
+
+    let mut rows = Vec::new();
+    queries::scan::visit_folder_tracks(&db, 1, |_path, row| {
+        rows.push((row.file_size, row.date_modified));
+    })
+    .await?;
+
+    let stored = make_test_metadata("Song");
+    assert_eq!(rows, [(Some(stored.file_size), stored.date_modified)]);
+    Ok(())
+}
+
 #[tokio::test]
 async fn visit_folder_tracks_visits_nothing_for_an_unknown_folder() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;

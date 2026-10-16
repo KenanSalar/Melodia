@@ -246,11 +246,10 @@ pub async fn refresh_detail(
         crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
-        // Prune `selected-ids` to ids that still exist, then let the shared filter pass
-        // re-derive the displayed cache and the model from the canonical set. It diffs, so a
-        // scan that touched unrelated files writes back only the rows whose content moved and
-        // keeps both the shift-range anchor and an in-flight drag.
-        selection::prune_selection_to(&g, &tracks);
+        // The shared filter pass re-derives the displayed cache and the model from the canonical
+        // set, and drops from the selection whatever left it. It diffs, so a scan that touched
+        // unrelated files writes back only the rows whose content moved and keeps an in-flight
+        // drag.
         playlists_ui.detail.cache.set_all_tracks(tracks);
         *playlists_ui.detail.position_order.lock() = position_order_snapshot;
         apply_filtered_detail(&g, &playlists_ui);

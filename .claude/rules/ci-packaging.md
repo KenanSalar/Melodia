@@ -114,8 +114,8 @@ coverage on this path.
   `--target x86_64-pc-windows-msvc` wants an MSVC toolchain wherever it runs. It is a **sibling**
   of `test-windows` rather than a step inside it, for the reason `fmt` is a sibling of `clippy`,
   and it carries no `CARGO_BUILD_JOBS` cap because a check-only build never reaches the codegen
-  peak that cap is sized against. **The headless test
-  is skipped by name** (`-- --skip headless_scan_persists_track`), not by target selection and not
+  peak that cap is sized against. **The headless tests
+  are skipped by name**, every one under one prefix (`-- --skip headless_scan`), not by target selection and not
   by a `cfg_attr(windows, ignore)`: what is missing is the runner's audio endpoint rather than
   Windows, and a name filter leaves a *new* integration test running here by default, which target
   selection would not. **`windows-latest` here, against a pinned label in release**: the gate

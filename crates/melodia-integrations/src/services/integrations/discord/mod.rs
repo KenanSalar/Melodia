@@ -95,12 +95,17 @@ struct WorkerSlot {
     thread: Option<JoinHandle<()>>,
 }
 
+/// What a worker opens its socket to Discord with, `None` where no client is listening.
+type Connector = Arc<dyn Fn() -> Option<ipc::Connection> + Send + Sync>;
+
 /// Held as `Arc<DiscordPresenceService>` on the app's `AppState`.
 pub struct DiscordPresenceService {
     /// The enable flags, read synchronously by the detector task (`armed`).
     runtime: RwLock<DiscordFlags>,
     status: Arc<StatusCell>,
     worker: Mutex<WorkerSlot>,
+    /// [`ipc::connect`] in the app, a stand-in Discord in the worker's suite.
+    connect: Connector,
     /// Shared lazy HTTP client (same `OnceLock` as `AppState`/scrobble) for the
     /// album-cover lookup — one connection pool built on first actual request.
     http: Arc<OnceLock<reqwest::Client>>,
@@ -122,9 +127,20 @@ impl DiscordPresenceService {
             runtime: RwLock::new(flags.clone()),
             status,
             worker: Mutex::new(WorkerSlot::default()),
+            connect: Arc::new(ipc::connect),
             http,
             artwork_cache: artwork::new_cache(),
         }
+    }
+
+    /// Open every worker's socket with `connect` instead of probing for the Discord client.
+    /// Consuming, so a seated `Arc` can't reach it. Unix only, its suite standing a socket pair
+    /// in for the client.
+    #[cfg(all(test, unix))]
+    #[must_use]
+    pub(crate) fn with_connector(mut self, connect: Connector) -> Self {
+        self.connect = connect;
+        self
     }
 
     /// Whether presence pushing is on — the cheap synchronous gate the task
@@ -214,6 +230,7 @@ impl DiscordPresenceService {
         }
         let (tx, rx) = mpsc::channel::<Command>();
         let status = Arc::clone(&self.status);
+        let connect = Arc::clone(&self.connect);
         let previous = worker.thread.take();
         let spawned = std::thread::Builder::new().name("melodia-discord".into()).spawn(move || {
             // One turned off just before may still be closing its socket. Waiting for it keeps
@@ -221,7 +238,7 @@ impl DiscordPresenceService {
             if let Some(previous) = previous {
                 let _ = previous.join();
             }
-            ipc::run_worker(&rx, &status);
+            ipc::run_worker(&rx, &status, &*connect);
         });
         match spawned {
             Ok(thread) => {
@@ -239,3 +256,7 @@ impl DiscordPresenceService {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

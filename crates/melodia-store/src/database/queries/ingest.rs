@@ -1,5 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 use rayon::prelude::*;
 use sqlx::AssertSqlSafe;
@@ -340,7 +342,7 @@ async fn resolve_move_candidates(
         .collect();
     let mut by_hash = queries::track::lowest_id_by_hash_on(tx, &new_path_hashes).await?;
     let old_paths: Vec<String> = by_hash.values().map(|(_, p)| p.clone()).collect();
-    let still_present = batch_stat_existence(old_paths, pool).await;
+    let still_present = batch_still_on_disk(old_paths, pool).await;
     by_hash.retain(|_, (_, old_path)| !still_present.contains(old_path));
     Ok(by_hash)
 }
@@ -403,28 +405,60 @@ impl<'a> InsertBuffer<'a> {
 /// incremental rescans) walk sequentially. Per `.claude/rules/rayon.md`.
 const STAT_PAR_THRESHOLD: usize = 32;
 
-/// Run `Path::exists()` over `paths`, returning the subset that's actually present on disk. A
-/// batch past [`STAT_PAR_THRESHOLD`] fans out on the scan pool from a blocking thread, keeping the
-/// syscalls off the async worker; the caller's transaction stays open across the await either way.
-async fn batch_stat_existence(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
+/// The subset of `paths` still on disk under their own spelling. A batch past
+/// [`STAT_PAR_THRESHOLD`] stats on the scan pool from a blocking thread, keeping the syscalls off
+/// the async worker; the caller's transaction stays open across the await either way.
+///
+/// **Under their own spelling**, because a case-insensitive or normalizing filesystem answers
+/// `exists()` for a spelling no entry carries: a rename that changed only case or Unicode
+/// normalization leaves the old path resolving to the renamed file, and that is a move. A copy or
+/// a hard link keeps an entry of its own and stays a duplicate.
+async fn batch_still_on_disk(paths: Vec<String>, pool: &ScanPool) -> HashSet<String> {
     if paths.is_empty() {
         return HashSet::new();
     }
-    if paths.len() < STAT_PAR_THRESHOLD {
-        return paths.into_iter().filter(|p| std::path::Path::new(p).exists()).collect();
-    }
-    let pool = pool.clone();
-    tokio::task::spawn_blocking(move || {
-        pool.install(|| {
-            paths
-                .par_iter()
-                .filter(|p| std::path::Path::new(p).exists())
-                .cloned()
-                .collect::<HashSet<String>>()
+    let existing = if paths.len() < STAT_PAR_THRESHOLD {
+        paths.into_iter().filter(|p| Path::new(p).exists()).collect()
+    } else {
+        let pool = pool.clone();
+        tokio::task::spawn_blocking(move || {
+            pool.install(|| {
+                paths
+                    .par_iter()
+                    .filter(|p| Path::new(p).exists())
+                    .cloned()
+                    .collect::<HashSet<String>>()
+            })
         })
-    })
-    .await
-    .unwrap_or_default()
+        .await
+        .unwrap_or_default()
+    };
+    listed_as_spelled(existing)
+}
+
+/// Keeps the paths their directory lists under exactly that name, reading each directory once. A
+/// directory that can't be read keeps what `exists()` said.
+fn listed_as_spelled(paths: HashSet<String>) -> HashSet<String> {
+    let mut listings: HashMap<PathBuf, Option<HashSet<OsString>>> = HashMap::new();
+    paths
+        .into_iter()
+        .filter(|path| {
+            let path = Path::new(path);
+            let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+                return true;
+            };
+            listings
+                .entry(dir.to_path_buf())
+                .or_insert_with(|| entry_names(dir))
+                .as_ref()
+                .is_none_or(|names| names.contains(name))
+        })
+        .collect()
+}
+
+fn entry_names(dir: &Path) -> Option<HashSet<OsString>> {
+    let entries = std::fs::read_dir(dir).ok()?;
+    Some(entries.flatten().map(|entry| entry.file_name()).collect())
 }
 
 /// Apply queued artwork backfills as a single chunked CTE-driven UPDATE.

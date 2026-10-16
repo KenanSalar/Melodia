@@ -124,9 +124,11 @@ tempfile.workspace = true
 # of them are globs. Hand-rolling `**` inside the one test that exists to catch silent drift is
 # the wrong place to be clever.
 glob.workspace = true
-# `tests/cross_tier.rs` reads `pragma_table_info` off a `test_pool`, which is the
-# only place this package touches the database directly.
+# `tests/cross_tier.rs` reads `pragma_table_info` off a `test_pool`, and `tests/headless.rs`
+# seeds and reads rows under a booted state.
 sqlx.workspace = true
+# `tests/headless.rs` routes the booted state's client through a proxy that refuses every request.
+reqwest.workspace = true
 # `tests/translations.rs` asks the bundled faces whether they carry every character a
 # catalogue sets.
 skrifa.workspace = true

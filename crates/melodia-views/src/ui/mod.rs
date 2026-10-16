@@ -60,6 +60,9 @@ pub mod view_tag;
 pub mod visualizer;
 pub mod window_chrome;
 
+#[cfg(test)]
+pub(crate) mod fixtures;
+
 // Source pins for shared components with no Rust module of their own — the
 // faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
 // both mosaic pages wear and My Library's own), the blur stack under both of them, the

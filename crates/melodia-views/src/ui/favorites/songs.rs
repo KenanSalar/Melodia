@@ -10,6 +10,7 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Weak};
 
 use super::{FavoritesTab, FavoritesUi};
+use crate::ui::list_selection;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::track_list_cache::VisibleRows;
 use crate::ui::track_list_model::TrackListModel;
@@ -210,8 +211,11 @@ fn write_filtered_tracks(ui: &AppWindow, fav_ui: &FavoritesUi, visible: VisibleR
     if !fav_ui.section_active() || fav_ui.active_tab() != FavoritesTab::Songs {
         return;
     }
-    let rows = ui.global::<Favorites>().get_tracks();
+    let g = ui.global::<Favorites>();
+    let rows = g.get_tracks();
     if let Some(model) = TrackListModel::installed(&rows, "Favorites.tracks") {
+        // An unfavourited track leaves the set through here as well as a refetch does.
+        list_selection::keep_selection_within(&g, || visible.held_ids());
         model.show(visible);
     }
 }
