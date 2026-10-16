@@ -12,13 +12,12 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
 use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
-use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
+use melodia_ui::{AppWindow, Favorites};
 
 /// Wire the card-action and sub-view-routing callbacks.
 pub(super) fn wire(
@@ -123,22 +122,22 @@ fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
         // its empty state is not, so a grid that paints before its rows
         // land shows a bare panel rather than a placeholder.
         favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
-        // Only when Songs is the tab being entered: rebuilding a list
-        // nobody can see costs one prepared row per favourite on this
-        // thread, and every entry into Songs comes back through here. The
-        // `_now` variant for the reason the grids' is used two lines up —
-        // the tab mounts on the next frame, and a posted write can lose that
-        // race to a `TrackList` of headers over an emptied model.
+        // Only when Songs is the tab being entered: filtering a list
+        // nobody can see walks every favourite on this thread, and every
+        // entry into Songs comes back through here. The `_now` variant for
+        // the reason the grids' is used two lines up — the tab mounts on the
+        // next frame, and a posted write can lose that race to a `TrackList`
+        // of headers over an emptied model.
         // Leaving it empties that model rather than leaving it holding its
-        // last rows — the same trade `write_filtered_grids` makes for the
-        // grid it isn't mounting, and for the same reason: a row per
-        // favourite is one `TrackListRow` of `SharedString`s pinned behind
-        // a tab the user has left. `apply_filtered_tracks` refuses to
-        // refill it while that's true, so nothing puts them back.
+        // last snapshot — the same trade `write_filtered_grids` makes for
+        // the grid it isn't mounting: a fetch replacing the cache behind a
+        // tab the user has left would otherwise leave this pinning a second
+        // copy of every favourite. `apply_filtered_tracks` refuses to refill
+        // it while that's true, so nothing puts one back.
         if songs {
             favorites_ui_mod::apply_filtered_tracks_now(&ui, &fu);
         } else {
-            clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "favorites: leave songs tab");
+            favorites_ui_mod::hide_tracks(&g);
         }
 
         // Spawned *after* the synchronous applies above, so whatever the

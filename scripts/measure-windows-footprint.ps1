@@ -4,9 +4,9 @@
 Measures Melodia's memory, CPU and GPU footprint on Windows the same way every run.
 
 .DESCRIPTION
-Launches Melodia (or attaches to a running one), lets it settle, then samples one window per
-scenario while you switch between scenarios by hand. Every sample goes to samples.csv and the
-per-scenario figures to summary.md.
+Launches Melodia and samples its startup straight away, or attaches to a running one. Once it has
+settled, it samples one window per scenario while you switch between scenarios by hand. Every
+sample goes to samples.csv and the per-scenario figures to summary.md.
 
 Commit is the headline figure: the private memory Windows has promised the process, whether it
 sits in RAM or in the page file. It doesn't fall when the memory manager trims the working set
@@ -31,8 +31,8 @@ CPU is process CPU time over wall time, one full core being 100%. Task Manager's
 divides by the logical processor count, which is the "all cores" column. GPU is the busiest
 engine's running time over wall time, the same per-process definition Task Manager uses.
 
-Handles, threads, GDI and USER objects should hold flat from one scenario to the next. A climb
-is a leak.
+Handles, threads, GDI and USER objects should hold flat from one prompted scenario to the next,
+Startup's sitting higher while its database connections are open. A climb is a leak.
 
 .PARAMETER Exe
 Binary to launch. Defaults to the release build: cargo build --release -p melodia
@@ -41,13 +41,16 @@ Binary to launch. Defaults to the release build: cargo build --release -p melodi
 Data root to launch against, passed as MELODIA_DATA_DIR, so every run sees the same library.
 
 .PARAMETER ProcessId
-Measure an already running Melodia instead of launching one.
+Measure an already running Melodia instead of launching one. Its startup is past, so there is no
+Startup window.
 
 .PARAMETER Scenarios
-One measurement window per name, in order. You are prompted before each.
+One measurement window per name, in order. You are prompted before each. A launch samples Startup
+before them, unprompted.
 
 .PARAMETER SettleSeconds
-Wait before the first scenario, so startup work stays out of every window.
+Time from the launch, or the attach, to the first prompt, so startup work and the database
+connections it opens stay out of every prompted window.
 
 .PARAMETER SwitchSettleSeconds
 Wait after each prompt, so the switch itself (a view being built, covers decoding) stays out of
@@ -81,8 +84,10 @@ param(
 
     [string[]] $Scenarios = @('Idle', 'Playing, list view', 'Playing, visualizer live'),
 
+    # Counted from the launch, past the reaper tick that closes the database connections startup
+    # opened, about two minutes in (IDLE_TIMEOUT in crates/melodia-store/src/database/mod.rs).
     [ValidateRange(0, 3600)]
-    [int] $SettleSeconds = 30,
+    [int] $SettleSeconds = 150,
 
     [ValidateRange(0, 3600)]
     [int] $SwitchSettleSeconds = 10,
@@ -103,25 +108,54 @@ $ErrorActionPreference = 'Stop'
 # counts in TimeSpan ticks.
 $GpuTicksPerSecond = [TimeSpan]::TicksPerSecond
 $ProgressStepSeconds = 0.25
+$StartupScenario = 'Startup'
+$Launching = $PSCmdlet.ParameterSetName -eq 'Launch'
 
 function Measure-Footprint($Process, [string] $Origin) {
+    $sinceStart = [Diagnostics.Stopwatch]::StartNew()
     # Holding the handle keeps ExitCode readable once the process is gone.
     $null = $Process.Handle
     Write-Host "Measuring Melodia (pid $($Process.Id)), $Origin."
-    Wait-Countdown $Process 'Waiting for Melodia to settle' $SettleSeconds
 
-    $measurements = for ($index = 0; $index -lt $Scenarios.Count; $index++) {
-        $title = "Scenario $($index + 1)/$($Scenarios.Count): $($Scenarios[$index])"
+    $names = @($Scenarios)
+    $measurements = [Collections.Generic.List[object]]::new()
+    if ($Launching) {
+        $names = @($StartupScenario) + $names
+        $measurements.Add((Measure-Startup $Process (Get-ScenarioTitle $names 0)))
+    }
+    Wait-Settle $Process $sinceStart
+
+    for ($index = $measurements.Count; $index -lt $names.Count; $index++) {
+        $title = Get-ScenarioTitle $names $index
         Read-Confirmation $title
         Wait-Countdown $Process "$title, settling after the switch" $SwitchSettleSeconds
 
-        $measurement = Measure-Scenario $Process $Scenarios[$index] $title
+        $measurement = Measure-Scenario $Process $names[$index] $title
         Write-ScenarioResult $measurement.Summary
-        $measurement
+        $measurements.Add($measurement)
     }
 
     Save-Report $Process $Origin $measurements
     Write-Host "Melodia (pid $($Process.Id)) is still running. Close it before the next run."
+}
+
+function Measure-Startup($Process, [string] $Title) {
+    Write-Title $Title
+    Write-Host '  Sampled from the launch. Leave Melodia alone until the next prompt.'
+    $measurement = Measure-Scenario $Process $StartupScenario $Title
+    Write-ScenarioResult $measurement.Summary
+    $measurement
+}
+
+function Wait-Settle($Process, [Diagnostics.Stopwatch] $SinceStart) {
+    # From the launch or the attach, so the startup window counts toward the settle.
+    $countdown = New-Countdown 'Waiting for Melodia to settle' $SettleSeconds $SinceStart
+    Wait-Until $Process $countdown $SettleSeconds
+    Complete-Countdown $countdown
+}
+
+function Get-ScenarioTitle([string[]] $Names, [int] $Index) {
+    "Scenario $($Index + 1)/$($Names.Count): $($Names[$Index])"
 }
 
 function Start-Melodia([string] $Path, [string] $DataRoot) {
@@ -154,13 +188,28 @@ function Wait-Countdown($Process, [string] $Activity, [double] $Seconds) {
     Complete-Countdown $countdown
 }
 
-function Read-Confirmation([string] $Title) {
+function Write-Title([string] $Title) {
     Write-Host ''
     Write-Host $Title -ForegroundColor Cyan
+}
+
+function Read-Confirmation([string] $Title) {
+    Write-Title $Title
     Write-Host '  Set Melodia up for it, keep its window visible and unminimized, then press Enter.'
+    Clear-Typeahead
     # A host with no stdin reads end-of-input at once, which would sample a scenario nobody set up.
     if ($null -eq [Console]::ReadLine()) {
         throw 'No console input to confirm the scenario with. Run the script from an interactive terminal.'
+    }
+}
+
+# An Enter pressed before the prompt would confirm a scenario nobody has set up yet. A console
+# only: redirected input is the confirmations themselves, and KeyAvailable throws on it.
+function Clear-Typeahead {
+    if ([Console]::IsInputRedirected) { return }
+
+    while ([Console]::KeyAvailable) {
+        $null = [Console]::ReadKey($true)
     }
 }
 
@@ -185,11 +234,11 @@ function Measure-Scenario($Process, [string] $Scenario, [string] $Title) {
     }
 }
 
-function New-Countdown([string] $Activity, [double] $Seconds) {
+function New-Countdown([string] $Activity, [double] $Seconds, [Diagnostics.Stopwatch] $Clock = [Diagnostics.Stopwatch]::StartNew()) {
     [pscustomobject]@{
         Activity = $Activity
         Seconds  = $Seconds
-        Clock    = [Diagnostics.Stopwatch]::StartNew()
+        Clock    = $Clock
     }
 }
 
@@ -248,8 +297,14 @@ function Select-ProcessInstances($Counter, [int] $Id) {
     $Counter.Values | Where-Object InstanceName -Like "pid_$($Id)_*"
 }
 
+# There are none until Melodia opens its GPU device, after Startup's first samples, and
+# Measure-Object over no input returns no object to read a Sum from.
 function Get-CounterTotal($Counter, [int] $Id) {
-    [long](Select-ProcessInstances $Counter $Id | Measure-Object -Property RawValue -Sum).Sum
+    $total = 0L
+    foreach ($instance in Select-ProcessInstances $Counter $Id) {
+        $total += $instance.RawValue
+    }
+    $total
 }
 
 function Read-GpuEngineTicks([int] $Id) {
@@ -326,7 +381,7 @@ function Format-Report($Process, [string] $Origin, $Summaries) {
     $lines.Add("- Binary: $($binary.FullName), version $($binary.VersionInfo.ProductVersion), built $($binary.LastWriteTime.ToString('yyyy-MM-dd HH:mm'))")
     $lines.Add("- Process: $Origin")
     foreach ($line in Get-SystemDescription $Process) { $lines.Add("- $line") }
-    $lines.Add("- Method: $SettleSeconds s settle, $SwitchSettleSeconds s after each switch, $DurationSeconds s per scenario sampled every $IntervalSeconds s. Memory is the median sample, CPU and GPU the total over the window.")
+    $lines.Add("- Method: $(Get-MethodDescription)")
     $lines.Add('')
     $lines.Add('| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |')
     $lines.Add('| --- | --- | --- | --- | --- | --- | --- | --- | --- |')
@@ -344,6 +399,14 @@ function Format-Report($Process, [string] $Origin, $Summaries) {
                 $summary.Handles, $summary.Threads, $summary.GdiObjects, $summary.UserObjects))
     }
     $lines -join [Environment]::NewLine
+}
+
+function Get-MethodDescription {
+    $settle = "$SettleSeconds s settle"
+    if ($Launching) {
+        $settle = "$StartupScenario sampled from the launch, $SettleSeconds s from the launch to the first prompt"
+    }
+    "$settle, $SwitchSettleSeconds s after each switch, $DurationSeconds s per scenario sampled every $IntervalSeconds s. Memory is the median sample, CPU and GPU the total over the window."
 }
 
 function Get-SystemDescription($Process) {
@@ -538,13 +601,13 @@ namespace MelodiaFootprint
 $sessionCulture = [cultureinfo]::CurrentCulture
 [cultureinfo]::CurrentCulture = [cultureinfo]::InvariantCulture
 try {
-    if ($PSCmdlet.ParameterSetName -eq 'Attach') {
-        $melodia = Get-Process -Id $ProcessId
-        $origin = "attached to pid $ProcessId"
-    }
-    else {
+    if ($Launching) {
         $melodia = Start-Melodia $Exe $DataDir
         $origin = if ($DataDir) { "launched with MELODIA_DATA_DIR=$DataDir" } else { 'launched against its default data root' }
+    }
+    else {
+        $melodia = Get-Process -Id $ProcessId
+        $origin = "attached to pid $ProcessId"
     }
     Measure-Footprint $melodia $origin
 }

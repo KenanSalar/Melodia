@@ -25,7 +25,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     // `browse::seed_from_settings` fetches whatever section the launch lands on, and off
     // screen the leave that follows hands its covers back as proxies. Seeding the flag here
     // costs one re-fetch on the first visit to a Browse the boot didn't land on, and nothing
-    // at all on the one it did. Same shape, same reason, as the four detail lifecycles'.
+    // at all on the one it did.
     if !browse_ui.section_active() {
         browse_ui.mark_dirty();
     }

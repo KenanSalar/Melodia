@@ -12,7 +12,8 @@ use super::{ArtistsUi, to_slint_artist_row};
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::track_detail::{DetailCache, TrackDetail, filter, selection};
+use crate::ui::section_state::SectionState;
+use crate::ui::track_detail::{DetailCache, TrackDetail, filter, restore, selection};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
@@ -29,8 +30,14 @@ use melodia_ui::{
 impl TrackDetail for ArtistsUi {
     type Global = ArtistDetail<'static>;
 
+    const TAB: MyLibraryTab = MyLibraryTab::Artists;
+
     fn cache(&self) -> &DetailCache {
         &self.detail.cache
+    }
+
+    fn section(&self) -> &SectionState {
+        &self.section
     }
 
     fn refilter(&self, g: &Self::Global) {
@@ -207,7 +214,6 @@ pub async fn refresh_detail(
         crate::ui::hero_chips::publish_artist(&ui, &detail, years, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
-        selection::prune_selection_to(&g, &tracks);
         // The canonical sets only: the filter pass rewrites the displayed cache and both models,
         // so a live needle survives the refresh with no flash of unfiltered rows.
         artists_ui.detail.cache.set_all_tracks(tracks);
@@ -234,24 +240,24 @@ fn apply_filtered_detail(g: &ArtistDetail<'_>, artists_ui: &ArtistsUi) {
     write_albums_model(g, album_rows);
 }
 
-/// Reopen the artist that was visible at the last shutdown, if any.
+/// Reopen the artist that was visible at the last shutdown, if any: now if the launch shows the
+/// Artists tab, otherwise on that tab's first enter.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
-    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
-        s.last_detail_ids.get(crate::ui::track_list_view::view_id::ARTIST_DETAIL).copied()
-    }) else {
-        return;
-    };
-    // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
+    restore::seed_or_defer(ui, state, artists_ui, restore_detail);
+}
+
+/// Reopen a persisted artist, at launch or on the first enter of a tab the launch left hidden.
+pub fn restore_detail(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>, id: i64) {
+    // Synchronously, so it is up before the tab's first frame; see `AlbumDetail.restoring`.
     ui.global::<ArtistDetail>().set_restoring(true);
     artists_ui.section.begin_restore();
     let s = state.clone();
     let au = artists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Above = first-launch fade-down, not a drill-in slide: the user didn't navigate, this is
-        // restoring their last view.
+        // Above, not a drill-in slide: nobody navigated into this artist, it is their last view.
         if let Err(e) = open_artist(&s, &au, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!("artists::seed_detail_from_settings open_artist({id}): {}", describe(&e));
+            log::warn!("artists::restore_detail open_artist({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_artist`'s own hop so the id is already in: an
         // artist gone since the last session owes the grid back rather than an empty body.

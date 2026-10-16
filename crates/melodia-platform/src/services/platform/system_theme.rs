@@ -92,9 +92,7 @@ fn query_portal_color_scheme_blocking() -> Option<u32> {
 /// when the colour scheme changes, so refreshing it on every portal tick
 /// is correct and cheap (a few KB read on a desktop event).
 ///
-/// Uses `zbus::blocking::*` inside `spawn_blocking` so it doesn't share an
-/// async zbus connection with Slint's a11y subsystem (see CLAUDE.md zbus
-/// footgun).
+/// Uses `zbus::blocking::*` inside `spawn_blocking` (CLAUDE.md zbus footgun).
 pub fn spawn_color_watcher(state_tx: watch::Sender<melodia_core::themes::SystemColorState>) {
     tokio::task::spawn_blocking(move || {
         if let Err(e) = watch_color_changes(&state_tx) {

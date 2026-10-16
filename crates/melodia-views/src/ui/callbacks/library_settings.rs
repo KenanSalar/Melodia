@@ -60,9 +60,9 @@ pub fn wire_library_settings(ui: &AppWindow, state: &AppState) {
         });
     }
 
-    // Rescan: the scan-progress channel drives the bar, and the
-    // `library_changed` bump at the end of the scan refreshes the folder
-    // list so `last_scanned` updates.
+    // Rescan: the scan-progress channel drives the bar, and its return to
+    // idle refreshes the folder list so `last_scanned` updates. A rescan that
+    // changed nothing bumps no `library_changed`.
     {
         let s = state.clone();
         g.on_rescan_folder(move |id| library::scan::start(&s, i64::from(id), OnStop::Keep));

@@ -14,27 +14,20 @@
 
 [advisories]
 ignore = [
-    # bincode 2.0.1 unmaintained — via i-slint-compiler 1.16.1 → typed-index-collections 3.5.0.
-    # Slint 1.16.1 is current and there is no upstream tracking issue. Build-time only.
-    # revisit: 2026-08-19
+    # bincode 2.0.1 unmaintained: in the lockfile only, as the optional `bincode` feature of
+    # typed-index-collections 3.5.0 under i-slint-compiler 1.18.1. Nothing enables it, so it is
+    # never built. No upstream tracking issue.
+    # revisit: 2026-12-11
     "RUSTSEC-2025-0141",
 
-    # ttf-parser 0.25.1 unmaintained — via i-slint-compiler / i-slint-core 1.16.1 → resvg 0.47 →
-    # usvg → fontdb, with no newer ttf-parser to update to. Parses only the fonts bundled in the
-    # binary and installed system fonts, never downloaded content.
-    # revisit: 2026-10-06
+    # ttf-parser 0.25.1 unmaintained: via winit's Wayland decorations (sctk-adwaita → ab_glyph →
+    # owned_ttf_parser), Linux only, with no newer ttf-parser to update to. Parses installed
+    # system fonts, never downloaded content. Leaves once Slint's winit backend asks for the
+    # skrifa-drawn decorations rather than ab_glyph's.
+    # revisit: 2026-12-11
     "RUSTSEC-2026-0192",
 
-    # rustybuzz 0.20.1 unmaintained — same chain as ttf-parser above. Text shaping for the bundled
-    # SVG icon assets only. `unmaintained` flags the crate, so no version bump clears it: it lifts
-    # when Slint moves to a maintained shaper, and we are held on 1.16.1 by the 1.17 regressions
-    # tracked in docs/plans/SLINT_NATIVE_ADOPTION.md.
-    # revisit: 2026-10-06
-    "RUSTSEC-2026-0206",
-
-    # paste 1.0.15 unmaintained — via lofty 0.25.4 (direct) and rav1e 0.8.1 (slint → image →
-    # ravif → rav1e). Lofty has no migration plan; rav1e's pastey migration (PR #3430) is merged
-    # but unreleased.
-    # revisit: 2026-08-19
+    # paste 1.0.15 unmaintained: via lofty 0.25.4 (direct), which has no migration plan.
+    # revisit: 2026-12-11
     "RUSTSEC-2024-0436",
 ]

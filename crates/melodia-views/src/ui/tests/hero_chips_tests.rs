@@ -9,6 +9,7 @@ use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::genre::GenreStats;
 use melodia_core::entities::playlist::PlaylistStats;
+use melodia_testkit::{binding_value, block_body, code_tokens};
 use slint::SharedString;
 
 const STRIP: &str = include_str!("../../../../melodia-ui/ui/components/meta-chip-strip.slint");
@@ -467,21 +468,17 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
         }
     }
 
-    // Bounded by the `measured` handler rather than by a brace, so the
-    // handler's own body can't end the window early.
     let mounts = [
         (WRAPPER, "hero-chip-strip.slint", "HeroBackdrop."),
         (NOW_PLAYING, "now-playing-view.slint", "Player.np-"),
     ];
     for (src, name, tier) in mounts {
-        let mount = src
-            .split_once("MetaChipStrip {")
-            .and_then(|(_, rest)| rest.split_once("measured("))
-            .map_or("", |(body, _)| body);
-        assert!(
-            !mount.is_empty(),
-            "{name} no longer mounts a `MetaChipStrip` ahead of its `measured` handler"
-        );
+        let code = code_tokens(src);
+        let mount = code
+            .find("MetaChipStrip {")
+            .and_then(|at| block_body(&code, at + "MetaChipStrip ".len()))
+            .unwrap_or_default();
+        assert!(!mount.is_empty(), "{name} no longer mounts a `MetaChipStrip`");
         for prop in ["chip-fill", "chip-label-color"] {
             assert!(
                 mount.contains(&format!("{prop}: {tier}")),
@@ -528,7 +525,7 @@ fn no_hero_view_still_declares_a_meta_line() {
 /// The six banners are one band under different content, so the tile each leads
 /// with is one number — `Theme.hero-artwork`.
 ///
-/// Pinned beside the chip tests because `HERO_MAX_ROWS` is measured against that tile: a
+/// Pinned beside the chip tests because the strip's `max-rows` is measured against that tile: a
 /// view sizing its own artwork moves the slack the cap was picked for, and the band's
 /// height with it. No hero spells a size — the details route through `LibraryTabBand`
 /// and the mosaic pages through `MosaicTabHero`, neither exposing a knob to override the
@@ -787,104 +784,58 @@ fn no_publisher_reads_its_facts_back_off_a_slint_global() {
     }
 }
 
-/// The strip owns the width mirror and the mount seed so that no host has to
-/// restate either. Both are documented pitfalls: `changed` rejects a path
-/// expression, and it does not fire on the first binding evaluation — so a
-/// window opened at its final size would never report a width, and every hero
-/// would collapse its chips into the single unlaid-out row forever.
+/// The strip's height must come off a flex measured at the width the strip draws it.
+///
+/// A flex inside an `if` reports its height at its own preferred width, a near-square block a
+/// few chips across, so the strip reserved lines it never drew; unmounted for the metadata gap,
+/// it then dropped to one row and jumped back, moving the centred Now Playing column down and up
+/// on every track change. Both halves build and look plausible on a single screenshot.
 #[test]
-fn the_strip_reports_its_width_on_resize_and_at_mount() {
+fn the_strip_measures_its_rows_at_the_width_it_draws() {
+    let code = code_tokens(STRIP);
+
     assert!(
-        STRIP.contains("property <length> watched-w: self.width;")
-            && STRIP.contains("changed watched-w =>"),
-        "MetaChipStrip must mirror its width into a local property — `changed` cannot watch \
-         `self.width` through a path expression"
+        !code.contains(": FlexboxLayout"),
+        "MetaChipStrip's flex must not be mounted through an `if` or `for`: repeated, it is \
+         measured at its near-square preferred width rather than the width it is drawn"
     );
     assert!(
-        STRIP.contains("Timer {") && STRIP.contains("interval: 1ms;"),
-        "MetaChipStrip must keep its 1 ms mount Timer — `changed` doesn't fire when the first \
-         layout settles directly on the final value, which is every window opened at its own size"
+        binding_value(&code, "property <length> rows-h:").contains("rows.preferred-height"),
+        "MetaChipStrip must take its height off the flex itself, which is the height its chips \
+         need at the width the strip is drawn"
     );
-    assert_eq!(
-        STRIP.matches("root.measured(").count(),
-        2,
-        "MetaChipStrip should report through `measured` exactly twice: once from the resize \
-         handler and once from the mount seed"
+    assert!(
+        code.contains("rows := FlexboxLayout { visible: root.show-rows;"),
+        "`show-rows` must hide the flex rather than unmount it, so the lines it took stay \
+         reserved while Now Playing waits on the next track's metadata"
     );
 }
 
-/// The strip's rows must sit under a plain layout, not directly under the root.
+/// The strip's two gaps are different numbers, and the row cap counts the tighter one.
 ///
-/// A root inheriting `Rectangle` folds a child *layout* into its own layout info but not
-/// a conditional one, an `if` lowering to a repeater that `gen_layout_info_prop` skips.
-/// With the `if` as the direct child the strip reports `preferred: 0`, takes its
-/// `min-height` floor, and draws every row past the first *outside* that box. Nothing
-/// fails to build, and it only shows once the chips actually wrap — a narrow window, or
-/// a locale whose plurals run long.
-///
-/// Pinned as a shape rather than by counting braces: what matters is that something
-/// non-conditional stands between the root and the `if`.
-#[test]
-fn the_strip_rows_hang_off_a_layout_not_off_the_root() {
-    let normalized: String = STRIP.split_whitespace().collect::<Vec<_>>().join(" ");
-    assert!(
-        normalized.contains("VerticalLayout { if root.show-rows:"),
-        "MetaChipStrip must wrap its conditional rows in a plain layout — without it the root \
-         reports `preferred: 0` vertically and a wrapped second row paints outside the strip. \
-         See the `if`-child entry in `.claude/rules/slint-pitfalls.md`"
-    );
-}
-
-/// ...and that wrapper owes a `min-width: 0px`, which is the same decision seen
-/// from the other axis.
-///
-/// A layout child folds into a `Rectangle` root's layout info in *both* orientations, so
-/// the wrapper above hands the root a horizontal `min` equal to the widest published
-/// row. A box layout never shrinks a cell past its `min`, so the strip keeps being
-/// allotted the width it was chunked at — and keeps reporting it through `measured` —
-/// while the panel narrows: the chunker never learns there is less room, and the row
-/// clips instead of wrapping.
-///
-/// An explicit `min-width` replaces the merged constraint rather than maxing with it, as
-/// the `min-height` beside it does, so one line is the whole fix.
-#[test]
-fn the_strip_leaks_no_width_floor() {
-    assert!(
-        STRIP.contains("min-width: 0px;"),
-        "MetaChipStrip must pin `min-width: 0px` — its rows wrapper is a real layout, so without \
-         it the widest chip row becomes a floor the hero column can't shrink past, and the chips \
-         clip on a narrowing window instead of wrapping into a second row"
-    );
-}
-
-/// The strip's two gaps are different numbers, and only the horizontal one
-/// crosses into Rust.
-///
-/// `ui::chips::SPACING` restates the *inter-chip* gap because the wrap packs each row
-/// against it; the gap between rows is Slint's alone. Collapsing the two into one
-/// `pad-sm` is the tempting simplification and costs the hero band slack it doesn't
-/// have, so a wrapped second row overruns the artwork tile. The other way is quieter and
-/// worse: a narrower inter-chip gap leaves `SPACING` over-estimating every row, so the
-/// strip wraps early and drops chips that would fit.
+/// Collapsing both into one `pad-sm` is the tempting simplification and costs the hero band
+/// slack it doesn't have, so a wrapped second row overruns the artwork tile. The row gap is
+/// also what `capped-h` adds between rows, which is why it is one property: spelled twice, a
+/// change to the layout's gap moves the second row off the cap's boundary and slices it.
 #[test]
 fn the_strip_spaces_its_rows_tighter_than_its_chips() {
-    // Split on the repeater, so each half holds exactly one `spacing:` — the
-    // rows layout's before it, the row layout's after.
-    let (rows, chips) = STRIP.split_once("for row in root.rows:").unwrap_or_default();
+    let code = code_tokens(STRIP);
 
-    let row_gap = rows.rsplit_once("spacing: Theme.").map_or("", |(_, gap)| gap);
     assert!(
-        row_gap.starts_with("pad-xs;"),
+        code.contains("property <length> row-gap: Theme.pad-xs;"),
         "the gap *between* chip rows must be `pad-xs` — at `pad-sm` a wrapped second row \
          overruns the hero's artwork tile and the band grows on every wrap"
     );
-
-    let chip_gap = chips.split_once("spacing: Theme.").map_or("", |(_, gap)| gap);
     assert!(
-        chip_gap.starts_with("pad-sm;"),
-        "the gap *between chips within a row* must stay `pad-sm` — `ui::chips::SPACING` is 8.0 \
-         and packs every row against exactly this number, so a change here desynchronises the \
-         wrap silently"
+        code.contains("spacing-vertical: root.row-gap;")
+            && binding_value(&code, "property <length> capped-h:").contains("root.row-gap"),
+        "the layout's row gap and the gap the row cap counts must be the one `row-gap`, or a \
+         capped strip clips partway through its last row"
+    );
+    assert!(
+        code.contains("spacing-horizontal: Theme.pad-sm;"),
+        "the gap *between chips within a row* must stay `pad-sm`: a wrapped row reads as the \
+         same strip continuing only while the gap between rows is the tighter one"
     );
 }
 
@@ -896,7 +847,7 @@ fn the_strip_spaces_its_rows_tighter_than_its_chips() {
 /// It sits on a row of its own, forced rather than chosen: the band's search box is up
 /// in the tab row, so the line costs its full box plus a gap out of a meta column
 /// bounded by `Theme.hero-artwork` less the pill band. What that buys back is that there
-/// is exactly one of it. Three things stay pinned: the size, `HERO_MAX_ROWS`' slack being
+/// is exactly one of it. Three things stay pinned: the size, the strip's `max-rows` slack being
 /// measured against what the title block spends; that the line collapses when empty, an
 /// always-mounted row spending it on the four heroes that state nothing there; and the
 /// optical inset, whose wrapper reads as redundant to anyone reaching for the `Text` inside
@@ -917,7 +868,7 @@ fn the_subtitled_heroes_share_one_collapsing_line() {
         1,
         "library-tab-band.slint must carry exactly one collapsing subtitle row — an \
          always-mounted one spends a wrapped chip row's worth of the tile on the four heroes \
-         that state nothing under the title. See `ui::hero_chips::HERO_MAX_ROWS`"
+         that state nothing under the title. See `HeroChipStrip`'s `max-rows`"
     );
 
     // Bounded on the chip strip rather than on a brace: the line's own `text`
@@ -935,7 +886,7 @@ fn the_subtitled_heroes_share_one_collapsing_line() {
     assert!(
         block.contains("font-size: Theme.font-size-md;"),
         "the band's second line must stay at `font-size-md` — the meta column is bounded by the \
-         hero tile, and a larger line spends the slack `HERO_MAX_ROWS` is measured against"
+         hero tile, and a larger line spends the slack the strip's `max-rows` is measured against"
     );
     assert!(
         block.contains("padding-left:"),
@@ -1064,9 +1015,9 @@ fn only_the_mounted_tabs_own_id_names_the_hero() {
     use crate::ui::my_library::MyLibraryTab::{Albums, Artists, Genres, Playlists, Songs};
 
     // One id set at a time, so a tab reading a sibling's is a failure rather than a
-    // coincidence — the shape a `match` arm gets wrong. Boot makes that reachable
-    // rather than theoretical: `seed_detail_from_settings` restores one detail per
-    // view whichever tab is resumed, so several ids are `>= 0` at once.
+    // coincidence — the shape a `match` arm gets wrong. Tab switches make that reachable
+    // rather than theoretical: a tab left with its detail open keeps the id, so several
+    // ids are `>= 0` at once.
     for (tab, ids, owner) in [
         (Albums, [7, -1, -1, -1], ChipOwner::Album(7)),
         (Artists, [-1, 7, -1, -1], ChipOwner::Artist(7)),

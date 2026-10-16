@@ -42,7 +42,7 @@ pub fn station_has_row(id: i64) -> bool {
 
 /// Write `cards` onto the delegates a grid already has mounted, or report that it cannot.
 ///
-/// **A model reset is what this exists to avoid**, and it costs more than a repaint. `write_grid`
+/// **A model reset is what this exists to avoid**, and it costs more than a repaint. `replace_rows`
 /// is a `set_vec`: every delegate is torn down and rebuilt, and a rebuilt card carries no pointer
 /// state until the next mouse *event*. So a click that repaints the grid it was aimed at leaves
 /// the card still under the cursor drawn as though it had never been hovered — the star, the play

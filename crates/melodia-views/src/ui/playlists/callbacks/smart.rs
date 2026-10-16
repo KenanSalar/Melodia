@@ -14,8 +14,14 @@
 //! tick — a synchronous `Dialog.open = true` inside a click callback trips
 //! Slint's property-recursion guard (same reason the create-playlist open is
 //! inline-Slint and the export open hops through Rust).
+//!
+//! `recount` answers the track count the dialog's footer states, from the same
+//! criteria the commit saves, so the number shown is the playlist that Save
+//! would make.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
@@ -28,6 +34,13 @@ use melodia_app::state::AppState;
 use melodia_core::entities::smart_criteria as sc;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, SmartEditor, SmartRuleRow};
+
+/// `SmartEditor.match-count` while no count describes the form, which hides the line.
+const NOT_COUNTED: i32 = -1;
+
+/// How long the form sits still before it is counted. Every keystroke in a value field asks
+/// again, and the count is a query over the whole library.
+const RECOUNT_SETTLE: Duration = Duration::from_millis(250);
 
 /// Wire the Smart-Playlist editor callbacks + install its rules model. See
 /// [`super::wire`].
@@ -43,6 +56,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     wire_set_rule_value(ui);
     wire_request_new(ui);
     wire_request_edit(ui, state);
+    wire_recount(ui, state);
     wire_commit(ui, state, playlists_ui);
 }
 
@@ -76,8 +90,7 @@ fn wire_set_rule_field(ui: &AppWindow) {
         let Some(ui) = weak.upgrade() else { return };
         patch_rule_row(&ui, row, |old| {
             let field = field_at(field_idx);
-            let op = first_op(field.value_type());
-            rebuilt_row(field, field_idx, op, 0, &old)
+            rebuilt_row(field, first_op(field.value_type()), &old)
         });
     });
 }
@@ -89,8 +102,7 @@ fn wire_set_rule_op(ui: &AppWindow) {
         let Some(ui) = weak.upgrade() else { return };
         patch_rule_row(&ui, row, |old| {
             let field = field_at(old.field_index);
-            let op = op_at(field.value_type(), op_idx);
-            rebuilt_row(field, old.field_index, op, op_idx, &old)
+            rebuilt_row(field, op_at(field.value_type(), op_idx), &old)
         });
     });
 }
@@ -142,6 +154,41 @@ fn wire_request_edit(ui: &AppWindow, state: &AppState) {
                     return;
                 }
                 open_editor(&ui, &name, &description, &criteria, id);
+            });
+        });
+    });
+}
+
+/// Count the form off the UI thread once it settles. Each ask carries a generation: one a later
+/// edit has overtaken stands down before it queries, and a query that finishes behind a newer one
+/// doesn't write.
+fn wire_recount(ui: &AppWindow, state: &AppState) {
+    let weak = ui.as_weak();
+    let state = state.clone();
+    let generation = Arc::new(AtomicU64::new(0));
+    ui.global::<SmartEditor>().on_recount(move || {
+        let Some(ui) = weak.upgrade() else { return };
+        let criteria = read_criteria(&ui);
+        let asked = generation.fetch_add(1, Ordering::Relaxed) + 1;
+        let generation = generation.clone();
+        let s = state.clone();
+        let weak = weak.clone();
+        s.runtime.clone().spawn(async move {
+            tokio::time::sleep(RECOUNT_SETTLE).await;
+            if generation.load(Ordering::Relaxed) != asked {
+                return;
+            }
+            let count = match library::smart_playlists::count(&s.db, &criteria).await {
+                Ok((count, _duration_ms)) => clamp_i64_to_i32(count),
+                Err(e) => {
+                    log::warn!("smart editor recount: {}", describe(&e));
+                    NOT_COUNTED
+                }
+            };
+            let _ = weak.upgrade_in_event_loop(move |ui| {
+                if generation.load(Ordering::Relaxed) == asked {
+                    ui.global::<SmartEditor>().set_match_count(count);
+                }
             });
         });
     });
@@ -223,26 +270,35 @@ fn patch_rule_row(ui: &AppWindow, row: i32, f: impl FnOnce(SmartRuleRow) -> Smar
     });
 }
 
-/// Rebuild a rule row after a field or operator change: recompute the
-/// `field-kind` / `input-kind` codes from `(field, op)` and keep the old value
+/// Rebuild a rule row after a field or operator change, keeping the old value
 /// text only when the input kind is unchanged (else the remounted input reads
 /// empty). Shared by the `set-rule-field` / `set-rule-op` handlers.
-fn rebuilt_row(
-    field: sc::RuleField,
-    field_index: i32,
-    op: sc::RuleOp,
-    op_index: i32,
-    old: &SmartRuleRow,
-) -> SmartRuleRow {
-    let vt = field.value_type();
-    let input_kind = op.input_kind(vt).as_index();
+fn rebuilt_row(field: sc::RuleField, op: sc::RuleOp, old: &SmartRuleRow) -> SmartRuleRow {
+    let row = rule_row(field, op);
     SmartRuleRow {
-        field_index,
-        op_index,
-        field_kind: vt.as_index(),
-        input_kind,
-        value_text: keep_or_clear(input_kind, old.input_kind, &old.value_text),
+        value_text: keep_or_clear(row.input_kind, old.input_kind, &old.value_text),
+        ..row
     }
+}
+
+/// The row `field` and `op` mount as, value empty: both dropdown indices and the
+/// `field-kind` / `input-kind` codes the row's widgets switch on.
+fn rule_row(field: sc::RuleField, op: sc::RuleOp) -> SmartRuleRow {
+    let vt = field.value_type();
+    SmartRuleRow {
+        field_index: dropdown_index(sc::FIELDS, &field),
+        op_index: dropdown_index(sc::ops_for(vt), &op),
+        field_kind: vt.as_index(),
+        input_kind: op.input_kind(vt).as_index(),
+        fractional: field.holds_fractions(),
+        value_text: SharedString::default(),
+    }
+}
+
+/// `item`'s index in the dropdown listing `items`. Every caller hands over an item off that list,
+/// so the `0` is only the fallback `field_at` and `op_at` already take.
+fn dropdown_index<T: PartialEq>(items: &[T], item: &T) -> i32 {
+    items.iter().position(|i| i == item).and_then(|i| i32::try_from(i).ok()).unwrap_or(0)
 }
 
 /// The first (default) operator for a value type.
@@ -252,14 +308,8 @@ fn first_op(vt: sc::ValueType) -> sc::RuleOp {
 
 /// The default blank rule row: `Title contains …`.
 fn default_rule_row() -> SmartRuleRow {
-    let vt = sc::RuleField::Title.value_type();
-    SmartRuleRow {
-        field_index: 0,
-        op_index: 0,
-        field_kind: vt.as_index(),
-        input_kind: first_op(vt).input_kind(vt).as_index(),
-        value_text: SharedString::default(),
-    }
+    let field = sc::RuleField::Title;
+    rule_row(field, first_op(field.value_type()))
 }
 
 /// Field at a dropdown index (falling back to `Title` on an out-of-range index).
@@ -284,24 +334,21 @@ fn keep_or_clear(new_kind: i32, old_kind: i32, old_text: &SharedString) -> Share
     if new_kind == old_kind { old_text.clone() } else { SharedString::default() }
 }
 
-/// Build an editor row from a stored rule.
+/// Build an editor row from a stored rule, dropping one naming a field or operator the dropdowns
+/// don't offer.
 fn rule_to_row(rule: &sc::Rule) -> Option<SmartRuleRow> {
-    let field_index = i32::try_from(sc::FIELDS.iter().position(|f| *f == rule.field)?).ok()?;
-    let vt = rule.field.value_type();
-    let op_index = i32::try_from(sc::ops_for(vt).iter().position(|o| *o == rule.op)?).ok()?;
+    let offered =
+        sc::FIELDS.contains(&rule.field) && sc::ops_for(rule.field.value_type()).contains(&rule.op);
+    if !offered {
+        return None;
+    }
     let value_text = match &rule.value {
         Some(sc::RuleValue::Text(s)) => SharedString::from(s.as_str()),
         Some(sc::RuleValue::Number(n)) => SharedString::from(n.to_string()),
         Some(sc::RuleValue::Days(d)) => SharedString::from(d.to_string()),
         None => SharedString::default(),
     };
-    Some(SmartRuleRow {
-        field_index,
-        op_index,
-        field_kind: vt.as_index(),
-        input_kind: rule.op.input_kind(vt).as_index(),
-        value_text,
-    })
+    Some(SmartRuleRow { value_text, ..rule_row(rule.field, rule.op) })
 }
 
 /// Rebuild a rule from an editor row (dropping incoherent / incomplete rows).
@@ -330,7 +377,18 @@ fn collect_criteria(ui: &AppWindow) -> Option<CriteriaDraft> {
     if name.is_empty() {
         return None;
     }
-    let description = optional_text(&se.get_description());
+    Some(CriteriaDraft {
+        name,
+        description: optional_text(&se.get_description()),
+        criteria: read_criteria(ui),
+        target_id: i64::from(se.get_target_id()),
+    })
+}
+
+/// The match mode, rules and limit as the form holds them, dropping rows too incomplete to stand
+/// as a rule.
+fn read_criteria(ui: &AppWindow) -> sc::SmartCriteria {
+    let se = ui.global::<SmartEditor>();
     let limit = se.get_limit_enabled().then(|| sc::SmartLimit {
         count: se
             .get_limit_count_text()
@@ -343,17 +401,12 @@ fn collect_criteria(ui: &AppWindow) -> Option<CriteriaDraft> {
     let rules: Vec<sc::Rule> =
         with_rules_model(ui, |vm| vm.iter().filter_map(|r| row_to_rule(&r)).collect())
             .unwrap_or_default();
-    Some(CriteriaDraft {
-        name,
-        description,
-        criteria: sc::SmartCriteria {
-            version: sc::SMART_CRITERIA_VERSION,
-            match_mode: sc::MatchMode::from_index(se.get_match_mode_index()),
-            rules,
-            limit,
-        },
-        target_id: i64::from(se.get_target_id()),
-    })
+    sc::SmartCriteria {
+        version: sc::SMART_CRITERIA_VERSION,
+        match_mode: sc::MatchMode::from_index(se.get_match_mode_index()),
+        rules,
+        limit,
+    }
 }
 
 /// Populate every `SmartEditor` global + the rules model from a criteria and
@@ -387,5 +440,12 @@ fn open_editor(
         }
         vm.set_vec(rows);
     });
+    // The last session's number describes another form until this one is counted.
+    se.set_match_count(NOT_COUNTED);
+    se.invoke_recount();
     ui.global::<Dialog>().set_open(true);
 }
+
+#[cfg(test)]
+#[path = "tests/smart_tests.rs"]
+mod tests;

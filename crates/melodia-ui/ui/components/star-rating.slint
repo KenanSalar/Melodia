@@ -21,6 +21,8 @@ export component StarRating {
     // star / heart group with the per-artwork accent.
     in property <brush> filled-color: Theme.yellow;
     in property <brush> empty-color: Theme.subtext0;
+    // `IconButton`'s, set by that override.
+    in property <bool> on-backdrop: false;
     // Draw the rating a click would set while the pointer is over the strip, the run coming up from
     // `Theme.lit-rest` to full the way the heart beside it does in Now Playing. Off in a track row,
     // where the stars already sit inside the row's own hover treatment.
@@ -73,10 +75,10 @@ export component StarRating {
                         filled: parent.lit;
                         fade: parent.level;
                         // Animating a brush a host hands over is safe here for `IconButton`'s
-                        // reason: neither host eases the pair, writing both discretely on a theme
-                        // or artwork change. Read `slint-pitfalls.md` before giving one of them a
-                        // crossfade.
-                        animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
+                        // reason: neither host eases the pair, writing both discretely on an
+                        // artwork change, and a palette fade raises `Theme.recoloring`. Read
+                        // `slint-pitfalls.md` before giving one of them a crossfade.
+                        animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
                     }
                 }
             }

@@ -1,6 +1,6 @@
-//! Library API — direct, in-process replacement for the Tauri `commands/` layer.
+//! Library API: the in-process calls the UI reaches the database through.
 //!
-//! Each submodule mirrors a former `#[tauri::command]` group. Functions are plain
+//! Each submodule is one feature's group of calls. Functions are plain
 //! `pub async fn` (or `pub fn`) returning `Result<T, AppError>`. One reading only `paths` or only
 //! `db` takes that field, `&Paths` or `&DbPool`, and the rest take `&AppState`; `playback` takes
 //! `PlaybackContext`. The signature then says what a call can touch, and a test drives it off a

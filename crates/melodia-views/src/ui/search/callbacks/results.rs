@@ -12,14 +12,16 @@ use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::cross_tab_nav;
 use crate::ui::callbacks::macros::wire_row_flag;
-use crate::ui::callbacks::track_list::{play_displayed, wire_queue_actions, wire_toggle_column};
+use crate::ui::callbacks::track_list::{
+    play_displayed, wire_queue_actions, wire_row_selection, wire_toggle_column,
+};
 use crate::ui::callbacks::{collect_track_ids, model_track_ids, next_sort, persist_view_sort};
-use crate::ui::search::{self as search_ui_mod, SearchUi, apply, fetch};
+use crate::ui::search::{SearchUi, apply, fetch};
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Search};
+use melodia_ui::{AppWindow, Nav, Search};
 
 /// Wire the cross-tab open / Top Result / row-action / sort / selection
 /// callbacks.
@@ -39,7 +41,9 @@ pub(super) fn wire(
     wire_row_flags(ui, state, search_ui);
     wire_sort(ui, state, search_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_selection(ui, search_ui);
+    // Ranges over the displayed rows, so a shift-click follows the compact/full toggle and never
+    // reaches the rows "Show all" hides.
+    wire_row_selection(&g.as_weak());
 }
 
 fn wire_open_album(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
@@ -74,8 +78,8 @@ fn wire_open_artist(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi
     });
 }
 
-/// Resolves to one of three cross-tab handlers based on `top-kind` —
-/// the two above plus `go-to-genre`, wired in `cross_tab_nav`.
+/// Resolves to one of three cross-tab handlers based on `top-kind`:
+/// the two above plus `Nav.go-to-genre`, wired in `cross_tab_nav`.
 /// Invoking the global callback directly keeps the origin-stamp +
 /// nav-flip + persist all in one place.
 fn wire_open_top_result(ui: &AppWindow) {
@@ -91,7 +95,7 @@ fn wire_open_top_result(ui: &AppWindow) {
         match kind.as_str() {
             "album" => g.invoke_open_album(id),
             "artist" => g.invoke_open_artist(id),
-            "genre" => g.invoke_go_to_genre(id),
+            "genre" => ui.global::<Nav>().invoke_go_to_genre(id),
             _ => {}
         }
     });
@@ -163,32 +167,4 @@ fn wire_sort(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
         // yet (no commit ran since startup) this is a no-op.
         fetch::reapply_cached_results(&su, &weak);
     });
-}
-
-fn wire_selection(ui: &AppWindow, search_ui: &Arc<SearchUi>) {
-    let g = ui.global::<Search>();
-    {
-        let weak = ui.as_weak();
-        let su = search_ui.clone();
-        g.on_select_row(move |idx, id, shift, ctrl| {
-            let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::handle_select_row(&ui, &su, idx, id, shift, ctrl);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        let su = search_ui.clone();
-        g.on_select_all(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::select_all(&ui, &su);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        let su = search_ui.clone();
-        g.on_clear_selection(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::clear_selection(&ui, &su);
-        });
-    }
 }

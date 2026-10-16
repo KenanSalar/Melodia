@@ -1,21 +1,27 @@
 //! Source pins for what the window does on the frame it opens, and on the swap in and out of the
 //! miniplayer.
 //!
-//! Two components decide that, and neither has a Rust module the contract could sit beside.
-//! `ViewTransition` fades and slides the view mounted at launch, which is what "Skip
-//! Startup Animation" turns off; `MiniPlayerSwitch` reads the construction-time 0×0 window
+//! Three components decide that, and none has a Rust module the contract could sit beside.
+//! `ViewTransition` fades and slides every view it mounts except the one mounted at launch;
+//! `DetailArrival` keeps a detail the launch restores from fading its page's body in;
+//! `MiniPlayerSwitch` reads the construction-time 0×0 window
 //! as miniplayer size, so the first real layout looks like a swap out of it. Pinned
 //! together because they are one symptom — a window that spends its first moments dark —
-//! and restoring either half puts that symptom back on its own. The swap's own crossfade sits
+//! and restoring any one puts that symptom back on its own. The swap's own crossfade sits
 //! here beside them, the shell painting what the switch's fade decides.
 
-use melodia_testkit::{code_tokens, strip_line_comments};
+use melodia_testkit::{block_after, blocks_named, code_tokens, strip_line_comments};
 
 const VIEW_TRANSITION: &str =
     include_str!("../../../../melodia-ui/ui/components/view-transition.slint");
 const MINI_SWITCH: &str =
     include_str!("../../../../melodia-ui/ui/components/mini-player-switch.slint");
+const DETAIL_ARRIVAL: &str =
+    include_str!("../../../../melodia-ui/ui/components/detail-arrival.slint");
 const APP_WINDOW: &str = include_str!("../../../../melodia-ui/ui/app-window.slint");
+const NAV: &str = include_str!("../../../../melodia-ui/ui/globals/nav.slint");
+const MY_LIBRARY_VIEW: &str = include_str!("../../../../melodia-ui/ui/views/my-library-view.slint");
+const RADIO_VIEW: &str = include_str!("../../../../melodia-ui/ui/views/radio-view.slint");
 
 /// The crossfade overlay's whole declaration, as tokens.
 const CROSSFADE_OVERLAY: &str = "Rectangle { width: 100%; height: 100%; \
@@ -67,8 +73,7 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
     assert!(
         settled.contains("Nav.suppress-enter-animation"),
         "`settled` no longer reads the suppression: {settled}\n\
-         Nothing else consults the flag, so the launch mount animates as though the \
-         setting were off."
+         Nothing else consults the flag, so the launch mount fades and slides in."
     );
 
     let shown = index_of(&lines, "root.shown = true;");
@@ -84,6 +89,94 @@ fn the_launch_mount_reads_the_suppression_and_hands_it_back_settled() {
         "the hand-back lost its `enabled` gate — a nested body mounted at boot with \
          `enabled: false` runs this same Timer and would drop the flag for the page above it"
     );
+}
+
+/// The launch page mounts under a suppression that is declared, not raised by Rust.
+/// `AppWindow::new()` already builds the page for the declared nav index, so a flag Rust raises
+/// before the show arrives after that page's `init` has read its opacity at 0, and it fades in.
+#[test]
+fn the_suppression_is_declared_raised() {
+    let lines = code_lines(NAV);
+
+    let declared =
+        lines.iter().any(|line| line == "in-out property <bool> suppress-enter-animation: true;");
+
+    assert!(declared, "`Nav.suppress-enter-animation` is no longer declared raised");
+}
+
+/// A restore lands its detail with nobody navigating, so its landing is no arrival. The latch
+/// is raised with `restoring`, taken by the open that ends it, and cleared by a fall with
+/// nothing open. It is never read off `restoring` at the open, which Rust has usually lowered
+/// by then.
+#[test]
+fn a_restore_landing_is_no_arrival() {
+    let tokens = code_tokens(DETAIL_ARRIVAL);
+
+    let on_open = block_after(&tokens, "changed open =>");
+    let on_restoring = block_after(&tokens, "changed restoring =>");
+    let on_init = block_after(&tokens, "init =>");
+
+    assert!(
+        on_open.contains("if (!root.landing) { root.arrived(); } root.landing = false;"),
+        "an open must arrive only when no restore is landing, then take the latch: {on_open:?}"
+    );
+    assert!(
+        on_restoring.contains(
+            "if (root.restoring) { root.landing = true; } \
+             else if (!root.open) { root.landing = false; }"
+        ),
+        "the latch must rise with `restoring` and fall with it only where nothing opened: \
+         {on_restoring:?}"
+    );
+    assert!(
+        on_init.contains("root.landing = root.restoring;"),
+        "a page mounted mid-restore never sees `restoring` rise, so `init` has to own the latch"
+    );
+}
+
+/// Both pages that restore a detail at launch arm their body fade through `DetailArrival`, bound
+/// to their own flags. An arm left in the page's own open handler fires on the restore's landing
+/// too, and puts the fade back on the launch's first frames.
+#[test]
+fn every_detail_page_arms_its_body_through_detail_arrival() {
+    const PAGES: [(&str, &str, &str, &str, &str); 2] = [
+        (
+            "my-library-view.slint",
+            MY_LIBRARY_VIEW,
+            "open: root.detail-open;",
+            "restoring: root.detail-restoring;",
+            "changed detail-open =>",
+        ),
+        (
+            "radio-view.slint",
+            RADIO_VIEW,
+            "open: Radio.detail-open;",
+            "restoring: Radio.restoring;",
+            "changed watched-detail-open =>",
+        ),
+    ];
+
+    for (name, src, open, restoring, open_handler) in PAGES {
+        let tokens = code_tokens(src);
+        let mounts = blocks_named(&tokens, "DetailArrival");
+        let mount = mounts.first().copied().unwrap_or_default();
+        let handler = block_after(&tokens, open_handler);
+
+        assert_eq!(mounts.len(), 1, "{name} must mount `DetailArrival` exactly once");
+        assert!(
+            mount.contains(open) && mount.contains(restoring),
+            "{name}'s `DetailArrival` must watch the page's own detail: {mount:?}"
+        );
+        assert!(
+            mount.contains("arrived => { root.body-anim-armed = true; }"),
+            "{name}'s `DetailArrival` must arm the body fade: {mount:?}"
+        );
+        assert!(
+            !handler.is_empty() && !handler.contains("body-anim-armed"),
+            "{name}'s `{open_handler}` arms the fade itself, so a restore's landing fades in: \
+             {handler:?}"
+        );
+    }
 }
 
 /// Leaving the miniplayer rebuilds the whole full UI, and its page skips its own entrance under the

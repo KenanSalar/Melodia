@@ -24,7 +24,7 @@ const IMAGE_RESAMPLERS: [&str; 6] = [
 
 /// The one file allowed to keep calling them.
 ///
-/// `extract_source_argb` downscales to 64 px to seed a *palette*, so changing its filter moves
+/// `extract_source_rgb` downscales to 64 px to seed a *palette*, so changing its filter moves
 /// every generated theme colour. It is also the cold half of that path — the live one reads a
 /// `CoverThumbs` buffer that is already through `resize_rgb8`.
 const EXEMPT: &str = "media/image/material_you.rs";

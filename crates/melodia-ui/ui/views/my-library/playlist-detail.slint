@@ -74,9 +74,6 @@ export component PlaylistDetailBody inherits Rectangle {
             request-blur-search => { MyLibrary.blur-search-tick += 1; }
             reorder(from, to) => { PlaylistDetail.reorder(from, to); }
             remove-from-playlist(ids) => { PlaylistDetail.remove-track(ids); }
-            go-to-album(aid) => { PlaylistDetail.go-to-album(aid); }
-            go-to-artist(aid) => { PlaylistDetail.go-to-artist(aid); }
-            go-to-genre(gid) => { PlaylistDetail.go-to-genre(gid); }
         }
 
         if PlaylistDetail.playlist.track_count == 0: GridEmptyState {
@@ -100,23 +97,18 @@ export component PlaylistDetailBody inherits Rectangle {
 
             VerticalLayout {
                 alignment: center;
+                cross-axis-alignment: center;
                 spacing: Theme.pad-sm;
-                HorizontalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: "playlist_add";
-                        icon-size: 56px;
-                        icon-color: Theme.accent;
-                    }
+                MaterialIcon {
+                    name: "playlist_add";
+                    icon-size: 56px;
+                    icon-color: Theme.accent;
                 }
-                HorizontalLayout {
-                    alignment: center;
-                    Text {
-                        text: @tr("Drop files to add to this playlist");
-                        color: Theme.text;
-                        font-size: Theme.font-size-lg;
-                        font-weight: 600;
-                    }
+                Text {
+                    text: @tr("Drop files to add to this playlist");
+                    color: Theme.text;
+                    font-size: Theme.font-size-lg;
+                    font-weight: 600;
                 }
             }
         }

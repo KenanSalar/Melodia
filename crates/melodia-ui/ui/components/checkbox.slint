@@ -23,8 +23,8 @@ export component Checkbox inherits Rectangle {
     background: (root.checked ? Theme.accent : transparent).transparentize(1.0 - root.fade);
     border-color: (root.checked ? Theme.accent : root.unchecked-border).transparentize(1.0 - root.fade);
     border-width: 1px;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     if root.checked: MaterialIcon {
         x: (parent.width - self.width) / 2;

@@ -1,4 +1,5 @@
 import { Theme } from "../theme.slint";
+import { SliderPointer } from "slider-pointer.slint";
 
 // Horizontal M3 Expressive slider — twin slim bars meeting at the thumb, a parent-background
 // stadium masking the seam, and a vertical-pill thumb that shrinks along the value axis on press.
@@ -19,21 +20,14 @@ export component SliderTrack inherits Rectangle {
 
     // Gated on movement, so a no-move grab inside the mask doesn't flip the
     // visuals and the time text into drag mode.
-    out property <bool>  dragging: touch.pressed && root.dragged-since-press;
-    out property <float> drag-value;    // valid only while dragging
+    out property <bool>  dragging: touch.dragging;
+    out property <float> drag-value: touch.drag-value;    // valid only while dragging
     // So a host can gate a floating badge on hover without wrapping this in an
     // outer TouchArea, which would steal the pointer events.
     out property <bool>  has-hover: touch.has-hover;
-    // Raw pressed, because the winit Release filter clears `PopupHighlight.id`
-    // on every mouse-up while `committed` only fires after movement — a no-move
-    // grab still needs a way back to the trigger highlight.
-    out property <bool>  pressed: touch.pressed;
 
     callback changed(float);
     callback committed(float);
-
-    // Set by a jump-to-click or any `moved`; a no-move grab must not fire a seek.
-    private property <bool> dragged-since-press: false;
 
     // Tall enough to host the 24 px vertical thumb without clipping.
     min-height: 24px;
@@ -113,52 +107,23 @@ export component SliderTrack inherits Rectangle {
 
     // On top of the mask, so the seam-cover itself stays invisible.
     Rectangle {
+        // Snapped, not eased: easing a binding off the position ticks phase-lags
+        // the source, and repaints the thumb plus everything it overlaps for the
+        // length of the curve, once per tick.
         x: root.thumb-x;
         y: root.track-cy - root.thumb-h / 2;
         width: root.thumb-w;
         height: root.thumb-h;
         border-radius: self.width / 2;
         background: root.is-disabled ? Theme.overlay0 : root.fill-color;
-        // Snapped, not eased: easing a binding off the position ticks phase-lags
-        // the source, and repaints the thumb plus everything it overlaps for the
-        // length of the curve, once per tick.
-        animate x { duration: 0ms; }
     }
 
-    touch := TouchArea {
+    // The mask region is the grab band, being the thumb as the eye reads it.
+    touch := SliderPointer {
         enabled: !root.is-disabled;
-        mouse-cursor: pointer;
-
-        pointer-event(ev) => {
-            if (ev.kind == PointerEventKind.down) {
-                // Inside the mask region the press is captured without jumping —
-                // that band is the perceived thumb, and a 1–2 px nudge there
-                // must not teleport the value. Outside, jump to the click.
-                if (self.mouse-x < root.thumb-cx - root.thumb-bg-w / 2
-                    || self.mouse-x > root.thumb-cx + root.thumb-bg-w / 2) {
-                    root.drag-value = clamp(self.mouse-x / root.width, 0, 1);
-                    root.changed(root.drag-value);
-                    root.dragged-since-press = true;
-                } else {
-                    root.dragged-since-press = false;
-                }
-            }
-            // Commit on up or cancel, but never on a no-move grab: the player
-            // advances during the hold, so committing the captured value would
-            // seek backwards to the click instant.
-            if (ev.kind == PointerEventKind.up
-                || ev.kind == PointerEventKind.cancel) {
-                if (root.dragged-since-press) {
-                    root.committed(root.drag-value);
-                }
-            }
-        }
-        moved => {
-            if (self.pressed) {
-                root.drag-value = clamp(self.mouse-x / root.width, 0, 1);
-                root.changed(root.drag-value);
-                root.dragged-since-press = true;
-            }
-        }
+        thumb-center: root.thumb-cx;
+        grab-half: root.thumb-bg-w / 2;
+        changed(v) => { root.changed(v); }
+        committed(v) => { root.committed(v); }
     }
 }

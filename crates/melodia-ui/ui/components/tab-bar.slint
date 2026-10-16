@@ -84,27 +84,25 @@ component TabBarCell inherits Rectangle {
             // coverage at the midpoint and the glyph visibly thins. Both take the same `filled`,
             // so this crossfades colour only. The wrapper needs its own geometry — `MaterialIcon`
             // binds `width`/`height`, so a container merges nothing from it and reports 0×0.
-            VerticalLayout {
-                alignment: center;
-                Rectangle {
-                    // Scaled directly for the `SidebarItem` reason — a container shrinking 3% moves
-                    // the glyph a pixel and nothing else, inert where the icon *is* the tab.
-                    width: 22px * root.press-scale;
-                    height: self.width;
+            Rectangle {
+                cross-axis-self-alignment: center;
+                // Scaled directly for the `SidebarItem` reason — a container shrinking 3% moves
+                // the glyph a pixel and nothing else, inert where the icon *is* the tab.
+                width: 22px * root.press-scale;
+                height: self.width;
 
-                    MaterialIcon {
-                        name: root.icon;
-                        icon-size: parent.width;
-                        icon-color: root.label-color-idle;
-                        filled: root.selected;
-                    }
+                MaterialIcon {
+                    name: root.icon;
+                    icon-size: parent.width;
+                    icon-color: root.label-color-idle;
+                    filled: root.selected;
+                }
 
-                    MaterialIcon {
-                        name: root.icon;
-                        icon-size: parent.width;
-                        icon-color: root.active-color.transparentize(1.0 - root.sel-t);
-                        filled: root.selected;
-                    }
+                MaterialIcon {
+                    name: root.icon;
+                    icon-size: parent.width;
+                    icon-color: root.active-color.transparentize(1.0 - root.sel-t);
+                    filled: root.selected;
                 }
             }
 
@@ -234,8 +232,9 @@ export component TabBar inherits Rectangle {
     // y control points sit inside [0, 1], so no derived width goes negative. Gated on `eased`, the
     // first resolution being the bar learning how much room it has rather than a change.
     animate compact-t {
-        duration: root.eased ? 350ms : 0ms;
+        duration: 350ms;
         easing: cubic-bezier(0.2, 0, 0, 1);
+        enabled: root.eased;
     }
 
     // 100 ms rather than the tree's usual 1 ms mount seed: this has to **outlast** the host's first

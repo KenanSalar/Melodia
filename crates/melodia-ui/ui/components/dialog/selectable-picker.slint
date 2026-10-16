@@ -29,8 +29,8 @@ export component SelectIndicator inherits Rectangle {
     background: (root.active ? Theme.accent : transparent).transparentize(1.0 - root.fade);
     border-width: root.active ? 0px : 2px;
     border-color: Theme.overlay0.transparentize(1.0 - root.fade);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     if root.active: MaterialIcon {
         x: (parent.width - self.width) / 2;
@@ -66,31 +66,28 @@ export component SelectableRow inherits Rectangle {
             ? Theme.accent.with-alpha(0.16)
             : (touch.has-hover && !root.disabled ? Theme.surface1 : transparent))
         .transparentize(1.0 - root.fade);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
         padding-right: Theme.pad-md;
         spacing: Theme.pad-md;
         alignment: start;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            ArtworkImage {
-                tile-size: 44px;
-                tile-radius: Theme.radius-md;
-                artwork-path: root.artwork-path;
-                cover: root.cover;
-                fallback-icon: root.fallback-icon;
-                // The grid cards' hover zoom, skipped while disabled.
-                cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
-                fade: root.fade;
-            }
+        ArtworkImage {
+            tile-size: 44px;
+            tile-radius: Theme.radius-md;
+            artwork-path: root.artwork-path;
+            cover: root.cover;
+            fallback-icon: root.fallback-icon;
+            // The grid cards' hover zoom, skipped while disabled.
+            cover-scale: touch.has-hover && !root.disabled ? 1.05 : 1.0;
+            fade: root.fade;
         }
 
         VerticalLayout {
             horizontal-stretch: 1;
-            alignment: center;
             spacing: 2px;
             Text {
                 text: root.name;
@@ -104,16 +101,13 @@ export component SelectableRow inherits Rectangle {
                 color: (root.selected ? Theme.accent : Theme.subtext0).transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-sm;
                 overflow: elide;
-                animate color { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
         }
 
-        VerticalLayout {
-            alignment: center;
-            SelectIndicator {
-                checked: root.selected;
-                fade: root.fade;
-            }
+        SelectIndicator {
+            checked: root.selected;
+            fade: root.fade;
         }
     }
 
@@ -134,55 +128,47 @@ export component SelectAllHeader inherits Rectangle {
     height: 52px;
     border-radius: Theme.radius-md;
     background: header-touch.has-hover ? Theme.surface1 : Theme.surface0;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-md;
         padding-right: Theme.pad-md;
         spacing: Theme.pad-md;
         alignment: start;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            SelectIndicator {
-                checked: root.checked;
-                indeterminate: root.indeterminate;
-            }
+        SelectIndicator {
+            checked: root.checked;
+            indeterminate: root.indeterminate;
         }
-        VerticalLayout {
+        Text {
             horizontal-stretch: 1;
-            alignment: center;
-            Text {
-                text: @tr("Select all");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 600;
-            }
+            text: @tr("Select all");
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 600;
         }
-        VerticalLayout {
-            alignment: center;
-            Rectangle {
-                height: 26px;
-                width: chip-l.preferred-width;
-                border-radius: self.height / 2;
-                background: root.selected-count > 0
-                    ? Theme.accent.with-alpha(0.18)
-                    : Theme.surface1;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        Rectangle {
+            height: 26px;
+            width: chip-l.preferred-width;
+            border-radius: self.height / 2;
+            background: root.selected-count > 0
+                ? Theme.accent.with-alpha(0.18)
+                : Theme.surface1;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
-                chip-l := HorizontalLayout {
-                    padding-left: 12px;
-                    padding-right: 12px;
-                    alignment: center;
-                    Text {
-                        text: @tr("{} selected", root.selected-count);
-                        color: root.selected-count > 0
-                            ? Theme.accent
-                            : Theme.subtext0;
-                        font-size: Theme.font-size-sm;
-                        font-weight: 600;
-                        vertical-alignment: center;
-                    }
+            chip-l := HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                alignment: center;
+                Text {
+                    text: @tr("{} selected", root.selected-count);
+                    color: root.selected-count > 0
+                        ? Theme.accent
+                        : Theme.subtext0;
+                    font-size: Theme.font-size-sm;
+                    font-weight: 600;
+                    vertical-alignment: center;
                 }
             }
         }
@@ -232,8 +218,8 @@ export component PickerListCard inherits Rectangle {
         height: parent.height - 2 * root.border-w;
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
-        viewport-width: self.visible-width;
-        viewport-height: root.content-h - 2 * root.border-w;
+        content-width: self.visible-width;
+        content-height: root.content-h - 2 * root.border-w;
 
         VerticalLayout {
             padding: root.pad - root.border-w;
@@ -250,8 +236,8 @@ export component PickerListCard inherits Rectangle {
         width: Theme.scrollbar-slot;
         height: parent.height - 4px;
         visible-size: sv.visible-height;
-        content-size: sv.viewport-height;
-        offset: -sv.viewport-y;
-        scroll-to(o) => { sv.viewport-y = -o; }
+        content-size: sv.content-height;
+        offset: -sv.content-y;
+        scroll-to(o) => { sv.content-y = -o; }
     }
 }

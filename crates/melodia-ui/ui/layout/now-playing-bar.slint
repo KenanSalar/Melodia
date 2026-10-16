@@ -4,8 +4,10 @@ import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { WindowChrome } from "../globals/shell.slint";
 import { Settings } from "../settings.slint";
+import { ContextClick } from "../components/context-menu.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { MetaChip } from "../components/meta-chip.slint";
+import { TrackContextMenu } from "../components/track-list/track-context-menu.slint";
 import { SourceArtwork } from "../components/now-playing/source-artwork.slint";
 import { SeekRow } from "../components/now-playing/seek-row.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
@@ -57,8 +59,8 @@ export component NowPlayingBar inherits Rectangle {
     // No divider here: the content panel's own bottom border draws the seam, so it
     // follows the panel's rounded corners cleanly.
 
-    // Each section wraps in a centring `VerticalLayout`, so its content sits centred
-    // against the bar height whatever its intrinsic size — the sidebar's row pattern.
+    // The transport, seek and trailing columns each wrap in a centring `VerticalLayout`, so their
+    // content sits centred against the bar height whatever its intrinsic size.
     HorizontalLayout {
         padding-left: clamp(root.bar-w * 0.02, 10px, 16px);
         padding-right: clamp(root.bar-w * 0.02, 10px, 16px);
@@ -105,7 +107,7 @@ export component NowPlayingBar inherits Rectangle {
                 background: track-info-touch.has-hover && track-info-cell.has-source
                     ? Theme.accent.with-alpha(0.12)
                     : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
 
             // Shares `press-scale` with the fill, so the row inside contracts toward the
@@ -124,54 +126,48 @@ export component NowPlayingBar inherits Rectangle {
                     padding-right: 8px;
                     spacing: clamp(root.bar-w * 0.015, 6px, 10px);
                     alignment: start;
+                    cross-axis-alignment: center;
 
-                    VerticalLayout {
-                        alignment: center;
-                        SourceArtwork {
-                            tile-size: clamp(root.bar-w * 0.07, 36px, 46px);
-                            // The frame stays fixed; the cover scales within it.
-                            cover-scale: track-info-touch.has-hover && track-info-cell.has-source
-                                ? 1.15
-                                : 1.0;
-                        }
+                    SourceArtwork {
+                        tile-size: clamp(root.bar-w * 0.07, 36px, 46px);
+                        // The frame stays fixed; the cover scales within it.
+                        cover-scale: track-info-touch.has-hover && track-info-cell.has-source
+                            ? 1.15
+                            : 1.0;
                     }
 
                     VerticalLayout {
-                        alignment: center;
                         horizontal-stretch: 1;
+                        spacing: 2px;
 
-                        VerticalLayout {
-                            spacing: 2px;
-
-                            // Both lines come off `Player`, which owns the track-or-station
-                            // ladder and the LRM that keeps elide's `…` on the right edge for
-                            // RTL scripts.
-                            Text {
-                                text: Player.source-title;
-                                color: Theme.text;
-                                font-size: Theme.font-size-sm;
-                                font-weight: 500;
-                                overflow: elide;
-                            }
-                            Text {
-                                text: Player.source-subtitle;
-                                color: Theme.text;
-                                font-size: 11px;
-                                overflow: elide;
-                            }
-                            Text {
-                                // The album for a track, the station's country for a stream.
-                                text: Player.source-tertiary;
-                                // All three lines are `Theme.text`; size and weight are
-                                // what separate them. Artist and album were `subtext0`
-                                // and `overlay1` — the latter isn't even a text rung —
-                                // which put the album two steps under the title in a
-                                // bar this short.
-                                color: Theme.text;
-                                font-size: 11px;
-                                overflow: elide;
-                                visible: Player.source-tertiary != "";
-                            }
+                        // Both lines come off `Player`, which owns the track-or-station
+                        // ladder and the LRM that keeps elide's `…` on the right edge for
+                        // RTL scripts.
+                        Text {
+                            text: Player.source-title;
+                            color: Theme.text;
+                            font-size: Theme.font-size-sm;
+                            font-weight: 500;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: Player.source-subtitle;
+                            color: Theme.text;
+                            font-size: 11px;
+                            overflow: elide;
+                        }
+                        Text {
+                            // The album for a track, the station's country for a stream.
+                            text: Player.source-tertiary;
+                            // All three lines are `Theme.text`; size and weight are
+                            // what separate them. Artist and album were `subtext0`
+                            // and `overlay1` — the latter isn't even a text rung —
+                            // which put the album two steps under the title in a
+                            // bar this short.
+                            color: Theme.text;
+                            font-size: 11px;
+                            overflow: elide;
+                            visible: Player.source-tertiary != "";
                         }
                     }
                 }
@@ -189,6 +185,26 @@ export component NowPlayingBar inherits Rectangle {
                     Nav.pending-enter-from = NavEnterFrom.above;
                     Nav.now-playing-open = !Nav.now-playing-open;
                 }
+                // A station has no `tracks` row for the menu to act on.
+                pointer-event(ev) => {
+                    if (Player.vm.has_track
+                        && ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                        track-menu.show-at(self.mouse-x, self.mouse-y);
+                    }
+                }
+            }
+
+            // The row menu with the playing track as its row. A sibling of the TouchArea, so the
+            // popup's frame is the cell's, the one `mouse-x` reports in.
+            track-menu := TrackContextMenu {
+                row-id: Player.vm.track.id;
+                row-is-favorite: Player.vm.track.is_favorite;
+                album-id: Player.track-album-id;
+                artist-id: Player.track-artist-id;
+                genre-id: Player.track-genre-id;
+                view-context: "now-playing";
+                // The heart's path, which also repaints every list showing this track.
+                toggle-favorite(ids, on) => { Player.toggle-favorite(); }
             }
         }
 
@@ -202,55 +218,47 @@ export component NowPlayingBar inherits Rectangle {
             HorizontalLayout {
                 spacing: Theme.pad-xs;
                 alignment: center;
+                cross-axis-alignment: center;
 
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "chevron_left";
-                        press-shrink: true;
-                        diameter: root.btn-d;
-                        icon-size: root.btn-icon-d;
-                        button-enabled: Player.vm.has_previous;
-                        hold-delay: Player.scan-hold;
-                        repeat-interval: Player.scan-interval;
-                        tooltip-text: Player.previous-tooltip;
-                        clicked => { Player.previous(); }
-                        held(step) => { Player.scan-step(-1, step); }
-                    }
+                IconButton {
+                    icon: "chevron_left";
+                    press-shrink: true;
+                    diameter: root.btn-d;
+                    icon-size: root.btn-icon-d;
+                    button-enabled: Player.vm.has_previous;
+                    hold-delay: Player.scan-hold;
+                    repeat-interval: Player.scan-interval;
+                    tooltip-text: Player.previous-tooltip;
+                    clicked => { Player.previous(); }
+                    held(step) => { Player.scan-step(-1, step); }
                 }
 
                 // Disc geometry, hover and press scale, tooltip, the hold ring and the
                 // optional Equalizer overlay all live inside `PlayButton`. The glyph is
                 // punched out in the bar's own fill.
-                VerticalLayout {
-                    alignment: center;
-                    PlayButton {
-                        wrapper-d: clamp(root.bar-w * 0.055, 30px, 38px);
-                        icon-size: clamp(root.bar-w * 0.025, 14px, 20px);
-                        icon-color: WindowChrome.mantle;
-                        is-playing: Player.vm.is_playing;
-                        is-stopped: Player.stopped-at-top;
-                        animation-mode: Settings.play-button-animation-idx;
-                        hold-delay: Player.stop-hold;
-                        clicked => { Player.play-pause(); }
-                        held => { Player.stop(); }
-                    }
+                PlayButton {
+                    wrapper-d: clamp(root.bar-w * 0.055, 30px, 38px);
+                    icon-size: clamp(root.bar-w * 0.025, 14px, 20px);
+                    icon-color: WindowChrome.mantle;
+                    is-playing: Player.vm.is_playing;
+                    is-stopped: Player.stopped-at-top;
+                    animation-mode: Settings.play-button-animation-idx;
+                    hold-delay: Player.stop-hold;
+                    clicked => { Player.play-pause(); }
+                    held => { Player.stop(); }
                 }
 
-                VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "chevron_right";
-                        press-shrink: true;
-                        diameter: root.btn-d;
-                        icon-size: root.btn-icon-d;
-                        button-enabled: Player.vm.has_next;
-                        hold-delay: Player.scan-hold;
-                        repeat-interval: Player.scan-interval;
-                        tooltip-text: Player.next-tooltip;
-                        clicked => { Player.next(); }
-                        held(step) => { Player.scan-step(1, step); }
-                    }
+                IconButton {
+                    icon: "chevron_right";
+                    press-shrink: true;
+                    diameter: root.btn-d;
+                    icon-size: root.btn-icon-d;
+                    button-enabled: Player.vm.has_next;
+                    hold-delay: Player.scan-hold;
+                    repeat-interval: Player.scan-interval;
+                    tooltip-text: Player.next-tooltip;
+                    clicked => { Player.next(); }
+                    held(step) => { Player.scan-step(1, step); }
                 }
             }
         }
@@ -273,14 +281,12 @@ export component NowPlayingBar inherits Rectangle {
             if Player.vm.has_station: HorizontalLayout {
                 spacing: Theme.pad-sm;
                 alignment: center;
+                cross-axis-alignment: center;
 
-                VerticalLayout {
-                    alignment: center;
-                    MetaChip {
-                        text: Player.live-label;
-                        fill: Theme.accent.with-alpha(0.18);
-                        label-color: Theme.accent;
-                    }
+                MetaChip {
+                    text: Player.live-label;
+                    fill: Theme.accent.with-alpha(0.18);
+                    label-color: Theme.accent;
                 }
 
                 Text {
@@ -303,93 +309,72 @@ export component NowPlayingBar inherits Rectangle {
             HorizontalLayout {
                 spacing: clamp(root.bar-w * 0.005, 0px, 2px);
                 alignment: end;
+                cross-axis-alignment: center;
 
                 // `if` rather than `visible: false`, so a button moved into the overflow
                 // menu vacates its layout slot instead of leaving a hole. The chip's padding
                 // stands in for the gap this row's spacing is too tight to give it.
                 if SignalPathUi.chip-shown && !Settings.overflow-quality: VerticalLayout {
-                    alignment: center;
                     padding-right: Theme.pad-sm;
                     QualityChip { }
                 }
-                if !Settings.overflow-repeat: VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
-                        press-shrink: true;
-                        diameter: root.btn-d;
-                        icon-size: root.btn-icon-d;
-                        active: Player.queue.repeat_mode != "off";
-                        tooltip-text: Player.queue.repeat_mode == "off"
-                            ? @tr("Repeat: off")
-                            : (Player.queue.repeat_mode == "one"
-                                ? @tr("Repeat: one")
-                                : @tr("Repeat: all"));
-                        clicked => { Player.cycle-repeat(); }
-                    }
+                if !Settings.overflow-repeat: IconButton {
+                    icon: Player.queue.repeat_mode == "one" ? "repeat_one" : "repeat";
+                    press-shrink: true;
+                    diameter: root.btn-d;
+                    icon-size: root.btn-icon-d;
+                    active: Player.queue.repeat_mode != "off";
+                    tooltip-text: Player.queue.repeat_mode == "off"
+                        ? @tr("Repeat: off")
+                        : (Player.queue.repeat_mode == "one"
+                            ? @tr("Repeat: one")
+                            : @tr("Repeat: all"));
+                    clicked => { Player.cycle-repeat(); }
                 }
-                if !Settings.overflow-shuffle: VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "shuffle";
-                        press-shrink: true;
-                        diameter: root.btn-d;
-                        icon-size: root.btn-icon-d;
-                        active: Player.queue.shuffle;
-                        tooltip-text: Player.queue.shuffle ? @tr("Shuffle: on") : @tr("Shuffle: off");
-                        clicked => { Player.toggle-shuffle(); }
-                    }
+                if !Settings.overflow-shuffle: IconButton {
+                    icon: "shuffle";
+                    press-shrink: true;
+                    diameter: root.btn-d;
+                    icon-size: root.btn-icon-d;
+                    active: Player.queue.shuffle;
+                    tooltip-text: Player.queue.shuffle ? @tr("Shuffle: on") : @tr("Shuffle: off");
+                    clicked => { Player.toggle-shuffle(); }
                 }
-                if !Settings.overflow-favorite: VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
-                        press-shrink: true;
-                        diameter: root.btn-d;
-                        icon-size: root.btn-icon-d;
-                        active: Player.vm.track.is_favorite;
-                        filled: Player.vm.track.is_favorite;
-                        button-enabled: Player.vm.has_track;
-                        tooltip-text: Player.vm.track.is_favorite ? @tr("Unfavorite") : @tr("Favorite");
-                        clicked => { Player.toggle-favorite(); }
-                    }
+                if !Settings.overflow-favorite: IconButton {
+                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+                    press-shrink: true;
+                    diameter: root.btn-d;
+                    icon-size: root.btn-icon-d;
+                    active: Player.vm.track.is_favorite;
+                    filled: Player.vm.track.is_favorite;
+                    button-enabled: Player.vm.has_track;
+                    tooltip-text: Player.vm.track.is_favorite ? @tr("Unfavorite") : @tr("Favorite");
+                    clicked => { Player.toggle-favorite(); }
                 }
-                if WindowChrome.always-on-top-supported && !Settings.overflow-pin: VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "push_pin";
-                        press-shrink: true;
-                        diameter: root.btn-d;
-                        icon-size: root.btn-icon-d;
-                        active: WindowChrome.always-on-top-active;
-                        filled: WindowChrome.always-on-top-active;
-                        tooltip-text: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
-                        clicked => { WindowChrome.toggle-always-on-top(); }
-                    }
+                if WindowChrome.always-on-top-supported && !Settings.overflow-pin: IconButton {
+                    icon: "push_pin";
+                    press-shrink: true;
+                    diameter: root.btn-d;
+                    icon-size: root.btn-icon-d;
+                    active: WindowChrome.always-on-top-active;
+                    filled: WindowChrome.always-on-top-active;
+                    tooltip-text: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
+                    clicked => { WindowChrome.toggle-always-on-top(); }
                 }
-                if !Settings.overflow-queue: VerticalLayout {
-                    alignment: center;
-                    IconButton {
-                        icon: "queue_music";
-                        press-shrink: true;
-                        diameter: root.btn-d;
-                        icon-size: root.btn-icon-d;
-                        active: Queue.open;
-                        tooltip-text: @tr("Queue");
-                        clicked => { Queue.open = !Queue.open; }
-                    }
+                if !Settings.overflow-queue: IconButton {
+                    icon: "queue_music";
+                    press-shrink: true;
+                    diameter: root.btn-d;
+                    icon-size: root.btn-icon-d;
+                    active: Queue.open;
+                    tooltip-text: @tr("Queue");
+                    clicked => { Queue.open = !Queue.open; }
                 }
-                VerticalLayout {
-                    alignment: center;
-                    VolumePopup {
-                        diameter: root.btn-d;
-                        icon-size: clamp(root.bar-w * 0.035, 22px, 22px);
-                    }
+                VolumePopup {
+                    diameter: root.btn-d;
+                    icon-size: clamp(root.bar-w * 0.035, 22px, 22px);
                 }
-                VerticalLayout {
-                    alignment: center;
-                    OverflowMenu { bar-w: root.bar-w; }
-                }
+                OverflowMenu { bar-w: root.bar-w; }
             }
         }
     }

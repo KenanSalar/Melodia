@@ -2,7 +2,6 @@ import { Theme } from "../../../theme.slint";
 import { SettingsPage } from "../../../globals/settings-page.slint";
 import { LanguageSection } from "../language-section.slint";
 import { AppearanceSection } from "../appearance-section.slint";
-import { MotionSection } from "../motion-section.slint";
 import { WindowChromeSection } from "../window-chrome-section.slint";
 import { OverflowMenuSection } from "../overflow-menu-section.slint";
 import { MiniPlayerSection } from "../mini-player-section.slint";
@@ -17,8 +16,8 @@ export component InterfacePage inherits Rectangle {
     vertical-stretch: 0;
 
     out property <bool> has-matches:
-        language.has-matches || appearance.has-matches || motion.has-matches
-        || window.has-matches || overflow.has-matches || mini.has-matches;
+        language.has-matches || appearance.has-matches || window.has-matches
+        || overflow.has-matches || mini.has-matches;
 
     // See `library-page.slint` for why the cards live in columns that place
     // themselves — this is the page that shows what it buys, five cards
@@ -33,7 +32,6 @@ export component InterfacePage inherits Rectangle {
 
             language := LanguageSection { tab-name: @tr("Interface"); }
             appearance := AppearanceSection { tab-name: @tr("Interface"); }
-            motion := MotionSection { tab-name: @tr("Interface"); }
         }
 
         VerticalLayout {

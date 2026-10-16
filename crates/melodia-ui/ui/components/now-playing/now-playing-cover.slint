@@ -37,16 +37,10 @@ export component NowPlayingCover inherits Rectangle {
     Rectangle {
         opacity: Player.np-cover-has-image ? 0.0 : 1.0;
         animate opacity { duration: Theme.dur-med; easing: ease-in-out; }
-        HorizontalLayout {
-            alignment: center;
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "music_note";
-                    icon-size: root.height * 0.4;
-                    icon-color: Player.np-on-backdrop-muted.transparentize(0.5);
-                }
-            }
+        MaterialIcon {
+            name: "music_note";
+            icon-size: root.height * 0.4;
+            icon-color: Player.np-on-backdrop-muted.transparentize(0.5);
         }
     }
 

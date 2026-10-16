@@ -15,22 +15,20 @@ component StatusLine inherits HorizontalLayout {
     alignment: start;
     spacing: Theme.pad-xs;
     vertical-stretch: 0;
+    // The glyph sits in a collapsed em-box and the text in a line box, so the two share a centre
+    // line rather than a top edge.
+    cross-axis-alignment: center;
 
     MaterialIcon {
         name: root.icon;
         icon-size: 16px;
         icon-color: root.tint;
     }
-    // The glyph sits in a collapsed em-box and the text in a line box, so the two need a
-    // centring wrapper to share a baseline.
-    VerticalLayout {
-        alignment: center;
-        Text {
-            text: root.text;
-            color: Theme.subtext0;
-            font-size: Theme.font-size-sm;
-            overflow: elide;
-        }
+    Text {
+        text: root.text;
+        color: Theme.subtext0;
+        font-size: Theme.font-size-sm;
+        overflow: elide;
     }
 }
 
@@ -66,7 +64,7 @@ export component RadioStationDetail inherits Rectangle {
                 height: 100%;
                 horizontal-scrollbar-policy: always-off;
                 vertical-scrollbar-policy: always-off;
-                viewport-width: self.width;
+                content-width: self.width;
 
                 VerticalLayout {
                     spacing: Theme.pad-md;
@@ -116,9 +114,9 @@ export component RadioStationDetail inherits Rectangle {
                 width: Theme.scrollbar-slot;
                 height: 100%;
                 visible-size: sv.visible-height;
-                content-size: sv.viewport-height;
-                offset: -sv.viewport-y;
-                scroll-to(o) => { sv.viewport-y = -o; }
+                content-size: sv.content-height;
+                offset: -sv.content-y;
+                scroll-to(o) => { sv.content-y = -o; }
             }
         }
     }

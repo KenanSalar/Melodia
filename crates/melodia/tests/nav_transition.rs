@@ -12,7 +12,7 @@
 //! direction — a Slint-side mount is lateral by construction, the two that aren't (a drill
 //! in, a back out) being Rust's and going through `ui::nav_transition`.
 
-use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, stripped_sources};
+use melodia_testkit::{MIN_SLINT_SOURCES, UI_DIR, spellings_outside, stripped_sources};
 
 /// The nine writes as of this pin — six closers and three index flips. A floor rather than
 /// an equality: a tenth is fine, a walk that stopped finding them is not.
@@ -67,4 +67,12 @@ fn every_slint_side_mount_writes_its_own_enter_edge() {
         "only {found} Slint-side view mounts found, expected at least {MIN_MOUNTS} — the \
          walk stopped seeing them, so every assertion above it is vacuous"
     );
+}
+
+/// The launch's entrance suppression is declared raised and handed back by the first mount that
+/// settles. `AppWindow::new()` builds the declared page before Rust can reach the global, so a
+/// raise from Rust lands after that page has armed its fade, and a lower can land mid-fade.
+#[test]
+fn no_rust_writes_the_entrance_suppression() {
+    assert_eq!(spellings_outside("set_suppress_enter_animation(", &[]), Vec::<String>::new());
 }

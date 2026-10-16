@@ -97,7 +97,7 @@ fn a_specless_pair_keeps_the_seeds_and_skips_the_blur_and_the_brightness() {
 
     assert!(pair.blur.is_none());
     assert!(pair.sample.luma.is_none());
-    assert!(pair.sample.accent_argb.is_some());
+    assert!(pair.sample.accent_rgb.is_some());
     assert!(pair.sample.seeds.iter().any(Option::is_some));
 }
 

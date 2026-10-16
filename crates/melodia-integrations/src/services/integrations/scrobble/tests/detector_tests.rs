@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use super::{DetectorState, Effect};
 use melodia_core::entities::track::TrackSummary;
+use melodia_engine::player::engine::fixtures::test_view_model;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick};
-use melodia_engine::player::engine::types::RepeatMode;
 
 /// UNIX-seconds "now" at each play's start; every scrobble should carry it as its
 /// timestamp.
@@ -35,27 +35,11 @@ fn summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
 /// A view-model carrying `status` and an optional current track — the only two
 /// things the detector reads.
 fn vm(status: &'static str, current_track: Option<Arc<TrackSummary>>) -> PlayerViewModelLight {
-    PlayerViewModelLight {
-        status,
-        current_track,
-        position_ms: 0,
-        duration_ms: 0,
-        progress_percent: 0.0,
-        volume: 100,
-        is_muted: false,
-        playback_speed: 1.0,
-        gapless_enabled: false,
-        sleep_at_track_end: false,
-        radio: None,
-        has_next: false,
-        has_previous: false,
-        shuffle_enabled: false,
-        repeat_mode: RepeatMode::Off,
-    }
+    PlayerViewModelLight { status, ..test_view_model(current_track, None, 0) }
 }
 
 fn tick(position_ms: u64, duration_ms: u64) -> PositionTick {
-    PositionTick { position_ms, duration_ms }
+    PositionTick { position_ms, duration_ms, stamp: 0 }
 }
 
 /// Feed position ticks from the play's start up to `target_ms` in

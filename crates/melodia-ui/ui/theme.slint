@@ -171,6 +171,14 @@ export global Theme {
     // heroes first, whose right column barely clears the tile once the chips wrap.
     out property <length> hero-artwork: 140px;
 
+    // A `MetaChip`'s height, here because `MetaChipStrip` caps its rows in multiples of it: a chip
+    // and a cap that disagree slice a row instead of dropping it whole.
+    out property <length> meta-chip-h: 26px;
+
+    // A `Dropdown` trigger's height, here because the smart editor's value fields sit beside its
+    // pickers at the same height.
+    out property <length> dropdown-h: 32px;
+
     // Typography
     out property <length> font-size-sm: 12px;
     out property <length> font-size-row: 13px;
@@ -192,11 +200,17 @@ export global Theme {
     // text line nest it inside the title row, so raising this spends the slack a chip row needs.
     out property <length> hero-title-size: 22px;
 
-    // Easing is inlined at each `animate` site: Slint 1.16 can't expose an `easing` property
+    // Easing is inlined at each `animate` site: Slint can't expose an `easing` property
     // across the Rust boundary, and a global one warns at build time.
     out property <duration> dur-fast: 200ms;
     out property <duration> dur-med: 250ms;
     out property <duration> dur-spatial: 400ms;
+
+    // Up while `ui::appearance::theme_paint` eases one palette into the next by writing the brushes
+    // above every frame. **An `animate` whose binding reads a palette brush is `enabled` only while
+    // this is down**: each write restarts its curve, so easing alongside leaves that control landing
+    // after the window, and switched off it simply follows the fade.
+    in property <bool> recoloring: false;
 
     // **`window_chrome` must hydrate this between `AppWindow::new()` and `app.show()`**: Slint applies
     // `no-frame` live, so a later write maps the window with the wrong frame and swaps it on screen.

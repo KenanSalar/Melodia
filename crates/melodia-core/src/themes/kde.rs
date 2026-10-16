@@ -1,5 +1,4 @@
 //! KDE Breeze theme: 2 variants (Dark / Light), 8 accents.
-//! Ported verbatim from `Melodia-tauri/src/themes/kde-breeze.ts`.
 //!
 //! The static tables are half of it. The other half is [`palette_from_kde`], which re-sources
 //! every slot from the live `kdeglobals` so the player matches Plasma's active scheme rather than
@@ -9,8 +8,6 @@
 
 use std::collections::HashMap;
 
-use serde::Serialize;
-
 use super::{AccentDef, Palette, ThemeDef, Variant};
 
 /// A parsed `kdeglobals` colour scheme.
@@ -19,7 +16,7 @@ use super::{AccentDef, Palette, ThemeDef, Variant};
 /// that pairing are needed and only one of them can cross a crate boundary: this is plain data
 /// the palette half consumes, and the reader is a platform adapter that produces it. Naming it
 /// from there instead made the two mutually dependent.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct KdeColorPalette {
     pub colors: HashMap<String, String>,
     pub accent: String,

@@ -13,15 +13,14 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use async_compat::Compat;
-use slint::{ComponentHandle, Image, Weak};
+use slint::{ComponentHandle, Image, ModelRc, VecModel, Weak};
 
 use super::metadata::to_slint_track_meta;
 use super::write_crossfade_slot;
 use super::{NowPlayingSource, NowPlayingState, SourceKey};
-use crate::ui::appearance::theme_apply::color;
+use crate::ui::appearance::rgb::color;
 use crate::ui::aurora;
 use crate::ui::backdrop::{self, BackdropSample};
-use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -140,7 +139,7 @@ pub(super) async fn apply_source_change(
     }
 
     let player = ui.global::<Player>();
-    publish_chips(&player, np_state, meta);
+    publish_chips(&player, meta);
     write_backdrop_tiers(&ui, sample);
 
     // The blur is the backdrop for both kinds, so it takes the same cross-fade either way.
@@ -245,20 +244,10 @@ async fn decode_artwork_for(
     }
 }
 
-/// Chunk the new track's chips and push them with the meta row they came from.
-///
-/// Refreshes the shadow from the just-fetched `meta` and pushes a freshly chunked model, so the
-/// view reflects the new track without waiting on a width-change fire. With no layout pass yet the
-/// chunk collapses to one row and the strip's mount `Timer` fires a real width immediately. `None`
-/// because this column can grow downward — the hero band can't.
-fn publish_chips(player: &Player<'_>, np_state: &NowPlayingState, meta: TrackMetaRow) {
-    let chip_texts = super::metadata::visible_chip_texts(&meta);
-    let chip_rows = chips::chunk_chips_to_rows(&chip_texts, np_state.chip_last_width.get(), None);
-    // Unconditional: a new track's chips are new text, which a row-length comparison
-    // can't see. Recording the shape is what lets the width channel skip its repaints.
-    *np_state.chip_last_shape.borrow_mut() = chips::split_shape(&chip_rows);
-    player.set_chip_rows(chips::rows_to_model(chip_rows));
-    *np_state.chip_texts.borrow_mut() = chip_texts;
+/// Push the new track's chips with the meta row they came from.
+fn publish_chips(player: &Player<'_>, meta: TrackMetaRow) {
+    let chips = super::metadata::visible_chip_texts(&meta);
+    player.set_chips(ModelRc::from(Rc::new(VecModel::from(chips))));
     player.set_track_meta(meta);
 }
 

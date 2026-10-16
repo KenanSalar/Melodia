@@ -10,8 +10,6 @@ fn file(id: i64, title: &str, artist: Option<&str>, in_library: bool) -> BrowseF
     BrowseFile {
         row: RsTrackListRow {
             id,
-            file_path: format!("/music/{title}.flac"),
-            file_name: format!("{title}.flac"),
             title: title.to_owned(),
             artist: artist.map(str::to_owned),
             album_artist: None,
@@ -27,9 +25,9 @@ fn file(id: i64, title: &str, artist: Option<&str>, in_library: bool) -> BrowseF
             album_id: None,
             artist_id: None,
             genre_id: None,
-            date_added: "2026-01-01T00:00:00Z".to_owned(),
             sort_key: Some(title.to_lowercase()),
         },
+        file_name: format!("{title}.flac"),
         in_library,
     }
 }

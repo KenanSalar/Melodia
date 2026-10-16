@@ -3,11 +3,11 @@
 //! Fetching, judging a skip, caching the asset and recording the result sit here so the two can't
 //! drift apart. What stays with each caller is its cadence and how loudly it fails.
 
-use chrono::Utc;
 use tokio::sync::watch;
 
 use melodia_core::config::Paths;
 use melodia_core::error::{AppResult, describe};
+use melodia_core::utils::now_unix;
 
 use super::asset_cache;
 use super::check::{Checked, Verdict, check_for_update, recheck_for_update};
@@ -93,7 +93,7 @@ pub async fn run_check(http: &reqwest::Client, paths: &Paths) -> AppResult<Findi
         None => check_for_update(http, RELEASES_BASE, &current).await.map(Some),
     };
 
-    let now = Utc::now().timestamp();
+    let now = now_unix();
     match fetched {
         Ok(Some(checked)) => Ok(settle(paths, &flags.skipped_release, checked, now)),
         Ok(None) => {

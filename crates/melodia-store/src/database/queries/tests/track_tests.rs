@@ -1,7 +1,7 @@
-use crate::database::DbPool;
 use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
+use crate::database::{DbPool, IDS_PER_SET};
 use melodia_core::entities::track::TrackMeta;
 use melodia_core::error::AppError;
 
@@ -258,7 +258,7 @@ async fn get_tracks_in_directory_direct_only() -> Result<(), AppError> {
 
     let tracks = queries::track::get_tracks_in_directory(&db, &dir).await?;
     assert_eq!(tracks.len(), 1);
-    assert_eq!(tracks[0].title, "Direct");
+    assert_eq!(tracks[0].row.title, "Direct");
     Ok(())
 }
 
@@ -493,6 +493,19 @@ async fn set_rating_empty_ids_is_noop() -> Result<(), AppError> {
     let db = seed_db().await?;
     // Should not error.
     queries::track::set_rating(&db, &[], 3).await?;
+    Ok(())
+}
+
+/// One id past what a statement carries beside its value, so the write spans two chunks and a
+/// loop that ran only its first would leave the last track unrated.
+#[tokio::test]
+async fn set_rating_rates_every_id_past_one_statements_budget() -> Result<(), AppError> {
+    let tracks = IDS_PER_SET + 1;
+    let (db, ids) = numbered_library(tracks).await?;
+
+    queries::track::set_rating(&db, &ids, 4).await?;
+
+    assert_eq!(rows_counted(&db, "rating", 4).await?, i64::try_from(tracks).unwrap_or(i64::MAX));
     Ok(())
 }
 
@@ -974,7 +987,7 @@ async fn a_folder_named_with_an_underscore_does_not_reach_its_siblings() -> Resu
 
     let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
 
-    assert_eq!(rows.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    assert_eq!(rows.iter().map(|r| r.row.title.as_str()).collect::<Vec<_>>(), ["A"]);
     Ok(())
 }
 
@@ -994,7 +1007,7 @@ async fn a_folder_named_with_a_percent_does_not_reach_its_siblings() -> Result<(
 
     let rows = queries::track::get_tracks_in_directory(&db, &asked).await?;
 
-    assert_eq!(rows.iter().map(|r| r.title.as_str()).collect::<Vec<_>>(), ["A"]);
+    assert_eq!(rows.iter().map(|r| r.row.title.as_str()).collect::<Vec<_>>(), ["A"]);
     Ok(())
 }
 

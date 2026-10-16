@@ -4,7 +4,7 @@ use super::helpers::{
     TestResult, favorite_row, init_service, lb_love_service, paths_in, sample_item, scrobble_row,
 };
 use crate::services::integrations::scrobble::{
-    LastfmCredentials, ListenBrainzCredentials, LoveTarget,
+    LastfmCredentials, ListenBrainzCredentials, LoveTarget, ScrobbleService,
 };
 use melodia_core::entities::integrations::ScrobbleFlags;
 
@@ -299,5 +299,143 @@ async fn now_playing_reaches_a_connected_provider() -> TestResult {
     let arrival = tokio::time::timeout(std::time::Duration::from_secs(5), arrived.recv()).await;
     assert_eq!(arrival?.as_deref(), Some("/1/submit-listens"));
     assert_eq!(service.queued_len(), 0, "ephemeral: nothing durable is written for it");
+    Ok(())
+}
+
+// --- the gate the detector checks before reading a track's row ---
+
+/// The credentials a row of the gate's table has stored.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stored {
+    Nothing,
+    ListenBrainz,
+    /// A `ListenBrainz` token and a Last.fm session. Last.fm's own scrobble toggle stays off
+    /// wherever a session is stored, so no row turns on keys a build may lack.
+    Both,
+}
+
+/// A toggle a row of the gate's table has switched on.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Toggle {
+    ListenBrainzScrobble,
+    ListenBrainzLove,
+    LastfmScrobble,
+}
+
+/// One row of the gate's table, and whether a listen would reach a provider there.
+struct Wiring {
+    what: &'static str,
+    stored: Stored,
+    on: &'static [Toggle],
+    active: bool,
+}
+
+const WIRINGS: [Wiring; 7] = [
+    Wiring { what: "nothing stored or on", stored: Stored::Nothing, on: &[], active: false },
+    Wiring {
+        what: "both scrobble toggles on, nothing stored",
+        stored: Stored::Nothing,
+        on: &[Toggle::ListenBrainzScrobble, Toggle::LastfmScrobble],
+        active: false,
+    },
+    Wiring {
+        what: "a ListenBrainz token, its toggle off",
+        stored: Stored::ListenBrainz,
+        on: &[],
+        active: false,
+    },
+    Wiring {
+        what: "a ListenBrainz token, only love on",
+        stored: Stored::ListenBrainz,
+        on: &[Toggle::ListenBrainzLove],
+        active: false,
+    },
+    Wiring {
+        what: "a ListenBrainz token, its toggle on",
+        stored: Stored::ListenBrainz,
+        on: &[Toggle::ListenBrainzScrobble],
+        active: true,
+    },
+    Wiring { what: "both stored, every toggle off", stored: Stored::Both, on: &[], active: false },
+    Wiring {
+        what: "both stored, ListenBrainz on",
+        stored: Stored::Both,
+        on: &[Toggle::ListenBrainzScrobble],
+        active: true,
+    },
+];
+
+async fn wired(
+    paths: &melodia_core::config::Paths,
+    wiring: &Wiring,
+) -> Result<ScrobbleService, Box<dyn std::error::Error>> {
+    let flags = ScrobbleFlags {
+        lastfm_enabled: wiring.on.contains(&Toggle::LastfmScrobble),
+        listenbrainz_enabled: wiring.on.contains(&Toggle::ListenBrainzScrobble),
+        listenbrainz_love_enabled: wiring.on.contains(&Toggle::ListenBrainzLove),
+        ..Default::default()
+    };
+    let service = init_service(paths, &flags);
+    if wiring.stored != Stored::Nothing {
+        service
+            .set_listenbrainz_credentials(Some(ListenBrainzCredentials {
+                token: "tok".to_owned(),
+                username: "lb-user".to_owned(),
+            }))
+            .await?;
+    }
+    if wiring.stored == Stored::Both {
+        service
+            .set_lastfm_credentials(Some(LastfmCredentials {
+                session_key: "sk-abc".to_owned(),
+                username: "listener".to_owned(),
+            }))
+            .await?;
+    }
+    Ok(service)
+}
+
+/// A love toggle is not a listen, and a toggle is nothing without what it stands for stored.
+#[tokio::test]
+async fn scrobbling_is_active_only_where_a_provider_would_take_a_listen() -> TestResult {
+    for wiring in &WIRINGS {
+        let dir = tempfile::tempdir()?;
+        let service = wired(&paths_in(dir.path()), wiring).await?;
+
+        assert_eq!(service.scrobbling_active(), wiring.active, "{}", wiring.what);
+    }
+    Ok(())
+}
+
+/// The gate is a second spelling of what `enqueue_track` asks, and the two have to agree: a gate
+/// shut where a listen would queue drops it, one open where nothing would reads a row for nothing.
+#[tokio::test]
+async fn the_gate_opens_exactly_where_a_listen_would_queue() -> TestResult {
+    for wiring in &WIRINGS {
+        let dir = tempfile::tempdir()?;
+        let service = wired(&paths_in(dir.path()), wiring).await?;
+
+        service.enqueue_track(sample_item().track, 1_700_000_000).await?;
+
+        assert_eq!(service.scrobbling_active(), service.queued_len() == 1, "{}", wiring.what);
+    }
+    Ok(())
+}
+
+/// The gate reads the live shadow, so it shuts on the toggle or the disconnect that closes it,
+/// rather than holding what it read when the service started.
+#[tokio::test]
+async fn the_gate_closes_as_soon_as_the_provider_does() -> TestResult {
+    // A ListenBrainz token, its toggle on.
+    let ready = &WIRINGS[4];
+    let (toggled_dir, disconnected_dir) = (tempfile::tempdir()?, tempfile::tempdir()?);
+    let toggled = wired(&paths_in(toggled_dir.path()), ready).await?;
+    let disconnected = wired(&paths_in(disconnected_dir.path()), ready).await?;
+
+    toggled.set_flags(ScrobbleFlags::default());
+    disconnected.set_listenbrainz_credentials(None).await?;
+
+    let read = (toggled.scrobbling_active(), disconnected.scrobbling_active());
+    assert_eq!(read, (false, false), "(toggled off, disconnected)");
     Ok(())
 }

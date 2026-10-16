@@ -26,8 +26,6 @@ fn mk(
 ) -> RsTrackListRow {
     RsTrackListRow {
         id,
-        file_path: format!("/m/{id}.flac"),
-        file_name: format!("{id}.flac"),
         title: format!("title{id}"),
         artist: artist.map(str::to_owned),
         album_artist: None,
@@ -43,7 +41,6 @@ fn mk(
         album_id: None,
         artist_id: None,
         genre_id: None,
-        date_added: "2026-01-01T00:00:00Z".to_owned(),
         sort_key: Some(sort_key.to_owned()),
     }
 }
@@ -172,13 +169,15 @@ fn track_number_desc_keeps_disc_ascending() {
 
 #[test]
 fn custom_secondary_key_breaks_ties() {
-    // Browse-style: file name, not title/sort_key, is the tie-breaker.
+    // Browse-style: a caller-supplied key, not sort_key, is the tie-breaker. Input order and
+    // sort_key both disagree with it, so a sort that ignores the key or falls back to sort_key
+    // leaves [2, 1].
     let mut rows = vec![
-        mk(1, "same", Some("A"), None, None, None, 0, None, None),
-        mk(2, "same", Some("A"), None, None, None, 0, None, None),
+        mk(2, "a", Some("A"), None, None, None, 0, None, None),
+        mk(1, "b", Some("A"), None, None, None, 0, None, None),
     ];
-    sort_track_rows_by(&mut rows, "artist", "asc", |r| r, |r| r.file_name.to_lowercase());
-    // file_name "1.flac" < "2.flac".
+    sort_track_rows_by(&mut rows, "artist", "asc", |r| r, |r| r.title.to_lowercase());
+    // "title1" < "title2".
     assert_eq!(ids(&rows), [1, 2]);
 }
 

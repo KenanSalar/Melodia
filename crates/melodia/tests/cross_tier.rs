@@ -98,8 +98,6 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
     // decide whether it belongs in the index and in the fold.
     let row = melodia_core::entities::track::TrackListRow {
         id: 1,
-        file_path: "/m/1.flac".to_owned(),
-        file_name: "file_name".to_owned(),
         title: "title".to_owned(),
         artist: Some("artist".to_owned()),
         album_artist: Some("album_artist".to_owned()),
@@ -115,7 +113,6 @@ async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result
         album_id: None,
         artist_id: None,
         genre_id: None,
-        date_added: "2026-01-01T00:00:00Z".to_owned(),
         sort_key: None,
     };
     assert_eq!(

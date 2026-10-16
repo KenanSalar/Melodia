@@ -6,6 +6,7 @@ import { GenreDetail, Genres } from "../globals/genres.slint";
 import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 import { PlaylistDetail, Playlists } from "../globals/playlists.slint";
 import { Tracks } from "../globals/tracks.slint";
+import { DetailArrival } from "../components/detail-arrival.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
@@ -27,9 +28,9 @@ import { PlaylistDetailBody } from "my-library/playlist-detail.slint";
 // sheet — the band, the grid geometry the four card tabs share, which body is on screen, and the
 // two tooltip frames the band and the pills publish anchors for.
 //
-// **The tab index is what routes, not the detail id.** `seed_detail_from_settings` runs for all
-// four detail views at boot whichever section is restored, so more than one `*Detail.*-id` can be
-// `>= 0` at once and splitting on the id alone would mount two.
+// **The tab index is what routes, not the detail id.** A tab left with its detail open keeps the
+// id, so more than one `*Detail.*-id` can be `>= 0` at once and splitting on the id alone would
+// mount two.
 export component MyLibraryView inherits Rectangle {
     // Bumped by the band's `SearchBar`, settled 130 ms later — the list-view shape, where
     // the cost being debounced is a model rebuild in Rust rather than Slint's own
@@ -122,14 +123,19 @@ export component MyLibraryView inherits Rectangle {
 
     // **May a mounting body animate at all.** The page's own `ViewTransition` is still in flight
     // when its first body mounts, so a body moving into it is the same diagonal one level up.
-    // `tab-anim-armed` covers every arrival through the bar; the two that don't are armed by the
-    // handlers below — the first drill out of the tab the page opened on, and a tab move that isn't
-    // a pick, which `detail-open` can't cover because it lands the id and the tab in **one** tick.
-    // Seeded by the binding and owned by the handlers, `hero-t`'s idiom; it re-disarms for free on
-    // the next entry, and `changed` skips a first evaluation.
+    // `tab-anim-armed` covers every arrival through the bar. The two that don't are armed below:
+    // a drill or close by `DetailArrival`, which leaves out a restore's landing, and a tab move
+    // that isn't a pick by `watched-tab-idx`, a cross-tab drill landing the id and the tab in
+    // **one** tick so `detail-open` never moves. Seeded by the binding and owned by the handlers,
+    // `hero-t`'s idiom; it re-disarms for free on the next entry, and `changed` skips a first
+    // evaluation.
     property <bool> body-anim-armed: band.tab-anim-armed;
+    DetailArrival {
+        open: root.detail-open;
+        restoring: root.detail-restoring;
+        arrived => { root.body-anim-armed = true; }
+    }
     changed detail-open => {
-        root.body-anim-armed = true;
         if (!root.detail-open) { root.latch-count(); }
     }
 

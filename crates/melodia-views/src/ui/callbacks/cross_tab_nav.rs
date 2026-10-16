@@ -1,7 +1,7 @@
-//! Single-home wiring for the `go-to-album` / `go-to-artist` / `go-to-genre` callbacks
-//! every row context menu emits — the track-list views and the queue sheet. Its own module
-//! because each per-view callback file would otherwise need all three target UI handles;
-//! instead this runs after every `wire_*`, so the handles are guaranteed to exist.
+//! Single-home wiring for `Nav.go-to-album` / `go-to-artist` / `go-to-genre`, which every
+//! right-click menu's "Go to …" calls straight. Its own module because each per-view
+//! callback file would otherwise need all three target UI handles; instead this runs after
+//! every `wire_*`, so the handles are guaranteed to exist.
 //!
 //! Four steps, mirroring the older cross-tab hand-offs: stamp
 //! `*Detail.origin-nav-index` synchronously from where the user is standing, mark the
@@ -16,9 +16,6 @@
 //! [`Origin`] survives** for the other question it answers — "did the user navigate away
 //! mid-fetch", which the nav index alone stopped being able to tell once the four
 //! destinations became tabs of one page.
-//!
-//! Search is the exception: its row menu calls the existing `Search.open-album` /
-//! `open-artist`, so only `go-to-genre` is wired here.
 
 use std::sync::Arc;
 
@@ -34,8 +31,7 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
-    AlbumDetail, Albums, AppWindow, ArtistDetail, Browse, Favorites, GenreDetail, MyLibrary, Nav,
-    NavEnterFrom, PlaylistDetail, Queue, RecentlyPlayed, Search, Tracks,
+    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, NavEnterFrom, Queue,
 };
 
 /// Where the user is standing when a "Go to …" fires: the nav index, plus the My Library
@@ -87,8 +83,8 @@ pub(in crate::ui) fn origin_stamp(nav: i32) -> i32 {
     if nav == NAV_MY_LIBRARY { -1 } else { nav }
 }
 
-/// Wire every `go-to-*` callback to its cross-tab handler. Must run *after* the three
-/// target `install`s, so their UI handles exist.
+/// Wire the three `Nav.go-to-*` callbacks to their cross-tab handlers. Must run *after* the
+/// three target `install`s, so their UI handles exist.
 pub fn wire_cross_tab_nav(
     ui: &AppWindow,
     state: &AppState,
@@ -97,44 +93,19 @@ pub fn wire_cross_tab_nav(
     genres_ui: &Arc<GenresUi>,
 ) {
     let weak = ui.as_weak();
+    let nav = ui.global::<Nav>();
+    nav.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
+    nav.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
+    nav.on_go_to_genre(make_go_to_genre(state, genres_ui, weak));
+}
 
-    // One trio per global, spelled once. A `macro_rules!` rather than a generic fn: these
-    // nine globals, `Tracks`, `Browse` and `Queue` among them, share these three setters and
-    // nothing else, so a trait for them would need an impl macro of its own and save nothing.
-    macro_rules! wire_go_to {
-        ($($global:ident),+ $(,)?) => {
-            $({
-                let g = ui.global::<$global>();
-                g.on_go_to_album(make_go_to_album(state, albums_ui, weak.clone()));
-                g.on_go_to_artist(make_go_to_artist(state, artists_ui, weak.clone()));
-                g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
-            })+
-        };
-    }
-
-    // The row menu hides the entry naming the surface you are already on, so the detail
-    // globals still wire all three. `Queue` is the queue sheet's row menu, which dismisses
-    // the sheet before invoking.
-    wire_go_to!(
-        Tracks,
-        Browse,
-        Favorites,
-        PlaylistDetail,
-        AlbumDetail,
-        ArtistDetail,
-        GenreDetail,
-        RecentlyPlayed,
-        Queue,
-    );
-
-    // Search is the exception: album and artist reuse `Search.open-album` / `open-artist`,
-    // wired elsewhere.
-    let g = ui.global::<Search>();
-    g.on_go_to_genre(make_go_to_genre(state, genres_ui, weak.clone()));
-
-    // The Albums grid's card menu wants only "Go to Artist", so it takes the helper directly
-    // rather than joining the macro, which installs all three on every global it names.
-    ui.global::<Albums>().on_go_to_artist(make_go_to_artist(state, artists_ui, weak));
+/// Moves to the drill's tab once it has landed, uncovering the content panel first: the
+/// player bar stays reachable over Now Playing and the queue sheet, and a detail opened under
+/// either is one nobody sees.
+fn land(ui: &AppWindow, tab: i32) {
+    ui.global::<Nav>().set_now_playing_open(false);
+    ui.global::<Queue>().invoke_dismiss();
+    go_to_tab(ui, tab);
 }
 
 fn make_go_to_album(
@@ -202,7 +173,7 @@ pub(in crate::ui) fn open_album_cross_tab(
             NavEnterFrom::Right,
             move |ui: &AppWindow| {
                 if origin.still_current(ui) {
-                    go_to_tab(ui, target_tab);
+                    land(ui, target_tab);
                 }
             },
         )
@@ -249,7 +220,7 @@ pub(in crate::ui) fn open_artist_cross_tab(
             NavEnterFrom::Right,
             move |ui: &AppWindow| {
                 if origin.still_current(ui) {
-                    go_to_tab(ui, target_tab);
+                    land(ui, target_tab);
                 }
             },
         )
@@ -302,7 +273,7 @@ fn make_go_to_genre(
                 NavEnterFrom::Right,
                 move |ui: &AppWindow| {
                     if origin.still_current(ui) {
-                        go_to_tab(ui, target_tab);
+                        land(ui, target_tab);
                     }
                 },
             )

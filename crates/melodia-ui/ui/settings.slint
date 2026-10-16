@@ -64,12 +64,6 @@ export global Settings {
     in-out property <bool> close-to-tray: false;
     callback close-to-tray-changed(bool);
 
-    // Persist-only from here — what applies it is `boot::ui_setup`, which turns it into
-    // `Nav.suppress-enter-animation` before the window is shown. Off by default, so the
-    // launch a release already ships is the one that keeps playing.
-    in-out property <bool> skip-startup-animation: false;
-    callback skip-startup-animation-changed(bool);
-
     // Applied to `PlayerState.gapless_enabled` synchronously — the next 500 ms monitor
     // tick picks it up — then persisted on the blocking pool.
     in-out property <bool> gapless-playback: true;
@@ -111,6 +105,12 @@ export global Settings {
     in-out property <bool> output-follow-rate: false;
     callback output-follow-rate-changed(bool);
     in property <bool> follow-rate-supported;
+
+    // Linear (0) or band-limited (1), for every conversion: a rate mismatch, either mode, and any
+    // speed other than one. Applied off the UI thread, the engine waiting out a reopen for it.
+    in-out property <int> output-resampler-idx: 0;
+    out property <bool> resampler-linear: root.output-resampler-idx == 0;
+    callback output-resampler-changed(int);
 
     // Shared (0) or exclusive (1), and which card an exclusive claim takes, and shared output too
     // where `shared-device-supported`. Rust lists the cards, whose names are data, and applies a
@@ -346,7 +346,7 @@ export global Settings {
     in-out property <bool> verbose-logging: false;
     callback verbose-logging-changed(bool);
 
-    // Everything below is a `pure callback` wrapping an `@tr` literal, Slint 1.16 exposing no
+    // Everything below is a `pure callback` wrapping an `@tr` literal, Slint 1.18 exposing no
     // Rust-callable `tr(...)`: Rust invokes these at push time so each string resolves in the
     // locale selected right then, not the one active when the notification was built.
     pure callback watcher-disabled-title() -> string;

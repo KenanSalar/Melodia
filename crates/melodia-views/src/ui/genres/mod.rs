@@ -50,9 +50,9 @@ pub use detail::{open_genre_with, seed_detail_from_settings};
 // which is why it can't fold into `install` with the models and the wiring.
 pub use grid::fetch_grid;
 
-// `pub(super)` is `pub(in crate::ui)` here, the reach the drill in
-// `callbacks::cross_tab_nav` needs.
-pub(super) use detail::{open_genre, refresh_detail};
+// `pub(super)` is `pub(in crate::ui)` here, the reach this slice's own `callbacks/` and the drill
+// in `callbacks::cross_tab_nav` need.
+pub(super) use detail::{open_genre, refresh_detail, restore_detail};
 pub(super) use grid::rebuild_grid;
 
 /// Install the Genres grid + detail models, build the handle, and wire every

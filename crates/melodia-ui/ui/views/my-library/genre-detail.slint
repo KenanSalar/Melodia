@@ -40,9 +40,6 @@ export component GenreDetailBody inherits Rectangle {
         clear-selection => { GenreDetail.clear-selection(); }
         // A click in the track list blurs the band's SearchBar.
         request-blur-search => { MyLibrary.blur-search-tick += 1; }
-        go-to-album(aid) => { GenreDetail.go-to-album(aid); }
-        go-to-artist(aid) => { GenreDetail.go-to-artist(aid); }
-        go-to-genre(gid) => { GenreDetail.go-to-genre(gid); }
     }
 
     // At the view root, flush with the content panel's rounded edges.

@@ -88,8 +88,9 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Queue with shuffle and repeat; playing from any list queues that list behind your pick
 - Hold Previous or Next to scan through a track in short audible jumps that grow the longer you hold, and hold Play/Pause to stop, which takes the track back to its start
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
+- Right-click the playing song in the player bar for the menu its row has in a list: copy its details, add it to a playlist or your favorites, edit its tags, open its folder, or go to its album, artist or genre
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
-- Band-limited sample-rate conversion wherever a file's rate isn't the output's or the speed isn't 1×, carried across gapless track changes, and skipped entirely where the rates already match
+- Sample-rate conversion wherever a file's rate isn't the output's or the speed isn't 1×: band-limited to keep the full treble, or linear, light on the CPU at any device rate and the default on Windows, under Settings ▸ Playback ▸ Output. Either way it is carried across gapless track changes and skipped entirely where the rates already match
 - Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next or lyrics, one layout that rearranges as you resize instead of jumping between them
 
 ### Bit-perfect output
@@ -126,7 +127,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Segmented (HLS) stations play like any other
 
 ### Themes
-Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**. System dark/light is followed automatically, KDE color schemes are read from `kdeglobals`, and Material You derives a palette from the current artwork in seven color styles. Headers paint an aurora of the album's own colors by default, or a blurred cover instead. The titlebar is custom and transparent, with native decorations available, and KDE opens on its native one. A first launch picks the desktop's own theme too: Windows Fluent, KDE Breeze and GNOME Adwaita follow the system's light or dark mode, and any other desktop starts on Catppuccin Mocha.
+Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**. System dark/light is followed automatically, KDE color schemes are read from `kdeglobals`, and Material You derives a palette from the current artwork in seven color styles, fading the whole window into each new cover's colors. Material 3 and Material You both follow Google's 2025 Material color spec wherever it defines the style. Headers paint an aurora of the album's own colors by default, or a blurred cover instead. The titlebar is custom and transparent, with native decorations available, and KDE opens on its native one. A first launch picks the desktop's own theme too: Windows Fluent, KDE Breeze and GNOME Adwaita follow the system's light or dark mode, and any other desktop starts on Catppuccin Mocha.
 
 ### Formats and languages
 MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), Opus (`.opus`, up to 7.1), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`), and CAF. Matroska and CAF carry no tags Melodia can read, so those tracks list under their filename, as does anything whose tags are too damaged to parse.
@@ -146,49 +147,97 @@ Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Braz
 
 ## Footprint
 
-Release builds against the same 512-track library on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display. On both platforms Melodia opened on the same playlist, its detail view showing the hero banner, and the visualizer ran in the Mirrored style. After 30 s to settle, each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
+Release builds on one dual-boot PC, a Ryzen 7 9800X3D (8 cores, 16 threads) with an RTX 3080 and the window on a 144 Hz display, against the same 512-track library on both platforms, and again with a second library of 50,500 tracks added beside it, 51,012 tracks in all. On both platforms Melodia opened on the same playlist, its detail view showing the hero banner, and the visualizer ran in the Mirrored style. Each scenario is sampled every second for 60 s: memory is the median sample, CPU and GPU the total over that minute. Each platform's table uses what its own kernel accounts for, so the columns differ between the two.
 
 ### Linux (Fedora)
 
-Measured with [`scripts/measure-linux-footprint.sh`](scripts/measure-linux-footprint.sh) on KDE Plasma under Wayland.
-
-#### Custom titlebar
-
-| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 32 MiB | 87 MiB | 81 MiB | 157 MiB | 39 MiB | 0.08% | 0.01% | 0.00% |
-| Playing, list view | 33 MiB | 89 MiB | 84 MiB | 157 MiB | 35 MiB | 0.67% | 0.04% | 1.21% |
-| Playing, visualizer live | 33 MiB | 90 MiB | 85 MiB | 158 MiB | 35 MiB | 3.88% | 0.24% | 1.86% |
+Measured with [`scripts/measure-linux-footprint.sh`](scripts/measure-linux-footprint.sh) on KDE Plasma under Wayland, with the default Band-Limited sample-rate conversion. Startup is sampled from the moment Melodia launches, and the other scenarios start 150 s after it, once the database connections opened while loading the library have closed.
 
 #### Native titlebar
 
 | Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 32 MiB | 87 MiB | 81 MiB | 157 MiB | 24 MiB | 0.08% | 0.01% | 0.00% |
-| Playing, list view | 33 MiB | 90 MiB | 84 MiB | 156 MiB | 24 MiB | 0.57% | 0.04% | 0.00% |
-| Playing, visualizer live | 33 MiB | 91 MiB | 86 MiB | 157 MiB | 29 MiB | 3.92% | 0.24% | 0.78% |
+| Startup | 29.98 MiB | 86.83 MiB | 80.41 MiB | 159.33 MiB | 28.00 MiB | 0.98% | 0.06% | 0.03% |
+| Idle | 30.07 MiB | 84.52 MiB | 80.03 MiB | 154.71 MiB | 28.00 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 30.67 MiB | 86.03 MiB | 81.54 MiB | 156.22 MiB | 28.00 MiB | 0.52% | 0.03% | 0.00% |
+| Playing, visualizer live | 30.63 MiB | 88.75 MiB | 84.25 MiB | 159.00 MiB | 27.00 MiB | 2.52% | 0.16% | 4.31% |
 
-Linux keeps no commit charge per process, so **Anonymous** is the figure to compare: the memory Melodia allocated itself, in RAM or in swap, which nothing another process does can move. It is also the number that stays flat, since grids and track lists are virtualized and the cover caches are capped against the display, so a larger library barely moves it. **PSS** is KDE System Monitor's Memory column. It adds a share of the file-backed pages, mostly the binary and the shared graphics stack rather than anything Melodia allocated, and that share shrinks whenever another program maps the same libraries. **USS** is the part no other process maps, what closing Melodia gives back, and System Monitor's Private column. **RSS** counts every shared page in full. **GPU memory** is the video memory the NVIDIA driver charges to Melodia, where FemtoVG keeps its textures and framebuffers, counted apart from the rest. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as System Monitor's CPU column does. **GPU** is the utilization the NVIDIA driver reports for Melodia, in whole percents each second.
+With both libraries, 51,012 tracks. The higher PSS and RSS at startup are the library's database, which every connection that read it keeps mapped until it closes; RSS counts it once per connection.
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 36.93 MiB | 152.00 MiB | 90.14 MiB | 341.90 MiB | 28.00 MiB | 2.43% | 0.15% | 0.14% |
+| Idle | 36.02 MiB | 92.00 MiB | 87.43 MiB | 162.50 MiB | 28.00 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 36.34 MiB | 93.05 MiB | 88.49 MiB | 163.56 MiB | 28.00 MiB | 0.48% | 0.03% | 0.00% |
+| Playing, visualizer live | 35.21 MiB | 94.71 MiB | 90.15 MiB | 165.28 MiB | 27.00 MiB | 2.48% | 0.16% | 3.10% |
+
+---
+
+#### Custom titlebar
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 30.16 MiB | 89.40 MiB | 82.90 MiB | 164.05 MiB | 32.00 MiB | 1.07% | 0.07% | 0.03% |
+| Idle | 30.16 MiB | 87.01 MiB | 82.49 MiB | 157.48 MiB | 32.00 MiB | 0.07% | 0.00% | 0.00% |
+| Playing, list view | 30.37 MiB | 88.14 MiB | 83.56 MiB | 158.54 MiB | 32.00 MiB | 0.50% | 0.03% | 0.00% |
+| Playing, visualizer live | 30.97 MiB | 89.28 MiB | 84.70 MiB | 159.68 MiB | 32.00 MiB | 2.75% | 0.17% | 4.93% |
+
+With both libraries, 51,012 tracks:
+
+| Scenario | Anonymous | PSS | USS | RSS | GPU memory | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 34.99 MiB | 151.10 MiB | 87.46 MiB | 339.49 MiB | 36.00 MiB | 2.32% | 0.14% | 0.00% |
+| Idle | 35.05 MiB | 92.20 MiB | 87.54 MiB | 162.82 MiB | 36.00 MiB | 0.12% | 0.01% | 0.00% |
+| Playing, list view | 35.49 MiB | 93.37 MiB | 88.70 MiB | 163.98 MiB | 36.00 MiB | 0.58% | 0.04% | 0.00% |
+| Playing, visualizer live | 37.16 MiB | 95.85 MiB | 91.18 MiB | 166.46 MiB | 34.00 MiB | 3.23% | 0.20% | 2.50% |
+
+Linux keeps no commit charge per process, so **Anonymous** is the figure to compare: the memory Melodia allocated itself, in RAM or in swap, which nothing another process does can move. **PSS** is KDE System Monitor's Memory column. It adds a share of the file-backed pages, mostly the binary and the shared graphics stack rather than anything Melodia allocated, and that share shrinks whenever another program maps the same libraries. **USS** is the part no other process maps, what closing Melodia gives back, and System Monitor's Private column. **RSS** counts every shared page in full. **GPU memory** is the video memory the NVIDIA driver charges to Melodia, where FemtoVG keeps its textures and framebuffers, counted apart from the rest. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as System Monitor's CPU column does. **GPU** is the utilization the NVIDIA driver reports for Melodia, in whole percents each second.
 
 ### Windows
 
-Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1).
-
-#### Custom titlebar
-
-| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 105 MiB | 60 MiB | 119 MiB | 26 MiB | 13 MiB | 0.13% | 0.01% | 0.00% |
-| Playing, list view | 112 MiB | 64 MiB | 123 MiB | 28 MiB | 17 MiB | 0.91% | 0.06% | 0.12% |
-| Playing, visualizer live | 116 MiB | 67 MiB | 126 MiB | 29 MiB | 17 MiB | 6.33% | 0.40% | 2.36% |
+Measured with [`scripts/measure-windows-footprint.ps1`](scripts/measure-windows-footprint.ps1), on an output device Windows mixes at 192 kHz, so every track passes through the sample-rate conversion. Startup is sampled from the moment Melodia launches, and the other scenarios start 150 s after it, once the database connections opened while loading the library have closed.
 
 #### Native titlebar
 
 | Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Idle | 102 MiB | 59 MiB | 118 MiB | 23 MiB | 13 MiB | 0.16% | 0.01% | 0.00% |
-| Playing, list view | 103 MiB | 59 MiB | 118 MiB | 24 MiB | 13 MiB | 0.89% | 0.06% | 0.10% |
-| Playing, visualizer live | 115 MiB | 67 MiB | 126 MiB | 27 MiB | 19 MiB | 9.06% | 0.57% | 2.17% |
+| Startup | 113.20 MiB | 63.09 MiB | 120.83 MiB | 27.95 MiB | 23.60 MiB | 1.46% | 0.09% | 0.07% |
+| Idle | 109.66 MiB | 62.09 MiB | 118.38 MiB | 24.63 MiB | 23.60 MiB | 0.21% | 0.01% | 0.02% |
+| Playing, list view | 111.03 MiB | 62.75 MiB | 119.64 MiB | 24.63 MiB | 23.61 MiB | 0.78% | 0.05% | 0.04% |
+| Playing, visualizer live | 115.18 MiB | 65.93 MiB | 123.69 MiB | 25.56 MiB | 25.61 MiB | 7.08% | 0.44% | 1.03% |
+
+With both libraries, 51,012 tracks. The higher commit and working set at startup are the library's database: every connection that read it holds a page cache of its own, which commit counts, and maps the file, which the working set counts, until it closes.
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 151.14 MiB | 98.89 MiB | 299.16 MiB | 27.95 MiB | 23.60 MiB | 6.48% | 0.41% | 0.05% |
+| Idle | 128.27 MiB | 79.36 MiB | 135.66 MiB | 24.63 MiB | 23.60 MiB | 0.08% | 0.00% | 0.00% |
+| Playing, list view | 131.38 MiB | 81.04 MiB | 138.01 MiB | 24.63 MiB | 23.60 MiB | 0.83% | 0.05% | 0.04% |
+| Playing, visualizer live | 139.70 MiB | 87.04 MiB | 144.91 MiB | 25.56 MiB | 25.61 MiB | 6.72% | 0.42% | 1.83% |
+
+Both tables use the default Linear sample-rate conversion. Band-Limited costs more CPU while playing: with the 512-track library, about 1.9% of one core in the list view and about 7.9% with the visualizer live.
+
+---
+
+#### Custom titlebar
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 117.05 MiB | 64.64 MiB | 122.35 MiB | 33.64 MiB | 23.73 MiB | 0.21% | 0.01% | 0.00% |
+| Idle | 110.19 MiB | 63.34 MiB | 119.68 MiB | 27.94 MiB | 23.73 MiB | 0.57% | 0.04% | 0.06% |
+| Playing, list view | 112.29 MiB | 64.17 MiB | 121.40 MiB | 27.94 MiB | 23.73 MiB | 0.86% | 0.05% | 0.07% |
+| Playing, visualizer live | 120.08 MiB | 68.23 MiB | 126.04 MiB | 30.75 MiB | 25.73 MiB | 6.33% | 0.40% | 2.33% |
+
+With both libraries, 51,012 tracks:
+
+| Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Startup | 155.99 MiB | 101.66 MiB | 301.97 MiB | 33.64 MiB | 23.72 MiB | 6.01% | 0.38% | 0.06% |
+| Idle | 131.93 MiB | 82.12 MiB | 138.78 MiB | 27.95 MiB | 23.73 MiB | 0.36% | 0.02% | 0.02% |
+| Playing, list view | 133.88 MiB | 83.73 MiB | 141.07 MiB | 27.95 MiB | 23.73 MiB | 0.62% | 0.04% | 0.06% |
+| Playing, visualizer live | 141.16 MiB | 88.91 MiB | 146.86 MiB | 29.36 MiB | 25.73 MiB | 5.49% | 0.34% | 2.21% |
+
+Both tables use the default Linear sample-rate conversion. Band-Limited costs more CPU while playing: with the 512-track library, about 2.1% of one core in the list view and about 6.2% with the visualizer live.
 
 Windows keeps no PSS, so **Commit** is the figure to compare: the private memory Windows has set aside for Melodia, in RAM or paged out, which doesn't fall when Windows trims the process. **Private WS** is Task Manager's Memory column, the private memory in RAM at that moment. **Working set** adds the pages Melodia shares with other processes, mostly system DLLs. **GPU dedicated** and **GPU shared** are the video memory Task Manager lists per process, where FemtoVG keeps its textures and framebuffers, counted apart from commit. **CPU (1 core)** counts one full core as 100%, and **CPU (all cores)** spreads that across all 16 threads, as Task Manager's Details tab does. **GPU** is the busiest GPU engine, Task Manager's per-process figure.
 
@@ -293,7 +342,7 @@ decoding, the DSP chain, and the mix stay off the runtime entirely.
 
 Fourteen crates, layered so the compiler enforces the direction rather than a convention: the UI
 names no database or socket, the decoders name no mixer, the tag writer names no state machine.
-Slint 1.16 on FemtoVG, Tokio, Symphonia and cpal (with ALSA and WASAPI directly for exclusive output),
+Slint 1.18 on FemtoVG, Tokio, Symphonia and cpal (with ALSA and WASAPI directly for exclusive output),
 SQLite via SQLx with WAL and FTS5, Lofty for tags, Rayon, BLAKE3, and minisign for the updater.
 
 [`CLAUDE.md`](CLAUDE.md) is the architecture reference; [`docs/adr/`](docs/adr/) records why each

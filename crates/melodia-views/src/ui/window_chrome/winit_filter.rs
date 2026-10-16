@@ -5,7 +5,8 @@
 //! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
 //!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
 //!    issue the parent module's docs describe. The titlebar's double press toggles maximize
-//!    instead, Slint never seeing the pair (`drag_region`).
+//!    instead, Slint never seeing the pair (`drag_region`). `CursorMoved` is mirrored for it, a
+//!    press carrying no position.
 //! 2. **`MouseInput { Pressed, Back | Forward }`** — Mouse-4 / Mouse-5 into the nav
 //!    history, gated on no overlay being open so the buttons don't fight its input
 //!    context.
@@ -17,10 +18,10 @@
 //! 4. **`Focused(bool)`** — mirror OS focus into `Theme.window-focused`, and use the
 //!    transition to reconcile the tray-bridge's visibility shadow: raise on focus, ask
 //!    the OS about a minimize on focus loss (see [`schedule_minimize_probe`]).
-//! 5. **`DroppedFile` / `HoveredFile` / `HoveredFileCancelled`** — Slint 1.16 has no
-//!    cross-app `DnD` API, so this is the only path a file drop arrives through.
-//! 6. **`MouseWheel`**, for two unrelated `Flickable` defects — see [`route_wheel`].
-//!    `CursorMoved` is mirrored for the same arm, a wheel event carrying no position.
+//! 5. **`DroppedFile` / `HoveredFile` / `HoveredFileCancelled`** — Slint 1.18's winit backend
+//!    delivers no cross-app drop, so this is the only path a file drop arrives through.
+//! 6. **`MouseWheel`**, for a nested `ListView` that swallows the wheel at its scroll edge. See
+//!    [`route_wheel`].
 //! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
 //!    loop parks winit out of; see `parked_loop`.
 //! 8. **`ThemeChanged`**, Windows only: a light/dark flip for a theme on its System
@@ -34,19 +35,16 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use slint::ComponentHandle;
 use slint::winit_030::winit::error::ExternalError;
-use slint::winit_030::winit::event::{
-    ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
-};
+use slint::winit_030::winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 use slint::winit_030::{EventResult, WinitWindowAccessor};
-use slint::{ComponentHandle, SharedString};
 
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, PopupHighlight, Queue, Theme,
-    WindowChrome,
+    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, Queue, Theme, WindowChrome,
 };
 
 use super::drag_region::{DoublePress, PressAction};
@@ -85,37 +83,20 @@ fn schedule_minimize_probe(weak: slint::Weak<AppWindow>) {
 enum WheelRoute {
     /// Into the mounted composite view's own scroll math.
     Composite,
-    /// Re-send to Slint without the gesture phase, then swallow the original.
-    Unphased,
     /// Leave it to Slint.
     Native,
 }
 
-/// Decide where one wheel event goes. Two unrelated `Flickable` defects meet here, and the
-/// composite view is asked first — it owns its region outright.
+/// Decides whether one wheel event belongs to the mounted composite view, whose nested
+/// `ListView` would otherwise swallow it at its scroll edge (argued at `CompositeScroll` in
+/// `globals/shell.slint`). Horizontal-dominant wheel stays native, that axis belonging to the
+/// strips' own scrollers.
 ///
-/// `Composite` is the nested-`ListView`-swallows-the-wheel one, argued at `CompositeScroll`
-/// in `globals/shell.slint`. Horizontal-dominant wheel stays native there, that axis
-/// belonging to the strips' own scrollers.
-///
-/// `Unphased` is the touchpad one. `Flickable` intercepts `TouchPhase::Started`
-/// unconditionally and sets its capture flag without checking the delta's axis, so the
-/// outermost one under the pointer owns the whole gesture where its `Moved` and
-/// `Cancelled` arms check direction first — and only a precision device sends the phase,
-/// which is why a scroller nested inside another scrolls under a wheel and not two fingers.
-/// Re-sending unphased leaves the capture flag unset, costing Slint's kinetic fling.
-fn route_wheel(
-    composite_hovered: bool,
-    overlay_open: bool,
-    phase: TouchPhase,
-    dx: f32,
-    dy: f32,
-) -> WheelRoute {
+/// Everything else reaches Slint as winit sent it. A touchpad gesture tracks the fingers and
+/// flings only when Slint sees its phases, so nothing here may re-send one.
+fn route_wheel(composite_hovered: bool, overlay_open: bool, dx: f32, dy: f32) -> WheelRoute {
     if composite_hovered && !overlay_open && dy != 0.0 && dy.abs() >= dx.abs() {
         return WheelRoute::Composite;
-    }
-    if matches!(phase, TouchPhase::Started) {
-        return WheelRoute::Unphased;
     }
     WheelRoute::Native
 }
@@ -154,7 +135,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     let PressTargets { drag_region, resize } = targets;
     let weak = app.as_weak();
     let state = state.clone();
-    // Where the pointer is, for the synthetic scroll and the titlebar's double press below.
+    // Where the pointer is, for the titlebar's double press below.
     let mut cursor_pos = slint::LogicalPosition::default();
     let mut double_press = DoublePress::default();
     let resize_watch = ResizeWatch::new(app.as_weak());
@@ -184,17 +165,11 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             } if drag_region.get() != DragRegion::None => {
                 drag_press(w, &weak, &mut double_press, drag_region.get(), cursor_pos)
             }
-            // Above the `Released` cleanup arm because the press is what wants
-            // `PreventDefault`.
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: button @ (MouseButton::Back | MouseButton::Forward),
                 ..
             } => nav_button(&weak, &state, *button),
-            WindowEvent::MouseInput { state: ElementState::Released, .. } => {
-                release_popup_highlight(&weak);
-                EventResult::Propagate
-            }
             WindowEvent::Resized(_) => on_resized(w, &weak),
             // X11/Win32/macOS deliver these. Wayland never does, a client there not knowing its
             // own position: position restore is a no-op there anyway, but a drag pressed again
@@ -233,9 +208,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 cursor_pos = slint::LogicalPosition::new(l.x, l.y);
                 EventResult::Propagate
             }
-            WindowEvent::MouseWheel { delta, phase, .. } => {
-                on_mouse_wheel(w, &weak, cursor_pos, *delta, *phase)
-            }
+            WindowEvent::MouseWheel { delta, .. } => on_mouse_wheel(w, &weak, *delta),
             // The filter runs ahead of Slint's own dispatch, so the last `Resized` has already
             // landed its size and `draw()` has not run yet: a handler firing here sees the frame
             // it is about to be painted into.
@@ -281,26 +254,6 @@ fn nav_button(weak: &slint::Weak<AppWindow>, state: &AppState, button: MouseButt
     let going_back = matches!(button, MouseButton::Back);
     crate::ui::nav_history::replay(state, &ui, going_back);
     EventResult::PreventDefault
-}
-
-/// Popup-trigger highlight cleanup. `PopupWindow` has no `closed` callback,
-/// and while one is open the dispatcher stops routing mouse events to
-/// main-window items, so an `AppWindow`-level scrim `TouchArea` can't catch the
-/// dismissing click. Release works because the press has already fired Slint's
-/// `close-on-click-outside`; popup-internal areas that should *keep* the
-/// highlight re-set `PopupHighlight.id` from their own `pointer-event(up)`,
-/// which runs after this filter. The write is sentinel-gated so a random click
-/// doesn't churn the property.
-///
-/// Synchronous rather than `upgrade_in_event_loop`: a deferred clear lands
-/// after those `pointer-event(up)` handlers and wipes the re-set.
-fn release_popup_highlight(weak: &slint::Weak<AppWindow>) {
-    if let Some(ui) = weak.upgrade() {
-        let ph = ui.global::<PopupHighlight>();
-        if !ph.get_id().is_empty() {
-            ph.set_id(SharedString::default());
-        }
-    }
 }
 
 fn on_resized(w: &slint::Window, weak: &slint::Weak<AppWindow>) -> EventResult {
@@ -428,9 +381,7 @@ fn on_close_requested(weak: &slint::Weak<AppWindow>) -> EventResult {
 fn on_mouse_wheel(
     w: &slint::Window,
     weak: &slint::Weak<AppWindow>,
-    cursor_pos: slint::LogicalPosition,
     delta: MouseScrollDelta,
-    phase: TouchPhase,
 ) -> EventResult {
     let (dx, dy) = match delta {
         MouseScrollDelta::LineDelta(lx, ly) => (lx * 60.0, ly * 60.0),
@@ -447,7 +398,7 @@ fn on_mouse_wheel(
     // region with no pointer move, Slint clearing `has-hover` only on the
     // next `MouseEvent::Exit`. Mirrors the Mouse-4/5 arm's own gate.
     let overlay_open = crate::ui::nav_history::overlay_open(&ui);
-    match route_wheel(cs.get_hovered(), overlay_open, phase, dx, dy) {
+    match route_wheel(cs.get_hovered(), overlay_open, dx, dy) {
         WheelRoute::Composite => {
             // Accumulate rather than overwrite: the `changed wheel-tick`
             // handler fires at most once per loop iteration, so several
@@ -459,20 +410,6 @@ fn on_mouse_wheel(
             // Nothing paints either property, so nothing else asks for the
             // frame whose `new_events` runs the handler that applies them.
             ui.window().request_redraw();
-            EventResult::PreventDefault
-        }
-        // `PointerScrolled` lands as a one-shot `TouchPhase::Cancelled`
-        // wheel, the direction-aware arm. Re-sent rather than dropped so
-        // the shortest gesture — one event and a stop — still moves.
-        WheelRoute::Unphased => {
-            let scrolled = slint::platform::WindowEvent::PointerScrolled {
-                position: cursor_pos,
-                delta_x: dx,
-                delta_y: dy,
-            };
-            if let Err(e) = ui.window().try_dispatch_event(scrolled) {
-                log::warn!("touchpad scroll: dispatch: {}", describe(&e));
-            }
             EventResult::PreventDefault
         }
         WheelRoute::Native => EventResult::Propagate,

@@ -1,5 +1,6 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
+import { SingleLineInput } from "single-line-input.slint";
 
 // The reusable compact filter input: an `ActionPill`-matching outline over a fill that
 // **solidifies the moment the bar is engaged** — half its mounts sit over a detail hero, so at rest
@@ -33,17 +34,17 @@ export component SearchBar inherits Rectangle {
     // Measured off the Text the bar actually draws, so measured and drawn can't drift. A Text's
     // *horizontal* layout info is intrinsic to the string, so this is a derivation and not a cycle.
     property <length> natural-width:
-        placeholder-text.preferred-width + root.chrome-overhead;
+        input.placeholder-width + root.chrome-overhead;
 
     // Recessed into a surface rather than floating over content: the host's corner instead of a
-    // stadium, and no lift or swell — inside a popup there is nothing to be above. Fills, border
+    // stadium, and no swell — inside a popup there is nothing to be above. Fills, border
     // tint, placeholder and icon are unchanged, so both shapes read as one control.
     in property <bool> inset: false;
 
     // Slint has no click-outside behaviour for `TextInput`, so each increment fires
     // `clear-focus()` on the inner input.
     in property <int> blur-trigger: 0;
-    changed blur-trigger => { input.clear-focus(); }
+    changed blur-trigger => { input.clear-input-focus(); }
 
     callback edited(string);
 
@@ -85,13 +86,13 @@ export component SearchBar inherits Rectangle {
 
     // The simple case: a same-file caller with an id skips the `blur-trigger` plumbing.
     public function clear-input-focus() {
-        input.clear-focus();
+        input.clear-input-focus();
     }
 
     // For a view auto-focusing its bar on mount. Named `focus-input` because `focus`
     // collides with the built-in element method.
     public function focus-input() {
-        input.focus();
+        input.focus-input();
     }
 
     // The slot still doesn't stretch — `preferred` and `max` are the same number, so the bar is
@@ -118,29 +119,15 @@ export component SearchBar inherits Rectangle {
 
         // Rest matches the `ActionPill` chip's fill, so adjacent bars and pills read as
         // one family; engagement closes it to opaque, as a hovered `PillButton` does.
-        // **Out to the edge, not a `TuckedFill`**, although the focus ring is translucent: the focus
-        // shadow sits under the whole bar, and a fill stopping at the ring's middle lets it darken
-        // the rim. Under a translucent border the renderer runs the fill out to the edge for exactly
-        // that, at the price of a second antialiased pass while the bar has focus.
         background: root.engaged
             ? Theme.surface0
             : Theme.floating-chrome-bg;
-        // The `ActionPill` outline at rest; focus lifts it with a glow and tints the
-        // ring faintly toward the accent.
+        // The `ActionPill` outline at rest; focus tints the ring faintly toward the accent.
         border-radius: root.inset ? Theme.radius-md : self.height / 2;
         border-width: 1px;
         border-color: input.has-focus
             ? Theme.accent.with-alpha(0.18)
             : Theme.surface2;
-        // An inset bar drops the shadow through the *colour*: the renderer bails on a transparent
-        // one, where a zeroed blur still paints an occluded rect under this fill's translucency.
-        drop-shadow-color: root.inset
-            ? transparent
-            : (input.has-focus
-                ? Theme.crust.with-alpha(0.45)
-                : Theme.crust.with-alpha(0.15));
-        drop-shadow-blur: input.has-focus ? 16px : 2px;
-        drop-shadow-offset-y: input.has-focus ? 4px : 1px;
         // **The ease belongs on the scale, not on the dimensions.** Animating a binding derived
         // from another animating property phase-lags, and `width`/`height` derive from this while
         // `x`/`y` derive from those. Second reason: `width` also multiplies `root.width`, which the
@@ -148,10 +135,10 @@ export component SearchBar inherits Rectangle {
         // on dependency *dirtiness* — so an eased `width` re-based on every event of a resize drag.
         // `focus-scale` reads the focus flag and a mount-constant variant, so it only ever sees
         // the toggle.
-        animate background, border-color, drop-shadow-color,
-                drop-shadow-blur, drop-shadow-offset-y {
+        animate background, border-color {
             duration: Theme.dur-fast;
             easing: ease-in-out;
+            enabled: !Theme.recoloring;
         }
 
         // **Wraps the content rather than sitting beside it.** As a sibling its `has-hover` only
@@ -163,7 +150,7 @@ export component SearchBar inherits Rectangle {
             width: 100%;
             height: 100%;
             // Forwards focus so the whole pill is the target, not just the input.
-            clicked => { input.focus(); }
+            clicked => { input.focus-input(); }
 
         HorizontalLayout {
             padding-left: Theme.pad-sm;
@@ -171,74 +158,38 @@ export component SearchBar inherits Rectangle {
             spacing: Theme.pad-xs;
             alignment: stretch;
 
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "search";
-                    icon-size: root.icon-size;
-                    // Rest matches the placeholder beside it, so the two halves of
-                    // an empty bar sit on one rung.
-                    icon-color: input.has-focus
-                        ? Theme.accent
-                        : Theme.text.transparentize(0.3);
-                    animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; }
-                }
+            MaterialIcon {
+                cross-axis-self-alignment: center;
+                name: "search";
+                icon-size: root.icon-size;
+                // Rest matches the placeholder beside it, so the two halves of
+                // an empty bar sit on one rung.
+                icon-color: input.has-focus
+                    ? Theme.accent
+                    : Theme.text.transparentize(0.3);
+                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
 
-            // Slint's `TextInput` has no `placeholder-text`, so the placeholder is a
-            // sibling Text overlaid while the input is empty.
-            Rectangle {
+            // The bar's full height rather than a line-sized box centred in it: the same centre,
+            // and the clip around the text then leaves room for marks that reach past its line.
+            input := SingleLineInput {
                 horizontal-stretch: 1;
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        height: 20px;
-                        // Both children fill this box, so their `vertical-alignment` actually
-                        // centres the glyph line-box inside it — without an explicit height they
-                        // auto-size to the line-box and pin to the top, reading a pixel high.
-                        placeholder-text := Text {
-                            visible: root.text == "";
-                            text: root.placeholder;
-                            // `PillButton`'s label brush, so a bar and the pills beside it read as
-                            // one family, dimmed just enough to stay a hint rather than typed
-                            // text. Alpha in the brush, never `opacity`, which crops the ink.
-                            color: Theme.text.transparentize(0.3);
-                            font-size: Theme.font-size-md;
-                            vertical-alignment: center;
-                            x: 0;
-                            // **Bounded, and only then elided.** The parent is a plain Rectangle
-                            // rather than a layout, so without a width of its own this Text takes
-                            // its *implicit* size — the untruncated string — and paints straight
-                            // through the pill's right edge. Eliding alone doesn't save it: elide
-                            // lowers a Text's layout *minimum* to one ellipsis and leaves
-                            // `preferred` at the full string, and the implicit size is the larger.
-                            width: 100%;
-                            height: 100%;
-                            overflow: elide;
-                        }
-                        input := TextInput {
-                            text <=> root.text;
-                            color: Theme.text;
-                            font-size: Theme.font-size-md;
-                            single-line: true;
-                            vertical-alignment: center;
-                            x: 0;
-                            width: 100%;
-                            height: 100%;
-                            edited => { root.edited(self.text); }
-                            accepted => { root.accepted(); }
-                        }
-                    }
-                }
+                text <=> root.text;
+                placeholder: root.placeholder;
+                // `PillButton`'s label brush, so a bar and the pills beside it read as one family,
+                // dimmed just enough to stay a hint rather than typed text.
+                placeholder-color: Theme.text.transparentize(0.3);
+                edited(t) => { root.edited(t); }
+                accepted => { root.accepted(); }
             }
 
             if root.text != "": Rectangle {
+                cross-axis-self-alignment: center;
                 width: 22px;
                 height: 22px;
-                y: (parent.height - self.height) / 2;
                 border-radius: self.height / 2;
                 background: clear-touch.has-hover ? Theme.surface1 : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                 MaterialIcon {
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;

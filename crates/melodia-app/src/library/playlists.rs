@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use serde::Serialize;
-
 use super::import::import_and_summarize;
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::CoverCache;
@@ -142,7 +140,7 @@ async fn compose_thumbnail(
     queries::playlist::set_playlist_custom_thumbnail(db, playlist_id, &composite_path).await
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct ImportToPlaylistResult {
     pub imported_count: u32,
     pub added_count: u32,

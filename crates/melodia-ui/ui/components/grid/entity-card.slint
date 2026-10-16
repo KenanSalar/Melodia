@@ -3,6 +3,7 @@ import { ArtworkImage } from "../artwork-image.slint";
 import { Checkbox } from "../checkbox.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { PlayCountBadge } from "play-count-badge.slint";
+import { ContextClick } from "../context-menu.slint";
 
 // The card every grid and strip draws: a square artwork tile with an elided title and subtitle
 // beneath it, inside a hover-highlighted rounded surface. **The outer slot is a fixed size**, so
@@ -80,8 +81,8 @@ export component EntityCard inherits Rectangle {
     // The box or the body was clicked; the host applies the modifiers against its own selection
     // scope.
     callback select-clicked(bool /*shift*/, bool /*ctrl*/);
-    // A right-click, in this card's own coordinate frame. The host keeps the position and the
-    // menu, as `TrackListRowItem` does for a row.
+    // A right-click, in this card's own coordinate frame. The host owns the menu, as
+    // `TrackListRowItem` does for a row.
     callback context-requested(length /*x*/, length /*y*/);
 
     // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
@@ -145,7 +146,7 @@ export component EntityCard inherits Rectangle {
         // their own pace, and a selected card brightens under the pointer the way a selected
         // row does rather than answering it with nothing.
         background: root.card-hovered ? Theme.surface0 : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
         // The ring and the hover fill on **one** element, so the renderer tucks that fill under
         // the stroke. An `EdgeOutline` is the answer where there is a rounded clip to cut its
         // bleed away; there is none here.
@@ -238,8 +239,8 @@ export component EntityCard inherits Rectangle {
             if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                 root.press-shift = ev.modifiers.shift;
             }
-            if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                root.context-requested(touch.mouse-x, touch.mouse-y);
+            if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                root.context-requested(self.mouse-x, self.mouse-y);
             }
         }
     }
@@ -336,7 +337,7 @@ export component EntityCard inherits Rectangle {
             // The two brushes `IconButton` crosses between, on its curve, so the corner answers
             // the pointer exactly as the controls beside it do.
             background: box-touch.has-hover ? Theme.surface0 : Theme.floating-chrome-bg;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
             // **`opacity` here and brush alpha on the badge, and the difference is `Checkbox`.** It
             // `animate`s its own fill and rim to cross-fade a tick, and folds `fade` into both of
@@ -375,12 +376,11 @@ export component EntityCard inherits Rectangle {
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
                     root.pick(ev.modifiers.shift);
                 }
-                // This area sits over the card's own `touch`, which never sees a press inside it,
-                // so without this the corner is a hole in the card's right-click. Offset by the
-                // box's own origin, `context-requested` reporting in the card's frame.
-                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                    root.context-requested(
-                        box.x + box-touch.mouse-x, box.y + box-touch.mouse-y);
+                // This area sits over the card's own `touch`, which never sees a release inside
+                // it, so without this the corner is a hole in the card's right-click. Offset by
+                // the box's own origin, `context-requested` reporting in the card's frame.
+                if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                    root.context-requested(box.x + self.mouse-x, box.y + self.mouse-y);
                 }
             }
         }

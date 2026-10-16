@@ -19,7 +19,7 @@ exclude = ["winit"]
 # `build-{rpm,appimage,tarball}.sh`) anchor on this table by name and take the
 # first `version = ` inside it, so that entry stays first.
 [workspace.package]
-version = "0.18.0"
+version = "0.19.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 # Lockstep with `rust-toolchain.toml` and `clippy.toml`'s `msrv`.
@@ -43,7 +43,7 @@ homepage = "https://github.com/KenanSalar/Melodia"
 # `WinitWindowAccessor` for `drag_window()` and `WindowEvent::Resized` (slint-ui#2521,
 # #6273, #4817); `renderer-femtovg` because the software renderer can't clip to
 # `border-radius` (slint#4176).
-slint = { version = "1.16.1", default-features = false, features = [
+slint = { version = "1.18.1", default-features = false, features = [
     "std",
     "backend-default",
     "accessibility",
@@ -54,11 +54,12 @@ slint = { version = "1.16.1", default-features = false, features = [
 ] }
 # Must match the `slint` version above; the pair is declared adjacently for that.
 # So must `slint-tr-extractor`: `scripts/update-translations.sh` reads the version off the
-# `slint = { version = … }` line and refuses an extractor that doesn't match it.
-slint-build = "1.16.1"
+# `slint = { version = … }` line and refuses an extractor that doesn't match it. The default
+# `renderer-software` feature only embeds resources for a renderer we don't build.
+slint-build = { version = "1.18.1", default-features = false, features = ["compat-1-18"] }
 
 # Async runtime / synchronisation
-tokio = { version = "1.53.1", features = [
+tokio = { version = "1.53.3", features = [
     "rt-multi-thread",
     "macros",
     "sync",
@@ -66,12 +67,12 @@ tokio = { version = "1.53.1", features = [
     "fs",
     "process",
 ] }
-tokio-util = { version = "0.7.19", features = ["rt"] }
-async-compat = "0.2.5"
+tokio-util = { version = "0.7.20", features = ["rt"] }
+async-compat = "0.2.6"
 parking_lot = "0.12.5"
 # `StreamExt` over a response body, so neither the updater's download nor a capped read
 # collects the whole asset; `future::join_all` where a view fans out over its rows.
-futures-util = { version = "0.3.33", default-features = false, features = ["std"] }
+futures-util = { version = "0.3.34", default-features = false, features = ["std"] }
 
 # Database
 # `macros` stays despite every query going through runtime `query_as`, because
@@ -127,7 +128,7 @@ symphonia = { version = "0.6.1", default-features = false, features = [
 # registration into `decode::CODECS` over this. Pure Rust with no dependencies and no
 # `build.rs`: the libopus adapter would put CMake and a vendored C build in ten release slots
 # for a decoder that measured no better here.
-opus-pure = "0.2.1"
+opus-pure = "0.2.2"
 # The graphic EQ cascades this crate's `Type::PeakingEQ` filters. `DirectForm1` keeps
 # its delay line across a coefficient swap, so a slider drag injects no transient.
 biquad = "0.6.0"
@@ -146,7 +147,7 @@ walkdir = "2.5"
 notify = "8.2.0"
 notify-debouncer-full = "0.7.0"
 rayon = "1.12"
-blake3 = "1.8.5"
+blake3 = "1.8.7"
 natord = "1.0.9"
 # Accent folding, so filter boxes narrow on the same spellings `tracks_fts`'s
 # `remove_diacritics 2` tokenizer does.
@@ -187,9 +188,9 @@ fast_image_resize = { version = "6.1.0", features = ["image"] }
 # IDCTs by coefficient content, not by request). Every tier draws a cover far smaller
 # than the store holds; `image_decode::decode_capped_to` falls back to `image`.
 jpeg-decoder = "0.3.2"
-# Material 3 dynamic colour. Its `image`/`serde`/`libm` features stay off; we feed
-# it quantized pixel data ourselves.
-material-colors = "0.4.2"
+# Material 3 dynamic colour. `quantize` is turned on by melodia-artwork alone, the one
+# crate that picks a seed from pixels; `serde` and `libm` stay off.
+material-colors = "0.5.0"
 # The backdrop's quantizer, beside rather than instead of the one above: median-cut
 # over a fixed histogram answers "what is this cover mostly made of" in a fraction of
 # a millisecond, where Celebi's k-means costs tens on photographic art.
@@ -217,61 +218,62 @@ md5 = "0.8.1"
 
 # Serde / config
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde_json = "1.0.154"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
-dirs = "6.0.0"
+dirs = "7.0.0"
 
 # Logging / errors
 log = "0.4.33"
 # Replaced `env_logger` when logs had to reach a file: the only candidate with size
 # and age rotation in one criterion and no background thread. `colors` pulls
 # `nu-ansi-term`, the only crate the swap adds against thirteen it retires.
-flexi_logger = { version = "0.31.9", default-features = false, features = ["colors"] }
-thiserror = "2.0.19"
+flexi_logger = { version = "0.31.10", default-features = false, features = ["colors"] }
+thiserror = "2.0.21"
 
 # Updater
 # `minisign-verify` is zero-dep and verify-only. `semver` powers `is_upgrade()`, so a
 # rolled-back `latest.json` reports `UpToDate` where string equality would downgrade.
-minisign-verify = "0.2.5"
+minisign-verify = "0.3.0"
 semver = "1.0.28"
 
 # OS integrations
 rfd = "0.17.2"
 # Hands a path to the OS default handler, for "Open Containing Folder".
-open = "5.4.0"
+open = "5.4.4"
 # The single-instance socket: one abstraction over a Linux abstract unix socket and
 # a Windows named pipe, whose *server* half would otherwise be `CreateNamedPipeW`, an
 # FFI site no Linux runner compiles. `tokio` would pull `tokio/net`, left off above.
-interprocess = "2.4.3"
+interprocess = "2.4.5"
 
 # Utilities
-rand = "0.10.2"
-lru = "0.18.2"
+rand = "0.10.3"
+lru = "0.18.5"
 # Atomic file writes (settings/queue/search-history persistence)
 tempfile = "3.27.0"
 # Several playlists export as one archive of `.m3u8` files. Deflate is the one method an
-# archive zipped elsewhere reliably uses; the defaults add AES, bzip2, lzma, xz, zstd,
-# PPMd and zopfli for nothing we write or expect to read. `deflate-flate2` names no
-# backend of its own: `lofty` already builds `flate2` with its pure-Rust one, and a tree
+# archive zipped elsewhere reliably uses; the defaults add AES, bzip2, Deflate64, lzma,
+# xz, zstd, PPMd and zopfli for nothing we write or expect to read. `deflate-flate2` names
+# no backend of its own: `lofty` already builds `flate2` with its pure-Rust one, and a tree
 # that lost that would fail to compile rather than misbehave. `chrono` is the conversion
 # that dates each entry, without which every extracted file reads 1980; it adds no crate.
-zip = { version = "8.6.0", default-features = false, features = ["chrono", "deflate-flate2"] }
+zip = { version = "9.0.4", default-features = false, features = ["chrono", "deflate-flate2"] }
 # Test-only: the rules pin expands each `.claude/rules` `paths:` glob.
 glob = "0.3.4"
-# Test-only: the translations pin reads the bundled faces' character maps. Slint's compiler
-# already builds this release, and a character lookup needs none of its features.
-ttf-parser = { version = "0.25.1", default-features = false }
+# Test-only: the translations pin reads the bundled faces' character maps, which needs
+# nothing of the defaults but `std`.
+skrifa = { version = "0.48.0", default-features = false, features = ["std"] }
 
 # Platform-specific, each declared under a `[target.'cfg(…)']` table in the member that
 # takes it: a call site gated wider than its dependency fails to resolve on the platforms
 # the gap leaves uncovered.
 
 # Linux
-# Do NOT enable the `tokio` feature: cargo unifies it onto Slint's accesskit_unix →
-# atspi → zbus chain, whose a11y thread has no tokio context and panics at startup.
+# Do NOT enable the `tokio` feature: under it every `zbus::blocking` call blocks on a
+# runtime zbus starts for itself, and `AppState::init` opens two connections (MPRIS,
+# the always-on-top probe) inside `runtime.block_on`, where tokio panics on a second.
 # Always-on-top uses `zbus::blocking::*` inside `spawn_blocking`; MPRIS serves on a
 # blocking connection and signals from a thread of its own.
-zbus = "5.18.0"
+zbus = "5.19.0"
 # Linux tray (StatusNotifierItem, no GTK); Windows/macOS take `tray-icon` below.
 # Defaults off: ksni's default `tokio` feature turns on `zbus/tokio` and walks into
 # the footgun above. `async-io` is mandatory (`compat` won't compile without an
@@ -281,7 +283,7 @@ ksni = { version = "0.3.6", default-features = false, features = ["blocking", "a
 # `mallopt` caps the per-thread arenas and pins the mmap/trim thresholds, which
 # otherwise ratchet up until nothing returns to the kernel, and `malloc_trim` hands
 # retained pages back.
-libc = "0.2.189"
+libc = "0.2.190"
 
 # Windows
 # `MoveFileExW(MOVEFILE_DELAY_UNTIL_REBOOT)` in `updater/install/swap.rs`, for when
@@ -302,14 +304,16 @@ windows-sys = { version = "0.61.2", features = [
 # `folders.path` and then fails to match the plain paths `read_dir` yields, greying
 # Browse rows out as disk-only. Reached through `utils::canonicalize_path`.
 dunce = "1.0.5"
-# Embeds the `ICON` resource so the taskbar and Explorer entries aren't the generic
-# placeholder. `wix/main.wxs` reads the same `assets/melodia.ico`.
-winresource = "0.1.31"
+# Embeds the icon the taskbar and Explorer show in place of the generic placeholder, and
+# the version info Task Manager names the app from. `wix/main.wxs` reads the same
+# `assets/melodia.ico`.
+winresource = "0.1.34"
 
 # Windows and macOS
-# Defaults off to drop `gtk` and `libxdo`, the Linux paths `ksni` covers. The icon is
-# created on the main thread, its menu events pumped from Slint's winit loop.
-tray-icon = { version = "0.24.2", default-features = false }
+# Defaults off so `libappindicator` and its `gtk` stay out of `Cargo.lock`, which resolves
+# every target; Linux takes `ksni`. The icon is created on the main thread, its menu events
+# pumped from Slint's winit loop.
+tray-icon = { version = "0.26.1", default-features = false }
 # SMTC and `MediaPlayer`. Linux serves MPRIS over `zbus` instead: souvlaki's `Position`
 # is whatever it was last pushed, and each push re-announces the playback status.
 souvlaki = "0.8.3"

@@ -6,15 +6,15 @@
 //! is [`super::top_result`].
 
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
+use slint::{ComponentHandle, SharedString, Weak};
 
 use super::SearchUi;
 use super::apply::{apply_results_to_slint, clear_results_on_ui, set_loading_on_ui};
+use crate::ui::model_diff::replace_rows;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::search::SearchResults;
@@ -70,9 +70,8 @@ pub async fn kick_search(
     apply_results_to_slint(search_ui, weak, &results, &trimmed);
     set_loading_on_ui(weak, false);
 
-    // Schedule the 2-second delayed history add. The 2 s window is
-    // Tauri parity — a query the user paused on long enough is worth
-    // remembering; a fast typo isn't.
+    // Schedule the 2-second delayed history add: a query the user paused
+    // on long enough is worth remembering; a fast typo isn't.
     schedule_history_add(state, search_ui, weak, query);
     Ok(())
 }
@@ -169,17 +168,11 @@ pub fn schedule_history_add(
 /// Push a freshly-loaded recent-searches list into `Search.recent-rows`.
 /// Called from `callbacks::recent` on initial hydrate, after a successful
 /// history-add, and after `recent-remove` / `recent-clear`.
-/// A **fresh** model rather than `set_vec` on the one already there, which the rest of the
-/// tree prefers: the chip strip packs its rows through a `pure callback` reading this
-/// property, and a cached pure result is only re-evaluated when a property it read is
-/// dirtied. Writing through the existing model leaves the property untouched, so a
-/// reorder — or an add at the history cap, both of which keep the length — would paint the
-/// previous terms. Nothing here holds a `ListView` delegate cache worth the reuse.
 pub fn push_recent_rows_to_slint(weak: &Weak<AppWindow>, rows: Vec<String>) {
     let weak = weak.clone();
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
-        let ss: Vec<SharedString> = rows.into_iter().map(SharedString::from).collect();
-        ui.global::<Search>().set_recent_rows(ModelRc::from(Rc::new(VecModel::from(ss))));
+        let rows = rows.into_iter().map(SharedString::from).collect();
+        replace_rows(&ui.global::<Search>().get_recent_rows(), rows, "Search.recent-rows");
     });
 }

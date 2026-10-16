@@ -1,6 +1,7 @@
 import { Theme } from "../theme.slint";
 import { Radio } from "../globals/radio.slint";
 import { NavEnterFrom } from "../globals/nav.slint";
+import { DetailArrival } from "../components/detail-arrival.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
 import { GridColumnsSync } from "../components/grid-columns-sync.slint";
 import { GridGeometry } from "../components/grid-geometry.slint";
@@ -71,11 +72,16 @@ export component RadioView inherits Rectangle {
     }
 
     // Arms the body's own cross-fade. `tab-anim-armed` is the band's answer for a tab move; a
-    // drill is not one, so the two openings and the tab picks both have to raise it.
+    // drill is not one, so `DetailArrival` raises it when a page opens or closes, leaving out a
+    // restore's landing, and `watched-tab-idx` for a tab move.
     property <bool> body-anim-armed: band.tab-anim-armed;
+    DetailArrival {
+        open: Radio.detail-open;
+        restoring: Radio.restoring;
+        arrived => { root.body-anim-armed = true; }
+    }
     property <bool> watched-detail-open: Radio.detail-open;
     changed watched-detail-open => {
-        root.body-anim-armed = true;
         if (!Radio.detail-open) { root.latch-count(); }
         // The box describes the song history now, or the tab under it again. Neither is what the
         // user last typed into it.

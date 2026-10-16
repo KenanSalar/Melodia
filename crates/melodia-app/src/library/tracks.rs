@@ -28,7 +28,7 @@ pub async fn get_track_links(db: &DbPool, ids: &[i64]) -> Result<Vec<track::Trac
 ///
 /// Resolves the track's `file_path` from the DB, then hands its parent
 /// directory to the platform default handler via the `open` crate
-/// (`xdg-open` on Linux, `open` on macOS, PowerShell `Start-Process` with
+/// (`xdg-open` on Linux, `open` on macOS, PowerShell `Invoke-Item` with
 /// an `explorer.exe` fallback on Windows). The existence check runs on the
 /// blocking pool because `is_dir` is a `stat` syscall.
 ///

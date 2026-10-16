@@ -1,13 +1,13 @@
 //! Pure data structures for the theme registry, and the luminance split read off them. No Slint
-//! imports and no OS signals: the brush writes live in `ui::appearance::theme_apply`, the OS
+//! imports and no OS signals: the brush writes live in `ui::appearance::theme_paint`, the OS
 //! signals in `system_color_state.rs`.
 
 /// The theme-dependent brush slots that come from a palette table. Stored as
-/// packed `0x00RRGGBB` so the data tables stay readable next to the
-/// Tauri-source hex strings. `apply()` writes three more that don't:
+/// packed `0x00RRGGBB` so the data tables read as the hex colours they
+/// are. `theme_paint` writes three more that don't:
 /// `mantle_unfocused` (an OS signal, which a [`Variant`] may snapshot), and
 /// `accent` / `accent_text` (picked independently of the variant).
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Palette {
     // 13 base / structure
     pub base: u32,

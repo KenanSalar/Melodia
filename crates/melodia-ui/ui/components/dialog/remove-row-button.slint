@@ -1,0 +1,11 @@
+import { Theme } from "../../theme.slint";
+import { IconButton } from "../icon-button.slint";
+
+// The × closing a row of an editable list: an artist credit, a genre, a smart-playlist rule.
+export component RemoveRowButton inherits IconButton {
+    icon: "close";
+    icon-size: 16px;
+    diameter: 28px;
+    idle-bg: Theme.surface1;
+    hover-fg: Theme.danger;
+}

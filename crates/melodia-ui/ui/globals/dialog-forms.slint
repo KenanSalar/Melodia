@@ -19,6 +19,8 @@ export global SmartEditor {
     in-out property <int> limit-order-index;
     // -1 creates; otherwise the playlist being edited.
     in-out property <int> target-id: -1;
+    // How many tracks the rules hold right now, limit applied. -1 hides the line.
+    in property <int> match-count: -1;
 
     callback request-new();
     callback request-edit(int /*playlist_id*/);
@@ -29,6 +31,9 @@ export global SmartEditor {
     callback set-rule-field(int /*row*/, int /*field index*/);
     callback set-rule-op(int /*row*/, int /*op index*/);
     callback set-rule-value(int /*row*/, string);
+
+    // Re-counts `match-count` from the form as it stands, name aside.
+    callback recount();
 
     callback commit();
 }
@@ -214,7 +219,7 @@ export global TagEditor {
 // approval page and advances `lastfm-step`, then `lastfm-finish` exchanges it
 // for a session. ListenBrainz just validates a pasted token. `error` carries a
 // localized line, which Rust has to set through the `err-*` `@tr` callbacks —
-// Slint 1.16 exposes no Rust-callable `tr()`.
+// Slint 1.18 exposes no Rust-callable `tr()`.
 export global ScrobbleUi {
     in-out property <int> lastfm-step;      // 0 = open browser, 1 = finish
     in-out property <string> lastfm-token;  // unauthorized token between steps
@@ -254,7 +259,7 @@ export global ScrobbleUi {
 // rather than at the first click. Rust closes the dialog once that succeeds.
 //
 // `error` carries a localized line, which Rust has to set through the `err-*` `@tr` callbacks —
-// Slint 1.16 exposes no Rust-callable `tr()`.
+// Slint 1.18 exposes no Rust-callable `tr()`.
 export global RadioForm {
     in-out property <int> edit-id: -1;
     in-out property <string> url;

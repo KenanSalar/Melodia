@@ -148,9 +148,12 @@ export component LibraryTabBand inherits Rectangle {
     property <brush> hero-hover:
         root.detail-open ? HeroBackdrop.on-backdrop.transparentize(0.88) : Theme.surface0;
     property <brush> hero-divider: root.detail-open ? HeroBackdrop.tile-edge : Theme.surface1;
+    // A detail open puts them on `HeroBackdrop`, which Rust writes once a solve, so only the idle
+    // half reads the palette a fade restarts.
     animate hero-label, hero-active, hero-hover, hero-divider {
         duration: Theme.dur-med;
         easing: ease-in-out;
+        enabled: root.detail-open || !Theme.recoloring;
     }
 
     // **Split `in` / `out` to take the morph's two curves** — the colour is the same gesture as the
@@ -308,6 +311,7 @@ export component LibraryTabBand inherits Rectangle {
                     idle-bg: HeroBackdrop.disc-fill;
                     hover-bg: HeroBackdrop.disc-hover;
                     idle-fg: HeroBackdrop.chrome;
+                    on-backdrop: true;
                     // **A bias off the morph, not the morph itself** — this is the only piece of
                     // the hero whose *size* also rides `hero-t`, so a plain alpha puts its
                     // presence at `hero-t` squared and the entry reads as a pop at the end.
@@ -378,15 +382,13 @@ export component LibraryTabBand inherits Rectangle {
                         alignment: start;
 
                         // Playlist Detail's smart badge, matching the grid card's corner.
-                        if root.title-badge: VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: "auto_awesome";
-                                icon-size: 22px;
-                                // Multiplied, not set: `chrome` carries its own alpha on the aurora.
-                                icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);
-                                filled: true;
-                            }
+                        if root.title-badge: MaterialIcon {
+                            cross-axis-self-alignment: center;
+                            name: "auto_awesome";
+                            icon-size: 22px;
+                            // Multiplied, not set: `chrome` carries its own alpha on the aurora.
+                            icon-color: HeroBackdrop.chrome.transparentize(1.0 - root.hero-t);
+                            filled: true;
                         }
 
                         Text {
@@ -421,8 +423,8 @@ export component LibraryTabBand inherits Rectangle {
                     }
                 }
 
-                // The rows live on a global six heroes share, so what empties the strip is the
-                // collapse's teardown rather than an `if` — which this couldn't be anyway.
+                // The chips live on a global six heroes share, so what empties the strip is the
+                // collapse's teardown rather than an `if`.
                 HeroChipStrip { fade: root.hero-t; }
 
                 Rectangle { vertical-stretch: 1; }

@@ -1,8 +1,6 @@
 //! Internal data structures for the Favorites view. Mirrors `src/ui/albums/state.rs` in shape,
 //! concentrated here so the public [`crate::ui::favorites::FavoritesUi`] surface stays small.
 
-use std::collections::HashSet;
-
 use parking_lot::Mutex;
 
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
@@ -49,9 +47,6 @@ pub(crate) struct FavoritesUiState {
     /// `FavoritesUi::release_section_state` beside the caches they were folded from.
     pub songs_fold: Mutex<HeroFold>,
     pub most_played_totals: Mutex<MostPlayedTotals>,
-    /// `TrackListRow.id`s currently `selected: true` on the Slint model. The same diff-then-write
-    /// Albums uses to keep updates O(changed) rather than O(rows).
-    pub applied_selection: Mutex<HashSet<i32>>,
     /// The covers last composed into the banner, guarding against redoing four decodes, a
     /// 600² compose and a blur when a refresh yields the same top four.
     pub last_mosaic_paths: MosaicGuard,
@@ -81,7 +76,6 @@ impl FavoritesUiState {
             fav_artists: Mutex::new(Vec::new()),
             songs_fold: Mutex::new(HeroFold::default()),
             most_played_totals: Mutex::new(MostPlayedTotals::default()),
-            applied_selection: Mutex::new(HashSet::new()),
             last_mosaic_paths: MosaicGuard::default(),
             last_grid_signature: Mutex::new(None),
         }

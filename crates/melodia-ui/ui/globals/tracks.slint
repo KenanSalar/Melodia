@@ -30,10 +30,6 @@ export global Tracks {
     // Whether the section is on screen. Rust skips `library_changed` refreshes while
     // hidden and runs one deferred re-fetch on re-enter.
     callback section-active-changed(bool);
-    // Cross-tab navigation from a row's right-click "Go to …" entry.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // Modifiers come off the row's pointer-event as bools; Rust does the work and walks the model
     // to flip the per-row `selected` flags, a Slint expression not being able to iterate one.
@@ -131,10 +127,6 @@ export global Browse {
     pure callback request-card-cover(string /*artwork_path*/, int /*generation*/) -> image;
     // As `Tracks.section-active-changed` — skip refreshes while hidden, one re-fetch on re-enter.
     callback section-active-changed(bool);
-    // Cross-tab navigation from a row's right-click "Go to …" entry.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 }
 
 // The lazy thumbnail lookup **every** `TrackListRowItem` in the tree resolves through — they all

@@ -1,12 +1,11 @@
 //! Shared flat-list row-selection core: the [`RowSelectionView`] surface the four detail
-//! globals, the two curated pages and Search are driven through, modifier-aware click math, the
-//! diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
+//! globals, Tracks, the two curated pages and Search are driven through, modifier-aware click
+//! math, the diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
 //!
 //! Every list implements the same click semantics (plain click = single, Ctrl = toggle, Shift =
-//! range over the displayed order). The curated pages and Search get the whole of it from the
-//! three `*_curated` functions below, their `selection.rs` files staying thin adapters over their
-//! own global. **Tracks stays hand-written and should**: its range branch walks the filtered cache
-//! (`current_ids_filtered`) where those read the Slint model directly.
+//! range over the displayed order). The four list views get the whole of it from
+//! [`handle_row_click`], [`select_all_rows`] and [`clear_row_selection`], wired once by
+//! `callbacks::track_list::wire_row_selection`.
 //!
 //! [`crate::ui::track_detail::selection`] is the other consumer of the trait: same accessors,
 //! cache-indexed selection with different complexity trade-offs.
@@ -14,26 +13,33 @@
 use std::collections::HashSet;
 use std::hash::BuildHasher;
 
-use parking_lot::Mutex;
 use slint::{Model, ModelRc, VecModel};
 
+use crate::ui::track_list_model::TrackListModel;
 use melodia_ui::{
     AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed, Search,
-    TrackListRow as UiTrackListRow,
+    TrackListRow as UiTrackListRow, Tracks,
 };
+
+/// The anchor of a list nothing has been clicked in since its selection was last cleared.
+pub const NO_ANCHOR: i32 = -1;
 
 /// Compute the new `(selected_ids, anchor)` for a row click.
 ///
-/// * plain click → single-row selection, anchor moves to the clicked row
-/// * Ctrl-click  → toggle this row in/out of the existing set
-/// * Shift-click → range select from the current anchor to this row, in the
-///   *displayed* order; the anchor stays put
+/// The anchor is the **id** of the row last clicked rather than its position, so a range runs from
+/// that row wherever a re-sort or a refilter has since moved it.
 ///
-/// `visible_ids` supplies the displayed-order id list and is only invoked in
-/// the Shift branch, so callers with an expensive projection (Tracks walks its
-/// filtered cache) don't pay it on plain clicks.
+/// * plain click → single-row selection, the anchor moving to the clicked row
+/// * Ctrl-click  → toggle this row in or out of the set, the anchor moving to it
+/// * Shift-click → the displayed rows from the anchor's to this one, the anchor staying put; with
+///   no anchor, or the anchor's row filtered out, it is a plain click
+///
+/// `visible_ids` supplies the displayed-order id list and is only invoked in the Shift branch, so
+/// callers with an expensive projection don't pay it on plain clicks. `idx` is the clicked row's
+/// position, trusted where it names `id` and looked up by id otherwise. A row listed as `0` keeps
+/// its place in that list and stays out of a range, which is how Browse's disk-only rows ride it.
 pub fn compute_click_selection(
-    cur_anchor: i32,
+    anchor: i32,
     cur_selected: Vec<i32>,
     visible_ids: impl FnOnce() -> Vec<i32>,
     idx: i32,
@@ -41,38 +47,44 @@ pub fn compute_click_selection(
     shift: bool,
     ctrl: bool,
 ) -> (Vec<i32>, i32) {
-    if shift && cur_anchor >= 0 {
+    if shift && anchor != NO_ANCHOR {
         let ids = visible_ids();
-        if ids.is_empty() {
-            (vec![id], idx)
-        } else {
-            let last = i32::try_from(ids.len().saturating_sub(1)).unwrap_or(i32::MAX);
-            let lo = usize::try_from(cur_anchor.min(idx).clamp(0, last)).unwrap_or(0);
-            let hi = usize::try_from(cur_anchor.max(idx).clamp(0, last)).unwrap_or(0);
-            (ids[lo..=hi].to_vec(), cur_anchor)
+        let from = ids.iter().position(|&shown| shown == anchor);
+        let to = usize::try_from(idx)
+            .ok()
+            .filter(|&at| ids.get(at) == Some(&id))
+            .or_else(|| ids.iter().position(|&shown| shown == id));
+        if let (Some(from), Some(to)) = (from, to) {
+            let range = ids[from.min(to)..=from.max(to)].iter().copied();
+            return (range.filter(|&shown| shown != 0).collect(), anchor);
         }
-    } else if ctrl {
+        return (vec![id], id);
+    }
+    if ctrl {
         let mut next = cur_selected;
         if let Some(pos) = next.iter().position(|&v| v == id) {
             next.remove(pos);
         } else {
             next.push(id);
         }
-        (next, idx)
-    } else {
-        (vec![id], idx)
+        return (next, id);
     }
+    (vec![id], id)
 }
 
-/// Re-stamp `selected: bool` on every row in the visible
-/// `VecModel<TrackListRow>` to match `desired`. Rows whose flag already
-/// matches are skipped — `set_row_data` invalidates the `ListView` delegate
-/// cache for that row, so a full rewrite would re-build every row component
-/// on every click. UI-thread only.
+/// Re-stamp `selected: bool` on every visible row to match `desired`. Rows
+/// whose flag already matches are skipped — `set_row_data` invalidates the
+/// `ListView` delegate cache for that row, so a full rewrite would re-build
+/// every row component on every click. A [`TrackListModel`] keeps the set
+/// itself and makes the same skip without cloning a row. UI-thread only.
 pub fn stamp_rows_selected<S: BuildHasher>(
     rows: &ModelRc<UiTrackListRow>,
     desired: &HashSet<i32, S>,
 ) {
+    if let Some(model) = TrackListModel::of(rows) {
+        model.select(desired);
+        return;
+    }
     let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
         return;
     };
@@ -111,9 +123,13 @@ pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
 /// accessor to make either clone free. Keeps that function's skip-if-unchanged guard for the
 /// same reason it has one.
 ///
-/// Falls back to [`displayed_ids`] where the model isn't the `VecModel` the views install, which
-/// is [`stamp_rows_selected`]'s own early return: there is nothing to stamp either way.
+/// A [`TrackListModel`] answers from its snapshot, every row it holds being a library row.
+/// Falls back to [`displayed_ids`] where the model is neither, which is [`stamp_rows_selected`]'s
+/// own early return: there is nothing to stamp either way.
 pub fn select_all_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
+    if let Some(model) = TrackListModel::of(rows) {
+        return model.select_all();
+    }
     let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
         return displayed_ids(rows);
     };
@@ -169,7 +185,7 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
 /// [`crate::ui::track_detail::selection`] because the *logic* differs between the two layers and
 /// the accessors don't.
 pub trait RowSelectionView {
-    /// The shift-range anchor row index (`-1` = no anchor).
+    /// The id of the row a shift-range runs from, or [`NO_ANCHOR`].
     fn anchor(&self) -> i32;
     fn set_anchor(&self, anchor: i32);
     /// The currently-selected track ids model.
@@ -180,11 +196,19 @@ pub trait RowSelectionView {
     /// Replace the displayed track-row model wholesale (downcast-miss fallback only — the model
     /// is normally mutated in place).
     fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>);
+
+    fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static);
+    fn bind_select_all(&self, f: impl FnMut() + 'static);
+    fn bind_clear_selection(&self, f: impl FnMut() + 'static);
 }
 
-/// Generate a [`RowSelectionView`] impl for a Slint global.
+/// Generate a [`RowSelectionView`] impl for a Slint global. Tracks names its row model `rows`
+/// where every other list says `tracks`.
 macro_rules! impl_row_selection_view {
     ($global:ident) => {
+        impl_row_selection_view!($global, get_tracks, set_tracks);
+    };
+    ($global:ident, $get_rows:ident, $set_rows:ident) => {
         impl RowSelectionView for $global<'_> {
             fn anchor(&self) -> i32 {
                 self.get_selection_anchor()
@@ -199,10 +223,19 @@ macro_rules! impl_row_selection_view {
                 self.set_selected_ids(ids);
             }
             fn track_rows(&self) -> ModelRc<UiTrackListRow> {
-                self.get_tracks()
+                self.$get_rows()
             }
             fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>) {
-                self.set_tracks(rows);
+                self.$set_rows(rows);
+            }
+            fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static) {
+                self.on_select_row(f);
+            }
+            fn bind_select_all(&self, f: impl FnMut() + 'static) {
+                self.on_select_all(f);
+            }
+            fn bind_clear_selection(&self, f: impl FnMut() + 'static) {
+                self.on_clear_selection(f);
             }
         }
     };
@@ -215,29 +248,17 @@ impl_row_selection_view!(GenreDetail);
 impl_row_selection_view!(PlaylistDetail);
 impl_row_selection_view!(RecentlyPlayed);
 impl_row_selection_view!(Search);
+impl_row_selection_view!(Tracks, get_rows, set_rows);
 
-/// Compute the new selection set for a curated page's row click and apply it, on the UI thread.
-/// Click semantics match `tracks::handle_select_row` exactly, and the selection is mirrored into
-/// `applied` so the next `apply_filtered_tracks` round can re-stamp freshly-built rows.
-pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
-    view: &V,
-    applied: &Mutex<HashSet<i32, S>>,
-    idx: i32,
-    id: i32,
-    shift: bool,
-    ctrl: bool,
-) {
+/// Compute the new selection set for a list view's row click and apply it, on the UI thread.
+pub fn handle_row_click<V: RowSelectionView>(view: &V, idx: i32, id: i32, shift: bool, ctrl: bool) {
     let (new_selected, new_anchor) = compute_click_selection(
         view.anchor(),
         view.selected_ids().iter().collect(),
-        // Range select over the currently-displayed rows (post-filter, already in the same order
-        // as the Slint `tracks` model). Read ids straight from the model rather than re-walking
-        // the cached `tracks_all` + filter, so the range matches what the user is looking at even
-        // mid-debounce — where a detail view, whose cache *is* the display order, indexes that.
-        || {
-            let rows = view.track_rows();
-            (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect()
-        },
+        // Range select over the displayed rows, read straight from the model rather than a cache
+        // refiltered by the box's newer text, so the range matches what the user is looking at
+        // even mid-debounce. A detail view, whose cache *is* the display order, indexes that.
+        || row_ids(&view.track_rows()),
         idx,
         id,
         shift,
@@ -245,60 +266,74 @@ pub fn handle_curated_click<V: RowSelectionView, S: BuildHasher>(
     );
 
     let id_set: HashSet<i32> = new_selected.iter().copied().collect();
-    write_curated_selection(view, new_selected);
+    write_row_selection(view, new_selected);
     view.set_anchor(new_anchor);
-    {
-        // `clone_from` needs both sides on one hasher, and a public parameter may not name a
-        // concrete one (`implicit_hasher`) — so refill, which keeps the allocation just the same.
-        let mut applied = applied.lock();
-        applied.clear();
-        applied.extend(id_set.iter().copied());
-    }
 
     // Re-stamp per-row `selected` flags so the checkbox + background highlight reflect the new
     // set immediately.
     stamp_rows_selected(&view.track_rows(), &id_set);
 }
 
-/// Take every displayed row into a curated page's selection.
+/// Take every displayed row into a list view's selection.
 ///
 /// **The anchor is left where the last click put it**, unlike the clear below: Select All is not
 /// itself a click, so a shift-click after one should still range from whatever the user picked.
 /// The queue's own select-all has said the same since it was written.
-pub fn select_all_curated<V: RowSelectionView, S: BuildHasher>(
-    view: &V,
-    applied: &Mutex<HashSet<i32, S>>,
-) {
+pub fn select_all_rows<V: RowSelectionView>(view: &V) {
     let ids = select_all_ids(&view.track_rows());
-    {
-        let mut applied = applied.lock();
-        applied.clear();
-        applied.extend(ids.iter().copied());
-    }
-    write_curated_selection(view, ids);
+    write_row_selection(view, ids);
 }
 
-/// Reset a curated page's selection (Escape, the row menu's "Clear selection", and
-/// section-leave). Same diff-then-write shape as [`handle_curated_click`].
-pub fn clear_curated_selection<V: RowSelectionView, S: BuildHasher>(
-    view: &V,
-    applied: &Mutex<HashSet<i32, S>>,
-) {
-    write_curated_selection(view, Vec::new());
-    view.set_anchor(-1);
-    applied.lock().clear();
+/// Reset a list view's selection (Escape, the row menu's "Clear selection", and
+/// section-leave). Same diff-then-write shape as [`handle_row_click`].
+pub fn clear_row_selection<V: RowSelectionView>(view: &V) {
+    write_row_selection(view, Vec::new());
+    view.set_anchor(NO_ANCHOR);
     stamp_rows_selected(&view.track_rows(), &HashSet::new());
 }
 
 /// UI-thread-only: re-stamp selection onto a freshly-built row list before it's pushed into the
 /// Slint model, so a filter change / library refresh doesn't drop the user's existing selection.
-pub fn restamp_curated_rows<V: RowSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
+pub fn restamp_row_selection<V: RowSelectionView>(view: &V, rows: &mut [UiTrackListRow]) {
     let selected: HashSet<i32> = view.selected_ids().iter().collect();
     restamp_selected(rows, &selected);
 }
 
+/// Drops every id the list no longer holds from a view's selection, the anchor with it, when the
+/// set behind the list changes. UI-thread only.
+///
+/// `held` is the whole set, never the rows a filter left on screen: a filter hides a selection,
+/// which the next refilter paints again, where a track gone from the set is one the next batch
+/// action would otherwise still act on. Built only where a selection or an anchor is held.
+pub fn keep_selection_within<V: RowSelectionView>(view: &V, held: impl FnOnce() -> HashSet<i32>) {
+    let selected: Vec<i32> = view.selected_ids().iter().collect();
+    let anchor = view.anchor();
+    if selected.is_empty() && anchor == NO_ANCHOR {
+        return;
+    }
+    let held = held();
+    if !held.contains(&anchor) {
+        view.set_anchor(NO_ANCHOR);
+    }
+    let kept: Vec<i32> = selected.iter().copied().filter(|id| held.contains(id)).collect();
+    if kept.len() == selected.len() {
+        return;
+    }
+    let kept_set: HashSet<i32> = kept.iter().copied().collect();
+    write_row_selection(view, kept);
+    stamp_rows_selected(&view.track_rows(), &kept_set);
+}
+
+/// Every row's id in display order, one per row so a click's index still names its row.
+fn row_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
+    match TrackListModel::of(rows) {
+        Some(model) => model.ids(),
+        None => (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect(),
+    }
+}
+
 /// Mutate the persistent `selected-ids` `VecModel<i32>` in place.
-fn write_curated_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {
+fn write_row_selection<V: RowSelectionView>(view: &V, ids: Vec<i32>) {
     write_selection_ids(&view.selected_ids(), ids, |m| view.replace_selected_ids(m));
 }
 

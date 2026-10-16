@@ -1,5 +1,5 @@
 // Theme tests verify hex literals byte-for-byte; underscores would obscure
-// the match against the upstream Tauri sources.
+// the match against the colours as each theme publishes them.
 #![allow(clippy::unreadable_literal)]
 
 use super::*;
@@ -20,7 +20,7 @@ fn unknown_theme_id_falls_back_to_catppuccin() {
 }
 
 #[test]
-fn catppuccin_mocha_mauve_matches_tauri_hex() {
+fn catppuccin_mauve_matches_the_published_hex() {
     let theme = get("catppuccin");
     assert_eq!(theme.accent_hex("mauve", "mocha"), Some(0xcba6f7));
     assert_eq!(theme.accent_hex("mauve", "latte"), Some(0x8839ef));

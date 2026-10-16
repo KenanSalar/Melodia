@@ -11,8 +11,9 @@ use parking_lot::Mutex;
 use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::ShadowEntry;
-use super::links::{self, LinkCache, RowLinks};
+use super::links::{self, LinkCache};
 use crate::ui::model_patch::patch_rows_where;
+use crate::ui::track_links::RowLinks;
 use crate::ui::tracks::format_duration_ms;
 use crate::ui::util::opt_shared;
 use melodia_app::state::AppState;

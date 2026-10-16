@@ -3,8 +3,6 @@
 //! at all: the Songs list keeps its recency fetch order and Most Played's title
 //! names its own, so the cached sets are only ever filtered.
 
-use std::collections::HashSet;
-
 use parking_lot::Mutex;
 
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
@@ -53,9 +51,6 @@ pub(crate) struct RecentlyPlayedUiState {
     pub songs_totals: Mutex<SongsTotals>,
     pub songs_fold: Mutex<HeroFold>,
     pub most_played_totals: Mutex<MostPlayedTotals>,
-    /// `TrackListRow.id`s currently `selected: true` on the Slint model. The same
-    /// diff-then-write the other list views use.
-    pub applied_selection: Mutex<HashSet<i32>>,
     /// The covers last composed into the banner, guarding against redoing four decodes, a
     /// 600² compose and a blur when a refresh yields the same top four — the common case.
     pub last_mosaic_paths: MosaicGuard,
@@ -77,7 +72,6 @@ impl RecentlyPlayedUiState {
             songs_totals: Mutex::new(SongsTotals::default()),
             songs_fold: Mutex::new(HeroFold::default()),
             most_played_totals: Mutex::new(MostPlayedTotals::default()),
-            applied_selection: Mutex::new(HashSet::new()),
             last_mosaic_paths: MosaicGuard::default(),
             last_grid_signature: Mutex::new(None),
         }

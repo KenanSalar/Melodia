@@ -16,30 +16,25 @@ export component CollapsibleSectionHeader inherits Rectangle {
     height: 28px;
     border-radius: self.height / 2;
     background: touch.has-hover ? Theme.surface1 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     row := HorizontalLayout {
         padding-left: 10px;
         padding-right: 10px;
         spacing: 2px;
         alignment: start;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.label;
-                color: Theme.text;
-                font-size: Theme.font-size-lg;
-                font-weight: 600;
-            }
+        Text {
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.font-size-lg;
+            font-weight: 600;
         }
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: root.collapsed ? "expand_more" : "expand_less";
-                icon-size: 20px;
-                icon-color: Theme.subtext0;
-            }
+        MaterialIcon {
+            name: root.collapsed ? "expand_more" : "expand_less";
+            icon-size: 20px;
+            icon-color: Theme.subtext0;
         }
     }
 

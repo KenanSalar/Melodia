@@ -1,0 +1,27 @@
+import { Theme } from "../theme.slint";
+
+// The filled pill a click acts on: `ChipGroup`'s options, Radio's facet chips and its scope
+// suggestions. Each host keeps its own height, padding and contents, and paints what it draws on
+// the fill in `ink`. `MetaChip` states a fact and `QualityChip` a verdict, so neither is this.
+export component FilledChip inherits Rectangle {
+    in property <bool> selected;
+    // Keeps the hover fill while something the chip opened has the pointer, `has-hover` going false
+    // the moment a popup takes input.
+    in property <bool> held;
+    out property <brush> ink: root.selected ? Theme.accent-text : Theme.text;
+
+    callback clicked();
+
+    border-radius: self.height / 2;
+    background: root.selected
+        ? Theme.accent
+        : (touch.has-hover || root.held ? Theme.surface2 : Theme.surface1);
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+    @children
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

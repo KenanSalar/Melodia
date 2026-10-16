@@ -13,7 +13,7 @@ import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 // page treatment, which is the miniplayer with its own backdrop switched off. Each pair is
 // restated per branch rather than gated, Slint having no way to apply a property conditionally.
 export component NpOverlayScrollbar inherits OverlayScrollbar {
-    in property <bool> on-backdrop: true;
+    on-backdrop: true;
 
     track-color: root.on-backdrop ? Player.np-accent-bright : Theme.surface0;
     track-opacity: root.on-backdrop ? 0.25 : 0.5;

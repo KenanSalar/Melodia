@@ -2,8 +2,6 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use serde::Serialize;
-
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
@@ -16,12 +14,11 @@ use melodia_store::media::ingest::scanner::{Unobserved, scan_files_parallel};
 ///
 /// `summaries` costs a second projection query, so [`import_files`] leaves it empty and
 /// [`import_and_summarize`] is the variant that fills it.
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct ImportFilesResult {
     pub track_ids: Vec<i64>,
     pub imported_count: u32,
     pub failed_paths: Vec<String>,
-    #[serde(skip)]
     pub summaries: Vec<Arc<TrackSummary>>,
 }
 

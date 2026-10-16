@@ -18,7 +18,7 @@ use std::cell::Cell;
 
 use slint::ComponentHandle;
 
-use crate::ui::appearance::theme_apply::color;
+use crate::ui::appearance::rgb::color;
 use crate::ui::aurora::{self, Tint, WASH_COUNT};
 use crate::ui::backdrop::{self, BackdropColors, BackdropSample};
 use melodia_ui::{AppWindow, HeroBackdrop};

@@ -66,7 +66,7 @@ export component SearchView inherits Rectangle {
             height: 100%;
             horizontal-scrollbar-policy: always-off;
             vertical-scrollbar-policy:   always-off;
-            viewport-width: self.width;
+            content-width: self.width;
 
             VerticalLayout {
                 padding-top: root.bar-inset;
@@ -75,12 +75,7 @@ export component SearchView inherits Rectangle {
                 padding-bottom: Theme.pad-lg;
                 spacing: Theme.pad-lg;
 
-                // The chips wrap against the column's content width, which the layout fixes
-                // independently of them, so handing it over is a derivation rather than a
-                // cycle — and a plain binding, so the strip owes no width mirror.
-                if Search.query == "" && Search.recent-rows.length > 0: RecentSearches {
-                    avail-width: root.width - 2 * Theme.pad-lg;
-                }
+                if Search.query == "" && Search.recent-rows.length > 0: RecentSearches { }
 
                 if Search.loading && Search.query != "": HorizontalLayout {
                     vertical-stretch: 0;
@@ -163,9 +158,9 @@ export component SearchView inherits Rectangle {
         width: Theme.scrollbar-slot;
         height: parent.height;
         visible-size: below-sv.visible-height;
-        content-size: below-sv.viewport-height;
-        offset: -below-sv.viewport-y;
-        scroll-to(o) => { below-sv.viewport-y = -o; }
+        content-size: below-sv.content-height;
+        offset: -below-sv.content-y;
+        scroll-to(o) => { below-sv.content-y = -o; }
     }
 
     // Declared last so it paints over both the results and the scrollbar — Slint paints
@@ -179,27 +174,25 @@ export component SearchView inherits Rectangle {
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         alignment: center;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            search-bar := SearchBar {
-                text <=> Search.query;
-                placeholder: @tr("Search your library…");
-                blur-trigger: Search.blur-search-tick;
-                input-width: 420px;
-                edited(t) => {
-                    Search.debounce-tick-pending += 1;
-                    Search.query-changed(t);
-                }
-                // Enter commits immediately, and aligning the ticks cancels the pending
-                // fire so the query isn't committed twice. **This is what lets a
-                // preserved query be re-run**: tab-leave released the results and cleared
-                // the models but kept `Search.query`, so no editing is needed — just
-                // focus and Enter.
-                accepted => {
-                    Search.debounce-tick-applied = Search.debounce-tick-pending;
-                    Search.commit-search(Search.query);
-                }
+        search-bar := SearchBar {
+            text <=> Search.query;
+            placeholder: @tr("Search your library…");
+            blur-trigger: Search.blur-search-tick;
+            input-width: 420px;
+            edited(t) => {
+                Search.debounce-tick-pending += 1;
+                Search.query-changed(t);
+            }
+            // Enter commits immediately, and aligning the ticks cancels the pending
+            // fire so the query isn't committed twice. **This is what lets a
+            // preserved query be re-run**: tab-leave released the results and cleared
+            // the models but kept `Search.query`, so no editing is needed — just
+            // focus and Enter.
+            accepted => {
+                Search.debounce-tick-applied = Search.debounce-tick-pending;
+                Search.commit-search(Search.query);
             }
         }
     }

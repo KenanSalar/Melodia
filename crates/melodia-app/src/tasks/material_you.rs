@@ -9,7 +9,7 @@
 //!    whether to generate or clear Material You — view-model wakes (the
 //!    per-emit playback hot path) never touch the filesystem.
 //! 3. CPU-bound extraction + palette generation runs on
-//!    `tokio::task::spawn_blocking`. Source ARGB is cached in a bounded
+//!    `tokio::task::spawn_blocking`. The source seed is cached in a bounded
 //!    `SeedCache` so prev/next/prev round-trips don't re-quantize the
 //!    same artwork.
 //! 4. Writes `(Palette, accent_hex)` back into `os_state.material_you`
@@ -31,7 +31,7 @@ use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_artwork::media::image::material_you::{
-    SchemeStyle, SeedCache, extract_source_argb_from_rgb8, generate_palette,
+    SchemeStyle, SeedCache, extract_source_rgb_from_rgb8, generate_palette,
 };
 use melodia_core::error::describe;
 use melodia_core::themes::{Palette, SystemColorState};
@@ -255,7 +255,7 @@ async fn react(
             thumbs
                 .get_or_load_rgb8(&artwork_for_block)
                 .as_ref()
-                .and_then(extract_source_argb_from_rgb8)
+                .and_then(extract_source_rgb_from_rgb8)
         });
         let palette = seed.map(|s| generate_palette(s, is_dark, style));
         (tmp_cache, palette)

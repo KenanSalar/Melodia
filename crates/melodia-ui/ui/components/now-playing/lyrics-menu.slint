@@ -3,7 +3,6 @@ import { Lyrics, LyricsState } from "../../globals/lyrics.slint";
 import { Player } from "../../globals/player.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { TagEditor } from "../../globals/dialog-forms.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { TooltipSide } from "../tooltip.slint";
 import { AccentGlyphButton } from "./accent-glyph-button.slint";
 import { MenuSurface } from "./menu-surface.slint";
@@ -34,17 +33,12 @@ export component LyricsMenu inherits Rectangle {
     // the rows do not move under the pointer between one open and the next.
     property <length> menu-h: FlyoutMetrics.menu-row-h * 5 + FlyoutMetrics.chrome-h;
 
-    function dismiss() {
-        pop.close();
-        PopupHighlight.id = "";
-    }
-
     btn := AccentGlyphButton {
         icon: "lyrics";
         filled: Lyrics.enabled;
         // Lit while the column is showing lyrics, and while the menu is open: a bare glyph has no
         // disc for `force-bg` to light.
-        active: Lyrics.enabled || PopupHighlight.id == "np-lyrics";
+        active: Lyrics.enabled || pop.is-open;
         // Off, drawn at rest rather than greyed: the switch beside it says why nothing answers,
         // and a greyed glyph beside a working switch reads as something broken.
         button-enabled: Lyrics.enabled;
@@ -56,7 +50,6 @@ export component LyricsMenu inherits Rectangle {
         tooltip-side: TooltipSide.below;
         tooltip-align-end: true;
         clicked => {
-            PopupHighlight.id = "np-lyrics";
             pop.show();
         }
     }
@@ -75,11 +68,10 @@ export component LyricsMenu inherits Rectangle {
         close-policy: close-on-click-outside;
 
         MenuSurface {
-            popup-id: "np-lyrics";
             width: 100%;
             height: 100%;
             close-requested => {
-                root.dismiss();
+                pop.close();
             }
 
             menu-vl := VerticalLayout {
@@ -100,7 +92,7 @@ export component LyricsMenu inherits Rectangle {
                     clicked => {
                         Lyrics.romanization-shown = !Lyrics.romanization-shown;
                         Lyrics.set-romanization-shown(Lyrics.romanization-shown);
-                        root.dismiss();
+                        pop.close();
                     }
                 }
 
@@ -116,7 +108,7 @@ export component LyricsMenu inherits Rectangle {
                     clicked => {
                         Lyrics.online-enabled = !Lyrics.online-enabled;
                         Lyrics.set-online-enabled(Lyrics.online-enabled);
-                        root.dismiss();
+                        pop.close();
                     }
                 }
 
@@ -130,7 +122,7 @@ export component LyricsMenu inherits Rectangle {
                     button-enabled: Lyrics.state != LyricsState.idle && Lyrics.online-enabled;
                     clicked => {
                         Lyrics.refresh();
-                        root.dismiss();
+                        pop.close();
                     }
                 }
 
@@ -140,7 +132,7 @@ export component LyricsMenu inherits Rectangle {
                     button-enabled: Lyrics.can-save-to-tag;
                     clicked => {
                         Lyrics.save-to-tag();
-                        root.dismiss();
+                        pop.close();
                     }
                 }
 
@@ -159,7 +151,7 @@ export component LyricsMenu inherits Rectangle {
                             @tr("Edit Track Information"),
                             [Player.vm.track.id],
                             TagEditor.tab-lyrics);
-                        root.dismiss();
+                        pop.close();
                     }
                 }
             }

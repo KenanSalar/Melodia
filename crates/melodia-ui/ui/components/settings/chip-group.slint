@@ -1,21 +1,12 @@
 import { Theme } from "../../theme.slint";
-import { SettingsPage } from "../../globals/settings-page.slint";
-import { Wrap } from "../../globals/wrap.slint";
+import { FilledChip } from "../filled-chip.slint";
 
 // One pill in a `ChipGroup`. Unexported — it's useful nowhere else.
-component Chip inherits Rectangle {
+component Chip inherits FilledChip {
     in property <string> label;
-    in property <bool>   selected;
-
-    callback clicked();
 
     height: 32px;
     horizontal-stretch: 0;
-    border-radius: self.height / 2;
-    background: root.selected
-        ? Theme.accent
-        : (touch.has-hover ? Theme.surface2 : Theme.surface1);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
 
     HorizontalLayout {
         padding-left: Theme.pad-md;
@@ -23,23 +14,13 @@ component Chip inherits Rectangle {
         Text {
             text: root.label;
             vertical-alignment: center;
-            color: root.selected ? Theme.accent-text : Theme.text;
+            color: root.ink;
             font-size: Theme.font-size-sm;
         }
-    }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
     }
 }
 
 // Pill-chip selector. A click writes `selected-index` and emits `selected(idx)`.
-//
-// Slint 1.16 has no wrapping layout and no `Flow`, so the group lays itself out as a column of
-// rows: it decides how many chips fit on a line and `Wrap.chunk-indices` splits the options into
-// index groups of that size. Iterating real arrays both times is what keeps it simple — Slint
-// rejects an inline `for … : if …`, and a wrapper around a filtered-out chip still claims spacing.
 export component ChipGroup inherits Rectangle {
     in property <[string]> options;
     in-out property <int> selected-index;
@@ -48,55 +29,27 @@ export component ChipGroup inherits Rectangle {
     // required where `selected-index` is a *derived* expression, since a
     // self-write would orphan that one-way binding.
     in property <bool> manual: false;
-    // Defaults to the settings body's own answer, so a call site inside a
-    // settings row says nothing; override it anywhere the group doesn't span a
-    // full card row. The `TabBar` shape — host owns the width, component owns
-    // the verdict.
-    in property <length> avail-width: SettingsPage.row-content-w;
 
     callback selected(int);
 
-    // The widest chip, measured rather than estimated: a hidden ruler mounts one **real** `Chip`
-    // per option, so measured and drawn shapes can't drift, and a `VerticalLayout` reports the max
-    // of its children's widths. Same idiom, and the same `visible: false` (a 0×0 clip that still
-    // computes layout info), as `tab-bar.slint`'s ruler. Sizing every row off the widest is
-    // deliberately conservative: a row is never full but can never overflow, and no per-chip
-    // measurement has to escape the repeater.
-    measure := VerticalLayout {
-        visible: false;
-        for option in root.options: Chip {
-            label: option;
-        }
-    }
-    property <length> chip-w: measure.preferred-width;
-    property <int> per-row: Wrap.per-row(root.avail-width, root.chip-w, Theme.pad-sm);
-
-    // Pinned rather than derived, and it is what makes the wrap worth anything:
-    // left to the children it merges in the hidden ruler's width, so the widest
-    // chip becomes a floor the card can't shrink past — the exact
-    // incompressibility this lays itself out to avoid.
+    // Left to the flex, the widest chip is a floor the card can't shrink past.
     min-width: 0px;
-    horizontal-stretch: 0;
-    height: Wrap.rows-height(root.options.length, root.per-row, 32px, Theme.pad-sm);
+    // Bound, because the flex reports no maximum and stretches its lines by default: a host
+    // with height to spare would spread the rows apart.
+    height: flow.preferred-height;
 
-    VerticalLayout {
+    flow := FlexboxLayout {
         spacing: Theme.pad-sm;
 
-        for row in Wrap.chunk-indices(root.options.length, root.per-row):
-            HorizontalLayout {
-                spacing: Theme.pad-sm;
-                alignment: start;
-
-                for idx in row: Chip {
-                    label: root.options[idx];
-                    selected: idx == root.selected-index;
-                    clicked => {
-                        if (!root.manual) {
-                            root.selected-index = idx;
-                        }
-                        root.selected(idx);
-                    }
+        for option[idx] in root.options: Chip {
+            label: option;
+            selected: idx == root.selected-index;
+            clicked => {
+                if (!root.manual) {
+                    root.selected-index = idx;
                 }
+                root.selected(idx);
             }
+        }
     }
 }

@@ -36,9 +36,6 @@ export component RecentlyPlayedSongsTab inherits Rectangle {
         select-all => { RecentlyPlayed.select-all(); }
         clear-selection => { RecentlyPlayed.clear-selection(); }
         request-blur-search => { RecentlyPlayed.blur-search-tick += 1; }
-        go-to-album(aid) => { RecentlyPlayed.go-to-album(aid); }
-        go-to-artist(aid) => { RecentlyPlayed.go-to-artist(aid); }
-        go-to-genre(gid) => { RecentlyPlayed.go-to-genre(gid); }
     }
 
     TrackListScrollbars {

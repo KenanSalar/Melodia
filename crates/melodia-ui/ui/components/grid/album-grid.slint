@@ -26,19 +26,17 @@ export component AlbumGrid inherits Rectangle {
     in property <int> covers-generation: 0;
 
     callback open-album(int /*album_id*/);
-    // The card menu's one cross-tab entry, routed by the host to `Albums.go-to-artist`.
-    callback go-to-artist(int /*artist_id*/);
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
     // Same sign convention as `TrackList` — a positive `v-offset` is N px
     // scrolled, where the inner `ListView` holds that as a non-positive
-    // `viewport-y`, so the boundary negates.
+    // `content-y`, so the boundary negates.
     out property <length> v-visible-height: list.visible-height;
-    out property <length> v-viewport-height: list.viewport-height;
-    out property <length> v-offset: -list.viewport-y;
+    out property <length> v-viewport-height: list.content-height;
+    out property <length> v-offset: -list.content-y;
     callback set-v-offset(length);
-    set-v-offset(o) => { list.viewport-y = -o; }
+    set-v-offset(o) => { list.content-y = -o; }
 
     list := ListView {
         vertical-scrollbar-policy: always-off;
@@ -66,7 +64,6 @@ export component AlbumGrid inherits Rectangle {
                     card-kind: "album";
                     card-id: album.id;
                     card-artist-id: album.artist_id;
-                    go-to-artist(id) => { root.go-to-artist(id); }
 
                     EntityCard {
                         card-width: root.card-width;

@@ -17,7 +17,8 @@ export component IconButton inherits Rectangle {
     // broken.
     in property <brush> disabled-fg: Theme.overlay0;
     in property <float> disabled-fade: 0.5;
-    // Lets a popup trigger keep its highlight while the popup is open — see `PopupHighlight`.
+    // For a popup trigger, bound to its popup's `is-open`: `has-hover` drops the moment the popup
+    // takes the pointer, so hover alone would leave the disc dark under an open popup.
     in property <bool> force-bg: false;
     in property <brush> idle-bg: transparent;
     // Overridden where the button sits on `surface0` itself and the default hover fill is invisible.
@@ -34,6 +35,9 @@ export component IconButton inherits Rectangle {
     // easing one as well restarts that curve on every frame of its own. A host repainting its
     // buttons in step with a longer fade hands over the stepped brushes and this instead.
     in property <duration> recolor-duration: Theme.dur-fast;
+    // Set by a host handing over a tier Rust writes once (`Player.np-*`, `HeroBackdrop`): those keep
+    // easing through a palette fade, where the `Theme` defaults stand down for it.
+    in property <bool> on-backdrop: false;
     in property <string> tooltip-text: "";
     // For a button sitting against the edge of something that clips: the pill is centred on the
     // host and runs well past it either way, so a scroller's own viewport cuts it.
@@ -110,7 +114,7 @@ export component IconButton inherits Rectangle {
         // the animated binding below and restart the crossfade every frame.
         opacity: root.fade;
 
-        animate background { duration: root.recolor-duration; easing: ease-in-out; }
+        animate background { duration: root.recolor-duration; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
     }
 
     // **Centred by hand rather than by a layout, and that is not a style preference.**
@@ -137,7 +141,7 @@ export component IconButton inherits Rectangle {
         // The disabled dim rides the same float rather than a second `opacity`: this root wraps a
         // `Text`, so an `opacity` here layered and cropped the glyph to its line box.
         fade: root.fade * (root.button-enabled ? 1.0 : root.disabled-fade) * root.lit-level;
-        animate icon-color { duration: root.recolor-duration; easing: ease-in-out; }
+        animate icon-color { duration: root.recolor-duration; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
     }
 
     Tooltip {

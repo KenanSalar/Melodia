@@ -24,7 +24,7 @@ component StepperButton inherits Rectangle {
     // The content views' darker page fill, lifting on hover.
     background: (touch.has-hover && !root.at-bound ? Theme.surface0 : Theme.base)
         .transparentize(1.0 - root.fade);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     MaterialIcon {
         name: root.icon;
@@ -104,7 +104,7 @@ export component SleepTimerFlyout inherits PopupSurface {
         padding: Theme.pad-xs;
         spacing: 0;
 
-        // The host's height reserve reads the same list's length.
+        // The height the host sizes this flyout at reads the same list's length.
         for p in SleepPresets.list: FlyoutOption {
             label: p.label;
             active: p.value == -1
@@ -133,35 +133,27 @@ export component SleepTimerFlyout inherits PopupSurface {
             padding-right: Theme.pad-sm;
             spacing: Theme.pad-sm;
             alignment: stretch;
+            cross-axis-alignment: center;
 
-            VerticalLayout {
-                alignment: center;
-                StepperButton {
-                    icon: "remove";
-                    at-bound: root.pending-seconds <= root.min-seconds;
-                    pressed-changed(down) => {
-                        if (down) { root.press(-1); } else { root.release(); }
-                    }
+            StepperButton {
+                icon: "remove";
+                at-bound: root.pending-seconds <= root.min-seconds;
+                pressed-changed(down) => {
+                    if (down) { root.press(-1); } else { root.release(); }
                 }
             }
-            VerticalLayout {
-                alignment: center;
+            Text {
                 horizontal-stretch: 1;
-                Text {
-                    text: Theme.format-duration(root.pending-seconds * 1000);
-                    color: Theme.text;
-                    font-size: Theme.font-size-md;
-                    horizontal-alignment: center;
-                }
+                text: Theme.format-duration(root.pending-seconds * 1000);
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                horizontal-alignment: center;
             }
-            VerticalLayout {
-                alignment: center;
-                StepperButton {
-                    icon: "add";
-                    at-bound: root.pending-seconds >= root.max-seconds;
-                    pressed-changed(down) => {
-                        if (down) { root.press(1); } else { root.release(); }
-                    }
+            StepperButton {
+                icon: "add";
+                at-bound: root.pending-seconds >= root.max-seconds;
+                pressed-changed(down) => {
+                    if (down) { root.press(1); } else { root.release(); }
                 }
             }
         }
@@ -175,7 +167,7 @@ export component SleepTimerFlyout inherits PopupSurface {
                 height: 28px;
                 border-radius: self.height / 2;
                 background: start-touch.has-hover ? Theme.accent.brighter(8%) : Theme.accent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                 Text {
                     text: @tr("Start");
                     color: Theme.crust;

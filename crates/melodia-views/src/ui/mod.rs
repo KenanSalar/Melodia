@@ -6,7 +6,6 @@ pub mod aurora;
 pub mod backdrop;
 pub mod browse;
 pub mod callbacks;
-pub mod chips;
 pub mod clipboard;
 pub mod cover_generation;
 pub mod detail_artwork;
@@ -50,7 +49,9 @@ pub mod support;
 pub mod tab_bar;
 pub mod track_columns;
 pub mod track_detail;
+pub mod track_links;
 pub mod track_list_cache;
+pub mod track_list_model;
 pub mod track_list_view;
 pub mod track_sort;
 pub mod tracks;
@@ -60,8 +61,11 @@ pub mod view_tag;
 pub mod visualizer;
 pub mod window_chrome;
 
+#[cfg(test)]
+pub(crate) mod fixtures;
+
 // Source pins for shared components with no Rust module of their own — the
-// three faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
+// faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
 // both mosaic pages wear and My Library's own), the blur stack under both of them, the
 // header row all three of those plus the Settings page share, and `IconButton`, whose
 // glyph sits outside the disc and places itself — nested it costs a layer per frame of a
@@ -75,7 +79,10 @@ pub mod window_chrome;
 // for the decoration buttons, whose fill answers to the OS decoration beside the window and
 // to a backdrop that is off by default. `frameless_tests` holds the
 // shell's frame bindings and the miniplayer's exit edge to one another, a pairing only a Win32
-// or macOS frame shows breaking.
+// or macOS frame shows breaking. `mount_fade_tests` holds every fade flipped right after its
+// mount to reading its layers first, a race that snaps on some runs and fades on the rest.
+// `slider_pointer_tests` holds the pointer every value slider shares to the left button, and to
+// committing only what a press moved.
 //
 // What used to sit among them and no longer does is the set that walked the *tree* rather
 // than reading a component: those are `crates/melodia/tests/`, on the rule that a check
@@ -108,11 +115,17 @@ mod library_tab_band_tests;
 #[path = "tests/mosaic_tab_hero_tests.rs"]
 mod mosaic_tab_hero_tests;
 #[cfg(test)]
+#[path = "tests/mount_fade_tests.rs"]
+mod mount_fade_tests;
+#[cfg(test)]
 #[path = "tests/placeholder_tests.rs"]
 mod placeholder_tests;
 #[cfg(test)]
 #[path = "tests/play_count_badge_tests.rs"]
 mod play_count_badge_tests;
+#[cfg(test)]
+#[path = "tests/slider_pointer_tests.rs"]
+mod slider_pointer_tests;
 #[cfg(test)]
 #[path = "tests/startup_motion_tests.rs"]
 mod startup_motion_tests;

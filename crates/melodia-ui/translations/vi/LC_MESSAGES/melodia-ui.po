@@ -146,6 +146,15 @@ msgid "Add"
 msgstr "Thêm"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} bản nhạc"
+
+#: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
 #: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
@@ -157,10 +166,12 @@ msgid "Playlist name"
 msgstr "Tên danh sách phát"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Mô tả (không bắt buộc)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Thêm mô tả…"
 
@@ -227,14 +238,6 @@ msgstr "Đặt lại"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Không có danh sách phát nào để xuất"
-
-#: ui/components/dialog/export-playlist-picker.slint
-#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
-#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
-msgid "{n} track"
-msgid_plural "{n} tracks"
-msgstr[0] "{n} bản nhạc"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
@@ -333,6 +336,7 @@ msgstr "Bạn có thể tìm mã thông báo trên trang cài đặt hồ sơ Li
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Chọn tất cả"
@@ -802,6 +806,10 @@ msgid "Folder"
 msgstr "Thư mục"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Nghệ sĩ - Album"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -872,7 +880,7 @@ msgstr "Sửa thông tin bản nhạc"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Sao chép"
@@ -929,10 +937,6 @@ msgstr "Xóa {} danh sách phát"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Xóa danh sách phát"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Nghệ sĩ - Album"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -1436,6 +1440,14 @@ msgstr "Sao chép tiêu đề"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Sao chép nghệ sĩ"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Cắt"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Dán"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"
@@ -2669,18 +2681,6 @@ msgstr "Phông nền album"
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Tô trình phát mini bằng màu của album đang phát, giống như màn hình Đang phát."
 
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Chuyển động"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Bỏ qua hiệu ứng khởi động"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Mở với thư viện đã hiện sẵn trên màn hình, thay vì mờ dần và trượt vào vị trí. Trang chi tiết bạn để mở vẫn sẽ mở rộng ra khi tải xong."
-
 #: ui/views/settings/output-section.slint
 msgid "Output"
 msgstr "Đầu ra"
@@ -2764,6 +2764,14 @@ msgstr "Khớp tần số lấy mẫu của tệp"
 #: ui/views/settings/output-section.slint
 msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
 msgstr "Mở lại thiết bị âm thanh theo tần số riêng của từng bản nhạc, để hệ thống không lấy mẫu lại. Hệ thống phải cho phép tần số đó"
+
+#: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Chuyển đổi tần số lấy mẫu"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Cách một bản nhạc được chuyển đổi khi tần số lấy mẫu của nó khác với thiết bị, hoặc tốc độ không phải 1×. Tuyến tính tốn ít CPU hơn và làm dịu các tần số cao nhất; Giới hạn băng tần giữ trọn dải âm cao"
 
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -2852,6 +2860,14 @@ msgid "The device is running at {}"
 msgstr "Thiết bị đang chạy ở {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Tuyến tính"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Giới hạn băng tần"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Chuyển sang Bit-perfect"
 
@@ -2919,6 +2935,10 @@ msgstr "Đang chuyển tiếp mượt giữa các bản nhạc"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Không chuyển tiếp mượt"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} được lấy mẫu lại tuyến tính thành {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

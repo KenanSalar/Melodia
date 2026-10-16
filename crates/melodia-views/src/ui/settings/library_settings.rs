@@ -40,15 +40,18 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
         });
     }
 
-    // 2. Scan-progress subscriber: live progress bar updates on the UI.
+    // 2. Scan-progress subscriber: live progress bar updates on the UI, and the
+    //    folder list again once a run ends, which is when `last_scanned` moves.
+    //    A run that changed nothing bumps no `library_changed` to say so.
     {
         let mut rx = state.scan.subscribe();
         let weak = weak.clone();
+        let s = state.clone();
         slint::spawn_local(Compat::new(async move {
             // Painted before the first wait: the launch scan can be publishing before
             // this subscribes, and `subscribe` marks that value seen.
+            let mut snapshot = rx.borrow_and_update().clone();
             loop {
-                let snapshot = rx.borrow_and_update().clone();
                 match weak.upgrade() {
                     Some(ui) => {
                         paint_scan_progress(&ui.global::<LibrarySettings>(), snapshot.as_ref());
@@ -58,13 +61,18 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<(), slint::EventLoopE
                 if rx.changed().await.is_err() {
                     break;
                 }
+                snapshot.clone_from(&rx.borrow());
+                // Only a run letting go of the bar sends `None`.
+                if snapshot.is_none() {
+                    s.runtime.spawn(refresh_folders(weak.clone(), s.clone()));
+                }
             }
             log::debug!("ui::settings::library_settings scan-progress subscriber stopped");
         }))?;
     }
 
-    // 3. Library-changed subscriber: refetch folder list so `last_scanned`
-    //    updates after each scan completion (own scans + watcher batches).
+    // 3. Library-changed subscriber: refetch the folder list when a folder is
+    //    added, removed or absorbed by a scan.
     //    Its own loop rather than `ui::signal::on_signal`, whose callback can't
     //    await: awaiting the refetch here folds a burst of bumps into one more pass.
     {

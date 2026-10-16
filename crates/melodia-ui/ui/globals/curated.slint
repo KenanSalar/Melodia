@@ -107,16 +107,12 @@ export global Favorites {
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
     callback filter-changed(string);
-    // Cross-tab navigation from a row's right-click "Go to …" entry.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // Page enter/leave — a sidebar nav, or Now Playing opening over it. Mirrored into
     // `FavoritesUi.section_active` to drive the cache release / re-fetch.
     callback section-active-changed(bool);
 
-    // The Favorite-Artist card subtitle. Slint 1.16 exposes no Rust-callable `tr`, so Rust resolves
+    // The Favorite-Artist card subtitle. Slint 1.18 exposes no Rust-callable `tr`, so Rust resolves
     // the plural through this at row-build time; shares its msgid with the hero count line.
     pure callback artist-favorite-subtitle(int /*count*/) -> string;
     artist-favorite-subtitle(count) => {
@@ -203,10 +199,6 @@ export global RecentlyPlayed {
     callback clear-selection();
     callback toggle-column(string /*column_id*/);
     callback filter-changed(string);
-    // Cross-tab navigation from a row's right-click "Go to …" entry.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // Section-visible signal — driven by `watched-recently-active` in `app-window.slint`.
     callback section-active-changed(bool);

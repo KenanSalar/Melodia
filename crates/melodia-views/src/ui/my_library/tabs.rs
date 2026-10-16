@@ -99,9 +99,8 @@ pub fn the_band_is_up(ui: &AppWindow) -> bool {
 
 /// The detail `tab` has open, or `None` — including for Songs, which has no detail.
 ///
-/// **The tab is what discriminates, not the id.** `seed_detail_from_settings` runs for all
-/// four detail views at boot whichever tab is restored, so more than one `*Detail.*-id`
-/// can be `>= 0` and "some id is set" answers nothing.
+/// **The tab is what discriminates, not the id.** A tab left with its detail open keeps the
+/// id, so more than one `*Detail.*-id` can be `>= 0` and "some id is set" answers nothing.
 ///
 /// Takes the tab rather than reading the mounted one because `nav_history` genuinely asks
 /// about an unmounted one, resolving a *recorded* entry's detail.

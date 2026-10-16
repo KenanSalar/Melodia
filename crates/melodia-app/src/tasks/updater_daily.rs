@@ -29,7 +29,6 @@
 
 use std::time::Duration;
 
-use chrono::Utc;
 use tokio::sync::watch;
 
 use crate::services::settings;
@@ -37,6 +36,7 @@ use crate::services::updater::{PanelPaint, UpdaterEvent, run_check};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::error::describe;
+use melodia_core::utils::now_unix;
 
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
 const NORMAL_CADENCE: Duration = Duration::from_hours(6);
@@ -122,10 +122,11 @@ async fn run_one_iteration(
         return;
     }
 
-    if !needs_check(snapshot.last_check_unix) {
+    let now = now_unix();
+    if !needs_check(snapshot.last_check_unix, now) {
         log::info!(
             "updater_daily: check skipped — last check {}s ago (< 24h)",
-            elapsed_secs(snapshot.last_check_unix)
+            elapsed_secs(snapshot.last_check_unix, now)
         );
         return;
     }
@@ -173,15 +174,16 @@ fn backoff_delay_for(count: u8) -> Duration {
     BACKOFF_LADDER[idx]
 }
 
-fn needs_check(last_check_unix: i64) -> bool {
+/// Whether a day has passed since `last_check_unix` at `now`, both Unix seconds. A stamp ahead of
+/// `now` is a clock stepped back, and waits rather than checking again.
+fn needs_check(last_check_unix: i64, now: i64) -> bool {
     if last_check_unix <= 0 {
         return true;
     }
-    elapsed_secs(last_check_unix) >= ONE_DAY_SECS
+    elapsed_secs(last_check_unix, now) >= ONE_DAY_SECS
 }
 
-fn elapsed_secs(last_check_unix: i64) -> i64 {
-    let now = Utc::now().timestamp();
+fn elapsed_secs(last_check_unix: i64, now: i64) -> i64 {
     now.saturating_sub(last_check_unix)
 }
 

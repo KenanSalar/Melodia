@@ -1,8 +1,6 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use serde::Serialize;
-
 use melodia_core::entities::track::TrackSummary;
 
 use super::types::{PersistableQueue, RepeatMode};
@@ -18,7 +16,7 @@ pub struct PruneOutcome {
     pub current_was_removed: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct QueueState {
     /// Canonical track data — each track stored exactly once.
     pub tracks: Vec<Arc<TrackSummary>>,

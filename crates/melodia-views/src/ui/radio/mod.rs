@@ -146,8 +146,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
     // `SectionState` starts clean so the boot pre-fetch wins the first enter, but a station page
     // restored from `views.json` while Radio is off screen publishes into neither shared global —
     // and with nothing marked, the first enter would consume no flag and never republish, leaving
-    // the band on a hero with no chips and no backdrop. The four detail sections seed it the same
-    // way.
+    // the band on a hero with no chips and no backdrop.
     if !radio_ui.section_active() {
         radio_ui.mark_dirty();
     }
@@ -161,7 +160,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<RadioUi> {
 
 /// Hand the global its empty `VecModel`s. Every later write finds them by downcasting back, so a
 /// property left on the declared default is a silent no-op: an unbound array is a model of its own
-/// kind, `write_grid`'s downcast misses, and the grid stays empty with one warning per attempt.
+/// kind, `replace_rows`'s downcast misses, and the grid stays empty with one warning per attempt.
 fn install_models(ui: &AppWindow) {
     let g = ui.global::<Radio>();
 

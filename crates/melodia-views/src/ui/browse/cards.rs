@@ -19,7 +19,8 @@ use slint::{ComponentHandle, SharedString};
 
 use super::BrowseUi;
 use crate::ui::grid_prewarm;
-use crate::ui::grid_rows::{chunk_built_rows, write_grid};
+use crate::ui::grid_rows::chunk_built_rows;
+use crate::ui::model_diff::replace_rows;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32, opt_shared};
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
 use melodia_ui::{
@@ -111,7 +112,7 @@ pub fn to_browse_card_rows(folders: &[BrowseFolder], files: &[BrowseFile]) -> Ve
 pub fn rebuild_cards(ui: &AppWindow, browse_ui: &BrowseUi) {
     let g = ui.global::<Browse>();
     if browse_ui.view_mode() != BrowseViewMode::Card {
-        write_grid(&g.get_card_rows(), Vec::new(), "browse::cards");
+        replace_rows(&g.get_card_rows(), Vec::new(), "browse::cards");
         return;
     }
     let cards = {
@@ -120,7 +121,7 @@ pub fn rebuild_cards(ui: &AppWindow, browse_ui: &BrowseUi) {
         to_browse_card_rows(&folders, &files)
     };
     let rows = chunk_built_rows(cards, g.get_columns(), |cards| UiBrowseCardGridRow { cards });
-    write_grid(&g.get_card_rows(), rows, "browse::cards");
+    replace_rows(&g.get_card_rows(), rows, "browse::cards");
 }
 
 /// Artwork paths for roughly the first screenful of cards, in display order.

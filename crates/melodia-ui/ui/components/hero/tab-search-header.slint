@@ -131,9 +131,8 @@ export component TabSearchHeader inherits HorizontalLayout {
     // constraint the bar's own bound width would otherwise merge in.
     //
     // **`visible`, never `clip`.** The cell is exactly as wide as the bar, and the bar's focus
-    // swell and shadow reach past it; a clip shaved the swollen ends flat and cut the glow into a
-    // box. Slint lowers `visible` to a clip that only applies while hidden, which is the whole
-    // collapse this needs.
+    // swell reaches past it; a clip shaved the swollen ends flat. Slint lowers `visible` to a clip
+    // that only applies while hidden, which is the whole collapse this needs.
     //
     // **The budget above is deliberately not gated with it.** `search-w` still reserves, so
     // `TabBar.avail-width` does not move and the bar does not play its 350 ms compact morph on a

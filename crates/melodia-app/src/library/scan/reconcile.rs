@@ -14,6 +14,7 @@ use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::folder::Folder;
 use melodia_core::error::describe;
+use melodia_platform::services::platform::allocator::trim;
 use melodia_store::database::queries;
 
 /// Which folders a pass reads.
@@ -101,8 +102,8 @@ impl Drop for PassClaim<'_> {
 ///
 /// Sequential per folder: `SQLite` has a single writer, and the scan
 /// progress is one `watch` slot that parallel scans would clobber. Each
-/// folder's scan already bumps `library_changed`, so Browse/Tracks views
-/// auto-refresh per folder as scans complete.
+/// folder's scan bumps `library_changed` when it changed something, so
+/// Browse/Tracks views refresh per folder as scans complete.
 ///
 /// One token for the whole pass, so a cancel stops the folders still to
 /// come as well as the one being scanned. Tracked on `TaskSpawner` so
@@ -140,10 +141,13 @@ pub(super) fn start(state: &AppState, reach: Reach, restoring: Option<RestoreNot
                 return;
             }
             let Some(next) = claim.next_round(reach) else {
-                return;
+                break;
             };
             reach = next;
         }
+        // Each walk holds a path and a row per file and frees them all at once. On a large library
+        // that outlasts the startup trim, so the pass hands its own slack back.
+        trim();
     });
 }
 

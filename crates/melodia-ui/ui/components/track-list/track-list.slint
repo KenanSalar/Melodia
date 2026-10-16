@@ -59,10 +59,6 @@ export component TrackList inherits Rectangle {
     callback select-all();
     callback clear-selection();
     callback request-blur-search();
-    // Cross-tab navigation from the row's context menu.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // Plumbed straight through to every row; `TrackListRowItem` has the vocabulary.
     in property <string> view-context;
@@ -78,8 +74,8 @@ export component TrackList inherits Rectangle {
     // `body-y` lets the host align its vertical bar with the list body, skipping the
     // column header band; it is relative to this component's own root.
     out property <length> v-visible-height: inner-list.visible-height;
-    out property <length> v-viewport-height: inner-list.viewport-height;
-    out property <length> v-offset: -inner-list.viewport-y;
+    out property <length> v-viewport-height: inner-list.content-height;
+    out property <length> v-offset: -inner-list.content-y;
     out property <length> body-y: inner-list.absolute-position.y - root.absolute-position.y;
     out property <length> body-height: inner-list.height;
 
@@ -91,7 +87,7 @@ export component TrackList inherits Rectangle {
 
     callback set-v-offset(length);
 
-    set-v-offset(o) => { inner-list.viewport-y = -o; }
+    set-v-offset(o) => { inner-list.content-y = -o; }
 
     VerticalLayout {
         padding-left: root.inset-left;
@@ -140,9 +136,6 @@ export component TrackList inherits Rectangle {
                 select-all => { root.select-all(); }
                 clear-selection => { root.clear-selection(); }
                 request-blur-search => { root.request-blur-search(); }
-                go-to-album(aid) => { root.go-to-album(aid); }
-                go-to-artist(aid) => { root.go-to-artist(aid); }
-                go-to-genre(gid) => { root.go-to-genre(gid); }
             }
         }
     }

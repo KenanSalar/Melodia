@@ -12,7 +12,6 @@
 //! - [`radio`]: the Radio section's master switch and its two sub-toggles.
 //! - [`folders`]: library folder CRUD, watcher toggle, and `scan_folder*`.
 //! - [`diagnostics`]: the Verbose Logging switch.
-//! - [`motion`]: the Skip Startup Animation switch.
 //! - [`support`]: the launch counter behind the one-time Ko-fi prompt.
 //! - [`onboarding`]: the revision the welcome card has been shown at.
 //!
@@ -30,7 +29,6 @@ pub mod discord;
 pub mod equalizer;
 pub mod folders;
 pub mod lyrics;
-pub mod motion;
 pub mod onboarding;
 pub mod playback;
 pub mod radio;
@@ -60,12 +58,11 @@ pub use folders::{
     toggle_folder_watching,
 };
 pub use lyrics::{set_lyrics_enabled, set_lyrics_online_enabled, set_lyrics_romanization_shown};
-pub use motion::set_skip_startup_animation;
 pub use onboarding::set_onboarding_seen;
 pub use playback::{
     reset_for_bit_perfect, set_gapless_playback, set_output_choice, set_output_follow_rate,
-    set_output_paused_device, set_output_resync_ms, set_play_button_animation, set_playback_speed,
-    set_resume_on_startup, switch_to_bit_perfect,
+    set_output_paused_device, set_output_resampler, set_output_resync_ms,
+    set_play_button_animation, set_playback_speed, set_resume_on_startup, switch_to_bit_perfect,
 };
 pub use radio::{
     set_radio_enabled, set_radio_hide_segmented, set_radio_scrobble, set_radio_send_clicks,
@@ -102,14 +99,4 @@ pub fn get_settings(paths: &Paths) -> Result<SettingsData, AppError> {
 /// [`ViewStateData::default`].
 pub fn get_view_state(paths: &Paths) -> Result<ViewStateData, AppError> {
     services::view_state::read_view_state(paths)
-}
-
-#[cfg(target_os = "linux")]
-pub fn get_kde_colors() -> Option<melodia_core::themes::kde::KdeColorPalette> {
-    melodia_platform::services::platform::system_theme::get_kde_colors()
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn get_kde_colors() -> Option<serde_json::Value> {
-    None
 }

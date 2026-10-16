@@ -1247,15 +1247,20 @@ fn the_fade_only_mode_suppresses_both_offsets() {
 /// is seeded `false` and never written, which silently retires the fade on the two
 /// arrivals the band's own `tab-anim-armed` doesn't cover.
 ///
-/// The seed is one, the two handlers are the others: `changed detail-open` arms the
-/// first drill out of the tab the page opened on, and the `watched-tab-idx` mirror arms
-/// a tab move that isn't a pick, which `detail-open` cannot — a cross-tab drill writes
-/// the new id and moves the tab in one tick, so that property never transitions. Neither
-/// fires on the page's own mount, `changed` not running on a first evaluation, which is
-/// what leaves the entrance uncompounded.
+/// The seed is one, and the `watched-tab-idx` mirror arms a tab move that isn't a pick,
+/// which a detail opening cannot: a cross-tab drill writes the new id and moves the tab
+/// in one tick, so `detail-open` never transitions. The first drill out of the tab the
+/// page opened on is armed through `DetailArrival`, pinned with the launch motion in
+/// `ui::startup_motion_tests`. Neither fires on the page's own mount, `changed` not
+/// running on a first evaluation, which is what leaves the entrance uncompounded.
 #[test]
 fn every_arrival_that_is_not_the_pages_own_entrance_arms_the_body_fade() {
     let view = code(VIEW);
+
+    let tab_move = view
+        .split_once("changed watched-tab-idx =>")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(body, _)| body);
 
     assert!(
         view.contains("property <bool> body-anim-armed: band.tab-anim-armed;"),
@@ -1263,16 +1268,9 @@ fn every_arrival_that_is_not_the_pages_own_entrance_arms_the_body_fade() {
          plus a mount `Timer` races `ViewTransition`'s own, and a constant `true` compounds the \
          body's rise with the page entrance still in flight"
     );
-
-    for handler in ["changed detail-open =>", "changed watched-tab-idx =>"] {
-        let body = view
-            .split_once(handler)
-            .and_then(|(_, rest)| rest.split_once('}'))
-            .map_or("", |(body, _)| body);
-        assert!(
-            body.contains("root.body-anim-armed = true;"),
-            "`{handler}` must arm `body-anim-armed` — without it the arrival it watches mounts \
-             its body with the fade disabled, which is a body that simply appears; got {body:?}"
-        );
-    }
+    assert!(
+        tab_move.contains("root.body-anim-armed = true;"),
+        "`changed watched-tab-idx` must arm `body-anim-armed`, or a tab move that isn't a pick \
+         mounts its body with the fade disabled, a body that simply appears; got {tab_move:?}"
+    );
 }

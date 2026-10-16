@@ -41,9 +41,6 @@ export component MyLibrarySongsTab inherits Rectangle {
             clear-selection => { Tracks.clear-selection(); }
             // The page's one filter box, not this view's retired own.
             request-blur-search => { MyLibrary.blur-search-tick += 1; }
-            go-to-album(aid) => { Tracks.go-to-album(aid); }
-            go-to-artist(aid) => { Tracks.go-to-artist(aid); }
-            go-to-genre(gid) => { Tracks.go-to-genre(gid); }
         }
     }
 

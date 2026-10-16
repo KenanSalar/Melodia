@@ -8,7 +8,8 @@ use melodia_audio::player::source::audio::Shape;
 
 use std::f32::consts::TAU;
 
-use super::{Converter, Filled};
+use super::super::resample;
+use super::{Conversion, Converter, Filled, Resampler};
 use crate::player::playback::dsp::index_to_f32;
 use crate::player::playback::tests::helpers::{TestSource, bits, shape};
 
@@ -35,20 +36,36 @@ fn ramp(count: usize) -> Vec<f32> {
     (0..count).map(|i| f32::from(u16::try_from(i).unwrap_or(u16::MAX)) / 1024.0).collect()
 }
 
+/// Both resamplers, for the cases whose answer is the same through either.
+const RESAMPLERS: [Resampler; 2] = [Resampler::Linear, Resampler::BandLimited];
+
+/// A conversion to `device` at `speed` through `resampler`, the kernel's table prepared as a voice
+/// prepares it.
+fn conversion(device: Shape, speed: f64, resampler: Resampler) -> Conversion {
+    if resampler == Resampler::BandLimited {
+        resample::prepare();
+    }
+    Conversion { device, speed, resampler }
+}
+
+/// A conversion through the band-limited kernel, which most of these cases were written against.
+fn band_limited(device: Shape, speed: f64) -> Conversion {
+    conversion(device, speed, Resampler::BandLimited)
+}
+
 /// Fill `block` samples at a time until the converter is done, draining it once `src` runs dry, as
 /// a voice does with nothing staged behind the source.
 fn run_out(
     converter: &mut Converter,
     src: &mut TestSource,
-    device: Shape,
-    speed: f64,
+    conversion: Conversion,
     block: usize,
 ) -> (Vec<f32>, u64) {
     let mut out = Vec::new();
     let mut piece = vec![0.0; block];
     let mut frames = 0;
     while !converter.is_done() {
-        let Filled { samples, source_frames } = converter.fill(&mut piece, src, device, speed);
+        let Filled { samples, source_frames } = converter.fill(&mut piece, src, conversion);
         out.extend_from_slice(&piece[..samples]);
         frames += source_frames;
         if converter.is_starved() {
@@ -58,11 +75,18 @@ fn run_out(
     (out, frames)
 }
 
-/// Convert a whole source from `from` to `to` at `speed`.
+/// Convert a whole source from `from` to `to` at `speed`, through the kernel.
 fn convert_all(source: Vec<f32>, channels: u16, from: u32, to: u32, speed: f64) -> (Vec<f32>, u64) {
     let mut src = TestSource::new(source, channels, from);
     let mut converter = Converter::new(shape(channels, from));
-    run_out(&mut converter, &mut src, shape(channels, to), speed, 4096)
+    run_out(&mut converter, &mut src, band_limited(shape(channels, to), speed), 4096)
+}
+
+/// Convert a whole mono source from `from` to `to` at speed one, through `resampler`.
+fn convert_mono(source: Vec<f32>, from: u32, to: u32, resampler: Resampler) -> (Vec<f32>, u64) {
+    let mut src = TestSource::new(source, 1, from);
+    let mut converter = Converter::new(shape(1, from));
+    run_out(&mut converter, &mut src, conversion(shape(1, to), 1.0, resampler), 4096)
 }
 
 /// [`TONE_FRAMES`] of a `tone_hz` sine at `rate`, its phase kept inside one cycle in whole numbers.
@@ -96,24 +120,63 @@ fn level_after_conversion(tone_hz: u32, from: u32, to: u32, speed: f64) -> f64 {
 fn remap(data: Vec<f32>, source: u16, device: u16) -> (Vec<f32>, u64) {
     let mut src = TestSource::new(data, source, 48_000);
     let mut converter = Converter::new(shape(source, 48_000));
-    run_out(&mut converter, &mut src, shape(device, 48_000), 1.0, 4096)
+    run_out(&mut converter, &mut src, band_limited(shape(device, 48_000), 1.0), 4096)
 }
 
+/// Whichever resampler is picked, since the pick only says how to interpolate where there is
+/// something to interpolate.
 #[test]
 fn equal_rates_pass_every_sample_through_untouched() {
     let input = ramp(8);
-    let (out, frames) = convert_all(input.clone(), 1, 44_100, 44_100, 1.0);
+    for resampler in RESAMPLERS {
+        let (out, frames) = convert_mono(input.clone(), 44_100, 44_100, resampler);
 
-    assert_eq!(bits(&out), bits(&input), "an equal-rate fill must not touch a single sample");
-    assert_eq!(frames, 8);
+        assert_eq!(
+            (bits(&out), frames),
+            (bits(&input), 8),
+            "{resampler:?}: an equal-rate fill must not touch a single sample"
+        );
+    }
 }
 
 /// The passthrough has to survive the sign of zero, which is what a multiply-add loses: `-0.0` is
 /// the sample a silent stretch of a signed format decodes to, and bit-perfect means bit-perfect.
+/// A lerp at a fraction of zero is one such multiply-add, so linear is a row of its own.
 #[test]
 fn the_passthrough_keeps_negative_zero() {
-    let (out, _) = convert_all(vec![-0.0, 0.0, -0.0], 1, 48_000, 48_000, 1.0);
-    assert_eq!(bits(&out), bits(&[-0.0, 0.0, -0.0]));
+    for resampler in RESAMPLERS {
+        let (out, _) = convert_mono(vec![-0.0, 0.0, -0.0], 48_000, 48_000, resampler);
+
+        assert_eq!(bits(&out), bits(&[-0.0, 0.0, -0.0]), "{resampler:?}");
+    }
+}
+
+/// Every output frame lies between the two source frames either side of its instant, by how far
+/// it sits between them, and the last leans towards the silence past the end. Upsampled the step
+/// is a half and downsampled one and a half, so every value is exact in binary.
+#[test]
+fn linear_conversion_interpolates_between_the_frames_either_side() {
+    let rows = [
+        (
+            "24 to 48 kHz",
+            vec![0.0, 0.25, 0.5, 0.75],
+            24_000,
+            48_000,
+            vec![0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.375],
+        ),
+        (
+            "48 to 32 kHz",
+            vec![0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875],
+            48_000,
+            32_000,
+            vec![0.0, 0.1875, 0.375, 0.5625, 0.75, 0.4375],
+        ),
+    ];
+    for (what, source, from, to, expected) in rows {
+        let (out, _) = convert_mono(source, from, to, Resampler::Linear);
+
+        assert_eq!(bits(&out), bits(&expected), "{what}");
+    }
 }
 
 #[test]
@@ -214,7 +277,7 @@ fn a_resampled_mono_source_hands_both_stereo_channels_what_a_mono_device_gets() 
     let mut src = TestSource::new(ramp(1_000), 1, 44_100);
     let mut converter = Converter::new(shape(1, 44_100));
 
-    let (stereo, _) = run_out(&mut converter, &mut src, shape(2, 48_000), 1.0, 4096);
+    let (stereo, _) = run_out(&mut converter, &mut src, band_limited(shape(2, 48_000), 1.0), 4096);
 
     let left: Vec<f32> = stereo.iter().step_by(2).copied().collect();
     let right: Vec<f32> = stereo.iter().skip(1).step_by(2).copied().collect();
@@ -249,13 +312,16 @@ fn a_trailing_partial_frame_is_dropped_rather_than_padded() {
 /// the same source two ways and the output has to be identical.
 #[test]
 fn a_block_boundary_is_not_a_source_boundary() {
-    let (whole, _) = convert_all(ramp(64), 1, 44_100, 48_000, 1.0);
+    for resampler in RESAMPLERS {
+        let (whole, _) = convert_mono(ramp(64), 44_100, 48_000, resampler);
 
-    let mut src = TestSource::new(ramp(64), 1, 44_100);
-    let mut converter = Converter::new(shape(1, 44_100));
-    let (pieced, _) = run_out(&mut converter, &mut src, shape(1, 48_000), 1.0, 7);
+        let mut src = TestSource::new(ramp(64), 1, 44_100);
+        let mut converter = Converter::new(shape(1, 44_100));
+        let blocks = conversion(shape(1, 48_000), 1.0, resampler);
+        let (pieced, _) = run_out(&mut converter, &mut src, blocks, 7);
 
-    assert_eq!(bits(&pieced), bits(&whole));
+        assert_eq!(bits(&pieced), bits(&whole), "{resampler:?}");
+    }
 }
 
 #[test]
@@ -263,17 +329,18 @@ fn a_drained_converter_stays_drained() {
     let mut src = TestSource::new(ramp(2), 1, 44_100);
     let device = shape(1, 44_100);
     let mut converter = Converter::new(device);
-    let (out, _) = run_out(&mut converter, &mut src, device, 1.0, 16);
+    let (out, _) = run_out(&mut converter, &mut src, band_limited(device, 1.0), 16);
     assert_eq!(out.len(), 2);
 
-    let again = converter.fill(&mut [0.0; 16], &mut src, device, 1.0);
+    let again = converter.fill(&mut [0.0; 16], &mut src, band_limited(device, 1.0));
     assert_eq!(again, Filled { samples: 0, source_frames: 0 });
 }
 
 /// The length a track plays for is decided here, so the count is pinned exactly: an output frame
 /// for every output instant inside the source's span, which rounds a fractional count up. The
 /// ratios are ones whose count falls well clear of a whole number, or whose step is exact in
-/// binary, so the rounding asked about is the converter's and not the accumulated position's.
+/// binary, so the rounding asked about is the converter's and not the accumulated position's. The
+/// same for both resamplers, whose lookaheads drain from a frame and from the kernel's whole reach.
 #[test]
 fn a_drained_source_yields_an_output_frame_for_every_instant_inside_it() {
     let rows: [(usize, u32, u32, usize); 5] = [
@@ -283,11 +350,16 @@ fn a_drained_source_yields_an_output_frame_for_every_instant_inside_it() {
         (1_000, 96_000, 48_000, 500),
         (1_001, 24_000, 48_000, 2_002),
     ];
-    for (frames, from, to, expected) in rows {
-        let (out, consumed) = convert_all(ramp(frames), 1, from, to, 1.0);
+    for resampler in RESAMPLERS {
+        for (frames, from, to, expected) in rows {
+            let (out, consumed) = convert_mono(ramp(frames), from, to, resampler);
 
-        assert_eq!(out.len(), expected, "{frames} frames from {from} to {to} Hz");
-        assert_eq!(usize::try_from(consumed).ok(), Some(frames), "every source frame is taken");
+            assert_eq!(
+                (out.len(), usize::try_from(consumed).ok()),
+                (expected, Some(frames)),
+                "{resampler:?}: (written, taken) for {frames} frames from {from} to {to} Hz"
+            );
+        }
     }
 }
 
@@ -333,10 +405,10 @@ const FRAMES_BEFORE_THE_REOPEN: usize = 256;
 fn after_a_reopen_from(before: Shape, before_frames: usize) -> Vec<f32> {
     let mut src = TestSource::new(clean_tone(30_000, HI_RES_RATE), 1, HI_RES_RATE);
     let mut converter = Converter::new(shape(1, HI_RES_RATE));
-    converter.fill(&mut vec![0.0; before_frames], &mut src, before, 1.0);
+    converter.fill(&mut vec![0.0; before_frames], &mut src, band_limited(before, 1.0));
 
     let mut after = vec![0.0; 512];
-    converter.fill(&mut after, &mut src, shape(1, 48_000), 1.0);
+    converter.fill(&mut after, &mut src, band_limited(shape(1, 48_000), 1.0));
     after
 }
 
@@ -374,7 +446,8 @@ fn steps_across_live_speed_changes() -> Vec<f32> {
     let mut written = Vec::new();
     for speed in LIVE_SPEEDS {
         let mut block = vec![0.0; 800];
-        let Filled { samples, .. } = converter.fill(&mut block, &mut src, device, speed);
+        let Filled { samples, .. } =
+            converter.fill(&mut block, &mut src, band_limited(device, speed));
         written.extend_from_slice(&block[..samples]);
     }
     written.windows(2).map(|pair| pair[1] - pair[0]).collect()
@@ -398,4 +471,61 @@ fn a_live_speed_change_never_skips_a_frame() {
     let longest = steps.iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
     assert!(longest <= FASTEST_STEP + STEP_TOLERANCE, "the read position jumped {longest} frames");
+}
+
+/// Resamplers a live pick walks through, one block each. Linear goes first, so the kernel's first
+/// block already has the source behind it.
+const LIVE_RESAMPLERS: [Resampler; 5] = [
+    Resampler::Linear,
+    Resampler::BandLimited,
+    Resampler::Linear,
+    Resampler::BandLimited,
+    Resampler::Linear,
+];
+
+/// 44.1 kHz on a 48 kHz device, as the step every frame takes while the resampler changes.
+const LIVE_RESAMPLER_STEP: f32 = 0.918_75;
+
+/// How far apart each frame written while [`LIVE_RESAMPLERS`] change between blocks reads, in
+/// source frames.
+fn steps_across_live_resampler_changes() -> Vec<f32> {
+    let device = shape(1, 48_000);
+    let positions = (0..6_000).map(index_to_f32).collect();
+    let mut src = TestSource::new(positions, 1, 44_100);
+    let mut converter = Converter::new(shape(1, 44_100));
+    let mut written = Vec::new();
+    for resampler in LIVE_RESAMPLERS {
+        let mut block = vec![0.0; 800];
+        let Filled { samples, .. } =
+            converter.fill(&mut block, &mut src, conversion(device, 1.0, resampler));
+        written.extend_from_slice(&block[..samples]);
+    }
+    written.windows(2).map(|pair| pair[1] - pair[0]).collect()
+}
+
+/// A pick lands on the next block without a rebuild, so the two methods have to agree on where the
+/// centre is: a frame read again shows as a step short of the ratio.
+#[test]
+fn a_live_resampler_change_never_replays_a_frame() {
+    let steps = steps_across_live_resampler_changes();
+
+    let shortest = steps.iter().copied().fold(f32::INFINITY, f32::min);
+
+    assert!(
+        shortest > LIVE_RESAMPLER_STEP - STEP_TOLERANCE,
+        "the read position fell back, to a step of {shortest} frames"
+    );
+}
+
+/// A dropped frame shows as a step past the ratio.
+#[test]
+fn a_live_resampler_change_never_skips_a_frame() {
+    let steps = steps_across_live_resampler_changes();
+
+    let longest = steps.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+
+    assert!(
+        longest < LIVE_RESAMPLER_STEP + STEP_TOLERANCE,
+        "the read position jumped {longest} frames"
+    );
 }

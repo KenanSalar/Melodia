@@ -14,6 +14,7 @@ use super::track_list::{play_displayed, wire_queue_actions, wire_toggle_column};
 use super::{
     collect_track_ids, next_sort_with_natural, persist_view_sort, spawn_play_then_shuffle,
 };
+use crate::ui::list_selection::RowSelectionView;
 use crate::ui::track_detail::{DetailGlobal, DetailRows, TrackDetail, selection};
 use melodia_app::library;
 use melodia_app::state::AppState;

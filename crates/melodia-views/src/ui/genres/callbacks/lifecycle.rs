@@ -14,11 +14,12 @@ use slint::ComponentHandle;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::detail_view::release_shared_hero;
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
+use crate::ui::list_selection::NO_ANCHOR;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::TrackDetail;
+use crate::ui::track_detail::{TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
@@ -29,12 +30,6 @@ use melodia_ui::{
 /// Wire the Genres section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
     genres_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Genres));
-    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
-    // section that isn't on screen can't publish the shared hero globals, so
-    // its first enter has to re-fetch rather than take the cheap path.
-    if !genres_ui.section_active() {
-        genres_ui.mark_dirty();
-    }
     wire_section_gate(ui, state, genres_ui);
     install_library_refresher(ui, state, genres_ui);
 }
@@ -67,7 +62,7 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>
             let d = ui.global::<GenreDetail>();
             clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "genres: clear detail tracks");
             clear_vec_model::<i32>(&d.get_selected_ids(), "genres: clear detail selection");
-            d.set_selection_anchor(-1);
+            d.set_selection_anchor(NO_ANCHOR);
             // Six heroes share one colour set and one chip row; this one has
             // no images to release, so it takes the shared pair alone rather
             // than the full `release_detail_hero_images`.
@@ -77,6 +72,7 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
+            restore::resume_deferred(&weak, &s, &gu, genres_ui_mod::restore_detail);
             s.runtime.spawn(reenter(s.clone(), gu.clone(), weak.clone()));
         } else {
             let gu = gu.clone();

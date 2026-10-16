@@ -145,6 +145,17 @@ msgstr "Έλεγχος της ροής…"
 msgid "Add"
 msgstr "Προσθήκη"
 
+# Greek pluralizes a noun after a numeral, so the two forms differ.
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} κομμάτι"
+msgstr[1] "{n} κομμάτια"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -157,10 +168,12 @@ msgid "Playlist name"
 msgstr "Όνομα λίστας"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Περιγραφή (προαιρετική)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Προσθήκη περιγραφής…"
 
@@ -227,16 +240,6 @@ msgstr "Επαναφορά"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
-
-# Greek pluralizes a noun after a numeral, so the two forms differ.
-#: ui/components/dialog/export-playlist-picker.slint
-#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
-#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
-msgid "{n} track"
-msgid_plural "{n} tracks"
-msgstr[0] "{n} κομμάτι"
-msgstr[1] "{n} κομμάτια"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
@@ -335,6 +338,7 @@ msgstr "Θα βρείτε το διακριτικό σας στη σελίδα �
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Επιλογή όλων"
@@ -805,6 +809,10 @@ msgid "Folder"
 msgstr "Φάκελος"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Καλλιτέχνης - Άλμπουμ"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -875,7 +883,7 @@ msgstr "Επεξεργασία πληροφοριών κομματιού"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Αντιγραφή"
@@ -932,10 +940,6 @@ msgstr "Διαγραφή {} λιστών"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Διαγραφή λίστας"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Καλλιτέχνης - Άλμπουμ"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -1443,6 +1447,14 @@ msgstr "Αντιγραφή τίτλου"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Αντιγραφή καλλιτέχνη"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Αποκοπή"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Επικόλληση"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"
@@ -2699,18 +2711,6 @@ msgstr "Φόντο άλμπουμ"
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Βάφει τον μίνι αναπαραγωγέα με τα χρώματα του άλμπουμ που παίζει, όπως κάνει η προβολή «Αναπαράγεται τώρα»."
 
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Κίνηση"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Παράλειψη κίνησης εκκίνησης"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Άνοιγμα με τη βιβλιοθήκη ήδη στην οθόνη, αντί να εμφανίζεται σταδιακά και να κυλά στη θέση της. Μια σελίδα λεπτομερειών που άφησες ανοιχτή εξακολουθεί να αναπτύσσεται μόλις φορτωθεί."
-
 #: ui/views/settings/output-section.slint
 msgid "Output"
 msgstr "Έξοδος"
@@ -2794,6 +2794,14 @@ msgstr "Αντιστοίχιση ρυθμού δειγματοληψίας αρ�
 #: ui/views/settings/output-section.slint
 msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
 msgstr "Ανοίγει ξανά τη συσκευή ήχου στον ρυθμό κάθε κομματιού, ώστε το σύστημα να μην τον μετατρέπει. Το σύστημα πρέπει να επιτρέπει αυτόν τον ρυθμό"
+
+#: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Μετατροπή ρυθμού δειγματοληψίας"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Πώς μετατρέπεται ένα κομμάτι όταν ο ρυθμός δειγματοληψίας του δεν είναι αυτός της συσκευής ή η ταχύτητα δεν είναι 1×. Η Γραμμική χρειάζεται λιγότερη CPU και αμβλύνει τις υψηλότερες συχνότητες, ενώ η Περιορισμένου εύρους κρατά όλα τα πρίμα"
 
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -2882,6 +2890,14 @@ msgid "The device is running at {}"
 msgstr "Η συσκευή λειτουργεί στα {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Γραμμική"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Περιορισμένου εύρους"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Κάνε το bit-perfect"
 
@@ -2949,6 +2965,10 @@ msgstr "Σταδιακή μετάβαση μεταξύ κομματιών"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Χωρίς μετάβαση"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} με γραμμική μετατροπή σε {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

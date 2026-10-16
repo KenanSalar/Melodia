@@ -71,8 +71,7 @@ fn crossfade_on(duration_ms: u32) -> CrossfadeSettings {
 /// A backend with no device lead, so the ear and the pull read alike.
 fn backend(position_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
     BackendSnapshot {
-        position_ms,
-        pulled_ms: position_ms,
+        clock: DeckClock { heard_ms: position_ms, pulled_ms: position_ms },
         already_preloaded: false,
         crossfading: false,
         xf,
@@ -82,7 +81,7 @@ fn backend(position_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
 
 /// A backend whose device still holds what was pulled past `heard_ms`.
 fn backend_behind(heard_ms: u64, pulled_ms: u64, xf: CrossfadeSettings) -> BackendSnapshot {
-    BackendSnapshot { pulled_ms, ..backend(heard_ms, xf) }
+    BackendSnapshot { clock: DeckClock { heard_ms, pulled_ms }, ..backend(heard_ms, xf) }
 }
 
 /// The position at which `remaining_ms` of the 180 s fixture track are left.
@@ -143,6 +142,21 @@ fn a_normal_tick_publishes_the_position_and_does_nothing_else() {
     assert_eq!(state.position_ms, 30_000);
     assert_eq!(fade_ms(t.as_ref()), None);
     assert_eq!(staged(t.as_ref()), None, "far from the end, nothing to stage");
+}
+
+/// A tick and an emit share one stamp, which is how the UI tells the newer of two that reach it out
+/// of order: the tick has to outrank the emit before it, and the state has to keep the tick's stamp
+/// for the next emit to outrank in turn.
+#[test]
+fn a_playing_tick_outranks_the_emit_before_it() {
+    const EMITTED: u64 = 7;
+    let mut state = playing_state();
+    state.position_stamp = EMITTED;
+
+    let stamp = tick(&mut state, backend(30_000, crossfade_off())).map(|t| t.tick.stamp);
+
+    assert!(stamp > Some(EMITTED), "the tick carried {stamp:?} after an emit stamped {EMITTED}");
+    assert_eq!(stamp, Some(state.position_stamp), "the state kept a stamp other than the tick's");
 }
 
 /// Everything published, persisted or reported outward is where the ear is, which is a device's

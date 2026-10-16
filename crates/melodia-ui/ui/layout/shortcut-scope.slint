@@ -46,8 +46,8 @@ export component ShortcutScope inherits FocusScope {
 
     // The clamp matches the slider's own emit range. Applies immediately so audio moves
     // on the keystroke, and defers the persist to the debounce above. Bumping
-    // `volume-hud-tick` is what force-shows `VolumePopup`'s tooltip with the new
-    // percentage — a slider drag doesn't, already raising that chrome itself.
+    // `volume-hud-tick` is what force-shows `VolumeTrigger`'s tooltip with the new
+    // percentage.
     function bump-volume(delta: int) {
         Player.set-volume(clamp(Player.vm.volume + delta, 0, 100));
         Player.volume-hud-tick += 1;

@@ -44,16 +44,17 @@ const CONNECT_BACKOFF_MAX: Duration = Duration::from_mins(1);
 /// Read deadline so a wedged Discord surfaces as an error → reconnect, rather
 /// than parking the worker thread forever. Unix only — a `std` named-pipe handle
 /// has no read-timeout API, so Windows inherits the blocking edge (survivable:
-/// the worker is a detached thread nobody waits on).
+/// only the next worker waits on it, and a Discord that wedged this one would
+/// wedge that one too).
 #[cfg(unix)]
 const READ_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// A connected IPC endpoint. Both concrete types implement `Read + Write`, so
 /// the framing/worker code is generic over the platform.
 #[cfg(unix)]
-type Connection = UnixStream;
+pub(crate) type Connection = UnixStream;
 #[cfg(windows)]
-type Connection = std::fs::File;
+pub(crate) type Connection = std::fs::File;
 
 /// A request from the service to the worker. All four variants are used — the
 /// service sends `Enable`/`Disable` from the settings toggle and `Apply`/`Clear`
@@ -61,7 +62,8 @@ type Connection = std::fs::File;
 pub(crate) enum Command {
     /// Feature turned on — start connecting (and repaint any held presence).
     Enable,
-    /// Feature turned off — clear the card and park until re-enabled.
+    /// Feature turned off — clear the card and close the socket. The service drops the channel
+    /// right after, which ends the worker.
     Disable,
     /// Show this card.
     Apply(Presence),
@@ -71,9 +73,9 @@ pub(crate) enum Command {
 
 /// Outcome of the connected serve loop.
 enum ServeOutcome {
-    /// All senders dropped — the process is exiting; end the worker.
+    /// All senders dropped — end the worker.
     Exit,
-    /// A `Disable` arrived — park until re-enabled.
+    /// A `Disable` arrived — close the socket.
     Disabled,
     /// The socket died mid-session — reconnect.
     Disconnected,
@@ -83,7 +85,12 @@ enum ServeOutcome {
 /// never registered with the task tracker (at quit the socket simply closes,
 /// which makes Discord drop the card). Publishes connection state through
 /// `status`; connect/reconnect failures stay silent (logged), never a toast.
-pub(crate) fn run_worker(rx: &mpsc::Receiver<Command>, status: &Arc<StatusCell>) {
+/// `connect` opens the socket, [`connect`] in the app.
+pub(crate) fn run_worker(
+    rx: &mpsc::Receiver<Command>,
+    status: &Arc<StatusCell>,
+    connect: &dyn Fn() -> Option<Connection>,
+) {
     let pid = std::process::id();
     let mut nonce: u64 = 0;
     let mut desired: Option<Presence> = None;
@@ -91,7 +98,8 @@ pub(crate) fn run_worker(rx: &mpsc::Receiver<Command>, status: &Arc<StatusCell>)
     let mut backoff = CONNECT_BACKOFF_MIN;
 
     loop {
-        // Parked while disabled: no polling thread, no socket probing.
+        // Blocks without probing until enabled. Past a `Disable` the channel is already closed,
+        // so this returns.
         while !enabled {
             match rx.recv() {
                 Ok(cmd) => handle_command(cmd, &mut desired, &mut enabled),
@@ -369,7 +377,7 @@ fn socket_bases() -> &'static [String] {
 /// Probe `discord-ipc-{0..10}` across every base/subdir and take the first that
 /// opens. `None` when Discord isn't running.
 #[cfg(unix)]
-fn connect() -> Option<Connection> {
+pub(super) fn connect() -> Option<Connection> {
     use std::fmt::Write as _;
     let mut path = String::with_capacity(64);
     for base in socket_bases() {
@@ -392,7 +400,7 @@ fn connect() -> Option<Connection> {
 /// FILE_WRITE_DATA` (the file-specific read/write pair a named pipe accepts) —
 /// **not** `GENERIC_READ | GENERIC_WRITE` (`0xC0000000`); do not "correct" it.
 #[cfg(windows)]
-fn connect() -> Option<Connection> {
+pub(super) fn connect() -> Option<Connection> {
     use std::os::windows::fs::OpenOptionsExt;
     for i in 0..10 {
         let path = format!(r"\\?\pipe\discord-ipc-{i}");

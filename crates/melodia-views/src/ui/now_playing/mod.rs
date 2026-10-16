@@ -26,9 +26,8 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Image, ModelRc, SharedString, TimerMode, VecModel};
+use slint::{ComponentHandle, Image, ModelRc, TimerMode, VecModel};
 
-use crate::ui::chips;
 use crate::ui::now_playing_artwork::NowPlayingArtwork;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -147,18 +146,6 @@ pub struct NowPlayingState {
     /// callback compares it against `current_source` to skip a redundant re-seed when
     /// nothing changed while the view was closed.
     pub(super) applied_source: RefCell<Option<SourceKey>>,
-    /// Visible chip texts in declared order for the applied `track-meta`, re-chunked on
-    /// every `Player.recompute-chip-rows(width)` so a resize needn't re-walk
-    /// `TrackMetaRow`.
-    pub(super) chip_texts: RefCell<Vec<SharedString>>,
-    /// Last width the `MetaChipStrip` reported, so the source-change subscriber can chunk
-    /// against the current layout without waiting for the next `changed` fire.
-    pub(super) chip_last_width: Cell<f32>,
-    /// Row lengths of the split last handed to `Player.chip-rows` — see
-    /// [`crate::ui::chips::split_shape`]. Only the width channel consults it; the
-    /// source-change subscriber writes unconditionally, its chips having moved by
-    /// definition, and records the shape on its way past.
-    pub(super) chip_last_shape: RefCell<Vec<usize>>,
     /// `None` only between `Rc::new(…)` and [`install`]'s post-init writes. Captures a
     /// `Weak<NowPlayingState>` to avoid the `Rc → closure → Rc` cycle.
     up_next_seeder: RefCell<Option<Hook>>,
@@ -314,7 +301,6 @@ pub fn install(
     spawn_source_change_subscriber(ui, state, np_artwork.clone(), np_state.clone(), initial_key)?;
     spawn_up_next_subscriber(ui, state, up_next_model.clone(), np_state.clone())?;
     wire_now_playing_open(ui, state, np_artwork.clone(), up_next_model.clone(), np_state.clone());
-    wire_recompute_chip_rows(ui, &np_state);
 
     // Synchronously, the queue-restore broadcast having fired before the subscriber
     // subscribed; the snapshot then goes to `latest_qvm` for a later open.
@@ -365,9 +351,6 @@ impl NowPlayingState {
             last_queue_index: Cell::new(qvm.queue_index),
             current_source: RefCell::new(current_source),
             applied_source: RefCell::new(None),
-            chip_texts: RefCell::new(Vec::new()),
-            chip_last_width: Cell::new(0.0),
-            chip_last_shape: RefCell::new(Vec::new()),
             up_next_seeder: RefCell::new(None),
             artwork_seeder: RefCell::new(None),
             artwork_releaser: RefCell::new(None),
@@ -384,26 +367,6 @@ fn wire_request_cover(ui: &AppWindow, cover_thumbs: &Arc<CoverThumbs>) {
     let covers = cover_thumbs.clone();
     ui.global::<NowPlaying>().on_request_cover(move |path| {
         covers.get_or_load_opt(Some(path.as_str()).filter(|s| !s.is_empty()))
-    });
-}
-
-/// Cached on `chip_last_width` so the source-change subscriber can re-chunk against the
-/// current layout without waiting for the next `changed` fire.
-fn wire_recompute_chip_rows(ui: &AppWindow, np_state: &Rc<NowPlayingState>) {
-    let weak = ui.as_weak();
-    let np = np_state.clone();
-    ui.global::<Player>().on_recompute_chip_rows(move |width| {
-        np.chip_last_width.set(width);
-        let Some(ui) = weak.upgrade() else { return };
-        let rows = chips::chunk_chips_to_rows(&np.chip_texts.borrow(), width, None);
-        // The chips can't have moved — only `source_change` writes them — and
-        // `set_chip_rows` is a model reset, fired here per pointer motion of a drag.
-        let shape = chips::split_shape(&rows);
-        if *np.chip_last_shape.borrow() == shape {
-            return;
-        }
-        *np.chip_last_shape.borrow_mut() = shape;
-        ui.global::<Player>().set_chip_rows(chips::rows_to_model(rows));
     });
 }
 

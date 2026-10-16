@@ -3,26 +3,26 @@
 //! Two views keep an entire track list resident so a keystroke or a header click costs no
 //! DB round trip: My Library's Songs tab, holding the whole library, and Favorites'.
 //!
-//! The cache holds **already-converted** rows rather than DB ones. `SharedString` is
-//! refcounted, so handing a cached row to the model is a pointer copy and a few atomic
-//! increments where `SharedString::from(&str)` allocates — the display text exists once,
-//! a filter keystroke allocates nothing per visible row, and the single-row patches can't
-//! deep-clone a library's worth of `String`s. Once is also across rows: the conversion
-//! interns, so an album's tracks hold one artist, album, genre and cover path between them.
+//! The cache holds **already-converted** rows rather than DB ones, and the Slint model reads
+//! them in place ([`crate::ui::track_list_model`]), so the display text exists once: a filter
+//! keystroke allocates one index per surviving row, and only the rows on screen are ever
+//! cloned. Once is also across rows: the conversion interns, so an album's tracks hold one
+//! artist, album, genre and cover path between them.
 //!
 //! What a DB row still answers and a converted one cannot is the sort: `disc_number` never
 //! reaches the UI and `sort_key` is not a displayed column. Those two plus the untruncated
 //! `i64` id are [`TrackSortKey`]; [`SortRow`] is the pair viewed as one thing.
 //!
-//! **Alignment is the invariant, and one lock is how it is kept.** `rows`, `search` and
-//! `sort` are positionally aligned and `order` is a permutation of their indices, so all
-//! four live in one [`CacheData`] behind one `Mutex<Arc<…>>`. **All four are `Arc`s
-//! *inside* it**, so cloning bumps four refcounts rather than duplicating a `Box<str>` per
-//! row; `rows` is the only one ever patched and holds its own, so a re-sort — replacing
-//! `order` alone — stops paying for the row copy `Arc::make_mut` would make for it.
+//! **Alignment is the invariant, and one lock is how it is kept.** `rows`, `marks`, `search`
+//! and `sort` are positionally aligned and `order` is a permutation of their indices, so all
+//! five live in one [`CacheData`] behind one `Mutex<Arc<…>>`. **All five are `Arc`s *inside*
+//! it**, so cloning bumps five refcounts rather than duplicating a `Box<str>` per row, and a
+//! re-sort, replacing `order` alone, copies none of the others.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use parking_lot::Mutex;
 
@@ -86,6 +86,48 @@ struct TrackSortKey {
     disc: i32,
 }
 
+/// The two fields a single-row patch moves, kept beside the rows rather than in them. Every
+/// snapshot of one stored set shares them, so a patch reaches the list on screen without
+/// copying the set that list holds.
+///
+/// `Relaxed` throughout: each field stands alone, and the repaint that follows a patch reaches
+/// the UI thread through the event loop's queue, which orders the two.
+struct RowMarks {
+    favorite: AtomicBool,
+    rating: AtomicI32,
+}
+
+impl RowMarks {
+    /// Moves both fields out of `row`, so a stored row never carries a value a patch has since
+    /// moved.
+    fn take_from(row: &mut UiTrackListRow) -> Self {
+        Self {
+            favorite: AtomicBool::new(std::mem::take(&mut row.is_favorite)),
+            rating: AtomicI32::new(std::mem::take(&mut row.rating)),
+        }
+    }
+
+    fn stamp(&self, row: &mut UiTrackListRow) {
+        row.is_favorite = self.favorite.load(Ordering::Relaxed);
+        row.rating = self.rating.load(Ordering::Relaxed);
+    }
+
+    fn same_as(&self, other: &Self) -> bool {
+        self.favorite.load(Ordering::Relaxed) == other.favorite.load(Ordering::Relaxed)
+            && self.rating.load(Ordering::Relaxed) == other.rating.load(Ordering::Relaxed)
+    }
+}
+
+/// For [`TrackListCache::remove`], whose copy is the one place two snapshots stop sharing marks.
+impl Clone for RowMarks {
+    fn clone(&self) -> Self {
+        Self {
+            favorite: AtomicBool::new(self.favorite.load(Ordering::Relaxed)),
+            rating: AtomicI32::new(self.rating.load(Ordering::Relaxed)),
+        }
+    }
+}
+
 /// A cached row and its sort key viewed as one comparable thing, because
 /// [`track_sort::sort_track_rows_by`] projects each element to a single
 /// `&impl TrackSortFields` and here the fields are split across two parallel `Vec`s.
@@ -137,16 +179,19 @@ impl TrackSortFields for SortRow<'_> {
     }
 }
 
-/// The four aligned vectors, swapped as one so a reader can never see a half-updated set.
-/// Cloning is the copy-on-write step behind every single-row patch: one `Vec` allocation
-/// plus a refcount bump per `SharedString` and per inner `Arc`, no string data copied.
+/// The five aligned vectors, swapped as one so a reader can never see a half-updated set.
+/// Cloning bumps five refcounts; [`TrackListCache::remove`] is the one operation that then
+/// copies what it shares.
 #[derive(Clone)]
 pub struct CacheData {
-    /// Display rows in fetch order — never reordered, only patched in place. Behind its
-    /// own `Arc` because `Arc::make_mut` on the enclosing [`CacheData`] clones **every**
-    /// field it finds shared, so a [`TrackListCache::resort`] landing while a background
-    /// fetch held a snapshot duplicated the whole row vector to move a permutation.
+    /// Display rows in fetch order, never reordered or patched. `is_favorite` and `rating`
+    /// live in `marks` instead, so [`Self::row`] is the only way to read one whole. Behind
+    /// its own `Arc` because `Arc::make_mut` on the enclosing [`CacheData`] clones **every**
+    /// field it finds shared, so a [`TrackListCache::resort`] landing while a snapshot was
+    /// held would duplicate the whole row vector to move a permutation.
     rows: Arc<Vec<UiTrackListRow>>,
+    /// Favourite and rating, aligned with `rows` and written through by every patch.
+    marks: Arc<Vec<RowMarks>>,
     /// Filter keys, aligned with `rows`.
     search: Arc<Vec<RowSearchKey>>,
     /// Sort keys, aligned with `rows`.
@@ -159,37 +204,23 @@ impl CacheData {
     fn empty() -> Self {
         Self {
             rows: Arc::new(Vec::new()),
+            marks: Arc::new(Vec::new()),
             search: Arc::new(Vec::new()),
             sort: Arc::new(Vec::new()),
             order: Arc::new(Vec::new()),
         }
     }
 
-    /// Rows passing `needle`, in display order, ready for the Slint model. Each is a
-    /// `clone` of a cached row — a struct copy plus one atomic increment per
-    /// `SharedString`, no allocation. Runs per throttled keystroke.
-    pub fn visible(&self, needle: &Needle) -> Vec<UiTrackListRow> {
-        let mut out = Vec::with_capacity(self.reserve_for(needle));
-        out.extend(self.walk(needle).map(|(_, row)| row.clone()));
-        out
-    }
-
     /// Ids of the rows passing `needle`, in display order — what a row activation hands
     /// to `player_play_tracks` so the queue becomes the list the user is looking at.
     pub fn ids_filtered(&self, needle: &Needle) -> Vec<i64> {
-        let mut out = Vec::with_capacity(self.reserve_for(needle));
-        out.extend(self.walk(needle).map(|(i, _)| self.sort[i].id));
+        // A `Filter` adapter reports a `size_hint` lower bound of `0`, so an unfiltered walk
+        // reserves exactly, the empty needle being what every cold fetch and library tick
+        // takes. A real needle reserves nothing: no cheap guess at the survivor count beats
+        // growing, and a library-sized `Vec` holding three ids is the worse wrong.
+        let mut out = Vec::with_capacity(if needle.is_empty() { self.rows.len() } else { 0 });
+        out.extend(self.walk(needle).map(|i| self.sort[i].id));
         out
-    }
-
-    /// Exact capacity for an unfiltered walk, none for a filtered one. A `Filter` adapter
-    /// reports a `size_hint` lower bound of `0`, so building straight off [`Self::walk`]
-    /// grows geometrically — and the empty needle is the case every cold fetch and every
-    /// library tick takes over the largest list in the app. A real needle gets nothing:
-    /// nothing cheap predicts the survivor count, and reserving a library-sized `Vec` to
-    /// put three rows in is the worse wrong.
-    fn reserve_for(&self, needle: &Needle) -> usize {
-        if needle.is_empty() { self.rows.len() } else { 0 }
     }
 
     /// Unique artwork paths in **display** order, capped, so that on a library with more
@@ -210,15 +241,92 @@ impl CacheData {
         self.rows.is_empty()
     }
 
-    /// The one walk `visible` and `ids_filtered` share: display order, filtered, each
-    /// surviving row beside its cache index. Indexing rather than `.get()` is safe
-    /// because the four vectors share a lock — `order` is built from these very rows and
-    /// replaced with them, so no concurrent fetch can leave an index past its set.
-    fn walk<'a>(&'a self, needle: &'a Needle) -> impl Iterator<Item = (usize, &'a UiTrackListRow)> {
+    /// The cache indices passing `needle`, in display order: the one walk [`VisibleRows`] and
+    /// `ids_filtered` share. Indexing rather than `.get()` is safe because the five vectors
+    /// share a lock — `order` is built from these very rows and replaced with them, so no
+    /// concurrent fetch can leave an index past its set.
+    fn walk<'a>(&'a self, needle: &'a Needle) -> impl Iterator<Item = usize> + 'a {
         self.order
             .iter()
-            .map(|&i| (i, &self.rows[i]))
-            .filter(move |(i, _)| needle.is_empty() || self.search[*i].matches(needle))
+            .copied()
+            .filter(move |&i| needle.is_empty() || self.search[i].matches(needle))
+    }
+
+    /// The row at cache index `i`, with its marks stamped back on.
+    fn row(&self, i: usize) -> UiTrackListRow {
+        let mut row = self.rows[i].clone();
+        self.marks[i].stamp(&mut row);
+        row
+    }
+
+    /// Whether index `i` here and `j` in `other` would paint the same row, answered without
+    /// cloning either.
+    fn reads_same(&self, i: usize, other: &Self, j: usize) -> bool {
+        self.rows[i] == other.rows[j] && self.marks[i].same_as(&other.marks[j])
+    }
+
+    fn position(&self, id: i64) -> Option<usize> {
+        self.sort.iter().position(|k| k.id == id)
+    }
+}
+
+/// One snapshot's rows passing a filter, in display order: what a
+/// [`TrackListModel`](crate::ui::track_list_model::TrackListModel) shows. Built on whichever
+/// thread holds the snapshot, so a cold fetch's filter walk stays off the event loop and only
+/// the finished selection crosses to it.
+pub struct VisibleRows {
+    data: Arc<CacheData>,
+    /// The cache indices passing the filter, or `None` when nothing is filtered out: the
+    /// snapshot's own `order` is that answer already, and a second library-sized copy of it
+    /// would be the largest allocation a keystroke makes.
+    filtered: Option<Vec<usize>>,
+}
+
+impl Default for VisibleRows {
+    fn default() -> Self {
+        Self { data: Arc::new(CacheData::empty()), filtered: None }
+    }
+}
+
+impl VisibleRows {
+    pub fn new(data: Arc<CacheData>, needle: &Needle) -> Self {
+        let filtered = (!needle.is_empty()).then(|| data.walk(needle).collect());
+        Self { data, filtered }
+    }
+
+    pub fn len(&self) -> usize {
+        self.indices().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.indices().is_empty()
+    }
+
+    /// The row at display position `pos`.
+    pub fn row(&self, pos: usize) -> Option<UiTrackListRow> {
+        self.indices().get(pos).map(|&i| self.data.row(i))
+    }
+
+    /// Every id in display order, read in place.
+    pub fn ids(&self) -> impl Iterator<Item = i32> + '_ {
+        self.indices().iter().map(|&i| self.data.rows[i].id)
+    }
+
+    /// Every id the snapshot holds, the ones the filter hides included.
+    pub fn held_ids(&self) -> HashSet<i32> {
+        self.data.rows.iter().map(|row| row.id).collect()
+    }
+
+    /// Whether display position `pos` paints the same row here as in `other`.
+    pub fn reads_same_at(&self, other: &Self, pos: usize) -> bool {
+        match (self.indices().get(pos), other.indices().get(pos)) {
+            (Some(&i), Some(&j)) => self.data.reads_same(i, &other.data, j),
+            _ => false,
+        }
+    }
+
+    fn indices(&self) -> &[usize] {
+        self.filtered.as_deref().unwrap_or(&self.data.order)
     }
 }
 
@@ -239,7 +347,7 @@ impl TrackListCache {
         Self { data: Mutex::new(Arc::new(CacheData::empty())) }
     }
 
-    /// A consistent view of all four vectors, for a rebuild that must not hold the lock
+    /// A consistent view of all five vectors, for a rebuild that must not hold the lock
     /// while it walks.
     pub fn snapshot(&self) -> Arc<CacheData> {
         self.data.lock().clone()
@@ -247,9 +355,7 @@ impl TrackListCache {
 
     /// Convert `rows` into the cache and compute the display order for `field` / `dir`.
     pub fn store(&self, rows: Vec<RsTrackListRow>, field: &str, dir: &str) {
-        let (display, search, sort) = convert(rows);
-        let order = compute_order(&display, &sort, field, dir);
-        self.install(display, search, sort, order);
+        self.install(convert(rows, |display, sort| compute_order(display, sort, field, dir)));
     }
 
     /// [`Self::store`] for a caller that has already computed the display permutation.
@@ -262,29 +368,17 @@ impl TrackListCache {
     /// [`CacheData::walk`] rests on. An index past the end panics on the next filter walk.
     pub fn store_in_order(&self, rows: Vec<RsTrackListRow>, order: Vec<usize>) {
         debug_assert_eq!(order.len(), rows.len(), "store_in_order needs a permutation of its rows");
-        let (display, search, sort) = convert(rows);
-        self.install(display, search, sort, order);
+        self.install(convert(rows, |_, _| order));
     }
 
-    fn install(
-        &self,
-        rows: Vec<UiTrackListRow>,
-        search: Vec<RowSearchKey>,
-        sort: Vec<TrackSortKey>,
-        order: Vec<usize>,
-    ) {
-        *self.data.lock() = Arc::new(CacheData {
-            rows: Arc::new(rows),
-            search: Arc::new(search),
-            sort: Arc::new(sort),
-            order: Arc::new(order),
-        });
+    fn install(&self, data: CacheData) {
+        *self.data.lock() = Arc::new(data);
     }
 
     /// Recompute only the display permutation — a header click costs no DB round trip, no
     /// key rebuild and **no row copy either, which is what `rows` being an `Arc` buys**:
-    /// `Arc::make_mut` clones every shared field, so with `rows` a bare `Vec` this
-    /// duplicated the entire row set whenever a reader held a snapshot.
+    /// `Arc::make_mut` clones every shared field, and the list on screen always holds a
+    /// snapshot.
     ///
     /// The lock is held across [`compute_order`] deliberately: the caller is the UI thread,
     /// so this parks background workers rather than the event loop, and computing outside
@@ -305,26 +399,30 @@ impl TrackListCache {
     /// Patch `is_favorite` on one row, so a toggle doesn't re-fetch the list and lose
     /// scroll position.
     pub fn set_favorite(&self, id: i64, fav: bool) {
-        self.patch(id, |row| row.is_favorite = fav);
+        self.mark(id, |marks| marks.favorite.store(fav, Ordering::Relaxed));
     }
 
     /// Patch `rating` on one row — the star-rating analogue of [`Self::set_favorite`].
     pub fn set_rating(&self, id: i64, rating: i32) {
-        self.patch(id, |row| row.rating = rating);
+        self.mark(id, |marks| marks.rating.store(rating, Ordering::Relaxed));
     }
 
-    /// Drop one row from all four vectors, keeping them aligned — Favorites needs it,
+    /// Drop one row from all five vectors, keeping them aligned — Favorites needs it,
     /// unfavouriting removing a track from the set the list is defined by. `order` is
     /// rebuilt rather than recomputed: shifting the indices past the removed slot preserves
     /// the current sort exactly, where a re-sort needs a field and direction the caller
     /// doesn't have.
+    ///
+    /// Copy-on-write, the list on screen holding the snapshot this shortens: it keeps its
+    /// own until the caller shows it the new one.
     pub fn remove(&self, id: i64) {
         let mut guard = self.data.lock();
-        let Some(at) = guard.sort.iter().position(|k| k.id == id) else {
+        let Some(at) = guard.position(id) else {
             return;
         };
         let data = Arc::make_mut(&mut *guard);
         Arc::make_mut(&mut data.rows).remove(at);
+        Arc::make_mut(&mut data.marks).remove(at);
         Arc::make_mut(&mut data.search).remove(at);
         Arc::make_mut(&mut data.sort).remove(at);
         let order = Arc::make_mut(&mut data.order);
@@ -334,29 +432,29 @@ impl TrackListCache {
         }
     }
 
-    /// Copy-on-write single-row patch, cheap against a live reader in a way a DB-row cache
-    /// is not: cloning converted rows allocates the `Vec` and bumps refcounts, where
-    /// cloning DB rows duplicates every string in the list.
-    fn patch(&self, id: i64, edit: impl FnOnce(&mut UiTrackListRow)) {
-        let mut guard = self.data.lock();
-        let Some(at) = guard.sort.iter().position(|k| k.id == id) else {
-            return;
-        };
-        let data = Arc::make_mut(&mut *guard);
-        edit(&mut Arc::make_mut(&mut data.rows)[at]);
+    /// Patch one row's marks in place, copying nothing whoever holds a snapshot. The caller
+    /// owes the list a repaint of that row.
+    fn mark(&self, id: i64, edit: impl FnOnce(&RowMarks)) {
+        let data = self.data.lock();
+        if let Some(at) = data.position(id) {
+            edit(&data.marks[at]);
+        }
     }
 }
 
-/// Convert DB rows into the three aligned vectors the cache holds.
+/// Convert DB rows into a cache laid out in the display order `order_of` picks off the
+/// converted rows and sort keys.
 ///
 /// Takes the `Vec` **by value and consumes it**: each DB row's `String`s are freed as its
 /// converted row is built, so the peak never holds two full copies of the library's text.
 /// Collecting from a borrow would, and that peak is the app's largest allocation.
 fn convert(
     rows: Vec<RsTrackListRow>,
-) -> (Vec<UiTrackListRow>, Vec<RowSearchKey>, Vec<TrackSortKey>) {
+    order_of: impl FnOnce(&[UiTrackListRow], &[TrackSortKey]) -> Vec<usize>,
+) -> CacheData {
     let n = rows.len();
     let mut display = Vec::with_capacity(n);
+    let mut marks = Vec::with_capacity(n);
     let mut search = Vec::with_capacity(n);
     let mut sort = Vec::with_capacity(n);
     let mut pool = StringPool::default();
@@ -368,9 +466,18 @@ fn convert(
             disc: row.disc(),
             sort_key: row.sort_key.as_deref().unwrap_or("").into(),
         });
-        display.push(to_slint_track_list_row(&row, &mut pool));
+        let mut converted = to_slint_track_list_row(&row, &mut pool);
+        marks.push(RowMarks::take_from(&mut converted));
+        display.push(converted);
     }
-    (display, search, sort)
+    let order = order_of(&display, &sort);
+    CacheData {
+        rows: Arc::new(display),
+        marks: Arc::new(marks),
+        search: Arc::new(search),
+        sort: Arc::new(sort),
+        order: Arc::new(order),
+    }
 }
 
 /// Zip the two parallel vectors into borrowing views for the shared comparator, so the

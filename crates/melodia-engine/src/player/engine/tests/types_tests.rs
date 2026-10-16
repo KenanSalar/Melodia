@@ -25,27 +25,21 @@ fn repeat_mode_as_str_all_variants() {
     assert_eq!(RepeatMode::One.as_str(), "one");
 }
 
+/// Every saved settings.json names the mode by these tokens, so renaming one stops each file
+/// reading back. A trip through serde and back can't see that, both halves renaming together.
 #[test]
-fn playback_status_serde_roundtrip() -> Result<(), AppError> {
-    for status in [
-        PlaybackStatus::Stopped,
-        PlaybackStatus::Playing,
-        PlaybackStatus::Paused,
-        PlaybackStatus::Loading,
-    ] {
-        let json = serde_json::to_string(&status).map_err(|e| json_err(&e))?;
-        let deserialized: PlaybackStatus = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
-        assert_eq!(status, deserialized);
-    }
-    Ok(())
-}
+fn repeat_mode_is_read_and_written_by_its_settings_json_token() -> Result<(), AppError> {
+    let rows = [(RepeatMode::Off, "off"), (RepeatMode::All, "all"), (RepeatMode::One, "one")];
+    for (mode, token) in rows {
+        let written = serde_json::to_value(mode).map_err(|e| json_err(&e))?;
+        let read: RepeatMode =
+            serde_json::from_value(serde_json::json!(token)).map_err(|e| json_err(&e))?;
 
-#[test]
-fn repeat_mode_serde_roundtrip() -> Result<(), AppError> {
-    for mode in [RepeatMode::Off, RepeatMode::All, RepeatMode::One] {
-        let json = serde_json::to_string(&mode).map_err(|e| json_err(&e))?;
-        let deserialized: RepeatMode = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
-        assert_eq!(mode, deserialized);
+        assert_eq!(
+            (written, read),
+            (serde_json::json!(token), mode),
+            "(written, read) for {token}"
+        );
     }
     Ok(())
 }

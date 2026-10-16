@@ -26,7 +26,7 @@ blake3.workspace = true
 lofty.workspace = true
 jpeg-decoder.workspace = true
 lru.workspace = true
-material-colors.workspace = true
+material-colors = { workspace = true, features = ["quantize"] }
 color-thief.workspace = true
 parking_lot.workspace = true
 # The decode pool behind `cover_thumbs`.

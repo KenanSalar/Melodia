@@ -19,9 +19,6 @@ export global Albums {
     callback apply-filter(string);
     callback request-sort(string /*field*/);
     callback open-album(int /*album_id*/);
-    // The card menu's one cross-tab entry. Only `go-to-artist`, and so wired beside the `Search`
-    // exception rather than through `wire_go_to!`, which installs all three.
-    callback go-to-artist(int /*artist_id*/);
     // Invoked from each on-screen card's own binding, so only visible cards lock a cover.
     // `pure` so Slint may evaluate it inside a binding at all. Cache-only: a miss schedules and
     // comes back on the bump below, rather than decoding under the event loop.
@@ -40,8 +37,9 @@ export global Albums {
 export global AlbumDetail {
     in-out property <int> album-id: -1;
     // A persisted detail is being reopened and its id has not landed yet. Raised before
-    // `app.show()`, so the grid `album-id == -1` would otherwise mount never paints a frame of
-    // the wrong page while the fetch behind the restore runs.
+    // `app.show()`, or on the first enter of a tab the launch left hidden, so the grid
+    // `album-id == -1` would otherwise mount never paints a frame of the wrong page while the
+    // fetch behind the restore runs.
     in-out property <bool> restoring: false;
     in-out property <AlbumRow> album;
     in-out property <[TrackListRow]> tracks;
@@ -85,10 +83,6 @@ export global AlbumDetail {
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
-    // Cross-tab navigation from a row's right-click "Go to …" entry.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
     callback select-all();
     callback clear-selection();
     callback request-sort(string /*field*/);

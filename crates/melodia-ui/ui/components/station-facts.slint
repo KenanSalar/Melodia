@@ -1,7 +1,7 @@
 import { Theme } from "../theme.slint";
 import { StationHistoryRow } from "../models.slint";
 import { CopyActions } from "../globals/copy-actions.slint";
-import { ContextMenuMetrics, MenuItem } from "./context-menu.slint";
+import { ContextClick, ContextMenuMetrics, MenuItem } from "./context-menu.slint";
 import { FocusLossWatcher } from "./focus-loss-watcher.slint";
 import { IconButton } from "./icon-button.slint";
 import { PopupSurface } from "./popup-surface.slint";
@@ -34,35 +34,31 @@ component DetailRow inherits HorizontalLayout {
     in property <brush> action-idle-fg;
     in property <brush> action-hover-fg;
     in property <brush> action-hover-bg;
+    in property <bool> action-on-backdrop;
     callback action-clicked();
 
     spacing: Theme.pad-md;
     vertical-stretch: 0;
     min-height: Theme.row-h-compact;
     max-height: Theme.row-h-compact;
+    cross-axis-alignment: center;
 
-    VerticalLayout {
-        alignment: center;
-        Text {
-            // Fixed, so the values line up down the column rather than tracking each label.
-            width: root.label-width;
-            text: root.label;
-            color: root.label-color;
-            font-size: Theme.font-size-sm;
-            overflow: elide;
-        }
+    Text {
+        // Fixed, so the values line up down the column rather than tracking each label.
+        width: root.label-width;
+        text: root.label;
+        color: root.label-color;
+        font-size: Theme.font-size-sm;
+        overflow: elide;
     }
-    VerticalLayout {
-        alignment: center;
+    Text {
         horizontal-stretch: 1;
-        Text {
-            // The mark is what keeps a URL from re-ordering under a right-to-left UI locale: it
-            // is the station's text, not the interface's.
-            text: "\u{200e}" + root.value;
-            color: root.value-color;
-            font-size: Theme.font-size-md;
-            overflow: elide;
-        }
+        // The mark is what keeps a URL from re-ordering under a right-to-left UI locale: it
+        // is the station's text, not the interface's.
+        text: "\u{200e}" + root.value;
+        color: root.value-color;
+        font-size: Theme.font-size-md;
+        overflow: elide;
     }
     // **Left, where every other tooltip in the tree clears above.** The button is the row's
     // trailing cell, so a pill centred on it runs past the scroller's right edge; and the first
@@ -76,6 +72,7 @@ component DetailRow inherits HorizontalLayout {
         idle-fg: root.action-idle-fg;
         hover-fg: root.action-hover-fg;
         hover-bg: root.action-hover-bg;
+        on-backdrop: root.action-on-backdrop;
         tooltip-text: root.action-tooltip;
         tooltip-side: TooltipSide.left;
         clicked => { root.action-clicked(); }
@@ -101,10 +98,11 @@ export component StationFacts inherits VerticalLayout {
     in property <brush> label-color: Theme.subtext0;
     in property <brush> value-color: Theme.text;
     // `IconButton`'s own defaults, which the station page takes; Now Playing hands over the tier
-    // it solves against the artwork.
+    // it solves against the artwork, and sets `action-on-backdrop` for `IconButton`'s reason.
     in property <brush> action-idle-fg: Theme.text;
     in property <brush> action-hover-fg: root.action-idle-fg;
     in property <brush> action-hover-bg: Theme.surface0;
+    in property <bool> action-on-backdrop: false;
 
     callback open-homepage(string);
 
@@ -125,6 +123,7 @@ export component StationFacts inherits VerticalLayout {
         action-idle-fg: root.action-idle-fg;
         action-hover-fg: root.action-hover-fg;
         action-hover-bg: root.action-hover-bg;
+        action-on-backdrop: root.action-on-backdrop;
     }
     if root.homepage != "": DetailRow {
         label: @tr("Website");
@@ -138,6 +137,7 @@ export component StationFacts inherits VerticalLayout {
         action-idle-fg: root.action-idle-fg;
         action-hover-fg: root.action-hover-fg;
         action-hover-bg: root.action-hover-bg;
+        action-on-backdrop: root.action-on-backdrop;
     }
     if root.codec != "": DetailRow {
         label: @tr("Format");
@@ -220,7 +220,7 @@ export component StationHistory inherits Rectangle {
 
             touch := TouchArea {
                 pointer-event(ev) => {
-                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
+                    if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
                         root.menu-row = entry;
                         root.menu-x = touch.absolute-position.x + touch.mouse-x - root.absolute-position.x;
                         root.menu-y = touch.absolute-position.y + touch.mouse-y - root.absolute-position.y;

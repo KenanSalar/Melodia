@@ -4,17 +4,17 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
+use crate::ui::track_list_model::TrackListModel;
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use melodia_core::entities::artist::FavoriteArtist;
 use melodia_core::entities::track::MostPlayedFavorite;
 use melodia_ui::{
     AppWindow, EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow, Favorites,
-    TrackListRow as UiTrackListRow,
 };
 
-/// Bind empty Slint `VecModel`s for the two grid tabs, the Songs list, the
-/// selection set, and the mosaic-path string list. Subsequent updates locate
-/// them by downcasting back to `VecModel<T>` from the UI thread.
+/// Bind empty models for the two grid tabs, the Songs list and the selection
+/// set. Subsequent updates locate them by downcasting back from the UI thread:
+/// the Songs list to a [`TrackListModel`], the rest to `VecModel<T>`.
 pub(super) fn install_favorites_models(ui: &AppWindow) {
     let g = ui.global::<Favorites>();
 
@@ -24,7 +24,7 @@ pub(super) fn install_favorites_models(ui: &AppWindow) {
     let artists: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
     g.set_artist_rows(ModelRc::from(artists));
 
-    let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
+    let tracks: Rc<TrackListModel> = Rc::new(TrackListModel::default());
     g.set_tracks(ModelRc::from(tracks));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
@@ -48,7 +48,7 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
 /// Map a `FavoriteArtist` + caller-supplied subtitle to its Slint card
 /// row. The subtitle is the translated `"{n} favorite[s]"` count line and
 /// must be resolved on the UI thread via `Favorites.artist-favorite-subtitle(count)`
-/// (Slint 1.16 doesn't expose `translate_from_bundle` to Rust). `play_count`
+/// (Slint 1.18 doesn't expose `translate_from_bundle` to Rust). `play_count`
 /// is unused.
 pub fn to_slint_fav_artist_row(a: &FavoriteArtist, subtitle: SharedString) -> UiEntityStripRow {
     UiEntityStripRow {

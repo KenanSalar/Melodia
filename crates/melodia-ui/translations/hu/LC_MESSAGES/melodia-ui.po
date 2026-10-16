@@ -145,6 +145,18 @@ msgstr "Adatfolyam ellenőrzése…"
 msgid "Add"
 msgstr "Hozzáadás"
 
+# Hungarian doesn't pluralize a noun after a numeral ("3 szám", not "3 számok"),
+# so both forms are the same.
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} szám"
+msgstr[1] "{n} szám"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -157,10 +169,12 @@ msgid "Playlist name"
 msgstr "Lejátszási lista neve"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Leírás (nem kötelező)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Adj hozzá leírást…"
 
@@ -227,17 +241,6 @@ msgstr "Visszaállítás"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Nincs exportálható lejátszási lista"
-
-# Hungarian doesn't pluralize a noun after a numeral ("3 szám", not "3 számok"),
-# so both forms are the same.
-#: ui/components/dialog/export-playlist-picker.slint
-#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
-#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
-msgid "{n} track"
-msgid_plural "{n} tracks"
-msgstr[0] "{n} szám"
-msgstr[1] "{n} szám"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
@@ -336,6 +339,7 @@ msgstr "A tokenedet a ListenBrainz-profilod beállításainál találod."
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Összes kijelölése"
@@ -806,6 +810,10 @@ msgid "Folder"
 msgstr "Mappa"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Előadó - Album"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -876,7 +884,7 @@ msgstr "Számadatok szerkesztése"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Másolás"
@@ -933,10 +941,6 @@ msgstr "{} lejátszási lista törlése"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Lejátszási lista törlése"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Előadó - Album"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -1444,6 +1448,14 @@ msgstr "Cím másolása"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Előadó másolása"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Kivágás"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Beillesztés"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"
@@ -2697,18 +2709,6 @@ msgstr "Albumháttér"
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "A minilejátszó a lejátszott album színeit kapja, ahogy a Most szól nézet is."
 
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Mozgás"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Indítási animáció kihagyása"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Indításkor a könyvtár azonnal a képernyőn van, nem úszik be áttűnéssel. A nyitva hagyott részletező oldal betöltés után továbbra is kinyílik."
-
 #: ui/views/settings/output-section.slint
 msgid "Output"
 msgstr "Kimenet"
@@ -2792,6 +2792,14 @@ msgstr "Igazodás a fájl mintavételi frekvenciájához"
 #: ui/views/settings/output-section.slint
 msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
 msgstr "A hangeszköz újranyitása minden szám saját frekvenciáján, hogy a rendszer ne mintavételezze át. A rendszernek engedélyeznie kell ezt a frekvenciát"
+
+#: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Mintavételi frekvencia átalakítása"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Hogyan alakul át egy szám, ha a mintavételi frekvenciája nem egyezik az eszközével, vagy a sebesség nem 1×. A Lineáris kevesebb CPU-t használ, és tompítja a legmagasabb frekvenciákat; a Sávkorlátozott a teljes magas tartományt megőrzi"
 
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -2880,6 +2888,14 @@ msgid "The device is running at {}"
 msgstr "Az eszköz {} periódussal működik"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Lineáris"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Sávkorlátozott"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Bitpontossá tétel"
 
@@ -2947,6 +2963,10 @@ msgstr "Áttűnés a számok között"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Nincs áttűnés"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} lineárisan átmintavételezve {} értékre"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

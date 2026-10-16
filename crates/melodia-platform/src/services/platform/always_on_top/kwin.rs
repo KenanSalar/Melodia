@@ -5,11 +5,9 @@
 //! `keepAbove` flag. [`watch_keep_above`] leaves one running that reports
 //! every change to that flag back, whoever made it.
 //!
-//! We use `zbus::blocking::*` exclusively. Enabling zbus's `tokio`
-//! feature would unify Slint's accesskit-transitive zbus chain and
-//! panic the a11y thread at startup (see CLAUDE.md "zbus footgun" +
-//! `MEMORY.md/zbus_slint_tokio_conflict.md`). To avoid blocking the
-//! tokio runtime, the whole body runs inside `tokio::task::spawn_blocking`.
+//! We use `zbus::blocking::*` exclusively (CLAUDE.md "zbus footgun"). To
+//! avoid blocking the tokio runtime, the whole body runs inside
+//! `tokio::task::spawn_blocking`.
 
 use std::path::Path;
 

@@ -1,0 +1,22 @@
+import { Theme } from "../theme.slint";
+
+// The well a form field sits in, its border taking the accent while the field has focus.
+// `LabeledInput`, `ControlledInput` and `MultilineInput` each pad their input inside it as they
+// need.
+export component FieldFrame inherits Rectangle {
+    in property <bool> focused;
+
+    background: Theme.surface1;
+    border-color: root.focused ? Theme.accent : Theme.border;
+    border-width: 1px;
+    border-radius: Theme.radius-md;
+    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+}
+
+// The caption over a form field, shared by `LabeledInput` and the two list editors whose rows sit
+// under one.
+export component FieldLabel inherits Text {
+    color: Theme.subtext0;
+    font-size: Theme.font-size-sm;
+    font-weight: 600;
+}

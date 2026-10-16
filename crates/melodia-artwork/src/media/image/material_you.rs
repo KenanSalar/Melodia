@@ -19,13 +19,10 @@ use std::path::{Path, PathBuf};
 use color_thief::ColorFormat;
 use image::imageops::FilterType;
 use lru::LruCache;
-use material_colors::color::Argb;
+use material_colors::color::Rgb;
+use material_colors::dynamic_color::{DynamicScheme, Platform, Role, SpecVersion, Variant};
 use material_colors::hct::Hct;
 use material_colors::quantize::{Quantizer, QuantizerCelebi};
-use material_colors::scheme::variant::{
-    SchemeContent, SchemeExpressive, SchemeFidelity, SchemeMonochrome, SchemeNeutral,
-    SchemeTonalSpot, SchemeVibrant,
-};
 use material_colors::score::Score;
 use slint::{Rgb8Pixel, SharedPixelBuffer};
 
@@ -100,7 +97,7 @@ const QUANTIZE_DIM: u32 = 64;
 /// higher wastes CPU.
 const QUANTIZE_MAX_COLOURS: usize = 128;
 
-/// Defensive source cap for the path-based [`extract_source_argb`]. Real album
+/// Defensive source cap for the path-based [`extract_source_rgb`]. Real album
 /// art is well under it; the limit stops an oversized embedded picture spiking a
 /// transient decode buffer the glibc heap then keeps reserved. The current-track
 /// path goes through `CoverThumbs` instead, so this only fires when a caller
@@ -110,7 +107,7 @@ const MATERIAL_YOU_MAX_SOURCE_DIM: u32 = 2048;
 /// Decode `artwork_path`, downscale, and take the seed off it via
 /// [`seed_from_pixels`]. `None` when the decode failed or left nothing opaque.
 /// **Blocking** — call from `spawn_blocking` only.
-pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
+pub fn extract_source_rgb(artwork_path: &Path) -> Option<u32> {
     let decoded = match decode_capped(artwork_path, MATERIAL_YOU_MAX_SOURCE_DIM) {
         Ok(d) => d,
         Err(e) => {
@@ -125,7 +122,7 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
     let small = decoded.resize_exact(QUANTIZE_DIM, QUANTIZE_DIM, FilterType::Triangle).into_rgba8();
     drop(decoded);
 
-    let mut pixels: Vec<Argb> = Vec::with_capacity((QUANTIZE_DIM * QUANTIZE_DIM) as usize);
+    let mut pixels: Vec<Rgb> = Vec::with_capacity((QUANTIZE_DIM * QUANTIZE_DIM) as usize);
     for chunk in small.chunks_exact(4) {
         let r = chunk[0];
         let g = chunk[1];
@@ -136,7 +133,7 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
         if a < 128 {
             continue;
         }
-        pixels.push(Argb::new(0xff, r, g, b));
+        pixels.push(Rgb::new(r, g, b));
     }
 
     seed_from_pixels(&pixels)
@@ -161,28 +158,28 @@ pub fn extract_source_argb(artwork_path: &Path) -> Option<u32> {
 /// `None` means the quantizer had nothing to say, which both consumers already
 /// spell as the theme accent. So there is no last-resort colour to pick here,
 /// and no layer-crossing theme dependency to acquire in order to pick one.
-fn seed_from_pixels(pixels: &[Argb]) -> Option<u32> {
+fn seed_from_pixels(pixels: &[Rgb]) -> Option<u32> {
     if pixels.is_empty() {
         return None;
     }
     let counts = QuantizerCelebi::quantize(pixels, QUANTIZE_MAX_COLOURS).color_to_count;
-    let dominant = counts.iter().max_by_key(|(_, count)| **count).map(|(argb, _)| *argb)?;
-    Score::score(&counts, Some(1), Some(dominant), None).into_iter().next().map(argb_to_u32)
+    let dominant = counts.iter().max_by_key(|(_, count)| **count).map(|(rgb, _)| *rgb)?;
+    Score::score(&counts, Some(1), Some(dominant), None).first().map(Rgb::as_u32)
 }
 
-/// [`extract_source_argb`]'s pipeline starting from the RGB8 thumbnail
+/// [`extract_source_rgb`]'s pipeline starting from the RGB8 thumbnail
 /// [`crate::media::image::cover_thumbs::CoverThumbs`] already keeps for row rendering.
 /// Small enough that quantizing it directly is qualitatively the same as
 /// quantizing a downsample of the source, and it skips the transient decode peak
 /// the path-based variant produces on large embedded artwork.
 ///
 /// **Blocking** (CPU-bound quantize) — call from `spawn_blocking`.
-pub fn extract_source_argb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
+pub fn extract_source_rgb_from_rgb8(buf: &SharedPixelBuffer<Rgb8Pixel>) -> Option<u32> {
     let bytes = buf.as_bytes();
     // No alpha here, so the path-based sibling's alpha-skip collapses to a plain push.
-    let mut pixels: Vec<Argb> = Vec::with_capacity(bytes.len() / 3);
+    let mut pixels: Vec<Rgb> = Vec::with_capacity(bytes.len() / 3);
     for chunk in bytes.chunks_exact(3) {
-        pixels.push(Argb::new(0xff, chunk[0], chunk[1], chunk[2]));
+        pixels.push(Rgb::new(chunk[0], chunk[1], chunk[2]));
     }
     seed_from_pixels(&pixels)
 }
@@ -225,17 +222,17 @@ pub fn population_seeds(rgb: &[u8], desired: usize) -> Vec<u32> {
     }
 }
 
-/// Edit `argb` in HCT and pack the result back. **The round trip is gamut-mapped**, so a saturated
+/// Edit `rgb` in HCT and pack the result back. **The round trip is gamut-mapped**, so a saturated
 /// seed can come back a little less saturated — stated here rather than at each helper below.
 /// [`clamp_to_tone_band`] deliberately doesn't use it: returning an in-band colour *verbatim* is
 /// what keeps its own chroma, and a round trip would map it.
-fn with_hct(argb: u32, edit: impl FnOnce(&mut Hct)) -> u32 {
-    let mut hct = Hct::new(Argb::from_u32(argb));
+fn with_hct(rgb: u32, edit: impl FnOnce(&mut Hct)) -> u32 {
+    let mut hct = Hct::new(Rgb::from_u32(rgb));
     edit(&mut hct);
-    argb_to_u32(Argb::from(hct))
+    Rgb::from(hct).as_u32()
 }
 
-/// Move `argb` into the `min_tone..=max_tone` HCT lightness band, leaving hue
+/// Move `rgb` into the `min_tone..=max_tone` HCT lightness band, leaving hue
 /// and chroma alone; returns it unchanged when it is already inside.
 ///
 /// The M3 way to make an extracted colour legible on a known surface: tone *is*
@@ -254,21 +251,21 @@ fn with_hct(argb: u32, edit: impl FnOnce(&mut Hct)) -> u32 {
 /// saturated at high tones — the correct trade, legibility being the point.
 ///
 /// An out-of-range bound doesn't panic: `set_tone` forwards to the solver, which
-/// answers with a greyscale `Argb::from_lstar`. An *inverted* band does —
+/// answers with a greyscale `Rgb::from_lstar`. An *inverted* band does —
 /// `f64::clamp` panics on `min > max` before the solver sees the tone — hence
 /// the debug assertion.
-pub fn clamp_to_tone_band(argb: u32, min_tone: f64, max_tone: f64) -> u32 {
+pub fn clamp_to_tone_band(rgb: u32, min_tone: f64, max_tone: f64) -> u32 {
     debug_assert!(min_tone <= max_tone, "inverted tone band {min_tone}..={max_tone}");
-    let mut hct = Hct::new(Argb::from_u32(argb));
+    let mut hct = Hct::new(Rgb::from_u32(rgb));
     let tone = hct.get_tone();
     if tone >= min_tone && tone <= max_tone {
-        return argb;
+        return rgb;
     }
     hct.set_tone(tone.clamp(min_tone, max_tone));
-    argb_to_u32(Argb::from(hct))
+    Rgb::from(hct).as_u32()
 }
 
-/// Drive `argb` to exactly `tone`, capping chroma at `max_chroma` and keeping
+/// Drive `rgb` to exactly `tone`, capping chroma at `max_chroma` and keeping
 /// the hue.
 ///
 /// [`clamp_to_tone_band`]'s sibling, for surfaces wanting the source colour's
@@ -279,8 +276,8 @@ pub fn clamp_to_tone_band(argb: u32, min_tone: f64, max_tone: f64) -> u32 {
 ///
 /// Chroma is capped *before* the tone is set, the solver gamut-mapping against
 /// whatever chroma it is given.
-pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
-    with_hct(argb, |hct| {
+pub fn to_tone_capped_chroma(rgb: u32, tone: f64, max_chroma: f64) -> u32 {
+    with_hct(rgb, |hct| {
         if hct.get_chroma() > max_chroma {
             hct.set_chroma(max_chroma);
         }
@@ -288,59 +285,68 @@ pub fn to_tone_capped_chroma(argb: u32, tone: f64, max_chroma: f64) -> u32 {
     })
 }
 
-/// Scale `argb`'s HCT lightness by `factor`, keeping hue and chroma — a darker *sibling* of a
+/// Scale `rgb`'s HCT lightness by `factor`, keeping hue and chroma — a darker *sibling* of a
 /// colour rather than a legible version of it, `ui::aurora` pairing a wash with a deeper
 /// one so an art-less surface has the value structure a cover gave it. Multiplicative so the
 /// answer scales with whatever the theme's accent is; a fixed tone flattens every palette onto one
 /// pair.
-pub fn scale_tone(argb: u32, factor: f64) -> u32 {
-    with_hct(argb, |hct| hct.set_tone((hct.get_tone() * factor).clamp(0.0, 100.0)))
+pub fn scale_tone(rgb: u32, factor: f64) -> u32 {
+    with_hct(rgb, |hct| hct.set_tone((hct.get_tone() * factor).clamp(0.0, 100.0)))
 }
 
-/// Turn `argb` `degrees` around the HCT hue wheel, keeping tone and chroma, and wrapping so any
+/// Turn `rgb` `degrees` around the HCT hue wheel, keeping tone and chroma, and wrapping so any
 /// `degrees` is in range. For making a *second* colour out of a first rather than making one
 /// legible: `ui::aurora` fills a short seed list this way. HCT rather than HSL keeps the
 /// sibling at the same apparent lightness, which is why the tint band states one tone ceiling.
-pub fn rotate_hue(argb: u32, degrees: f64) -> u32 {
-    with_hct(argb, |hct| hct.set_hue((hct.get_hue() + degrees).rem_euclid(360.0)))
+pub fn rotate_hue(rgb: u32, degrees: f64) -> u32 {
+    with_hct(rgb, |hct| hct.set_hue((hct.get_hue() + degrees).rem_euclid(360.0)))
 }
+
+/// The Material colour spec every scheme here is built against. Spelled out because the crate
+/// still defaults to 2021. Not 2026, which changes nothing for the styles offered here, so naming
+/// it would only let a crate bump re-tone every palette unannounced. Content, Fidelity and
+/// Monochrome have no 2025 definition and resolve to 2021 whatever this says.
+const SPEC: SpecVersion = SpecVersion::Spec2025;
 
 /// Build a `DynamicScheme` of `style` × `is_dark` from the seed and map the M3
 /// roles onto a [`melodia_core::themes::Palette`] plus accent. Pure CPU and
 /// sub-millisecond, so a tokio worker can call it without `spawn_blocking`.
-pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> (Palette, u32) {
-    let hct = Hct::new(Argb::from_u32(source_argb));
-    // Read the resolved-role accessors off the inner `DynamicScheme` directly —
-    // they compute on demand and each role is read once, so a
-    // `Scheme::from(DynamicScheme)` would only be an intermediate clone.
-    let dyn_scheme = match style {
-        SchemeStyle::Content => SchemeContent::new(hct, is_dark, None).scheme,
-        SchemeStyle::Vibrant => SchemeVibrant::new(hct, is_dark, None).scheme,
-        SchemeStyle::Expressive => SchemeExpressive::new(hct, is_dark, None).scheme,
-        SchemeStyle::Fidelity => SchemeFidelity::new(hct, is_dark, None).scheme,
-        SchemeStyle::Neutral => SchemeNeutral::new(hct, is_dark, None).scheme,
-        SchemeStyle::Monochrome => SchemeMonochrome::new(hct, is_dark, None).scheme,
+///
+/// `themes::material3`'s two variants are this function over the M3 baseline seed, so a change
+/// to the mapping below owes them a regenerate.
+pub fn generate_palette(source_rgb: u32, is_dark: bool, style: SchemeStyle) -> (Palette, u32) {
+    let hct = Hct::new(Rgb::from_u32(source_rgb));
+    let variant = match style {
+        SchemeStyle::Content => Variant::Content,
+        SchemeStyle::Vibrant => Variant::Vibrant,
+        SchemeStyle::Expressive => Variant::Expressive,
+        SchemeStyle::Fidelity => Variant::Fidelity,
+        SchemeStyle::Neutral => Variant::Neutral,
+        SchemeStyle::Monochrome => Variant::Monochrome,
         // The coordinator filters `None` out earlier, so reaching this arm
         // through it is an upstream bug — but TonalSpot is the safe default.
-        SchemeStyle::TonalSpot | SchemeStyle::None => {
-            SchemeTonalSpot::new(hct, is_dark, None).scheme
-        }
+        SchemeStyle::TonalSpot | SchemeStyle::None => Variant::TonalSpot,
     };
+    // `Phone` is the spec's only platform besides a watch.
+    let scheme = DynamicScheme::from_spec(hct, variant, is_dark, None, Platform::Phone, SPEC);
+    // One memo for every read: under 2025 most roles solve against the same surface tones, which
+    // each per-role accessor on the scheme would derive again.
+    let roles = scheme.resolver();
+    let read = |role: Role| roles.rgb(role).as_u32();
 
-    let surface = argb_to_u32(dyn_scheme.surface());
-    let surface_container_low = argb_to_u32(dyn_scheme.surface_container_low());
-    let surface_dim = argb_to_u32(dyn_scheme.surface_dim());
-    let surface_container_high = argb_to_u32(dyn_scheme.surface_container_high());
-    let surface_container_highest = argb_to_u32(dyn_scheme.surface_container_highest());
-    let outline = argb_to_u32(dyn_scheme.outline());
-    let outline_variant = argb_to_u32(dyn_scheme.outline_variant());
-    let on_surface = argb_to_u32(dyn_scheme.on_surface());
-    let on_surface_variant = argb_to_u32(dyn_scheme.on_surface_variant());
-    let primary = argb_to_u32(dyn_scheme.primary());
-    let error = argb_to_u32(dyn_scheme.error());
+    let surface = read(Role::Surface);
+    let surface_container_low = read(Role::SurfaceContainerLow);
+    let surface_dim = read(Role::SurfaceDim);
+    let surface_container_high = read(Role::SurfaceContainerHigh);
+    let surface_container_highest = read(Role::SurfaceContainerHighest);
+    let outline = read(Role::Outline);
+    let outline_variant = read(Role::OutlineVariant);
+    let on_surface = read(Role::OnSurface);
+    let on_surface_variant = read(Role::OnSurfaceVariant);
+    let primary = read(Role::Primary);
+    let error = read(Role::Error);
 
-    // Interpolated middle tones, so the dynamic palette keeps the static one's
-    // depth range.
+    // M3 has no role between these pairs, where `Palette` has a slot each.
     let surface2 = mix_rgb_u32(surface_container_highest, outline);
     let subtext0 = mix_rgb_u32(on_surface_variant, on_surface);
 
@@ -367,7 +373,7 @@ pub fn generate_palette(source_argb: u32, is_dark: bool, style: SchemeStyle) -> 
         text: on_surface,
         subtext0,
         subtext1: outline,
-        // Match the static M3 palette: `border == surface_container_highest`.
+        // One surface up, where the other theme families put it.
         border: surface_container_highest,
         red: error,
         green,
@@ -385,7 +391,7 @@ const SEED_CACHE_CAP: NonZeroUsize = match NonZeroUsize::new(32) {
     None => panic!("SEED_CACHE_CAP > 0"),
 };
 
-/// Bounded LRU cache for source ARGB seeds keyed on the artwork path.
+/// Bounded LRU cache for source RGB seeds keyed on the artwork path.
 pub struct SeedCache {
     inner: LruCache<PathBuf, u32>,
 }
@@ -414,11 +420,6 @@ impl Default for SeedCache {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Pack an `Argb` into the `0x00RRGGBB` the palette tables use, dropping alpha.
-fn argb_to_u32(a: Argb) -> u32 {
-    (u32::from(a.red) << 16) | (u32::from(a.green) << 8) | u32::from(a.blue)
 }
 
 /// Channel-wise 50/50 mix of two `0x00RRGGBB` colours.

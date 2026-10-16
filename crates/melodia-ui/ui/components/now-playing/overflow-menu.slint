@@ -5,7 +5,7 @@ import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { Player } from "../../globals/player.slint";
 import { Queue } from "../../globals/queue.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
-import { WindowChrome, PopupHighlight } from "../../globals/shell.slint";
+import { WindowChrome } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { StarRating } from "../star-rating.slint";
@@ -19,9 +19,10 @@ import { FlyoutMetrics, SleepPresets, SpeedPresets } from "./flyout-presets.slin
 // The bar's overflow trigger and its popup: five permanent rows, two of which open a
 // left-side flyout, plus every button the user routed here.
 //
-// **Fixed-reserve geometry**, the volume popup's pattern: the `PopupWindow` is always
-// sized for the menu column *and* the widest flyout, so it never re-layouts when one
-// expands, with a transparent catcher over the empty regions. It opens upward, the bar
+// **Fixed-reserve geometry**: the `PopupWindow` is always sized for the menu column *and* the
+// widest flyout, with a transparent catcher over the empty regions. A flyout may not move the
+// popup's origin: Slint re-lays an open popup's content at once but moves the popup a loop pass
+// later, so the column would draw a frame out of place on every toggle. It opens upward, the bar
 // living at the window's bottom, and the menu column right-aligns under the trigger.
 //
 // The speed control is **always** here rather than configurable — it is never shown
@@ -37,14 +38,13 @@ export component OverflowMenu inherits Rectangle {
     property <bool> speed-flyout-open: false;
     property <bool> sleep-flyout-open: false;
 
-    // The close triple every row calls: drop the popup, collapse both flyouts, release
-    // the trigger highlight. **A function rather than a callback** — the rows invoke it
-    // and nothing subscribes, so there is no handler slot to clobber.
+    // What every closing row calls: drop the popup and collapse both flyouts. **A function
+    // rather than a callback** — the rows invoke it and nothing subscribes, so there is no
+    // handler slot to clobber.
     public function dismiss() {
         pop.close();
         root.speed-flyout-open = false;
         root.sleep-flyout-open = false;
-        PopupHighlight.id = "";
     }
 
     // The overflowed buttons only; the permanent rows are counted separately below. The
@@ -75,7 +75,7 @@ export component OverflowMenu inherits Rectangle {
     property <length> sleep-flyout-h:
         FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + 9px
         + FlyoutMetrics.chrome-h;
-    // Reserve the wider one, so the popup never re-layouts on a switch.
+    // Reserve the wider one, so the popup keeps its box on a switch.
     property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w);
     // Keeps the two columns reading as separate floating chromes.
     property <length> gap: 8px;
@@ -100,13 +100,10 @@ export component OverflowMenu inherits Rectangle {
         diameter: clamp(root.bar-w * 0.05, 28px, 36px);
         icon-size: clamp(root.bar-w * 0.03, 18px, 20px);
         tooltip-text: @tr("More");
-        // Keeps the disc highlighted while the popup is open; `dismiss()` and the winit
-        // Release path both clear it.
-        force-bg: PopupHighlight.id == "overflow";
+        force-bg: pop.is-open;
         clicked => {
             // Always (re)open collapsed.
             root.speed-flyout-open = false; root.sleep-flyout-open = false;
-            PopupHighlight.id = "overflow";
             pop.show();
         }
     }
@@ -126,11 +123,11 @@ export component OverflowMenu inherits Rectangle {
         y: -self.height - Theme.popup-gap;
         close-policy: close-on-click-outside;
 
-        // Mirrors the volume popup's left-strip catcher.
+        // Over the reserved left column and the space above the shorter column.
         PopupDismissCatcher {
             width: parent.width;
             height: parent.height;
-            clicked => {
+            close-requested => {
                 root.dismiss();
             }
         }
@@ -172,7 +169,6 @@ export component OverflowMenu inherits Rectangle {
 
         // Menu column — right, bottom-anchored under the trigger.
         MenuSurface {
-            popup-id: "overflow";
             x: parent.width - pop.menu-w;
             y: parent.height - root.menu-h;
             width: pop.menu-w;
@@ -185,8 +181,7 @@ export component OverflowMenu inherits Rectangle {
                 padding: Theme.pad-xs;
                 spacing: 0;
 
-                // **Doesn't close the popup**, and re-asserts the highlight id so the
-                // winit Release clear can't unmount the `FocusLossWatcher`.
+                // **Doesn't close the popup.**
                 OverflowRow {
                     icon: "speed";
                     label: @tr("Speed");
@@ -202,7 +197,6 @@ export component OverflowMenu inherits Rectangle {
                     clicked => {
                         root.speed-flyout-open = !root.speed-flyout-open;
                         root.sleep-flyout-open = false;
-                        PopupHighlight.id = "overflow";
                     }
                 }
 
@@ -221,7 +215,6 @@ export component OverflowMenu inherits Rectangle {
                     clicked => {
                         root.sleep-flyout-open = !root.sleep-flyout-open;
                         root.speed-flyout-open = false;
-                        PopupHighlight.id = "overflow";
                     }
                 }
 
@@ -263,8 +256,7 @@ export component OverflowMenu inherits Rectangle {
                 }
 
                 // Inline, so unlike the dialog rows it neither closes the popup nor
-                // opens a flyout: a star applies immediately and re-asserts the
-                // highlight id.
+                // opens a flyout: a star applies immediately.
                 rating-row := Rectangle {
                     // Not an `OverflowRow`, so it has to take the shared row
                     // height itself — `menu-h` above reserves one for it.
@@ -277,37 +269,28 @@ export component OverflowMenu inherits Rectangle {
                         padding-right: Theme.pad-sm;
                         spacing: Theme.pad-sm;
                         alignment: stretch;
-                        VerticalLayout {
-                            alignment: center;
-                            MaterialIcon {
-                                name: "star";
-                                icon-size: 20px;
-                                icon-color: Player.vm.track.rating > 0 ? Theme.accent : Theme.text;
-                                filled: Player.vm.track.rating > 0;
-                                fade: rating-row.fade;
-                            }
+                        cross-axis-alignment: center;
+                        MaterialIcon {
+                            name: "star";
+                            icon-size: 20px;
+                            icon-color: Player.vm.track.rating > 0 ? Theme.accent : Theme.text;
+                            filled: Player.vm.track.rating > 0;
+                            fade: rating-row.fade;
                         }
-                        VerticalLayout {
-                            alignment: center;
+                        Text {
                             horizontal-stretch: 1;
-                            Text {
-                                text: @tr("Rating");
-                                color: Theme.text.transparentize(1.0 - rating-row.fade);
-                                font-size: Theme.font-size-md;
-                            }
+                            text: @tr("Rating");
+                            color: Theme.text.transparentize(1.0 - rating-row.fade);
+                            font-size: Theme.font-size-md;
                         }
-                        VerticalLayout {
-                            alignment: center;
-                            StarRating {
-                                rating: Player.vm.track.rating;
-                                star-size: 18px;
-                                enabled: Player.vm.has_track;
-                                filled-color: Theme.yellow.transparentize(1.0 - rating-row.fade);
-                                empty-color: Theme.subtext0.transparentize(1.0 - rating-row.fade);
-                                rated(n) => {
-                                    Player.set-current-rating(n);
-                                    PopupHighlight.id = "overflow";
-                                }
+                        StarRating {
+                            rating: Player.vm.track.rating;
+                            star-size: 18px;
+                            enabled: Player.vm.has_track;
+                            filled-color: Theme.yellow.transparentize(1.0 - rating-row.fade);
+                            empty-color: Theme.subtext0.transparentize(1.0 - rating-row.fade);
+                            rated(n) => {
+                                Player.set-current-rating(n);
                             }
                         }
                     }

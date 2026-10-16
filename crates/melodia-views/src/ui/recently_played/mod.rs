@@ -18,7 +18,6 @@ mod covers;
 mod grid;
 mod hero;
 mod rows;
-mod selection;
 mod songs;
 mod state;
 mod tabs;
@@ -42,7 +41,6 @@ pub const NAV_RECENTLY_PLAYED: i32 = 8;
 // `callbacks/`, plus `ui::hero_chips`.
 pub(super) use grid::{apply_filtered_grid_now, apply_filtered_grid_settled, refresh_grid};
 pub(super) use rows::to_slint_most_played_row;
-pub(super) use selection::{clear_selection, handle_select_row, select_all};
 pub(super) use songs::{
     apply_filtered_tracks, apply_filtered_tracks_now, apply_row_favorite, apply_row_rating,
     refresh_tracks, set_filter,
@@ -186,7 +184,6 @@ impl RecentlyPlayedUi {
             *self.inner.songs_totals.lock() = SongsTotals::default();
             *self.inner.songs_fold.lock() = HeroFold::default();
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
-            self.inner.applied_selection.lock().clear();
         }
         // Re-armed where the wipe is rather than left to the caller: this empties the very cache
         // the flag guards, and relying on the leave's own `mark_dirty` is a coupling two files

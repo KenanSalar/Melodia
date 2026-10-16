@@ -13,24 +13,22 @@ component BreadcrumbPill inherits Rectangle {
     width: layout.preferred-width;
     border-radius: self.height / 2;
     background: touch.has-hover ? Theme.surface0 : transparent;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     layout := HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
         alignment: center;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.label;
-                color: root.is-current ? Theme.accent : Theme.subtext0;
-                font-size: Theme.font-size-sm;
-                font-weight: 500;
-                // Ink, not elision: the pill's bound width above keeps the segment
-                // incompressible either way, so this only drops the line-box scissor
-                // that would cut a path segment's Arabic marks.
-                overflow: elide;
-            }
+        Text {
+            text: root.label;
+            color: root.is-current ? Theme.accent : Theme.subtext0;
+            font-size: Theme.font-size-sm;
+            font-weight: 500;
+            vertical-alignment: center;
+            // Ink, not elision: the pill's bound width above keeps the segment
+            // incompressible either way, so this only drops the line-box scissor
+            // that would cut a path segment's Arabic marks.
+            overflow: elide;
         }
     }
 
@@ -66,13 +64,11 @@ export component BreadcrumbBar inherits Rectangle {
             for seg[i] in root.segments: HorizontalLayout {
                 spacing: 2px;
                 alignment: center;
-                if i > 0: VerticalLayout {
-                    alignment: center;
-                    MaterialIcon {
-                        name: "chevron_right";
-                        icon-size: 14px;
-                        icon-color: Theme.overlay0;
-                    }
+                cross-axis-alignment: center;
+                if i > 0: MaterialIcon {
+                    name: "chevron_right";
+                    icon-size: 14px;
+                    icon-color: Theme.overlay0;
                 }
                 BreadcrumbPill {
                     label: seg.label;

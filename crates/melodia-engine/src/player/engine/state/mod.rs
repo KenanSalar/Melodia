@@ -1,6 +1,6 @@
 use std::sync::Arc;
-use std::sync::MutexGuard;
 use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::{MutexGuard, TryLockError};
 
 use super::event_sink::PlayerSinks;
 use super::queue::QueueState;
@@ -61,6 +61,10 @@ pub struct PlayerState {
     pub source: Option<PlaybackSource>,
     pub position_ms: u64,
     pub duration_ms: u64,
+    /// Orders every publish of `position_ms`, each view model and each monitor tick, across the
+    /// two channels they travel on, so the reader (`ui::shell::bridge::ShownPosition`) can drop
+    /// the older of two that reach it out of order. Moved only by [`Self::stamp_position`].
+    pub position_stamp: u64,
     pub volume: u32,
     pub is_muted: bool,
     pub pre_mute_volume: u32,
@@ -87,6 +91,7 @@ impl Default for PlayerState {
             source: None,
             position_ms: 0,
             duration_ms: 0,
+            position_stamp: 0,
             volume: 100,
             is_muted: false,
             pre_mute_volume: 100,
@@ -138,6 +143,19 @@ impl PlayerStateHandle {
             poisoned.into_inner()
         })
     }
+
+    /// [`Self::lock_exec`] for a caller that would rather skip than wait behind a transport op,
+    /// `None` while one holds it.
+    pub fn try_lock_exec(&self) -> Option<MutexGuard<'_, ()>> {
+        match self.exec_lock.try_lock() {
+            Ok(guard) => Some(guard),
+            Err(TryLockError::WouldBlock) => None,
+            Err(TryLockError::Poisoned(poisoned)) => {
+                log::error!("PlayerState exec lock was poisoned, recovering");
+                Some(poisoned.into_inner())
+            }
+        }
+    }
 }
 
 impl PlayerState {
@@ -184,6 +202,11 @@ impl PlayerState {
     pub fn source_allows(&self, capability: fn(&PlaybackSource) -> bool) -> bool {
         self.source.as_ref().is_none_or(capability)
     }
+
+    /// Advance [`Self::position_stamp`] for a publish carrying `position_ms`.
+    pub fn stamp_position(&mut self) {
+        self.position_stamp += 1;
+    }
 }
 
 /// Lock the player state, recovering from mutex poison rather than panicking.
@@ -209,6 +232,7 @@ where
     let mut guard = lock_state(state);
     let queue_version_before = guard.queue.version;
     let result = f(&mut guard);
+    guard.stamp_position();
     let status = guard.status;
     // Sync atomic mirror for lock-free status checks (e.g., playback monitor)
     state.status_atomic.store(status as u8, Ordering::Relaxed);

@@ -48,31 +48,26 @@ export component LibrarySection inherits Rectangle {
                 padding: Theme.pad-lg;
                 spacing: Theme.pad-md;
                 alignment: stretch;
+                cross-axis-alignment: center;
 
-                VerticalLayout {
-                    alignment: center;
+                Text {
                     horizontal-stretch: 1;
-                    Text {
-                        text: root.manage-label;
-                        color: Theme.text;
-                        font-size: Theme.font-size-md;
-                        font-weight: 600;
-                        // Same reason the row labels wrap — see
-                        // `components/settings/setting-row.slint`.
-                        wrap: word-wrap;
-                    }
+                    text: root.manage-label;
+                    color: Theme.text;
+                    font-size: Theme.font-size-md;
+                    font-weight: 600;
+                    // Same reason the row labels wrap — see
+                    // `components/settings/setting-row.slint`.
+                    wrap: word-wrap;
                 }
 
-                VerticalLayout {
-                    alignment: center;
-                    SectionButton {
-                        label: root.add-label;
-                        icon: "create_new_folder";
-                        button-enabled: !LibrarySettings.scanning;
-                        primary: true;
-                        clicked => {
-                            LibrarySettings.add-folder();
-                        }
+                SectionButton {
+                    label: root.add-label;
+                    icon: "create_new_folder";
+                    button-enabled: !LibrarySettings.scanning;
+                    primary: true;
+                    clicked => {
+                        LibrarySettings.add-folder();
                     }
                 }
             }
@@ -122,21 +117,19 @@ export component LibrarySection inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 spacing: Theme.pad-sm;
-                HorizontalLayout {
-                    alignment: center;
-                    Rectangle {
-                        width: 32px;
-                        height: 32px;
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "folder_open";
-                            font-family: "Material Symbols Rounded";
-                            font-size: 32px;
-                            color: Theme.subtext0;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
+                Rectangle {
+                    cross-axis-self-alignment: center;
+                    width: 32px;
+                    height: 32px;
+                    Text {
+                        width: 100%;
+                        height: 100%;
+                        text: "folder_open";
+                        font-family: "Material Symbols Rounded";
+                        font-size: 32px;
+                        color: Theme.subtext0;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
                     }
                 }
                 Text {

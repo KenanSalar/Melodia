@@ -4,6 +4,7 @@ use sqlx::AssertSqlSafe;
 
 use super::columns;
 use crate::database::DbPool;
+use melodia_core::entities::browse::DirectoryTrack;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -27,7 +28,7 @@ use melodia_core::error::AppError;
 /// reads as an index scan rather than a sort.
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
-/// Lightweight version of `get_all_tracks` returning only list-view columns.
+/// Every track, as the Songs list retains it.
 ///
 /// The display order is the caller's: this hands back [`TRACK_LIST_ORDER`] and
 /// `ui::track_list_cache` permutes it.
@@ -99,9 +100,9 @@ pub async fn get_tracks_by_genre_for_list(
     Ok(tracks)
 }
 
-/// Fetch all favorite tracks (lightweight list-view columns).
+/// Every favorite track, as Favorites' Songs tab retains it.
 ///
-/// Ordered like [`get_all_tracks_for_list`] and for the same reason — the Songs tab's own sort is
+/// Ordered like [`get_all_tracks_for_list`] and for the same reason — the tab's own sort is
 /// resolved over the retained rows, not here.
 pub async fn get_favorite_tracks_for_list(
     db: &DbPool,
@@ -131,9 +132,9 @@ pub(super) fn directory_like_prefix(dir_path: &str) -> String {
     format!("{escaped}{LIKE_SEPARATOR}")
 }
 
-/// Fetch tracks whose files live directly inside `dir_path`, not in subdirectories. Returns the
-/// `TrackListRow` projection — Browse renders these through the shared `TrackList`, so it needs
-/// the same column set the Tracks view uses rather than a narrower browse-only slice.
+/// Fetch tracks whose files live directly inside `dir_path`, not in subdirectories, each with
+/// its path. Browse matches a row to its file on disk by that path, and has to: `LIKE` folds
+/// ASCII case, so a sibling folder spelled in another case answers here too.
 ///
 /// **Platform invariant**: `tracks.file_path` is stored verbatim from `Path::to_string_lossy()` at
 /// scan time, so it carries the platform's native separator and the LIKE pattern below matches
@@ -147,16 +148,16 @@ pub(super) fn directory_like_prefix(dir_path: &str) -> String {
 pub async fn get_tracks_in_directory(
     db: &DbPool,
     dir_path: &str,
-) -> Result<Vec<track::TrackListRow>, AppError> {
+) -> Result<Vec<DirectoryTrack>, AppError> {
     let prefix = directory_like_prefix(dir_path);
     let pattern = format!("{prefix}%");
     let subdir_pattern = format!("{prefix}%{LIKE_SEPARATOR}%");
 
     let cols = columns::TRACK_LIST.joined();
     let sql = format!(
-        "SELECT {cols} FROM tracks WHERE file_path LIKE ? ESCAPE '\\' AND file_path NOT LIKE ? ESCAPE '\\'"
+        "SELECT file_path, {cols} FROM tracks WHERE file_path LIKE ? ESCAPE '\\' AND file_path NOT LIKE ? ESCAPE '\\'"
     );
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
+    let tracks = sqlx::query_as::<_, DirectoryTrack>(AssertSqlSafe(sql))
         .bind(&pattern)
         .bind(&subdir_pattern)
         .fetch_all(db.read())

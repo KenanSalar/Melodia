@@ -7,7 +7,8 @@ use std::sync::atomic::Ordering;
 use slint::ComponentHandle;
 
 use crate::ui::callbacks::macros::spawn_logged;
-use crate::ui::search::{self as search_ui_mod, SearchUi, apply, fetch};
+use crate::ui::list_selection;
+use crate::ui::search::{SearchUi, apply, fetch};
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Search};
 
@@ -17,7 +18,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
     let weak = ui.as_weak();
 
     // Every keystroke: mirror the trimmed text into Rust state, reset
-    // `show-all-tracks` (Tauri parity: every new query starts compact),
+    // `show-all-tracks` (every new query starts compact),
     // bump the history token (defers any pending 2-second history-add
     // for a previous query), and fast-path the empty case so the
     // recent-searches branch re-mounts as soon as the user clears
@@ -41,7 +42,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
             if text.trim().is_empty() {
                 apply::clear_results_on_ui(&weak);
                 if let Some(ui) = weak.upgrade() {
-                    search_ui_mod::clear_selection(&ui, &su);
+                    list_selection::clear_row_selection(&ui.global::<Search>());
                 }
                 let su = su.clone();
                 s.runtime.spawn_blocking(move || su.release_for_empty_query());
@@ -72,7 +73,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
             if q.trim() != su.state().last_query.lock().as_str()
                 && let Some(ui) = weak.upgrade()
             {
-                search_ui_mod::clear_selection(&ui, &su);
+                list_selection::clear_row_selection(&ui.global::<Search>());
             }
             spawn_logged!(s, "search::commit", fetch::kick_search(&s, &su, &weak, q));
         });

@@ -65,8 +65,6 @@ pub(crate) static TRACK_SUMMARY: Columns = Columns::new(&[
 /// `TrackListRow`: every track list.
 pub(crate) static TRACK_LIST: Columns = Columns::new(&[
     "id",
-    "file_path",
-    "file_name",
     "title",
     "artist",
     "album_artist",
@@ -82,7 +80,6 @@ pub(crate) static TRACK_LIST: Columns = Columns::new(&[
     "album_id",
     "artist_id",
     "genre_id",
-    "date_added",
     "sort_key",
 ]);
 

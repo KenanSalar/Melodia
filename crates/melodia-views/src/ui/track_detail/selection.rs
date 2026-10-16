@@ -9,9 +9,10 @@ use std::collections::{HashMap, HashSet};
 use slint::{Model, VecModel};
 
 use super::DetailCache;
-use crate::ui::list_selection::{RowSelectionView, compute_click_selection, write_selection_ids};
+use crate::ui::list_selection::{
+    NO_ANCHOR, RowSelectionView, compute_click_selection, write_selection_ids,
+};
 use crate::ui::util::clamp_i64_to_i32;
-use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Computes the new selection for a row click and applies it. Runs on the UI thread.
@@ -38,11 +39,11 @@ pub fn handle_select_row<V: RowSelectionView>(
 }
 
 /// Takes every displayed row into the selection. The anchor is left where the last click put
-/// it; [`crate::ui::list_selection::select_all_curated`] argues why.
+/// it; [`crate::ui::list_selection::select_all_rows`] argues why.
 ///
-/// **Deliberately not `list_selection::select_all_ids`**, which the flat lists take: that walk
-/// clones every model row to read its id, where the cache already holds them and the stamper
-/// below touches only the rows that flip.
+/// **Deliberately not `list_selection::select_all_ids`**, which the flat lists take: on a
+/// `VecModel` that walk clones every model row to read its id, where the cache already holds them
+/// and the stamper below touches only the rows that flip.
 pub fn select_all<V: RowSelectionView>(view: &V, cache: &DetailCache) {
     write_selection(view, displayed_ids(cache));
     apply_selection_to_rows(view, cache);
@@ -51,7 +52,7 @@ pub fn select_all<V: RowSelectionView>(view: &V, cache: &DetailCache) {
 /// Resets the selection (Escape, and the row menu's "Clear selection").
 pub fn clear_selection<V: RowSelectionView>(view: &V, cache: &DetailCache) {
     write_selection(view, Vec::new());
-    view.set_anchor(-1);
+    view.set_anchor(NO_ANCHOR);
     apply_selection_to_rows(view, cache);
 }
 
@@ -59,7 +60,7 @@ pub fn clear_selection<V: RowSelectionView>(view: &V, cache: &DetailCache) {
 /// `selected` false.
 pub fn reset<V: RowSelectionView>(view: &V, cache: &DetailCache) {
     write_selection(view, Vec::new());
-    view.set_anchor(-1);
+    view.set_anchor(NO_ANCHOR);
     cache.applied_selection.lock().clear();
 }
 
@@ -96,28 +97,6 @@ pub fn apply_selection_to_rows<V: RowSelectionView>(view: &V, cache: &DetailCach
         }
     }
     *applied = desired;
-}
-
-/// Drops from `selected-ids` every id `tracks` no longer carries. Each detail view's
-/// re-fetch owes this before it hands the model swap on: the swap re-stamps the rows from
-/// this set, so an id whose track is gone would otherwise keep the menu's count and the
-/// applied shadow describing a track nothing can show.
-///
-/// Bails on an empty selection, the steady state on the watcher tick that runs this, rather
-/// than building a set over every track in the entity to prove nothing needed dropping. And
-/// having built it, only writes when it actually dropped something: the write resets the
-/// `[int]` model, which every mounted row reads the length of, so a tick that prunes nothing
-/// would dirty a binding per visible row to store what was already there.
-pub fn prune_selection_to<V: RowSelectionView>(view: &V, tracks: &[RsTrackListRow]) {
-    let selected = view.selected_ids();
-    if selected.row_count() == 0 {
-        return;
-    }
-    let valid: HashSet<i32> = tracks.iter().map(|t| clamp_i64_to_i32(t.id)).collect();
-    let kept: Vec<i32> = selected.iter().filter(|id| valid.contains(id)).collect();
-    if kept.len() != selected.row_count() {
-        write_selection(view, kept);
-    }
 }
 
 /// The model's ids in display order, read off the cache that is kept in lockstep with it.

@@ -1,30 +1,25 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
+import { FieldFrame } from "field-frame.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 
 // The tree's only multi-line, word-wrapping text box — every other `TextInput`
 // is single-line, and std-widgets' `TextEdit` forwards no appearance properties,
 // so it can't be themed to match a dialog. The scrolling recipe comes from
-// Slint's own `widgets/common/textedit-base.slint`; the chrome from
-// `labeled-input.slint`.
+// Slint's own `widgets/common/textedit-base.slint`; the chrome is `FieldFrame`'s.
 //
 // **Never put `border-radius` + `clip: true` on the box holding the
 // `TextInput`**: a rounded clip renders the text into a texture. The root paints
 // the rounded fill and border as one shape, which the renderer antialiases once,
 // and the inner `ScrollView` clips its viewport rectangularly, inset by `pad` so
 // nothing it scrolls reaches the border. The `PickerListCard` shape.
-export component MultilineInput inherits Rectangle {
+export component MultilineInput inherits FieldFrame {
     in property <string> placeholder;
     in-out property <string> text;
-    callback edited();
 
     private property <length> pad: Theme.pad-sm;
 
-    background: Theme.surface1;
-    border-radius: Theme.radius-md;
-    border-width: 1px;
-    border-color: ti.has-focus ? Theme.accent : Theme.border;
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; }
+    focused: ti.has-focus;
 
     sv := ScrollView {
         x: root.pad;
@@ -34,12 +29,12 @@ export component MultilineInput inherits Rectangle {
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
         // Width locked to the viewport so lines wrap instead of scrolling
-        // sideways. The height's `max` is required: without it the viewport
+        // sideways. The height's `max` is required: without it the content
         // never grows past what's visible, so there is no vertical travel, the
         // caret-nudge handler has nothing to scroll, and long text runs off the
         // bottom.
-        viewport-width: self.visible-width;
-        viewport-height: max(self.visible-height, ti.preferred-height);
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, ti.preferred-height);
 
         ti := TextInput {
             text <=> root.text;
@@ -48,15 +43,14 @@ export component MultilineInput inherits Rectangle {
             single-line: false;
             wrap: word-wrap;
             page-height: sv.visible-height;
-            edited => { root.edited(); }
             // Keeps the caret on screen. Word-wrap makes the x-axis inert, so
             // only upstream's y-branch survives — with the line height derived
             // from the font size rather than hardcoded as upstream does.
             cursor-position-changed(cpos) => {
-                if (cpos.y + sv.viewport-y < 12px) {
-                    sv.viewport-y = min(0px, max(sv.visible-height - self.height, -cpos.y + 12px));
-                } else if (cpos.y + sv.viewport-y > sv.visible-height - 12px - Theme.font-size-md * 1.5) {
-                    sv.viewport-y = min(0px, max(sv.visible-height - self.height, sv.visible-height - cpos.y - 12px - Theme.font-size-md * 1.5));
+                if (cpos.y + sv.content-y < 12px) {
+                    sv.content-y = min(0px, max(sv.visible-height - self.height, -cpos.y + 12px));
+                } else if (cpos.y + sv.content-y > sv.visible-height - 12px - Theme.font-size-md * 1.5) {
+                    sv.content-y = min(0px, max(sv.visible-height - self.height, sv.visible-height - cpos.y - 12px - Theme.font-size-md * 1.5));
                 }
             }
         }
@@ -83,8 +77,8 @@ export component MultilineInput inherits Rectangle {
         width: Theme.scrollbar-slot;
         height: parent.height - 2 * root.pad;
         visible-size: sv.visible-height;
-        content-size: sv.viewport-height;
-        offset: -sv.viewport-y;
-        scroll-to(o) => { sv.viewport-y = -o; }
+        content-size: sv.content-height;
+        offset: -sv.content-y;
+        scroll-to(o) => { sv.content-y = -o; }
     }
 }

@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use crate::ui::grid_rows::write_grid;
+use crate::ui::model_diff::replace_rows;
 use crate::ui::row_match::{self, Needle};
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{Facet, StationSearch};
@@ -28,10 +28,6 @@ use melodia_ui::{AppWindow, Radio, RadioSuggestionRow};
 
 use super::facets::{self, ChipFilter, FacetIndex};
 use super::{RadioTab, RadioUi, browse, mounted_tab};
-
-/// How many pills the row shows. It sits above the grid on one line and does not wrap, so this is
-/// what the line holds rather than a relevance judgement.
-const MAX_SUGGESTIONS: usize = 4;
 
 /// Below this a needle names too much to be a scope — a single letter matches a third of the
 /// country list, and the row would fill with noise while the user is still typing.
@@ -55,7 +51,8 @@ pub(super) struct Suggestion {
     pub count: Option<i64>,
 }
 
-/// Everything the needle could mean besides a name, best first.
+/// Everything the needle could mean besides a name, best first: at most one shape and one match
+/// per facet list, so five at the most.
 ///
 /// `active` is the query already on screen, and it is here to suppress a scope that query is
 /// already filtered by — an offer to do what has been done reads as a filter that failed.
@@ -81,19 +78,18 @@ pub(super) fn suggestions(
     // is still less likely to be what was meant than an exact one on a small facet.
     found.sort_by(|a, b| b.0.cmp(&a.0).then(b.1.count.cmp(&a.1.count)));
 
-    // **The shape leads, and it is the cap that makes that matter.** A facet match is a guess at
-    // what the needle names; a shape is a fact about the needle itself, and for a frequency it is
-    // the only pill that reaches those stations at all.
+    // **The shape leads**, being read first. A facet match is a guess at what the needle names; a
+    // shape is a fact about the needle itself, and for a frequency it is the only pill that
+    // reaches those stations at all.
     let mut out: Vec<Suggestion> = typed_shape(needle, active).into_iter().collect();
     out.extend(found.into_iter().map(|(_, s)| s));
-    out.truncate(MAX_SUGGESTIONS);
     out
 }
 
 /// The one entry of a facet list worth offering, and whether the needle named it exactly.
 ///
 /// One per chip rather than the whole match set: five near-identical country pills say nothing the
-/// chip's own picker does not say better, and the row has four slots for four *kinds* of answer.
+/// chip's own picker does not say better, and each pill in the row is a different *kind* of answer.
 fn best_match(
     needle: &Needle,
     chip: ChipFilter,
@@ -210,7 +206,7 @@ pub(super) fn refresh(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     } else {
         Vec::new()
     };
-    write_grid(&g.get_suggestions(), rows, "radio::suggest");
+    replace_rows(&g.get_suggestions(), rows, "radio::suggest");
 }
 
 /// Whether the page is somewhere a scope pill would mean anything: Browse, with no station page

@@ -54,12 +54,12 @@ export component StationGrid inherits Rectangle {
     callback remove-clicked(RadioStationRow);
 
     // Same sign convention as `TrackList` and the entity grids — a positive `v-offset` is N px
-    // scrolled, where the inner `ListView` holds that as a non-positive `viewport-y`.
+    // scrolled, where the inner `ListView` holds that as a non-positive `content-y`.
     out property <length> v-visible-height: list.visible-height;
-    out property <length> v-viewport-height: list.viewport-height;
-    out property <length> v-offset: -list.viewport-y;
+    out property <length> v-viewport-height: list.content-height;
+    out property <length> v-offset: -list.content-y;
     callback set-v-offset(length);
-    set-v-offset(o) => { list.viewport-y = -o; }
+    set-v-offset(o) => { list.content-y = -o; }
 
     list := ListView {
         vertical-scrollbar-policy: always-off;

@@ -9,11 +9,12 @@ use std::sync::Arc;
 use slint::{ComponentHandle, SharedString, Weak};
 
 use super::{GenresUi, genre_accent, to_slint_genre_row};
-use crate::ui::appearance::theme_apply::color_to_rgb;
+use crate::ui::appearance::rgb::color_to_rgb;
 use crate::ui::detail_view::resolve_view_sort;
 use crate::ui::hero_backdrop::GenreStops;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::track_detail::{DetailCache, TrackDetail, filter, selection};
+use crate::ui::section_state::SectionState;
+use crate::ui::track_detail::{DetailCache, TrackDetail, filter, restore, selection};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
@@ -27,8 +28,14 @@ use melodia_ui::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackLi
 impl TrackDetail for GenresUi {
     type Global = GenreDetail<'static>;
 
+    const TAB: MyLibraryTab = MyLibraryTab::Genres;
+
     fn cache(&self) -> &DetailCache {
         &self.detail
+    }
+
+    fn section(&self) -> &SectionState {
+        &self.section
     }
 }
 
@@ -199,36 +206,34 @@ pub async fn refresh_detail(
         g.set_genre(header);
         crate::ui::hero_chips::publish_genre(&ui, &detail, fold, on_screen);
 
-        // Prune `selected-ids` to ids that still exist, then let the shared filter pass
-        // re-derive the displayed cache and the model from the canonical set. It diffs, so a
-        // scan that touched unrelated files writes back only the rows whose content moved and
-        // keeps the shift-range anchor.
-        selection::prune_selection_to(&g, &tracks);
+        // The shared filter pass re-derives the displayed cache and the model from the canonical
+        // set, and drops from the selection whatever left it. It diffs, so a scan that touched
+        // unrelated files writes back only the rows whose content moved.
         genres_ui.detail.set_all_tracks(tracks);
         filter::apply_filtered_detail(&g, &genres_ui.detail);
     });
     Ok(())
 }
 
-/// Reopen the genre that was visible in the Genre Detail view at the last shutdown, if any. Called
-/// once at startup *after* [`super::install`] so the `GenreDetail` callbacks are already live by
-/// the time `open_genre`'s `upgrade_in_event_loop` lands. No-ops on a missing genre.
+/// Reopen the genre that was visible in the Genre Detail view at the last shutdown, if any: now if
+/// the launch shows the Genres tab, otherwise on that tab's first enter. Called once at startup
+/// *after* [`super::install`] so the `GenreDetail` callbacks are already live by the time
+/// `open_genre`'s `upgrade_in_event_loop` lands. No-ops on a missing genre.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
-    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
-        s.last_detail_ids.get(crate::ui::track_list_view::view_id::GENRE_DETAIL).copied()
-    }) else {
-        return;
-    };
-    // Synchronously, so it is up before `app.show()` — see `AlbumDetail.restoring`.
+    restore::seed_or_defer(ui, state, genres_ui, restore_detail);
+}
+
+/// Reopen a persisted genre, at launch or on the first enter of a tab the launch left hidden.
+pub fn restore_detail(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>, id: i64) {
+    // Synchronously, so it is up before the tab's first frame; see `AlbumDetail.restoring`.
     ui.global::<GenreDetail>().set_restoring(true);
     let s = state.clone();
     let gu = genres_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Above = first-launch fade-down, not a drill-in slide: the user didn't navigate, this is
-        // restoring their last view.
+        // Above, not a drill-in slide: nobody navigated into this genre, it is their last view.
         if let Err(e) = open_genre(&s, &gu, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!("genres::seed_detail_from_settings open_genre({id}): {}", describe(&e));
+            log::warn!("genres::restore_detail open_genre({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_genre`'s own hop so the id is already in: a
         // genre gone since the last session owes the grid back rather than an empty body.

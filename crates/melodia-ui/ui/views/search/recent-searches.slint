@@ -1,29 +1,23 @@
 import { Theme } from "../../theme.slint";
 import { Search } from "../../globals/search.slint";
-import { Wrap } from "../../globals/wrap.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
 // One history chip: the body re-runs the term, the X forgets it. Unexported, as `ChipGroup`'s
 // own `Chip` is — nothing else wants a removable pill.
 component RecentChip inherits Rectangle {
     in property <string> term;
-    // Everything of the chip that isn't its label. An input rather than a constant, because
-    // the packer has to agree with it and one definition is what keeps them agreeing.
-    in property <length> chrome-w;
-    // A ceiling on the chip: uncapped, one pasted query is wider than any row and paints
-    // straight out of the view whatever the wrap decides. Its own name rather than the
-    // built-in `max-width`, which this sets from itself.
-    in property <length> width-cap;
 
     callback picked();
     callback removed();
 
-    property <length> natural-w: min(term-text.preferred-width + root.chrome-w, root.width-cap);
+    // The 20 px close cell, the 4 px either side of it and the 10 px lead inset.
+    property <length> chrome-w: 38px;
+    property <length> natural-w: term-text.preferred-width + root.chrome-w;
 
-    // The three rather than a bound `width`, which is reported as both min and max: the
-    // packer works off an estimate, so a row it packed one chip too full has to compress and
-    // elide rather than paint out of the strip. The floor is the chrome plus one `…`, which
-    // is what `overflow: elide` lowers the label's own minimum to.
+    // The three rather than a bound `width`, which is reported as both min and max: a pasted
+    // query wider than the strip has to shrink to its line and elide rather than paint out of
+    // the view. The floor is the chrome plus one `…`, which is what `overflow: elide` lowers the
+    // label's own minimum to.
     min-width: min(root.chrome-w + term-text.min-width, root.natural-w);
     preferred-width: root.natural-w;
     max-width: root.natural-w;
@@ -36,7 +30,7 @@ component RecentChip inherits Rectangle {
         : Theme.surface0;
     border-width: 1px;
     border-color: Theme.surface2;
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     term-text := Text {
         x: 10px;
@@ -69,7 +63,7 @@ component RecentChip inherits Rectangle {
         background: close-touch.has-hover
             ? Theme.surface2
             : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
         MaterialIcon {
             name: "close";
             icon-size: 14px;
@@ -84,79 +78,54 @@ component RecentChip inherits Rectangle {
 }
 
 // The empty-query state: saved history as removable chips under a "Clear all" affordance.
-// Everything it reads and writes beyond its own width is on `Search`; the mount site gates it
-// on there being history, so it never renders an empty case of its own.
+// Everything it reads and writes is on `Search`; the mount site gates it on there being
+// history, so it never renders an empty case of its own.
 export component RecentSearches inherits VerticalLayout {
-    // The width the chips lay themselves out in. `ChipGroup`'s contract — host owns the
-    // width, component owns the verdict — so this needs no mirror and no `changed` tracker.
-    in property <length> avail-width;
-
-    // The 20 px close cell, the 4 px either side of it and the 10 px lead inset.
-    property <length> chip-chrome-w: 38px;
-
     vertical-stretch: 0;
     spacing: Theme.pad-sm;
-    // Load-bearing, and the half of the wrap that reaches the user: left to the children, the
-    // widest published row merges into a floor nothing can narrow past, so the strip keeps
-    // being handed the width it packed at and clips instead of re-wrapping.
-    min-width: 0px;
+    // Hands out no surplus height: the flex below reports no maximum and stretches its lines by
+    // default, so a column with room to spare would spread the chips apart.
+    alignment: start;
 
     HorizontalLayout {
         alignment: space-between;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("Recent");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 700;
-                letter-spacing: 0.4px;
-            }
+        cross-axis-alignment: center;
+        Text {
+            text: @tr("Recent");
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            letter-spacing: 0.4px;
         }
-        VerticalLayout {
-            alignment: center;
-            clear-target := Rectangle {
-                width: clear-label.preferred-width + 16px;
-                height: 24px;
-                border-radius: self.height / 2;
-                background: clear-touch.has-hover
-                    ? Theme.surface1
-                    : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
-                clear-label := Text {
-                    x: 8px;
-                    y: (parent.height - self.height) / 2;
-                    text: @tr("Clear all");
-                    color: Theme.subtext0;
-                    font-size: Theme.font-size-sm;
-                }
-                clear-touch := TouchArea {
-                    mouse-cursor: pointer;
-                    clicked => { Search.recent-clear(); }
-                }
+        clear-target := Rectangle {
+            width: clear-label.preferred-width + 16px;
+            height: 24px;
+            border-radius: self.height / 2;
+            background: clear-touch.has-hover
+                ? Theme.surface1
+                : transparent;
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+            clear-label := Text {
+                x: 8px;
+                y: (parent.height - self.height) / 2;
+                text: @tr("Clear all");
+                color: Theme.subtext0;
+                font-size: Theme.font-size-sm;
+            }
+            clear-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { Search.recent-clear(); }
             }
         }
     }
 
-    // Slint 1.16 has no wrapping layout and no `Flow`, so Rust packs the history into rows
-    // against the width above. Per chip, not off the widest one: a history of "it" and
-    // "synthwave" is exactly the spread `ChipGroup`'s uniform rows get wrong, and they wrap
-    // at two thirds of the strip.
-    VerticalLayout {
+    FlexboxLayout {
         spacing: Theme.pad-sm;
 
-        for row in Wrap.pack-labels(Search.recent-rows, root.avail-width, root.chip-chrome-w):
-            HorizontalLayout {
-                spacing: Theme.pad-sm;
-                alignment: start;
-
-                for t in row: RecentChip {
-                    term: t;
-                    chrome-w: root.chip-chrome-w;
-                    width-cap: root.avail-width;
-                    picked => { Search.recent-pick(self.term); }
-                    removed => { Search.recent-remove(self.term); }
-                }
-            }
+        for t in Search.recent-rows: RecentChip {
+            term: t;
+            picked => { Search.recent-pick(self.term); }
+            removed => { Search.recent-remove(self.term); }
+        }
     }
 }

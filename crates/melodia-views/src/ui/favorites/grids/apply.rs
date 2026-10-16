@@ -10,7 +10,8 @@ use super::warm::mounted_content;
 use crate::ui::favorites::{
     FavoritesTab, FavoritesUi, tab_from_index, to_slint_fav_artist_row, to_slint_most_played_row,
 };
-use crate::ui::grid_rows::{chunk_entity_rows, write_grid};
+use crate::ui::grid_rows::chunk_entity_rows;
+use crate::ui::model_diff::replace_rows;
 use crate::ui::row_match::most_played_matches;
 use crate::ui::tab_bar::grid_signature;
 use crate::ui::util::len_as_i32;
@@ -125,7 +126,7 @@ pub(super) fn build_filtered_grids(fav_ui: &FavoritesUi) -> PreparedGrids {
 /// emptied these models deliberately. An apply carrying another tab's rows is dropped,
 /// [`build_filtered_grids`] materializing only the mounted tab, so a pick landing in the gap would
 /// empty the grid it just filled. And an apply that would repaint what is already on screen is
-/// dropped, [`write_grid`] being a `set_vec` reset that tears down every mounted card.
+/// dropped, [`replace_rows`] being a `set_vec` reset that tears down every mounted card.
 fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: PreparedGrids) {
     if !fav_ui.section_active() {
         return;
@@ -154,7 +155,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: Prepared
     // The unmounted tab is emptied rather than left pinning a `SharedString` per field of every
     // card behind a tab the user has left. No branch needed: `build_filtered_grids` materialized
     // only the mounted tab, so the other's Vec is already empty.
-    write_grid(
+    replace_rows(
         &g.get_most_played_rows(),
         chunk_entity_rows(prepared.most_played, columns),
         "Favorites.most-played-rows",
@@ -165,7 +166,7 @@ fn write_filtered_grids(ui: &AppWindow, fav_ui: &FavoritesUi, prepared: Prepared
         .iter()
         .map(|a| to_slint_fav_artist_row(a, g.invoke_artist_favorite_subtitle(a.favorite_count)))
         .collect();
-    write_grid(
+    replace_rows(
         &g.get_artist_rows(),
         chunk_entity_rows(artist_rows, columns),
         "Favorites.artist-rows",

@@ -358,6 +358,14 @@ impl ScrobbleService {
         self.notify.notified().await;
     }
 
+    /// Whether a now-playing or a listen would reach any provider right now: the cheap gate the
+    /// detector checks before its per-track row read, as [`Self::love_sync_active`] is for
+    /// favorites.
+    pub fn scrobbling_active(&self) -> bool {
+        let runtime = self.runtime.read();
+        runtime.lastfm_scrobble_ready() || runtime.listenbrainz_scrobble_ready()
+    }
+
     /// Fire-and-forget "now playing" to every connected + enabled provider.
     /// Ephemeral — never queued or retried, since a missed update is
     /// inconsequential. Reads the shadow synchronously (never held across

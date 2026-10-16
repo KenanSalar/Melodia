@@ -10,11 +10,12 @@ use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
+use crate::ui::list_selection::NO_ANCHOR;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::TrackDetail;
+use crate::ui::track_detail::{TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
@@ -25,12 +26,6 @@ use melodia_ui::{
 /// Wire the Artists section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     artists_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Artists));
-    // See the matching seed in `albums/lifecycle.rs`: a boot pre-fetch for a
-    // section that isn't on screen can't publish the shared hero globals, so
-    // its first enter has to re-fetch rather than take the cheap path.
-    if !artists_ui.section_active() {
-        artists_ui.mark_dirty();
-    }
     wire_section_gate(ui, state, artists_ui);
     install_library_refresher(ui, state, artists_ui);
 }
@@ -66,12 +61,13 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsU
             clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "artists: clear detail tracks");
             clear_vec_model::<UiAlbumRow>(&d.get_albums(), "artists: clear detail albums");
             clear_vec_model::<i32>(&d.get_selected_ids(), "artists: clear detail selection");
-            d.set_selection_anchor(-1);
+            d.set_selection_anchor(NO_ANCHOR);
             // The card grid's set goes back with the models it describes;
             // `card-selection.slint` argues why it cannot outlive the leave.
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
+            restore::resume_deferred(&weak, &s, &au, artists_ui_mod::restore_detail);
             s.runtime.spawn(reenter(s.clone(), au.clone(), weak.clone()));
         } else {
             let au = au.clone();

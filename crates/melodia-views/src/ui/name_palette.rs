@@ -6,8 +6,8 @@
 //! composes its own stops on top. [`crate::ui::genres::genre_accent`] and
 //! [`crate::ui::radio::station_tile`] are those two.
 //!
-//! [`hash_name`] is value-identical to the Tauri build's hash and may not change: a genre's colour
-//! is the same colour across the port only because of that.
+//! [`hash_name`] may not change: it is the only thing keeping each genre the colour its users
+//! already know from one release to the next.
 
 use slint::Color;
 
@@ -15,7 +15,7 @@ use slint::Color;
 ///
 /// `wrapping_*` mimics the JS `| 0` 32-bit truncation; `.unsigned_abs()` mirrors `Math.abs(i32)`
 /// (handling the `-2^31` corner where regular `.abs()` would overflow). UTF-16 iteration matches
-/// JS `charCodeAt(i)` exactly, so a non-ASCII name hashes to the value Tauri produced.
+/// JS `charCodeAt(i)` exactly, which a non-ASCII name's colour depends on.
 pub fn hash_name(name: &str) -> u32 {
     let mut hash: i32 = 0;
     for unit in name.encode_utf16() {

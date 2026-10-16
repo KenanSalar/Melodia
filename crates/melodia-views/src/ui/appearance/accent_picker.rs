@@ -9,7 +9,8 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use slint::{Brush, ComponentHandle, SharedString};
 
-use super::theme_apply::{accent_brushes, brush};
+use super::rgb::brush;
+use super::theme_apply::accent_brushes;
 use melodia_app::state::AppState;
 use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings};

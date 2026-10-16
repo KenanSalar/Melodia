@@ -1,6 +1,10 @@
-//! Material 3 theme: 2 variants (Dark / Light), 8 accents. Static palette
-//! only — the dynamic-from-album-art "Color Style" feature is deferred.
-//! Ported verbatim from `Melodia-tauri/src/themes/material3.ts`.
+//! Material 3 theme: 2 variants (Dark / Light), 8 accents.
+//!
+//! The two variants are generated rather than picked: each is
+//! `media::image::material_you::generate_palette` over the M3 baseline seed `#6750a4` (the Purple
+//! accent's light value) in Tonal Spot, at the colour spec that module pins. So before any artwork
+//! lands, Material You's Tonal Spot paints exactly this. The accents are key colours, which the
+//! spec doesn't define, so they stay as picked.
 
 #![allow(clippy::unreadable_literal)]
 
@@ -22,39 +26,39 @@ pub const LIGHT_GREEN: u32 = 0x1b6d2f;
 pub const LIGHT_YELLOW: u32 = 0xc69a17;
 
 const DARK: Palette = Palette {
-    base: 0x141218,
-    mantle: 0x1d1b20,
-    crust: 0x0f0d13,
-    surface0: 0x2b2930,
-    surface1: 0x36343b,
-    surface2: 0x413f46,
-    overlay0: 0x49454f,
-    overlay1: 0x79747e,
-    overlay2: 0x938f99,
-    text: 0xe6e0e9,
-    subtext0: 0xcac4d0,
-    subtext1: 0x938f99,
-    border: 0x36343b,
-    red: 0xffb4ab,
+    base: 0x0f0d12,
+    mantle: 0x141218,
+    crust: 0x0f0d12,
+    surface0: 0x211e26,
+    surface1: 0x27242d,
+    surface2: 0x4f4b55,
+    overlay0: 0x4a4650,
+    overlay1: 0x78737e,
+    overlay2: 0xaea9b4,
+    text: 0xeae3ef,
+    subtext0: 0xccc6d1,
+    subtext1: 0x78737e,
+    border: 0x27242d,
+    red: 0xf97386,
     yellow: DARK_YELLOW,
     green: DARK_GREEN,
 };
 
 const LIGHT: Palette = Palette {
-    base: 0xfef7ff,
-    mantle: 0xf7f2fa,
-    crust: 0xf3edf7,
+    base: 0xfdf7fe,
+    mantle: 0xf8f1fa,
+    crust: 0xded8e4,
     surface0: 0xece6f0,
-    surface1: 0xe4dfe8,
-    surface2: 0xddd8e0,
-    overlay0: 0xcac4d0,
-    overlay1: 0x938f99,
-    overlay2: 0x79747e,
-    text: 0x1d1b20,
-    subtext0: 0x49454f,
-    subtext1: 0x79747e,
-    border: 0xcac4d0,
-    red: 0xb3261e,
+    surface1: 0xe7e0ec,
+    surface2: 0xb2acb7,
+    overlay0: 0xb5b0bb,
+    overlay1: 0x7d7983,
+    overlay2: 0x615d68,
+    text: 0x34313a,
+    subtext0: 0x4a4751,
+    subtext1: 0x7d7983,
+    border: 0xe7e0ec,
+    red: 0xa8364b,
     yellow: LIGHT_YELLOW,
     green: LIGHT_GREEN,
 };

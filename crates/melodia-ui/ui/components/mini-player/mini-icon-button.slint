@@ -54,7 +54,7 @@ export global MiniSizes {
 // Every arm steps, and `IconButton` eases the step itself at the view's repaint pace: easing them
 // out here as well would restart its curve on every frame of this one.
 export component MiniIconButton inherits IconButton {
-    private property <bool> on-backdrop: MiniPlayer.backdrop-shown;
+    on-backdrop: MiniPlayer.backdrop-shown;
 
     press-shrink: true;
     diameter: 28px;

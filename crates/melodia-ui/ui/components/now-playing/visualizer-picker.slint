@@ -1,6 +1,5 @@
 import { Theme } from "../../theme.slint";
 import { Visualizer } from "../../globals/audio.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 import { TooltipSide } from "../tooltip.slint";
 import { AccentGlyphButton } from "./accent-glyph-button.slint";
@@ -23,17 +22,12 @@ export component VisualizerPicker inherits Rectangle {
         FlyoutMetrics.option-row-h * (VizStylePresets.viz-style-names.length + 1)
         + FlyoutMetrics.chrome-h;
 
-    function dismiss() {
-        pop.close();
-        PopupHighlight.id = "";
-    }
-
     btn := AccentGlyphButton {
         icon: "bar_chart";
         filled: Visualizer.enabled;
         // **The open state has nowhere else to go**: a bare glyph has no disc for `force-bg` to
         // light, so being lit covers both "drawing" and "picking".
-        active: Visualizer.enabled || PopupHighlight.id == "np-visualizer";
+        active: Visualizer.enabled || pop.is-open;
         // The words the menu row spelled, this row having space for a glyph and no more.
         tooltip-text: @tr("Visualizer");
         // This row is the panel's top edge, so an above-pill is cut off by it, and near enough its
@@ -42,7 +36,6 @@ export component VisualizerPicker inherits Rectangle {
         tooltip-side: TooltipSide.below;
         tooltip-align-end: true;
         clicked => {
-            PopupHighlight.id = "np-visualizer";
             pop.show();
         }
     }
@@ -56,9 +49,9 @@ export component VisualizerPicker inherits Rectangle {
         height: root.flyout-h;
         close-policy: close-on-click-outside;
 
-        if PopupHighlight.id == "np-visualizer": FocusLossWatcher {
+        FocusLossWatcher {
             close => {
-                root.dismiss();
+                pop.close();
             }
         }
 
@@ -80,7 +73,7 @@ export component VisualizerPicker inherits Rectangle {
                     }
                     Visualizer.set-style(i);
                 }
-                root.dismiss();
+                pop.close();
             }
         }
     }

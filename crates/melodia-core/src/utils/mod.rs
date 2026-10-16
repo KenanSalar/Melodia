@@ -17,6 +17,11 @@ pub fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
 }
 
+/// Seconds since the Unix epoch.
+pub fn now_unix() -> i64 {
+    chrono::Utc::now().timestamp()
+}
+
 /// Cross-platform `canonicalize` that avoids the Windows verbatim
 /// (`\\?\C:\...`) form. On Windows we route through `dunce::canonicalize`
 /// — it strips the `\\?\` prefix whenever the resolved path fits in

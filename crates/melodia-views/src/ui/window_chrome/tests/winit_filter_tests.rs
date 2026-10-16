@@ -1,42 +1,35 @@
 use super::*;
 use melodia_testkit::{block_after, strip_line_comments};
 
-// Every mouse wheel on every platform, and a touchpad on X11 and Win32.
+// The sideways case is a card strip under Search's vertical outer scroller,
+// which Slint now routes by axis on its own.
 #[test]
 fn a_wheel_is_left_to_slint() {
-    assert_eq!(route_wheel(false, false, TouchPhase::Moved, 0.0, -60.0), WheelRoute::Native);
-    assert_eq!(route_wheel(false, false, TouchPhase::Ended, 0.0, 0.0), WheelRoute::Native);
+    assert_eq!(route_wheel(false, false, 0.0, -60.0), WheelRoute::Native);
+    assert_eq!(route_wheel(false, false, -12.0, 0.0), WheelRoute::Native);
+    assert_eq!(route_wheel(false, false, 0.0, 0.0), WheelRoute::Native);
 }
 
-// Only the phase decides. Gating on the delta too would leave the horizontal
-// half, a card strip under Search's vertical outer scroller, captured and
-// ignored exactly as before.
+// A composite view drives its own math off the raw delta, a touchpad's and a
+// notch's alike.
 #[test]
-fn a_touchpad_gesture_start_is_unphased_on_both_axes() {
-    assert_eq!(route_wheel(false, false, TouchPhase::Started, 0.0, -8.0), WheelRoute::Unphased);
-    assert_eq!(route_wheel(false, false, TouchPhase::Started, -12.0, 0.0), WheelRoute::Unphased);
+fn a_vertical_wheel_over_a_composite_region_is_composite() {
+    assert_eq!(route_wheel(true, false, 0.0, -8.0), WheelRoute::Composite);
+    assert_eq!(route_wheel(true, false, 0.0, -60.0), WheelRoute::Composite);
 }
 
-// A composite view drives its own math off the raw delta and wants the gesture
-// whole, phases and all.
+// `hovered` can be left stale under an overlay, whose own scrollers want the
+// wheel.
 #[test]
-fn a_composite_region_still_takes_the_gesture_start() {
-    assert_eq!(route_wheel(true, false, TouchPhase::Started, 0.0, -8.0), WheelRoute::Composite);
-    assert_eq!(route_wheel(true, false, TouchPhase::Moved, 0.0, -60.0), WheelRoute::Composite);
-}
-
-// The overlay has scrollers of its own, nested the same way, so a released
-// gesture still owes normalizing.
-#[test]
-fn an_overlay_releases_the_composite_arm_without_releasing_the_gesture() {
-    assert_eq!(route_wheel(true, true, TouchPhase::Started, 0.0, -8.0), WheelRoute::Unphased);
-    assert_eq!(route_wheel(true, true, TouchPhase::Moved, 0.0, -60.0), WheelRoute::Native);
+fn an_overlay_releases_the_composite_arm() {
+    assert_eq!(route_wheel(true, true, 0.0, -8.0), WheelRoute::Native);
+    assert_eq!(route_wheel(true, true, 0.0, -60.0), WheelRoute::Native);
 }
 
 #[test]
 fn a_horizontal_wheel_is_not_composite() {
-    assert_eq!(route_wheel(true, false, TouchPhase::Moved, -60.0, 0.0), WheelRoute::Native);
-    assert_eq!(route_wheel(true, false, TouchPhase::Moved, -60.0, 20.0), WheelRoute::Native);
+    assert_eq!(route_wheel(true, false, -60.0, 0.0), WheelRoute::Native);
+    assert_eq!(route_wheel(true, false, -60.0, 20.0), WheelRoute::Native);
 }
 
 /// The filter's own source, comments stripped — what the arm walks below read.

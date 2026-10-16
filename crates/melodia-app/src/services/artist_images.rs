@@ -1,50 +1,80 @@
-use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
 use std::time::Duration;
-
-use parking_lot::Mutex;
 
 use melodia_artwork::media::image::artwork;
 use melodia_core::config::Paths;
 use melodia_core::error::describe;
 use melodia_core::error::{AppError, AppResult};
+use melodia_core::utils::now_unix;
 use melodia_net::media::fetch::deezer::{self, DeezerAnswer};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 
-/// Session-scoped negative memo: artist ids whose Deezer search returned a
-/// definitive "no match" this session. `spawn_fetch` runs after every scan
-/// completion, so without this every image-less artist is re-queried over
-/// the network per scan — and the answer won't change until tags change
-/// (which usually creates new artist rows anyway). Transient failures
-/// (transport/HTTP errors, failed downloads) are deliberately NOT memoized
-/// so a later scan retries them. Cleared only by process restart; bounded
-/// by the artist-table size (bare `i64`s).
-fn attempted_no_match() -> &'static Mutex<HashSet<i64>> {
-    static ATTEMPTED: OnceLock<Mutex<HashSet<i64>>> = OnceLock::new();
-    ATTEMPTED.get_or_init(|| Mutex::new(HashSet::new()))
-}
+use crate::state::{AppState, Signal};
+
+/// How long a definitive "no match" stands before the artist is searched again.
+///
+/// Recorded on the artist's row rather than in memory: `spawn_fetch` runs after every scan, a
+/// launch's no-change re-scan included, so a per-session record would search every artist the
+/// directory doesn't know again on each launch. It lapses because the directory keeps adding
+/// artists.
+const NO_MATCH_RETRY_AFTER: Duration = Duration::from_hours(30 * 24);
 
 /// Per-artist result of one Deezer round-trip.
 enum FetchOutcome {
     /// Image found, downloaded, and cached at this path.
     Cached(String),
-    /// Deezer answered definitively with no usable result — memoized.
+    /// Deezer answered definitively with no usable result, recorded for
+    /// [`NO_MATCH_RETRY_AFTER`].
     NoMatch,
     /// Transport/HTTP/download failure — retry on a later scan. Also where a
     /// Deezer error code that isn't [`deezer::halts_a_batch`] lands: those answer
     /// the query rather than the pace, so the pass keeps going and the answer is
-    /// deliberately not memoized. A name that reliably draws one therefore costs
-    /// a request per scan for the session, which is the right way round —
-    /// memoizing would strand a genuinely transient failure for just as long, and
-    /// it is one request either way.
+    /// deliberately not recorded. A name that reliably draws one therefore costs
+    /// a request per scan, which is the right way round: recording it would
+    /// strand a genuinely transient failure for the whole retry window, and it is
+    /// one request either way.
     Transient,
     /// Deezer refused the search itself, carrying its own reason. In practice a
     /// tripped quota, which the remaining batches would spend on refusals too —
-    /// so this stops the pass. Nothing is memoized, so the next scan retries.
+    /// so this stops the pass. Nothing is recorded, so the next scan retries.
     Refused(String),
+}
+
+/// What a search's answer leaves the pass to do for one artist.
+enum Searched {
+    /// An image to download.
+    Found(String),
+    /// Nothing to download, for this reason.
+    Settled(FetchOutcome),
+}
+
+/// Reads Deezer's answer to the search for `name`. Only a definitive "no match" becomes
+/// [`FetchOutcome::NoMatch`], the one answer recorded for the retry window, so a misfiled arm
+/// blanks an artist for a month rather than for a scan.
+fn judge(name: &str, answer: AppResult<DeezerAnswer<String>>) -> Searched {
+    match answer {
+        Ok(DeezerAnswer::Body(Some(url))) => Searched::Found(url),
+        Ok(DeezerAnswer::Body(None)) => Searched::Settled(FetchOutcome::NoMatch),
+        Ok(DeezerAnswer::HttpStatus(status)) => {
+            log::warn!("Deezer answered HTTP {status} searching for '{name}'");
+            Searched::Settled(FetchOutcome::Transient)
+        }
+        Ok(DeezerAnswer::ApiError { message, code }) => {
+            let reason = format!("{message} (code {code})");
+            if deezer::halts_a_batch(code) {
+                return Searched::Settled(FetchOutcome::Refused(reason));
+            }
+            log::warn!("Deezer refused the search for '{name}': {reason}");
+            Searched::Settled(FetchOutcome::Transient)
+        }
+        Err(e) => {
+            log::warn!("Deezer search failed for '{name}': {}", describe(&e));
+            Searched::Settled(FetchOutcome::Transient)
+        }
+    }
 }
 
 /// Deezer's ceiling is 50 requests per 5 s per IP, and the Discord presence path
@@ -114,14 +144,33 @@ pub async fn fetch_artist_images(
         return Ok(0);
     }
     let _guard = PassGuard;
+    run_passes(&PASS_REQUESTED_AGAIN, || run_pass(paths, db, client)).await
+}
 
+/// Runs `pass` until one halts or no request landed while it ran, answering with every image the
+/// passes stored.
+///
+/// A re-run that fails still answers with what the passes before it stored: those images are in
+/// the database, and the bump the caller makes for them is the only thing that repaints the lists.
+async fn run_passes<Pass, Run>(requested_again: &AtomicBool, mut pass: Pass) -> AppResult<u32>
+where
+    Pass: FnMut() -> Run,
+    Run: Future<Output = AppResult<PassOutcome>>,
+{
     let mut fetched_total: u32 = 0;
     loop {
-        PASS_REQUESTED_AGAIN.store(false, Ordering::Release);
-        let outcome = run_pass(paths, db, client).await?;
+        requested_again.store(false, Ordering::Release);
+        let outcome = match pass().await {
+            Ok(outcome) => outcome,
+            Err(e) if fetched_total > 0 => {
+                log::warn!("Artist image re-run failed: {}", describe(&e));
+                return Ok(fetched_total);
+            }
+            Err(e) => return Err(e),
+        };
         fetched_total = fetched_total.saturating_add(outcome.fetched);
 
-        if outcome.halted || !PASS_REQUESTED_AGAIN.load(Ordering::Acquire) {
+        if outcome.halted || !requested_again.load(Ordering::Acquire) {
             return Ok(fetched_total);
         }
         log::debug!("artist image fetch: re-running for a scan that landed mid-pass");
@@ -133,11 +182,9 @@ pub async fn fetch_artist_images(
 /// Runs one [`BATCH_SIZE`] batch of concurrent searches per [`BATCH_INTERVAL`],
 /// and abandons the rest if Deezer refuses on a code that says to stop asking.
 async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppResult<PassOutcome> {
-    let mut artists = queries::artist::get_artists_without_images(db).await?;
-    {
-        let attempted = attempted_no_match().lock();
-        artists.retain(|a| !attempted.contains(&a.id));
-    }
+    let now = now_unix();
+    let missed_before = now.saturating_sub_unsigned(NO_MATCH_RETRY_AFTER.as_secs());
+    let artists = queries::artist::get_artists_without_images(db, missed_before).await?;
     if artists.is_empty() {
         return Ok(PassOutcome { fetched: 0, halted: false });
     }
@@ -160,25 +207,10 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
             let dir = artists_dir.clone();
 
             set.spawn(async move {
-                let url = match deezer::search_artist_image_url(&client, &name).await {
-                    Ok(DeezerAnswer::Body(Some(url))) => url,
-                    Ok(DeezerAnswer::Body(None)) => return (id, name, FetchOutcome::NoMatch),
-                    Ok(DeezerAnswer::HttpStatus(status)) => {
-                        log::warn!("Deezer answered HTTP {status} searching for '{name}'");
-                        return (id, name, FetchOutcome::Transient);
-                    }
-                    Ok(DeezerAnswer::ApiError { message, code }) => {
-                        let reason = format!("{message} (code {code})");
-                        if deezer::halts_a_batch(code) {
-                            return (id, name, FetchOutcome::Refused(reason));
-                        }
-                        log::warn!("Deezer refused the search for '{name}': {reason}");
-                        return (id, name, FetchOutcome::Transient);
-                    }
-                    Err(e) => {
-                        log::warn!("Deezer search failed for '{name}': {}", describe(&e));
-                        return (id, name, FetchOutcome::Transient);
-                    }
+                let answer = deezer::search_artist_image_url(&client, &name).await;
+                let url = match judge(&name, answer) {
+                    Searched::Found(url) => url,
+                    Searched::Settled(outcome) => return (id, name, outcome),
                 };
 
                 match download_and_store(&client, &url, dir).await {
@@ -198,6 +230,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
         // refusal rather than five identical warnings.
         let mut refusal: Option<String> = None;
         let mut refused = 0usize;
+        let mut missed: Vec<i64> = Vec::with_capacity(batch.len());
 
         while let Some(result) = set.join_next().await {
             match result {
@@ -211,9 +244,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
                         fetched_count += 1;
                     }
                 }
-                Ok((id, _name, FetchOutcome::NoMatch)) => {
-                    attempted_no_match().lock().insert(id);
-                }
+                Ok((id, _name, FetchOutcome::NoMatch)) => missed.push(id),
                 Ok((_id, _name, FetchOutcome::Transient)) => {}
                 Ok((_id, _name, FetchOutcome::Refused(reason))) => {
                     refused += 1;
@@ -221,6 +252,10 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
                 }
                 Err(e) => log::error!("Artist image fetch task failed: {}", describe(&e)),
             }
+        }
+
+        if let Err(e) = queries::artist::mark_image_search_missed(db, &missed, now).await {
+            log::warn!("Failed to record artist image misses: {}", describe(&e));
         }
 
         // Refusals don't count: Deezer declined to answer for those, so they sit
@@ -238,8 +273,6 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
         }
     }
 
-    // Fetched images land in the DB but nothing signals the UI, so a grid
-    // that's already painted won't pick them up until its next refresh.
     Ok(PassOutcome { fetched: fetched_count, halted })
 }
 
@@ -260,13 +293,28 @@ async fn download_and_store(
 }
 
 /// Spawn a background task to fetch artist images. Fire-and-forget.
-/// `client` is the shared client from `AppState::http_client()`.
-pub fn spawn_fetch(paths: Arc<Paths>, db: DbPool, client: reqwest::Client) {
-    tokio::spawn(async move {
-        if let Err(e) = fetch_artist_images(&paths, &db, &client).await {
-            log::warn!("Background artist image fetch failed: {}", describe(&e));
-        }
-    });
+pub fn spawn_fetch(state: &AppState) {
+    let paths = Arc::clone(&state.paths);
+    let db = state.db.clone();
+    let client = state.http_client().clone();
+    let library_changed = state.library_changed.clone();
+    tokio::spawn(async move { fetch_and_announce(&paths, &db, &client, &library_changed).await });
+}
+
+/// A pass, and one bump of `library_changed` if it stored any image. Nothing else tells a painted
+/// Artists grid its rows now have one, and the pass outlives the scan whose bump it would
+/// otherwise have to ride.
+async fn fetch_and_announce(
+    paths: &Paths,
+    db: &DbPool,
+    client: &reqwest::Client,
+    library_changed: &Signal,
+) {
+    match fetch_artist_images(paths, db, client).await {
+        Ok(0) => {}
+        Ok(_) => library_changed.bump(),
+        Err(e) => log::warn!("Background artist image fetch failed: {}", describe(&e)),
+    }
 }
 
 #[cfg(test)]

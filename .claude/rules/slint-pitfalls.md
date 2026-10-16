@@ -19,16 +19,17 @@ this file is what builds, looks right, and is wrong.
   A zero-width clip is a tempting way to hide something while keeping its ids readable, but the
   clip applies while the box is open too, and a box sized to its content leaves no room for what a
   control paints outside its own geometry: a focus swell, a drop shadow, a tooltip. It bit the
-  shared tab header's search box, whose swollen ends were shaved flat and whose focus shadow was
-  cut into a box. Collapse through `visible` instead: `passes/visible.rs` lowers it to a `Clip`
+  shared tab header's search box, whose swollen ends were shaved flat. Collapse through `visible`
+  instead: `passes/visible.rs` lowers it to a `Clip`
   whose `clip` is `!visible`, so the element is clipped only while hidden, and hidden it draws
   nothing and takes no events. Layouts are lowered before that pass, so the element's own width
   constraints still collapse it (`tab-search-header.slint`).
 
 - **Don't `animate` a property driven by both toggle and continuous input** (drag micro-updates
-  get full easing → spongy). Gate duration on bool:
-  `animate width { duration: is-dragging ? 0ms : 250ms; }`. Boolean ternaries safe; #7999 only
-  fires on array/list calcs.
+  get full easing → spongy). Switch the ease off for the drag and keep the token:
+  `animate width { duration: Theme.dur-med; enabled: !Nav.sidebar-dragging; }`. A disabled
+  animation lands on its target at once, imperative writes included (`layout/sidebar.slint`,
+  `tab-bar.slint`'s `compact-t`).
 
 - **An animated property with a *binding* restarts whenever a dependency is marked dirty — not
   when its value changes.** `AnimatedBindingCallable::mark_dirty`
@@ -67,9 +68,9 @@ this file is what builds, looks right, and is wrong.
   old and new `ModelRc` **by pointer**, so a callback building a fresh model per call drops and
   rebuilds the whole repeater, trackers and tooltip layers included. Symptom: a page that stutters
   through a resize drag while nothing on it visibly changes, because every width feeding an argument
-  re-ran the call. Cure: hand back the *same* `ModelRc` for the same answer. `ui::chips::IndexRows`
-  memoizes the settings strips by row shape, and `ui::chips::PackedLabels` does the same for
-  `Wrap.pack-labels` behind Recent Searches, keyed on the labels and the split they packed into.
+  re-ran the call. Cure: hand back the *same* `ModelRc` for the same answer, or better, keep the
+  model flat and let a layout do what the callback was computing, which is why the chip strips are
+  `FlexboxLayout`s over one list rather than rows split for them.
 
 - **A shared component may not `animate` a brush its host hands it — it cannot tell an eased
   input from a stepped one, so it eases a *float* and lets the brush track its source.** A host
@@ -87,7 +88,8 @@ this file is what builds, looks right, and is wrong.
   layers at `t` and `1 - t` composite to three quarters coverage at the midpoint and the text
   thins; keep them identical in everything but colour or the crossing ghosts. The exemption is the
   opposite case — a host that never eases what it hands over, hence `icon-button.slint`'s two
-  `animate`s. Pinned by `ui::tab_bar::tests::`
+  `animate`s, which stand down for the one writer that does step their defaults, the palette fade
+  below. Pinned by `ui::tab_bar::tests::`
   `{the_cell_eases_floats_and_never_a_brush, the_selected_colour_crosses_over_two_matched_layers}`.
   **The mirror image bites the host**: a layer may not ease *out of* a value nothing was painting.
   `HeroBackdrop` is held across a My Library tab leave, so a mirror bound to it unconditionally
@@ -96,15 +98,28 @@ this file is what builds, looks right, and is wrong.
   (`root.detail-open ? <tier> : <idle token>`), suppressing the ease on the right frame being
   impossible when the colour and the id land in the same tick. See `ui-patterns.md`.
 
+- **`Theme`'s palette brushes are stepped every frame while one Material You palette fades into the
+  next, so an `animate` whose binding can read one carries `enabled: !Theme.recoloring`.** Slint
+  can't animate a global, so `ui::appearance::theme_paint` writes a blend each frame and holds
+  `Theme.recoloring` up for the fade. An ungated `animate` on a palette brush restarts on every
+  write and lands after the window: the entry above, at the scale of the whole window. Disabled, it
+  takes each written value as it comes and so rides the fade. **"Can read" includes a defaulted
+  input**: `IconButton`, `OverlayScrollbar`, `ToggleSwitch` and `StarRating` ease brushes their
+  hosts hand over, and every one of those defaults to a `Theme` token. A float, an `np-*` or
+  `HeroBackdrop` tier Rust writes once a solve, and a `states` transition, whose timeline survives
+  the dirt, need no gate. Where one binding switches between the two kinds, gate on the switch:
+  `library-tab-band.slint`'s mirrors take `root.detail-open || !Theme.recoloring`, and the
+  miniplayer's mirrors and those four leaves `root.on-backdrop || !Theme.recoloring`, so a hero or
+  backdrop tier keeps easing through a fade. A leaf can't see which kind it was handed, so a host
+  passing it a tier sets its `on-backdrop`. Missing, either gate shows only during a fade: an
+  ungated control settles after the rest, and a tier-fed leaf left unset jumps ahead of it.
+
 - **Drag handles inside resized element need absolute coords.** Snapshot
   `start_abs = self.absolute-position.x + self.pressed-x` on `down`, then
   `parent.width = clamp(start_w + (self.absolute-position.x + self.mouse-x - start_abs), ...)`.
 
 - **Material Symbols glyphs need a collapsed line-box.** `Text` defaults to ~1.2× `font-size`;
   pin inside fixed `icon-size × icon-size` Rectangle. `MaterialIcon` does this.
-
-- **Fixed-width children don't center in a wider `VerticalLayout`.** Let column track child's
-  natural width, or wrap in `HorizontalLayout { alignment: center; … }`.
 
 - **`parent` not accessible from component's root binding.** Take host metric as explicit
   `in property <length> host-width;`.
@@ -133,8 +148,8 @@ this file is what builds, looks right, and is wrong.
   body; sibling `ListView` renders 0 rows. Pin fixed-size rows with `min-height` + `max-height` +
   `vertical-stretch: 0`. Never `height/width: 100%` on layout child.
 
-- **Nested ScrollView + ListView need `viewport-height: self.height` on outer.** Reverse: lock
-  `viewport-width: self.width`.
+- **Nested ScrollView + ListView need `content-height: self.height` on outer.** Reverse: lock
+  `content-width: self.width`.
 
 - **A nested `ListView` swallows the mouse wheel at its scroll edge — it never bubbles to an outer
   `ScrollView`** (`flickable.rs::process_wheel_event` returns `EventAccepted` at the edge during
@@ -165,22 +180,6 @@ this file is what builds, looks right, and is wrong.
   scroller per tab with plain `OverlayScrollbar`s is the way out. The two mounts left are where
   the upper section is a header the list belongs under, not a peer view: `browse-view.slint` and
   `ArtistDetailBody`.
-
-- **A `Flickable` claims a whole *gesture* on `TouchPhase::Started`, whatever direction it is
-  going — so a touchpad scrolls where a wheel does not.** `flickable.rs`'s filter returns
-  `Intercept` for that phase unconditionally and `process_wheel_event` sets `capture_events` with
-  no `is_allowed_scroll_direction` call, so the *outermost* `Flickable` under the pointer owns
-  every event until `Ended` — its `Moved`/`Cancelled` arms do check direction, which is the whole
-  of why a wheel behaves. **Only a precision device sends the phase**: Wayland folds a discrete
-  axis to `Moved`, X11 and Win32 send nothing else — Wayland and macOS only, invisible to a mouse.
-  Bites any scroller nested in another on a crossing axis: a card strip under Search's vertical
-  outer scroller never sees a sideways swipe. Cure in `winit_filter.rs`'s `route_wheel`:
-  swallow the native `Started` and re-send its delta through
-  `Window::try_dispatch_event(PointerScrolled)`, which lands as a one-shot `Cancelled` and leaves
-  the capture flag unset for the rest of the gesture. **Ungated on purpose** — it reads no view
-  state, so a new nested scroller is covered without owing a sentinel or a `reset()`. It costs
-  Slint's kinetic fling, gated on that same flag. `MouseWheel` carries no position, hence the
-  `CursorMoved` mirror beside it.
 
 - **The same `Flickable` steals a *mouse* drag wherever it is interactive, and there the cure is
   per-list: `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture and only one
@@ -276,32 +275,112 @@ this file is what builds, looks right, and is wrong.
   **A `min-height` beside it makes this survivable and therefore invisible**: `MetaChipStrip`
   shipped as `Rectangle { min-height: 26px; if show-rows: VerticalLayout { … } }`, reported
   `preferred: 0`, took its 26 px floor, and drew every wrapped row *outside* the box — only wrong
-  once content wraps, i.e. a narrow window or a long-plural locale. **And the wrapper owes a
-  `min-width: 0px`** — a layout child folds in *both* orientations, and `layout_items` never
-  shrinks a cell past its `min`, so a strip that chunks itself against the width it is handed
-  reports the old width back, never learns there is less room, and clips instead of wrapping. An
-  explicit `min-width` **replaces** the merged constraint rather than maxing with it, so one line
-  is the whole cure (`settings/chip-group.slint` carries it against a hidden ruler). Nothing
-  higher up saves you: the same replacement happens on the root `Window`. Pinned by
-  `ui::hero_chips::tests::{the_strip_rows_hang_off_a_layout_not_off_the_root,`
-  `the_strip_leaks_no_width_floor}`.
+  once content wraps, i.e. a narrow window or a long-plural locale. The wrapper is also the one
+  thing outside the `if` the root can read its height off, an id inside an `if` being unreadable
+  from out there. **Not for a flex**, which inside an `if` answers at the wrong width (the entry
+  on a flex inside an `if`, below). **The fold runs in *both* orientations**, and `layout_items`
+  never shrinks a cell past its `min`, so a wrapper's `min-width` becomes a floor under whatever
+  holds the root. An explicit `min-width` **replaces** the merged constraint rather than maxing
+  with it, so one line is the whole cure (`settings/chip-group.slint`, whose flex would otherwise
+  floor the card at its widest chip). Nothing higher up saves you: the same replacement happens on
+  the root `Window`.
+
+- **A box layout holds a stretched child to that child's own `min`/`max` on the cross axis, and the
+  std `ScrollView` floors itself at 50 px.** `clamp_cross_stretch_size` (`passes/lower_layout.rs`)
+  wraps the column's width in the child's explicit constraints, where 1.16 handed the column over
+  as is. So a std scroller (`ListView` included, which inherits the floor) in a narrower column
+  overflows it, and everything sized off its `content-width` goes too: the collapsed sidebar's rows
+  drew their fill past the rail. A wide column never shows it and nothing warns. Cure:
+  `min-width: 0px` at the mount, which replaces the widget's own (`layout/sidebar.slint`'s
+  `nav-scroll`). Tell: `.max (50f64` on the binding in `app-window.rs`.
+
+- **A sized cell of a box layout sits at the start of the cross axis, and centring it moves every
+  cell of that layout onto another solve.** On the plain path a cell is stretched and clamped to
+  its explicit constraints (the entry above), which pins a fixed one to the start edge.
+  `cross-axis-alignment: center` on the layout, or `cross-axis-self-alignment: center` on one cell,
+  sends the whole layout through `solve_box_layout_ortho` (`i-slint-core/layout.rs`), and three
+  things change with it:
+  - **A stretched sibling is clamped to its implicit min/max too**, so a cell that has to fill the
+    row stops at whatever max its contents report. Self-align only where every stretched sibling's
+    max is unbounded: a `Text` or `TextInput`, a `Rectangle` whose children are all `if`s, a layout
+    of such cells. Otherwise the row stays on the plain path and keeps its wrappers
+    (`queue-row-item.slint`, whose duration cell reports the hover heart's 26 px).
+  - **An explicit `x`/`y` on a cell is a build error**, the solve owning every position.
+  - **A removed wrapper can cap the row.** A row's cross-axis info ignores `cross-axis-alignment`
+    and takes the least of its cells' maxes, and a wrapper whose own `alignment` wasn't `stretch`
+    reported an unbounded one where its fixed child reports its own size. A row with an explicit
+    cross size never notices; a host with surplus to hand out finds the row has stopped growing.
+    That is what the `alignment: start` wrappers round fixed children are for, no-ops in position
+    that keep the max open.
+  A lone `Text` centres its own lines with `vertical-alignment` and stays on the plain path, and a
+  sized child of a plain `Rectangle` is already centred (the default-geometry entry below), so
+  neither wants a layout round it. Tell: a converted layout calls `solve_box_layout_ortho` in
+  `app-window.rs`.
 
 - **`VerticalLayout` divides surplus equally when every child has `vertical-stretch: 0`.** Append
   trailing `Rectangle { vertical-stretch: 1; }`, or set `alignment: start`, which hands out no
-  surplus at all. Inside a `GridLayout` one of the two is mandatory: a row is as tall as its
+  surplus at all, a stretching child included: under it the smart editor's value field sat at its
+  preferred width beside a row of free space. Inside a `GridLayout` one of the two is mandatory: a row is as tall as its
   taller cell and the shorter is stretched to match, so surplus lands inside whatever that cell
   contains — a settings body column left on `stretch` grows its cards instead of ending above the
   taller column's floor.
 
 - **A `GridLayout` cannot do masonry, and the cure is to make each cell a column rather than an
   item.** Cells are top-aligned to a row as tall as its tallest, so a short item is followed by
-  dead space down to the next row. No per-column flow, no `Flow` element to fall back on.
+  dead space down to the next row. No per-column flow, and a `FlexboxLayout` of columns can't stand
+  in for it over cards like these (the flex measuring entry below).
   Restructure: one cell per column, each a `VerticalLayout` of the items
   (`views/settings/pages/*.slint` place *columns*, not cards). Two consequences: stacked, it is
   column A's items then column B's, so columns want to be **contiguous halves** of the list rather
   than alternating; and a page with fewer items than columns leaves one empty, so an item that
   must not fill the surplus width needs its own `max-width` (`SectionCard` pins one beside its
   `preferred-width`).
+
+- **A `FlexboxLayout` measures its items at a width it hasn't committed to, and only a
+  layout-rooted component can answer.** taffy solves both axes in one pass, so placing an item
+  whose height follows its width means asking that height at a trial width, through the
+  synthesized `layoutinfo-v-with-constraint`. The compiler synthesizes it on *layout* elements only
+  (`passes/lower_layout.rs`), and a host treats a child as height-for-width only when the child's
+  component root has one (`llr/lower_layout_expression.rs`, `is_height_for_width_cell`). A
+  `Rectangle`-rooted component whose height follows its width (`ChipGroup`, `SettingRow` with its
+  wrapped label, …) is read at its *drawn* height instead, which
+  depends on its drawn width, which comes from the solve still in progress. Symptom: `Recursion
+  detected` at `i-slint-core/properties.rs`, at run time only and on the first layout, through
+  `layout_item_info_at_cross_width` and `*_layoutinfo_v_with_constraint` frames; the build and
+  every test stay green. A flex Settings body of two card columns hit it on opening Interface and
+  went back to the `GridLayout` above, which solves widths before heights. **What a flex may hold
+  is fixed-height, layout-rooted or `Text`-rooted**, wrapped or not: a `Text` is a builtin
+  height-for-width cell, so the flex hands it the trial width as its `cross_axis_constraint`, which
+  `text_layout_info` (`items/text.rs`) reads ahead of the drawn `width`. Every flex in the tree
+  keeps to that: chips, pills, swatches, tiles, and the smart editor's rule rows, whose `Dropdown`s,
+  value field and remove button each bind a constant height beside a `Text`-rooted `RowLabel`. A
+  root `height` bound to its own flex's `preferred-height` (`ChipGroup`, `MetaChipStrip`) is read
+  at the drawn width too, so neither may sit in a flex itself.
+
+- **A `FlexboxLayout` reports no maximum height and stretches its lines into whatever it is
+  given**, `cross-axis-line-alignment` defaulting to `stretch` (taffy's `align-content`). A host
+  with height to spare spreads the rows apart, and nothing says so until one has some. Three
+  answers in the tree: bind the root's `height` to the flex's `preferred-height` (`ChipGroup`), set
+  `cross-axis-line-alignment: start` (the mosaic picker, whose viewport outgrows one row of tiles),
+  or hand the flex no surplus (`alignment: start` on `RecentSearches`' root).
+  **The width half is the opposite trap**: a wrapping flex's `preferred-width` is a near-square
+  block (`flexbox_layout_info_main_axis`), not its items on one line, so a host that hands a strip
+  only its preferred width (`alignment: start`, a zero-stretch cell) wraps it where a line would
+  fit. Every strip in the tree fills a column; one moved into a row beside a control won't.
+
+- **A `FlexboxLayout` inside an `if` reports its height at its near-square preferred width, not
+  at the width it is drawn.** The repeated component's `layout_info(Vertical)` hands its
+  `fn_layoutinfo_v_with_constraint` its own `layoutinfo_h.preferred`. A box layout's solve asks
+  `layout_item_info_at_cross_width` instead and places the flex right, which is why Radio's
+  suggestion row draws correctly; what goes wrong is anything reading the layout's *reported*
+  height, so a root binding its height to a wrapper round the `if` reserves the lines a block a
+  few chips across needs. It gave Now Playing a band of blank lines under its chips. Cure: the
+  flex as a direct child, measured at its root's width, hidden through `visible` where its lines
+  should stay reserved (`MetaChipStrip`'s `show-rows`). Tell, in `app-window.rs`: a repeated
+  flex's `layout_info` hands `fn_layoutinfo_v_with_constraint` its own `…_layoutinfo_h ()` …
+  `.preferred`, where a direct child's `flexbox_layout_info_cross_axis` ends on its root's
+  `…_width ()`; the first is a bug only where something reads that layout's reported height.
+  Pinned by `ui::hero_chips::tests::the_strip_measures_its_rows_at_the_width_it_draws`.
 
 - **`GridLayout` honours a runtime expression for `row`/`col` on a plain child, and forces `Auto`
   on a repeated one.** `convert_row_col_expr` lowers `RowColExpr::Named` to a `PropertyReference`
@@ -340,14 +419,17 @@ this file is what builds, looks right, and is wrong.
 
 - **A faked placeholder `Text` in a non-layout parent paints out of its input, and
   `overflow: elide` alone doesn't stop it.** Slint's raw `TextInput` has no `placeholder-text`, so
-  all four placeholders in the tree are a sibling `Text` gated on the field being empty. Under a
+  both placeholders in the tree are a sibling `Text` gated on the field being empty:
+  `single-line-input.slint`'s, which every single-line field mounts, and
+  `multiline-input.slint`'s. Under a
   plain `Rectangle`, `make_default_implicit` sizes each to `max(preferred, min)` of its **own**
   `layout_info` — the untruncated string — so it paints through the pill's right edge, and the
   default `clip` is against that same full-string width. Elide is half the cure: `text_layout_info`
   lowers only `min` to one `…`, leaving `preferred` at the full string, so a non-layout parent
-  hands over the larger and elide never fires. **Bound the width *and* elide.** The `TextInput`
-  beside each one never had the bug: it fills its parent (an item with **no** implicit size is
-  sized to 100 %) and clips itself besides. `multiline-input.slint` is exempt — bounded to its
+  hands over the larger and elide never fires. **Bound the width *and* elide.** The single-line
+  `TextInput` beside it is the opposite case on purpose: it grows wider than the field once its
+  text does, sliding to keep the cursor in view, and the component's own scissor `clip` holds it
+  in. `multiline-input.slint` is exempt — bounded to its
   scroller (`width: sv.width`) and wrapping rather than eliding. A **locale** bug in practice,
   English fitting every slot where the catalogues run ~1.3× longer; pinned by
   `ui::placeholder_tests`.
@@ -355,8 +437,8 @@ this file is what builds, looks right, and is wrong.
 - **A `SearchBar`'s slot is sized off its own placeholder, so its root spells
   `min-width`/`preferred-width`/`max-width` and never binds `width`** — a bound `width` is
   reported as both `min` and `max` and would drag the window's resize floor along with a
-  locale-sized default. The natural width is `placeholder-text.preferred-width + chrome-overhead`,
-  read off the Text the bar draws (the `label-w` idiom: a Text's *horizontal* layout info is
+  locale-sized default. The natural width is `input.placeholder-width + chrome-overhead`, which
+  `SingleLineInput` publishes off the hint it draws (the `label-w` idiom: a Text's *horizontal* layout info is
   intrinsic to the string and never reads back the width it was handed, so it's a derivation and
   not a cycle). Only the **default** is measured — the four hosts that set `input-width` outright
   never evaluate it. What every mount keeps is the `min-width` floor: below it the bar compresses
@@ -422,22 +504,40 @@ this file is what builds, looks right, and is wrong.
   before first layout — popup lands above trigger top, expands downward. Canonical:
   `components/now-playing/overflow-menu.slint`.
 
-- **A `PopupWindow` is sized and placed once, as it opens, so content that changes while it is open
-  paints into the old box.** `WindowInner::show_popup` reads the popup's layout info and `set()`s
-  the size into its root as a plain value, replacing any binding on its `height`, and
-  `place_popup` fixes the origin; nothing re-flows it after that. A child with no width of its own,
-  as `PopupSurface` is, re-centres in the frozen box as its content narrows, so a shrinking list
-  reads as an empty slot plus the popup sliding sideways. Only a reopen re-measures. Bites any
-  popup whose model is refreshed as it opens: `Dropdown`'s `about-to-open` returns the revision its
-  refresh will publish and shows the popup once that lands, the output device picker being the
-  host that needed it (`components/settings/dropdown.slint`).
+- **An open `PopupWindow` re-lays its content at once and moves a loop pass later.** Everything
+  inside reads the popup's new size on the frame that changed it, while its origin and box are
+  re-read by `WindowInner::update_popup_properties` on the zero-delay timer the popup's
+  `PropertyTracker` schedules, which runs after that frame is drawn. So a popup whose origin moves
+  while open (end-aligned, opening upward, growing leftward) draws one frame of its new layout at
+  the old origin. Two answers in the tree. Keep the origin fixed: `OverflowMenu` reserves its
+  widest flyout, and a right-click menu opening left holds its flyout's room from the start
+  (`ContextMenuMetrics`, applied by `ContextMenuPopup`). Or keep the content still while open:
+  `Dropdown`'s `about-to-open` returns the revision its refresh will publish and shows the popup
+  once that lands, the output device picker being the host that needed it
+  (`components/settings/dropdown.slint`).
+
+- **A press outside an open `PopupWindow` closes it and reaches nothing else.**
+  `WindowInner::process_mouse_input` closes the popup on that press and, the pointer being outside
+  a popup that isn't a `Menu`, dispatches it nowhere, so whatever it landed on never sees it. The
+  release does arrive, the popup being gone by then. Hence a right-click menu raised on the press
+  needed a second right-click to move to another row, and every menu now opens on the release
+  (`ContextClick`). An element that closes its own popup on a press hands its release onward the
+  same way, the grab going with the popup (the grab-invalidation entry): `PopupDismissCatcher`
+  leans on it.
+
+- **A `TouchArea` grabs on a press of any button, and only `pressed` is left-only.** So its
+  `mouse-x`/`mouse-y` keep tracking the pointer until that button comes up, wherever it goes, and
+  an open popup follows its `x`/`y` (the entry above). A menu anchored to a host's live
+  `touch.mouse-x` dragged after a held right button. A menu takes its anchor once, through
+  `show-at`. A slider's `pointer-event` arms on that same press of any button, so it filters the
+  button itself: `SliderPointer` is the one place that does, and a right click moves no value.
 
 - **A child with no `x`/`y` in a non-layout parent is *centred*, not at the origin** — Slint
   generates `(parent.width - self.width) / 2`, which reads as 0 only for a child as wide as its
   parent. **A zero-size wrapper therefore lands at half the parent**, and anything positioned
-  against it goes with it: `TrackContextMenu` is a `PopupWindow` in such a wrapper, and the row
-  passed a pointer position measured in the row's own frame, so the menu opened half a row right
-  of the cursor on both its hosts. A wrapper meant to be a coordinate frame pins `x: 0px; y: 0px`
+  against it goes with it: `TrackContextMenu` holds its `ContextMenuPopup` in such a wrapper, and
+  the row passed a pointer position measured in the row's own frame, so the menu opened half a row
+  right of the cursor on both its hosts. A wrapper meant to be a coordinate frame pins `x: 0px; y: 0px`
   **inside the component**, where a host cannot forget it.
 
 - **`absolute-position` inside a `PopupWindow` is measured from the popup's corner, not the
@@ -450,8 +550,9 @@ this file is what builds, looks right, and is wrong.
 - **A flyout opens *inside* the overflow menu's single `PopupWindow` — no nesting.** The
   playback-speed row (`speed-flyout.slint`, presets in shared `flyout-presets.slint` globals) is
   the worked example. Fixed-reserve geometry, as with the volume popup: size the popup for
-  menu-column + flyout up front and bottom-anchor both, so the menu stays pinned under its
-  trigger; a transparent full-popup `TouchArea` **declared first** closes on stray clicks.
+  menu-column + flyout up front and bottom-anchor both, so opening a flyout never moves the
+  popup's origin (the entry above) and the menu stays pinned under its trigger; a transparent
+  full-popup `TouchArea` **declared first** closes on stray clicks.
 
 - **Sleep timer = a session-only cancel-and-replace tokio countdown + a `PlayerState`
   end-of-track flag.** In `crates/melodia-views/src/ui/sleep_timer.rs` — a **UI-layer** module, because `tasks/` may
@@ -502,8 +603,7 @@ this file is what builds, looks right, and is wrong.
   border (the lyrics pill, a focus ring, a colour fading through `transparent`) stacks again. Tuck
   the fill yourself with a `TuckedFill`, or keep the border opaque (the dropdown rests on its fill
   colour). **Except over a drop shadow**: the shadow sits under the whole element, and a tucked fill
-  lets it show through the rim, which reads worse than the second pass. The search bar keeps its
-  fill out to the edge for that.
+  lets it show through the rim, which reads worse than the second pass.
 
 - **Nothing that draws text may be cut to its layout box — the box is a line box and the ink is
   not. Two mechanisms cut, and both are invisible in Latin.** The shipped Vazirmatn faces are
@@ -548,8 +648,8 @@ this file is what builds, looks right, and is wrong.
     render Arabic correctly. Any `Text` that can hold user
     data wants `elide` even where nothing can overflow — **but it also lowers that element's
     layout `min` to the width of one `…`**, so an over-packed row that used to overflow one chip
-    now compresses and truncates all of them (`components/meta-chip.slint`;
-    `ui::chips::estimated_chip_width` keeps the wrap estimate out of reach). Sharper for a
+    now compresses and truncates all of them (`components/meta-chip.slint`, safe only because its
+    strip breaks lines on the chips' real widths). Sharper for a
     *fixed*-height `Text` — it is asking to be cut, so give it slack or leave the height alone.
 
 - **A function's arguments are unreachable inside a gradient's stops, so a shared
@@ -619,6 +719,17 @@ this file is what builds, looks right, and is wrong.
   the extents and `ui::aurora_backdrop_tests` pins them, an inset stop looking like nothing on
   screen and only a measurement or that test catching one coming back.
 
+- **A drop shadow that changes over an animation leaves a texture per frame resident.** Since
+  1.18 the renderer keeps shadows across frames in a `BoxShadowCache`
+  (`i-slint-core/graphics/boxshadowcache.rs`) keyed by size, colour, blur, radius and offset, up to
+  sixteen, each a texture plus the stencil buffer it was drawn with; 1.16 rebuilt it every frame.
+  So easing any `drop-shadow-*`, or easing the size of the element casting it, fills all sixteen
+  slots, and they stay after the animation ends. A colour-only ease is no escape, the colour being
+  baked into the texture. A shadow has to be switched rather than eased and cast from an element
+  whose size holds still, which is why the search bar and the labeled input, the two that eased
+  theirs on focus, dropped them instead. Nothing looks wrong on screen; only the process's GPU
+  memory shows it.
+
 - **Generated `Path` geometry has to arrive as an SVG `commands` string, and needs an explicit
   viewbox with `fit: fill`.** `for`-`in` inside a `Path` is rejected outright (slint-ui/slint#754),
   so a computed vertex count means building the string in Rust. Then **declare
@@ -647,26 +758,26 @@ this file is what builds, looks right, and is wrong.
   past the endpoint, so geometry lies on both sides of the edge and both tips fade alike. Bit
   `caption-buttons.slint`'s KDE glyphs, copied from a decoration that draws round caps.
 
-- **A `<=>` on a `Flickable`'s `viewport-y` silently disables Slint's own out-of-bounds correction
+- **A `<=>` on a `Flickable`'s `content-y` silently disables Slint's own out-of-bounds correction
   — a one-way binding doesn't.** `Flickable::init` installs a change handler that pulls a
   scrolled-past-the-end viewport back in range, guarded on
-  `if *y_out_of_bounds && !y.has_binding()` (`items/flickable.rs:112`), so a `viewport-y` carrying
+  `if *y_out_of_bounds && !y.has_binding()` (`items/flickable.rs:118`), so a `content-y` carrying
   a binding opts out. **The distinction is which kind survives a write.** Most scrollers here
-  reach `viewport-y` imperatively (`sv.viewport-y = -o`); the constant `0px` binding the generated
-  tree seeds them with is *orphaned by the first such write* (the one-way-binding pitfall above),
-  and until then `0px` can't be out of bounds either way — so they keep the guard. `<=>` compiles
-  to `Property::link_two_way`, which **does** survive a self-write, making the two composite views
-  (`browse-view.slint`, `ArtistDetailBody`) the only permanently unguarded scrollers in the tree.
+  reach `content-y` imperatively (`sv.content-y = -o`), and 1.18's generated tree seeds them with
+  no binding at all, so they keep the guard. `<=>` compiles to `Property::link_two_way`, which
+  **does** survive a self-write, making the two composite views (`browse-view.slint`,
+  `ArtistDetailBody`) the only permanently unguarded scrollers in the tree.
   Left uncorrected, content that shrinks under the current offset paints a **blank region** —
   Browse leaving a deep folder for the much shorter library root, or either view filtering a long
   list to a few rows. Nothing looks wrong in the source; the symptom is an empty view that fixes
   itself when you switch tabs, the content-area `if` remounting it at 0. `CompositeScrollbars`
-  re-clamps on `changed v-outer-max`; a new scroller that two-way-binds `viewport-y` needs the
-  same. To audit, grep the generated file for `r#Flickable :: FIELD_OFFSETS . r#viewport_y ())`
-  (empty parens included): 2 `link_two_way` hits, 23 benign `set_property_binding` seeds.
+  re-clamps on `changed v-outer-max`; a new scroller that two-way-binds `content-y` needs the
+  same. To audit, grep the generated file for `r#Flickable :: FIELD_OFFSETS . r#content_y ())`
+  (empty parens included): 2 `link_two_way` hits, every other one a read, a write, or the pin a
+  `ListView`'s repeater is handed.
 
-- **Stock Slint 1.16 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
-  in-process only — no `PathBuf`, still true of released 1.17.x. Vendored winit PR #4009. Fix
+- **Stock Slint 1.18 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
+  in-process only, with no `PathBuf`. Vendored winit PR #4009. Fix
   merged upstream but unreleased: winit **#4571**, a new `DataTransfer` DnD API superseding
   #1881/#4009.
 
@@ -688,7 +799,8 @@ this file is what builds, looks right, and is wrong.
   whole distinction: a tracker reading a property driven from **inside** the branch dies quietly
   (`tooltip.slint`'s `changed hovered`, fed by its own `TouchArea`), where one reading a **layout**
   property is re-dirtied by the *surviving parent* the moment it re-flows without the child
-  (`meta-chip-strip.slint`'s `changed watched-w`). So the rule is about the **condition**, not the
+  (`grid-columns-sync.slint`'s `changed watched-cols`, a count off a width). So the rule is about
+  the **condition**, not the
   handler: a branch carrying a layout-watching tracker may only be dropped when nothing has
   re-dirtied that property in the same frame — never by an animated property, never by anything a
   `changed` handler writes. **Don't read "a discrete write from Rust" as the cure — the quiet
@@ -699,14 +811,13 @@ this file is what builds, looks right, and is wrong.
   Symptom: `called Option::unwrap() on a None value` at `app-window.rs` in
   `InnerFoo::user_init::{closure#N}`, on a frame with no obvious cause, naming a component nowhere
   near what you touched; the tell in the generated source is a
-  `change_tracker<N>.init` whose *eval* closure reads a `_width` / `_height` / `_watched_w`.
+  `change_tracker<N>.init` whose *eval* closure reads a `_width` / `_height` / `_watched_cols`.
   The shape to copy is `library-tab-band.slint`: everything tracker-free rides one
   `hero-shown: root.detail-open || root.hero-t > 0` (which also stops the two halves mounting a
-  frame apart), and **the chip strip is mounted for the life of the band**, fading by brush alpha
-  through `HeroBackdrop.chip-fill-at` — brush alpha rather than `opacity` because a permanent
-  mount satisfies neither `need_layer` bail. Pinned by
-  `ui::library_tab_band_tests::the_chip_strip_outlives_every_morph_it_is_painted_in` (a brace
-  walk, not an indent walk — the band has `if`-gated *siblings* at shallower depths).
+  frame apart), and a piece carrying a layout-watching tracker stays mounted for the life of the
+  band, fading by brush alpha — brush alpha rather than `opacity` because a permanent mount
+  satisfies neither `need_layer` bail. Pinned by
+  `ui::library_tab_band_tests::the_hero_mounts_on_the_detail_or_a_running_morph`.
 
 - **A `Timer`'s `interval` may not reach a layout property, even transitively.** Slint evaluates it
   through a `ChangeTracker` initialised in the component's `user_init`, and for a timer inside an
@@ -720,22 +831,35 @@ this file is what builds, looks right, and is wrong.
   reached the sung line) at the end of each tick, where reading `target-y` is free, the handler
   running nowhere near the pass.
 
-- **`init` runs *after* bindings resolve to final values — useless for entry animations.** Setting
-  `shown: true` in `init` makes `true` the *initial* value, so `animate opacity` never runs. Fix:
-  single-shot 1 ms `Timer` flips `shown` once at mount.
+- **`init` runs *after* bindings resolve to final values — useless for *flipping* an entry
+  animation.** Setting `shown: true` in `init` makes `true` the *initial* value, so
+  `animate opacity` never runs. Fix: single-shot 1 ms `Timer` flips `shown` once at mount. **On
+  1.18 the Timer is half of it**: an `if` branch is instantiated eagerly, so the Timer can fire
+  before any animated binding has been evaluated, and one first evaluated after the flip has
+  nothing to ease from. `init` reads each animated property once, so it starts from its
+  `shown: false` value (`components/view-transition.slint`). **The layers' own `init` is enough
+  even where they sit in an `if` nested below the Timer**: `Conditional::ensure_updated` runs a new
+  branch's `init` and builds its nested `if`s in the same call, before the event loop can fire the
+  Timer. Bit the miniplayer backdrop on some presses and not others, until `HeroBlurBackdrop` and
+  `AuroraBackdrop` read theirs. Pinned by `ui::mount_fade_tests`, the bare reads looking like dead
+  statements.
 
 - **Glyphs outside Vazirmatn inflate `Text` line-box and break patched-metrics centring.** Unicode
   arrows or any glyph the bundled font lacks pulls a fallback font; its taller `typoAsc/Desc`
   defines the line-box, so patched glyphs drift down. Fix: render the foreign glyph as a sibling
   `MaterialIcon` (collapsed em-box).
 
-- **Slint 1.16 draws a Hangul syllable with no final consonant as two loose jamo, and the trigger
-  is the generic family it appends to every font stack.** `sharedparley.rs`'s `ranged_builder`
-  pushes `[<default-font-family>, Generic(SansSerif), Generic(SystemUi)]`, and that list is what
-  breaks composition: the same line through *any single* named family shapes correctly, Vazirmatn
-  included, which covers no Hangul at all. Reproducible against parley 0.8 with no Slint in the
-  picture, so there is nothing to reach from a `.slint` file. A syllable that carries a final
-  consonant is unaffected, which is why half a Korean line looks blocky and half looks spaced out.
+- **Slint 1.18 draws a Hangul syllable with no final consonant as two loose jamo, and the trigger
+  is the generic family it appends to every font stack.** `textlayout/sharedparley/shaping.rs`'s
+  `ranged_builder` pushes `[<default-font-family>, Generic(SansSerif), Generic(SystemUi)]`, and
+  fontique takes each generic as fontconfig's whole `sans-serif` chain. parley counts a font as
+  covering a syllable when it covers the *decomposed* form and stops at the first that does, so a
+  face holding the jamo and not the syllables wins: Droid Sans Fallback, on Fedora. The same line
+  through *any single* named family shapes correctly, Vazirmatn included, which covers no Hangul at
+  all, so there is nothing to reach from a `.slint` file. A syllable with a final consonant splits
+  into a smaller syllable that face lacks and falls through to a CJK face, which is why half a
+  Korean line looks blocky and half looks spaced out. The exception is the 27 built on `가`, which
+  that face does carry: they split into three glyphs at 3 em, and the estimate charges them one.
   **The cost is width, not only looks.** Swept across the whole syllables block, an open syllable
   measures 2 em against a closed one's 0.92, so a Korean line lays out up to 1.6× wider than its
   syllable count says. Anything sizing a box from a character count under-measures it, and an

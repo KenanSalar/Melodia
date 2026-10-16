@@ -25,12 +25,14 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **Scan ingest is chunked + batched.** A scan parses and ingests `TX_CHUNK_FILES` files at a
   time, each chunk in its own write transaction. The writer connection frees between chunks, and
-  a bulk scan's (`to_scan > SCAN_BULK_THRESHOLD`) per-chunk stats-trigger drop/create stays
-  crash-safe. Inserts are multi-row `INSERT … RETURNING id, file_path` via
-  `insert_tracks_batch` — ids mapped back **by path**, RETURNING order being unspecified while
-  DnD import relies on input order. Small deltas keep the stats triggers enabled and skip
-  `recalculate_all_stats` entirely. Orphans, the cover roll-ups (`queries::scan::roll_up_covers`)
-  and the recalc land in one final tx; `library_changed` bumps once after it.
+  a bulk scan's (`to_scan + orphans > BULK_THRESHOLD`, `Ingested::for_delta`) per-chunk
+  stats-trigger drop/create stays crash-safe. Inserts are multi-row
+  `INSERT … RETURNING id, file_path` via `insert_tracks_batch` — ids mapped back **by path**,
+  RETURNING order being unspecified while DnD import relies on input order. Small deltas keep
+  the stats triggers enabled and skip `recalculate_all_stats` entirely. Orphans, the cover
+  roll-ups (`queries::scan::roll_up_covers`) and the recalc land in one final tx;
+  `library_changed` bumps once after it, and only if the scan changed something, a launch
+  scanning every folder.
 
 - **The artwork sweep runs *after* that tx commits, never inside it** (`tasks::artwork_sweep`,
   spawned beside `retroactive_hash`, and once per launch, since a launch with no library scans
@@ -131,11 +133,11 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `SqlSafeStr`) — data never rides in the string, only through `.bind()`.
 
 - **Track projections by use case**, each with a column list in `queries::track::columns`:
-  `TrackSummary` (17 cols; queue/NP/playback, incl. 4 ReplayGain + `rating`); `TrackListRow` (20;
-  lists incl. Files/Browse, which render through the shared `TrackList` so there is no narrower
-  browse slice; incl.
-  `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36; Edit-Tags dialog — the only production
-  by-id multi-fetch, every single-valued tag column + the technical Summary cols); `PlaylistExportRow` (5;
+  `TrackSummary` (17 cols; queue/NP/playback, incl. 4 ReplayGain + `rating`); `TrackListRow` (17;
+  every list incl. Browse, whose directory fetch selects `file_path` beside it as the key it
+  matches files on disk by; incl. `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36;
+  Edit-Tags dialog — the only production by-id multi-fetch, every single-valued tag column + the
+  technical Summary cols); `PlaylistExportRow` (5;
   `file_path`/`file_hash`/`title`/`artist`/`duration_ms`, M3U8 export only); `Track` (60; scan
   ingest, hash backfill, detail, fixtures). Pick the slimmest — `SELECT *` into `Track` for a list
   view costs ~40 unused decodes/row.
@@ -151,11 +153,12 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   - **The other half of narrowing is `ui::track_list_cache`**: the two views that retain a whole
     list resident (My Library's Songs tab, Favorites') keep *converted* rows rather than
     `TrackListRow`s, so the columns a list doesn't render are freed at fetch rather than held for
-    the session. **Recently Played's Songs tab retains a list too and deliberately stays off it** —
-    `get_recently_played` is capped at 200 rows, so what the cache is for (a resident set whose
-    second copy in the Slint model is the larger half of the view's footprint) doesn't apply, and
-    it keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped* fourth view
-    belongs on the cache, not on a sixth projection.
+    the session, and `ui::track_list_model` shows them to Slint in place, so the set is held once
+    rather than again as a `VecModel` copy. **Recently Played's Songs tab retains a list too and
+    deliberately stays off it** — `get_recently_played` is capped at 200 rows, so what the cache is
+    for (a resident set large enough that a second copy of it is the view's footprint) doesn't
+    apply, and it keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped*
+    fourth view belongs on the cache and its model, not on a sixth projection.
 
   - **It is also why the whole-table fetches take no sort**: `get_all_tracks_for_list` and
     `get_favorite_tracks_for_list` lost their `sort_by`/`sort_dir` when their callers started

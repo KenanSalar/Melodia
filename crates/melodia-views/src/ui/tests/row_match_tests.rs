@@ -17,8 +17,6 @@ fn mk(
 ) -> TrackListRow {
     TrackListRow {
         id: 1,
-        file_path: "/m/1.flac".to_owned(),
-        file_name: "1.flac".to_owned(),
         title: title.to_owned(),
         artist: artist.map(str::to_owned),
         album_artist: None,
@@ -34,7 +32,6 @@ fn mk(
         album_id: None,
         artist_id: None,
         genre_id: None,
-        date_added: "2026-01-01T00:00:00Z".to_owned(),
         sort_key: None,
     }
 }

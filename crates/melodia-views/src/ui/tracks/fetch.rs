@@ -1,18 +1,19 @@
 //! DB fetch + filter rebuild + favourite-row in-place update.
 
-use std::collections::HashSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, VecModel, Weak};
+use slint::{ComponentHandle, Weak};
 
 use super::TracksUi;
-use crate::ui::model_patch;
+use crate::ui::list_selection;
 use crate::ui::row_match::fold_needle;
-use crate::ui::track_list_cache::CacheData;
+use crate::ui::track_list_cache::{CacheData, VisibleRows};
+use crate::ui::track_list_model::TrackListModel;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
-use melodia_ui::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
+use melodia_ui::{AppWindow, Tracks};
 
 /// Re-fetch the full list from the DB, store it in `tracks_ui`, then push the
 /// filtered+sorted view into the Slint model. Async — runs on the tokio
@@ -54,15 +55,14 @@ pub async fn fetch_and_apply(
         .await;
     }
 
-    apply(&weak, &snapshot, &filter);
+    apply(&weak, snapshot, &filter);
     Ok(())
 }
 
-/// Re-derive the visible rows after a filter change. No DB hit, and no
-/// allocation per row — the cached rows are cloned, which is a refcount bump
-/// per `SharedString`.
+/// Re-derive the visible rows after a filter change. No DB hit, and no row
+/// copied: the model reads the cache's own.
 pub fn refilter(weak: &Weak<AppWindow>, tracks_ui: &TracksUi, filter: &str) {
-    apply(weak, &tracks_ui.cache.snapshot(), filter);
+    apply(weak, tracks_ui.cache.snapshot(), filter);
 }
 
 /// Re-sort the Tracks view after a header-column click. Fully in memory:
@@ -80,60 +80,37 @@ pub fn resort_and_apply(
     sort_dir: &str,
     filter: &str,
 ) {
-    apply(weak, &tracks_ui.cache.resort(sort_field, sort_dir), filter);
+    apply(weak, tracks_ui.cache.resort(sort_field, sort_dir), filter);
 }
 
-/// Filter `snapshot` into display order and swap the result into the model.
+/// Filter `snapshot` into display order and show the result.
 ///
 /// The walk runs on the **calling** thread — the runtime worker on the cold
 /// fetch path, the UI thread on a refilter or resort, which is where those
-/// two already are. Only the finished `Vec` crosses the hop, and moving one
-/// is a pointer move; deferring the walk instead would put the cold path's
-/// whole rebuild on the event loop.
-fn apply(weak: &Weak<AppWindow>, snapshot: &CacheData, filter: &str) {
-    let visible = snapshot.visible(&fold_needle(filter));
+/// two already are. Only the finished selection crosses the hop; deferring
+/// the walk instead would put the cold path's whole filter on the event loop.
+fn apply(weak: &Weak<AppWindow>, snapshot: Arc<CacheData>, filter: &str) {
     let total = snapshot.total();
+    let visible = VisibleRows::new(snapshot, &fold_needle(filter));
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        apply_visible(&ui, visible, total);
-    });
-}
-
-/// Flip `is_favorite` on a single row in the Slint `VecModel`. Only touches
-/// the affected row — scroll position and neighbouring rows stay put.
-pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<Tracks>().get_rows(), id, |r| {
-            r.is_favorite = fav;
-        });
-    });
-}
-
-/// Set `rating` on a single row in the Slint `VecModel` — the star-rating
-/// analogue of [`apply_row_favorite`].
-pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        model_patch::patch_track_row_by_id(&ui.global::<Tracks>().get_rows(), id, |r| {
-            r.rating = rating;
-        });
-    });
-}
-
-/// UI-thread-only: apply current selection state to `visible` and swap
-/// the model contents via the shared diff helper, which prefers per-row
-/// `set_row_data` over `set_vec` when ids align positionally so the
-/// `ListView`'s delegate cache survives.
-fn apply_visible(ui: &AppWindow, mut visible: Vec<UiTrackListRow>, total: i32) {
-    let g = ui.global::<Tracks>();
-    let selected_set: HashSet<i32> = g.get_selected_ids().iter().collect();
-    for row in &mut visible {
-        if selected_set.contains(&row.id) {
-            row.selected = true;
+        let g = ui.global::<Tracks>();
+        g.set_total_count(total);
+        let rows = g.get_rows();
+        if let Some(model) = TrackListModel::installed(&rows, "Tracks.rows") {
+            list_selection::keep_selection_within(&g, || visible.held_ids());
+            model.show(visible);
         }
-    }
-    g.set_total_count(total);
-    let rows = g.get_rows();
-    let Some(vec_model) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-        return;
-    };
-    crate::ui::model_diff::apply_rows_keyed(vec_model, visible, |r| r.id);
+    });
+}
+
+/// Repaint the row showing `id` after a favourite or rating patch to the
+/// cache. Only that row is read again — scroll position and neighbouring
+/// rows stay put.
+pub fn repaint_row(weak: &Weak<AppWindow>, id: i64) {
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        let rows = ui.global::<Tracks>().get_rows();
+        if let Some(model) = TrackListModel::installed(&rows, "Tracks.rows") {
+            model.repaint(id);
+        }
+    });
 }

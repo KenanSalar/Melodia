@@ -1,10 +1,10 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { RadioFacetRow } from "../../models.slint";
+import { FilledChip } from "../../components/filled-chip.slint";
 import { FocusLossWatcher } from "../../components/focus-loss-watcher.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { PopupSurface } from "../../components/popup-surface.slint";
 import { SearchBar } from "../../components/search-bar.slint";
 
@@ -19,7 +19,7 @@ component FacetOption inherits Rectangle {
     height: 34px;
     border-radius: Theme.radius-sm;
     background: touch.has-hover ? Theme.surface1 : transparent;
-    animate background { duration: 100ms; easing: ease-in-out; }
+    animate background { duration: 100ms; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
@@ -27,28 +27,23 @@ component FacetOption inherits Rectangle {
         // pixels sit under a `TouchArea` that eats the click landing on them.
         padding-right: Theme.pad-sm + Theme.scrollbar-slot;
         spacing: Theme.pad-sm;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
+        Text {
             horizontal-stretch: 1;
-            Text {
-                text: "‎" + root.label;
-                color: root.active ? Theme.accent : Theme.text;
-                font-size: Theme.font-size-md;
-                overflow: elide;
-            }
+            text: "‎" + root.label;
+            color: root.active ? Theme.accent : Theme.text;
+            font-size: Theme.font-size-md;
+            overflow: elide;
         }
         // The bitrate floors are ours rather than the directory's, so they arrive with no count at
         // all. Suppressed here rather than at that mount, and an `if` rather than `visible` — a
         // hidden child still claims the row's spacing.
-        if root.count > 0: VerticalLayout {
-            alignment: center;
+        if root.count > 0: Text {
             horizontal-stretch: 0;
-            Text {
-                text: root.count;
-                color: Theme.overlay1;
-                font-size: Theme.font-size-sm;
-            }
+            text: root.count;
+            color: Theme.overlay1;
+            font-size: Theme.font-size-sm;
         }
     }
 
@@ -85,15 +80,7 @@ export component FacetChip inherits Rectangle {
     callback picked(int /*kind*/, string /*name*/, string /*code*/);
     callback cleared(int /*kind*/);
 
-    // What this chip writes into `PopupHighlight.id` before `show()`, per `globals/shell.slint`'s
-    // contract. A per-mount string rather than something derived from `kind`, so the five chips in
-    // the strip cannot cross-talk.
-    in property <string> popup-id;
-
     property <bool> is-set: root.value != "";
-    // The `!= ""` half is `MenuSurface`'s: every close path clears the global back to `""`, which
-    // is also this property's default, so a mount that forgot it would read as permanently open.
-    property <bool> popup-open: root.popup-id != "" && PopupHighlight.id == root.popup-id;
     // Spelled once because the filter box's slot is this number less the surface's padding, and a
     // hand-derived second copy is what left the box floating in a gutter.
     property <length> popup-w: 320px;
@@ -106,51 +93,36 @@ export component FacetChip inherits Rectangle {
     preferred-width: chip.preferred-width;
     max-width: chip.preferred-width;
 
-    chip := Rectangle {
+    chip := FilledChip {
         height: 100%;
-        border-radius: self.height / 2;
-        // `has-hover` goes false the moment the picker takes input, so an open chip reads its own
-        // highlight off the global instead: without it the fill drops out from under the pointer.
-        background: root.is-set
-            ? Theme.accent
-            : (touch.has-hover || root.popup-open ? Theme.surface2 : Theme.surface1);
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        selected: root.is-set;
+        held: popup.is-open;
+        clicked => {
+            if (root.is-set) {
+                root.cleared(root.kind);
+            } else {
+                root.opened(root.kind);
+                popup.show();
+            }
+        }
 
         HorizontalLayout {
             padding-left: Theme.pad-md;
             padding-right: Theme.pad-sm;
             spacing: 2px;
+            cross-axis-alignment: center;
 
-            VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.is-set ? root.value : root.label;
-                    color: root.is-set ? Theme.accent-text : Theme.text;
-                    font-size: Theme.font-size-sm;
-                    overflow: elide;
-                }
+            Text {
+                text: root.is-set ? root.value : root.label;
+                color: chip.ink;
+                font-size: Theme.font-size-sm;
+                overflow: elide;
             }
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    // A set chip offers the clear; an unset one says it opens something.
-                    name: root.is-set ? "close" : "expand_more";
-                    icon-size: 18px;
-                    icon-color: root.is-set ? Theme.accent-text : Theme.text;
-                }
-            }
-        }
-
-        touch := TouchArea {
-            mouse-cursor: pointer;
-            clicked => {
-                if (root.is-set) {
-                    root.cleared(root.kind);
-                } else {
-                    root.opened(root.kind);
-                    PopupHighlight.id = root.popup-id;
-                    popup.show();
-                }
+            MaterialIcon {
+                // A set chip offers the clear; an unset one says it opens something.
+                name: root.is-set ? "close" : "expand_more";
+                icon-size: 18px;
+                icon-color: chip.ink;
             }
         }
     }
@@ -171,29 +143,13 @@ export component FacetChip inherits Rectangle {
         // The rows need their own handlers to run before it closes, so they close it themselves.
         close-policy: close-on-click-outside;
 
-        if root.popup-open: FocusLossWatcher {
-            close => { popup.close(); PopupHighlight.id = ""; }
+        FocusLossWatcher {
+            close => { popup.close(); }
         }
 
         PopupSurface {
             width: 100%;
             height: 100%;
-
-            // The winit Release filter clears `PopupHighlight.id` on **every** mouse release, this
-            // popup's own included, and nothing in here closes the picker — so reclaim the id, per
-            // the third clause of `globals/shell.slint`'s contract. Without it one click inside the
-            // picker drops both the chip's fill and the watcher below.
-            //
-            // Declared first, so it only ever sees a click that landed on bare surface: a
-            // `SearchBar` hands its clicks to `TextInput` and an `OverlayScrollbar` grabs its own,
-            // so those two restore the claim on the next keystroke or surface click instead.
-            TouchArea {
-                pointer-event(ev) => {
-                    if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
-                        PopupHighlight.id = root.popup-id;
-                    }
-                }
-            }
 
             VerticalLayout {
                 padding: Theme.pad-xs;
@@ -206,9 +162,6 @@ export component FacetChip inherits Rectangle {
                     text <=> root.needle;
                     edited(t) => {
                         root.needle-edited(t);
-                        // The click that focused this box cleared the claim; typing is the first
-                        // thing after it this chip can hear.
-                        PopupHighlight.id = root.popup-id;
                     }
                 }
 
@@ -250,7 +203,6 @@ export component FacetChip inherits Rectangle {
                             clicked => {
                                 root.picked(root.kind, option.name, option.code);
                                 popup.close();
-                                PopupHighlight.id = "";
                             }
                         }
                     }
@@ -261,9 +213,9 @@ export component FacetChip inherits Rectangle {
                         width: Theme.scrollbar-slot;
                         height: 100%;
                         visible-size: list.visible-height;
-                        content-size: list.viewport-height;
-                        offset: -list.viewport-y;
-                        scroll-to(o) => { list.viewport-y = -o; }
+                        content-size: list.content-height;
+                        offset: -list.content-y;
+                        scroll-to(o) => { list.content-y = -o; }
                     }
                 }
             }

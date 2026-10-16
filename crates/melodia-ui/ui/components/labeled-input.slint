@@ -1,80 +1,39 @@
 import { Theme } from "../theme.slint";
+import { FieldFrame, FieldLabel } from "field-frame.slint";
+import { SingleLineInput } from "single-line-input.slint";
 
-// Label plus text input for dialog forms: the `SearchBar`'s input chrome —
-// focus-tracking border and a faked placeholder, since a raw `TextInput` has
-// none — under a label row, at a form-sized fixed height.
+// Label plus text input for dialog forms, at a form-sized fixed height.
 //
 // `text` is two-way bound so the host sees edits live; `accepted` fires on Enter
-// for the confirm path, `edited` per keystroke for anything throttled.
+// for the confirm path.
 export component LabeledInput inherits VerticalLayout {
     in property <string> label;
     in property <string> placeholder;
     in-out property <string> text;
+    // `number` for a field the commit parses as an integer, so a letter can't be typed into it.
+    in property <InputType> input-type: InputType.text;
     callback accepted();
-    callback edited();
 
     spacing: 4px;
 
-    Text {
+    FieldLabel {
         text: root.label;
-        color: Theme.subtext0;
-        font-size: Theme.font-size-sm;
-        font-weight: 600;
     }
 
-    Rectangle {
+    FieldFrame {
         height: 40px;
-        background: Theme.surface1;
-        border-color: input.has-focus ? Theme.accent : Theme.border;
-        border-width: 1px;
-        border-radius: Theme.radius-md;
-        // The `SearchBar`'s focus halo, so dialog fields and the search box read
-        // as one family. Collapses to nothing when blurred.
-        drop-shadow-color: input.has-focus
-            ? Theme.accent.with-alpha(0.22)
-            : transparent;
-        drop-shadow-blur: input.has-focus ? 12px : 0px;
-        drop-shadow-offset-y: input.has-focus ? 2px : 0px;
-        animate border-color, drop-shadow-color, drop-shadow-blur,
-                drop-shadow-offset-y {
-            duration: Theme.dur-fast;
-            easing: ease-in-out;
-        }
+        focused: input.has-focus;
 
         HorizontalLayout {
             padding-left: Theme.pad-md;
             padding-right: Theme.pad-md;
 
-            Rectangle {
+            input := SingleLineInput {
                 horizontal-stretch: 1;
-                // `search-bar.slint`'s faked placeholder, at the same rung and
-                // with the same bounded width and elide — unbounded, this Text
-                // takes the untruncated string as its own width and paints out
-                // of the field. The tag editor's three-up numeric row is where
-                // that showed first: each field gets a third of the dialog, and
-                // its sentinel is translated.
-                Text {
-                    visible: root.text == "";
-                    text: root.placeholder;
-                    color: Theme.overlay2;
-                    font-size: Theme.font-size-md;
-                    vertical-alignment: center;
-                    x: 0;
-                    width: 100%;
-                    height: 100%;
-                    overflow: elide;
-                }
-                input := TextInput {
-                    text <=> root.text;
-                    color: Theme.text;
-                    font-size: Theme.font-size-md;
-                    single-line: true;
-                    horizontal-alignment: left;
-                    vertical-alignment: center;
-                    height: 100%;
-                    accepted => { root.accepted(); }
-                    edited => { root.edited(); }
-                }
+                text <=> root.text;
+                placeholder: root.placeholder;
+                input-type: root.input-type;
+                accepted => { root.accepted(); }
             }
         }
     }

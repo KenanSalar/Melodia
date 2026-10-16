@@ -1,0 +1,33 @@
+import { Theme } from "../../theme.slint";
+import { FieldFrame } from "../field-frame.slint";
+import { SingleLineInput } from "../single-line-input.slint";
+
+// A text field whose value the host owns. `text` is one-way and every keystroke reports back
+// through `edited`: the first keystroke orphans the inner binding, so Rust re-emitting the value
+// it just received never moves the cursor, while a remount reads `text` fresh. The smart-playlist
+// rule rows lean on both halves.
+//
+// Mounted by the artist credits, the genre list and the smart-playlist rules.
+export component ControlledInput inherits FieldFrame {
+    in property <string> text;
+    in property <string> placeholder;
+    in property <InputType> input-type: InputType.text;
+    callback edited(string);
+
+    // Matches the `LabeledInput`s it sits between in the Tags tab, where a shorter field reads as a
+    // different control. A rule row overrides it to its dropdowns' height.
+    height: 40px;
+    focused: field.has-focus;
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        field := SingleLineInput {
+            horizontal-stretch: 1;
+            text: root.text;
+            placeholder: root.placeholder;
+            input-type: root.input-type;
+            edited(t) => { root.edited(t); }
+        }
+    }
+}

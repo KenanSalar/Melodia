@@ -5,7 +5,8 @@
 //! a `watch<DiscordStatus>` the settings UI subscribes to — but owns **no**
 //! on-disk state (the application id is a compile-time constant, not a secret to
 //! persist) and drives a blocking transport rather than HTTP, so its worker is a
-//! detached `std::thread` + `std::sync::mpsc` channel rather than a tokio task.
+//! `std::thread` + `std::sync::mpsc` channel rather than a tokio task, alive only
+//! while the feature is on.
 //! See [`ipc`] for the transport and [`model`] for the pure projection.
 
 mod artwork;
@@ -15,6 +16,7 @@ pub mod payload;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock, mpsc};
+use std::thread::JoinHandle;
 
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::watch;
@@ -84,14 +86,26 @@ impl StatusCell {
     }
 }
 
+/// The IPC worker's command channel and the thread it runs on.
+#[derive(Default)]
+struct WorkerSlot {
+    /// `None` while the feature is off, which costs no thread and no socket probing.
+    commands: Option<mpsc::Sender<Command>>,
+    /// The running worker, or the last one turned off, which may still be closing its socket.
+    thread: Option<JoinHandle<()>>,
+}
+
+/// What a worker opens its socket to Discord with, `None` where no client is listening.
+type Connector = Arc<dyn Fn() -> Option<ipc::Connection> + Send + Sync>;
+
 /// Held as `Arc<DiscordPresenceService>` on the app's `AppState`.
 pub struct DiscordPresenceService {
     /// The enable flags, read synchronously by the detector task (`armed`).
     runtime: RwLock<DiscordFlags>,
     status: Arc<StatusCell>,
-    /// Command channel to the worker — `None` until the feature is first enabled
-    /// (a user who never turns it on pays for no thread, no socket probing).
-    worker: Mutex<Option<mpsc::Sender<Command>>>,
+    worker: Mutex<WorkerSlot>,
+    /// [`ipc::connect`] in the app, a stand-in Discord in the worker's suite.
+    connect: Connector,
     /// Shared lazy HTTP client (same `OnceLock` as `AppState`/scrobble) for the
     /// album-cover lookup — one connection pool built on first actual request.
     http: Arc<OnceLock<reqwest::Client>>,
@@ -112,10 +126,21 @@ impl DiscordPresenceService {
         Self {
             runtime: RwLock::new(flags.clone()),
             status,
-            worker: Mutex::new(None),
+            worker: Mutex::new(WorkerSlot::default()),
+            connect: Arc::new(ipc::connect),
             http,
             artwork_cache: artwork::new_cache(),
         }
+    }
+
+    /// Open every worker's socket with `connect` instead of probing for the Discord client.
+    /// Consuming, so a seated `Arc` can't reach it. Unix only, its suite standing a socket pair
+    /// in for the client.
+    #[cfg(all(test, unix))]
+    #[must_use]
+    pub(crate) fn with_connector(mut self, connect: Connector) -> Self {
+        self.connect = connect;
+        self
     }
 
     /// Whether presence pushing is on — the cheap synchronous gate the task
@@ -153,7 +178,7 @@ impl DiscordPresenceService {
         if enabled {
             self.arm();
         } else {
-            self.send(Command::Disable);
+            self.disarm();
         }
     }
 
@@ -170,9 +195,6 @@ impl DiscordPresenceService {
 
     /// Push a presence card. No-op when disabled.
     pub fn apply(&self, presence: Presence) {
-        if !self.armed() {
-            return;
-        }
         self.ensure_worker();
         self.send(Command::Apply(presence));
     }
@@ -189,30 +211,52 @@ impl DiscordPresenceService {
         self.send(Command::Enable);
     }
 
-    /// Lazily spawn the detached worker thread on first use, storing its sender.
-    /// Not tracked for shutdown — at quit the socket closes under
-    /// `process::exit(0)`, which makes Discord drop the card.
+    /// Clear the card and close the socket, then drop the channel, which ends the worker once it
+    /// has done both. A later enable spawns a fresh one.
+    fn disarm(&self) {
+        if let Some(commands) = self.worker.lock().commands.take() {
+            let _ = commands.send(Command::Disable);
+        }
+    }
+
+    /// Spawn the worker if the feature is on and none is running. Never joined at shutdown: at
+    /// quit the socket closes under `process::exit(0)`, which makes Discord drop the card.
     fn ensure_worker(&self) {
         let mut worker = self.worker.lock();
-        if worker.is_some() {
+        // Read under the slot's lock, so an `apply` racing a disable can't spawn a worker
+        // after `disarm` has let the last one go.
+        if worker.commands.is_some() || !self.armed() {
             return;
         }
         let (tx, rx) = mpsc::channel::<Command>();
         let status = Arc::clone(&self.status);
-        match std::thread::Builder::new()
-            .name("melodia-discord".into())
-            .spawn(move || ipc::run_worker(&rx, &status))
-        {
-            Ok(_handle) => *worker = Some(tx),
+        let connect = Arc::clone(&self.connect);
+        let previous = worker.thread.take();
+        let spawned = std::thread::Builder::new().name("melodia-discord".into()).spawn(move || {
+            // One turned off just before may still be closing its socket. Waiting for it keeps
+            // one connection to Discord, and one writer of `connected`, at a time.
+            if let Some(previous) = previous {
+                let _ = previous.join();
+            }
+            ipc::run_worker(&rx, &status, &*connect);
+        });
+        match spawned {
+            Ok(thread) => {
+                worker.commands = Some(tx);
+                worker.thread = Some(thread);
+            }
             Err(e) => log::warn!("discord: could not spawn worker thread: {}", describe(&e)),
         }
     }
 
-    /// Best-effort send to the worker; a never-spawned or gone worker just means
-    /// nothing to push.
+    /// Best-effort send to the worker; with none running there is nothing to push.
     fn send(&self, cmd: Command) {
-        if let Some(tx) = self.worker.lock().as_ref() {
-            let _ = tx.send(cmd);
+        if let Some(commands) = self.worker.lock().commands.as_ref() {
+            let _ = commands.send(cmd);
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/mod_tests.rs"]
+mod tests;

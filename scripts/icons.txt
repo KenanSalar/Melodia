@@ -22,6 +22,8 @@ close
 cloud_off
 colorize
 content_copy
+content_cut
+content_paste
 create_new_folder
 crop_square
 delete

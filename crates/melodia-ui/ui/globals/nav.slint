@@ -19,20 +19,25 @@ export global Nav {
     // watch its own property, so `AppWindow` mirrors this locally.
     callback now-playing-open-changed(bool);
     callback persist-selected-index(int);
-    // Right-click "Open Containing Folder". **View-independent**, unlike the `go-to-*`
-    // callbacks, which need per-view origin context and are duplicated per global.
+    // Right-click "Open Containing Folder".
     callback reveal-in-folder(int /*track_id*/);
+    // Every menu's "Go to …", wired in `ui::callbacks::cross_tab_nav`. One trio rather than one
+    // per host: the origin a drill records is read off where the user stands, not off who asked.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
     // Written synchronously **immediately before** the flip that triggers the new mount. Typed
     // so a Rust typo is a compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
     in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.above;
-    // Raised before `app.show()` for "Skip Startup Animation", and by `MiniPlayerSwitch` for the
-    // full UI remounting on the way out of the miniplayer. The mount hands it back itself once
-    // settled — `view-transition.slint` says why Rust can't.
-    in-out property <bool> suppress-enter-animation: false;
+    // Raised from construction, so the launch opens on its content, and by `MiniPlayerSwitch` for
+    // the full UI remounting on the way out of the miniplayer. The mount hands it back itself once
+    // settled; `view-transition.slint` says why Rust can't. Declared rather than written by Rust
+    // because `AppWindow::new()` already builds the default page, which a later raise would fade in.
+    in-out property <bool> suppress-enter-animation: true;
     in-out property <bool> sidebar-collapsed: false;
     in-out property <length> sidebar-width: 180px;
-    // Read by the rows to disable their `padding-left` ease, which every mouse move would
-    // otherwise restart, leaving the icons lagging the edge.
+    // Switches off the rail's width ease and the rows' padding ease for a handle drag, which
+    // every mouse move would otherwise restart, leaving the edge and the icons lagging the pointer.
     in-out property <bool> sidebar-dragging: false;
     // The collapsed rail's tooltip channel; `app-window.slint` paints one pill beside the rail.
     // **It can't be mounted on the row** — `nav-scroll` clips its viewport, and the Sidebar is

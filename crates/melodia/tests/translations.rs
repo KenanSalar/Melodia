@@ -21,7 +21,8 @@ use melodia_testkit::{
     MIN_SLINT_SOURCES, REPO_ROOT, UI_DIR, font_sources, raw_sources, rel_path, strip_line_comments,
     stripped_sources,
 };
-use ttf_parser::Face;
+use skrifa::charmap::Charmap;
+use skrifa::{FontRef, MetadataProvider};
 use unicode_normalization::UnicodeNormalization;
 
 const TRANSLATIONS_DIR: &str = concat!(env!("MELODIA_REPO_ROOT"), "crates/melodia-ui/translations");
@@ -330,15 +331,15 @@ fn shipped_characters() -> BTreeMap<char, BTreeSet<&'static str>> {
     characters
 }
 
-/// One line per character in `characters` that `face` has no glyph for.
+/// One line per character in `characters` that `charmap` has no glyph for.
 fn missing_glyphs(
-    face: &Face<'_>,
+    charmap: &Charmap<'_>,
     characters: &BTreeMap<char, BTreeSet<&str>>,
     face_name: &str,
 ) -> Vec<String> {
     characters
         .iter()
-        .filter(|(character, _)| face.glyph_index(**character).is_none())
+        .filter(|(character, _)| charmap.map(**character).is_none())
         .map(|(character, codes)| {
             format!(
                 "{face_name} lacks {character} (U+{:04X}), for {codes:?}",
@@ -371,10 +372,21 @@ fn missing_from_text_faces(characters: &BTreeMap<char, BTreeSet<&str>>) -> Vec<S
                 continue;
             }
         };
-        match Face::parse(&data, 0) {
-            Ok(face) => missing.extend(missing_glyphs(&face, characters, &face_name)),
-            Err(e) => unreadable.push(format!("{face_name}: {e}")),
+        let face = match FontRef::from_index(&data, 0) {
+            Ok(face) => face,
+            Err(e) => {
+                unreadable.push(format!("{face_name}: {e}"));
+                continue;
+            }
+        };
+        let charmap = face.charmap();
+        // Without a usable cmap every lookup misses, which would blame every character on
+        // `LANGUAGE_LETTERS`.
+        if !charmap.has_map() {
+            unreadable.push(format!("{face_name}: no Unicode character map"));
+            continue;
         }
+        missing.extend(missing_glyphs(&charmap, characters, &face_name));
     }
     assert!(unreadable.is_empty(), "text faces that won't read or parse: {unreadable:?}");
     missing

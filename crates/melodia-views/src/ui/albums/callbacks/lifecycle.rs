@@ -10,11 +10,12 @@ use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
+use crate::ui::list_selection::NO_ANCHOR;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::TrackDetail;
+use crate::ui::track_detail::{TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
@@ -33,15 +34,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) 
     // this shadow. See the `SectionActiveGate` bullet in
     // `.claude/rules/ui-patterns.md`.
     albums_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Albums));
-    // `seed_detail_from_settings` runs for every persisted detail id whichever
-    // section the boot lands on, but it can only publish the two shared hero
-    // globals for the one that is *on screen* — so off-screen its band and its
-    // chips never land, and `SectionState::new`'s "the boot pre-fetch wins the
-    // first enter" would leave them empty until the user opened the detail by
-    // hand. Force that first enter to re-fetch instead.
-    if !albums_ui.section_active() {
-        albums_ui.mark_dirty();
-    }
     wire_section_gate(ui, state, albums_ui);
     install_library_refresher(ui, state, albums_ui);
 }
@@ -86,12 +78,13 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>
             release_detail_hero_images(&ui, &d);
             clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "albums: clear detail tracks");
             clear_vec_model::<i32>(&d.get_selected_ids(), "albums: clear detail selection");
-            d.set_selection_anchor(-1);
+            d.set_selection_anchor(NO_ANCHOR);
             // The card grid's set goes back with the models it describes;
             // `card-selection.slint` argues why it cannot outlive the leave.
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
+            restore::resume_deferred(&weak, &s, &au, albums_ui_mod::restore_detail);
             s.runtime.spawn(reenter(s.clone(), au.clone(), weak.clone()));
         } else {
             let au = au.clone();

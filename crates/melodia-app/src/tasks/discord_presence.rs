@@ -5,7 +5,8 @@
 //! and imports no `ui::*`.
 //!
 //! Always spawned; inert while the feature is disabled (self-gates on
-//! `service.armed()`). Self-throttled between writes (see
+//! `service.armed()`), which is why it logs its start and stop at debug: at info
+//! they read as Discord having been in use. Self-throttled between writes (see
 //! `MIN_UPDATE_INTERVAL`): an update landing inside the window is deferred to
 //! the window's end and re-read from the (latest-only) watch, so suppressed
 //! intermediates collapse into a single write on current truth — the progress
@@ -20,6 +21,7 @@ use tokio_util::sync::CancellationToken;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::error;
+use melodia_core::utils::now_unix;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 use melodia_integrations::services::integrations::discord::DiscordPresenceService;
 use melodia_integrations::services::integrations::discord::model::{PresenceState, Update};
@@ -39,11 +41,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let db = state.db.clone();
     let vm_rx = state.sinks.view_model.subscribe();
     spawner.spawn_cancellable(move |shutdown| run_detector(shutdown, service, db, vm_rx));
-    log::info!("Discord presence task started");
-}
-
-fn now_ts() -> i64 {
-    chrono::Utc::now().timestamp()
+    log::debug!("Discord presence task started");
 }
 
 /// Do-while shaped like `tasks::scrobble::run_detector`: process the primed
@@ -149,7 +147,7 @@ impl Detector {
     /// Clear the card on shutdown, logging the stop once.
     fn shutdown_clear(&self) {
         self.service.clear();
-        log::info!("Discord presence task stopped");
+        log::debug!("Discord presence task stopped");
     }
 
     /// Read current truth from the watch, project it through the model, and push
@@ -167,7 +165,7 @@ impl Detector {
         // holding the borrow.
         let vm = vm_rx.borrow_and_update().clone();
         let flags = self.service.flags();
-        let Some(update) = self.presence.on_view_model(vm.as_ref(), now_ts(), &flags) else {
+        let Some(update) = self.presence.on_view_model(vm.as_ref(), now_unix(), &flags) else {
             return; // deduped, or holding through a `loading` transition
         };
         match update {

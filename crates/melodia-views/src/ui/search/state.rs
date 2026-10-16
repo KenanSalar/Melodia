@@ -2,7 +2,6 @@
 //! in shape, concentrated here so the public [`crate::ui::search::SearchUi`] surface
 //! stays small.
 
-use std::collections::HashSet;
 use std::num::NonZeroUsize;
 
 use parking_lot::Mutex;
@@ -31,9 +30,6 @@ pub(crate) struct SearchUiState {
     /// user can pick any standard track-list field after the fact; persisted to
     /// `views.json`'s `view_sort["search"]`.
     pub sort: Mutex<ViewSort>,
-    /// `TrackListRow.id`s currently `selected: true` on the Slint model. The same
-    /// diff-then-write Favorites uses.
-    pub applied_selection: Mutex<HashSet<i32>>,
 }
 
 impl SearchUiState {
@@ -46,7 +42,6 @@ impl SearchUiState {
             // apply is a no-op. Any column field re-sorts in memory through
             // `track_sort::sort_track_rows_by`.
             sort: Mutex::new(ViewSort { field: "rank".to_owned(), dir: SortDir::Asc }),
-            applied_selection: Mutex::new(HashSet::new()),
         }
     }
 }

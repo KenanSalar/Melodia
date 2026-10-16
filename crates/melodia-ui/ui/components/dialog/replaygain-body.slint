@@ -23,24 +23,19 @@ export component ReplayGainBody inherits VerticalLayout {
     HorizontalLayout {
         spacing: Theme.pad-md;
         alignment: stretch;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
+        Text {
             horizontal-stretch: 1;
-            Text {
-                text: @tr("Normalization mode");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-            }
+            text: @tr("Normalization mode");
+            color: Theme.text;
+            font-size: Theme.font-size-md;
         }
-        VerticalLayout {
-            alignment: center;
-            Dropdown {
-                options: root.mode-names;
-                trigger-width: 150px;
-                selected-index <=> ReplayGain.mode-idx;
-                selected(i) => { ReplayGain.set-mode(i); }
-            }
+        Dropdown {
+            options: root.mode-names;
+            trigger-width: 150px;
+            selected-index <=> ReplayGain.mode-idx;
+            selected(i) => { ReplayGain.set-mode(i); }
         }
     }
 

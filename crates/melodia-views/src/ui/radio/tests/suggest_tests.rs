@@ -1,8 +1,6 @@
 use crate::ui::row_match::fold_needle;
 
-use super::{
-    ChipFilter, Facet, FacetIndex, MAX_SUGGESTIONS, StationSearch, Suggestion, suggestions,
-};
+use super::{ChipFilter, Facet, FacetIndex, StationSearch, Suggestion, suggestions};
 
 fn facet(name: &str, code: Option<&str>, count: i64) -> Facet {
     Facet { name: name.to_owned(), code: code.map(str::to_owned), station_count: count }
@@ -130,19 +128,30 @@ fn a_needle_matching_no_facet_offers_nothing() {
 }
 
 #[test]
-fn the_cap_drops_a_guess_before_it_drops_a_shape() {
-    // Contrived so all four lists match a needle that is also a bitrate — five scopes for a
-    // row that holds four. The floor is a fact about what was typed where the rest are
-    // guesses at what it names, so it is the one that must survive.
+fn the_shape_leads_every_guess() {
+    // Contrived so all four lists match a needle that is also a bitrate, the most a needle can
+    // be offered. The floor is a fact about what was typed where the rest are guesses at what
+    // it names, so it reads first, and the guesses follow by how many stations carry them.
     let all = FacetIndex::from_lists(
         vec![facet("Region 128", Some("R1"), 10)],
         vec![facet("Lang128", None, 20)],
         vec![facet("128 hits", None, 30)],
         vec![facet("MP128", None, 40)],
     );
+
     let out = suggestions(&fold_needle("128"), &all, &StationSearch::default());
-    assert_eq!(out.len(), MAX_SUGGESTIONS);
-    assert_eq!(out.first().map(|s| s.chip), Some(ChipFilter::BitrateMin));
+
+    let order: Vec<ChipFilter> = out.iter().map(|s| s.chip).collect();
+    assert_eq!(
+        order,
+        [
+            ChipFilter::BitrateMin,
+            ChipFilter::Codec,
+            ChipFilter::Tag,
+            ChipFilter::Language,
+            ChipFilter::Country,
+        ]
+    );
 }
 
 #[test]

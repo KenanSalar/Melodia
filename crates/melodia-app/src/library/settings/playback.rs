@@ -10,6 +10,7 @@ use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::backend::OutputChoice;
 use melodia_engine::player::engine::state::{MAX_SPEED, MAX_VOLUME, MIN_SPEED};
+use melodia_playback::player::playback::output::convert::Resampler;
 
 /// Persist the user toggle for "Gapless Playback". The runtime effect
 /// (gating `preload_gapless` inside the 500 ms position monitor in
@@ -29,6 +30,14 @@ pub fn set_gapless_playback(paths: &Paths, on: bool) -> Result<(), AppError> {
 pub fn set_output_follow_rate(paths: &Paths, on: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.output.output_follow_rate = on;
+    })
+}
+
+/// Persist "Sample-Rate Conversion", which `library::playback::player_set_resampler` handed the
+/// engine in the same blocking task.
+pub fn set_output_resampler(paths: &Paths, resampler: Resampler) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |settings| {
+        settings.output.output_resampler = resampler;
     })
 }
 

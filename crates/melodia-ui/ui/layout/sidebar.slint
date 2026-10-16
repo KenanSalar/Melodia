@@ -55,7 +55,7 @@ component SidebarItem inherits Rectangle {
         background: root.selected
             ? Theme.surface1
             : (touch.has-hover ? Theme.surface0 : transparent);
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         HorizontalLayout {
             // Collapsed, it centres the icon in the content row; expanded, it tracks a
@@ -68,31 +68,26 @@ component SidebarItem inherits Rectangle {
             padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
             spacing: Theme.pad-md;
             alignment: start;
-            animate padding-left, padding-right { duration: Nav.sidebar-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+            cross-axis-alignment: center;
+            animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
 
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: root.icon;
-                    // Scaled directly so the wobble is visible on a collapsed rail too:
-                    // otherwise only the row's fill shrinks, by a pixel or so, and the
-                    // press feels inert with the label hidden.
-                    icon-size: 22px * root.press-scale;
-                    icon-color: root.selected ? Theme.accent : Theme.text;
-                    filled: root.selected;
-                }
+            MaterialIcon {
+                name: root.icon;
+                // Scaled directly so the wobble is visible on a collapsed rail too:
+                // otherwise only the row's fill shrinks, by a pixel or so, and the
+                // press feels inert with the label hidden.
+                icon-size: 22px * root.press-scale;
+                icon-color: root.selected ? Theme.accent : Theme.text;
+                filled: root.selected;
             }
 
-            if !Nav.sidebar-collapsed: VerticalLayout {
-                alignment: center;
-                Text {
-                    text: root.label;
-                    color: root.selected ? Theme.text : Theme.subtext0;
-                    font-size: Theme.font-size-md * root.press-scale;
-                    font-weight: root.selected ? 600 : 500;
-                    vertical-alignment: center;
-                    overflow: elide;
-                }
+            if !Nav.sidebar-collapsed: Text {
+                text: root.label;
+                color: root.selected ? Theme.text : Theme.subtext0;
+                font-size: Theme.font-size-md * root.press-scale;
+                font-weight: root.selected ? 600 : 500;
+                vertical-alignment: center;
+                overflow: elide;
             }
         }
     }
@@ -122,14 +117,10 @@ component Divider inherits Rectangle {
 }
 
 export component Sidebar inherits Rectangle {
-    // A drag sets the width on every mouse move, so without this the animation
-    // interpolates each delta and the handle feels laggy. Ease the collapse only.
-    property <bool> is-dragging;
-
     width: Nav.sidebar-collapsed
         ? Theme.sidebar-collapsed-w
         : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
-    animate width { duration: is-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
+    animate width { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
 
     background: WindowChrome.mantle;
 
@@ -174,7 +165,7 @@ export component Sidebar inherits Rectangle {
                 y: (parent.height - self.height) / 2;
                 border-radius: Theme.radius-md;
                 background: collapse-touch.has-hover ? Theme.surface0 : transparent;
-                animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+                animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
                 HorizontalLayout {
                     // `SidebarItem`'s padding, so this icon stays on the same vertical
                     // line as the nav icons below it.
@@ -184,25 +175,20 @@ export component Sidebar inherits Rectangle {
                     padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
                     spacing: Theme.pad-md;
                     alignment: start;
-                    animate padding-left, padding-right { duration: Nav.sidebar-dragging ? 0ms : Theme.dur-med; easing: ease-in-out; }
-                    VerticalLayout {
-                        alignment: center;
-                        MaterialIcon {
-                            name: Nav.sidebar-collapsed ? "dock_to_right" : "dock_to_left";
-                            icon-size: 22px;
-                            icon-color: Theme.text;
-                            filled: true;
-                        }
+                    cross-axis-alignment: center;
+                    animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
+                    MaterialIcon {
+                        name: Nav.sidebar-collapsed ? "dock_to_right" : "dock_to_left";
+                        icon-size: 22px;
+                        icon-color: Theme.text;
+                        filled: true;
                     }
-                    if !Nav.sidebar-collapsed: VerticalLayout {
-                        alignment: center;
-                        Text {
-                            text: @tr("Collapse");
-                            color: Theme.subtext0;
-                            font-size: Theme.font-size-md;
-                            vertical-alignment: center;
-                            overflow: elide;
-                        }
+                    if !Nav.sidebar-collapsed: Text {
+                        text: @tr("Collapse");
+                        color: Theme.subtext0;
+                        font-size: Theme.font-size-md;
+                        vertical-alignment: center;
+                        overflow: elide;
                     }
                 }
             }
@@ -215,13 +201,16 @@ export component Sidebar inherits Rectangle {
         // Caps the sidebar's preferred height, so the content row stops claiming a tall
         // slot and the now-playing bar keeps its own at small window heights. Both
         // built-in scrollbars are off — the `OverlayScrollbar` at the root sits flush
-        // with the right edge instead — and **`viewport-width: self.width` locks the
+        // with the right edge instead — and **`content-width: self.width` locks the
         // orthogonal axis**, so wheel events aren't hijacked into horizontal scroll.
         nav-scroll := ScrollView {
             vertical-stretch: 1;
+            // The std ScrollView floors its own width, and a box layout holds a stretched child to
+            // that floor, so on the collapsed rail every row would draw wider than its column.
+            min-width: 0px;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            viewport-width: self.width;
+            content-width: self.width;
 
             VerticalLayout {
                 spacing: Theme.pad-xs;
@@ -266,7 +255,7 @@ export component Sidebar inherits Rectangle {
         width: 4px;
         height: parent.height;
         background: resize-touch.pressed ? Theme.accent : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
         resize-touch := TouchArea {
             mouse-cursor: ew-resize;
@@ -280,11 +269,9 @@ export component Sidebar inherits Rectangle {
                 if (ev.kind == PointerEventKind.down) {
                     self.start-w = Nav.sidebar-width;
                     self.press-abs-x = self.absolute-position.x + self.pressed-x;
-                    root.is-dragging = true;
                     Nav.sidebar-dragging = true;
                 }
                 if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
-                    root.is-dragging = false;
                     Nav.sidebar-dragging = false;
                 }
             }
@@ -319,10 +306,10 @@ export component Sidebar inherits Rectangle {
         bar-radius: Nav.sidebar-collapsed ? 2px : 4px;
         min-thumb: Nav.sidebar-collapsed ? 20px : 28px;
         visible-size: nav-scroll.visible-height;
-        content-size: nav-scroll.viewport-height;
-        offset: -nav-scroll.viewport-y;
+        content-size: nav-scroll.content-height;
+        offset: -nav-scroll.content-y;
         scroll-to(o) => {
-            nav-scroll.viewport-y = -o;
+            nav-scroll.content-y = -o;
         }
     }
 }

@@ -16,15 +16,13 @@ export component SongsSection inherits VerticalLayout {
     HorizontalLayout {
         height: 32px;
         alignment: space-between;
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: @tr("Songs");
-                color: Theme.text;
-                font-size: Theme.font-size-md;
-                font-weight: 700;
-                letter-spacing: 0.4px;
-            }
+        Text {
+            text: @tr("Songs");
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            vertical-alignment: center;
         }
 
         // **No Shuffle pill here**: Search has no single "all of these tracks" the way
@@ -75,11 +73,6 @@ export component SongsSection inherits VerticalLayout {
         select-all => { Search.select-all(); }
         clear-selection => { Search.clear-selection(); }
         request-blur-search => { Search.blur-search-tick += 1; }
-        // Reuses the card-click callbacks, so cross-tab nav means the same thing from
-        // either surface.
-        go-to-album(aid) => { Search.open-album(aid); }
-        go-to-artist(aid) => { Search.open-artist(aid); }
-        go-to-genre(gid) => { Search.go-to-genre(gid); }
     }
 
     // Mounted only when the backend returned more than the compact cap; Rust re-derives
@@ -96,7 +89,7 @@ export component SongsSection inherits VerticalLayout {
                 : transparent;
             border-width: 1px;
             border-color: Theme.surface2;
-            animate background { duration: Theme.dur-fast; easing: ease-in-out; }
+            animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             show-more-label := Text {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;

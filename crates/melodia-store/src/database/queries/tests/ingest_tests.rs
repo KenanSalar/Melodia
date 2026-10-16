@@ -1,5 +1,7 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
+use super::listed_as_spelled;
 use crate::database::DbPool;
 use crate::database::queries;
 use crate::database::queries::fixtures::{insert_test_track, make_test_metadata};
@@ -778,7 +780,7 @@ fn what_the_chunks_wrote_decides_the_last_write_and_the_withdraw() {
     ];
 
     for ((inserted, moved, updated), expected) in cases {
-        let mut ingested = queries::ingest::Ingested::new(false);
+        let mut ingested = queries::ingest::Ingested::for_delta(0);
         ingested.add(&chunk(inserted, moved, updated));
         let decided = (ingested.any(), ingested.rewrote_existing());
         assert_eq!(decided, expected, "inserted {inserted}, moved {moved}, updated {updated}");
@@ -789,10 +791,101 @@ fn what_the_chunks_wrote_decides_the_last_write_and_the_withdraw() {
 /// inserted.
 #[test]
 fn the_counts_sum_across_chunks() {
-    let mut ingested = queries::ingest::Ingested::new(true);
+    let mut ingested = queries::ingest::Ingested::for_delta(0);
 
     ingested.add(&chunk(2, 1, 0));
     ingested.add(&chunk(3, 0, 0));
 
     assert_eq!((ingested.inserted, ingested.rewrote_existing()), (5, true));
+}
+
+// --- a moved file against an old path that still resolves ---
+
+/// A rename that changed only case leaves the old spelling resolving on a case-insensitive
+/// filesystem, so its directory's own listing is what tells it from a file still there. Asked of
+/// the listing directly, which a case-sensitive filesystem can answer too.
+#[test]
+fn only_a_spelling_its_directory_lists_is_still_on_disk() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    std::fs::write(tmp.path().join("Song.flac"), b"audio")?;
+    let as_listed = tmp.path().join("Song.flac").to_string_lossy().into_owned();
+    let respelled = tmp.path().join("song.flac").to_string_lossy().into_owned();
+
+    let kept = listed_as_spelled([as_listed.clone(), respelled].into_iter().collect());
+
+    assert_eq!(kept, HashSet::from([as_listed]));
+    Ok(())
+}
+
+/// A directory that can't be read says nothing about its entries, so what `exists()` said stands.
+#[test]
+fn a_path_whose_directory_cannot_be_listed_is_kept() {
+    let unlisted = PathBuf::from("no-such-directory").join("song.flac");
+    let unlisted = unlisted.to_string_lossy().into_owned();
+
+    let kept = listed_as_spelled(HashSet::from([unlisted.clone()]));
+
+    assert_eq!(kept, HashSet::from([unlisted]));
+}
+
+/// A hard link is a second entry for the same file, and each entry is a track of its own: taking
+/// it for a move would hand the one row back and forth between the two on every scan.
+#[tokio::test]
+async fn a_hard_link_beside_its_row_is_a_duplicate_rather_than_a_move() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let (original, link) = (tmp.path().join("a.flac"), tmp.path().join("b.flac"));
+    std::fs::write(&original, b"audio")?;
+    std::fs::hard_link(&original, &link)?;
+    insert_test_track(&db, &original.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    let files = vec![ScannedFile { path: link, metadata: make_test_metadata("Song") }];
+
+    let mut tx = db.write().begin().await?;
+    let result = ingest_scanned_files(
+        &mut tx,
+        &files,
+        &FolderResolution::Fixed(1),
+        "2024-01-01T00:00:00Z",
+        false,
+        &ScanPool::default(),
+    )
+    .await?;
+    tx.commit().await?;
+
+    assert_eq!((result.inserted_count, result.moved_count), (1, 0), "(inserted, moved)");
+    Ok(())
+}
+
+/// The scan meets the renamed file as new and its row as an orphan, and the old spelling still
+/// resolves. Read as a duplicate, the row would be purged with its rating. Only a filesystem
+/// that folds case can stage it, which the default Windows and macOS ones do.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+#[tokio::test]
+async fn a_case_only_rename_keeps_the_tracks_rating() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, &tmp.path().to_string_lossy(), true).await?;
+    let (old, renamed) = (tmp.path().join("song.flac"), tmp.path().join("Song.flac"));
+    std::fs::write(&renamed, b"audio")?;
+    let id = insert_test_track(&db, &old.to_string_lossy(), "Song", "Art", "Alb", "Rock").await?;
+    queries::track::set_rating(&db, &[id], 5).await?;
+    let files = vec![ScannedFile { path: renamed.clone(), metadata: make_test_metadata("Song") }];
+
+    let mut tx = db.write().begin().await?;
+    ingest_scanned_files(
+        &mut tx,
+        &files,
+        &FolderResolution::Fixed(1),
+        "2024-01-01T00:00:00Z",
+        false,
+        &ScanPool::default(),
+    )
+    .await?;
+    tx.commit().await?;
+
+    let track = queries::track::get_track_by_id(&db, id).await?;
+    let renamed = renamed.to_string_lossy();
+    assert_eq!((track.file_path.as_str(), track.rating), (renamed.as_ref(), 5), "(path, rating)");
+    Ok(())
 }

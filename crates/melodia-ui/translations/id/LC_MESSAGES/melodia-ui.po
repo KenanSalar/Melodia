@@ -146,6 +146,15 @@ msgid "Add"
 msgstr "Tambah"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} lagu"
+
+#: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
 #: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
@@ -157,10 +166,12 @@ msgid "Playlist name"
 msgstr "Nama playlist"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Deskripsi (opsional)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Tambahkan deskripsi…"
 
@@ -227,14 +238,6 @@ msgstr "Atur ulang"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Tidak ada playlist untuk diekspor"
-
-#: ui/components/dialog/export-playlist-picker.slint
-#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
-#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
-msgid "{n} track"
-msgid_plural "{n} tracks"
-msgstr[0] "{n} lagu"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
@@ -333,6 +336,7 @@ msgstr "Token Anda ada di halaman pengaturan profil ListenBrainz."
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Pilih semua"
@@ -802,6 +806,10 @@ msgid "Folder"
 msgstr "Folder"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Artis - Album"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -872,7 +880,7 @@ msgstr "Edit Informasi Lagu"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Salin"
@@ -929,10 +937,6 @@ msgstr "Hapus {} Playlist"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Hapus Playlist"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Artis - Album"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -1436,6 +1440,14 @@ msgstr "Salin Judul"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Salin Artis"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Potong"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Tempel"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"
@@ -2669,18 +2681,6 @@ msgstr "Latar Album"
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Warnai pemutar mini dengan warna album yang sedang diputar, seperti tampilan Sedang Diputar."
 
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Gerakan"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Lewati Animasi Pembuka"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Buka dengan pustaka langsung tampil di layar, alih-alih memudar dan bergeser ke tempatnya. Halaman detail yang Anda biarkan terbuka tetap membentang setelah dimuat."
-
 #: ui/views/settings/output-section.slint
 msgid "Output"
 msgstr "Output"
@@ -2764,6 +2764,14 @@ msgstr "Ikuti Laju Sampel Berkas"
 #: ui/views/settings/output-section.slint
 msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
 msgstr "Buka ulang perangkat audio pada laju masing-masing lagu, sehingga sistem tidak melakukan resampling. Sistem harus mengizinkan laju tersebut"
+
+#: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Konversi Laju Sampel"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Cara lagu dikonversi saat laju sampelnya bukan laju perangkat, atau kecepatannya bukan 1×. Linear memakai lebih sedikit CPU dan melembutkan frekuensi tertinggi; Terbatas Pita mempertahankan nada tinggi sepenuhnya"
 
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -2852,6 +2860,14 @@ msgid "The device is running at {}"
 msgstr "Perangkat berjalan pada {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Linear"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Terbatas Pita"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Jadikan Bit-Perfect"
 
@@ -2919,6 +2935,10 @@ msgstr "Memudarkan antarlagu"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Tidak memudarkan"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} di-resample secara linear ke {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

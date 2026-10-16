@@ -11,8 +11,9 @@ use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 
 use super::state::COMPACT_TRACK_LIMIT;
 use super::top_result::{TopKind, TopResult, TopSubtitle, compute_top_result};
-use super::{SearchUi, restamp_rows, to_slint_album_strip_row, to_slint_artist_strip_row};
+use super::{SearchUi, to_slint_album_strip_row, to_slint_artist_strip_row};
 use crate::ui::genres::genre_accent;
+use crate::ui::list_selection;
 use crate::ui::model_patch;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32, opt_shared};
@@ -94,10 +95,12 @@ fn sort_track_rows(
 /// Truncate the Songs rows against the live `show-all-tracks` flag and write
 /// them, with the untruncated total beside them.
 fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
+    // Against the whole result set: the compact view hides the rest rather than dropping it.
+    list_selection::keep_selection_within(g, || rows.iter().map(|row| row.id).collect());
     let take =
         if g.get_show_all_tracks() { rows.len() } else { rows.len().min(COMPACT_TRACK_LIMIT) };
     let mut shown: Vec<UiTrackListRow> = rows.into_iter().take(take).collect();
-    restamp_rows(g, &mut shown);
+    list_selection::restamp_row_selection(g, &mut shown);
     write_track_model(g, shown);
     g.set_tracks_total(total);
 }
@@ -221,7 +224,7 @@ pub fn teardown_models_on_leave(ui: &AppWindow) {
     // clean. The user just navigated away — they can't be relying on
     // a sticky selection.
     clear_selected_ids_model(&g);
-    g.set_selection_anchor(-1);
+    g.set_selection_anchor(list_selection::NO_ANCHOR);
 }
 
 fn clear_selected_ids_model(g: &Search) {

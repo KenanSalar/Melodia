@@ -1,7 +1,8 @@
 import { Theme } from "../../theme.slint";
-import { IconButton } from "../icon-button.slint";
+import { FieldLabel } from "../field-frame.slint";
 import { PillButton } from "../action-pill.slint";
-import { CreditNameInput } from "./credit-name-input.slint";
+import { ControlledInput } from "./controlled-input.slint";
+import { RemoveRowButton } from "./remove-row-button.slint";
 
 // One name in a plain list. `CreditRowView` without the phrase picker, which is the whole of the
 // difference: an artist credit prints as a line and needs to say what joins two names, where a
@@ -14,8 +15,9 @@ component NameRowView inherits HorizontalLayout {
     callback remove();
 
     spacing: Theme.pad-sm;
+    cross-axis-alignment: center;
 
-    CreditNameInput {
+    ControlledInput {
         horizontal-stretch: 1;
         min-width: 120px;
         text: root.name;
@@ -25,17 +27,9 @@ component NameRowView inherits HorizontalLayout {
 
     // Hidden on a lone row for `CreditRowView`'s reason: a field with no entries is a state the
     // editor should not be able to reach, the save reading it as "cleared" rather than as the
-    // removal it was. Unmounted rather than emptied — an empty wrapper still claims its spacing.
-    if !root.is-only: VerticalLayout {
-        alignment: center;
-        IconButton {
-            icon: "close";
-            icon-size: 16px;
-            diameter: 28px;
-            idle-bg: Theme.surface1;
-            hover-fg: Theme.danger;
-            clicked => { root.remove(); }
-        }
+    // removal it was. Unmounted rather than hidden, since a hidden button still claims its spacing.
+    if !root.is-only: RemoveRowButton {
+        clicked => { root.remove(); }
     }
 }
 
@@ -52,14 +46,11 @@ export component NameListEditor inherits VerticalLayout {
     callback add();
     callback remove(int /*row*/);
 
-    // `LabeledInput`'s own label gap and weight, for the same reason as the field height.
+    // `LabeledInput`'s own label gap, for the same reason as the field height.
     spacing: 4px;
 
-    Text {
+    FieldLabel {
         text: root.label;
-        color: Theme.subtext0;
-        font-size: Theme.font-size-sm;
-        font-weight: 600;
     }
 
     for name[i] in root.names: NameRowView {

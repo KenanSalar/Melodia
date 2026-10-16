@@ -137,7 +137,7 @@ async fn folders_and_files_sort_case_insensitively() -> Result<(), AppError> {
     let result = browse(&db, tmp.path(), &folders).await?;
     let folder_names: Vec<&str> = result.folders.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(folder_names, ["alpha", "Beta", "Zebra"]);
-    let file_names: Vec<&str> = result.files.iter().map(|f| f.row.file_name.as_str()).collect();
+    let file_names: Vec<&str> = result.files.iter().map(|f| f.file_name.as_str()).collect();
     assert_eq!(file_names, ["alpha.mp3", "Bravo.mp3", "Zulu.mp3"]);
     Ok(())
 }
@@ -164,12 +164,60 @@ async fn a_file_carries_its_row_only_when_the_library_holds_one() -> Result<(), 
     let listed: Vec<(&str, bool, i64, &str)> = result
         .files
         .iter()
-        .map(|f| (f.row.file_name.as_str(), f.in_library, f.row.id, f.row.title.as_str()))
+        .map(|f| (f.file_name.as_str(), f.in_library, f.row.id, f.row.title.as_str()))
         .collect();
     assert_eq!(
         listed,
         [("known.mp3", true, 1, "Known Song"), ("unknown.mp3", false, 0, "unknown.mp3")],
         "a disk-only file must be titled by its name and carry no id"
     );
+    Ok(())
+}
+
+/// The directory's rows are fetched with a `LIKE`, which folds ASCII case, so a sibling directory
+/// differing only in case answers too. Only the full path tells the two rows apart, and the wrong
+/// one would play, rate and favourite another track.
+#[tokio::test]
+async fn a_directory_lists_its_own_row_and_not_a_case_variant_siblings() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let root = resolved(tmp.path())?;
+    queries::folder::insert_folder(&db, &root.to_string_lossy(), true).await?;
+    let dir = root.join("Rock");
+    std::fs::create_dir(&dir)?;
+    std::fs::write(dir.join("a.mp3"), "data")?;
+    let own = dir.join("a.mp3").to_string_lossy().into_owned();
+    let sibling = root.join("rock").join("a.mp3").to_string_lossy().into_owned();
+    insert_test_track(&db, &own, "Upper", "Artist", "Album", "Rock").await?;
+    insert_test_track(&db, &sibling, "Lower", "Artist", "Album", "Rock").await?;
+
+    let result = browse(&db, &dir, &[library_folder(&root, true)]).await?;
+
+    let listed: Vec<(&str, bool, &str)> = result
+        .files
+        .iter()
+        .map(|f| (f.file_name.as_str(), f.in_library, f.row.title.as_str()))
+        .collect();
+    assert_eq!(listed, [("a.mp3", true, "Upper")]);
+    Ok(())
+}
+
+/// The list sorts by what is on disk, so a library file and a disk-only one beside it order the
+/// same way whatever the library titled the first.
+#[tokio::test]
+async fn files_sort_by_their_name_on_disk_not_their_title() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    let tmp = TempDir::new()?;
+    let dir = resolved(tmp.path())?;
+    queries::folder::insert_folder(&db, &dir.to_string_lossy(), true).await?;
+    let titled = dir.join("a.mp3");
+    std::fs::write(&titled, "data")?;
+    std::fs::write(dir.join("b.mp3"), "data")?;
+    insert_test_track(&db, &titled.to_string_lossy(), "Zed", "Artist", "Album", "Rock").await?;
+
+    let result = browse(&db, &dir, &[library_folder(&dir, true)]).await?;
+
+    let names: Vec<&str> = result.files.iter().map(|f| f.file_name.as_str()).collect();
+    assert_eq!(names, ["a.mp3", "b.mp3"]);
     Ok(())
 }

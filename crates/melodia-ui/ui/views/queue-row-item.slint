@@ -6,6 +6,7 @@ import { ArtworkImage } from "../components/artwork-image.slint";
 import { IconButton } from "../components/icon-button.slint";
 import { Checkbox } from "../components/checkbox.slint";
 import { TrackContextMenu } from "../components/track-list/track-context-menu.slint";
+import { ContextClick } from "../components/context-menu.slint";
 import { SelectionPill } from "../components/track-list/selection-pill.slint";
 
 // One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete.
@@ -16,8 +17,8 @@ import { SelectionPill } from "../components/track-list/selection-pill.slint";
 //
 // **The drag is hand-rolled rather than built on `DragArea` / `DropArea`.** Those negotiate a drop
 // onto a whole element: no insertion-slot granularity, no edge auto-scroll, and what they add is a
-// mime-typed payload a reorder has nothing to put in; 1.16's `DragArea` doesn't expose `dragging`
-// either. `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit pointer
+// `data-transfer` payload a reorder has nothing to put in; 1.18's `DragArea` doesn't expose
+// `dragging` either. `moved` keeps firing after the pointer leaves the TouchArea's bounds — implicit pointer
 // capture — which is what makes `absolute-position.y + mouse-y` → row index reliable.
 export component QueueRowItem inherits Rectangle {
     in property <QueueRow> row-data;
@@ -78,7 +79,7 @@ export component QueueRowItem inherits Rectangle {
     // and the handler stays one line.
     private property <length> cur-abs-y: 0px;
     // The same point in the list's *content* space. A row sits on screen at
-    // `list-y0 + viewport-y + idx * row-height`, so recovering the index means taking
+    // `list-y0 + list-viewport-y + idx * row-height`, so recovering the index means taking
     // the scroll offset back out — without it the slot walks off the moment the queue is
     // scrolled while the host's indicator, which does account for it, points elsewhere.
     private property <length> cur-list-y:
@@ -195,8 +196,8 @@ export component QueueRowItem inherits Rectangle {
                 }
                 // Nothing here touches the drag state: its arm is left-only, so a right-click
                 // can't ghost the row.
-                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.right) {
-                    ctx-menu.show();
+                if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                    ctx-menu.show-at(self.mouse-x, self.mouse-y);
                 }
             }
             moved => {
@@ -232,6 +233,9 @@ export component QueueRowItem inherits Rectangle {
                 }
             }
 
+            // Kept off the cross-axis solve, so the artwork and remove button keep their own
+            // centring layouts: under it the duration cell would be held to the heart's 26 px
+            // while the heart shows.
             HorizontalLayout {
                 padding-left: Theme.pad-md;
                 padding-right: Theme.pad-md;
@@ -242,43 +246,31 @@ export component QueueRowItem inherits Rectangle {
                 // on hover or selection.
                 Rectangle {
                     width: 28px;
-                    if !root.show-checkbox: VerticalLayout {
-                        alignment: center;
-                        HorizontalLayout {
-                            alignment: center;
-                            Text {
-                                text: root.row-index + 1;
-                                // `Theme.text` throughout, as in the track lists: same
-                                // body copy on the same background, and reading dimmer
-                                // than the lists behind the sheet is the one thing
-                                // these rows shouldn't do.
-                                color: root.playing ? Theme.accent : Theme.text;
-                                font-size: Theme.font-size-row;
-                                horizontal-alignment: center;
-                            }
-                        }
+                    if !root.show-checkbox: Text {
+                        text: root.row-index + 1;
+                        // `Theme.text` throughout, as in the track lists: same
+                        // body copy on the same background, and reading dimmer
+                        // than the lists behind the sheet is the one thing
+                        // these rows shouldn't do.
+                        color: root.playing ? Theme.accent : Theme.text;
+                        font-size: Theme.font-size-row;
+                        horizontal-alignment: center;
                     }
-                    if root.show-checkbox: VerticalLayout {
-                        alignment: center;
-                        HorizontalLayout {
-                            alignment: center;
-                            Rectangle {
-                                width: 16px;
-                                height: 16px;
-                                Checkbox {
-                                    checked: root.selected;
-                                }
-                                // The box starts a selection; once one is live the row body
-                                // picks too. Modifiers ride through `ev.modifiers`.
-                                cb-touch := TouchArea {
-                                    mouse-cursor: pointer;
-                                    pointer-event(ev) => {
-                                        if (ev.kind == PointerEventKind.up
-                                            && ev.button == PointerEventButton.left) {
-                                            root.pick(
-                                                ev.modifiers.control, ev.modifiers.shift);
-                                        }
-                                    }
+                    if root.show-checkbox: Rectangle {
+                        width: 16px;
+                        height: 16px;
+                        Checkbox {
+                            checked: root.selected;
+                        }
+                        // The box starts a selection; once one is live the row body
+                        // picks too. Modifiers ride through `ev.modifiers`.
+                        cb-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            pointer-event(ev) => {
+                                if (ev.kind == PointerEventKind.up
+                                    && ev.button == PointerEventButton.left) {
+                                    root.pick(
+                                        ev.modifiers.control, ev.modifiers.shift);
                                 }
                             }
                         }
@@ -327,19 +319,16 @@ export component QueueRowItem inherits Rectangle {
                     clip: true;
                     HorizontalLayout {
                         alignment: end;
-                        if !touch.has-hover: VerticalLayout {
-                            alignment: center;
-                            Text {
-                                text: root.row-data.display_duration;
-                                color: Theme.text;
-                                font-size: Theme.font-size-sm;
-                                horizontal-alignment: right;
-                            }
+                        cross-axis-alignment: center;
+                        if !touch.has-hover: Text {
+                            text: root.row-data.display_duration;
+                            color: Theme.text;
+                            font-size: Theme.font-size-sm;
+                            horizontal-alignment: right;
                         }
                         if touch.has-hover: Rectangle {
                             width: 26px;
                             height: 26px;
-                            y: (parent.height - self.height) / 2;
                             border-radius: self.height / 2;
                             background: fav-touch.has-hover ? Theme.surface1 : transparent;
                             MaterialIcon {
@@ -397,8 +386,6 @@ export component QueueRowItem inherits Rectangle {
             view-context: "queue";
             effective-selection: Queue.selected-ids;
             selection-count: Queue.selected-count;
-            at-x: touch.mouse-x;
-            at-y: touch.mouse-y;
 
             play-single => { Queue.skip-to(root.row-index); }
             toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
@@ -414,11 +401,6 @@ export component QueueRowItem inherits Rectangle {
                     Queue.remove(root.row-index);
                 }
             }
-            // Dismiss first: the sheet sits above the content panel, so a navigation with it
-            // still up lands behind it.
-            go-to-album(aid) => { Queue.dismiss(); Queue.go-to-album(aid); }
-            go-to-artist(aid) => { Queue.dismiss(); Queue.go-to-artist(aid); }
-            go-to-genre(gid) => { Queue.dismiss(); Queue.go-to-genre(gid); }
         }
     }
 }

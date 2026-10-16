@@ -8,14 +8,9 @@ import { ColorDotGrid } from "../settings/color-dot-grid.slint";
 // callback, so the card recolours itself under the pointer as they're used — which is the whole
 // demonstration and costs nothing to build.
 //
-// Composed directly rather than through `SettingRowStacked`: that row pads `pad-lg` of its own and
-// derives its strip width from `SettingsPage`, so on a card that already pads it would indent the
-// controls past the heading and size them against the Settings page's width.
+// Composed directly rather than through `SettingRowStacked`: that row pads `pad-lg` of its own, so
+// on a card that already pads it would indent the controls past the heading.
 export component OnboardingAppearancePanel inherits VerticalLayout {
-    // The width the card leaves its content. Handed to every strip explicitly — they default to
-    // `SettingsPage.row-content-w`, which is the Settings page's width and not this one.
-    in property <length> content-w;
-
     min-width: 0px;
     spacing: Theme.pad-sm;
 
@@ -39,7 +34,6 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
         ChipGroup {
             options: Settings.language-names;
             selected-index <=> Settings.language-idx;
-            avail-width: root.content-w;
             selected(i) => { Settings.language-changed(i); }
         }
     }
@@ -58,7 +52,6 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
         ChipGroup {
             options: Settings.theme-names;
             selected-index <=> Settings.theme-idx;
-            avail-width: root.content-w;
             selected(i) => { Settings.theme-changed(i); }
         }
     }
@@ -80,7 +73,6 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
                 ? ["Latte", "Frappe", "Macchiato", "Mocha", @tr("System")]
                 : [@tr("Dark"), @tr("Light"), @tr("System")];
             selected-index <=> Settings.variant-idx;
-            avail-width: root.content-w;
             selected(i) => { Settings.variant-changed(i); }
         }
     }
@@ -99,7 +91,6 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
             labels: Settings.accent-names;
             first-is-dynamic: Settings.material-you-active;
             selected-index <=> Settings.accent-idx;
-            avail-width: root.content-w;
             selected(i) => { Settings.accent-changed(i); }
         }
     }

@@ -106,7 +106,7 @@ fn every_tab_is_listed_in_the_walk_over_the_seats() {
 /// **Every station grid the global declares has to be handed a `VecModel` at install.**
 ///
 /// This is the one failure in the page that is silent at both ends: an unbound Slint array is a
-/// model of its own kind, so `write_grid`'s downcast misses, the grid stays empty, and the only
+/// model of its own kind, so `replace_rows`'s downcast misses, the grid stays empty, and the only
 /// report is one log line per attempted write. It has cost a round already — the Favorites and
 /// Recently Played grids shipped declared but never installed, and both tabs simply painted their
 /// empty state while the database held the rows.

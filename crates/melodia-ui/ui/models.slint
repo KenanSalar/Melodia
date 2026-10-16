@@ -204,19 +204,21 @@ export struct ArtistCreditRow {
 // the editor body, mirrored by position to `entities::smart_criteria::{FIELDS, ops_for}`.
 //   * field-kind — 0 text · 1 number · 2 bool · 3 date; picks the op array
 //   * input-kind — 0 none · 1 text · 2 number; picks the value widget
+//   * fractional — a number widget that takes a decimal point (`RuleField::holds_fractions`)
 export struct SmartRuleRow {
     field-index: int,
     op-index: int,
     field-kind: int,
     input-kind: int,
+    fractional: bool,
     value-text: string,
 }
 
-// **`position_ms`, `duration_ms` and `progress` deliberately live on the `Player` global as
-// separate scalars, not here.** Bundled in, each 500 ms monitor tick invalidated the whole
+// **`position_ms` and `duration_ms` deliberately live on the `Player` global as separate
+// scalars, not here.** Bundled in, each 500 ms monitor tick invalidated the whole
 // `Player.vm` and dirty-marked every binding reading *any* field — a recursive walk of the
 // dependency list twice a second, for as long as playback lasted. Kept out, a tick's dirty
-// set is the three readers that care.
+// set is the readers that care.
 // The station on the deck, as every Now-Playing surface draws it. `PlayerVm`'s `track` half at
 // the same altitude, and mutually exclusive with it: `has_track` and `has_station` are never both
 // true, so a surface reads whichever says yes.
@@ -521,8 +523,8 @@ export struct RadioSuggestionRow {
 // **Every count is Rust's answer, not the layout's.** A `for` loop exposes no per-item element
 // whose `y` could be read back, so following the song means Rust owning a cumulative offset table.
 // It can only do that if it also decides how tall each row is, which it does by estimating the
-// wrap the way `ui::chips` estimates a chip's width. Over by one costs a blank line; under by one
-// elides.
+// wrap from per-character widths (`ui::now_playing::lyrics::measure`). Over by one costs a blank
+// line; under by one elides.
 //
 // The three are declared in the order they are drawn: the words, how they sound, what they mean.
 //

@@ -74,7 +74,8 @@ fn install_grid_covers(app: &AppWindow) {
 }
 
 /// Install every view slice and its callbacks. Seeds the persisted nav index
-/// and reopens each view's persisted detail (if any). Returns the per-view
+/// and reopens each view's persisted detail (if any), a My Library tab the launch
+/// doesn't show keeping its own until its first enter. Returns the per-view
 /// handles for downstream wiring.
 pub fn install_views(
     app: &AppWindow,
@@ -244,14 +245,11 @@ pub fn install_library_settings_and_friends(
     ui::settings::file_watching::install(app, state, &notifications);
     ui::settings::rating_writeback::install(app, state);
     ui::settings::updater_settings::install(app, state);
-    ui::settings::motion::install(app, state);
     ui::settings::about::install(app, state);
     // Takes the stack because it both toasts and, on the launch after a panic,
     // pushes the "crashed last time" notice itself.
     ui::settings::diagnostics::install(app, state, &notifications);
     ui::settings::settings_page::install(app, state);
-    ui::chips::install(app);
-    ui::hero_chips::install(app);
     ui::track_columns::install(app);
     // The stack is the one surface a language switch can't reach on its own: its rows carry
     // strings Rust resolved once, they outlive every navigation, and the file-watching

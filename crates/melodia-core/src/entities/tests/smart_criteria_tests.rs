@@ -96,6 +96,15 @@ fn field_value_types_and_operator_lists_are_coherent() {
     }
 }
 
+/// `bpm` is the one `REAL` column, so its value input is the only one taking a decimal point.
+#[test]
+fn only_bpm_holds_fractions() {
+    let fractional: Vec<RuleField> =
+        FIELDS.iter().copied().filter(|field| field.holds_fractions()).collect();
+
+    assert_eq!(fractional, [RuleField::Bpm]);
+}
+
 #[test]
 fn editor_field_array_is_exhaustive_and_unique() {
     // Wildcard-free match: adding a `RuleField` variant fails to compile here

@@ -71,8 +71,7 @@ fn onboarding_sources() -> Vec<(String, String)> {
 /// **This reads the directory's own files, not what they mount.** `IconButton` brings a `Tooltip`
 /// in on the close button and that carries `changed hovered` — safe, the property being local to
 /// the branch, and `NowPlayingView` is the standing proof: it is `if`-mounted too and drops the
-/// same button on every close. A `SearchBar` or `MetaChipStrip` in a panel would not be, and lives
-/// outside this walk.
+/// same button on every close. A `SearchBar` in a panel would not be, and lives outside this walk.
 #[test]
 fn no_onboarding_component_carries_a_change_tracker() {
     let offenders: Vec<String> = onboarding_sources()

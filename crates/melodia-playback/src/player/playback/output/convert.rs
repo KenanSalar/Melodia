@@ -2,9 +2,9 @@
 //!
 //! Pull-driven, because the whole chain above it is: the voice asks for a block and this reaches
 //! back through the source for however many frames that takes. Where the rates differ, or the
-//! speed isn't one, each output frame is interpolated by [`super::resample`]'s band-limited kernel.
-//! Where they match exactly, the source's own frames are handed over untouched, which is what
-//! bit-perfect output rests on.
+//! speed isn't one, each output frame is interpolated, between two frames or through
+//! [`super::resample`]'s band-limited kernel as the [`Resampler`] asks. Where they match exactly,
+//! the source's own frames are handed over untouched, which is what bit-perfect output rests on.
 //!
 //! **Playback speed lives here.** rodio expressed it by reporting a multiplied `sample_rate()`
 //! upward and letting its mixer resample the difference, which is why a position had to be read on
@@ -15,6 +15,39 @@
 use melodia_audio::player::source::audio::{AudioSource, Sample, Shape};
 
 use super::resample::{self, CENTRE, Kernel, SPAN, Weighed};
+
+/// How a converter interpolates wherever the rates differ or the speed isn't one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Resampler {
+    /// Between the two frames either side of the point. Cheap at any device rate, but it softens
+    /// the top octave and only attenuates the source's images, so what lands past the output's
+    /// Nyquist folds back into the band, loudest on a downsample and on an upsample short of twice
+    /// the source's rate (44.1 to 48 kHz among them), and fainter above that.
+    Linear,
+    /// Through [`super::resample`]'s kernel, which keeps the whole band. Its cost per output frame
+    /// is the kernel's span, so it follows the device's rate rather than the track's.
+    BandLimited,
+}
+
+impl Default for Resampler {
+    /// Linear on Windows alone, whose shared mode converts every stream to the system's mix format
+    /// however high it runs. Elsewhere a shared stream can follow the file's rate, and on Linux
+    /// otherwise opens at 48 kHz, where the kernel is cheap and 44.1 kHz material is the case
+    /// linear aliases most.
+    fn default() -> Self {
+        if cfg!(target_os = "windows") { Self::Linear } else { Self::BandLimited }
+    }
+}
+
+/// What one [`Converter::fill`] converts to.
+#[derive(Debug, Clone, Copy)]
+pub struct Conversion {
+    pub device: Shape,
+    /// Scales the source's rate rather than the device's, so `1.0` against equal rates steps
+    /// exactly one source frame per output frame and every sample passes through untouched.
+    pub speed: f64,
+    pub resampler: Resampler,
+}
 
 /// What one [`Converter::fill`] did.
 ///
@@ -41,9 +74,8 @@ pub struct Filled {
 /// [starved]: Self::is_starved
 pub struct Converter {
     source: Shape,
-    kernel: &'static Kernel,
     /// The frames around the one being written. Held across calls and, at a gapless seam, across
-    /// sources, so neither a block boundary nor a track boundary restarts the kernel.
+    /// sources, so neither a block boundary nor a track boundary restarts the interpolation.
     window: Window,
     /// How far past the centre frame the next output frame falls.
     position: f64,
@@ -51,7 +83,8 @@ pub struct Converter {
     /// crosses that the lookahead doesn't already cover.
     owed: u32,
     /// Frames taken in past the centre. None while the output copies the source's own frames, so
-    /// a bit-perfect path runs no later than the source; the kernel's reach once it interpolates.
+    /// a bit-perfect path runs no later than the source; the interpolation's reach once it
+    /// interpolates.
     ahead: usize,
     /// Silent frames pushed since the source ran out. The centre reaching one ends the converter.
     pads: usize,
@@ -80,12 +113,59 @@ enum State {
     Done,
 }
 
+/// How one fill makes its frames, settled once for the whole block.
+#[derive(Clone, Copy)]
+enum Method {
+    Copy,
+    Linear,
+    Kernel(&'static Kernel),
+}
+
+impl Method {
+    fn of(step: f64, resampler: Resampler) -> Self {
+        if step.to_bits() == 1.0_f64.to_bits() {
+            return Self::Copy;
+        }
+        match resampler {
+            Resampler::Linear => Self::Linear,
+            // An unbuilt table means it was asked for without being prepared, and building it
+            // here would allocate on the audio thread. The block goes linear instead.
+            Resampler::BandLimited => resample::prepared().map_or(Self::Linear, Self::Kernel),
+        }
+    }
+
+    /// Frames past the centre this method reads.
+    fn reach(self, step: f64) -> usize {
+        match self {
+            Self::Copy => 0,
+            Self::Linear => 1,
+            Self::Kernel(_) => resample::reach(step),
+        }
+    }
+}
+
+/// How one output frame is made from the window.
+enum Made {
+    Copied,
+    /// This fraction of the way from the centre frame to the next.
+    Lerped(Sample),
+    Weighed(Weighed),
+}
+
+/// A position inside one frame, at the width of the samples it weighs.
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "a fraction in [0, 1) loses nothing a sample's own precision would keep"
+)]
+fn fraction(position: f64) -> Sample {
+    position as Sample
+}
+
 impl Converter {
     pub fn new(source: Shape) -> Self {
         let width = usize::from(source.channels.get());
         Self {
             source,
-            kernel: resample::kernel(),
             window: Window::new(width),
             position: 0.0,
             owed: 1,
@@ -98,37 +178,38 @@ impl Converter {
         }
     }
 
-    /// Write up to `out.len()` samples at `device`'s shape, pulling from `src` as the ratio demands.
+    /// Write up to `out.len()` samples at the device's shape, pulling from `src` as the ratio
+    /// demands.
     ///
     /// A short return means the converter starved or finished; `out` past that point is untouched.
-    /// `speed` scales the source's rate rather than the device's, so `1.0` against equal rates
-    /// steps exactly one source frame per output frame and every sample passes through untouched.
     pub fn fill(
         &mut self,
         out: &mut [Sample],
         src: &mut dyn AudioSource,
-        device: Shape,
-        speed: f64,
+        conversion: Conversion,
     ) -> Filled {
+        let Conversion { device, speed, resampler } = conversion;
         let width = usize::from(device.channels.get());
         let step = f64::from(self.source.rate.get()) * speed / f64::from(device.rate.get());
-        let passthrough = step.to_bits() == 1.0_f64.to_bits();
-        let reach = if passthrough {
+        let method = Method::of(step, resampler);
+        if matches!(method, Method::Copy) {
             // Only a position of zero hands the source's own frames over, so one an earlier speed
             // left part way between two is dropped once the step is back to exactly one.
             self.position = 0.0;
-            0
-        } else {
-            resample::reach(step)
-        };
+        }
+        let reach = method.reach(step);
 
         let mut filled = Filled { samples: 0, source_frames: 0 };
         if !self.settle(src, reach, &mut filled.source_frames) {
             return filled;
         }
         for frame in out.chunks_exact_mut(width) {
-            let weighed = (!passthrough).then(|| self.weigh(step));
-            self.write_frame(frame, weighed.as_ref());
+            let made = match method {
+                Method::Copy => Made::Copied,
+                Method::Linear => Made::Lerped(fraction(self.position)),
+                Method::Kernel(kernel) => Made::Weighed(self.weigh(kernel, step)),
+            };
+            self.write_frame(frame, &made);
             filled.samples += width;
 
             self.position += step;
@@ -181,7 +262,7 @@ impl Converter {
 
     /// Lay the kernel's weights out for an output frame at the current position, unless they are
     /// already laid out for this position and step.
-    fn weigh(&mut self, step: f64) -> Weighed {
+    fn weigh(&mut self, kernel: &Kernel, step: f64) -> Weighed {
         let (position, step_bits) = (self.position.to_bits(), step.to_bits());
         if let Some(laid) = &self.laid
             && laid.position == position
@@ -189,7 +270,7 @@ impl Converter {
         {
             return laid.weighed.clone();
         }
-        let weighed = self.kernel.weigh(self.position, step, &mut self.weights);
+        let weighed = kernel.weigh(self.position, step, &mut self.weights);
         self.laid = Some(Laid { position, step: step_bits, weighed: weighed.clone() });
         weighed
     }
@@ -256,8 +337,7 @@ impl Converter {
         self.pads += 1;
     }
 
-    /// Write the centre frame, or the kernel's interpolation around it where it has been
-    /// `weighed`, and map it onto the device's channels.
+    /// Write the frame as it is `made` from the window, and map it onto the device's channels.
     ///
     /// A mono device is the ladder's *second* rung — cpal ranks stereo, then mono, ahead of every
     /// wider count — so its fold is the one that has to be right, and dropping to channel 0 would
@@ -266,11 +346,14 @@ impl Converter {
     /// unknown channel costs a wide source some level in its mains rather than routing LFE and
     /// surrounds there at full scale. A device wider than mono has no such divisor to hide behind,
     /// so it keeps the first `min(from, to)` channels and folds nothing.
-    fn write_frame(&self, frame: &mut [Sample], weighed: Option<&Weighed>) {
+    fn write_frame(&self, frame: &mut [Sample], made: &Made) {
         let from = usize::from(self.source.channels.get());
-        let source = |channel: usize| match weighed {
-            Some(weighed) => self.window.interpolate(channel, self.ahead, weighed, &self.weights),
-            None => self.window.behind_newest(channel, self.ahead),
+        let source = |channel: usize| match made {
+            Made::Copied => self.window.behind_newest(channel, self.ahead),
+            Made::Lerped(fraction) => self.window.lerp(channel, self.ahead, *fraction),
+            Made::Weighed(weighed) => {
+                self.window.interpolate(channel, self.ahead, weighed, &self.weights)
+            }
         };
 
         if frame.len() == 1 && from > 1 {
@@ -335,6 +418,14 @@ impl Window {
     /// Where in `samples` [`Self::behind_newest`] reads.
     fn slot(&self, channel: usize, ahead: usize) -> usize {
         channel * 2 * SPAN + self.head + SPAN - 1 - ahead
+    }
+
+    /// `channel`'s value `fraction` of the way from the frame `ahead` before the newest to the one
+    /// after it.
+    fn lerp(&self, channel: usize, ahead: usize, fraction: Sample) -> Sample {
+        let at = self.slot(channel, ahead);
+        let (from, to) = (self.samples[at], self.samples[at + 1]);
+        from + (to - from) * fraction
     }
 
     /// `channel`'s frames under the `weighed` taps, laid out as [`Kernel::weigh`] lays its

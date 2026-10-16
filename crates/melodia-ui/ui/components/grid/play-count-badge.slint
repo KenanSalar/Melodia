@@ -24,26 +24,21 @@ export component PlayCountBadge inherits Rectangle {
 
     badge-row := HorizontalLayout {
         alignment: center;
+        cross-axis-alignment: center;
         spacing: 2px;
 
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.count;
-                color: Theme.text;
-                font-size: Theme.font-size-sm;
-                font-weight: 600;
-            }
+        Text {
+            text: root.count;
+            color: Theme.text;
+            font-size: Theme.font-size-sm;
+            font-weight: 600;
         }
 
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: "play_arrow";
-                icon-size: 14px;
-                icon-color: Theme.text;
-                filled: true;
-            }
+        MaterialIcon {
+            name: "play_arrow";
+            icon-size: 14px;
+            icon-color: Theme.text;
+            filled: true;
         }
     }
 }

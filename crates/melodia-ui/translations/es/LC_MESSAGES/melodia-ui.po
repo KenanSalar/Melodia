@@ -146,6 +146,16 @@ msgid "Add"
 msgstr "Añadir"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} pista"
+msgstr[1] "{n} pistas"
+
+#: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
 #: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
@@ -157,10 +167,12 @@ msgid "Playlist name"
 msgstr "Nombre de la lista"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Descripción (opcional)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Añadir una descripción…"
 
@@ -227,15 +239,6 @@ msgstr "Restablecer"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "No hay listas para exportar"
-
-#: ui/components/dialog/export-playlist-picker.slint
-#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
-#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
-msgid "{n} track"
-msgid_plural "{n} tracks"
-msgstr[0] "{n} pista"
-msgstr[1] "{n} pistas"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
@@ -334,6 +337,7 @@ msgstr "Encontrarás tu token en los ajustes de tu perfil de ListenBrainz."
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Seleccionar todo"
@@ -804,6 +808,10 @@ msgid "Folder"
 msgstr "Carpeta"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Artista - Álbum"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -874,7 +882,7 @@ msgstr "Editar información de la pista"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Copiar"
@@ -931,10 +939,6 @@ msgstr "Eliminar {} listas"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Eliminar lista"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Artista - Álbum"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -1442,6 +1446,14 @@ msgstr "Copiar título"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Copiar artista"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Cortar"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Pegar"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"
@@ -2695,18 +2707,6 @@ msgstr "Fondo del álbum"
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Pinta el minirreproductor con los colores del álbum que suena, como hace la vista «Reproduciendo»."
 
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Movimiento"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Omitir la animación de inicio"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Abrir con la biblioteca ya en pantalla, en lugar de mostrarla con un fundido y un deslizamiento. Una página de detalles que dejaste abierta se sigue desplegando al cargarse."
-
 #: ui/views/settings/output-section.slint
 msgid "Output"
 msgstr "Salida"
@@ -2790,6 +2790,14 @@ msgstr "Ajustar a la frecuencia de muestreo del archivo"
 #: ui/views/settings/output-section.slint
 msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
 msgstr "Reabre el dispositivo de audio a la frecuencia de cada pista para que el sistema no la remuestree. El sistema debe admitir esa frecuencia"
+
+#: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Conversión de frecuencia de muestreo"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Cómo se convierte una pista cuando su frecuencia de muestreo no es la del dispositivo o la velocidad no es 1×. Lineal usa menos CPU y suaviza las frecuencias más altas; Limitada en banda conserva todos los agudos"
 
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -2878,6 +2886,14 @@ msgid "The device is running at {}"
 msgstr "El dispositivo funciona a {}"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Lineal"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Limitada en banda"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Hacerlo bit-perfect"
 
@@ -2945,6 +2961,10 @@ msgstr "Fundido entre pistas"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Sin fundido"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{} remuestreado linealmente a {}"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

@@ -7,16 +7,19 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, VecModel, Weak};
+use slint::{ComponentHandle, Weak};
 
 use super::{FavoritesTab, FavoritesUi};
+use crate::ui::list_selection;
 use crate::ui::row_match::{self, Needle};
+use crate::ui::track_list_cache::VisibleRows;
+use crate::ui::track_list_model::TrackListModel;
 use crate::ui::track_sort;
 use melodia_app::library;
 use melodia_app::services::settings::{SortDir, ViewSort};
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
-use melodia_ui::{AppWindow, Favorites, TrackListRow as UiTrackListRow};
+use melodia_ui::{AppWindow, Favorites};
 
 /// The active sort. Slint mirrors it in `Favorites.sort-*`, but this cache is the source of truth
 /// — those properties are written from Rust, never back.
@@ -149,18 +152,18 @@ pub async fn refresh_tracks(
     Ok(())
 }
 
-/// Re-walk the cached `tracks_all` through the active filter and push the result into
-/// `Favorites.tracks`. Selected ids are re-stamped before the swap, so a filter change or library
-/// refresh doesn't visually drop a selection.
+/// Re-walk the cached `tracks_all` through the active filter and show the result in
+/// `Favorites.tracks`. The model keeps its own selection, so a filter change or library refresh
+/// doesn't visually drop one.
 ///
 /// A hidden section is never written to, and the check must sit in [`write_filtered_tracks`]
 /// rather than out here because the leave can land while the post is in flight.
 ///
 /// **An unmounted tab is refused for the same reason, and asked about twice.** `Favorites.tracks`
-/// feeds one element under `if tab-idx == tab-songs`, so on the other two tabs every row built
-/// here reaches nothing — [`build_filtered_tracks`]' check skips the cost, and
-/// [`write_filtered_tracks`]' stops a pick landing mid-post from pinning a row per favourite
-/// behind a tab the user just left.
+/// feeds one element under `if tab-idx == tab-songs`, so on the other two tabs the walk here
+/// reaches nothing — [`build_filtered_tracks`]' check skips the cost, and
+/// [`write_filtered_tracks`]' stops a pick landing mid-post from pinning the whole favourites
+/// snapshot behind a tab the user just left.
 pub fn apply_filtered_tracks(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
     let Some(rows) = build_filtered_tracks(fav_ui) else {
         return;
@@ -189,46 +192,51 @@ pub fn apply_filtered_tracks_now(ui: &AppWindow, fav_ui: &FavoritesUi) {
 /// Walk the cached `tracks_all` through the active filter, or `None` when Songs isn't the mounted
 /// tab and the walk would feed nothing.
 ///
-/// Runs on the calling thread off one `Arc` snapshot and allocates nothing per row — the cache
-/// holds converted rows, so a survivor is cloned, not rebuilt.
-fn build_filtered_tracks(fav_ui: &FavoritesUi) -> Option<Vec<UiTrackListRow>> {
+/// Runs on the calling thread off one `Arc` snapshot and copies no row: the model reads the
+/// cache's own.
+fn build_filtered_tracks(fav_ui: &FavoritesUi) -> Option<VisibleRows> {
     if fav_ui.active_tab() != FavoritesTab::Songs {
         return None;
     }
     let needle = current_filter(fav_ui);
-    Some(fav_ui.state().tracks_all.snapshot().visible(&needle))
+    Some(VisibleRows::new(fav_ui.state().tracks_all.snapshot(), &needle))
 }
 
-/// Push the rows into `Favorites.tracks`. UI thread only.
+/// Show the rows in `Favorites.tracks`. UI thread only.
 ///
 /// Both gates are re-asked here rather than trusted from the build: on the posting path a section
 /// leave or a tab pick can land while the closure is in flight, and either has already emptied
 /// this model on purpose.
-fn write_filtered_tracks(ui: &AppWindow, fav_ui: &FavoritesUi, mut rendered: Vec<UiTrackListRow>) {
+fn write_filtered_tracks(ui: &AppWindow, fav_ui: &FavoritesUi, visible: VisibleRows) {
     if !fav_ui.section_active() || fav_ui.active_tab() != FavoritesTab::Songs {
         return;
     }
     let g = ui.global::<Favorites>();
-    let model = g.get_tracks();
-    let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-        log::warn!("Favorites.tracks: VecModel<TrackListRow> downcast failed");
-        return;
-    };
-    super::selection::restamp_rows(&g, &mut rendered);
-    // A per-row rewrite where the identities align — a library tick — keeps the `ListView`'s
-    // delegates instead of tearing them all down; a structural change falls back to `set_vec`.
-    crate::ui::model_diff::apply_rows_keyed(vec, rendered, |r| r.id);
+    let rows = g.get_tracks();
+    if let Some(model) = TrackListModel::installed(&rows, "Favorites.tracks") {
+        // An unfavourited track leaves the set through here as well as a refetch does.
+        list_selection::keep_selection_within(&g, || visible.held_ids());
+        model.show(visible);
+    }
 }
 
-/// Set `rating` on one Songs-tab row. Rating affects neither membership nor
-/// order, so the row stays put and is patched in place rather than the whole
-/// filtered list rebuilt. Mirrors [`crate::ui::tracks::apply_row_rating`].
-pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
+/// Repaint one Songs-tab row after a rating patch to the cache. Rating affects neither
+/// membership nor order, so the row stays put rather than the whole filtered list being rebuilt.
+/// Mirrors [`crate::ui::tracks::repaint_row`].
+pub fn repaint_row(weak: &Weak<AppWindow>, id: i64) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        crate::ui::model_patch::patch_track_row_by_id(
-            &ui.global::<Favorites>().get_tracks(),
-            id,
-            |r| r.rating = rating,
-        );
+        let rows = ui.global::<Favorites>().get_tracks();
+        if let Some(model) = TrackListModel::installed(&rows, "Favorites.tracks") {
+            model.repaint(id);
+        }
     });
+}
+
+/// Empty `Favorites.tracks`, handing back the snapshot it shows. The selection stays, as
+/// `selected-ids` does, so a tab leave paints it again on return; a section leave clears it first.
+pub fn hide_tracks(g: &Favorites) {
+    let rows = g.get_tracks();
+    if let Some(model) = TrackListModel::installed(&rows, "Favorites.tracks") {
+        model.show(VisibleRows::default());
+    }
 }

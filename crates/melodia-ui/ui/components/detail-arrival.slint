@@ -1,0 +1,33 @@
+// Answers whether a detail opening or closing is an arrival its page's body should fade for. Every
+// change is, except the open that ends a restore: nobody navigated, and its fade would only add a
+// page-sized layer to the launch's first frames.
+//
+// **Latched on the rise of `restoring` and taken by the open that ends it, never read at the
+// open.** Rust lowers `restoring` in the hop right behind the id, which usually lands before the
+// `open` handler runs. A restore that finds nothing lowers it with no open to take the latch, so
+// the fall clears it. `init` writes the latch so a page mounted mid-restore owns it too, `changed`
+// skipping a first evaluation.
+export component DetailArrival {
+    in property <bool> open;
+    in property <bool> restoring;
+    callback arrived();
+
+    property <bool> landing: root.restoring;
+
+    init => {
+        root.landing = root.restoring;
+    }
+
+    changed restoring => {
+        if (root.restoring) {
+            root.landing = true;
+        } else if (!root.open) {
+            root.landing = false;
+        }
+    }
+
+    changed open => {
+        if (!root.landing) { root.arrived(); }
+        root.landing = false;
+    }
+}

@@ -1,6 +1,5 @@
 import { Theme } from "../../theme.slint";
 import { TrackColumns } from "../../models.slint";
-import { PopupHighlight } from "../../globals/shell.slint";
 import { PillButton } from "../action-pill.slint";
 import { Checkbox } from "../checkbox.slint";
 import { PopupSurface } from "../popup-surface.slint";
@@ -22,42 +21,29 @@ component ColumnToggleRow inherits Rectangle {
     height: 32px;
     border-radius: Theme.radius-sm;
     background: !root.locked && touch.has-hover ? Theme.surface2 : transparent;
-    animate background { duration: 100ms; easing: ease-in-out; }
+    animate background { duration: 100ms; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
         padding-right: Theme.pad-sm;
         spacing: Theme.pad-sm;
         alignment: start;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            Checkbox {
-                checked: root.checked;
-                fade: root.fade;
-            }
+        Checkbox {
+            checked: root.checked;
+            fade: root.fade;
         }
 
-        VerticalLayout {
-            alignment: center;
-            Text {
-                text: root.label;
-                color: Theme.text.transparentize(1.0 - root.fade);
-                font-size: Theme.font-size-md;
-            }
+        Text {
+            text: root.label;
+            color: Theme.text.transparentize(1.0 - root.fade);
+            font-size: Theme.font-size-md;
         }
     }
 
     touch := TouchArea {
         mouse-cursor: root.locked ? default : pointer;
-        // A toggle doesn't close the popup, so restore the trigger highlight
-        // the winit Release filter just cleared.
-        pointer-event(ev) => {
-            if (ev.kind == PointerEventKind.up
-                || ev.kind == PointerEventKind.cancel) {
-                PopupHighlight.id = "columns";
-            }
-        }
         clicked => {
             if (!root.locked) { root.toggled(); }
         }
@@ -91,10 +77,8 @@ export component ColumnTogglePopup inherits Rectangle {
     btn := PillButton {
         icon: "tune";
         text: @tr("Columns");
-        // Held while the popup is open, and cleared by the AppWindow scrim
-        // catching an outside click — the rows inside never close it.
-        force-bg: PopupHighlight.id == "columns";
-        clicked => { PopupHighlight.id = "columns"; pop.show(); }
+        force-bg: pop.is-open;
+        clicked => { pop.show(); }
     }
 
     pop := PopupWindow {
@@ -110,8 +94,8 @@ export component ColumnTogglePopup inherits Rectangle {
         y: root.height + Theme.popup-gap;
         close-policy: close-on-click-outside;
 
-        if PopupHighlight.id == "columns": FocusLossWatcher {
-            close => { pop.close(); PopupHighlight.id = ""; }
+        FocusLossWatcher {
+            close => { pop.close(); }
         }
 
         HorizontalLayout {

@@ -92,7 +92,10 @@ silently miss the other.
   readout is up on the frame the drag starts, where the reveal delay is for a label you linger
   for. **Both pass `in-popup: true`**, being the only mounts inside a `PopupWindow`, whose
   `absolute-position` would have the pill fit a window that isn't there (`slint-pitfalls.md`). A
-  third mount inside a popup owes the same.
+  third mount inside a popup owes the same. **The disc both popups open from is
+  `components/now-playing/volume-trigger.slint`'s `VolumeTrigger`**, which also owns the keyboard
+  readout (the `Player.volume-hud-tick` countdown force-showing the disc's own tooltip), so a
+  popup keeps only its slider's readout. `placeholder_tests` holds each file to one percentage.
 
 ### Pills, chips, sort rows
 
@@ -102,8 +105,9 @@ silently miss the other.
   *outside* chips.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
-  the right-click menu's, on rows and cards alike: "Select all" ungated, "Clear selection" gated
-  on the clicked *row* being in the set, so a menu raised beside one still acts on that row alone.
+  the right-click menu's, on rows and cards alike: "Select all" ungated wherever the host has a set,
+  "Clear selection" gated on the clicked *row* being in the set, so a menu raised beside one still
+  acts on that row alone.
   **A card gates it on the scope holding a set instead**, a card having no second activation with
   which to reach a set it can no longer see; `card-context-menu.slint` argues it. The other exits
   are Escape (`Selection.clear-live()`), a section leave, and unpicking the last item. A surface
@@ -153,8 +157,10 @@ silently miss the other.
   `card-is-smart` to that one entry.
 
 - **`MetaChip`/`MetaChipStrip` are decorative** — no `TouchArea`, no selected state. The
-  *interactive* pill is `chip-group.slint`'s `Chip`. Deliberately not one component: one states a
-  fact, the other configures something.
+  *interactive* pill is `components/filled-chip.slint`'s `FilledChip`, under `ChipGroup`'s `Chip`,
+  Radio's `FacetChip` and its `SuggestionPill`; its header says what is the shell's and what each
+  host keeps. Deliberately not one component with `MetaChip`: one states a fact, the other
+  configures something.
 
 - **`QualityChip` is the third, and neither of those**: it states the signal path's verdict and
   opens the Output card, in the player bar only. It is outlined on the bar's ground so its dot is
@@ -217,9 +223,8 @@ three components that answer it, and each argues its geometry at its own file.
   border, inset to the stroke's middle: where the renderer puts a fill under an *opaque* border,
   and where it doesn't under a translucent one. Mounted first, at full size. Two mounts: the lyrics
   pill, whose border is translucent, and the toast, whose accent bar has to sit between the fill
-  and the border. **Not under a drop shadow**: the search bar keeps its `background` out to the
-  edge, since a fill stopping half a pixel in lets its focus shadow darken the rim, and
-  `search-bar.slint` argues that at the binding.
+  and the border. **Not under a drop shadow**: a fill stopping half a pixel in lets the shadow
+  darken the rim, so a shadowed element keeps its `background` out to the edge.
 
 ### Grids, strips, cards
 
@@ -227,16 +232,19 @@ three components that answer it, and each argues its geometry at its own file.
   list into grid-row structs of N, **`GridColumnsSync`** computes N from the width and fires
   `columns-changed` so a resize rebuilds the model without touching the database. Detail views own
   no header — the four under My Library are bodies, the banner being the page's own band.
+  My Library's mount re-chunks only the mounted tab, so a grid chunked while hidden enters at a
+  stale N. The launch therefore fetches only the shown tab's grid (`spawn_initial_*_fetch`), and
+  every other tab fetches on its first enter.
 
 - **`EntityCard` goes inside `grid/card-cell.slint`'s `CardCell`, which owns everything a card owes
-  its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame and
-  the delegate needs somewhere to hold the right-click position, so neither can live on the
-  `EntityCard` mount; the card itself arrives through `@children` because Slint has no generics and
-  each grid iterates its own row struct. **A mount states its scope and nothing else** — `selected`,
-  `selection-live`, the menu's `effective-selection` and its count are all derived there once, and a
-  mount reaching past them for a `CardSelection` call is re-spelling what the cell already answers.
-  Per-kind menu arms (`go-to-artist`, the playlist four, `play-single`) are callbacks the grid
-  forwards, inert on a kind that never raises them.
+  its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame, so
+  it can't live on the `EntityCard` mount; the card itself arrives through `@children` because
+  Slint has no generics and each grid iterates its own row struct. **A mount states its scope and
+  nothing else** — `selected`, `selection-live`, the menu's `effective-selection` and its count are
+  all derived there once, and a mount reaching past them for a `CardSelection` call is re-spelling
+  what the cell already answers.
+  Per-kind menu arms (the playlist four, `play-single`) are callbacks the grid forwards, inert on
+  a kind that never raises them. "Go to Artist" is not one: it calls the row menu's `Nav` trio.
   **It mounts two menus and opens one by kind**: `card-kind: "station"` raises
   `StationContextMenu`, whose actions are `Radio`'s and resolve to no tracks, and every other kind
   raises `CardContextMenu`. The second mount is free until it opens, a `PopupWindow`'s body being
@@ -285,8 +293,9 @@ three components that answer it, and each argues its geometry at its own file.
   for the borrowing form with `Clone::clone` as the projection is the trap the split closes — a
   second full pass cloning every card into the chunk about to replace it. `columns` is floored at
   one in both: a grid mid-layout can report zero, and one card per row is a visible wrong where a
-  zero-width `chunks` is a panic. Grid tabs take `chunk_entity_rows` + `write_grid` (generic over
-  the row type, so Browse uses it too). Don't re-roll either.
+  zero-width `chunks` is a panic. Grid tabs take `chunk_entity_rows` + `model_diff::replace_rows`
+  (generic over the row type, so Browse, Radio's grids and the recent searches use it too). Don't
+  re-roll either.
 
 - **The play-count badge is its own leaf** (`grid/play-count-badge.slint`) with **one** mount,
   `EntityCard` — Radio's `StationCard` hosts one now, so what a station card owes is the count and
@@ -412,7 +421,8 @@ three components that answer it, and each argues its geometry at its own file.
   - **`detail-open`** for `LibraryTabBand`, whose globals outlive the tab that filled them;
   - **the drain** for the miniplayer, whose `MiniBackdrop` fades the stack out through `shown`
     and unmounts it once drained, the backdrop being off for every install that never presses
-    the button.
+    the button. A press mounts it unpainted and paints it a tick later, which eases in only
+    because both stacks read their faded layers in `init` (`slint-pitfalls.md`'s `init` entry).
 
   That makes the gate a two-file deal and each half its own pin: the band passes the term
   (`library_tab_band_tests::no_hero_tier_outlives_the_banner_it_was_solved_for`) and both
@@ -468,15 +478,14 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **`has-cover` is how a host says "not this one".** The `cover:` ternary must bind *some* global
   on every arm, Slint having no empty-`image` literal, and Genre owns no cover — so the Genre hero
-  painted whichever other detail was open, which `seed_detail_from_settings` makes routine.
+  painted whichever other detail was open, which a tab left with its detail open makes routine.
   `ArtworkImage` takes `has-cover` defaulting `true`. Neither the blur quartet nor the washes need
   an equivalent: `has-blur: false` is exactly what a procedural backdrop is for, and a tint is
   always a colour — an entry with nothing of its own substitutes a seed rather than going absent.
 
-- **A hero may publish into either shared global only while it is the one on screen.**
-  `install_views` seeds **all four** detail views unconditionally, so a cold start fetches up to
-  four details whichever section it restores and the last to finish would win. The gate is passed
-  to `apply_detail_artwork` (guarding the `HeroBackdrop` write **and only that** — the cover and
+- **A hero may publish into either shared global only while it is the one on screen.** Every My
+  Library tab keeps its detail across a leave, so several are routinely open and only the mounted
+  one may write. The gate is passed to `apply_detail_artwork` (guarding the `HeroBackdrop` write **and only that** — the cover and
   blur slots either side are the view's own, and writing those while hidden is what leaves the
   page ready to paint), `apply_genre_hero` and `hero_chips::publish`.
   - **On the four details it is a live `tab_is_mounted` read *after* `on_applied`, and both halves
@@ -484,11 +493,11 @@ three components that answer it, and each argues its geometry at its own file.
     which moves the tab from inside the closure that publishes — answers for the tab being left;
     and the shadow is the wrong *question* besides, going false when Now Playing covers the band.
     Hoisting the binding above `on_applied` compiles, reads correctly, and puts the bug back.
-  - **Dropping a publish is only free if something later replaces it.** `SectionState::new` starts
-    `dirty: false` so the boot pre-fetch wins the first enter, but a pre-fetch that ran off-screen
-    filled nothing shared — so the four detail sections seed the flag themselves at wire time
-    (`if !section_active() { mark_dirty() }`), reading `tab_is_mounted` rather than the nav index,
-    five sections sharing index 3.
+  - **A launch reopens only the shown tab's detail.** A hidden tab's reopen could publish nothing
+    shared and would decode a hero and covers no frame draws, so its seed parks the id
+    (`SectionState::defer_restore`) and the tab's first enter reopens it
+    (`take_deferred_restore`, dropped if a drill landed a detail first). The seed asks
+    `tab_is_mounted` rather than the nav index, five sections sharing index 3.
 
 - **A leave is not a teardown on a tabbed page.** Nothing clears a detail id on a tab switch, so
   the band is either collapsing out of that banner or one pick away from morphing it back open,
@@ -528,25 +537,24 @@ three components that answer it, and each argues its geometry at its own file.
   current filter**: forced rather than chosen, an album's chips being unable to follow its track
   filter without lying about the album.
 
-- **`HeroChipStrip`** is where a hero mounts `MetaChipStrip`: it fixes the `HeroBackdrop` brushes
-  and forwards `measured` into `HeroChips.recompute`, making the wrong mount unspellable rather
-  than merely tested against. `MetaChip`'s `Theme.*` defaults are correct nowhere and never taken —
+- **`HeroChipStrip`** is where a hero mounts `MetaChipStrip`: it fixes the `HeroBackdrop` brushes,
+  the chip list and the row cap, making the wrong mount unspellable rather than merely tested
+  against. `MetaChip`'s `Theme.*` defaults are correct nowhere and never taken —
   they exist so the file imports neither `Player` nor `HeroBackdrop`, which is what lets one
   component sit on a blurred cover *and* a blurred banner.
-  - **`fade` multiplies both brushes** and only `LibraryTabBand` sets it — the strip carries a
-    `changed` tracker, so a band wanting a fade-out must keep it *mounted* across the collapse, and
-    `Opacity::need_layer` bails only at exactly `1.0`.
-  - **Who chunks is the host's**, via `chunk_chips_to_rows`'s `max_rows` — `None` for the Now
-    Playing column, `Some(HERO_MAX_ROWS)` for a band. **`HERO_MAX_ROWS` is 2, measured rather than
-    picked**: a second row plus its gap fits the slack every hero's trailing spacer already leaves,
-    where a third overruns the tile and pushes the pill out of the banner. If a wrapped row ever
-    clips, the fix is a per-hero max into `write_rows`, **not** a taller band — the band clips, so
-    the failure is bounded.
-  - **The rows hang off a plain `VerticalLayout` pinned at `min-width: 0px`**, not off the root —
-    the conditional-child pitfall, one shipped bug per axis. Without the wrapper the root reports
-    `preferred: 0` and paints the second row outside its allotment; with it and without the
-    `min-width`, the widest published row becomes a floor no narrowing can negotiate. The second is
-    the one to remember, fixing the first being what introduces it.
+  - **`fade` multiplies both brushes** and only `LibraryTabBand` sets it, keeping the strip
+    *mounted* across the collapse, where an `opacity` under 1 would cost a layer every frame
+    (`Opacity::need_layer` bails only at exactly `1.0`).
+  - **The strip wraps in a `FlexboxLayout` at the width it is drawn, and the host decides how many
+    rows show** through `max-rows`: none for the Now Playing column, two for a band, which clips the
+    rest away whole, the chips being one height. **Two is measured rather than picked** and argued
+    at `HeroChipStrip`'s binding. If a wrapped row ever clips wrongly, the fix is a per-hero cap,
+    **not** a taller band — the band clips, so the failure is bounded.
+  - **The flex is the root's direct child and the root's `height` is read off it**, never through
+    an `if` (`slint-pitfalls.md`'s entry on a flex inside an `if`), so `show-rows` hides it rather
+    than unmounting it. The height is bound so a host short of height can't squeeze a row over
+    what follows, which also keeps the strip out of any `FlexboxLayout` (`slint-pitfalls.md`'s
+    flex measuring entry).
   - **`Theme.hero-title-size` is the one number all six titles read.** Pinned over **`HERO_VIEWS`**
     (two bands, six banners), with **`MOSAIC_HOSTS`**/**`BAND_HOSTS`** holding each page to mounting
     its band and growing no title, chip strip or artwork size of its own — the detail bodies being
@@ -571,39 +579,59 @@ three components that answer it, and each argues its geometry at its own file.
 ### Lists and playback
 
 - **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
-  place its entries are mounted.** Two hosts, `TrackListRowItem` and the queue sheet's
-  `QueueRowItem`. It owns the entries, the `multi-active` gate (this row selected *and* more than
-  one selected, so a right-click on an unselected row falls back to that row alone) and the
-  `effective-ids` every handler reads; the host keeps the pointer position. **`view-context` is
-  most of what a host configures** — it suppresses the entry naming the surface you are already
-  on and picks the remove arm, and `"queue"` drops Play Next and Add to Queue outright, the queue
-  being what they name. A remove label handed over by the host would ship untranslated, `@tr`
-  resolving literals at codegen, so a third list's arm is one more `if` here rather than a
-  property.
+  place its entries are mounted.** Three hosts: `TrackListRowItem`, the queue sheet's
+  `QueueRowItem` and the now-playing bar's track card. It owns the entries, the `multi-active` gate
+  (this row selected *and* more than one selected, so a right-click on an unselected row falls back
+  to that row alone) and the `effective-ids` every handler reads; the host only says where, through
+  `show-at`.
+  **`view-context` is most of what a host configures** — it suppresses the entry naming the
+  surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add to
+  Queue outright, the queue being what they name. `"now-playing"` drops those two and Play as well,
+  its row being the track already playing out of a queue that holds it, and the selection group
+  with them, the bar having no set. A remove label handed over by the host would ship
+  untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
+  rather than a property.
+  **The two hosts with no list row read the "Go to" ids through `ui::track_links`**, `TrackSummary`
+  carrying no foreign keys: the queue sheet per row, the bar onto
+  `Player.track-{album,artist,genre}-id` per track change and again per library tick, a retag
+  keeping the id.
+  **"Go to" calls `Nav.go-to-*` straight, as Open Containing Folder calls `Nav`**, with no host
+  forwarding: the origin a drill records is read off where the user stands, so there was nothing
+  per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands, closing
+  Now Playing and dismissing the queue sheet, the bar staying reachable over both.
 
-- **The four right-click menus share one shape**: the row menu, `CardContextMenu`,
-  `StationContextMenu` and the radio history list's. `components/context-menu.slint` holds the
-  parts (`MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `ContextMenuMetrics`), and
-  `components/track-copy-items.slint` the track Copy rows the row and card menus share; each menu
-  argues its own entries.
+- **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
+  `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
+  `components/context-menu.slint` holds the
+  parts (`MenuItem`, `FavoriteMenuItem`, `MenuFlyout`, `ContextMenuMetrics`, `CopyField`) and
+  `ContextMenuPopup`, and `components/track-copy-items.slint` the track Copy fields the row and
+  card menus share; each menu argues its own entries.
+  - **The row, card and station menus open `ContextMenuPopup`, never a `PopupWindow` of their
+    own.** Its header says what it owns and what stays on the menu's root. **The flyout's rows are
+    a `[CopyField]` list** (`TrackCopyFields.list`, the card's album fields, the station's), for the
+    reason that header gives, and `crates/melodia-app/src/library/tests/clipboard_tests.rs` reads
+    each list's `token:` literals against the parser behind it.
+  - **A menu opens on the right button's release and takes its anchor once, there.** Every
+    surface asks `ContextClick.raises-menu`, whose comment argues the release, and stores where it
+    landed: the four menu components through `show-at(x, y)`, the history list in its own
+    `menu-x`/`menu-y`. None binds its anchor to a live `mouse-x`, which an open popup would follow
+    for as long as the button is held (`slint-pitfalls.md`). `crates/melodia/tests/context_click.rs`
+    holds the first half: only the predicate may name the right button.
   - **Copy opens a flyout inside the menu's own popup** where the surface has more than one field
-    to offer, and is a flat entry where it has one. The geometry is `OverflowMenu`'s fixed reserve,
-    the popup being sized once as it opens: wide enough for the flyout whether or not it opens, the
-    reserve on whichever side `ContextMenuMetrics.opens-left` finds room, so the column stays under
-    the pointer. A second `PopupWindow` is not an option (`slint-pitfalls.md`).
-  - **The three with a flyout take `close-on-click-outside`, and every entry calls the menu's
+    to offer, and is a flat entry where it has one. The flyout opens on whichever side
+    `ContextMenuMetrics.opens-left` finds room, so the column stays under the pointer: rightward
+    the popup grows by it while it is open, leftward it holds the room from the start, an open
+    popup moving its origin a frame late (`slint-pitfalls.md`). A second `PopupWindow` is not an
+    option (same file).
+  - **`ContextMenuPopup` takes `close-on-click-outside`, and every entry calls the menu's
     `dismiss()` after acting.** `close-on-click` closes on any release inside the popup, the click
     that opens the flyout included. After, because `pop.effective-ids` goes with the popup. The
-    history list's menu is flat and keeps `close-on-click`.
-  - **Each mounts its `FocusLossWatcher` ungated, inside its own popup.** The popup's body exists
-    only while it is shown, so that is already one live watcher. A highlight key gating it is
-    gone by the end of the click that opened the menu, the winit Release arm clearing every key on
-    every release.
+    history list's menu and `TextEditMenu` are flat and keep `close-on-click`.
   - **The width follows the rows**, `ContextMenuMetrics.menu-w` over the rows' `preferred-width`,
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
     being picked by a side the width decides.
-  - **Copy acts on the effective set, one line per item, in the order handed over**, never
+  - **An item menu's Copy acts on the effective set, one line per item, in the order handed over**, never
     re-sorted: on a list or grid that is the selection's pick order (a range in display order, a
     ctrl-click appended), so it matches what Play queues, and on the queue sheet it is queue order,
     the set being read back off its rows. An item without the field adds no line. Why line breaks
@@ -615,6 +643,12 @@ three components that answer it, and each argues its geometry at its own file.
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
+- **A list holding its whole set in a `TrackListCache` shows it through
+  `ui::track_list_model::TrackListModel`, never a `VecModel` copy.** My Library's Songs tab and
+  Favorites' are the two today. A favourite or rating change writes the cache and asks the model to
+  `repaint` the row, where the `VecModel` lists go through `model_patch`; the `list_selection`
+  helpers take either model.
+
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
   rows in a `DetailCache`. A fifth detail implements both traits rather than copying a
@@ -623,7 +657,11 @@ three components that answer it, and each argues its geometry at its own file.
 - **All nine track lists share Play Next, Add to Queue and the column toggle**, written once in
   `callbacks::track_list` over `track_list_view::TrackListActions`, which `track_list_views!`
   implements beside the column state, plus the `play-row` tail as `play_displayed`. A list
-  supplies only what differs: its id source, and Browse its non-zero id filter.
+  supplies only what differs: its id source, and Browse its non-zero id filter. **Selection is
+  shared there too, by the four flat list views**: `wire_row_selection` over
+  `list_selection::RowSelectionView`, ranging over the rows on screen. Browse keeps its own
+  wiring for its disk-only rows and the details select through `track_detail::selection`, both
+  over the same `compute_click_selection`, whose anchor is the id of the row last clicked.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
@@ -684,7 +722,20 @@ three components that answer it, and each argues its geometry at its own file.
   to behave differently. The scan walks the seek keys' relative run, which is why that run's
   functions live on `Player` too and `ShortcutScope` keeps only the timer landing it.
 
+- **A slider's pointer goes through `components/slider-pointer.slint`'s `SliderPointer`**, never a
+  hand-rolled `TouchArea`; its header says what it decides. `SliderTrack`, the volume popup's
+  vertical slider and `EqBandSlider` each draw their own track over one, the EQ turning
+  `grabs-thumb` off. One place deciding it is what lets a fix land for all three.
+
 ### Dialogs, pickers, toasts
+
+- **A dialog's text field sits in `components/field-frame.slint`'s `FieldFrame`**. Three hosts,
+  each padding its input as it needs:
+  `LabeledInput` (a caption over a two-way field), `ControlledInput` (a value the host owns, one-way
+  in and every keystroke out through `edited`, which its header argues) and `MultilineInput` (the
+  one wrapping box). `FieldLabel` is the caption, shared with the credit and genre editors, whose
+  rows close on `components/dialog/remove-row-button.slint`'s `RemoveRowButton` as the smart
+  playlist rules do.
 
 - **Selectable-picker dialogs share one toolkit** (`components/dialog/selectable-picker.slint`).
   Both the Export and Add-to-Playlist pickers are thin wiring over it, toolkit components staying
@@ -886,7 +937,8 @@ three components that answer it, and each argues its geometry at its own file.
   - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from
     the UI thread, and a redraw winning that race paints an empty grid. It keeps its card model
     across the leave, which is why the covers under it are shrunk rather than dropped and why it
-    still owes a `mark_dirty()` on leave and the same wire-time seed, having no enter-time fetch.
+    still owes a `mark_dirty()` on leave and a wire-time `mark_dirty()` while hidden, having no
+    enter-time fetch.
   - **The Rust half is `grid_prewarm::grid_cover(path)`** — one tier, one lookup, no branch. Reach
     for it at a new surface: a copy that grew a **decoding** arm reads correctly and puts the
     UI-thread decode straight back, which is the one thing it will not do.
@@ -998,11 +1050,17 @@ three components that answer it, and each argues its geometry at its own file.
 
 ## Popups, native dialogs, input
 
-- **PopupWindow auto-dismiss on OS focus loss** is `FocusLossWatcher`, mounted inside the
-  popup's own `PopupWindow`, whose body Slint builds in `show()` and drops in `close()`, so only
-  the open popup has a live watcher. Singletons also gate it on `PopupHighlight.id`, the key that
-  lights their trigger; the four right-click menus mount it ungated. Slint 1.16 has no `closed`
-  callback, but `pop.close()` is a safe no-op when hidden.
+- **PopupWindow auto-dismiss on OS focus loss** is `FocusLossWatcher`, mounted ungated inside the
+  popup's own `PopupWindow` (or through `MenuSurface`, or `ContextMenuPopup` for the three
+  right-click menus with a flyout), whose body Slint builds in `show()` and drops in `close()`, so
+  only the open popup has a live watcher. A trigger lights off its own popup's `is-open`, which
+  every close path resets, Escape and an outside click included.
+  `crates/melodia/tests/popup_dismiss.rs` walks every popup for the watcher, a component that
+  `inherits PopupWindow` being read through its own body.
+
+- **An empty region inside a popup takes `PopupDismissCatcher`**, never a bare `TouchArea`: the
+  room a menu holds for its flyout, the volume popups' strips. Its comment argues which button
+  closes on which edge, and a bare one gets the right button wrong.
 
 - **Native dialogs (rfd) — always through `ui::file_dialog::parented(&weak, title)`.** The helper
   owns the `weak.upgrade()` + `.set_parent(…)` half; the caller chains its own
@@ -1045,17 +1103,19 @@ three components that answer it, and each argues its geometry at its own file.
     this view animate at all", `slide: false` is "is anything *else* already translating it" —
     fade, don't move. Both default on, so a mount that owns its motion says nothing.
   - **The launch mount has a third off-switch, and it is a global rather than an input.**
-    `Nav.suppress-enter-animation` carries the "Skip Startup Animation" setting, raised by
-    `boot::ui_setup` before `app.show()` and handed back by the first mount that settles — so the
-    window opens on its content and every later navigation still slides. A **live read inside
-    `settled`** rather than a property captured at `init`, and the capture would work — no branch
-    exists until the first layout pass, which is inside `app.show()` and long after
-    `hydrate_ui_from_settings` — but it spends a property and a handler to dodge the one thing the
-    live read owes: **the hand-back sits one statement after `shown` flips**, a clear landing on a
-    frame where `shown` is still false fading the settled page straight back out. That is also why
-    the hand-back can't be Rust's. Gated on **`enabled`**, since a nested body mounted at boot runs
-    the same `Timer` and would otherwise drop the flag for the page above it. Pinned by
-    `ui::startup_motion_tests`.
+    `Nav.suppress-enter-animation` is declared raised and handed back by the first mount that
+    settles, so the window opens on its content and every later navigation still slides.
+    **Declared, never written from Rust before the show**: `AppWindow::new()` already instantiates
+    the branch for the declared nav index, whose `init` reads its opacity at 0 under a lowered flag,
+    so a raise from `boot::ui_setup` faded that page in anyway. `app.show()` instantiates again
+    after the nav index is hydrated, still ahead of any `Timer`, so a launch elsewhere mounts its
+    own page under the flag too. A **live read inside `settled`**, and the hand-back **sits one
+    statement after `shown` flips**: a clear landing on a frame where `shown` is still false fades
+    the settled page straight back out, which is also why the hand-back can't be Rust's. Gated on
+    **`enabled`**, since a nested body mounted at boot runs the same `Timer` and would otherwise
+    drop the flag for the page above it. Pinned by `ui::startup_motion_tests`.
+    **A restored detail arms no body fade either**, on My Library or Radio
+    (`components/detail-arrival.slint`), its layer otherwise stacking on the launch's first frames.
     **`MiniPlayerSwitch`'s swap timer raises the same flag** on the way out of the miniplayer, ahead
     of the flip that rebuilds the full UI. That rebuild is already crossfading, and a page sliding in
     under it put a second full-window layer over the most expensive frames of the swap. The setting
@@ -1077,7 +1137,7 @@ three components that answer it, and each argues its geometry at its own file.
     `hero-t != (detail-open ? 1.0 : 0.0)`** — deliberately not `hero-t > 0`, which is `false` on a
     drill-in's first frame, the one frame the answer must be `true`; same-axis is not enough to
     skip it, the body's 32 px being made of a curve that disagrees with the morph's, so the sum
-    runs the wrong way before it turns. **`body-anim-armed`** is written from `changed detail-open`
+    runs the wrong way before it turns. **`body-anim-armed`** is written from `DetailArrival.arrived`
     **and** the `watched-tab-idx` mirror: the seed answers "a tab has been picked in this mount",
     and the two arrivals that aren't picks each need one handler, a cross-tab drill writing the id
     and moving the tab in *one* tick so `detail-open` never transitions.
@@ -1107,8 +1167,8 @@ three components that answer it, and each argues its geometry at its own file.
     `changed watched-nav-idx` instead, which also makes "covered" and "left" different events.
   - **A mirror fires on every nav change where a gate fired only on its own predicate, so the hook
     owes a latch** — the half a later edit reads as redundant. A `changed` handler cannot ask which
-    index it moved *from*, so unlatched the teardown also runs on Search → Browse and discards what
-    `seed_detail_from_settings` wrote at boot precisely *because* the page was hidden. The latch is
+    index it moved *from*, so unlatched the teardown also runs on Favorites → Recently Played and
+    clears the `HeroBackdrop` and `HeroChips` those two bands publish into. The latch is
     a `Cell<bool>` in Rust, not a `prev-nav-idx` mirror: `Nav.selected-index` is declared `: 3` and
     the persisted index lands after `AppWindow::new()`, so a Slint seed is either a constant firing
     one spurious teardown per boot or a binding that re-evaluates to the *new* index inside the
@@ -1235,7 +1295,8 @@ siblings, not one parameterised component**, differing in which artwork square t
 Slint can abstract over — so the header-row fixes are *ported
 verbatim* and `ui::library_tab_band_tests` holds the copy to a contract a copy is exactly how you
 lose. **Two things stay at each host**: the per-tab `ActionPill` rows (`@children`, placed after the
-trailing spacer, which is also the slack `HERO_MAX_ROWS` is measured against) and the tooltip frame.
+trailing spacer, which is also the slack the chip strip's two-row cap is measured against) and the
+tooltip frame.
 
 - **The height is a `min`/`preferred`/`max-height` split with `clip: true`**, never a bound
   `height` — the animated-root-dimension pitfall one axis over. **`hero-t` is *written* from
@@ -1243,9 +1304,10 @@ trailing spacer, which is also the slack `HERO_MAX_ROWS` is measured against) an
   open lands at hero height instead of growing into it.
 
 - **What may hang off an `if` is decided by change trackers, not taste.** Everything tracker-free
-  rides one `hero-shown: detail-open || hero-t > 0`. The chip strip **cannot** join them — it
-  carries a `changed` tracker over a layout property the morph re-dirties every frame, so dropping
-  its branch panics; it stays mounted and fades by brush alpha.
+  rides one `hero-shown: detail-open || hero-t > 0`, and a piece carrying a tracker over a layout
+  property the morph re-dirties every frame stays mounted and fades by brush alpha, dropping its
+  branch being a panic. The chip strip sits outside the gate and fades that way, though it carries
+  no tracker and could join it.
 
 - **Nothing carrying content answers `opacity`** — the layer is sized to child *geometry* and a
   text run's ink leaves its line box. Fade through the brush instead, via **`transparentize`, which
@@ -1322,7 +1384,8 @@ block first; each page's section below is deltas only.** The nav-index map is in
   Tracks' leave releases nothing, so it owes none.
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
-  `ui::grid_rows::{chunk_entity_rows, write_grid}`, `ui::track_list_cache`,
+  `ui::grid_rows::chunk_entity_rows`, `ui::model_diff::replace_rows`, `ui::track_list_cache`
+  with the `ui::track_list_model` that shows it,
   `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
@@ -1367,7 +1430,7 @@ edit would otherwise reverse.
 
 ## The Settings page
 
-- **The page is tabbed** — 5 tabs over the same 18 section cards. `settings-view.slint` is page
+- **The page is tabbed** — 5 tabs over the same section cards. `settings-view.slint` is page
   chrome only, `settings-tabs.slint` the router, `views/settings/pages/*.slint` the five pages,
   each owning its section list *and* an aggregate `has-matches`. **Search escapes the tabs**: a
   non-empty query mounts all five pages at once, which is how the cross-tab flat list comes back
@@ -1402,14 +1465,13 @@ edit would otherwise reverse.
   the double spelling, not the `@tr`. Nothing enforces any of this, and a fresh section is exactly
   where it comes back.
 
-- **Anything that has to fit a width reads `SettingsPage`, and never measures.**
+- **The body's geometry is `SettingsPage`'s, and nothing in a card measures.**
   `settings-view.slint` publishes `page-w` (the panel width it already mirrors — a live
   `root.width` read feeding a child's size re-enters layout) and `body-cols`; the global derives
-  `body-w`/`card-w`/`row-content-w`. Every card spans a full body column, so those are exact, and a
-  control four levels down sizes itself with no width mirror, no mount `Timer` and no `parent`
-  reach-around. **`row-content-w` is the one to want** — the width a `SettingRowStacked` leaves its
-  content block. Override at a call site that isn't a full-width card row; don't recompute the
-  number.
+  `body-w`/`card-w`. Every card spans a full body column, so those are exact. A control inside a
+  card that has to fit a width (the chip groups, the accent grids) wraps at the width it is drawn
+  rather than being handed one, so it needs no width mirror, no mount `Timer` and no `parent`
+  reach-around.
 
 - **`card-cap` (800 px) is one number both layouts obey**: a card grows to the cap, stops, and
   takes margins from there, and a second column appears exactly when two *capped* cards fit beside
@@ -1434,17 +1496,15 @@ edit would otherwise reverse.
   reintroduce the bar — a settings page that needs one is a page with a row that has stopped being
   able to wrap.
 
-- **The wrapping strips wrap through Rust, because Slint can't build a nested array.**
-  `chunk-indices(count, per-row) -> [[int]]` splits `0..count` into index groups and the strip
-  iterates two real arrays, sidestepping both traps the predecessor was built around: Slint rejects
-  an inline `for … : if …`, and a `Rectangle` wrapper around a filtered-out item still claims its
-  parent layout's spacing. `wrap-per-row` and `wrap-height` sit beside it. **How many fit is
-  measured, not estimated** — `ChipGroup` mounts a hidden ruler of real `Chip`s, `TabBar`'s idiom,
-  and **`min-width: 0px` on the root is load-bearing**, stopping that ruler leaking a floor into
-  the card. **`chunk-indices` hands back one model per row shape** (`ui::chips::IndexRows`), and
-  that is what keeps a resize cheap. Every width change re-runs the strip's binding through
-  `SettingsPage.page-w`, and a repeater handed a model it can't match by pointer rebuilds every chip
-  and swatch under it, tooltips included; see the repeater entry in `slint-pitfalls.md`.
+- **The wrapping strips are `FlexboxLayout`s over their flat list** (`ChipGroup`, `ColorDotGrid`),
+  breaking lines where the real chips stop fitting. Two lines on each root are load-bearing:
+  **`min-width: 0px`**, without which the flex floors the card at its widest chip, and a `height`
+  bound to the flex's `preferred-height`, without which a host with height to spare spreads the
+  lines apart (`slint-pitfalls.md`'s two flex entries). An accent swatch picks its tooltip side
+  off its cell's laid-out `y`, so the side follows wherever the flex broke the line.
+  **The body itself stays a `GridLayout`**: a flex body of card columns would measure each column
+  at a width it hasn't committed to, and these strips, `SettingRow`'s wrapped labels and the other
+  `Rectangle`-rooted controls answer at the width they were drawn, a cycle Slint panics on.
 
 - **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
   `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its

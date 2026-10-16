@@ -9,31 +9,18 @@
 //! inputs to the shared comparator have to agree field for field.
 
 use super::*;
+use crate::ui::fixtures::{four_tracks, track_row, visible_rows};
 
 /// A row with a distinct value in every searchable field, so a needle can
 /// only be answered by the field it names.
 fn row(id: i64) -> RsTrackListRow {
     RsTrackListRow {
-        id,
-        file_path: "/m/1.flac".to_owned(),
-        file_name: "1.flac".to_owned(),
-        title: "Ghost Town".to_owned(),
         artist: Some("The Specials".to_owned()),
         album_artist: Some("Various Artists".to_owned()),
         album: Some("More Specials".to_owned()),
         genre: Some("Ska".to_owned()),
-        track_number: None,
-        disc_number: None,
         year: Some(1981),
-        artwork_path: None,
-        duration_ms: 0,
-        is_favorite: false,
-        rating: 0,
-        album_id: None,
-        artist_id: None,
-        genre_id: None,
-        date_added: "2026-01-01T00:00:00Z".to_owned(),
-        sort_key: None,
+        ..track_row(id, "Ghost Town")
     }
 }
 
@@ -178,10 +165,16 @@ fn the_cache_sorts_exactly_as_the_db_rows_do() {
     }
 }
 
+/// Every row a list showing `snap` under `needle` would paint, in order.
+fn shown(snap: &Arc<CacheData>, needle: &str) -> Vec<UiTrackListRow> {
+    let visible = VisibleRows::new(Arc::clone(snap), &row_match::fold_needle(needle));
+    (0..visible.len()).filter_map(|pos| visible.row(pos)).collect()
+}
+
 #[test]
-fn a_stored_set_leaves_its_four_vectors_aligned() {
-    // `order` indexes `rows`, `search` and `sort` alike, and the whole reason
-    // they share one lock is that a reader must never see them disagree.
+fn a_stored_set_leaves_its_vectors_aligned() {
+    // `order` indexes `rows`, `marks`, `search` and `sort` alike, and the whole
+    // reason they share one lock is that a reader must never see them disagree.
     let rows = sortable_rows();
     let cache = TrackListCache::new();
     cache.store(rows.clone(), "title", "asc");
@@ -197,13 +190,12 @@ fn a_stored_set_leaves_its_four_vectors_aligned() {
     seen.sort_unstable();
     assert_eq!(seen, [1, 2, 3, 4]);
 
-    let titles: Vec<String> =
-        snap.visible(&row_match::fold_needle("")).iter().map(|r| r.title.to_string()).collect();
+    let titles: Vec<String> = shown(&snap, "").iter().map(|r| r.title.to_string()).collect();
     let by_id: Vec<String> = ids
         .iter()
         .map(|id| rows.iter().find(|r| r.id == *id).map_or_else(String::new, |r| r.title.clone()))
         .collect();
-    assert_eq!(titles, by_id, "visible() and ids_filtered() disagree on order");
+    assert_eq!(titles, by_id, "VisibleRows and ids_filtered() disagree on order");
 }
 
 #[test]
@@ -214,10 +206,21 @@ fn a_filter_narrows_both_walks_the_same_way() {
 
     let needle = row_match::fold_needle("mango");
     assert_eq!(snap.ids_filtered(&needle), [3, 4]);
-    assert_eq!(snap.visible(&needle).len(), 2);
+    assert_eq!(shown(&snap, "mango").len(), 2);
     // The unfiltered count is the view's `total-count` and must not follow
     // the filter — the header states the library, not the query.
     assert_eq!(snap.total(), 4);
+}
+
+/// A selection is kept to these on a refetch, and a filter hides a pick rather than dropping it.
+#[test]
+fn the_held_ids_are_every_stored_track_whatever_the_filter() {
+    let cache = TrackListCache::new();
+    cache.store(four_tracks(), "title", "asc");
+
+    let held = visible_rows(&cache, "ha").held_ids();
+
+    assert_eq!(held, HashSet::from([1, 2, 3, 4]));
 }
 
 #[test]
@@ -240,7 +243,7 @@ fn a_removal_keeps_the_order_pointing_at_the_rows_it_names() {
     assert_eq!(seen, [1, 2, 4]);
 
     // The surviving rows still line up with the ids beside them.
-    let visible = snap.visible(&row_match::fold_needle(""));
+    let visible = shown(&snap, "");
     assert_eq!(visible.len(), ids.len());
     for (row, id) in visible.iter().zip(&ids) {
         assert_eq!(i64::from(row.id), *id);
@@ -252,10 +255,11 @@ fn a_removal_keeps_the_order_pointing_at_the_rows_it_names() {
 }
 
 #[test]
-fn a_single_row_patch_leaves_a_live_snapshot_alone() {
-    // The patches are copy-on-write so a rebuild already holding a snapshot
-    // keeps a consistent view. That is the property the `Arc` is for; without
-    // it a star click mid-refilter would mutate the set being walked.
+fn a_single_row_patch_reaches_a_live_snapshot() {
+    // The list on screen always holds a snapshot, so a patch that stopped at
+    // the cache's own copy would leave the row it repaints showing the old
+    // value. Writing through costs nothing a walk could see: the marks sit
+    // outside the rows and keys a filter or a sort reads.
     let cache = TrackListCache::new();
     cache.store(sortable_rows(), "title", "asc");
 
@@ -264,15 +268,56 @@ fn a_single_row_patch_leaves_a_live_snapshot_alone() {
     cache.set_favorite(1, true);
     let after = cache.snapshot();
 
-    let rating_of = |snap: &CacheData| {
-        snap.visible(&row_match::fold_needle(""))
-            .into_iter()
-            .find(|r| r.id == 1)
-            .map(|r| (r.rating, r.is_favorite))
-    };
+    assert_eq!(marks_of(&before, 1), Some((5, true)));
+    assert_eq!(marks_of(&after, 1), Some((5, true)));
+}
 
-    assert_eq!(rating_of(&before), Some((0, false)));
-    assert_eq!(rating_of(&after), Some((5, true)));
+/// The rating and favourite `snap` paints for `id`.
+fn marks_of(snap: &Arc<CacheData>, id: i32) -> Option<(i32, bool)> {
+    shown(snap, "").into_iter().find(|r| r.id == id).map(|r| (r.rating, r.is_favorite))
+}
+
+/// The marks are moved out of each converted row at store time, so a store that failed to carry
+/// the fetched values across would paint every heart and star on both Songs lists empty.
+#[test]
+fn a_fetched_rating_and_favourite_reach_the_row() {
+    let cache = TrackListCache::new();
+    let rated = RsTrackListRow { rating: 4, is_favorite: true, ..track_row(1, "Rated") };
+    cache.store(vec![rated, track_row(2, "Plain")], "title", "asc");
+
+    let snap = cache.snapshot();
+
+    assert_eq!((marks_of(&snap, 1), marks_of(&snap, 2)), (Some((4, true)), Some((0, false))));
+}
+
+/// A header click replaces only the order, so the list still holding the snapshot from before it
+/// keeps reading the marks a later patch writes.
+#[test]
+fn a_patch_after_a_resort_reaches_the_snapshot_taken_before_it() {
+    let cache = TrackListCache::new();
+    cache.store(sortable_rows(), "title", "asc");
+    let before = cache.snapshot();
+    cache.resort("title", "desc");
+
+    cache.set_rating(1, 5);
+
+    assert_eq!(marks_of(&before, 1), Some((5, false)));
+}
+
+/// A removal is the one place two snapshots stop sharing marks, so it copies them, and a copy that
+/// lost the values would blank every other row's stars when one is unfavourited. The list on
+/// screen holds a snapshot, which is what makes the removal copy rather than shorten in place.
+#[test]
+fn a_removal_carries_the_marks_it_copies() {
+    let cache = TrackListCache::new();
+    cache.store(sortable_rows(), "title", "asc");
+    cache.set_rating(1, 5);
+    cache.set_favorite(1, true);
+    let _on_screen = cache.snapshot();
+
+    cache.remove(3);
+
+    assert_eq!(marks_of(&cache.snapshot(), 1), Some((5, true)));
 }
 
 #[test]
@@ -287,7 +332,7 @@ fn a_cleared_cache_reads_as_empty_rather_than_stale() {
     assert!(snap.is_empty());
     assert_eq!(snap.total(), 0);
     assert!(snap.ids_filtered(&row_match::fold_needle("")).is_empty());
-    assert!(snap.visible(&row_match::fold_needle("")).is_empty());
+    assert!(shown(&snap, "").is_empty());
 }
 
 #[test]

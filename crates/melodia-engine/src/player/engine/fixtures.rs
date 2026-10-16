@@ -1,9 +1,8 @@
 //! Fixtures for the transport suites, built out of this crate's own published types.
 //!
-//! `#[doc(hidden)] pub` rather than `#[cfg(test)]`, and not by preference: three crates read
-//! these — the engine's own suites, `library`'s playback tests and the now-playing ladder under
-//! `ui/` — and a `cfg(test)` item cannot cross a crate boundary. `DbPool::test_pool` is the same
-//! shape for the same reason. The cheaper fixtures each tier can spell for itself stayed
+//! `#[doc(hidden)] pub` rather than `#[cfg(test)]`, and not by preference: suites in other crates
+//! read these, and a `cfg(test)` item cannot cross a crate boundary. `DbPool::test_pool` is the
+//! same shape for the same reason. The cheaper fixtures each tier can spell for itself stayed
 //! `cfg(test)` beside their tests; these three could not, `RadioNowPlaying` having thirteen
 //! fields and `PlayerViewModelLight` fifteen.
 
@@ -76,6 +75,7 @@ pub fn test_view_model(
         current_track,
         position_ms: 0,
         duration_ms,
+        position_stamp: 0,
         progress_percent: 0.0,
         volume: 100,
         is_muted: false,

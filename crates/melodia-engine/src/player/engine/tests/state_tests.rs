@@ -978,6 +978,31 @@ fn sync_track_summaries_patches_current_queue_and_republishes() {
     );
 }
 
+// ── with_state_emit ──
+
+/// The view model and the position ticks reach the UI on two channels, and only the stamp says
+/// which is newer. An emit that kept the stamp would lose to a tick read before it, putting the
+/// position a stop or a seek moved off back on screen.
+#[test]
+fn every_emit_publishes_a_newer_position_stamp() {
+    use tokio::sync::watch;
+
+    use crate::player::engine::event_sink::PlayerSinks;
+
+    let handle = PlayerStateHandle::default();
+    let (vm_tx, vm_rx) = watch::channel(None);
+    let (q_tx, _q_rx) = watch::channel(None);
+    let sinks = PlayerSinks { view_model: vm_tx, queue: q_tx, media_controls: None };
+    let published = || vm_rx.borrow().as_ref().map(|vm| vm.position_stamp);
+
+    with_state_emit(&handle, &sinks, |_| ());
+    let first = published();
+    with_state_emit(&handle, &sinks, |_| ());
+    let second = published();
+
+    assert!(second > first, "the second emit published {second:?} after {first:?}");
+}
+
 /// Every `PlayerAction` arm names the fact a reader needs from it.
 ///
 /// A new variant is already a build failure — the match is exhaustive — so this

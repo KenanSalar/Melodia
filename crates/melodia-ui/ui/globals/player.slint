@@ -61,7 +61,7 @@ export global Player {
     // Projected out of `vm` for a *Rust* reader, which is the half a binding cannot help with:
     // reading a struct property from Rust clones the whole of it, and the lyrics panel's follow
     // wants these two on a 33 ms tick. Derived here so the clone happens once per publish rather
-    // than once per tick, the same trade the three scalars below make against their writers.
+    // than once per tick, the same trade the two scalars below make against their writers.
     out property <bool> vm-is-playing: root.vm.is_playing;
     out property <float> vm-playback-speed: root.vm.playback_speed;
 
@@ -69,7 +69,6 @@ export global Player {
     // the bindings that read them — see `PlayerVm` in `models.slint`.
     in-out property <int> position-ms;
     in-out property <int> duration-ms;
-    in-out property <float> progress;
 
     // A seek target held until the reported position lands within ±2 s or the track changes. While
     // ≥ 0 the slider prefers it over `position-ms`, so the thumb doesn't snap back for a frame.
@@ -163,12 +162,9 @@ export global Player {
     // landing after a rapid track change.
     in-out property <TrackMetaRow> track-meta;
 
-    // Chunked by `ui::chips` against the width the strip last reported. Uncapped — the view
-    // has room to wrap where the hero band does not.
-    in-out property <[[string]]> chip-rows;
-
-    // View → Rust: the strip's available width. `MetaChipStrip` owns the mirror and mount seed.
-    callback recompute-chip-rows(length);
+    // The metadata chips for `track-meta`, in reading order. Uncapped: the view has room to
+    // wrap where the hero band does not.
+    in-out property <[string]> chips;
 
     // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
     // `ui::backdrop`, which answers twice over: on the blur these take their *hue* from the accent
@@ -322,6 +318,13 @@ export global Player {
     // surfaces. Reads back through `vm.track.rating`.
     callback set-current-rating(int /*rating*/);
 
+    // The playing track's album, artist and genre, for the bar's row menu; 0 where it has none or
+    // the read hasn't landed. Outside `vm` because `TrackSummary` carries no foreign keys, so
+    // `ui::track_links` reads them beside it.
+    in-out property <int> track-album-id;
+    in-out property <int> track-artist-id;
+    in-out property <int> track-genre-id;
+
     // 0 = off, > 0 = duration timer, -1 = "End of current track". **Session-only.**
     callback set-sleep-timer(int /*minutes*/);
     // The flyout's ±stepper Start pill. Rust clamps to [30 s, 2 h].
@@ -333,7 +336,7 @@ export global Player {
     // only invalidates the row reading it — the `position-ms` rule.
     in-out property <string> sleep-timer-remaining: "";
 
-    // Bumped by the keyboard volume shortcuts; `VolumePopup` force-shows its tooltip. **Slider
+    // Bumped by the keyboard volume shortcuts; `VolumeTrigger` force-shows its tooltip. **Slider
     // drags don't bump it** — they already raise the popup chrome.
     in-out property <int> volume-hud-tick: 0;
 }

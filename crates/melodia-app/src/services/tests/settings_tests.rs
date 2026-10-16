@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use melodia_core::error::AppError;
 use melodia_engine::player::engine::backend::OutputChoice;
+use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{
     Drive, ExclusiveTuning, OutputMode, RateFallback,
 };
@@ -415,17 +416,54 @@ fn test_resume_on_startup_defaults_false() -> Result<(), AppError> {
     Ok(())
 }
 
-/// `MotionFlags` is `#[serde(flatten)]`ed like every other substruct, so its key sits at
-/// the top level of `settings.json` — a nested object here would be a shape change on
-/// installs that already have a file.
+/// Releases with the Skip Startup Animation switch wrote `skip_startup_animation` at the top
+/// level, so installed files still carry it. Such a file keeps every other value, and the next
+/// write leaves the key behind.
 #[test]
-fn test_skip_startup_animation_defaults_false_and_reads_a_top_level_key() -> Result<(), AppError> {
-    let absent: SettingsData = serde_json::from_str("{}").map_err(|e| json_err(&e))?;
-    assert!(!absent.motion.skip_startup_animation);
+fn a_file_carrying_the_retired_startup_animation_key_still_loads() -> Result<(), AppError> {
+    let json = r#"{"volume": 80, "skip_startup_animation": true}"#;
 
-    let present: SettingsData =
-        serde_json::from_str(r#"{"skip_startup_animation": true}"#).map_err(|e| json_err(&e))?;
-    assert!(present.motion.skip_startup_animation);
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(settings.volume, 80);
+    let written = serde_json::to_value(&settings).map_err(|e| json_err(&e))?;
+    assert!(
+        written.get("skip_startup_animation").is_none(),
+        "the retired key is written back, so it outlives the switch that read it"
+    );
+    Ok(())
+}
+
+/// Nothing reads the retired key, whatever an older or hand-edited file holds under it.
+#[test]
+fn a_retired_startup_animation_key_of_any_type_is_ignored() -> Result<(), AppError> {
+    let json = r#"{"volume": 80, "skip_startup_animation": "yes"}"#;
+
+    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(settings.volume, 80);
+    Ok(())
+}
+
+/// The write path rather than the serializer: a writer that merged onto the file it read, to keep
+/// what it doesn't know, would carry the retired key forward on every save.
+#[test]
+fn a_settings_write_leaves_the_retired_key_behind() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let paths = melodia_core::config::Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+    std::fs::write(&paths.settings_path, r#"{"volume": 80, "skip_startup_animation": true}"#)?;
+
+    reading_env(|| crate::services::settings::mutate_settings(&paths, |_| {}))?;
+
+    let written: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&paths.settings_path)?)
+            .map_err(|e| json_err(&e))?;
+    assert_eq!(
+        (written.get("skip_startup_animation"), written.get("volume")),
+        (None, Some(&serde_json::json!(80))),
+        "(the retired key, the volume)"
+    );
     Ok(())
 }
 
@@ -1017,6 +1055,52 @@ fn the_paused_device_is_written_and_read_by_its_token() -> Result<(), AppError> 
     Ok(())
 }
 
+/// A file from before the setting reads as what every conversion went through then, the kernel,
+/// wherever that is still the default.
+#[cfg(not(target_os = "windows"))]
+#[test]
+fn a_settings_file_from_before_the_resampler_keeps_band_limited_off_windows() -> Result<(), AppError>
+{
+    let json = r#"{"output_mode": "exclusive"}"#;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(flags.output_resampler, Resampler::BandLimited);
+    Ok(())
+}
+
+/// Windows' default moved to linear, the kernel costing per frame of a mix format that can run far
+/// above the track's rate, and a file from before the setting moves with it.
+#[cfg(target_os = "windows")]
+#[test]
+fn a_settings_file_from_before_the_resampler_converts_linearly_on_windows() -> Result<(), AppError>
+{
+    let json = r#"{"output_mode": "exclusive"}"#;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+
+    assert_eq!(flags.output_resampler, Resampler::Linear);
+    Ok(())
+}
+
+/// The resampler's token, held for the same reason as the rate fallback's.
+#[test]
+fn the_resampler_is_written_and_read_by_its_token() -> Result<(), AppError> {
+    let rows = [(Resampler::Linear, "linear"), (Resampler::BandLimited, "band_limited")];
+    for (resampler, token) in rows {
+        let flags = OutputFlags { output_resampler: resampler, ..OutputFlags::default() };
+        let written = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+        let read: OutputFlags =
+            serde_json::from_value(serde_json::json!({ "output_resampler": token }))
+                .map_err(|e| json_err(&e))?;
+
+        assert_eq!(
+            (written["output_resampler"].clone(), read.output_resampler),
+            (serde_json::json!(token), resampler),
+            "{token}"
+        );
+    }
+    Ok(())
+}
+
 /// The Output card's toggle writes the token and reads it back, and the engine is handed the same
 /// reading, so the two directions have to agree for both positions.
 #[test]
@@ -1052,6 +1136,26 @@ fn a_token_a_newer_build_wrote_resets_only_its_own_setting() -> Result<(), AppEr
         read,
         (40, TitlebarButtonStyle::Standard, true, OutputMode::Exclusive),
         "(volume, caption style, always on top, output mode)"
+    );
+    Ok(())
+}
+
+/// A resampler a newer build added reads as this platform's default, beside settings this one
+/// knows.
+#[test]
+fn an_unreadable_resampler_resets_to_the_default_alone() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let paths = melodia_core::config::Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+    let json = r#"{"volume": 40, "output_resampler": "a_newer_kernel"}"#;
+    std::fs::write(&paths.settings_path, json)?;
+
+    let settings = reading_env(|| crate::services::settings::read_settings(&paths))?;
+
+    assert_eq!(
+        (settings.volume, settings.output.output_resampler),
+        (40, Resampler::default()),
+        "(volume, resampler)"
     );
     Ok(())
 }

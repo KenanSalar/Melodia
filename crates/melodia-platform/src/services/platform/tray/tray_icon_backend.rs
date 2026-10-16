@@ -178,11 +178,12 @@ pub fn update(snapshot: &TraySnapshot) {
     });
 }
 
-/// Drop the tray icon and clear the global menu-event handler. Must be called
-/// on the UI thread before `std::process::exit`.
+/// Drop the tray icon. Must be called on the UI thread before `std::process::exit`.
+///
+/// The menu-event handler stays installed: muda's slot takes one value per process, so a
+/// `set_event_handler(None)` here would be a no-op, and with the menu gone nothing reaches it.
 pub fn shutdown() {
     if TRAY.with_borrow_mut(std::option::Option::take).is_some() {
-        MenuEvent::set_event_handler(None::<fn(MenuEvent)>);
         log::info!("System tray removed");
     }
 }

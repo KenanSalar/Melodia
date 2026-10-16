@@ -17,6 +17,7 @@ mod reads;
 
 pub use output::OutputChoice;
 pub use player_backend::PlayerBackend;
+pub use reads::DeckClock;
 
 use output::EngineOutput;
 
@@ -37,6 +38,7 @@ use melodia_playback::player::playback::crossfade::{self, CrossfadeShared};
 use melodia_playback::player::playback::decks::{Deck, Decks, DeferredOp, lock_decks};
 use melodia_playback::player::playback::equalizer::{self, EqShared, EqSource};
 use melodia_playback::player::playback::output::AudioOutput;
+use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::mixer::Mixer;
 use melodia_playback::player::playback::replaygain::{ReplayGainShared, TrackReplayGain};
 use melodia_playback::player::playback::visualizer::{VisualizerShared, VisualizerTap};
@@ -263,10 +265,10 @@ impl PlaybackEngine {
     ) -> Result<(), AppError> {
         let fade_ms = self.manual_fade_ms(start_position_ms);
 
-        // Decode outside the deck lock — the position monitor's `query_position`
-        // shares this mutex, so a synchronous Symphonia probe under it stalls
-        // position publication. It is the only step that can be hoisted out;
-        // everything depending on *which* deck we land on is `start_track`'s.
+        // Decode outside the deck lock: the monitor's poll takes this mutex every
+        // tick, so a synchronous Symphonia probe under it stalls the poll. It is the
+        // only step that can be hoisted out; everything depending on *which* deck we
+        // land on is `start_track`'s.
         let mut decoded = FileDecoder::open(Path::new(file_path))?;
 
         // One value for the decoder's seek and the deck's clock anchor both, so the two cannot
@@ -640,15 +642,17 @@ impl PlaybackEngine {
     pub fn seek(&self, file_path: &str, position_ms: u64, baked_rg: TrackReplayGain) {
         self.abort_crossfade();
 
-        // Nothing on the deck is nothing to seek, which is what moving the mounted source answered
-        // too. Asked before the open so a seek against a drained deck costs no I/O.
-        let mounted = {
+        // Nothing on the deck is nothing to seek, and a successor that has taken it is a track the
+        // state has yet to advance onto, so the file named here is the one that just ended. Both
+        // read as other than `Playing`, and both are asked before the open so they cost no I/O.
+        let handovers = {
             let decks = self.lock_decks();
             let voice = &decks.active().voice;
-            if voice.is_empty() {
+            let gapless = self.gapless_pending.load(Ordering::Acquire);
+            if evaluate_playback_check(gapless, voice.len()) != PlaybackCheck::Playing {
                 return;
             }
-            voice.mounted()
+            voice.handovers()
         };
 
         let position = Duration::from_millis(position_ms);
@@ -666,7 +670,7 @@ impl PlaybackEngine {
 
         let decks = self.lock_decks();
         let deck = decks.active();
-        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, mounted);
+        deck.voice.replace(self.build_source(decoded, baked_rg, deck), position, handovers);
     }
 
     /// Both decks must run at the same speed or a crossfade would drift.
@@ -681,6 +685,13 @@ impl PlaybackEngine {
         // them scaled: the analyzer needs the factor to place band edges on the pitch you hear.
         // Sole writer of that cell — see `VisualizerShared::set_speed`.
         self.viz.set_speed(speed);
+    }
+
+    /// Interpolate with `resampler` wherever a rate or the speed calls for conversion, from the
+    /// next block on. No reopen and no seek, the converters carrying their position across the
+    /// change, but it waits out a reopen in flight for the decks lock.
+    pub fn set_resampler(&self, resampler: Resampler) {
+        self.lock_decks().set_resampler_all(resampler);
     }
 
     /// Whether a gapless source is currently staged behind the playing one.
@@ -758,17 +769,19 @@ impl PlaybackEngine {
     /// Reads the **active** deck only. During a crossfade that deck holds
     /// exactly the incoming track and this reports `Playing`; the outgoing deck
     /// draining is [`Self::is_crossfading`]'s business.
+    ///
+    /// Observes a handover without acknowledging it: the flag stays up until the advance claims
+    /// it under the emit, so a seek landing in between still sees a deck the state is behind.
     pub fn check_playback_state(&self) -> PlaybackCheck {
         let was_gapless = self.gapless_pending.load(Ordering::Acquire);
-        let decks = self.lock_decks();
-        let sources = decks.active().voice.len();
-        drop(decks);
+        let sources = self.lock_decks().active().voice.len();
+        evaluate_playback_check(was_gapless, sources)
+    }
 
-        let result = evaluate_playback_check(was_gapless, sources);
-        if result == PlaybackCheck::GaplessTransition {
-            self.gapless_pending.store(false, Ordering::Release);
-        }
-        result
+    /// Take the staged successor's handover for the advance, `false` where a track start or a stop
+    /// has cleared it since [`Self::check_playback_state`] saw it.
+    pub fn claim_gapless_handover(&self) -> bool {
+        self.gapless_pending.swap(false, Ordering::AcqRel)
     }
 
     /// Lock the decks mutex, recovering from poison rather than panicking.

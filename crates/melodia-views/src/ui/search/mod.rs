@@ -25,7 +25,6 @@
 mod apply;
 mod callbacks;
 mod fetch;
-mod selection;
 mod state;
 mod top_result;
 
@@ -50,7 +49,6 @@ use melodia_ui::{
 use state::{ALBUM_STRIP_THUMB_SIZE, ARTIST_STRIP_THUMB_SIZE, STRIP_THUMB_CAP, SearchUiState};
 
 pub(super) use apply::{apply_row_favorite, apply_row_rating};
-pub(super) use selection::{clear_selection, handle_select_row, restamp_rows, select_all};
 
 /// Install the Search models, build the handle, and wire every `Search.*`
 /// callback to it.
@@ -133,7 +131,6 @@ impl SearchUi {
         self.artist_strip_thumbs.clear();
         *self.inner.last_results.lock() = None;
         self.inner.last_query.lock().clear();
-        self.inner.applied_selection.lock().clear();
         melodia_platform::services::platform::allocator::trim();
     }
 
@@ -151,7 +148,6 @@ impl SearchUi {
         self.artist_strip_thumbs.clear();
         *self.inner.last_results.lock() = None;
         self.inner.last_query.lock().clear();
-        self.inner.applied_selection.lock().clear();
         melodia_platform::services::platform::allocator::trim();
     }
 

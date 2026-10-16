@@ -12,8 +12,6 @@ use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
 fn track(artist_id: Option<i64>, album_id: Option<i64>, genre: Option<&str>) -> TrackListRow {
     TrackListRow {
         id: 0,
-        file_path: String::new(),
-        file_name: String::new(),
         title: String::new(),
         artist: None,
         album_artist: None,
@@ -29,7 +27,6 @@ fn track(artist_id: Option<i64>, album_id: Option<i64>, genre: Option<&str>) -> 
         album_id,
         artist_id,
         genre_id: None,
-        date_added: String::new(),
         sort_key: None,
     }
 }

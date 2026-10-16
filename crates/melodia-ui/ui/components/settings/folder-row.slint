@@ -20,19 +20,16 @@ export component FolderRow inherits Rectangle {
         padding: Theme.pad-lg;
         spacing: Theme.pad-md;
         alignment: stretch;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
-            MaterialIcon {
-                name: "folder";
-                icon-size: 22px;
-                icon-color: Theme.accent;
-                filled: true;
-            }
+        MaterialIcon {
+            name: "folder";
+            icon-size: 22px;
+            icon-color: Theme.accent;
+            filled: true;
         }
 
         VerticalLayout {
-            alignment: center;
             spacing: Theme.pad-xs;
             horizontal-stretch: 1;
 
@@ -49,32 +46,29 @@ export component FolderRow inherits Rectangle {
             }
         }
 
-        VerticalLayout {
-            alignment: center;
-            HorizontalLayout {
-                spacing: Theme.pad-xs;
-                IconButton {
-                    icon: "refresh";
-                    diameter: 32px;
-                    icon-size: 18px;
-                    tooltip-text: @tr("Rescan");
-                    button-enabled: root.actions-enabled;
-                    clicked => { root.rescan-clicked(); }
-                }
-                IconButton {
-                    icon: "delete";
-                    diameter: 32px;
-                    icon-size: 18px;
-                    idle-fg: Theme.text;
-                    // The semantic role token rather than the raw palette entry,
-                    // so a theme can move the destructive colour alone. And
-                    // `hover-fg`, since `active` is the toggled state and never
-                    // flips here.
-                    hover-fg: Theme.danger;
-                    tooltip-text: @tr("Remove");
-                    button-enabled: root.actions-enabled;
-                    clicked => { root.remove-clicked(); }
-                }
+        HorizontalLayout {
+            spacing: Theme.pad-xs;
+            IconButton {
+                icon: "refresh";
+                diameter: 32px;
+                icon-size: 18px;
+                tooltip-text: @tr("Rescan");
+                button-enabled: root.actions-enabled;
+                clicked => { root.rescan-clicked(); }
+            }
+            IconButton {
+                icon: "delete";
+                diameter: 32px;
+                icon-size: 18px;
+                idle-fg: Theme.text;
+                // The semantic role token rather than the raw palette entry,
+                // so a theme can move the destructive colour alone. And
+                // `hover-fg`, since `active` is the toggled state and never
+                // flips here.
+                hover-fg: Theme.danger;
+                tooltip-text: @tr("Remove");
+                button-enabled: root.actions-enabled;
+                clicked => { root.remove-clicked(); }
             }
         }
     }

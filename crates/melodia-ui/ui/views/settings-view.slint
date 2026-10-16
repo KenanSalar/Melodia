@@ -83,16 +83,16 @@ export component SettingsView inherits Rectangle {
         SettingsPage.body-cols = root.two-col ? 2 : 1;
         // Halving the body's height under a parked offset otherwise paints blank — the
         // reason the two mirrors below reset it too.
-        sv.viewport-y = 0px;
+        sv.content-y = 0px;
     }
 
     // A fresh tab, or entering or leaving search, starts at the top — a tall tab to a short one
     // otherwise leaves the viewport parked past the new content. Written **imperatively**: a `<=>`
-    // on `viewport-y` disables Slint's own out-of-bounds correction.
+    // on `content-y` disables Slint's own out-of-bounds correction.
     property <int> watched-tab: SettingsPage.tab-idx;
-    changed watched-tab => { sv.viewport-y = 0px; }
+    changed watched-tab => { sv.content-y = 0px; }
     property <bool> watched-searching: root.searching;
-    changed watched-searching => { sv.viewport-y = 0px; }
+    changed watched-searching => { sv.content-y = 0px; }
 
     // How far under the tab bar's divider a scrolled card is cut off. Everything between the two
     // hides content, so it stays tight and the rest of the header's clearance scrolls with the cards.
@@ -182,9 +182,9 @@ export component SettingsView inherits Rectangle {
         width: Theme.scrollbar-slot;
         height: sv.height;
         visible-size: sv.visible-height;
-        content-size: sv.viewport-height;
-        offset: -sv.viewport-y;
-        scroll-to(o) => { sv.viewport-y = -o; }
+        content-size: sv.content-height;
+        offset: -sv.content-y;
+        scroll-to(o) => { sv.content-y = -o; }
     }
 
     // Declared last so it paints above the scroll body — left on the tab, a below-anchored tooltip

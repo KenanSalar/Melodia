@@ -1,0 +1,75 @@
+import { ContextMenuMetrics, MenuItem, MenuSeparator } from "context-menu.slint";
+import { PopupSurface } from "popup-surface.slint";
+import { FocusLossWatcher } from "focus-loss-watcher.slint";
+
+// The menu a single-line field raises on right-click, drawn with the app's own menu parts. The
+// field owns the input, so every entry is a callback.
+//
+// Undo and redo stay on the keyboard: the input can't say whether either has anything to do, and
+// a menu row has no disabled state to say it with.
+export component TextEditMenu inherits Rectangle {
+    // An empty field has nothing to cut, copy or select.
+    in property <bool> has-text;
+    out property <bool> is-open: menu.is-open;
+
+    callback cut();
+    callback copy();
+    callback paste();
+    callback select-all();
+
+    // Stored by `show-at`, not bound by the host: `TrackContextMenu`'s header says why.
+    property <length> at-x;
+    property <length> at-y;
+
+    public function show-at(x: length, y: length) {
+        root.at-x = x;
+        root.at-y = y;
+        menu.show();
+    }
+
+    // `TrackContextMenu`'s reason for the pinned, zero-size root.
+    x: 0px;
+    y: 0px;
+    width: 0px;
+    height: 0px;
+
+    menu := PopupWindow {
+        x: root.at-x;
+        y: root.at-y;
+        width: ContextMenuMetrics.menu-w(menu-vl.preferred-width);
+
+        // Ungated, as on the row menu: the popup's body exists only while it is shown.
+        FocusLossWatcher {
+            close => { menu.close(); }
+        }
+
+        PopupSurface {
+            menu-vl := VerticalLayout {
+                padding: ContextMenuMetrics.inset;
+                spacing: 0;
+
+                if root.has-text: MenuItem {
+                    label: @tr("Cut");
+                    icon: "content_cut";
+                    clicked => { root.cut(); }
+                }
+                if root.has-text: MenuItem {
+                    label: @tr("Copy");
+                    icon: "content_copy";
+                    clicked => { root.copy(); }
+                }
+                MenuItem {
+                    label: @tr("Paste");
+                    icon: "content_paste";
+                    clicked => { root.paste(); }
+                }
+                if root.has-text: MenuSeparator {}
+                if root.has-text: MenuItem {
+                    label: @tr("Select all");
+                    icon: "select_all";
+                    clicked => { root.select-all(); }
+                }
+            }
+        }
+    }
+}

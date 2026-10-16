@@ -20,6 +20,8 @@ melodia-artwork = { path = "../melodia-artwork" }
 melodia-audio = { path = "../melodia-audio" }
 
 sqlx.workspace = true
+# `TryStreamExt`, to read a folder's rows one at a time.
+futures-util.workspace = true
 tokio.workspace = true
 lofty.workspace = true
 walkdir.workspace = true

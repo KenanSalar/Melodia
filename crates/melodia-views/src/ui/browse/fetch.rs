@@ -291,7 +291,6 @@ pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
 
 /// Flip `is_favorite` on a single row in the Slint `VecModel`. Only
 /// touches the affected row — scroll position and neighbours stay put.
-/// Mirrors `tracks::apply_row_favorite`.
 pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         model_patch::patch_track_row_by_id(&ui.global::<Browse>().get_rows(), id, |r| {

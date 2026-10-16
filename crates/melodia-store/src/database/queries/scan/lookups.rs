@@ -1,7 +1,9 @@
 //! Read-side helpers consumed by the scan and the watcher batch:
-//! exists-by-path, folder resolution by path prefix, and bulk pre-reads
-//! that gate the parallel scan's per-file work. Move detection resolves its
+//! exists-by-path, folder resolution by path prefix, and the folder read
+//! that gates the parallel scan's per-file work. Move detection resolves its
 //! hashes in one batch, through `track::lowest_id_by_hash_on`.
+
+use futures_util::TryStreamExt;
 
 use melodia_core::entities::scan::ExistingTrackSummary;
 use melodia_core::error::AppError;
@@ -50,39 +52,24 @@ pub(crate) async fn find_folder_for_path(
     Ok(id)
 }
 
-/// Get all track file paths for a given folder.
-/// Used for orphan detection during scans and startup verification.
-pub(crate) async fn get_all_track_paths_for_folder(
-    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    folder_id: i64,
-) -> Result<Vec<String>, AppError> {
-    let paths = sqlx::query_scalar::<_, String>("SELECT file_path FROM tracks WHERE folder_id = ?")
-        .bind(folder_id)
-        .fetch_all(&mut **tx)
-        .await?;
-    Ok(paths)
-}
-
-/// Read just the columns the incremental-scan filter needs (size, mtime),
-/// keyed by `file_path`. Runs against the read pool (called before the
-/// writer transaction begins) so it doesn't contend with the scan's writes.
-pub async fn get_existing_track_summaries_for_folder(
+/// Hands each of a folder's rows to `visit`, with the columns the incremental-scan filter needs,
+/// one row at a time, so the folder's paths are never all held at once. Read through the read
+/// pool, before the scan's writer transaction opens.
+pub async fn visit_folder_tracks(
     db: &crate::database::DbPool,
     folder_id: i64,
-) -> Result<std::collections::HashMap<String, ExistingTrackSummary>, AppError> {
-    let rows = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(
-        "SELECT file_path, file_size, date_modified
-         FROM tracks WHERE folder_id = ?",
+    mut visit: impl FnMut(String, ExistingTrackSummary),
+) -> Result<(), AppError> {
+    let mut rows = sqlx::query_as::<_, (String, Option<i64>, Option<String>)>(
+        "SELECT file_path, file_size, date_modified FROM tracks WHERE folder_id = ?",
     )
     .bind(folder_id)
-    .fetch_all(db.read())
-    .await?;
+    .fetch(db.read());
 
-    let mut out = std::collections::HashMap::with_capacity(rows.len());
-    for (path, size, mtime) in rows {
-        out.insert(path, ExistingTrackSummary { file_size: size, date_modified: mtime });
+    while let Some((path, file_size, date_modified)) = rows.try_next().await? {
+        visit(path, ExistingTrackSummary { file_size, date_modified });
     }
-    Ok(out)
+    Ok(())
 }
 
 /// Get a track's ID by its file path. Returns None if not found.

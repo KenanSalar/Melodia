@@ -1,5 +1,3 @@
-use serde::{Deserialize, Serialize};
-
 use melodia_core::error::AppError;
 
 #[cfg(target_os = "linux")]
@@ -13,20 +11,17 @@ pub mod kwin;
 /// `Copy` because every variant is a unit one: it is a detected capability passed by value to
 /// whatever acts on it, and a `&AlwaysOnTopCapability` in hand should not force a clone to read
 /// which arm it is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlwaysOnTopMethod {
     Native,
     #[cfg(target_os = "linux")]
     KwinDbus,
     #[cfg(target_os = "linux")]
     GnomeExtension,
-    #[serde(other)]
     Unsupported,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone)]
 pub struct AlwaysOnTopCapability {
     pub supported: bool,
     pub reason: Option<String>,
@@ -77,9 +72,8 @@ fn detect_capability_linux() -> AlwaysOnTopCapability {
 
     // Single blocking D-Bus connection shared across startup probes AND
     // every later apply call. Per CLAUDE.md, zbus's tokio feature must stay
-    // off — the blocking API is fine here because detection runs once on
-    // the main thread before the runtime is up, and the apply path drops
-    // to `spawn_blocking` before reusing this same pooled connection.
+    // off. Detection runs once, inside `AppState::init`, and the apply path
+    // drops to `spawn_blocking` before reusing this same pooled connection.
     let Ok(conn) = session_connection() else {
         return AlwaysOnTopCapability::unsupported("D-Bus session bus not available");
     };
@@ -162,11 +156,10 @@ pub async fn watch_changes(
 
 /// Lazily-initialized, shared D-Bus session connection used by the Linux
 /// backends. `zbus::blocking::Connection` is internally Arc-backed so the
-/// clone is cheap. Held behind a `parking_lot::Mutex` rather than an
-/// async lock because every caller is already inside
-/// `tokio::task::spawn_blocking` (per the CLAUDE.md zbus footgun: the
-/// async `zbus::Connection` would pull in zbus's tokio feature and
-/// collide with Slint's accesskit-transitive zbus chain).
+/// clone is cheap, and blocking per the CLAUDE.md zbus footgun. Held
+/// behind a `parking_lot::Mutex` because no caller awaits while holding
+/// it: detection is synchronous and every later caller is inside
+/// `tokio::task::spawn_blocking`.
 #[cfg(target_os = "linux")]
 static SESSION_CONN: parking_lot::Mutex<Option<zbus::blocking::Connection>> =
     parking_lot::Mutex::new(None);

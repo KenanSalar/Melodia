@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 
 use super::actions::emit_and_execute;
-use super::backend::{PlaybackCheck, PlaybackEngine};
+use super::backend::{DeckClock, PlaybackCheck, PlaybackEngine};
 use super::event_sink::PlayerSinks;
 use super::signal_path::{SignalPath, Transport};
 use super::state::{
@@ -127,11 +127,9 @@ impl PauseWatch {
 /// would nest the decks mutex inside it.
 #[derive(Copy, Clone)]
 pub struct BackendSnapshot {
-    /// Where the ear is, which is what the tick publishes and the state keeps.
-    pub position_ms: u64,
-    /// Where the deck has been pulled to, a device's worth ahead of the ear. What the crossfade
-    /// and the gapless stage are timed against, since both act on what is pulled next.
-    pub pulled_ms: u64,
+    /// The ear's position is what the tick publishes and the state keeps; the crossfade and the
+    /// gapless stage time against the pull, since both act on what is pulled next.
+    pub clock: DeckClock,
     pub already_preloaded: bool,
     pub crossfading: bool,
     pub xf: crossfade::CrossfadeSettings,
@@ -160,8 +158,7 @@ pub fn evaluate_playing_tick(
     backend: BackendSnapshot,
 ) -> Option<PlayingTick> {
     let BackendSnapshot {
-        position_ms,
-        pulled_ms,
+        clock: DeckClock { heard_ms: position_ms, pulled_ms },
         already_preloaded,
         crossfading,
         xf,
@@ -172,7 +169,9 @@ pub fn evaluate_playing_tick(
         return None;
     }
     state.position_ms = position_ms;
-    let tick = PositionTick { position_ms, duration_ms: state.duration_ms };
+    state.stamp_position();
+    let tick =
+        PositionTick { position_ms, duration_ms: state.duration_ms, stamp: state.position_stamp };
 
     // A live source has no track end, which is the only thing the two decisions below are about:
     // a crossfade ramps between two tracks and a gapless preload stages the next one. The position
@@ -464,7 +463,14 @@ impl Monitor {
     }
 
     fn advance_gapless(&self) {
+        let engine = &self.engine;
         emit_and_execute(&*self.engine, &self.player_state, &self.sinks, |state| {
+            // Claimed under the emit, as a crossfade re-verifies its decision there: a track start
+            // or a stop landing since the check has cleared the handover, and advancing anyway
+            // would step the queue past the track the deck now plays.
+            if !engine.claim_gapless_handover() {
+                return Vec::new();
+            }
             let mut actions = Vec::with_capacity(2);
 
             // Update play count for the track that just finished
@@ -511,25 +517,18 @@ impl Monitor {
 
     /// Normal tick: update position with lightweight event.
     fn playing(&mut self) -> Poll {
-        let backend = self.read_backend();
-        let (decided, transport) = {
-            let mut state = lock_state(&self.player_state);
-            let transport = Transport {
-                volume: state.volume,
-                muted: state.is_muted,
-                speed: state.playback_speed,
-                crossfading: backend.crossfading,
-            };
-            (evaluate_playing_tick(&mut state, backend), transport)
+        let xf = self.engine.crossfade_settings();
+        // Ahead of the positions, which a first open of the next file would leave stale, and of
+        // the exec lock, which the transport would otherwise wait on for that open.
+        let next_needs_reopen = next_needs_reopen(&self.engine, &self.player_state, xf);
+        let Some((decided, transport)) = self.read_and_publish(xf, next_needs_reopen) else {
+            return Poll::Skipped;
         };
         publish_signal_path(&self.signal_path_tx, self.engine.signal_path(transport));
         let Some(PlayingTick { tick, late_preload, crossfade }) = decided else {
             return Poll::Skipped;
         };
 
-        if self.publish.admits(tick.position_ms) {
-            let _ = self.position_tx.send(Some(tick.clone()));
-        }
         if let Some(mc) = self.sinks.media_controls.as_ref() {
             mc.update_position(tick.position_ms);
         }
@@ -558,20 +557,51 @@ impl Monitor {
         Poll::Counted
     }
 
+    /// Read the deck, decide the tick and send its position, all inside one hold of the exec lock.
+    ///
+    /// No transport op may land between the read and the send. A seek or a track start moves the
+    /// state before the deck, so a reading taken across one would publish, and write back, the
+    /// position the op just moved off. `None` while an op holds the lock or the deck has yet to act
+    /// on one, both of which the next poll reads past.
+    fn read_and_publish(
+        &mut self,
+        xf: crossfade::CrossfadeSettings,
+        next_needs_reopen: bool,
+    ) -> Option<(Option<PlayingTick>, Transport)> {
+        let _exec = self.player_state.try_lock_exec()?;
+        let backend = self.read_backend(xf, next_needs_reopen)?;
+        let (decided, transport) = {
+            let mut state = lock_state(&self.player_state);
+            let transport = Transport {
+                volume: state.volume,
+                muted: state.is_muted,
+                speed: state.playback_speed,
+                crossfading: backend.crossfading,
+            };
+            (evaluate_playing_tick(&mut state, backend), transport)
+        };
+        if let Some(PlayingTick { tick, .. }) = &decided
+            && self.publish.admits(tick.position_ms)
+        {
+            let _ = self.position_tx.send(Some(tick.clone()));
+        }
+        Some((decided, transport))
+    }
+
     /// Queried BEFORE locking `PlayerState` to avoid a nested lock — `evaluate_playing_tick`
-    /// takes this as an input.
-    fn read_backend(&self) -> BackendSnapshot {
-        let xf = self.engine.crossfade_settings();
-        // Ahead of the positions, which a first open of the next file would leave stale.
-        let next_needs_reopen = next_needs_reopen(&self.engine, &self.player_state, xf);
-        BackendSnapshot {
-            position_ms: self.engine.query_heard_position(),
-            pulled_ms: self.engine.query_position(),
+    /// takes this as an input. `None` while the deck has yet to act on what it was sent.
+    fn read_backend(
+        &self,
+        xf: crossfade::CrossfadeSettings,
+        next_needs_reopen: bool,
+    ) -> Option<BackendSnapshot> {
+        Some(BackendSnapshot {
+            clock: self.engine.query_settled_clock()?,
             already_preloaded: self.engine.is_gapless_preloaded(),
             crossfading: self.engine.is_crossfading(),
             xf,
             next_needs_reopen,
-        }
+        })
     }
 
     /// Snapshots under the state lock and awaits the sink inline — the monitor task

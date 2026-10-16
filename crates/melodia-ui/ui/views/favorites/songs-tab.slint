@@ -32,9 +32,6 @@ export component FavoritesSongsTab inherits Rectangle {
         select-all => { Favorites.select-all(); }
         clear-selection => { Favorites.clear-selection(); }
         request-blur-search => { Favorites.blur-search-tick += 1; }
-        go-to-album(aid) => { Favorites.go-to-album(aid); }
-        go-to-artist(aid) => { Favorites.go-to-artist(aid); }
-        go-to-genre(gid) => { Favorites.go-to-genre(gid); }
     }
 
     TrackListScrollbars {

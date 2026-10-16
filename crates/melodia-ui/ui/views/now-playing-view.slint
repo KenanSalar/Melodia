@@ -53,7 +53,7 @@ export component NowPlayingView inherits Rectangle {
     property <length> up-next-width: clamp(root.width * 0.35, 280px, 420px);
 
     // What the artwork / title / chip column gets: the panel less its left padding, the
-    // inter-column gap and the Up Next column. `Player.recompute-chip-rows` chunks against it.
+    // inter-column gap and the Up Next column.
     property <length> content-width: root.width - Theme.pad-lg - Theme.pad-md - root.up-next-width;
 
     // The square the slot reserves. The tile is square at whichever axis runs out first, so on a
@@ -99,48 +99,41 @@ export component NowPlayingView inherits Rectangle {
             padding-left: Theme.pad-lg;
             padding-right: Theme.pad-lg;
             spacing: Theme.pad-sm;
+            cross-axis-alignment: center;
 
-            VerticalLayout {
-                alignment: center;
-                AccentDiscButton {
-                    icon: "arrow_back";
-                    // Lateral: the view underneath remounts and samples this. See the
-                    // bar's own track-info card, which is the other half of the toggle.
-                    clicked => {
-                        Nav.pending-enter-from = NavEnterFrom.above;
-                        Nav.now-playing-open = false;
-                    }
+            AccentDiscButton {
+                icon: "arrow_back";
+                // Lateral: the view underneath remounts and samples this. See the
+                // bar's own track-info card, which is the other half of the toggle.
+                clicked => {
+                    Nav.pending-enter-from = NavEnterFrom.above;
+                    Nav.now-playing-open = false;
                 }
             }
 
             Rectangle { horizontal-stretch: 1; }
 
             // Left of the favourite heart.
-            if Player.vm.has_track: VerticalLayout {
-                alignment: center;
-                StarRating {
-                    rating: Player.vm.track.rating;
-                    star-size: 22px;
-                    // Accent-tinted rather than the list views' yellow; `AccentGlyphButton`,
-                    // which the rest of the row is, says why the group shares one colour.
-                    filled-color: Player.np-accent-bright;
-                    empty-color: Player.np-accent-dim;
-                    // The glyph family to the right answers the pointer; a star row that did not
-                    // would be the one dead control in the header.
-                    hover-preview: true;
-                    rated(n) => { Player.set-current-rating(n); }
-                }
+            if Player.vm.has_track: StarRating {
+                rating: Player.vm.track.rating;
+                star-size: 22px;
+                // Accent-tinted rather than the list views' yellow; `AccentGlyphButton`,
+                // which the rest of the row is, says why the group shares one colour.
+                filled-color: Player.np-accent-bright;
+                empty-color: Player.np-accent-dim;
+                on-backdrop: true;
+                // The glyph family to the right answers the pointer; a star row that did not
+                // would be the one dead control in the header.
+                hover-preview: true;
+                rated(n) => { Player.set-current-rating(n); }
             }
 
-            if !Player.vm.has_station: VerticalLayout {
-                alignment: center;
-                AccentGlyphButton {
-                    icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
-                    filled: Player.vm.track.is_favorite;
-                    active: Player.vm.track.is_favorite;
-                    button-enabled: Player.vm.has_track;
-                    clicked => { Player.toggle-favorite(); }
-                }
+            if !Player.vm.has_station: AccentGlyphButton {
+                icon: Player.vm.track.is_favorite ? "favorite" : "favorite_border";
+                filled: Player.vm.track.is_favorite;
+                active: Player.vm.track.is_favorite;
+                button-enabled: Player.vm.has_track;
+                clicked => { Player.toggle-favorite(); }
             }
 
             // **A station takes the vote in the heart's slot.** The favourite toggle acts on a
@@ -155,36 +148,27 @@ export component NowPlayingView inherits Rectangle {
             // The heart's own slot, not a new kind of control. Labelled on the station page,
             // where three segments fit and a reader can weigh them; here there is room for one
             // glyph, so it takes the tooltip.
-            if Player.vm.has_station && Player.vm.radio.uuid != "": VerticalLayout {
-                alignment: center;
-                AccentGlyphButton {
-                    icon: "thumb_up";
-                    tooltip-text: @tr("Vote");
-                    // Left, for the station page's own reason: this row is the panel's top edge,
-                    // so an above-pill is cut off by it. The left arm centres vertically and
-                    // clears inward over the header's own spacer.
-                    tooltip-side: TooltipSide.left;
-                    clicked => {
-                        Radio.vote(Player.vm.radio.uuid, Player.vm.radio.station_id);
-                    }
+            if Player.vm.has_station && Player.vm.radio.uuid != "": AccentGlyphButton {
+                icon: "thumb_up";
+                tooltip-text: @tr("Vote");
+                // Left, for the station page's own reason: this row is the panel's top edge,
+                // so an above-pill is cut off by it. The left arm centres vertically and
+                // clears inward over the header's own spacer.
+                tooltip-side: TooltipSide.left;
+                clicked => {
+                    Radio.vote(Player.vm.radio.uuid, Player.vm.radio.station_id);
                 }
             }
 
             // The visualizer's style on its own glyph, its label a tooltip.
             //
             // Not gated on `vm.has_track` — a style means something with an empty queue.
-            VerticalLayout {
-                alignment: center;
-                VisualizerPicker { }
-            }
+            VisualizerPicker { }
 
             // **Gone rather than disabled on a station**, the vote's rule directly above: the
             // column keeps its panel whatever the switch says, a stream having no track to look a
             // sheet up for, so here it could only ever swap nothing for nothing.
-            if !Player.vm.has_station: VerticalLayout {
-                alignment: center;
-                LyricsControls { }
-            }
+            if !Player.vm.has_station: LyricsControls { }
         }
 
         // The centred artwork group left, the Up Next column right, both floating on the backdrop
@@ -211,13 +195,13 @@ export component NowPlayingView inherits Rectangle {
                     // Locked to the viewport: left alone a ScrollView sizes its content to the
                     // content's own preferred width, and everything below centres against the
                     // column rather than against the widest thing in it.
-                    viewport-width: group-sv.visible-width;
+                    content-width: group-sv.visible-width;
                     // The visible height for as long as the column's floors fit inside it, so the
                     // cover gives ground before anything scrolls, and the column's own minimum
                     // past that. **Off the column, never off the scroller** — a ScrollView reports
-                    // a preferred height of its own and binds `viewport-height` back through it,
+                    // a preferred height of its own and binds `content-height` back through it,
                     // so reading that here closes the loop through this very property.
-                    viewport-height: max(group-sv.visible-height, group.min-height);
+                    content-height: max(group-sv.visible-height, group.min-height);
 
                     group := VerticalLayout {
                         alignment: center;
@@ -318,24 +302,20 @@ export component NowPlayingView inherits Rectangle {
                             }
                         }
 
-                        // **The strip reserves its row unconditionally**, so the centred artwork
-                        // above never reflows when a slow fetch lands or a track has no metadata.
-                        // On a narrow window it grows downward, the strip reporting its width and
-                        // Rust re-chunking uncapped. Contents are gated on the track id, so a fetch
-                        // landing after a rapid track change is never shown against the wrong
-                        // track.
+                        // Contents are gated on the track id, so a fetch landing after a rapid
+                        // track change is never shown against the wrong track; the strip keeps the
+                        // hidden lines reserved until it lands (its `show-rows`).
                         if Player.vm.has_track: MetaChipStrip {
-                            rows: Player.chip-rows;
+                            chips: Player.chips;
                             show-rows: Player.track-meta.track_id == Player.vm.track.id;
                             centred: true;
                             chip-fill: Player.np-chip-fill;
                             chip-label-color: Player.np-chrome-text;
-                            measured(w) => { Player.recompute-chip-rows(w); }
                         }
 
-                        // The base under the whole cover → title → chips group. Wrapped in a
-                        // centring layout, a fixed-width child not centring in a wider column;
-                        // both dimensions come off the view root above.
+                        // The base under the whole cover → title → chips group, in a row of its
+                        // own because the drop above it is padding, which a bare cell can't
+                        // carry; both dimensions come off the view root above.
                         if Visualizer.enabled: HorizontalLayout {
                             alignment: center;
                             // Well below the column's shared spacing, so it reads as the base of
@@ -360,9 +340,9 @@ export component NowPlayingView inherits Rectangle {
                     width: Theme.scrollbar-slot;
                     height: parent.height;
                     visible-size: group-sv.visible-height;
-                    content-size: group-sv.viewport-height;
-                    offset: -group-sv.viewport-y;
-                    scroll-to(o) => { group-sv.viewport-y = -o; }
+                    content-size: group-sv.content-height;
+                    offset: -group-sv.content-y;
+                    scroll-to(o) => { group-sv.content-y = -o; }
                 }
             }
 
@@ -422,7 +402,7 @@ export component NowPlayingView inherits Rectangle {
                         height: 100%;
                         horizontal-scrollbar-policy: always-off;
                         vertical-scrollbar-policy: always-off;
-                        viewport-width: self.width;
+                        content-width: self.width;
 
                         // The station page's shape: the scroller keeps the full width so the
                         // wheel works over the bar's lane too, and the content insets instead.
@@ -445,6 +425,7 @@ export component NowPlayingView inherits Rectangle {
                                 action-idle-fg: Player.np-accent-dim;
                                 action-hover-fg: Player.np-accent-bright;
                                 action-hover-bg: Player.np-accent-pill;
+                                action-on-backdrop: true;
                                 open-homepage(url) => { Radio.open-homepage(url); }
                             }
 
@@ -462,9 +443,9 @@ export component NowPlayingView inherits Rectangle {
                         width: Theme.scrollbar-slot;
                         height: parent.height;
                         visible-size: station-sv.visible-height;
-                        content-size: station-sv.viewport-height;
-                        offset: -station-sv.viewport-y;
-                        scroll-to(o) => { station-sv.viewport-y = -o; }
+                        content-size: station-sv.content-height;
+                        offset: -station-sv.content-y;
+                        scroll-to(o) => { station-sv.content-y = -o; }
                     }
                 }
             }

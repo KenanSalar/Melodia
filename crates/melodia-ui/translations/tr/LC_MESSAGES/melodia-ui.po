@@ -145,6 +145,18 @@ msgstr "Yayın denetleniyor…"
 msgid "Add"
 msgstr "Ekle"
 
+# Turkish doesn't pluralize a noun after a numeral ("3 parça", not "3 parçalar"),
+# so both forms are the same.
+#: ui/components/dialog/dialog.slint
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] "{n} parça"
+msgstr[1] "{n} parça"
+
 #: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
@@ -157,10 +169,12 @@ msgid "Playlist name"
 msgstr "Çalma listesi adı"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr "Açıklama (isteğe bağlı)"
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr "Açıklama ekle…"
 
@@ -227,17 +241,6 @@ msgstr "Sıfırla"
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Dışa aktarılacak çalma listesi yok"
-
-# Turkish doesn't pluralize a noun after a numeral ("3 parça", not "3 parçalar"),
-# so both forms are the same.
-#: ui/components/dialog/export-playlist-picker.slint
-#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
-#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
-msgid "{n} track"
-msgid_plural "{n} tracks"
-msgstr[0] "{n} parça"
-msgstr[1] "{n} parça"
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
@@ -336,6 +339,7 @@ msgstr "Belirtecini ListenBrainz profil ayarları sayfanda bulabilirsin."
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr "Tümünü seç"
@@ -806,6 +810,10 @@ msgid "Folder"
 msgstr "Klasör"
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr "Sanatçı - Albüm"
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -876,7 +884,7 @@ msgstr "Parça Bilgilerini Düzenle"
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr "Kopyala"
@@ -933,10 +941,6 @@ msgstr "{} çalma listesini sil"
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
 msgstr "Çalma listesini sil"
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
-msgstr "Sanatçı - Albüm"
 
 #: ui/components/grid/playlist-grid.slint
 msgid "0 tracks"
@@ -1448,6 +1452,14 @@ msgstr "Başlığı Kopyala"
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
 msgstr "Sanatçıyı Kopyala"
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr "Kes"
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
+msgstr "Yapıştır"
 
 #: ui/components/track-copy-items.slint
 msgid "Artist - Title"
@@ -2706,18 +2718,6 @@ msgstr "Albüm arka planı"
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Mini oynatıcıyı, “Şimdi Çalıyor” görünümünde olduğu gibi çalan albümün renkleriyle boyar."
 
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr "Hareket"
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr "Başlangıç animasyonunu atla"
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr "Kitaplığı belirip kayarak yerine oturması yerine, açılışta doğrudan ekranda göster. Açık bıraktığın bir ayrıntı sayfası yüklendiğinde yine de genişleyerek açılır."
-
 #: ui/views/settings/output-section.slint
 msgid "Output"
 msgstr "Çıkış"
@@ -2801,6 +2801,14 @@ msgstr "Dosyanın Örnekleme Hızına Uy"
 #: ui/views/settings/output-section.slint
 msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
 msgstr "Ses aygıtını her parçanın kendi hızında yeniden açar, böylece sistem yeniden örneklemez. Sistemin bu hıza izin vermesi gerekir"
+
+#: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr "Örnekleme Hızı Dönüşümü"
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
+msgstr "Bir parçanın örnekleme hızı aygıtınkinden farklıysa ya da hız 1× değilse nasıl dönüştürüleceği. Doğrusal daha az CPU kullanır ve en yüksek frekansları yumuşatır; Bant Sınırlı tizleri eksiksiz korur"
 
 #: ui/views/settings/output-section.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -2889,6 +2897,14 @@ msgid "The device is running at {}"
 msgstr "Aygıt {} ile çalışıyor"
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr "Doğrusal"
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr "Bant Sınırlı"
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr "Bit-Perfect Yap"
 
@@ -2956,6 +2972,10 @@ msgstr "Parçalar arasında geçiş yapılıyor"
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
 msgstr "Geçiş yok"
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
+msgstr "{}, {} hızına doğrusal olarak yeniden örneklenir"
 
 #: ui/views/settings/output-section.slint
 msgid "{} resampled to {}"

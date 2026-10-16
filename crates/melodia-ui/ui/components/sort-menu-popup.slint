@@ -1,5 +1,4 @@
 import { Theme } from "../theme.slint";
-import { PopupHighlight } from "../globals/shell.slint";
 import { PillButton } from "action-pill.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { PopupSurface } from "popup-surface.slint";
@@ -20,48 +19,35 @@ component SortMenuRow inherits Rectangle {
     height: 32px;
     border-radius: Theme.radius-sm;
     background: touch.has-hover ? Theme.surface2 : transparent;
-    animate background { duration: 100ms; easing: ease-in-out; }
+    animate background { duration: 100ms; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;
         padding-right: Theme.pad-sm;
         spacing: Theme.pad-sm;
+        cross-axis-alignment: center;
 
-        VerticalLayout {
-            alignment: center;
+        Text {
             horizontal-stretch: 1;
-            Text {
-                text: root.label;
-                color: root.active ? Theme.accent : Theme.text;
-                font-size: Theme.font-size-md;
-                overflow: elide;
-            }
+            text: root.label;
+            color: root.active ? Theme.accent : Theme.text;
+            font-size: Theme.font-size-md;
+            overflow: elide;
         }
 
         // Always rendered, transparent off the sorted field, so a pick shifts no row. Never an
         // arrow concatenated into the label: a glyph Vazirmatn lacks pulls a fallback font whose
         // line box pushes the patched glyphs off centre.
-        VerticalLayout {
-            alignment: center;
+        MaterialIcon {
             horizontal-stretch: 0;
-            MaterialIcon {
-                name: root.direction == "asc" ? "arrow_drop_up" : "arrow_drop_down";
-                icon-size: 16px;
-                icon-color: root.active ? Theme.accent : transparent;
-            }
+            name: root.direction == "asc" ? "arrow_drop_up" : "arrow_drop_down";
+            icon-size: 16px;
+            icon-color: root.active ? Theme.accent : transparent;
         }
     }
 
     touch := TouchArea {
         mouse-cursor: pointer;
-        // A pick doesn't close the popup, so restore the trigger highlight the winit Release
-        // filter just cleared.
-        pointer-event(ev) => {
-            if (ev.kind == PointerEventKind.up
-                || ev.kind == PointerEventKind.cancel) {
-                PopupHighlight.id = "sort";
-            }
-        }
         clicked => { root.clicked(); }
     }
 }
@@ -97,10 +83,8 @@ export component SortMenuPopup inherits Rectangle {
     btn := PillButton {
         icon: "sort";
         text: @tr("Sort");
-        // Held while the popup is open, and cleared by the AppWindow scrim catching an outside
-        // click; the rows inside never close it.
-        force-bg: PopupHighlight.id == "sort";
-        clicked => { PopupHighlight.id = "sort"; pop.show(); }
+        force-bg: pop.is-open;
+        clicked => { pop.show(); }
     }
 
     pop := PopupWindow {
@@ -115,8 +99,8 @@ export component SortMenuPopup inherits Rectangle {
         y: root.height + Theme.popup-gap;
         close-policy: close-on-click-outside;
 
-        if PopupHighlight.id == "sort": FocusLossWatcher {
-            close => { pop.close(); PopupHighlight.id = ""; }
+        FocusLossWatcher {
+            close => { pop.close(); }
         }
 
         HorizontalLayout {

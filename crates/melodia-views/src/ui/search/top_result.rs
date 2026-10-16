@@ -134,8 +134,7 @@ fn artist_to_top(a: &ArtistStats) -> TopResult {
         kind: TopKind::Artist,
         id: a.id,
         title: a.name.clone(),
-        // Album count by Tauri parity. Handed over as a count, not a
-        // sentence — see [`TopSubtitle`].
+        // Handed over as a count, not a sentence — see [`TopSubtitle`].
         subtitle: TopSubtitle::AlbumCount(a.album_count),
         artwork_path: a.image_path.clone(),
     }

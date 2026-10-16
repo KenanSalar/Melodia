@@ -12,7 +12,8 @@ use super::{PlaylistsUi, to_slint_playlist_row};
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::track_detail::{DetailCache, TrackDetail, filter, selection};
+use crate::ui::section_state::SectionState;
+use crate::ui::track_detail::{DetailCache, TrackDetail, filter, restore, selection};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
@@ -31,9 +32,14 @@ impl TrackDetail for PlaylistsUi {
     type Global = PlaylistDetail<'static>;
 
     const NATURAL_SORT: Option<&'static str> = Some(POSITION_FIELD);
+    const TAB: MyLibraryTab = MyLibraryTab::Playlists;
 
     fn cache(&self) -> &DetailCache {
         &self.detail.cache
+    }
+
+    fn section(&self) -> &SectionState {
+        &self.section
     }
 
     fn resort(&self, g: &Self::Global) {
@@ -240,11 +246,10 @@ pub async fn refresh_detail(
         crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
 
-        // Prune `selected-ids` to ids that still exist, then let the shared filter pass
-        // re-derive the displayed cache and the model from the canonical set. It diffs, so a
-        // scan that touched unrelated files writes back only the rows whose content moved and
-        // keeps both the shift-range anchor and an in-flight drag.
-        selection::prune_selection_to(&g, &tracks);
+        // The shared filter pass re-derives the displayed cache and the model from the canonical
+        // set, and drops from the selection whatever left it. It diffs, so a scan that touched
+        // unrelated files writes back only the rows whose content moved and keeps an in-flight
+        // drag.
         playlists_ui.detail.cache.set_all_tracks(tracks);
         *playlists_ui.detail.position_order.lock() = position_order_snapshot;
         apply_filtered_detail(&g, &playlists_ui);
@@ -341,30 +346,28 @@ fn apply_filtered_detail(g: &PlaylistDetail<'_>, playlists_ui: &PlaylistsUi) {
     }
 }
 
+/// Reopen the playlist that was visible at the last shutdown, if any: now if the launch shows the
+/// Playlists tab, otherwise on that tab's first enter.
 pub fn seed_detail_from_settings(
     ui: &AppWindow,
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
 ) {
-    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
-        s.last_detail_ids.get(crate::ui::track_list_view::view_id::PLAYLIST_DETAIL).copied()
-    }) else {
-        return;
-    };
-    // Synchronously, so it is up before `app.show()` — see `PlaylistDetail.restoring`.
+    restore::seed_or_defer(ui, state, playlists_ui, restore_detail);
+}
+
+/// Reopen a persisted playlist, at launch or on the first enter of a tab the launch left hidden.
+pub fn restore_detail(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>, id: i64) {
+    // Synchronously, so it is up before the tab's first frame; see `PlaylistDetail.restoring`.
     ui.global::<PlaylistDetail>().set_restoring(true);
     playlists_ui.section.begin_restore();
     let s = state.clone();
     let pu = playlists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Above = first-launch fade-down, not a drill-in slide. The user
-        // didn't navigate — we're just restoring their last view.
+        // Above, not a drill-in slide: nobody navigated into this playlist, it is their last view.
         if let Err(e) = open_playlist(&s, &pu, weak.clone(), id, NavEnterFrom::Above).await {
-            log::warn!(
-                "playlists::seed_detail_from_settings open_playlist({id}): {}",
-                describe(&e)
-            );
+            log::warn!("playlists::restore_detail open_playlist({id}): {}", describe(&e));
         }
         // Lowered however it went, and behind `open_playlist`'s own hop so the id is already in:
         // a playlist deleted since the last session owes the grid back rather than an empty body.

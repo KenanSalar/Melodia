@@ -51,15 +51,18 @@ fn literals_after(src: &str, needle: &str) -> Vec<String> {
         .collect()
 }
 
-/// The field each `CopyActions.copy-entities(kind, field, ids)` call passes. Its kind is a literal
-/// at some calls and a property at others, so the field is read by position.
+/// Every field a menu copies an entity by: its flyout list's `token:` literals, and the literal
+/// field of each `CopyActions.copy-entities(kind, field, ids)` call. A call's kind is a literal at
+/// some calls and a property at others, so the field is read by position; a call passing the
+/// flyout's token through is answered by the list instead.
 fn entity_copy_fields(src: &str) -> BTreeSet<String> {
-    strip_line_comments(src)
+    let called: Vec<String> = strip_line_comments(src)
         .split("CopyActions.copy-entities(")
         .skip(1)
         .filter_map(|call| call.split(',').nth(1))
-        .map(|field| field.trim().trim_matches('"').to_owned())
-        .collect()
+        .filter_map(|field| field.trim().strip_prefix('"')?.strip_suffix('"').map(str::to_owned))
+        .collect();
+    literals_after(src, "token: \"").into_iter().chain(called).collect()
 }
 
 #[test]
@@ -98,11 +101,12 @@ fn the_card_menu_copies_only_fields_rust_parses() {
     );
 }
 
+/// A set rather than a sequence: the flyout has a list without the website beside the one with it.
 #[test]
 fn the_station_menu_offers_exactly_the_fields_rust_parses() {
     assert_eq!(
-        literals_after(STATION_CONTEXT_MENU, "root.copy(\""),
-        STATION_TOKENS.map(|(token, _)| token)
+        literals_after(STATION_CONTEXT_MENU, "token: \"").into_iter().collect::<BTreeSet<_>>(),
+        STATION_TOKENS.iter().map(|(token, _)| (*token).to_owned()).collect::<BTreeSet<_>>()
     );
 }
 

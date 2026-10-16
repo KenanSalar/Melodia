@@ -1,8 +1,16 @@
+use std::cell::Cell;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use slint::{Model, ModelExt, ModelRc, VecModel};
 
-use super::{compute_click_selection, displayed_ids, restamp_selected, select_all_ids};
+use super::{
+    NO_ANCHOR, RowSelectionView, clear_row_selection, compute_click_selection, displayed_ids,
+    handle_row_click, keep_selection_within, restamp_selected, select_all_ids, select_all_rows,
+};
+use crate::ui::fixtures::{four_tracks, visible_rows};
+use crate::ui::track_list_cache::TrackListCache;
+use crate::ui::track_list_model::TrackListModel;
 use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Displayed order used by every shift-range case below.
@@ -14,72 +22,97 @@ fn visible() -> Vec<i32> {
 
 #[test]
 fn plain_click_selects_single_row_and_moves_anchor() {
-    let (sel, anchor) = compute_click_selection(2, vec![10, 20], visible, 4, 50, false, false);
+    let (sel, anchor) = compute_click_selection(20, vec![10, 20], visible, 4, 50, false, false);
     assert_eq!(sel, vec![50]);
-    assert_eq!(anchor, 4);
+    assert_eq!(anchor, 50);
 }
 
 #[test]
 fn ctrl_click_adds_unselected_row() {
-    let (sel, anchor) = compute_click_selection(0, vec![10], visible, 3, 40, false, true);
+    let (sel, anchor) = compute_click_selection(10, vec![10], visible, 3, 40, false, true);
     assert_eq!(sel, vec![10, 40]);
-    assert_eq!(anchor, 3);
+    assert_eq!(anchor, 40);
 }
 
 #[test]
 fn ctrl_click_removes_selected_row() {
-    let (sel, anchor) = compute_click_selection(0, vec![10, 40], visible, 3, 40, false, true);
+    let (sel, anchor) = compute_click_selection(10, vec![10, 40], visible, 3, 40, false, true);
     assert_eq!(sel, vec![10]);
-    assert_eq!(anchor, 3);
+    assert_eq!(anchor, 40);
 }
 
 #[test]
 fn shift_click_selects_range_and_keeps_anchor() {
-    let (sel, anchor) = compute_click_selection(1, vec![20], visible, 4, 50, true, false);
+    let (sel, anchor) = compute_click_selection(20, vec![20], visible, 4, 50, true, false);
     assert_eq!(sel, vec![20, 30, 40, 50]);
-    assert_eq!(anchor, 1);
+    assert_eq!(anchor, 20);
 }
 
 #[test]
 fn shift_click_range_works_upward() {
-    let (sel, anchor) = compute_click_selection(4, vec![50], visible, 1, 20, true, false);
+    let (sel, anchor) = compute_click_selection(50, vec![50], visible, 1, 20, true, false);
     assert_eq!(sel, vec![20, 30, 40, 50]);
-    assert_eq!(anchor, 4);
+    assert_eq!(anchor, 50);
+}
+
+#[test]
+fn a_shift_click_on_the_anchor_selects_it_alone() {
+    let (sel, anchor) = compute_click_selection(30, vec![30, 40], visible, 2, 30, true, false);
+    assert_eq!(sel, vec![30]);
+    assert_eq!(anchor, 30);
 }
 
 #[test]
 fn shift_click_without_anchor_falls_back_to_single() {
-    let (sel, anchor) = compute_click_selection(-1, vec![], visible, 2, 30, true, false);
+    let (sel, anchor) = compute_click_selection(NO_ANCHOR, vec![], visible, 2, 30, true, false);
     assert_eq!(sel, vec![30]);
-    assert_eq!(anchor, 2);
+    assert_eq!(anchor, 30);
 }
 
 #[test]
 fn shift_click_on_empty_visible_list_falls_back_to_single() {
-    let (sel, anchor) = compute_click_selection(1, vec![20], Vec::new, 3, 40, true, false);
+    let (sel, anchor) = compute_click_selection(20, vec![20], Vec::new, 3, 40, true, false);
     assert_eq!(sel, vec![40]);
-    assert_eq!(anchor, 3);
+    assert_eq!(anchor, 40);
 }
 
+/// A range measured from a row nobody can see would select rows the user never looked at.
 #[test]
-fn shift_click_clamps_out_of_range_indices() {
-    // Anchor beyond the (shrunken) visible list clamps to the last row
-    // instead of panicking on a bad slice bound.
-    let (sel, anchor) = compute_click_selection(99, vec![60], visible, 4, 50, true, false);
-    assert_eq!(sel, vec![50, 60]);
-    assert_eq!(anchor, 99);
+fn a_shift_click_whose_anchor_is_filtered_out_selects_the_row_alone() {
+    let (sel, anchor) = compute_click_selection(70, vec![70], visible, 4, 50, true, false);
+    assert_eq!(sel, vec![50]);
+    assert_eq!(anchor, 50);
+}
+
+/// The index Slint hands over is trusted only where it names the clicked id; a row model rebuilt
+/// under the click, or an index past its end, is looked up by id instead.
+#[test]
+fn a_shift_click_finds_its_row_by_id_wherever_the_index_does_not_name_it() {
+    let cases = [(0, "a stale index naming another row"), (99, "past the end"), (-1, "negative")];
+    for (idx, case) in cases {
+        let (sel, anchor) = compute_click_selection(20, vec![20], visible, idx, 50, true, false);
+        assert_eq!((sel, anchor), (vec![20, 30, 40, 50], 20), "{case}");
+    }
+}
+
+/// Browse lists a disk-only row as `0` so the index still names its row, and nothing selects one.
+#[test]
+fn a_shift_range_leaves_out_the_rows_listed_as_zero() {
+    let shown = || vec![10, 0, 20, 0];
+    let (sel, anchor) = compute_click_selection(10, vec![10], shown, 2, 20, true, false);
+    assert_eq!((sel, anchor), (vec![10, 20], 10));
 }
 
 #[test]
 fn shift_takes_priority_over_ctrl_when_anchored() {
-    let (sel, _) = compute_click_selection(0, vec![10], visible, 2, 30, true, true);
+    let (sel, _) = compute_click_selection(10, vec![10], visible, 2, 30, true, true);
     assert_eq!(sel, vec![10, 20, 30]);
 }
 
 #[test]
 fn visible_ids_is_not_invoked_on_plain_or_ctrl_clicks() {
     let (sel, _) = compute_click_selection(
-        0,
+        10,
         vec![10],
         || unreachable!("plain click must not walk the visible rows"),
         2,
@@ -165,4 +198,191 @@ fn a_model_that_is_not_a_vec_model_still_answers_with_its_ids() {
         "the fixture has to miss the downcast or it tests the arm above"
     );
     assert_eq!(select_all_ids(&rows), [10, 20]);
+}
+
+// --- a list view's whole selection, over the Songs lists' model ---
+
+/// What a list view's global holds of its selection, showing [`four_tracks`] as the two Songs
+/// lists show their rows.
+struct FakeView {
+    anchor: Cell<i32>,
+    selected: Rc<VecModel<i32>>,
+    rows: Rc<TrackListModel>,
+    cache: TrackListCache,
+}
+
+impl FakeView {
+    /// Showing the tracks in title order, 2 4 3 1, under `needle`.
+    fn showing(needle: &str) -> Self {
+        let cache = TrackListCache::new();
+        cache.store(four_tracks(), "title", "asc");
+        let rows = Rc::new(TrackListModel::default());
+        rows.show(visible_rows(&cache, needle));
+        Self { anchor: Cell::new(NO_ANCHOR), selected: Rc::new(VecModel::default()), rows, cache }
+    }
+
+    fn refilter(&self, needle: &str) {
+        self.rows.show(visible_rows(&self.cache, needle));
+    }
+
+    /// Unfiltered, in reverse title order: 1 3 4 2.
+    fn resort_descending(&self) {
+        self.cache.resort("title", "desc");
+        self.refilter("");
+    }
+
+    /// `(selected-ids, the anchor, each row's flag)`, the three things a click writes.
+    fn state(&self) -> (Vec<i32>, i32, Vec<bool>) {
+        let flags = self.rows.iter().map(|row| row.selected).collect();
+        (self.selected.iter().collect(), self.anchor.get(), flags)
+    }
+}
+
+impl RowSelectionView for FakeView {
+    fn anchor(&self) -> i32 {
+        self.anchor.get()
+    }
+    fn set_anchor(&self, anchor: i32) {
+        self.anchor.set(anchor);
+    }
+    fn selected_ids(&self) -> ModelRc<i32> {
+        ModelRc::from(Rc::clone(&self.selected))
+    }
+    fn replace_selected_ids(&self, _ids: ModelRc<i32>) {}
+    fn track_rows(&self) -> ModelRc<UiTrackListRow> {
+        ModelRc::from(Rc::clone(&self.rows))
+    }
+    fn replace_track_rows(&self, _rows: ModelRc<UiTrackListRow>) {}
+    fn bind_select_row(&self, _f: impl FnMut(i32, i32, bool, bool) + 'static) {}
+    fn bind_select_all(&self, _f: impl FnMut() + 'static) {}
+    fn bind_clear_selection(&self, _f: impl FnMut() + 'static) {}
+}
+
+#[test]
+fn a_plain_click_writes_the_set_the_anchor_and_the_rows() {
+    let view = FakeView::showing("");
+
+    handle_row_click(&view, 1, 4, false, false);
+
+    assert_eq!(view.state(), (vec![4], 4, vec![false, true, false, false]));
+}
+
+/// The range is the rows on screen, in the order they sit, not the order they were fetched in.
+#[test]
+fn a_shift_click_ranges_over_the_rows_on_screen() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 0, 2, false, false);
+
+    handle_row_click(&view, 2, 3, true, false);
+
+    assert_eq!(view.state(), (vec![2, 4, 3], 2, vec![true, true, true, false]));
+}
+
+#[test]
+fn a_shift_click_under_a_filter_skips_the_hidden_rows() {
+    let view = FakeView::showing("ha");
+    handle_row_click(&view, 0, 2, false, false);
+
+    handle_row_click(&view, 1, 3, true, false);
+
+    assert_eq!(view.state(), (vec![2, 3], 2, vec![true, true]));
+}
+
+/// Track 2 moves from the top row to the bottom one under the resort, so a range kept by
+/// position would run from whatever now sits on top.
+#[test]
+fn a_shift_click_after_a_resort_ranges_from_the_row_last_clicked() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 0, 2, false, false);
+    view.resort_descending();
+
+    handle_row_click(&view, 1, 3, true, false);
+
+    assert_eq!(view.state(), (vec![3, 4, 2], 2, vec![false, true, true, true]));
+}
+
+/// A Ctrl-click adds to the set as it stands, hidden rows and all.
+#[test]
+fn a_ctrl_click_keeps_a_selection_the_filter_hides() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 3, 1, false, false);
+    view.refilter("ha");
+
+    handle_row_click(&view, 0, 2, false, true);
+    view.refilter("");
+
+    assert_eq!(view.state(), (vec![1, 2], 2, vec![true, false, false, true]));
+}
+
+/// Select All is not a click, so a shift-click after it still ranges from the row last clicked.
+#[test]
+fn select_all_keeps_the_anchor_and_takes_only_the_rows_on_screen() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 2, 3, false, false);
+    view.refilter("ha");
+
+    select_all_rows(&view);
+
+    assert_eq!(view.state(), (vec![2, 3], 3, vec![true, true]));
+}
+
+/// A clear that wrote the set and left the rows stamped would paint every row as selected on a
+/// model that keeps its own.
+#[test]
+fn clear_drops_the_anchor_and_unstamps_every_row() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 0, 2, false, false);
+    handle_row_click(&view, 1, 4, false, true);
+
+    clear_row_selection(&view);
+
+    assert_eq!(view.state(), (Vec::new(), NO_ANCHOR, vec![false; 4]));
+}
+
+// --- keeping a selection to the set behind the list ---
+
+/// Track 3 left the set, so the next batch action must not still act on it.
+#[test]
+fn a_refetch_drops_a_track_it_no_longer_carries_from_the_selection() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 0, 2, false, false);
+    handle_row_click(&view, 2, 3, false, true);
+
+    keep_selection_within(&view, || HashSet::from([1, 2, 4]));
+
+    assert_eq!(view.state(), (vec![2], NO_ANCHOR, vec![true, false, false, false]));
+}
+
+/// The anchor alone can name a track that left, after a Ctrl-click took it back out of the set.
+#[test]
+fn a_refetch_drops_an_anchor_it_no_longer_carries() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 2, 3, false, false);
+    handle_row_click(&view, 2, 3, false, true);
+
+    keep_selection_within(&view, || HashSet::from([1, 2, 4]));
+
+    assert_eq!(view.state(), (Vec::new(), NO_ANCHOR, vec![false; 4]));
+}
+
+/// A filter hides a pick, which the next refilter paints again, so the set a selection is kept
+/// to is the whole one rather than the rows on screen.
+#[test]
+fn a_refilter_keeps_a_hidden_selection() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 3, 1, false, false);
+    view.refilter("ha");
+
+    keep_selection_within(&view, || visible_rows(&view.cache, "ha").held_ids());
+
+    assert_eq!(view.state(), (vec![1], 1, vec![false, false]));
+}
+
+#[test]
+fn nothing_to_keep_builds_no_set() {
+    let view = FakeView::showing("");
+
+    keep_selection_within(&view, || unreachable!("an empty selection has nothing to prune"));
+
+    assert_eq!(view.state(), (Vec::new(), NO_ANCHOR, vec![false; 4]));
 }

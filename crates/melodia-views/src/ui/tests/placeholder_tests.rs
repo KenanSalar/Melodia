@@ -2,7 +2,7 @@
 //! that paint text nobody sized, the one that sizes itself to text, and the two hosts
 //! that reach for it rather than drawing a pill of their own.
 //!
-//! Slint has no `placeholder-text` on a raw `TextInput`, so all four inputs fake one: a
+//! Slint has no `placeholder-text` on a raw `TextInput`, so both of ours fake one: a
 //! sibling `Text` gated on the field being empty. In a non-layout parent that Text takes
 //! its own *implicit* width — the untruncated string — and paints out of its field.
 //! `overflow: elide` is half the cure: it lowers the layout *minimum* to one ellipsis and
@@ -11,8 +11,8 @@
 //!
 //! `multiline-input.slint` is pinned to the *opposite* shape — bounded to its scroller and
 //! wrapping. It never had the bug, so it is the one nothing would catch being "fixed"
-//! into it. Here rather than beside one component because the defect is one copy-pasted
-//! block in three files with no Rust owner between them.
+//! into it. Here rather than beside either component because the two shapes only mean
+//! something read against each other.
 //!
 //! `SearchBar` is also the one input with two shapes, and the pins for that sit here because it
 //! is where the rest of its source contract already lives: floating chrome by default, recessed
@@ -33,10 +33,12 @@ const SEARCH_BAR: &str = include_str!("../../../../melodia-ui/ui/components/sear
 /// The chrome every `PopupWindow` body wraps, and so the corner an `inset` bar sits inside.
 const POPUP_SURFACE: &str =
     include_str!("../../../../melodia-ui/ui/components/popup-surface.slint");
-const LABELED_INPUT: &str =
-    include_str!("../../../../melodia-ui/ui/components/labeled-input.slint");
-const RULE_VALUE_INPUT: &str =
-    include_str!("../../../../melodia-ui/ui/components/dialog/smart-playlist-editor-body.slint");
+/// The editing half every single-line field mounts, the search bar included.
+const SINGLE_LINE_INPUT: &str =
+    include_str!("../../../../melodia-ui/ui/components/single-line-input.slint");
+/// The right-click menu every single-line field mounts.
+const TEXT_EDIT_MENU: &str =
+    include_str!("../../../../melodia-ui/ui/components/text-edit-menu.slint");
 const MULTILINE_INPUT: &str =
     include_str!("../../../../melodia-ui/ui/components/multiline-input.slint");
 const TOOLTIP: &str = include_str!("../../../../melodia-ui/ui/components/tooltip.slint");
@@ -55,6 +57,10 @@ const VOLUME_READOUTS: [(&str, &str); 2] = [
         ),
     ),
 ];
+
+/// The disc both popups open from, which reads the percentage out on the keyboard path.
+const VOLUME_TRIGGER: &str =
+    include_str!("../../../../melodia-ui/ui/components/now-playing/volume-trigger.slint");
 
 /// The one row that budgets against the bar's floor. It was three — Settings and the two
 /// hero bands each spelling the same clamp — and they are one component now, which is the
@@ -75,37 +81,34 @@ fn code_between(src: &str, from: &str, to: &str) -> String {
 }
 
 /// The placeholder's own declaration, taken as everything between it and the
-/// `TextInput` that follows it in all three files.
+/// `TextInput` that follows it.
 fn placeholder_block(src: &str) -> String {
     code_between(src, "text: root.placeholder;", "TextInput")
 }
 
 #[test]
-fn every_faked_placeholder_is_bounded_and_elides() {
-    for (name, src) in [
-        ("search-bar.slint", SEARCH_BAR),
-        ("labeled-input.slint", LABELED_INPUT),
-        ("smart-playlist-editor-body.slint", RULE_VALUE_INPUT),
-    ] {
-        let block = placeholder_block(src);
-        assert!(!block.is_empty(), "{name} no longer declares `text: root.placeholder;`");
-        assert!(
-            block.contains("width: 100%;"),
-            "{name}'s placeholder has no width — it will take the untruncated \
-             string's and paint out of its field"
-        );
-        assert!(
-            block.contains("overflow: elide;"),
-            "{name}'s placeholder is bounded but not elided — a long translation \
-             gets cut mid-glyph with no ellipsis"
-        );
-    }
+fn the_single_line_placeholder_is_bounded_and_elides() {
+    let block = placeholder_block(SINGLE_LINE_INPUT);
+    assert!(
+        !block.is_empty(),
+        "single-line-input.slint no longer declares `text: root.placeholder;`"
+    );
+    assert!(
+        block.contains("width: 100%;"),
+        "single-line-input.slint's placeholder has no width — it will take the untruncated \
+         string's and paint out of its field"
+    );
+    assert!(
+        block.contains("overflow: elide;"),
+        "single-line-input.slint's placeholder is bounded but not elided — a long translation \
+         gets cut mid-glyph with no ellipsis"
+    );
 }
 
-/// The fourth takes the opposite shape on purpose: a multi-line box wants its hint bounded
-/// to the scroller and wrapped, not elided against one line. It is the exemption in
-/// `.claude/rules/slint-pitfalls.md`, and a rule is not a build failure — without this it
-/// is the easiest thing in the tree to "fix" into the bug the other three just had.
+/// The multi-line placeholder takes the opposite shape on purpose: a multi-line box wants its
+/// hint bounded to the scroller and wrapped, not elided against one line. It is the exemption in
+/// `.claude/rules/slint-pitfalls.md`, and a rule is not a build failure. Without this pin it is
+/// the easiest thing in the tree to "fix" into the single-line shape.
 #[test]
 fn the_multiline_placeholder_is_bounded_and_wraps() {
     let block = code_between(MULTILINE_INPUT, "x: sv.x;", "Rectangle {");
@@ -165,8 +168,13 @@ fn the_search_bar_publishes_the_floor_its_hosts_budget_against() {
 fn the_search_bar_measures_its_own_placeholder() {
     let src = normalized(SEARCH_BAR);
     assert!(
-        src.contains("natural-width: placeholder-text.preferred-width + root.chrome-overhead;"),
+        src.contains("natural-width: input.placeholder-width + root.chrome-overhead;"),
         "search-bar.slint no longer measures its own placeholder"
+    );
+    assert!(
+        normalized(SINGLE_LINE_INPUT)
+            .contains("out property <length> placeholder-width: hint.preferred-width;"),
+        "single-line-input.slint no longer publishes the width of the hint it draws"
     );
     assert!(
         src.contains("chrome-overhead: Theme.pad-sm + root.icon-size + 2 * Theme.pad-xs;"),
@@ -209,13 +217,10 @@ fn an_inset_bar_takes_the_popup_surfaces_own_corner() {
     );
 }
 
-/// A shadow and a focus swell both say "above the content", and inside a popup there is nothing
-/// to be above — so the two are one decision and a bar keeping either reads as a pill dropped on
-/// a panel. The lift goes through the shadow's **colour** because the renderer bails on a
-/// transparent one, where a zeroed blur still paints an occluded rect under a fill that is
-/// translucent at rest.
+/// A focus swell says "above the content", and inside a popup there is nothing to be above, so a
+/// bar keeping it reads as a pill dropped on a panel.
 #[test]
-fn an_inset_bar_neither_lifts_nor_swells() {
+fn an_inset_bar_does_not_swell() {
     let src = normalized(SEARCH_BAR);
     assert!(
         src.contains("in property <bool> inset: false;"),
@@ -225,10 +230,6 @@ fn an_inset_bar_neither_lifts_nor_swells() {
     assert!(
         src.contains("focus-scale: input.has-focus && !root.inset ? 1.015 : 1.0;"),
         "an inset SearchBar swells on focus, shoving whatever the surface seats beside it"
-    );
-    assert!(
-        src.contains("drop-shadow-color: root.inset ? transparent :"),
-        "an inset SearchBar casts onto the surface it is recessed into"
     );
 }
 
@@ -245,6 +246,22 @@ fn the_tooltip_pill_is_capped() {
         src.contains("width: parent.width - 16px; wrap: word-wrap;"),
         "tooltip.slint's label is no longer bounded and wrapped, so the cap would clip it"
     );
+}
+
+/// The edit menu takes the keyboard while it is up, so a field reading its input's focus alone
+/// dims under its own menu: the accent border goes and the search bar shrinks back. Both halves
+/// are needed, the field reading the menu's flag and the menu publishing its popup's.
+#[test]
+fn a_field_reads_as_focused_while_its_edit_menu_is_open() {
+    let field = normalized(&code(SINGLE_LINE_INPUT));
+    let menu = normalized(&code(TEXT_EDIT_MENU));
+
+    let read = (
+        binding_value(&field, "out property <bool> has-focus:").trim(),
+        binding_value(&menu, "out property <bool> is-open:").trim(),
+    );
+
+    assert_eq!(read, ("ti.has-focus || menu.is-open", "menu.is-open"), "(field, menu)");
 }
 
 /// A pill with a child under any opacity short of 1.0 renders into a layer of its own, so a
@@ -282,11 +299,12 @@ fn the_tooltip_clears_its_host_on_all_four_sides() {
 }
 
 /// Both volume popups read their percentage out through the shared pill — including the
-/// slider's, which each used to hand-roll while the trigger disc a few lines above
-/// rendered the *same string* through `Tooltip` on the keyboard-HUD path. Two readouts
-/// per file is the whole count: the disc's and the slider's.
+/// slider's, which each used to hand-roll while the trigger disc rendered the *same string*
+/// through `Tooltip` on the keyboard-HUD path. One readout per popup is the slider's, and the
+/// disc's lives once in the `VolumeTrigger` both mount.
 #[test]
 fn the_volume_readouts_are_the_shared_tooltip() {
+    const PERCENT: &str = "round(Player.vm.volume) + \"%\"";
     for (name, src) in VOLUME_READOUTS {
         let src = normalized(&code(src));
         assert!(src.contains("Tooltip {"), "{name} no longer mounts the shared Tooltip");
@@ -296,10 +314,16 @@ fn the_volume_readouts_are_the_shared_tooltip() {
              the drag starts, not half a second later"
         );
         assert_eq!(
-            src.matches("round(Player.vm.volume) + \"%\"").count(),
-            2,
-            "{name} should read the percentage out exactly twice — once on the disc's \
-             tooltip, once on the slider's"
+            src.matches(PERCENT).count(),
+            1,
+            "{name} should read the percentage out exactly once, on the slider's tooltip"
         );
+        assert!(src.contains("VolumeTrigger {"), "{name} no longer opens from the shared trigger");
     }
+    let trigger = normalized(&code(VOLUME_TRIGGER));
+    assert_eq!(
+        trigger.matches(PERCENT).count(),
+        1,
+        "the trigger should read the percentage out exactly once, on the disc's tooltip"
+    );
 }

@@ -12,22 +12,17 @@ export component DialogToggleRow inherits HorizontalLayout {
 
     spacing: Theme.pad-md;
     alignment: stretch;
+    cross-axis-alignment: center;
 
-    VerticalLayout {
-        alignment: center;
-        ToggleSwitch {
-            checked <=> root.checked;
-            toggled(v) => { root.toggled(v); }
-        }
+    ToggleSwitch {
+        checked <=> root.checked;
+        toggled(v) => { root.toggled(v); }
     }
-    VerticalLayout {
-        alignment: center;
+    Text {
         horizontal-stretch: 1;
-        Text {
-            text: root.label;
-            color: Theme.text;
-            font-size: Theme.font-size-md;
-        }
+        text: root.label;
+        color: Theme.text;
+        font-size: Theme.font-size-md;
     }
 
     @children

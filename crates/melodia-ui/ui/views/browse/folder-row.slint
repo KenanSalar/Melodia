@@ -31,39 +31,31 @@ export component BrowseFolderRowItem inherits Rectangle {
             padding-right: Theme.pad-sm;
             spacing: Theme.pad-md;
             alignment: stretch;
+            cross-axis-alignment: center;
 
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "folder";
-                    icon-size: 24px;
-                    icon-color: Theme.accent;
-                }
+            MaterialIcon {
+                name: "folder";
+                icon-size: 24px;
+                icon-color: Theme.accent;
             }
 
-            VerticalLayout {
-                alignment: center;
+            Text {
                 horizontal-stretch: 1;
-                Text {
-                    text: root.name;
-                    color: Theme.text;
-                    font-size: Theme.font-size-md;
-                    font-weight: 500;
-                    min-width: self.preferred-width;
-                    // For the ink, not the elision — the floor above pins the width, so
-                    // this only retires the scissor `clip` would push at the line box.
-                    // A filename is the one string here that can carry Arabic marks.
-                    overflow: elide;
-                }
+                text: root.name;
+                color: Theme.text;
+                font-size: Theme.font-size-md;
+                font-weight: 500;
+                min-width: self.preferred-width;
+                // For the ink, not the elision — the floor above pins the width, so
+                // this only retires the scissor `clip` would push at the line box.
+                // A filename is the one string here that can carry Arabic marks.
+                overflow: elide;
             }
 
-            VerticalLayout {
-                alignment: center;
-                MaterialIcon {
-                    name: "chevron_right";
-                    icon-size: 20px;
-                    icon-color: Theme.overlay0;
-                }
+            MaterialIcon {
+                name: "chevron_right";
+                icon-size: 20px;
+                icon-color: Theme.overlay0;
             }
         }
 

@@ -24,12 +24,13 @@ parking_lot.workspace = true
 # Shuffle picks its order here rather than in the queue's persisted form.
 rand.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 log.workspace = true
 
 [dev-dependencies]
 # The persistence suites write a queue into a throwaway directory.
 tempfile.workspace = true
+# The persistence suites round-trip what queue.json and settings.json hold.
+serde_json.workspace = true
 # The signal path suite spells a negotiated device format.
 cpal.workspace = true
 # The backend suite opens a real file for the track-boundary probe.

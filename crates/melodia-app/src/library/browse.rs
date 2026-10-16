@@ -96,13 +96,8 @@ pub async fn browse_directory(
 
     let dir_str = scan.canonical.to_string_lossy();
     let tracks = queries::track::get_tracks_in_directory(db, &dir_str).await?;
-    // Move the DB rows into a path-keyed map (rather than borrow): the
-    // `remove` below hands ownership straight to `BrowseFile`, so an
-    // in-library file never deep-clones its ~18-field `TrackListRow` — the
-    // only per-row clone is the `file_path` key (one `String` vs ~6 heap
-    // allocs for a full row clone).
     let mut track_map: HashMap<String, TrackListRow> =
-        tracks.into_iter().map(|t| (t.file_path.clone(), t)).collect();
+        tracks.into_iter().map(|t| (t.file_path, t.row)).collect();
 
     let mut files: Vec<BrowseFile> = Vec::with_capacity(scan.audio_paths.len());
     for audio_path in &scan.audio_paths {
@@ -111,7 +106,7 @@ pub async fn browse_directory(
             audio_path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
 
         if let Some(row) = track_map.remove(path_str.as_ref()) {
-            files.push(BrowseFile { row, in_library: true });
+            files.push(BrowseFile { row, file_name, in_library: true });
         } else {
             // Disk-only file: present on disk inside a library folder but
             // not (yet) in the DB (just copied, or scanner-rejected).
@@ -120,9 +115,7 @@ pub async fn browse_directory(
             files.push(BrowseFile {
                 row: TrackListRow {
                     id: 0,
-                    file_path: path_str.into_owned(),
-                    file_name: file_name.clone(),
-                    title: file_name,
+                    title: file_name.clone(),
                     artist: None,
                     album_artist: None,
                     album: None,
@@ -137,15 +130,15 @@ pub async fn browse_directory(
                     album_id: None,
                     artist_id: None,
                     genre_id: None,
-                    date_added: String::new(),
                     sort_key: None,
                 },
+                file_name,
                 in_library: false,
             });
         }
     }
 
-    files.sort_by_cached_key(|f| f.row.file_name.to_lowercase());
+    files.sort_by_cached_key(|f| f.file_name.to_lowercase());
 
     let name = scan
         .canonical

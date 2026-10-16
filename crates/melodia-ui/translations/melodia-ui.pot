@@ -146,6 +146,16 @@ msgid "Add"
 msgstr ""
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/export-playlist-picker.slint
+#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
+#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
+#: ui/globals/search.slint ui/views/queue-sheet.slint
+msgid "{n} track"
+msgid_plural "{n} tracks"
+msgstr[0] ""
+msgstr[1] ""
+
+#: ui/components/dialog/dialog.slint
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/grid/station-context-menu.slint ui/views/favorites-view.slint
 #: ui/views/my-library/tab-pills.slint ui/views/radio/tab-pills.slint
@@ -157,10 +167,12 @@ msgid "Playlist name"
 msgstr ""
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Description (optional)"
 msgstr ""
 
 #: ui/components/dialog/dialog.slint
+#: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "Add a description…"
 msgstr ""
 
@@ -227,15 +239,6 @@ msgstr ""
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr ""
-
-#: ui/components/dialog/export-playlist-picker.slint
-#: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
-#: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
-msgid "{n} track"
-msgid_plural "{n} tracks"
-msgstr[0] ""
-msgstr[1] ""
 
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "Several playlists are saved as one .zip file, which you can import directly without extracting it."
@@ -334,6 +337,7 @@ msgstr ""
 #: ui/components/dialog/selectable-picker.slint
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
+#: ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Select all"
 msgstr ""
@@ -804,6 +808,10 @@ msgid "Folder"
 msgstr ""
 
 #: ui/components/grid/card-context-menu.slint
+msgid "Artist - Album"
+msgstr ""
+
+#: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
 #: ui/components/now-playing/play-button.slint
 #: ui/components/track-list/track-context-menu.slint
@@ -874,7 +882,7 @@ msgstr ""
 
 #: ui/components/grid/card-context-menu.slint
 #: ui/components/grid/station-context-menu.slint
-#: ui/components/station-facts.slint
+#: ui/components/station-facts.slint ui/components/text-edit-menu.slint
 #: ui/components/track-list/track-context-menu.slint
 msgid "Copy"
 msgstr ""
@@ -930,10 +938,6 @@ msgstr ""
 
 #: ui/components/grid/card-context-menu.slint
 msgid "Delete Playlist"
-msgstr ""
-
-#: ui/components/grid/card-context-menu.slint
-msgid "Artist - Album"
 msgstr ""
 
 #: ui/components/grid/playlist-grid.slint
@@ -1441,6 +1445,14 @@ msgstr ""
 
 #: ui/components/station-facts.slint
 msgid "Copy Artist"
+msgstr ""
+
+#: ui/components/text-edit-menu.slint
+msgid "Cut"
+msgstr ""
+
+#: ui/components/text-edit-menu.slint
+msgid "Paste"
 msgstr ""
 
 #: ui/components/track-copy-items.slint
@@ -2695,18 +2707,6 @@ msgstr ""
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr ""
 
-#: ui/views/settings/motion-section.slint
-msgid "Motion"
-msgstr ""
-
-#: ui/views/settings/motion-section.slint
-msgid "Skip Startup Animation"
-msgstr ""
-
-#: ui/views/settings/motion-section.slint
-msgid "Open with the library already on screen, instead of fading and sliding it into place. A detail page you left open still expands into view once it loads."
-msgstr ""
-
 #: ui/views/settings/output-section.slint
 msgid "Output"
 msgstr ""
@@ -2789,6 +2789,14 @@ msgstr ""
 
 #: ui/views/settings/output-section.slint
 msgid "Reopen the audio device at each track's own rate, so the system doesn't resample it. The system has to allow that rate"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
+msgid "Sample-Rate Conversion"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
+msgid "How a track is converted when its sample rate isn't the device's, or the speed isn't 1×. Linear uses less CPU and softens the highest frequencies; Band-Limited keeps the full treble"
 msgstr ""
 
 #: ui/views/settings/output-section.slint
@@ -2878,6 +2886,14 @@ msgid "The device is running at {}"
 msgstr ""
 
 #: ui/views/settings/output-section.slint
+msgid "Linear"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
+msgid "Band-Limited"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
 msgid "Make Bit-Perfect"
 msgstr ""
 
@@ -2944,6 +2960,10 @@ msgstr ""
 
 #: ui/views/settings/output-section.slint
 msgid "Not fading"
+msgstr ""
+
+#: ui/views/settings/output-section.slint
+msgid "{} resampled linearly to {}"
 msgstr ""
 
 #: ui/views/settings/output-section.slint

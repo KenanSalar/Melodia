@@ -9,10 +9,10 @@
 //! **The panel does not virtualize, and a `ListView` is what it cannot use rather than what it has
 //! not got around to.** Slint's listview repeater does measure real per-row heights, so uneven
 //! rows are not the objection they read as — but it *owns* the scroller's geometry: it writes
-//! `viewport-y` itself on every layout pass, and publishes `viewport-height` as an average row
+//! `content-y` itself on every layout pass, and publishes `content-height` as an average row
 //! height times the row count, re-derived from whichever rows happen to be mounted. This panel's
-//! whole design is the opposite of that: it centres the sung line by writing `viewport-y` from an
-//! exact offset table, and the overlay scrollbar gauges extent off `viewport-height`. Under a
+//! whole design is the opposite of that: it centres the sung line by writing `content-y` from an
+//! exact offset table, and the overlay scrollbar gauges extent off `content-height`. Under a
 //! `ListView` the first would be overwritten every frame and the second would drift as the sheet
 //! scrolled through rows a gloss makes nearly twice as tall. What makes the plain `for` right
 //! instead is that a sheet is small and, via [`super::rows::MAX_ROWS`], bounded.

@@ -1,14 +1,13 @@
 //! The card-grid pick matrix: scope guard, anchor, range and toggle.
 //!
 //! Everything a card's click decides is here; what a *published* selection then does to the Slint
-//! globals needs a window and is left to the wiring. The anchor sentinel is `0`, against
-//! `list_selection`'s `-1`, because this layer ranges over ids where that one ranges over row
-//! indices.
+//! globals needs a window and is left to the wiring.
 
 use std::collections::HashSet;
 
 use super::scope;
 use super::{Selection, pick};
+use crate::ui::list_selection::NO_ANCHOR;
 
 /// Card order as the grids draw it, for every range case below.
 const VISIBLE: [i32; 5] = [10, 20, 30, 40, 50];
@@ -118,7 +117,8 @@ fn shift_keeps_the_anchor_where_the_last_pick_left_it() {
 
 #[test]
 fn shift_without_an_anchor_falls_back_to_the_one_card() {
-    let next = picked(pick(&live(scope::ALBUMS, &[], 0), scope::ALBUMS, 30, true, false, visible));
+    let next =
+        picked(pick(&live(scope::ALBUMS, &[], NO_ANCHOR), scope::ALBUMS, 30, true, false, visible));
     assert_eq!(next.ids, [30]);
     assert_eq!(next.anchor, 30);
 }

@@ -26,7 +26,7 @@ fn a_composed_collage_carries_both_halves_and_a_hue_to_seed_from() -> Result<(),
     assert_eq!(blur.height(), DETAIL_BLUR.height);
     // Without a seed the banner falls back to `Theme.accent` and silently tracks the theme
     // again instead of the record.
-    assert!(pair.sample.accent_argb.is_some());
+    assert!(pair.sample.accent_rgb.is_some());
     assert!(pair.sample.luma.is_some());
     Ok(())
 }
@@ -40,7 +40,7 @@ fn nothing_to_compose_gives_an_empty_pair() {
         let pair = compose_hero_pair(&paths, Some(DETAIL_BLUR));
         assert!(pair.cover.is_none());
         assert!(pair.blur.is_none());
-        assert!(pair.sample.accent_argb.is_none());
+        assert!(pair.sample.accent_rgb.is_none());
     }
 }
 
@@ -58,7 +58,7 @@ fn a_specless_collage_keeps_its_seeds_and_builds_no_blur() -> Result<(), AppErro
 
     assert!(pair.blur.is_none());
     assert!(pair.cover.is_some());
-    assert!(pair.sample.accent_argb.is_some());
+    assert!(pair.sample.accent_rgb.is_some());
     assert!(pair.sample.seeds.iter().any(Option::is_some));
     Ok(())
 }
