@@ -243,8 +243,8 @@ three components that answer it, and each argues its geometry at its own file.
   nothing else** — `selected`, `selection-live`, the menu's `effective-selection` and its count are
   all derived there once, and a mount reaching past them for a `CardSelection` call is re-spelling
   what the cell already answers.
-  Per-kind menu arms (`go-to-artist`, the playlist four, `play-single`) are callbacks the grid
-  forwards, inert on a kind that never raises them.
+  Per-kind menu arms (the playlist four, `play-single`) are callbacks the grid forwards, inert on
+  a kind that never raises them. "Go to Artist" is not one: it calls the row menu's `Nav` trio.
   **It mounts two menus and opens one by kind**: `card-kind: "station"` raises
   `StationContextMenu`, whose actions are `Radio`'s and resolve to no tracks, and every other kind
   raises `CardContextMenu`. The second mount is free until it opens, a `PopupWindow`'s body being
@@ -592,8 +592,13 @@ three components that answer it, and each argues its geometry at its own file.
   untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
   rather than a property.
   **The two hosts with no list row read the "Go to" ids through `ui::track_links`**, `TrackSummary`
-  carrying no foreign keys: the queue sheet per row, the bar once per track change onto
-  `Player.track-{album,artist,genre}-id`.
+  carrying no foreign keys: the queue sheet per row, the bar onto
+  `Player.track-{album,artist,genre}-id` per track change and again per library tick, a retag
+  keeping the id.
+  **"Go to" calls `Nav.go-to-*` straight, as Open Containing Folder calls `Nav`**, with no host
+  forwarding: the origin a drill records is read off where the user stands, so there was nothing
+  per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands, closing
+  Now Playing and dismissing the queue sheet, the bar staying reachable over both.
 
 - **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.

@@ -157,10 +157,6 @@ export global PlaylistDetail {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // Cross-tab navigation from a row's right-click "Go to …" entry.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // Fires on pointer-up only once the drag passed the click threshold *and* the sort
     // is still `"position"`, ascending.

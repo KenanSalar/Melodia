@@ -55,8 +55,7 @@ export component CardCell inherits Rectangle {
     private property <int> scope-count: CardSelection.count-in(root.scope);
 
     // Per-kind menu entries the grid owns, because it already has them wired for its hover
-    // controls or its navigation. Inert on a kind that doesn't raise them.
-    callback go-to-artist(int /*artist_id*/);
+    // controls or its click. Inert on a kind that doesn't raise them.
     callback rename();
     callback edit-artwork();
     callback edit-rules();
@@ -95,7 +94,6 @@ export component CardCell inherits Rectangle {
         effective-selection: root.scope-selection;
         selection-count: root.scope-count;
 
-        go-to-artist(id) => { root.go-to-artist(id); }
         rename => { root.rename(); }
         edit-artwork => { root.edit-artwork(); }
         edit-rules => { root.edit-rules(); }

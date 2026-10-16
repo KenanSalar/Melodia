@@ -401,11 +401,6 @@ export component QueueRowItem inherits Rectangle {
                     Queue.remove(root.row-index);
                 }
             }
-            // Dismiss first: the sheet sits above the content panel, so a navigation with it
-            // still up lands behind it.
-            go-to-album(aid) => { Queue.dismiss(); Queue.go-to-album(aid); }
-            go-to-artist(aid) => { Queue.dismiss(); Queue.go-to-artist(aid); }
-            go-to-genre(gid) => { Queue.dismiss(); Queue.go-to-genre(gid); }
         }
     }
 }

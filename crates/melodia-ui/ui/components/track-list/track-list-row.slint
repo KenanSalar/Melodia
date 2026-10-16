@@ -135,11 +135,6 @@ export component TrackListRowItem inherits Rectangle {
     }
     // Only emitted under `view-context == "playlist-detail"`.
     callback request-remove-from-playlist([int] /*track_ids*/);
-    // The id is the row's own album/artist/genre linkage, already non-zero — the menu hides the
-    // entry when the row carries none.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
     // Bumped by anything that should make the host's filter input give up the keyboard: row
     // clicks, checkbox clicks, right-click. Slint doesn't blur a TextInput on an outside click, so
     // the host watches this counter and clears focus itself.
@@ -525,9 +520,6 @@ export component TrackListRowItem inherits Rectangle {
             request-remove(ids) => { root.request-remove-from-playlist(ids); }
             select-all => { root.select-all(); }
             clear-selection => { root.clear-selection(); }
-            go-to-album(aid) => { root.go-to-album(aid); }
-            go-to-artist(aid) => { root.go-to-artist(aid); }
-            go-to-genre(gid) => { root.go-to-genre(gid); }
         }
     }
     }

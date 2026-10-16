@@ -26,8 +26,6 @@ export component AlbumGrid inherits Rectangle {
     in property <int> covers-generation: 0;
 
     callback open-album(int /*album_id*/);
-    // The card menu's one cross-tab entry, routed by the host to `Albums.go-to-artist`.
-    callback go-to-artist(int /*artist_id*/);
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
@@ -66,7 +64,6 @@ export component AlbumGrid inherits Rectangle {
                     card-kind: "album";
                     card-id: album.id;
                     card-artist-id: album.artist_id;
-                    go-to-artist(id) => { root.go-to-artist(id); }
 
                     EntityCard {
                         card-width: root.card-width;

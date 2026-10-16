@@ -100,9 +100,6 @@ export component CardContextMenu inherits Rectangle {
     callback play-folder-next(string /*path*/);
     callback queue-folder(string /*path*/);
     callback reveal-folder(string /*path*/);
-    // The album card's one cross-tab entry, routed by the grid to `Albums.go-to-artist` — this
-    // file imports no view global, as the row menu's "Go to …" set doesn't either.
-    callback go-to-artist(int /*artist_id*/);
 
     // `TrackContextMenu`'s reason for the pinned, zero-size root, measured here from the card.
     x: 0px;
@@ -319,11 +316,12 @@ export component CardContextMenu inherits Rectangle {
                 root.dismiss();
             }
         }
+        // The album card's one cross-tab entry, through the row menu's `Nav` trio.
         if !root.multi-active && root.card-artist-id != 0: MenuItem {
             label: @tr("Go to Artist");
             icon: "person";
             clicked => {
-                root.go-to-artist(root.card-artist-id);
+                Nav.go-to-artist(root.card-artist-id);
                 root.dismiss();
             }
         }

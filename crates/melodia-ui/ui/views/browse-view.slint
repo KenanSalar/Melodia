@@ -219,9 +219,6 @@ export component BrowseView inherits Rectangle {
                             clear-selection => { Browse.clear-selection(); }
                             // Browse has no filter input — nothing to blur.
                             request-blur-search => { }
-                            go-to-album(aid) => { Browse.go-to-album(aid); }
-                            go-to-artist(aid) => { Browse.go-to-artist(aid); }
-                            go-to-genre(gid) => { Browse.go-to-genre(gid); }
                         }
 
                         // The card view. Same mounted-with-a-`0px`-arm shape as `tl`

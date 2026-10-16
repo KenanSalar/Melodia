@@ -320,14 +320,10 @@ export global Player {
 
     // The playing track's album, artist and genre, for the bar's row menu; 0 where it has none or
     // the read hasn't landed. Outside `vm` because `TrackSummary` carries no foreign keys, so
-    // `ui::track_links` reads them once per track change.
+    // `ui::track_links` reads them beside it.
     in-out property <int> track-album-id;
     in-out property <int> track-artist-id;
     in-out property <int> track-genre-id;
-    // That menu's cross-tab entries, wired in `ui::callbacks::cross_tab_nav` beside the lists'.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // 0 = off, > 0 = duration timer, -1 = "End of current track". **Session-only.**
     callback set-sleep-timer(int /*minutes*/);

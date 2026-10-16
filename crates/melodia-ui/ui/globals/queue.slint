@@ -74,13 +74,6 @@ export global Queue {
     // hover heart passes one id; the context menu passes the selection.
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
 
-    // The row menu's cross-tab entries. Wired in `ui::callbacks::cross_tab_nav` alongside the
-    // nine track-list globals; the sheet dismisses itself before invoking, a navigation with the
-    // queue still up landing behind it.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
-
     callback open-changed(bool);
 }
 

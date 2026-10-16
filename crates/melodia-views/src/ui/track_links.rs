@@ -4,10 +4,11 @@
 //!
 //! `TrackSummary` carries none of the three (`queue_sheet::links` argues why),
 //! so both hosts without a list row read them beside what they show: the queue
-//! sheet per row, the bar once per track change.
+//! sheet per row, the bar for the playing track.
 
 use async_compat::Compat;
 use slint::{ComponentHandle, Weak};
+use tokio::sync::watch;
 
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -60,36 +61,61 @@ fn to_row_id(id: Option<i64>) -> i32 {
 ///
 /// Do-while over the view model, so the track a launch restores is read with no
 /// seed of its own. The outgoing track's ids are cleared before the read, so a
-/// menu open across a track change never offers them for the new one, and a read
-/// overtaken by another change is dropped: the `changed()` below then wakes at
-/// once for the newer track.
+/// menu open across a track change never offers them for the new one. A library
+/// tick re-reads without clearing: a retag keeps the track's id and can still
+/// move it to another album, artist or genre.
+///
+/// Its own loop because it selects over both channels, and `ui::signal::on_signal`
+/// takes one; one loop also keeps two reads from ever overlapping.
 pub fn spawn_playing_links_subscriber(
     ui: Weak<AppWindow>,
     state: &AppState,
 ) -> Result<(), slint::EventLoopError> {
     let state = state.clone();
-    let mut rx = state.sinks.view_model.subscribe();
+    let mut playing_rx = state.sinks.view_model.subscribe();
+    let mut library_rx = state.library_changed.subscribe();
     slint::spawn_local(Compat::new(async move {
         let mut shown = None;
         loop {
-            let playing = playing_track_id(rx.borrow_and_update().as_ref());
+            let playing = playing_track_id(playing_rx.borrow_and_update().as_ref());
             if playing != shown {
                 shown = playing;
                 publish(&ui, RowLinks::default());
-                if let Some(id) = playing {
-                    let links = read_links(&state, id).await;
-                    if playing_track_id(rx.borrow().as_ref()) == playing {
-                        publish(&ui, links);
+                refresh(&ui, &state, &playing_rx, playing).await;
+            }
+            tokio::select! {
+                changed = playing_rx.changed() => {
+                    if changed.is_err() {
+                        break;
                     }
                 }
-            }
-            if rx.changed().await.is_err() {
-                break;
+                changed = library_rx.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                    refresh(&ui, &state, &playing_rx, shown).await;
+                }
             }
         }
         log::debug!("ui::track_links playing-track subscriber stopped");
     }))?;
     Ok(())
+}
+
+/// Reads `id`'s trio and publishes it while `id` is still the playing track. A
+/// read overtaken by a track change is dropped, the `changed()` that change armed
+/// waking the loop at once for the newer track.
+async fn refresh(
+    ui: &Weak<AppWindow>,
+    state: &AppState,
+    playing_rx: &watch::Receiver<Option<PlayerViewModelLight>>,
+    id: Option<i64>,
+) {
+    let Some(id) = id else { return };
+    let links = read_links(state, id).await;
+    if playing_track_id(playing_rx.borrow().as_ref()) == Some(id) {
+        publish(ui, links);
+    }
 }
 
 fn playing_track_id(vm: Option<&PlayerViewModelLight>) -> Option<i64> {

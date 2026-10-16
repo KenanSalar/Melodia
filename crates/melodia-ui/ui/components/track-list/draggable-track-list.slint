@@ -80,9 +80,6 @@ export component DraggableTrackList inherits Rectangle {
     callback request-blur-search();
     callback reorder(int /*from*/, int /*to*/);
     callback remove-from-playlist([int] /*track_ids*/);
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // Context for the row's menu: `view-context` is what surfaces the
     // Remove-from-Playlist entry, and the id filters this playlist out of the
@@ -163,9 +160,6 @@ export component DraggableTrackList inherits Rectangle {
                 request-remove-from-playlist(ids) => { root.remove-from-playlist(ids); }
                 request-blur-search => { root.request-blur-search(); }
                 drag-reorder(from, to) => { root.reorder(from, to); }
-                go-to-album(aid) => { root.go-to-album(aid); }
-                go-to-artist(aid) => { root.go-to-artist(aid); }
-                go-to-genre(gid) => { root.go-to-genre(gid); }
                 request-scroll-by(dy) => {
                     // `dy` is a content-space delta, so it *subtracts* from
                     // `content-y`, which runs 0 at the top and negative

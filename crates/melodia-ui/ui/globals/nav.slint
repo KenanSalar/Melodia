@@ -19,9 +19,13 @@ export global Nav {
     // watch its own property, so `AppWindow` mirrors this locally.
     callback now-playing-open-changed(bool);
     callback persist-selected-index(int);
-    // Right-click "Open Containing Folder". **View-independent**, unlike the `go-to-*`
-    // callbacks, which need per-view origin context and are duplicated per global.
+    // Right-click "Open Containing Folder".
     callback reveal-in-folder(int /*track_id*/);
+    // Every menu's "Go to …", wired in `ui::callbacks::cross_tab_nav`. One trio rather than one
+    // per host: the origin a drill records is read off where the user stands, not off who asked.
+    callback go-to-album(int /*album_id*/);
+    callback go-to-artist(int /*artist_id*/);
+    callback go-to-genre(int /*genre_id*/);
     // Written synchronously **immediately before** the flip that triggers the new mount. Typed
     // so a Rust typo is a compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
     in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.above;

@@ -85,8 +85,6 @@ export global Search {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // The row's other two "Go to …" entries reuse `open-album` / `open-artist` above.
-    callback go-to-genre(int /*genre_id*/);
 
     // Mirrored into `SearchUi.section_active`; drives the strip-cache release.
     callback section-active-changed(bool);

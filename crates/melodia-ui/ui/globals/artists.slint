@@ -73,10 +73,6 @@ export global ArtistDetail {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // Cross-tab navigation from a row's right-click "Go to …" entry.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // Rust flips `Nav.selected-index` to Albums *and* opens that album's detail.
     callback open-album(int /*album_id*/);

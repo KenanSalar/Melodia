@@ -59,10 +59,6 @@ export component TrackList inherits Rectangle {
     callback select-all();
     callback clear-selection();
     callback request-blur-search();
-    // Cross-tab navigation from the row's context menu.
-    callback go-to-album(int /*album_id*/);
-    callback go-to-artist(int /*artist_id*/);
-    callback go-to-genre(int /*genre_id*/);
 
     // Plumbed straight through to every row; `TrackListRowItem` has the vocabulary.
     in property <string> view-context;
@@ -140,9 +136,6 @@ export component TrackList inherits Rectangle {
                 select-all => { root.select-all(); }
                 clear-selection => { root.clear-selection(); }
                 request-blur-search => { root.request-blur-search(); }
-                go-to-album(aid) => { root.go-to-album(aid); }
-                go-to-artist(aid) => { root.go-to-artist(aid); }
-                go-to-genre(gid) => { root.go-to-genre(gid); }
             }
         }
     }

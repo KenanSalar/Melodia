@@ -170,9 +170,6 @@ export component ArtistDetailBody inherits Rectangle {
                         clear-selection => { ArtistDetail.clear-selection(); }
                         // A click in the track list blurs the band's SearchBar.
                         request-blur-search => { MyLibrary.blur-search-tick += 1; }
-                        go-to-album(aid) => { ArtistDetail.go-to-album(aid); }
-                        go-to-artist(aid) => { ArtistDetail.go-to-artist(aid); }
-                        go-to-genre(gid) => { ArtistDetail.go-to-genre(gid); }
                     }
                 }
             }

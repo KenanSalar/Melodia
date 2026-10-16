@@ -205,9 +205,6 @@ export component NowPlayingBar inherits Rectangle {
                 view-context: "now-playing";
                 // The heart's path, which also repaints every list showing this track.
                 toggle-favorite(ids, on) => { Player.toggle-favorite(); }
-                go-to-album(id) => { Player.go-to-album(id); }
-                go-to-artist(id) => { Player.go-to-artist(id); }
-                go-to-genre(id) => { Player.go-to-genre(id); }
             }
         }
 

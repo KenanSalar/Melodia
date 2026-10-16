@@ -180,13 +180,9 @@ pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
 /// cross-section drill, which moves the nav index as well as the tab. [`persist_tab`]
 /// rather than `tab-changed`, a drill not being a pick; the tab goes first, so the page
 /// mounts on the body it is meant to show.
-///
-/// Closes Now Playing too: the bar's menu and the queue sheet both drill from over it, and a
-/// detail landing under it opens nothing anyone can see.
 pub fn go_to_tab(ui: &AppWindow, tab: i32) {
     persist_tab(ui, tab);
     let nav = ui.global::<Nav>();
-    nav.set_now_playing_open(false);
     nav.set_selected_index(super::NAV_MY_LIBRARY);
     nav.invoke_persist_selected_index(super::NAV_MY_LIBRARY);
 }

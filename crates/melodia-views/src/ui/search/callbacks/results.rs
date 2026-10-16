@@ -21,7 +21,7 @@ use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
-use melodia_ui::{AppWindow, Search};
+use melodia_ui::{AppWindow, Nav, Search};
 
 /// Wire the cross-tab open / Top Result / row-action / sort / selection
 /// callbacks.
@@ -78,8 +78,8 @@ fn wire_open_artist(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi
     });
 }
 
-/// Resolves to one of three cross-tab handlers based on `top-kind` —
-/// the two above plus `go-to-genre`, wired in `cross_tab_nav`.
+/// Resolves to one of three cross-tab handlers based on `top-kind`:
+/// the two above plus `Nav.go-to-genre`, wired in `cross_tab_nav`.
 /// Invoking the global callback directly keeps the origin-stamp +
 /// nav-flip + persist all in one place.
 fn wire_open_top_result(ui: &AppWindow) {
@@ -95,7 +95,7 @@ fn wire_open_top_result(ui: &AppWindow) {
         match kind.as_str() {
             "album" => g.invoke_open_album(id),
             "artist" => g.invoke_open_artist(id),
-            "genre" => g.invoke_go_to_genre(id),
+            "genre" => ui.global::<Nav>().invoke_go_to_genre(id),
             _ => {}
         }
     });
