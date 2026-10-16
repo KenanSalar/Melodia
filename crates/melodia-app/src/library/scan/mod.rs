@@ -144,15 +144,6 @@ pub fn cancel(state: &AppState) {
     state.scan.cancel();
 }
 
-/// Scan-delta size above which the denormalized-stats triggers are dropped
-/// for the ingest and rebuilt via one `recalculate_all_stats` sweep at the
-/// end. At or below it the triggers stay enabled: per-row maintenance on a
-/// handful of inserts/updates/deletes is far cheaper than the full 3-table
-/// correlated-subquery recalc the drop would force. Same value and
-/// rationale as the watcher batch's `BULK_THRESHOLD` (`melodia-store`'s
-/// `queries/scan/watch_batch.rs`).
-const SCAN_BULK_THRESHOLD: usize = 20;
-
 /// Files a scan parses and then ingests in one write transaction. Large
 /// enough that per-chunk overhead (begin/commit + the 6 trigger DDL
 /// statements) is noise, small enough that interactive writes waiting on the
@@ -195,7 +186,7 @@ async fn scan_one(
 
     // Decided before the chunk loop consumes `to_scan`. The orphans count too, so a purge of
     // most of a folder runs with the triggers dropped rather than paying them per row.
-    let mut ingested = Ingested::new(to_scan.len() + orphans.len() > SCAN_BULK_THRESHOLD);
+    let mut ingested = Ingested::for_delta(to_scan.len() + orphans.len());
     run.begin_reading(u32::try_from(to_scan.len()).unwrap_or(u32::MAX));
 
     let scan_timestamp = melodia_core::utils::now_rfc3339();

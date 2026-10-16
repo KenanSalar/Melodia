@@ -12,7 +12,8 @@ use super::{ArtistsUi, to_slint_artist_row};
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::track_detail::{DetailCache, TrackDetail, filter, selection};
+use crate::ui::section_state::SectionState;
+use crate::ui::track_detail::{DetailCache, TrackDetail, filter, restore, selection};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
@@ -29,8 +30,14 @@ use melodia_ui::{
 impl TrackDetail for ArtistsUi {
     type Global = ArtistDetail<'static>;
 
+    const TAB: MyLibraryTab = MyLibraryTab::Artists;
+
     fn cache(&self) -> &DetailCache {
         &self.detail.cache
+    }
+
+    fn section(&self) -> &SectionState {
+        &self.section
     }
 
     fn refilter(&self, g: &Self::Global) {
@@ -237,16 +244,7 @@ fn apply_filtered_detail(g: &ArtistDetail<'_>, artists_ui: &ArtistsUi) {
 /// Reopen the artist that was visible at the last shutdown, if any: now if the launch shows the
 /// Artists tab, otherwise on that tab's first enter.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
-    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
-        s.last_detail_ids.get(crate::ui::track_list_view::view_id::ARTIST_DETAIL).copied()
-    }) else {
-        return;
-    };
-    if !tab_is_mounted(ui, MyLibraryTab::Artists) {
-        artists_ui.section.defer_restore(id);
-        return;
-    }
-    restore_detail(ui, state, artists_ui, id);
+    restore::seed_or_defer(ui, state, artists_ui, restore_detail);
 }
 
 /// Reopen a persisted artist, at launch or on the first enter of a tab the launch left hidden.

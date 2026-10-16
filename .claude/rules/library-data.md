@@ -25,7 +25,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **Scan ingest is chunked + batched.** A scan parses and ingests `TX_CHUNK_FILES` files at a
   time, each chunk in its own write transaction. The writer connection frees between chunks, and
-  a bulk scan's (`to_scan + orphans > SCAN_BULK_THRESHOLD`) per-chunk stats-trigger drop/create
+  a bulk scan's (`to_scan + orphans > BULK_THRESHOLD`, `Ingested::for_delta`) per-chunk stats-trigger drop/create
   stays crash-safe. Inserts are multi-row `INSERT … RETURNING id, file_path` via
   `insert_tracks_batch` — ids mapped back **by path**, RETURNING order being unspecified while
   DnD import relies on input order. Small deltas keep the stats triggers enabled and skip

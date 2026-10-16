@@ -1,6 +1,4 @@
-use sqlx::AssertSqlSafe;
-
-use crate::database::DbPool;
+use crate::database::{DbPool, IDS_PER_SET, set_where_id_in};
 use melodia_core::entities::artist;
 use melodia_core::error::AppError;
 
@@ -48,16 +46,10 @@ pub async fn get_artists_without_images(
 
 /// Records that the image search for each of `ids` found nothing, at `at` (Unix seconds).
 pub async fn mark_image_search_missed(db: &DbPool, ids: &[i64], at: i64) -> Result<(), AppError> {
-    // One bind of each budget goes to the timestamp.
-    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql =
-            format!("UPDATE artists SET image_search_missed_at = ? WHERE id IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(at);
-        for id in chunk {
-            query = query.bind(id);
-        }
-        query.execute(db.write()).await?;
+    for chunk in ids.chunks(IDS_PER_SET) {
+        set_where_id_in("UPDATE artists SET image_search_missed_at = ?", at, chunk)
+            .execute(db.write())
+            .await?;
     }
     Ok(())
 }

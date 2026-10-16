@@ -11,8 +11,9 @@ use slint::{ComponentHandle, Model, SharedString, VecModel, Weak};
 
 use super::state::COMPACT_TRACK_LIMIT;
 use super::top_result::{TopKind, TopResult, TopSubtitle, compute_top_result};
-use super::{SearchUi, restamp_rows, to_slint_album_strip_row, to_slint_artist_strip_row};
+use super::{SearchUi, to_slint_album_strip_row, to_slint_artist_strip_row};
 use crate::ui::genres::genre_accent;
+use crate::ui::list_selection;
 use crate::ui::model_patch;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32, opt_shared};
@@ -97,7 +98,7 @@ fn write_tracks(g: &Search, rows: Vec<UiTrackListRow>, total: i32) {
     let take =
         if g.get_show_all_tracks() { rows.len() } else { rows.len().min(COMPACT_TRACK_LIMIT) };
     let mut shown: Vec<UiTrackListRow> = rows.into_iter().take(take).collect();
-    restamp_rows(g, &mut shown);
+    list_selection::restamp_curated_rows(g, &mut shown);
     write_track_model(g, shown);
     g.set_tracks_total(total);
 }

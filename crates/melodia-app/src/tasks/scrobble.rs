@@ -23,6 +23,7 @@ use crate::state::{AppState, SharedFlag};
 use crate::tasks::TaskSpawner;
 use melodia_core::entities::track::ScrobbleRow;
 use melodia_core::error::describe;
+use melodia_core::utils::now_unix;
 use melodia_engine::player::engine::state::{PlayerViewModelLight, PositionTick};
 use melodia_integrations::services::integrations::scrobble::detector::{DetectorState, Effect};
 use melodia_integrations::services::integrations::scrobble::live_detector::{
@@ -59,10 +60,6 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     spawner.spawn_cancellable(move |shutdown| run_submitter(shutdown, submitter_service));
 }
 
-fn now_ts() -> i64 {
-    chrono::Utc::now().timestamp()
-}
-
 /// Correlate the two watch channels through the pure detectors, performing the DB
 /// enrichment fetch + service calls each decision asks for. Do-while shaped:
 /// each receiver's primed value is processed before the first `changed()`.
@@ -80,13 +77,13 @@ async fn run_detector(
     let mut last_row: Option<(i64, ScrobbleRow)> = None;
 
     let primed_vm = vm_rx.borrow_and_update().clone();
-    let effects = detector.on_view_model(primed_vm.as_ref(), now_ts());
+    let effects = detector.on_view_model(primed_vm.as_ref(), now_unix());
     process_effects(effects, &service, &db, &mut last_row).await;
-    let live_effects = live.on_view_model(primed_vm.as_ref(), now_ts(), radio_scrobble.get());
+    let live_effects = live.on_view_model(primed_vm.as_ref(), now_unix(), radio_scrobble.get());
     process_live_effects(live_effects, &service).await;
     let primed_tick = pos_rx.borrow_and_update().clone();
     if let Some(tick) = primed_tick {
-        let effects = detector.on_position(&tick, now_ts());
+        let effects = detector.on_position(&tick, now_unix());
         process_effects(effects, &service, &db, &mut last_row).await;
     }
 
@@ -104,9 +101,9 @@ async fn run_detector(
                     return; // sender dropped
                 }
                 let vm = vm_rx.borrow_and_update().clone();
-                let effects = detector.on_view_model(vm.as_ref(), now_ts());
+                let effects = detector.on_view_model(vm.as_ref(), now_unix());
                 process_effects(effects, &service, &db, &mut last_row).await;
-                let live_effects = live.on_view_model(vm.as_ref(), now_ts(), radio_scrobble.get());
+                let live_effects = live.on_view_model(vm.as_ref(), now_unix(), radio_scrobble.get());
                 process_live_effects(live_effects, &service).await;
             }
             result = pos_rx.changed() => {
@@ -115,7 +112,7 @@ async fn run_detector(
                 }
                 let tick = pos_rx.borrow_and_update().clone();
                 if let Some(tick) = tick {
-                    let effects = detector.on_position(&tick, now_ts());
+                    let effects = detector.on_position(&tick, now_unix());
                     process_effects(effects, &service, &db, &mut last_row).await;
                 }
             }

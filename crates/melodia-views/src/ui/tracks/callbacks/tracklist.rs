@@ -5,7 +5,9 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Global as _, SharedString};
 
 use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
-use crate::ui::callbacks::track_list::{play_displayed, wire_queue_actions, wire_toggle_column};
+use crate::ui::callbacks::track_list::{
+    play_displayed, wire_curated_selection, wire_queue_actions, wire_toggle_column,
+};
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, persisted_sort};
 use crate::ui::track_list_view::view_id;
 use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
@@ -28,7 +30,7 @@ pub(super) fn wire(
     wire_play_row(ui, state, tracks_ui);
     wire_queue_actions(&tracks, state, collect_track_ids);
     wire_row_flags(ui, state, tracks_ui);
-    wire_selection(ui, tracks_ui);
+    wire_curated_selection(&tracks.as_weak());
     wire_toggle_column(&tracks.as_weak(), state);
     wire_refresh(ui, state, tracks_ui);
 }
@@ -114,35 +116,6 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
                 tu.flip_rating(*id, rating);
                 tracks_ui_mod::repaint_row(&weak, *id);
             }
-        });
-    }
-}
-
-/// select-row: modifier-aware click handler. Computes the new selected
-/// set in Rust (Slint expressions can't iterate a model for a membership
-/// check) and hands it to the model, which repaints the rows whose flag moved.
-fn wire_selection(ui: &AppWindow, tracks_ui: &Arc<TracksUi>) {
-    let tracks = ui.global::<Tracks>();
-    {
-        let weak = ui.as_weak();
-        let tu = tracks_ui.clone();
-        tracks.on_select_row(move |idx, id, shift, ctrl| {
-            let Some(ui) = weak.upgrade() else { return };
-            tracks_ui_mod::handle_select_row(&ui, &tu, idx, id, shift, ctrl);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        tracks.on_select_all(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            tracks_ui_mod::select_all(&ui);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        tracks.on_clear_selection(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            tracks_ui_mod::clear_selection(&ui);
         });
     }
 }

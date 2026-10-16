@@ -778,7 +778,7 @@ fn what_the_chunks_wrote_decides_the_last_write_and_the_withdraw() {
     ];
 
     for ((inserted, moved, updated), expected) in cases {
-        let mut ingested = queries::ingest::Ingested::new(false);
+        let mut ingested = queries::ingest::Ingested::for_delta(0);
         ingested.add(&chunk(inserted, moved, updated));
         let decided = (ingested.any(), ingested.rewrote_existing());
         assert_eq!(decided, expected, "inserted {inserted}, moved {moved}, updated {updated}");
@@ -789,7 +789,7 @@ fn what_the_chunks_wrote_decides_the_last_write_and_the_withdraw() {
 /// inserted.
 #[test]
 fn the_counts_sum_across_chunks() {
-    let mut ingested = queries::ingest::Ingested::new(true);
+    let mut ingested = queries::ingest::Ingested::for_delta(0);
 
     ingested.add(&chunk(2, 1, 0));
     ingested.add(&chunk(3, 0, 0));

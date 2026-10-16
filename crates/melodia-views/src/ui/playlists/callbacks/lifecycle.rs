@@ -14,7 +14,7 @@ use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::TrackDetail;
+use crate::ui::track_detail::{TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
@@ -60,11 +60,7 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
-            if let Some(id) = pu.section.take_deferred_restore(|| pu.detail_playlist_id() >= 0)
-                && let Some(ui) = weak.upgrade()
-            {
-                playlists_ui_mod::restore_detail(&ui, &s, &pu, id);
-            }
+            restore::resume_deferred(&weak, &s, &pu, playlists_ui_mod::restore_detail);
             s.runtime.spawn(reenter(s.clone(), pu.clone(), weak.clone()));
         } else {
             let pu = pu.clone();

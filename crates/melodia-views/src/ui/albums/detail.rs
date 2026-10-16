@@ -10,7 +10,8 @@ use super::{AlbumsUi, to_slint_album_row};
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::track_detail::{DetailCache, TrackDetail, filter, selection};
+use crate::ui::section_state::SectionState;
+use crate::ui::track_detail::{DetailCache, TrackDetail, filter, restore, selection};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
@@ -24,8 +25,14 @@ use melodia_ui::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackLi
 impl TrackDetail for AlbumsUi {
     type Global = AlbumDetail<'static>;
 
+    const TAB: MyLibraryTab = MyLibraryTab::Albums;
+
     fn cache(&self) -> &DetailCache {
         &self.detail
+    }
+
+    fn section(&self) -> &SectionState {
+        &self.section
     }
 }
 
@@ -224,16 +231,7 @@ pub async fn refresh_detail(
 /// the `AlbumDetail` callbacks are live by the time `open_album`'s closure lands. A deleted album
 /// just logs and leaves `album-id` at `-1`, so the grid renders.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
-    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
-        s.last_detail_ids.get(crate::ui::track_list_view::view_id::ALBUM_DETAIL).copied()
-    }) else {
-        return;
-    };
-    if !tab_is_mounted(ui, MyLibraryTab::Albums) {
-        albums_ui.section.defer_restore(id);
-        return;
-    }
-    restore_detail(ui, state, albums_ui, id);
+    restore::seed_or_defer(ui, state, albums_ui, restore_detail);
 }
 
 /// Reopen a persisted album, at launch or on the first enter of a tab the launch left hidden.

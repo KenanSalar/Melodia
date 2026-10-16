@@ -1,9 +1,10 @@
 //! What the four track-list details (Album, Artist, Genre and Playlist) share: the Slint surface
-//! of their globals, the view handle the shared wiring drives, and the Rust-side cache. The
-//! wiring itself is [`crate::ui::callbacks::track_detail`].
+//! of their globals, the view handle the shared wiring drives, the Rust-side cache, and the
+//! launch's reopen. The wiring itself is [`crate::ui::callbacks::track_detail`].
 
 mod cache;
 pub mod filter;
+pub mod restore;
 pub mod selection;
 
 pub use cache::DetailCache;
@@ -13,6 +14,8 @@ use std::sync::Arc;
 use slint::{ModelRc, SharedString};
 
 use crate::ui::list_selection::RowSelectionView;
+use crate::ui::my_library::MyLibraryTab;
+use crate::ui::section_state::SectionState;
 use crate::ui::track_list_view::{TrackListActions, TrackListColumnState};
 use melodia_ui::{
     AlbumDetail, ArtistDetail, GenreDetail, PlaylistDetail, TrackListRow as UiTrackListRow,
@@ -32,9 +35,6 @@ pub trait DetailGlobal: RowSelectionView + TrackListColumnState + TrackListActio
     fn bind_play_row(&self, f: impl FnMut(i32, i32) + 'static);
     fn bind_toggle_row_favorite(&self, f: impl FnMut(ModelRc<i32>, bool) + 'static);
     fn bind_set_row_rating(&self, f: impl FnMut(ModelRc<i32>, i32) + 'static);
-    fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static);
-    fn bind_select_all(&self, f: impl FnMut() + 'static);
-    fn bind_clear_selection(&self, f: impl FnMut() + 'static);
     fn bind_request_sort(&self, f: impl FnMut(SharedString) + 'static);
     fn bind_filter_changed(&self, f: impl FnMut(SharedString) + 'static);
 }
@@ -69,15 +69,6 @@ macro_rules! impl_detail_global {
             fn bind_set_row_rating(&self, f: impl FnMut(ModelRc<i32>, i32) + 'static) {
                 self.on_set_row_rating(f);
             }
-            fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static) {
-                self.on_select_row(f);
-            }
-            fn bind_select_all(&self, f: impl FnMut() + 'static) {
-                self.on_select_all(f);
-            }
-            fn bind_clear_selection(&self, f: impl FnMut() + 'static) {
-                self.on_clear_selection(f);
-            }
             fn bind_request_sort(&self, f: impl FnMut(SharedString) + 'static) {
                 self.on_request_sort(f);
             }
@@ -106,8 +97,16 @@ pub trait TrackDetail: Send + Sync + 'static {
     /// The order a third click on a sorted header returns to, for a view whose own order is one
     /// no header names. `None` cycles between the two directions.
     const NATURAL_SORT: Option<&'static str> = None;
+    /// The My Library tab the detail opens over.
+    const TAB: MyLibraryTab;
 
     fn cache(&self) -> &DetailCache;
+
+    fn section(&self) -> &SectionState;
+
+    fn detail_open(&self) -> bool {
+        self.cache().id() >= 0
+    }
 
     fn resort(&self, g: &Self::Global) {
         self.cache().resort(g);

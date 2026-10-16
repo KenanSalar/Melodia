@@ -14,7 +14,7 @@ use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::TrackDetail;
+use crate::ui::track_detail::{TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
@@ -66,11 +66,7 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsU
             ui.global::<CardSelection>().invoke_clear();
         }
         if active {
-            if let Some(id) = au.section.take_deferred_restore(|| au.detail_artist_id() >= 0)
-                && let Some(ui) = weak.upgrade()
-            {
-                artists_ui_mod::restore_detail(&ui, &s, &au, id);
-            }
+            restore::resume_deferred(&weak, &s, &au, artists_ui_mod::restore_detail);
             s.runtime.spawn(reenter(s.clone(), au.clone(), weak.clone()));
         } else {
             let au = au.clone();

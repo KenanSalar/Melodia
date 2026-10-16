@@ -9,6 +9,7 @@ use slint::ComponentHandle;
 use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
 use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::ui::list_selection;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
@@ -63,14 +64,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 g.set_artist_count(UNFETCHED_COUNT);
-                favorites_ui_mod::release_tracks(&g);
+                list_selection::clear_curated_selection(&g);
+                favorites_ui_mod::hide_tracks(&g);
                 clear_vec_model::<UiEntityGridRow>(
                     &g.get_most_played_rows(),
                     "favorites: clear most-played",
                 );
                 clear_vec_model::<UiEntityGridRow>(&g.get_artist_rows(), "favorites: clear artist");
-                clear_vec_model::<i32>(&g.get_selected_ids(), "favorites: clear selected-ids");
-                g.set_selection_anchor(-1);
                 // The card grids' set goes back with the models it describes;
                 // `card-selection.slint` argues why it cannot outlive the leave.
                 ui.global::<CardSelection>().invoke_clear();

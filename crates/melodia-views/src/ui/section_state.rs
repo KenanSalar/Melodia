@@ -59,8 +59,8 @@ impl SectionState {
         self.active.load(Ordering::Relaxed)
     }
 
-    /// Raised beside the detail's own `restoring`, before a launch spawns the reopen of this
-    /// section's last detail.
+    /// Raised beside the detail's own `restoring`, before the reopen of this section's last
+    /// detail is spawned, at launch or on a hidden tab's first enter.
     pub fn begin_restore(&self) {
         self.restoring.store(true, Ordering::Release);
     }

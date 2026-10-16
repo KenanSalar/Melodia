@@ -24,7 +24,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
-use crate::ui::track_detail::DetailCache;
+use crate::ui::track_detail::{DetailCache, TrackDetail};
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -146,7 +146,7 @@ impl AlbumsUi {
     /// of this grid comes through here, and does nothing unless the grid is what
     /// is drawn ([`SectionState::grid_on_screen`]).
     pub fn prewarm_visible_covers(&self) {
-        if !self.section.grid_on_screen(|| self.detail_album_id() >= 0) {
+        if !self.section.grid_on_screen(|| self.detail_open()) {
             return;
         }
         let data = self.grid.data.lock().clone();

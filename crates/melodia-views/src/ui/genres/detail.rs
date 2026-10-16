@@ -13,7 +13,8 @@ use crate::ui::appearance::rgb::color_to_rgb;
 use crate::ui::detail_view::resolve_view_sort;
 use crate::ui::hero_backdrop::GenreStops;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::track_detail::{DetailCache, TrackDetail, filter, selection};
+use crate::ui::section_state::SectionState;
+use crate::ui::track_detail::{DetailCache, TrackDetail, filter, restore, selection};
 use crate::ui::track_list_view::view_id;
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
@@ -27,8 +28,14 @@ use melodia_ui::{AppWindow, GenreDetail, NavEnterFrom, TrackListRow as UiTrackLi
 impl TrackDetail for GenresUi {
     type Global = GenreDetail<'static>;
 
+    const TAB: MyLibraryTab = MyLibraryTab::Genres;
+
     fn cache(&self) -> &DetailCache {
         &self.detail
+    }
+
+    fn section(&self) -> &SectionState {
+        &self.section
     }
 }
 
@@ -215,16 +222,7 @@ pub async fn refresh_detail(
 /// *after* [`super::install`] so the `GenreDetail` callbacks are already live by the time
 /// `open_genre`'s `upgrade_in_event_loop` lands. No-ops on a missing genre.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
-    let Some(id) = library::settings::get_view_state(&state.paths).ok().and_then(|s| {
-        s.last_detail_ids.get(crate::ui::track_list_view::view_id::GENRE_DETAIL).copied()
-    }) else {
-        return;
-    };
-    if !tab_is_mounted(ui, MyLibraryTab::Genres) {
-        genres_ui.section.defer_restore(id);
-        return;
-    }
-    restore_detail(ui, state, genres_ui, id);
+    restore::seed_or_defer(ui, state, genres_ui, restore_detail);
 }
 
 /// Reopen a persisted genre, at launch or on the first enter of a tab the launch left hidden.

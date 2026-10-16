@@ -135,55 +135,59 @@ fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
 /// resume it, the detail is lost.
 #[test]
 fn a_tab_the_launch_hides_restores_its_detail_on_its_first_enter() {
-    // The tab is part of the anchor: a bare `if !` latches onto whichever negated guard
-    // comes first, and the *negation* is the half to pin — deferring while the tab is on
-    // screen is the inverted bug and reads alike.
-    const SLICES: [(&str, &str, &str, &str, &str); 4] = [
+    const RESTORE: &str = include_str!("../track_detail/restore.rs");
+    // The tab each slice names is part of the anchor: one naming a sibling's defers on the
+    // wrong tab and reads alike.
+    const SLICES: [(&str, &str, &str, &str); 4] = [
         (
             include_str!("../albums/detail.rs"),
             include_str!("../albums/callbacks/lifecycle.rs"),
             "albums",
-            "albums_ui",
             "Albums",
         ),
         (
             include_str!("../artists/detail.rs"),
             include_str!("../artists/callbacks/lifecycle.rs"),
             "artists",
-            "artists_ui",
             "Artists",
         ),
         (
             include_str!("../genres/detail.rs"),
             include_str!("../genres/callbacks/lifecycle.rs"),
             "genres",
-            "genres_ui",
             "Genres",
         ),
         (
             include_str!("../playlists/detail.rs"),
             include_str!("../playlists/callbacks/lifecycle.rs"),
             "playlists",
-            "playlists_ui",
             "Playlists",
         ),
     ];
 
-    for (seed, lifecycle, name, handle, tab) in SLICES {
-        let hidden_arm = seed
-            .split_once(&format!("if !tab_is_mounted(ui, MyLibraryTab::{tab}) {{"))
-            .and_then(|(_, rest)| rest.split_once('}'))
-            .map_or("", |(body, _)| body);
+    // The *negation* is the half to pin: deferring while the tab is on screen is the inverted
+    // bug and reads alike.
+    let hidden_arm = RESTORE
+        .split_once("if !tab_is_mounted(ui, V::TAB) {")
+        .and_then(|(_, rest)| rest.split_once('}'))
+        .map_or("", |(body, _)| body);
+    assert!(
+        hidden_arm.contains("view.section().defer_restore(id)"),
+        "the seed must defer its restore while the tab is hidden, or the launch decodes a detail \
+         nothing draws"
+    );
+    assert!(
+        RESTORE.contains(".section().take_deferred_restore("),
+        "the section gate must resume the restore the seed deferred, or the detail the user left \
+         open never comes back"
+    );
+    for (detail, lifecycle, name, tab) in SLICES {
         assert!(
-            hidden_arm.contains(&format!("{handle}.section.defer_restore(id)")),
-            "{name}'s seed must defer its restore while the tab is hidden, or the launch \
-             decodes a detail nothing draws"
-        );
-        assert!(
-            lifecycle.contains(".section.take_deferred_restore(")
-                && lifecycle.contains("_ui_mod::restore_detail("),
-            "{name}'s section gate must resume the restore its seed deferred, or the detail \
-             the user left open never comes back"
+            detail.contains(&format!("const TAB: MyLibraryTab = MyLibraryTab::{tab};"))
+                && detail.contains("restore::seed_or_defer(")
+                && lifecycle.contains("restore::resume_deferred("),
+            "{name} must seed and resume through the shared restore under its own tab, or its \
+             detail reopens at launch behind a hidden tab or never comes back"
         );
     }
 }

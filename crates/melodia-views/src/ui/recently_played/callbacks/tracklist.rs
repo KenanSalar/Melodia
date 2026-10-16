@@ -14,7 +14,9 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Global as _};
 
 use crate::ui::callbacks::macros::wire_row_flag;
-use crate::ui::callbacks::track_list::{play_displayed, wire_queue_actions, wire_toggle_column};
+use crate::ui::callbacks::track_list::{
+    play_displayed, wire_curated_selection, wire_queue_actions, wire_toggle_column,
+};
 use crate::ui::callbacks::{collect_track_ids, spawn_play_then_shuffle};
 use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
 use crate::ui::track_list_view::view_id;
@@ -30,7 +32,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     wire_row_flags(ui, state, rp_ui);
     wire_filter(ui, state, rp_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_selection(ui);
+    wire_curated_selection(&g.as_weak());
     wire_shuffle(&g, state, rp_ui);
 }
 
@@ -105,31 +107,6 @@ fn wire_filter(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) 
             recently_played_ui_mod::apply_filtered_grid_settled(&ru, &weak, generation);
         });
     });
-}
-
-fn wire_selection(ui: &AppWindow) {
-    let g = ui.global::<RecentlyPlayed>();
-    {
-        let weak = ui.as_weak();
-        g.on_select_row(move |idx, id, shift, ctrl| {
-            let Some(ui) = weak.upgrade() else { return };
-            recently_played_ui_mod::handle_select_row(&ui, idx, id, shift, ctrl);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        g.on_select_all(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            recently_played_ui_mod::select_all(&ui);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        g.on_clear_selection(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            recently_played_ui_mod::clear_selection(&ui);
-        });
-    }
 }
 
 fn wire_shuffle(g: &RecentlyPlayed<'_>, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {

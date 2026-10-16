@@ -98,12 +98,6 @@ impl TrackListModel {
             self.notify.row_changed(pos);
         }
     }
-
-    /// Drop the snapshot and the selection, for a leave that hands both back.
-    pub fn release(&self) {
-        self.selected.borrow_mut().clear();
-        self.show(VisibleRows::default());
-    }
 }
 
 impl Model for TrackListModel {

@@ -17,7 +17,6 @@
 
 mod callbacks;
 mod fetch;
-mod selection;
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -42,7 +41,6 @@ pub use fetch::fetch_and_apply;
 // `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
 // exactly that reach.
 pub(super) use fetch::{refilter, repaint_row, resort_and_apply};
-pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
 /// Install the Tracks models, build the handle, and wire every `Tracks.*`
 /// callback to it.

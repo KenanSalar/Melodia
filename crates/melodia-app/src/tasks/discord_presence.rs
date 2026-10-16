@@ -21,6 +21,7 @@ use tokio_util::sync::CancellationToken;
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::error;
+use melodia_core::utils::now_unix;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 use melodia_integrations::services::integrations::discord::DiscordPresenceService;
 use melodia_integrations::services::integrations::discord::model::{PresenceState, Update};
@@ -41,10 +42,6 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let vm_rx = state.sinks.view_model.subscribe();
     spawner.spawn_cancellable(move |shutdown| run_detector(shutdown, service, db, vm_rx));
     log::debug!("Discord presence task started");
-}
-
-fn now_ts() -> i64 {
-    chrono::Utc::now().timestamp()
 }
 
 /// Do-while shaped like `tasks::scrobble::run_detector`: process the primed
@@ -168,7 +165,7 @@ impl Detector {
         // holding the borrow.
         let vm = vm_rx.borrow_and_update().clone();
         let flags = self.service.flags();
-        let Some(update) = self.presence.on_view_model(vm.as_ref(), now_ts(), &flags) else {
+        let Some(update) = self.presence.on_view_model(vm.as_ref(), now_unix(), &flags) else {
             return; // deduped, or holding through a `loading` transition
         };
         match update {

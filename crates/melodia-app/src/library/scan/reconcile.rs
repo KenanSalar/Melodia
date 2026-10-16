@@ -145,8 +145,8 @@ pub(super) fn start(state: &AppState, reach: Reach, restoring: Option<RestoreNot
             };
             reach = next;
         }
-        // Each walk and orphan check holds a path per file and frees them all at once. On a large
-        // library that outlasts the startup trim, so the pass hands its own slack back.
+        // Each walk holds a path and a row per file and frees them all at once. On a large library
+        // that outlasts the startup trim, so the pass hands its own slack back.
         trim();
     });
 }

@@ -1,10 +1,13 @@
-//! The callbacks all nine track lists wire alike, written once over [`TrackListActions`]: the
-//! five list views and the four details through [`super::track_detail`].
+//! The callbacks the track lists wire alike, written once: Play Next, Add to Queue and the column
+//! toggle over [`TrackListActions`] for all nine, the five list views and the four details through
+//! [`super::track_detail`], and selection over [`RowSelectionView`] for the four list views that
+//! select over their displayed rows (Browse keeps its own).
 
 use slint::{ModelRc, StrongHandle, Weak};
 
 use super::macros::spawn_logged;
 use super::play_row_start;
+use crate::ui::list_selection::{self, RowSelectionView};
 use crate::ui::track_list_view::{TrackListActions, TrackListColumnState, persist_visible};
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -59,6 +62,34 @@ where
     g.bind_toggle_column(move |_id| {
         let Some(g) = weak.upgrade() else { return };
         persist_visible(&s, &g);
+    });
+}
+
+/// Modifier-aware row clicks, Select All and the clear, for a list view selecting over its displayed
+/// rows. The details select over their cache instead, through [`super::track_detail`].
+pub(in crate::ui) fn wire_curated_selection<G>(weak: &Weak<G>)
+where
+    G: RowSelectionView + StrongHandle + 'static,
+{
+    let Some(g) = weak.upgrade() else { return };
+    {
+        let weak = weak.clone();
+        g.bind_select_row(move |idx, id, shift, ctrl| {
+            let Some(g) = weak.upgrade() else { return };
+            list_selection::handle_curated_click(&g, idx, id, shift, ctrl);
+        });
+    }
+    {
+        let weak = weak.clone();
+        g.bind_select_all(move || {
+            let Some(g) = weak.upgrade() else { return };
+            list_selection::select_all_curated(&g);
+        });
+    }
+    let weak = weak.clone();
+    g.bind_clear_selection(move || {
+        let Some(g) = weak.upgrade() else { return };
+        list_selection::clear_curated_selection(&g);
     });
 }
 

@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use melodia_artwork::media::image::artwork;
 use melodia_core::config::Paths;
 use melodia_core::error::describe;
 use melodia_core::error::{AppError, AppResult};
+use melodia_core::utils::now_unix;
 use melodia_net::media::fetch::deezer::{self, DeezerAnswer};
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
@@ -128,7 +129,7 @@ pub async fn fetch_artist_images(
 /// Runs one [`BATCH_SIZE`] batch of concurrent searches per [`BATCH_INTERVAL`],
 /// and abandons the rest if Deezer refuses on a code that says to stop asking.
 async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppResult<PassOutcome> {
-    let now = unix_now();
+    let now = now_unix();
     let missed_before = now.saturating_sub_unsigned(NO_MATCH_RETRY_AFTER.as_secs());
     let artists = queries::artist::get_artists_without_images(db, missed_before).await?;
     if artists.is_empty() {
@@ -235,13 +236,6 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
     }
 
     Ok(PassOutcome { fetched: fetched_count, halted })
-}
-
-/// Seconds since the Unix epoch, the unit the miss column holds.
-fn unix_now() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |since| i64::try_from(since.as_secs()).unwrap_or(i64::MAX))
 }
 
 /// Download one artist image into the artists store, returning where it landed.

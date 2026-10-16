@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Model};
 
+use crate::ui::list_selection;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
+use crate::ui::tracks::TracksUi;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Tracks};
 
@@ -51,7 +52,7 @@ pub(super) fn wire(ui: &AppWindow, _state: &AppState, tracks_ui: &Arc<TracksUi>)
             if let Some(ui) = weak.upgrade()
                 && ui.global::<Tracks>().get_selected_ids().row_count() > 0
             {
-                tracks_ui_mod::clear_selection(&ui);
+                list_selection::clear_curated_selection(&ui.global::<Tracks>());
             }
             return;
         }

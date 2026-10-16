@@ -29,7 +29,6 @@
 
 use std::time::Duration;
 
-use chrono::Utc;
 use tokio::sync::watch;
 
 use crate::services::settings;
@@ -37,6 +36,7 @@ use crate::services::updater::{PanelPaint, UpdaterEvent, run_check};
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;
 use melodia_core::error::describe;
+use melodia_core::utils::now_unix;
 
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
 const NORMAL_CADENCE: Duration = Duration::from_hours(6);
@@ -181,7 +181,7 @@ fn needs_check(last_check_unix: i64) -> bool {
 }
 
 fn elapsed_secs(last_check_unix: i64) -> i64 {
-    let now = Utc::now().timestamp();
+    let now = now_unix();
     now.saturating_sub(last_check_unix)
 }
 

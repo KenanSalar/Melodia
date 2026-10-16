@@ -2,7 +2,7 @@
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::DbPool;
+use crate::database::{DbPool, IDS_PER_SET, set_where_id_in};
 use melodia_core::error::AppError;
 
 pub async fn update_play_count(db: &DbPool, id: i64) -> Result<(), AppError> {
@@ -84,38 +84,19 @@ pub async fn update_last_position(db: &DbPool, id: i64, position_ms: i64) -> Res
 
 /// Set `is_favorite` for one or more tracks by ID.
 pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<(), AppError> {
-    if ids.is_empty() {
-        return Ok(());
-    }
-    // Reserve 1 bind slot for the `favorite` parameter itself.
-    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("UPDATE tracks SET is_favorite = ? WHERE id IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(favorite);
-        for id in chunk {
-            query = query.bind(*id);
-        }
-        query.execute(db.write()).await?;
+    for chunk in ids.chunks(IDS_PER_SET) {
+        set_where_id_in("UPDATE tracks SET is_favorite = ?", favorite, chunk)
+            .execute(db.write())
+            .await?;
     }
     Ok(())
 }
 
-/// Set the star `rating` (0–5) for one or more tracks by ID. Mirrors [`set_favorite`]: the value
-/// is clamped by `library::ratings::set_rating`, chunked to stay inside one statement's bind
-/// budget, and run non-persistently since the placeholder count is dynamic.
+/// Set the star `rating` (0–5) for one or more tracks by ID. The value is clamped by
+/// `library::ratings::set_rating`.
 pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
-    if ids.is_empty() {
-        return Ok(());
-    }
-    // Reserve 1 bind slot for the `rating` parameter itself.
-    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("UPDATE tracks SET rating = ? WHERE id IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(rating);
-        for id in chunk {
-            query = query.bind(*id);
-        }
-        query.execute(db.write()).await?;
+    for chunk in ids.chunks(IDS_PER_SET) {
+        set_where_id_in("UPDATE tracks SET rating = ?", rating, chunk).execute(db.write()).await?;
     }
     Ok(())
 }
@@ -130,18 +111,10 @@ pub(crate) async fn set_track_artwork(
     ids: &[i64],
     artwork_path: Option<&str>,
 ) -> Result<(), AppError> {
-    if ids.is_empty() {
-        return Ok(());
-    }
-    // Reserve 1 bind slot for the `artwork_path` parameter itself.
-    for chunk in ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("UPDATE tracks SET artwork_path = ? WHERE id IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(artwork_path);
-        for id in chunk {
-            query = query.bind(*id);
-        }
-        query.execute(&mut **tx).await?;
+    for chunk in ids.chunks(IDS_PER_SET) {
+        set_where_id_in("UPDATE tracks SET artwork_path = ?", artwork_path, chunk)
+            .execute(&mut **tx)
+            .await?;
     }
     Ok(())
 }

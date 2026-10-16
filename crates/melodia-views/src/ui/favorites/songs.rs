@@ -228,19 +228,11 @@ pub fn repaint_row(weak: &Weak<AppWindow>, id: i64) {
     });
 }
 
-/// Empty `Favorites.tracks` for a tab leave, handing back the snapshot it shows. The selection
-/// stays, as `selected-ids` does, so a return paints it again.
+/// Empty `Favorites.tracks`, handing back the snapshot it shows. The selection stays, as
+/// `selected-ids` does, so a tab leave paints it again on return; a section leave clears it first.
 pub fn hide_tracks(g: &Favorites) {
     let rows = g.get_tracks();
     if let Some(model) = TrackListModel::installed(&rows, "Favorites.tracks") {
         model.show(VisibleRows::default());
-    }
-}
-
-/// Empty `Favorites.tracks` and its selection, for a section leave that hands both back.
-pub fn release_tracks(g: &Favorites) {
-    let rows = g.get_tracks();
-    if let Some(model) = TrackListModel::installed(&rows, "Favorites.tracks") {
-        model.release();
     }
 }

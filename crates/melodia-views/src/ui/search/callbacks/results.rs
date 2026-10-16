@@ -12,9 +12,11 @@ use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::cross_tab_nav;
 use crate::ui::callbacks::macros::wire_row_flag;
-use crate::ui::callbacks::track_list::{play_displayed, wire_queue_actions, wire_toggle_column};
+use crate::ui::callbacks::track_list::{
+    play_displayed, wire_curated_selection, wire_queue_actions, wire_toggle_column,
+};
 use crate::ui::callbacks::{collect_track_ids, model_track_ids, next_sort, persist_view_sort};
-use crate::ui::search::{self as search_ui_mod, SearchUi, apply, fetch};
+use crate::ui::search::{SearchUi, apply, fetch};
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::settings::ViewSort;
@@ -39,7 +41,9 @@ pub(super) fn wire(
     wire_row_flags(ui, state, search_ui);
     wire_sort(ui, state, search_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_selection(ui);
+    // Ranges over the displayed rows, so a shift-click follows the compact/full toggle and never
+    // reaches the rows "Show all" hides.
+    wire_curated_selection(&g.as_weak());
 }
 
 fn wire_open_album(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
@@ -163,29 +167,4 @@ fn wire_sort(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
         // yet (no commit ran since startup) this is a no-op.
         fetch::reapply_cached_results(&su, &weak);
     });
-}
-
-fn wire_selection(ui: &AppWindow) {
-    let g = ui.global::<Search>();
-    {
-        let weak = ui.as_weak();
-        g.on_select_row(move |idx, id, shift, ctrl| {
-            let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::handle_select_row(&ui, idx, id, shift, ctrl);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        g.on_select_all(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::select_all(&ui);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        g.on_clear_selection(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            search_ui_mod::clear_selection(&ui);
-        });
-    }
 }

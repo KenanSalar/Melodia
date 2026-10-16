@@ -7,11 +7,9 @@
 //!
 //! **A pick is applied on the blocking pool, never here**: claiming a card or handing it back opens
 //! a device. Each picker writes a synchronous shadow, the choice's or the conversion's own, and the
-//! task reads it when it runs rather than capturing a value, under the shadow's apply lock, which
-//! it holds through the persist. Whichever task takes that lock last applies and persists the
-//! latest pick, in whatever order the pool ran them. Ordering only the read would let a task that
-//! read an older pick still land after a newer one, the engine and the settings file each taking a
-//! lock of its own.
+//! task reads it when it runs rather than capturing a value, through [`Shadowed::apply_latest`].
+//! Whichever task runs last applies and persists the latest pick, in whatever order the pool ran
+//! them.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -63,6 +61,16 @@ struct Shadowed<T> {
 impl<T> Shadowed<T> {
     fn new(value: T) -> Self {
         Self { picked: Mutex::new(value), applying: Mutex::new(()) }
+    }
+
+    /// Hands `apply` the pick as it stands, holding the apply lock until it returns. Ordering only
+    /// the read would let a task that read an older pick land after a newer one, the engine and
+    /// the settings file each taking a lock of its own. The pick's own lock is let go first, so a
+    /// click never waits on a device open.
+    fn apply_latest<P, R>(&self, read: impl FnOnce(&T) -> P, apply: impl FnOnce(P) -> R) -> R {
+        let _applying = self.applying.lock();
+        let latest = read(&self.picked.lock());
+        apply(latest)
     }
 }
 
@@ -138,10 +146,13 @@ fn install_resampler_row(state: &AppState, g: &Settings<'_>, saved: Resampler) {
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist output_resampler", move |paths| {
-            let _applying = shadow.applying.lock();
-            let resampler = *shadow.picked.lock();
-            library::playback::player_set_resampler(&ctx, resampler);
-            library::settings::set_output_resampler(paths, resampler)
+            shadow.apply_latest(
+                |picked| *picked,
+                |resampler| {
+                    library::playback::player_set_resampler(&ctx, resampler);
+                    library::settings::set_output_resampler(paths, resampler)
+                },
+            )
         });
     });
 }
@@ -187,11 +198,14 @@ fn install_bit_perfect_switch(ui: &AppWindow, state: &AppState, shadow: &Shadow)
         let ctx = state.playback_ctx();
         let shadow = Arc::clone(&shadow);
         state.persist_blocking("persist bit-perfect switch", move |paths| {
-            let _applying = shadow.applying.lock();
-            let choice = shadow.picked.lock().choice.clone();
-            library::playback::player_set_output_choice(&ctx, choice.clone());
-            let volume = library::playback::player_make_bit_perfect(&ctx);
-            library::settings::switch_to_bit_perfect(paths, &choice, volume)
+            shadow.apply_latest(
+                |picked| picked.choice.clone(),
+                |choice| {
+                    library::playback::player_set_output_choice(&ctx, choice.clone());
+                    let volume = library::playback::player_make_bit_perfect(&ctx);
+                    library::settings::switch_to_bit_perfect(paths, &choice, volume)
+                },
+            )
         });
         signal_path::show_bit_perfect_reset(&ui);
     });
@@ -216,10 +230,13 @@ fn apply(state: &AppState, shadow: &Shadow) {
     let ctx = state.playback_ctx();
     let shadow = Arc::clone(shadow);
     state.persist_blocking("persist output choice", move |paths| {
-        let _applying = shadow.applying.lock();
-        let choice = shadow.picked.lock().choice.clone();
-        library::playback::player_set_output_choice(&ctx, choice.clone());
-        library::settings::set_output_choice(paths, &choice)
+        shadow.apply_latest(
+            |picked| picked.choice.clone(),
+            |choice| {
+                library::playback::player_set_output_choice(&ctx, choice.clone());
+                library::settings::set_output_choice(paths, &choice)
+            },
+        )
     });
 }
 

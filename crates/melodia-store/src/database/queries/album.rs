@@ -106,18 +106,10 @@ pub(crate) async fn set_album_artwork(
     album_ids: &[i64],
     artwork_path: Option<&str>,
 ) -> Result<(), AppError> {
-    if album_ids.is_empty() {
-        return Ok(());
-    }
-    // Reserve 1 bind slot for the `artwork_path` parameter itself.
-    for chunk in album_ids.chunks(crate::database::MAX_BINDS_PER_STATEMENT - 1) {
-        let placeholders = crate::database::placeholders(chunk.len());
-        let sql = format!("UPDATE albums SET artwork_path = ? WHERE id IN ({placeholders})");
-        let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(artwork_path);
-        for id in chunk {
-            query = query.bind(*id);
-        }
-        query.execute(&mut **tx).await?;
+    for chunk in album_ids.chunks(crate::database::IDS_PER_SET) {
+        crate::database::set_where_id_in("UPDATE albums SET artwork_path = ?", artwork_path, chunk)
+            .execute(&mut **tx)
+            .await?;
     }
     Ok(())
 }

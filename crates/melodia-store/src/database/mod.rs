@@ -103,6 +103,28 @@ where
     Ok(all_results)
 }
 
+/// Ids per [`set_where_id_in`] statement, the value it sets taking one bind of the budget.
+pub(crate) const IDS_PER_SET: usize = MAX_BINDS_PER_STATEMENT - 1;
+
+/// One chunk of an `UPDATE … SET col = ? WHERE id IN (…)`: `update_set` with `value` bound to its
+/// one `?`, then `ids`. The caller chunks at [`IDS_PER_SET`] and runs each on its own executor,
+/// some of them holding a transaction.
+pub(crate) fn set_where_id_in<'v, V>(
+    update_set: &str,
+    value: V,
+    ids: &[i64],
+) -> sqlx::query::Query<'static, sqlx::Sqlite, sqlx::sqlite::SqliteArguments>
+where
+    V: sqlx::Encode<'v, sqlx::Sqlite> + sqlx::Type<sqlx::Sqlite>,
+{
+    let sql = format!("{update_set} WHERE id IN ({})", placeholders(ids.len()));
+    let mut query = sqlx::query(AssertSqlSafe(sql)).persistent(false).bind(value);
+    for id in ids {
+        query = query.bind(*id);
+    }
+    query
+}
+
 #[derive(Clone)]
 pub struct DbPool {
     read: SqlitePool,
@@ -241,8 +263,9 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         // working set fits, and oversizing only inflates idle resident memory.
         .pragma("cache_size", "-16000")
         .pragma("temp_store", "MEMORY")
-        // The writer reads whole tables too, a scan's orphan check walking every path. Unmapped,
-        // each page it read was copied into its cache and held until the connection closed.
+        // The writer reads whole tables too, a bulk scan's stats recalc walking every track.
+        // Unmapped, each page it read was copied into its cache and held until the connection
+        // closed.
         .pragma("mmap_size", MMAP_SIZE);
 
     // Reaped like the read pool, so the pages a scan's writes leave cached don't outlive it.

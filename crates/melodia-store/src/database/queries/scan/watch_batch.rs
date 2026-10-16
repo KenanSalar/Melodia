@@ -12,12 +12,10 @@ use super::{
     update_track_location, update_track_metadata,
 };
 use crate::database::DbPool;
+use crate::database::queries::ingest::BULK_THRESHOLD;
 use crate::database::queries::{stats, track};
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::{AppError, describe};
-
-/// Batch size threshold above which stats triggers are disabled for bulk processing.
-const BULK_THRESHOLD: usize = 20;
 
 /// One watcher event, with what extraction read off the file.
 pub enum WatchedChange {

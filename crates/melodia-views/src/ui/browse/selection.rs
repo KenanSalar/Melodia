@@ -10,7 +10,7 @@ use crate::ui::util::clamp_i64_to_i32;
 use melodia_ui::{AppWindow, Browse};
 
 /// Compute the new selection state for a row click and apply it. Mirrors
-/// `tracks::handle_select_row`, with one Browse-specific guard: disk-only
+/// `list_selection::handle_curated_click`, with one Browse-specific guard: disk-only
 /// rows have `id == 0` (which would collide in an id-keyed selection
 /// model), so they're never selectable — the handler returns early on
 /// `id == 0` and filters `0`s out of any shift-range result.

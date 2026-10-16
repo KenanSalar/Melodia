@@ -1,12 +1,10 @@
 //! Shared flat-list row-selection core: the [`RowSelectionView`] surface the four detail
-//! globals, the two curated pages and Search are driven through, modifier-aware click math, the
-//! diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
+//! globals, Tracks, the two curated pages and Search are driven through, modifier-aware click
+//! math, the diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
 //!
 //! Every list implements the same click semantics (plain click = single, Ctrl = toggle, Shift =
-//! range over the displayed order). The curated pages and Search get the whole of it from the
-//! three `*_curated` functions below, their `selection.rs` files staying thin adapters over their
-//! own global. **Tracks stays hand-written and should**: its range branch walks the filtered cache
-//! (`current_ids_filtered`) where those read the Slint model directly.
+//! range over the displayed order). The four list views get the whole of it from the three
+//! `*_curated` functions below, wired once by `callbacks::track_list::wire_curated_selection`.
 //!
 //! [`crate::ui::track_detail::selection`] is the other consumer of the trait: same accessors,
 //! cache-indexed selection with different complexity trade-offs.
@@ -19,7 +17,7 @@ use slint::{Model, ModelRc, VecModel};
 use crate::ui::track_list_model::TrackListModel;
 use melodia_ui::{
     AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed, Search,
-    TrackListRow as UiTrackListRow,
+    TrackListRow as UiTrackListRow, Tracks,
 };
 
 /// Compute the new `(selected_ids, anchor)` for a row click.
@@ -30,8 +28,8 @@ use melodia_ui::{
 ///   *displayed* order; the anchor stays put
 ///
 /// `visible_ids` supplies the displayed-order id list and is only invoked in
-/// the Shift branch, so callers with an expensive projection (Tracks walks its
-/// filtered cache) don't pay it on plain clicks.
+/// the Shift branch, so callers with an expensive projection don't pay it on
+/// plain clicks.
 pub fn compute_click_selection(
     cur_anchor: i32,
     cur_selected: Vec<i32>,
@@ -188,11 +186,19 @@ pub trait RowSelectionView {
     /// Replace the displayed track-row model wholesale (downcast-miss fallback only — the model
     /// is normally mutated in place).
     fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>);
+
+    fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static);
+    fn bind_select_all(&self, f: impl FnMut() + 'static);
+    fn bind_clear_selection(&self, f: impl FnMut() + 'static);
 }
 
-/// Generate a [`RowSelectionView`] impl for a Slint global.
+/// Generate a [`RowSelectionView`] impl for a Slint global. Tracks names its row model `rows`
+/// where every other list says `tracks`.
 macro_rules! impl_row_selection_view {
     ($global:ident) => {
+        impl_row_selection_view!($global, get_tracks, set_tracks);
+    };
+    ($global:ident, $get_rows:ident, $set_rows:ident) => {
         impl RowSelectionView for $global<'_> {
             fn anchor(&self) -> i32 {
                 self.get_selection_anchor()
@@ -207,10 +213,19 @@ macro_rules! impl_row_selection_view {
                 self.set_selected_ids(ids);
             }
             fn track_rows(&self) -> ModelRc<UiTrackListRow> {
-                self.get_tracks()
+                self.$get_rows()
             }
             fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>) {
-                self.set_tracks(rows);
+                self.$set_rows(rows);
+            }
+            fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static) {
+                self.on_select_row(f);
+            }
+            fn bind_select_all(&self, f: impl FnMut() + 'static) {
+                self.on_select_all(f);
+            }
+            fn bind_clear_selection(&self, f: impl FnMut() + 'static) {
+                self.on_clear_selection(f);
             }
         }
     };
@@ -223,9 +238,9 @@ impl_row_selection_view!(GenreDetail);
 impl_row_selection_view!(PlaylistDetail);
 impl_row_selection_view!(RecentlyPlayed);
 impl_row_selection_view!(Search);
+impl_row_selection_view!(Tracks, get_rows, set_rows);
 
-/// Compute the new selection set for a curated page's row click and apply it, on the UI thread.
-/// Click semantics match `tracks::handle_select_row` exactly.
+/// Compute the new selection set for a list view's row click and apply it, on the UI thread.
 pub fn handle_curated_click<V: RowSelectionView>(
     view: &V,
     idx: i32,
@@ -236,10 +251,9 @@ pub fn handle_curated_click<V: RowSelectionView>(
     let (new_selected, new_anchor) = compute_click_selection(
         view.anchor(),
         view.selected_ids().iter().collect(),
-        // Range select over the currently-displayed rows (post-filter, already in the same order
-        // as the Slint `tracks` model). Read ids straight from the model rather than re-walking
-        // the cached `tracks_all` + filter, so the range matches what the user is looking at even
-        // mid-debounce — where a detail view, whose cache *is* the display order, indexes that.
+        // Range select over the displayed rows, read straight from the model rather than a cache
+        // refiltered by the box's newer text, so the range matches what the user is looking at
+        // even mid-debounce. A detail view, whose cache *is* the display order, indexes that.
         || row_ids(&view.track_rows()),
         idx,
         id,

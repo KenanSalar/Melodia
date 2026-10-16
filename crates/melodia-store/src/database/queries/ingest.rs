@@ -33,6 +33,12 @@ pub struct IngestResult {
     pub inserted_track_ids: Vec<i64>,
 }
 
+/// Rows a scan or a watcher batch writes above which the stats triggers are dropped and the counts
+/// rebuilt by one `recalculate_all_stats` sweep at the end. At or below it the triggers stay
+/// enabled: per-row maintenance on a handful of writes is far cheaper than the 3-table
+/// correlated-subquery recalc the drop would force.
+pub(crate) const BULK_THRESHOLD: usize = 20;
+
 /// What a scan's chunks wrote, summed across them, and how.
 pub struct Ingested {
     /// The chunks commit with the stats triggers dropped, leaving the counts to the final recalc.
@@ -43,8 +49,9 @@ pub struct Ingested {
 }
 
 impl Ingested {
-    pub fn new(bulk: bool) -> Self {
-        Self { bulk, inserted: 0, moved: 0, updated: 0 }
+    /// A scan that will write `rows`, its parsed files and its orphans together.
+    pub fn for_delta(rows: usize) -> Self {
+        Self { bulk: rows > BULK_THRESHOLD, inserted: 0, moved: 0, updated: 0 }
     }
 
     pub(crate) fn is_bulk(&self) -> bool {

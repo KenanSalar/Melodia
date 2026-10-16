@@ -7,7 +7,9 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Global as _, SharedString};
 
 use crate::ui::callbacks::macros::wire_row_flag;
-use crate::ui::callbacks::track_list::{play_displayed, wire_queue_actions, wire_toggle_column};
+use crate::ui::callbacks::track_list::{
+    play_displayed, wire_curated_selection, wire_queue_actions, wire_toggle_column,
+};
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use crate::ui::track_list_view::view_id;
@@ -24,7 +26,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     wire_filter(ui, fav_ui);
     wire_sort(ui, state, fav_ui);
     wire_toggle_column(&g.as_weak(), state);
-    wire_selection(ui);
+    wire_curated_selection(&g.as_weak());
 }
 
 /// Loads the filtered list into the queue and starts on the clicked track;
@@ -123,34 +125,4 @@ fn wire_sort(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
         // `SELECT` plus a full cover prewarm per click.
         favorites_ui_mod::resort_and_apply(&fu, &weak);
     });
-}
-
-/// Modifier-aware selection with
-/// per-row `selected` flag re-stamping so the row checkbox + accent
-/// highlight reflect each click. Mirrors `tracks::handle_select_row`
-/// exactly so range-select (Shift), toggle (Ctrl), and the
-/// single-row default all behave the same as in the Tracks view.
-fn wire_selection(ui: &AppWindow) {
-    let g = ui.global::<Favorites>();
-    {
-        let weak = ui.as_weak();
-        g.on_select_row(move |idx, id, shift, ctrl| {
-            let Some(ui) = weak.upgrade() else { return };
-            favorites_ui_mod::handle_select_row(&ui, idx, id, shift, ctrl);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        g.on_select_all(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            favorites_ui_mod::select_all(&ui);
-        });
-    }
-    {
-        let weak = ui.as_weak();
-        g.on_clear_selection(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            favorites_ui_mod::clear_selection(&ui);
-        });
-    }
 }

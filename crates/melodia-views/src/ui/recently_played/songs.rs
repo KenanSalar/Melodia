@@ -11,6 +11,7 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 
 use super::state::SongsTotals;
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
+use crate::ui::list_selection;
 use crate::ui::row_match::{self, Needle};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
@@ -178,7 +179,7 @@ fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec
         log::warn!("RecentlyPlayed.tracks: VecModel<TrackListRow> downcast failed");
         return;
     };
-    super::selection::restamp_rows(&g, &mut rows);
+    list_selection::restamp_curated_rows(&g, &mut rows);
     crate::ui::model_diff::apply_rows_keyed(vec, rows, |r| r.id);
 }
 

@@ -126,12 +126,14 @@ export component OutputSection inherits Rectangle {
     property <bool> show-resync: Settings.rate-follows && row-visible(resync-label, resync-desc);
     property <bool> show-signal-path: row-visible(signal-label, signal-desc);
 
-    // Whether any row above each exclusive row is shown, for the divider over it.
+    // Whether any row above each row is shown, for the divider over it.
     property <bool> any-above-rate-fallback: root.show-mode || root.show-device;
     property <bool> any-above-period: root.any-above-rate-fallback || root.show-rate-fallback;
     property <bool> any-above-polling: root.any-above-period || root.show-period;
     property <bool> any-above-hardware-volume: root.any-above-polling || root.show-polling;
     property <bool> any-above-release: root.any-above-hardware-volume || root.show-hardware-volume;
+    property <bool> any-above-follow-rate: root.shows-exclusive-rows || root.show-resampler;
+    property <bool> any-above-resync: root.any-above-follow-rate || root.show-follow-rate;
 
     // What the rows above the signal path hand the divider under them.
     property <bool> shows-exclusive-rows: root.any-above-release || root.show-release;
@@ -320,7 +322,7 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if (root.shows-exclusive-rows || root.show-resampler) && root.show-follow-rate: SectionDivider {}
+        if root.any-above-follow-rate && root.show-follow-rate: SectionDivider {}
 
         if root.show-follow-rate: SettingRow {
             icon: "speed";
@@ -332,7 +334,7 @@ export component OutputSection inherits Rectangle {
             }
         }
 
-        if (root.shows-exclusive-rows || root.show-resampler || root.show-follow-rate) && root.show-resync: SectionDivider {}
+        if root.any-above-resync && root.show-resync: SectionDivider {}
 
         if root.show-resync: SettingRowStacked {
             icon: "volume_off";
