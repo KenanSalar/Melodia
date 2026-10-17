@@ -1236,7 +1236,6 @@ msgstr "Témaváltozat"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Rendszer"
 
@@ -2544,6 +2543,14 @@ msgid "Show"
 msgstr "Mutasd"
 
 #: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Material You kiemelőszín"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "A kiemelőszín átvétele a jelenlegi szám borítójából."
+
+#: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Színstílus"
 
@@ -3334,16 +3341,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Vékony körvonal az egész ablak körül, a minilejátszót is beleértve."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Ablakkeret színe"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "A Rendszer beállítás azt a színt követi, amellyel az operációs rendszer a saját ablakkereteit rajzolja."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Csak akkor érhető el, ha az ablakkeret látható."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Rendszer szerinti keretszín"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Annak a színnek a használata, amellyel az operációs rendszer a saját ablakkereteit rajzolja."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Material You keret"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "A rendszer szerinti keretszín árnyalása a jelenlegi szám borítójával."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Ablakkeret színe"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

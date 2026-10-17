@@ -27,8 +27,7 @@ export component AppearanceSection inherits Rectangle {
 
     // Hidden only for KDE Breeze on System on a live KDE session, where
     // `kdeglobals` dictates the accent and the user has no say. Material You
-    // does *not* hide it — Rust prepends a dynamic swatch there, so a static
-    // accent can still override it.
+    // does *not* hide it, a swatch picked there overriding the artwork's accent.
     pure function show-accent-row() -> bool {
         return !Settings.kde-system-active;
     }
@@ -51,6 +50,8 @@ export component AppearanceSection inherits Rectangle {
     // form is on screen is the one in the haystack.
     property <string> theme-label: @tr("Theme");
     property <string> variant-label: @tr("Theme Variant");
+    property <string> follow-artwork-label: @tr("Material You Accent");
+    property <string> follow-artwork-desc: @tr("Take the accent color from the current track's artwork.");
     property <string> accent-label: @tr("Accent Color");
     property <string> color-style-label: @tr("Color Style");
     property <string> color-style-desc: Settings.material-you-active
@@ -61,18 +62,22 @@ export component AppearanceSection inherits Rectangle {
 
     property <bool> show-theme: row-visible(theme-label, "");
     property <bool> show-variant: row-visible(variant-label, "");
+    property <bool> show-follow-artwork: Settings.material-you-enabled
+        && row-visible(follow-artwork-label, follow-artwork-desc);
     property <bool> show-accent: show-accent-row() && row-visible(accent-label, "");
     property <bool> show-color-style: Settings.theme-idx == 4
         && row-visible(color-style-label, color-style-desc);
     property <bool> show-backdrop: row-visible(backdrop-label, backdrop-desc);
 
     out property <bool> has-matches:
-        show-theme || show-variant || show-accent || show-color-style || show-backdrop;
+        show-theme || show-variant || show-follow-artwork || show-accent || show-color-style
+            || show-backdrop;
 
     // A divider needs a visible row on both sides; filtering down to one row
     // would otherwise leave one dangling above it and another below.
-    property <bool> any-above-accent: show-theme || show-variant;
-    property <bool> any-above-color-style: show-theme || show-variant || show-accent;
+    property <bool> any-above-follow-artwork: show-theme || show-variant;
+    property <bool> any-above-accent: any-above-follow-artwork || show-follow-artwork;
+    property <bool> any-above-color-style: any-above-accent || show-accent;
     property <bool> any-above-backdrop: any-above-color-style || show-color-style;
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
@@ -116,6 +121,18 @@ export component AppearanceSection inherits Rectangle {
             }
         }
 
+        // On, no swatch is checked; picking one turns it off, so a colour is one click either way.
+        if root.any-above-follow-artwork && root.show-follow-artwork: SectionDivider {}
+        if root.show-follow-artwork: SettingRow {
+            icon: "image";
+            label: root.follow-artwork-label;
+            description: root.follow-artwork-desc;
+            ToggleSwitch {
+                checked <=> Settings.accent-follows-artwork;
+                toggled(v) => { Settings.accent-follows-artwork-changed(v); }
+            }
+        }
+
         // Swatches are per-(theme, variant); Rust computes the brush list.
         if root.any-above-accent && root.show-accent: SectionDivider {}
         if root.show-accent: SettingRowStacked {
@@ -125,9 +142,6 @@ export component AppearanceSection inherits Rectangle {
             ColorDotGrid {
                 colors: Settings.accent-colors;
                 labels: Settings.accent-names;
-                // Rust prepends the Material You swatch at index 0 — a rounded
-                // square, so it reads apart from the static accents.
-                first-is-dynamic: Settings.material-you-active;
                 selected-index <=> Settings.accent-idx;
                 selected(i) => { Settings.accent-changed(i); }
             }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::services::{
     self,
-    settings::{TitlebarButtonSide, TitlebarButtonStyle, WindowBorder},
+    settings::{BorderTint, TitlebarButtonSide, TitlebarButtonStyle, WindowBorder},
 };
 use crate::state::AppState;
 use melodia_core::config::Paths;
@@ -174,6 +174,14 @@ pub fn set_window_border(paths: &Paths, border: WindowBorder) -> Result<(), AppE
 pub fn set_window_border_color(paths: &Paths, color_id: String) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |s| {
         s.window.window_border_color = color_id;
+    })
+}
+
+/// Persist what the System colour is mixed from under Material You. The UI callback has already
+/// repainted the outline, so this only commits it.
+pub fn set_window_border_tint(paths: &Paths, tint: BorderTint) -> Result<(), AppError> {
+    services::settings::mutate_settings(paths, move |s| {
+        s.window.window_border_tint = tint;
     })
 }
 

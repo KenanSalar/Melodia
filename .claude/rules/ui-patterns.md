@@ -1517,6 +1517,14 @@ edit would otherwise reverse.
   committed to, and these strips, `SettingRow`'s wrapped labels and the other `Rectangle`-rooted
   controls answer at the width they were drawn, a cycle Slint panics on.
 
+- **A colour that follows something is a switch above its grid, never a swatch in it.** Material
+  You Accent and System Border Color both work this way: while one is on, its grid's
+  `selected-index` is -1 so nothing is checked, and picking a swatch turns it off, so a colour is
+  one click either way. Rust writes the switch and the index together (`accent_picker::seat_accent`,
+  `window_border::seat`), which is what keeps the two from reading as picked at once. A mode drawn
+  as a swatch is what this replaced: it came and went with the artwork, shifting every index past
+  it, and showed a colour it couldn't promise. Both grids draw `Settings.accent-colors`.
+
 - **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
   `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its
   two mounts, and the component's header says what stays the host's.

@@ -14,10 +14,11 @@ use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
 use melodia_artwork::media::image::material_you::SchemeStyle;
 use melodia_core::error::describe;
-use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState};
+use melodia_core::themes::{MATERIAL_YOU_ACCENT_ID, SystemColorState};
 use melodia_ui::{AppWindow, Settings};
 
-use super::{PersistedAccent, read_last_static_accent, registry_get, usize_from};
+use super::accent_picker::seat_accent;
+use super::{PersistedAccent, read_last_static_accent, registry_get, usize_from, variant_id_at};
 
 pub(super) fn wire_color_style_changed(
     ui: &AppWindow,
@@ -41,14 +42,7 @@ pub(super) fn wire_color_style_changed(
         let on_material3 = registry_get(theme_idx).is_some_and(|t| t.id == "material3");
         let theme_id: Option<&'static str> = registry_get(theme_idx).map(|t| t.id);
         let variant_id_owned: Option<String> = registry_get(theme_idx).map(|t| {
-            let i = usize_from(variant_idx);
-            if t.supports_system_mode && i == t.variants.len() {
-                themes::SYSTEM_VARIANT_ID.to_owned()
-            } else if let Some(v) = t.variants.get(i) {
-                v.id.to_owned()
-            } else {
-                t.default_variant.to_owned()
-            }
+            variant_id_at(t, usize_from(variant_idx)).unwrap_or(t.default_variant).to_owned()
         });
         let theme_default_accent: Option<&'static str> =
             registry_get(theme_idx).map(|t| t.default_accent);
@@ -87,6 +81,18 @@ pub(super) fn wire_color_style_changed(
             && !accent.is_empty()
         {
             persisted_accent.lock().clone_from(accent);
+        }
+
+        // Seated here rather than left to the coordinator's repaint, which a style change with
+        // nothing playing never sends.
+        if let (Some(theme), Some(accent)) = (registry_get(theme_idx), new_accent.as_deref()) {
+            let seated = if accent.is_empty() {
+                read_last_static_accent(&s, theme.id)
+                    .unwrap_or_else(|| theme.default_accent.to_owned())
+            } else {
+                accent.to_owned()
+            };
+            seat_accent(&g, theme, &seated);
         }
 
         // Sequence both writes + the kick inside a single spawn_blocking

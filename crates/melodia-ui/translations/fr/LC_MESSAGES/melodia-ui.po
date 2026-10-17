@@ -1234,7 +1234,6 @@ msgstr "Variante de thème"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Système"
 
@@ -2542,6 +2541,14 @@ msgid "Show"
 msgstr "Afficher"
 
 #: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Accentuation Material You"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "Prendre la couleur d'accentuation de la pochette de la piste actuelle."
+
+#: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Style de couleur"
 
@@ -3332,16 +3339,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Dessine un fin contour autour de toute la fenêtre, mini-lecteur compris."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Couleur de la bordure de la fenêtre"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Système suit la couleur dans laquelle le système d'exploitation dessine ses propres bordures de fenêtre."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Disponible uniquement lorsque la bordure de la fenêtre est affichée."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Couleur de bordure du système"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Utiliser la couleur dans laquelle le système d'exploitation dessine ses propres bordures de fenêtre."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Bordure Material You"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "Teinter la couleur de bordure du système avec la pochette de la piste actuelle."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Couleur de la bordure de la fenêtre"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

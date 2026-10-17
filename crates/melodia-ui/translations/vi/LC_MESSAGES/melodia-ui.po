@@ -1232,7 +1232,6 @@ msgstr "Biến thể chủ đề"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Hệ thống"
 
@@ -2516,6 +2515,14 @@ msgid "Show"
 msgstr "Hiện"
 
 #: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Màu nhấn Material You"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "Lấy màu nhấn từ ảnh bìa của bản nhạc hiện tại."
+
+#: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Kiểu màu"
 
@@ -3306,16 +3313,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Vẽ một đường viền mảnh quanh toàn bộ cửa sổ, kể cả trình phát mini."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Màu viền cửa sổ"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Hệ thống sẽ theo màu mà hệ điều hành dùng cho viền cửa sổ của chính nó."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Chỉ khả dụng khi viền cửa sổ đang hiện."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Màu viền hệ thống"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Sử dụng màu mà hệ điều hành dùng cho viền cửa sổ của chính nó."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Viền Material You"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "Pha màu viền hệ thống theo ảnh bìa của bản nhạc hiện tại."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Màu viền cửa sổ"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

@@ -1,16 +1,12 @@
 import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
 import { Tooltip, TooltipSide } from "../tooltip.slint";
 
-// One swatch. The active one takes its ring from `text`, so it stays legible
-// whichever palette the grid is hosting.
-//
-// `is-dynamic` renders a rounded square rather than a circle, marking the
-// Material You swatch apart from the static accents — a shape difference reads
-// at a glance where a tooltip needs dwell.
+// One swatch. The active one carries a check inked against the swatch, the only
+// fill under it, so the mark reads on any accent whichever palette hosts the grid.
 component ColorDot inherits Rectangle {
     in property <brush> swatch;
     in property <bool>  selected;
-    in property <bool>  is-dynamic;
     in property <string> label;
     // Rows after the first point downward: anchored above, their pill would
     // land on the row of dots over them.
@@ -20,21 +16,25 @@ component ColorDot inherits Rectangle {
 
     width: 32px;
     height: 32px;
-    border-radius: root.is-dynamic ? Theme.radius-md : self.width / 2;
+    border-radius: self.width / 2;
     background: root.swatch;
-    border-color: root.selected ? Theme.text : transparent;
-    border-width: 4px;
-    animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+    if root.selected: MaterialIcon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        name: "check";
+        icon-size: 20px;
+        icon-color: Theme.ink-on(root.swatch);
+    }
 
     // A 1 px ring stands in for a hover lift, Slint applying no `transform-scale`
-    // on a component's root. Its radius follows the dot's, or the squircle stops
-    // being one on hover.
+    // on a component's root.
     if touch.has-hover && !root.selected: Rectangle {
         x: -2px;
         y: -2px;
         width: parent.width + 4px;
         height: parent.height + 4px;
-        border-radius: root.is-dynamic ? Theme.radius-md + 2px : self.width / 2;
+        border-radius: self.width / 2;
         border-color: Theme.surface2;
         border-width: 1px;
         background: transparent;
@@ -57,25 +57,18 @@ component ColorDot inherits Rectangle {
 }
 
 // A grid of accent swatches; `labels` is read by index alongside `colors` so each dot names its
-// accent in a tooltip. It wraps, and it has to: Catppuccin ships fourteen accents, fifteen with
-// Material You prepended, which on one row was the widest incompressible thing on the settings
-// page. Laid out as `ChipGroup` is, for its reasons.
-//
-// `first-is-dynamic` marks index 0 as the dynamic swatch, wired from
-// `Settings.material-you-active`; Material You always being prepended at index 0 when active is
-// `accent_picker.rs::accent_swatches_with_my`'s invariant.
+// accent in a tooltip. It wraps, and it has to: Catppuccin ships fourteen accents, which on one
+// row was the widest incompressible thing on the settings page. Laid out as `ChipGroup` is, for
+// its reasons.
 export component ColorDotGrid inherits Rectangle {
     in property <[brush]> colors;
     in property <[string]> labels;
-    in property <bool> first-is-dynamic;
-    // Names the first swatch in place of `labels[0]`, for a host whose first swatch is a word to
-    // translate rather than a colour name Rust can hand over. Empty leaves `labels` in charge.
-    in property <string> first-label;
+    // -1 checks no swatch, for a host whose colour is following something rather than picked.
     in-out property <int> selected-index;
 
     callback selected(int);
 
-    // The cell runs a little taller than the dot, so the selection ring isn't
+    // The cell runs a little taller than the dot, so the hover ring isn't
     // clipped against the row edge.
     property <length> cell-h: 36px;
 
@@ -91,9 +84,7 @@ export component ColorDotGrid inherits Rectangle {
             ColorDot {
                 swatch: color;
                 selected: i == root.selected-index;
-                is-dynamic: root.first-is-dynamic && i == 0;
-                label: i == 0 && root.first-label != "" ? root.first-label
-                    : i < root.labels.length ? root.labels[i] : "";
+                label: i < root.labels.length ? root.labels[i] : "";
                 // Off the laid-out position rather than a count of what fits, so the side can't
                 // disagree with where the flex actually broke the line.
                 tip-side: cell.y < root.cell-h ? TooltipSide.above : TooltipSide.below;

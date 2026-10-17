@@ -1236,7 +1236,6 @@ msgstr "Варіант теми"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Системний"
 
@@ -2568,6 +2567,14 @@ msgid "Show"
 msgstr "Показати"
 
 #: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Акцент Material You"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "Брати акцентний колір з обкладинки поточного треку."
+
+#: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Колірний стиль"
 
@@ -3358,16 +3365,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Малювати тонку рамку навколо всього вікна, включно з мініплеєром."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Колір рамки вікна"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "«Системний» повторює колір, яким операційна система малює рамки своїх вікон."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Доступно, лише поки показано рамку вікна."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Системний колір рамки"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Використовувати колір, яким операційна система малює рамки своїх вікон."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Рамка Material You"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "Забарвлювати системний колір рамки в тон обкладинки поточного треку."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Колір рамки вікна"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

@@ -20,6 +20,11 @@ export global Settings {
     in property <[string]> accent-names;
     in-out property <int> accent-idx;
 
+    // The accent is Material You's, which follows the artwork rather than naming a swatch, so
+    // `accent-idx` is -1 while it holds. The switch shows under Material 3 with a Color Style set,
+    // playing or not, so the choice doesn't vanish with the artwork.
+    in-out property <bool> accent-follows-artwork;
+
     // The palette is coming from Plasma's live colour scheme rather than the static
     // Light/Dark tables: KDE Breeze, variant "System", and a parsed `kdeglobals`. The
     // Accent Color row hides its dot grid on it, the OS having already picked one.
@@ -30,15 +35,20 @@ export global Settings {
     in-out property <int> color-style-idx;
 
     // A non-`None` Color Style *and* a seed the coordinator actually extracted from the
-    // artwork. Prepends the dynamic-primary swatch to `accent-colors`, and flips the
-    // Color Style row's description so it's clear whether dynamic colour is live.
+    // artwork. Flips the Color Style row's description so it's clear whether dynamic
+    // colour is live.
     in property <bool> material-you-active;
+
+    // Material 3 (theme 4) with a Color Style set. Unlike `material-you-active` it holds with
+    // nothing playing, so the rows it shows don't come and go between tracks.
+    out property <bool> material-you-enabled: root.theme-idx == 4 && root.color-style-idx != 0;
 
     // Fired on chip / dot click. Rust resolves idx → id, persists, applies the new
     // palette and writes the lists back.
     callback theme-changed(int);
     callback variant-changed(int);
     callback accent-changed(int);
+    callback accent-follows-artwork-changed(bool);
     callback color-style-changed(int);
 
     // Hides the "Match Unfocused Window Background" row entirely off-KDE — the
@@ -297,12 +307,15 @@ export global Settings {
     in-out property <bool> window-border-shown: true;
     callback window-border-shown-changed(bool);
 
-    // The System swatch followed by the theme's accents in the live variant's shade, re-seeded on
-    // every palette change, since a variant reshades both. 1:1 with `window-border-names`, whose
-    // first entry is empty: the grid names the System swatch itself, so it stays translated.
-    in property <[brush]> window-border-colors;
-    in property <[string]> window-border-names;
-    in-out property <int> window-border-color-idx;
+    // System is the OS's own colour rather than a swatch, so `window-border-color-idx` is -1
+    // while it holds. The swatches are the theme's accents, which the grid reads off
+    // `accent-colors` and `accent-names`.
+    in-out property <bool> window-border-system: true;
+    callback window-border-system-changed(bool);
+    // Under Material You, System mixes from the artwork's palette rather than the theme's own.
+    in-out property <bool> window-border-material-you: true;
+    callback window-border-material-you-changed(bool);
+    in-out property <int> window-border-color-idx: -1;
     callback window-border-color-changed(int);
 
     // Mirrors `SettingsData.overflow_buttons`, a `Vec<String>` of ids. Discrete bools

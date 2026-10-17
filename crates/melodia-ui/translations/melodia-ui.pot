@@ -1234,7 +1234,6 @@ msgstr ""
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr ""
 
@@ -2542,6 +2541,14 @@ msgid "Show"
 msgstr ""
 
 #: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr ""
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr ""
+
+#: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr ""
 
@@ -3332,15 +3339,27 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr ""
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr ""
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr ""
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
+msgstr ""
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr ""
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr ""
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr ""
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr ""
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
 msgstr ""
 
 #: ui/views/settings/window-chrome-section.slint

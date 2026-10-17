@@ -51,10 +51,17 @@ export component WindowChromeSection inherits Rectangle {
     property <string> window-border-desc: root.native-titlebar
         ? @tr("Draw a thin outline around the miniplayer. The full window keeps the border of its system frame.")
         : @tr("Draw a thin outline around the whole window, the miniplayer included.");
+    property <string> border-only-when-shown: @tr("Available only while the window border is shown.");
+    property <string> border-system-label: @tr("System Border Color");
+    property <string> border-system-desc: Settings.window-border-shown
+        ? @tr("Use the color the operating system draws its own window borders in.")
+        : root.border-only-when-shown;
+    property <string> border-tint-label: @tr("Material You Border");
+    property <string> border-tint-desc: Settings.window-border-shown
+        ? @tr("Tint the system border color with the current track's artwork.")
+        : root.border-only-when-shown;
     property <string> border-color-label: @tr("Window Border Color");
-    property <string> border-color-desc: Settings.window-border-shown
-        ? @tr("System follows the color the operating system draws its own window borders in.")
-        : @tr("Available only while the window border is shown.");
+    property <string> border-color-desc: Settings.window-border-shown ? "" : root.border-only-when-shown;
     property <string> tb-style-label: @tr("Decoration Button Style");
     property <string> tb-side-label: @tr("Decoration Button Side");
     property <string> tray-icon-label: @tr("System Tray Icon");
@@ -71,6 +78,9 @@ export component WindowChromeSection inherits Rectangle {
         && row-visible(match-unfocused-label, match-unfocused-desc);
     property <bool> show-corner-radius: row-visible(corner-radius-label, os-managed-when-native);
     property <bool> show-window-border: row-visible(window-border-label, window-border-desc);
+    property <bool> show-border-system: row-visible(border-system-label, border-system-desc);
+    property <bool> show-border-tint: Settings.material-you-enabled
+        && row-visible(border-tint-label, border-tint-desc);
     property <bool> show-border-color: row-visible(border-color-label, border-color-desc);
     property <bool> show-titlebar-button-style: row-visible(tb-style-label, os-managed-when-native);
     property <bool> show-titlebar-button-side: row-visible(tb-side-label, os-managed-when-native);
@@ -79,14 +89,16 @@ export component WindowChromeSection inherits Rectangle {
 
     out property <bool> has-matches:
         show-native-titlebar || show-match-unfocused || show-corner-radius
-            || show-window-border || show-border-color
+            || show-window-border || show-border-system || show-border-tint || show-border-color
             || show-titlebar-button-style || show-titlebar-button-side
             || show-tray-icon || show-close-to-tray;
 
     property <bool> any-above-match: show-native-titlebar;
     property <bool> any-above-corner: any-above-match || show-match-unfocused;
     property <bool> any-above-window-border: any-above-corner || show-corner-radius;
-    property <bool> any-above-border-color: any-above-window-border || show-window-border;
+    property <bool> any-above-border-system: any-above-window-border || show-window-border;
+    property <bool> any-above-border-tint: any-above-border-system || show-border-system;
+    property <bool> any-above-border-color: any-above-border-tint || show-border-tint;
     property <bool> any-above-tb-style: any-above-border-color || show-border-color;
     property <bool> any-above-tb-side: any-above-tb-style || show-titlebar-button-style;
     property <bool> any-above-tray-icon: any-above-tb-side || show-titlebar-button-side;
@@ -198,20 +210,46 @@ export component WindowChromeSection inherits Rectangle {
             }
         }
 
+        if root.any-above-border-system && root.show-border-system: SectionDivider {}
+
+        // On, no swatch is checked; picking one turns it off, as the accent row's Material You
+        // switch does.
+        if root.show-border-system: SettingRow {
+            icon: "settings";
+            label: root.border-system-label;
+            description: root.border-system-desc;
+            disabled: !Settings.window-border-shown;
+            ToggleSwitch {
+                checked <=> Settings.window-border-system;
+                toggled(v) => { Settings.window-border-system-changed(v); }
+            }
+        }
+
+        if root.any-above-border-tint && root.show-border-tint: SectionDivider {}
+
+        // Shapes System alone, a picked swatch being that swatch under any palette.
+        if root.show-border-tint: SettingRow {
+            icon: "image";
+            label: root.border-tint-label;
+            description: root.border-tint-desc;
+            disabled: !Settings.window-border-shown || !Settings.window-border-system;
+            ToggleSwitch {
+                checked <=> Settings.window-border-material-you;
+                toggled(v) => { Settings.window-border-material-you-changed(v); }
+            }
+        }
+
         if root.any-above-border-color && root.show-border-color: SectionDivider {}
 
-        // Swatches are per-(theme, variant), the System one mixed from the palette; Rust computes
-        // the list. The first dot draws as a rounded square so System reads apart from the accents.
+        // The accent row's swatches, shaded per (theme, variant).
         if root.show-border-color: SettingRowStacked {
             icon: "brush";
             label: root.border-color-label;
             description: root.border-color-desc;
             disabled: !Settings.window-border-shown;
             ColorDotGrid {
-                colors: Settings.window-border-colors;
-                labels: Settings.window-border-names;
-                first-is-dynamic: true;
-                first-label: @tr("System");
+                colors: Settings.accent-colors;
+                labels: Settings.accent-names;
                 selected-index <=> Settings.window-border-color-idx;
                 selected(i) => { Settings.window-border-color-changed(i); }
             }

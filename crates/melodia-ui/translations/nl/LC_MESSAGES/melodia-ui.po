@@ -1234,7 +1234,6 @@ msgstr "Themavariant"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Systeem"
 
@@ -2542,6 +2541,14 @@ msgid "Show"
 msgstr "Tonen"
 
 #: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Material You-accent"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "De accentkleur overnemen uit de hoes van het huidige nummer."
+
+#: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Kleurstijl"
 
@@ -3332,16 +3339,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Teken een dunne rand rond het hele venster, de minispeler inbegrepen."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Kleur van vensterrand"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Systeem volgt de kleur waarin het besturingssysteem zijn eigen vensterranden tekent."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Alleen beschikbaar zolang de vensterrand wordt getoond."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Systeemkleur voor vensterrand"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "De kleur gebruiken waarin het besturingssysteem zijn eigen vensterranden tekent."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Material You-rand"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "De systeemkleur van de vensterrand tinten met de hoes van het huidige nummer."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Kleur van vensterrand"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

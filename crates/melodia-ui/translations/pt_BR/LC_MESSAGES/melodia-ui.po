@@ -1234,7 +1234,6 @@ msgstr "Variante do tema"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Sistema"
 
@@ -2542,6 +2541,14 @@ msgid "Show"
 msgstr "Mostrar"
 
 #: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Destaque Material You"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "Obtém a cor de destaque a partir da capa da faixa atual."
+
+#: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Estilo de cor"
 
@@ -3332,16 +3339,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Desenha um contorno fino ao redor de toda a janela, incluindo o miniplayer."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Cor da borda da janela"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Sistema segue a cor que o sistema operacional usa nas bordas das próprias janelas."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Disponível só enquanto a borda da janela estiver visível."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Cor da borda do sistema"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Aplica a cor que o sistema operacional usa nas bordas das próprias janelas."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Borda Material You"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "Tinge a cor da borda do sistema com a capa da faixa atual."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Cor da borda da janela"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

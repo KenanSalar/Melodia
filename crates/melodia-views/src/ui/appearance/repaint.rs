@@ -6,7 +6,9 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 
-use super::accent_picker::{accent_idx_in_grid, accent_swatches_with_my, effective_accent_id};
+use super::accent_picker::{
+    accent_swatches, effective_accent_id, material_you_active, seat_accent,
+};
 use super::{apply_and_seed_to_i32, theme_picker};
 use melodia_app::library;
 use melodia_app::services::settings::SettingsData;
@@ -74,8 +76,7 @@ pub fn apply_and_seed(
     // Accent swatches use the resolved real variant so the dots render
     // in the correct shade even when the user is on "System".
     let accent_variant_for_swatches = theme.shade_for(resolved_variant, &system.theme).id;
-    let (brushes, labels, my_active) =
-        accent_swatches_with_my(theme, accent_variant_for_swatches, system);
+    let (brushes, labels) = accent_swatches(theme, accent_variant_for_swatches);
     let g_swatches = ui.global::<Settings>();
     g_swatches.set_accent_colors(ModelRc::from(Rc::new(VecModel::from(brushes))));
     g_swatches.set_accent_names(ModelRc::from(Rc::new(VecModel::from(labels))));
@@ -84,14 +85,18 @@ pub fn apply_and_seed(
     // (no artwork / coordinator hasn't run yet / theme isn't material3),
     // paint with the user's last static pick so the surfaces still match
     // an accent the user actually chose.
+    let my_active = material_you_active(theme.id, system);
     let effective_id = effective_accent_id(theme, accent_id, my_active, last_static_accent);
-    let accent_idx = accent_idx_in_grid(theme, effective_id, my_active);
     let style_idx = SchemeStyle::all().iter().position(|s| s.as_id() == style_id).unwrap_or(0);
+    // The switch keeps reading on while nothing is playing, so it seats the persisted pick. Only
+    // with no Color Style, where there is no artwork to follow, does the painted fallback show.
+    let can_follow = theme.id == "material3" && SchemeStyle::from_id(style_id) != SchemeStyle::None;
+    let seated_id = if can_follow { accent_id } else { effective_id };
 
     let g = ui.global::<Settings>();
     g.set_theme_idx(apply_and_seed_to_i32(theme_idx));
     g.set_variant_idx(apply_and_seed_to_i32(variant_idx));
-    g.set_accent_idx(apply_and_seed_to_i32(accent_idx));
+    seat_accent(&g, theme, seated_id);
     g.set_color_style_idx(apply_and_seed_to_i32(style_idx));
     g.set_kde_system_active(theme_picker::kde_system_active(theme.id, variant_id, system));
     g.set_material_you_active(my_active);

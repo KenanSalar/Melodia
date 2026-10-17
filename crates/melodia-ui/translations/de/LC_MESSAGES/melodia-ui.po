@@ -1234,7 +1234,6 @@ msgstr "Design-Variante"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "System"
 
@@ -2543,6 +2542,14 @@ msgid "Show"
 msgstr "Anzeigen"
 
 #: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Material-You-Akzent"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "Die Akzentfarbe aus dem Cover des aktuellen Titels übernehmen."
+
+#: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Farbstil"
 
@@ -3333,16 +3340,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Zeichnet eine dünne Umrandung um das gesamte Fenster, den Miniplayer eingeschlossen."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Farbe des Fensterrands"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "System folgt der Farbe, in der das Betriebssystem seine eigenen Fensterränder zeichnet."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Nur verfügbar, solange der Fensterrand angezeigt wird."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Systemfarbe des Fensterrands"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Die Farbe verwenden, in der das Betriebssystem seine eigenen Fensterränder zeichnet."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Material-You-Fensterrand"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "Die Systemfarbe des Fensterrands mit dem Cover des aktuellen Titels einfärben."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Farbe des Fensterrands"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

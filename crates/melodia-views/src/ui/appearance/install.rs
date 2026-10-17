@@ -194,6 +194,12 @@ fn wire_pickers(
         persisted_accent.clone(),
     );
     accent_picker::wire_accent_changed(ui, state, os_state.clone(), persisted_accent.clone());
+    accent_picker::wire_follows_artwork_changed(
+        ui,
+        state,
+        os_state.clone(),
+        persisted_accent.clone(),
+    );
     material_you_sync::wire_color_style_changed(
         ui,
         state,

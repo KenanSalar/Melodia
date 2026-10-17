@@ -167,6 +167,15 @@ pub(super) fn resolved_variant_id(theme: &ThemeDef, idx: usize) -> &'static str 
     theme.variants.get(idx).map_or(theme.default_variant, |v| v.id)
 }
 
+/// The variant a chip index stands for: the theme's own, then the synthetic System chip where the
+/// theme offers one. `None` past the end.
+pub(super) fn variant_id_at(theme: &ThemeDef, idx: usize) -> Option<&'static str> {
+    if theme.supports_system_mode && idx == theme.variants.len() {
+        return Some(themes::SYSTEM_VARIANT_ID);
+    }
+    theme.variants.get(idx).map(|v| v.id)
+}
+
 #[allow(
     clippy::cast_sign_loss,
     reason = "Slint chip indices are i32 ≥ 0; negative slips fall through to default ids via .get(idx).map_or"

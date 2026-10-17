@@ -13,12 +13,10 @@ use melodia_app::state::{AppState, Signal};
 use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings};
 
-use super::accent_picker::{
-    accent_id_from_grid_idx, accent_swatches_with_my, effective_accent_id, material_you_active,
-};
+use super::accent_picker::{accent_swatches, effective_accent_id, material_you_active};
 use super::{
     PersistedAccent, apply_and_seed, persist_and_kick, read_last_static_accent, registry_get,
-    usize_from,
+    usize_from, variant_id_at,
 };
 
 /// True when KDE Breeze + System is active *and* a parsed `kdeglobals` palette is in
@@ -135,21 +133,11 @@ pub(super) fn wire_variant_changed(
     ui.global::<Settings>().on_variant_changed(move |idx| {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Settings>();
-        let theme_idx = g.get_theme_idx();
-        let accent_idx = g.get_accent_idx();
-        let Some(theme) = registry_get(theme_idx) else {
+        let Some(theme) = registry_get(g.get_theme_idx()) else {
             return;
         };
-
-        let i = usize_from(idx);
-        // The synthetic "System" chip sits at `theme.variants.len()` when the theme
-        // opts in; anything past that bails. Slint clamps the index already, but the
-        // boundary shouldn't trust it.
-        let variant_id: &str = if theme.supports_system_mode && i == theme.variants.len() {
-            themes::SYSTEM_VARIANT_ID
-        } else if let Some(v) = theme.variants.get(i) {
-            v.id
-        } else {
+        // Slint clamps the index already, but the boundary shouldn't trust it.
+        let Some(variant_id) = variant_id_at(theme, usize_from(idx)) else {
             return;
         };
 
@@ -162,22 +150,17 @@ pub(super) fn wire_variant_changed(
         // user's pick. Every `wire_*` updates the cell before its async write.
         let persisted_accent_str = persisted_accent.lock().clone();
         let last_static_owned = read_last_static_accent(&s, theme.id);
-        let visible_accent_id = if my_active {
-            // The grid index is authoritative while Material You is active: its own dot
-            // and the statics are all clickable.
-            accent_id_from_grid_idx(theme, usize_from(accent_idx), true)
-                .unwrap_or(theme.default_accent)
-        } else {
-            // Material You isn't a clickable dot here, so the visible accent is whichever
-            // static the grid highlights — but `persisted_accent` is still what gets
-            // written, so a sticky pick stays sticky.
-            effective_accent_id(theme, &persisted_accent_str, false, last_static_owned.as_deref())
-        };
+        let visible_accent_id = effective_accent_id(
+            theme,
+            &persisted_accent_str,
+            my_active,
+            last_static_owned.as_deref(),
+        );
 
         // Against the resolved *real* variant, which matters on a switch to "System":
         // the swatches render dark or light off the OS signal.
         let accent_variant = theme.shade_for(variant_id, &snapshot.theme).id;
-        let (brushes, labels, _) = accent_swatches_with_my(theme, accent_variant, &snapshot);
+        let (brushes, labels) = accent_swatches(theme, accent_variant);
         let g_swatches = ui.global::<Settings>();
         g_swatches.set_accent_colors(ModelRc::from(Rc::new(VecModel::from(brushes))));
         g_swatches.set_accent_names(ModelRc::from(Rc::new(VecModel::from(labels))));

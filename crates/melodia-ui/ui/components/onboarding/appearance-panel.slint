@@ -89,7 +89,6 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
         ColorDotGrid {
             colors: Settings.accent-colors;
             labels: Settings.accent-names;
-            first-is-dynamic: Settings.material-you-active;
             selected-index <=> Settings.accent-idx;
             selected(i) => { Settings.accent-changed(i); }
         }
