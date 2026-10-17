@@ -87,9 +87,10 @@ export component SettingsNav inherits Rectangle {
 
     out property <length> drawn-w: root.expanded-w + (root.rail-w - root.expanded-w) * root.compact-t;
 
-    // Where the rail's search button is centred, for the host to line its field up against.
-    // Arithmetic rather than read off the button: the host's own layout would otherwise depend on
-    // this one's, which depends on the host's.
+    // Where the rail's search button is centred on an unscrolled rail, for the host to line its
+    // field up against. Arithmetic rather than read off the button: the host's own layout would
+    // otherwise depend on this one's, which depends on the host's. The field ignores the scroll,
+    // its row sitting above the cards, which would move with it.
     out property <length> rail-search-center-y: root.card-pad + root.row-h / 2;
 
     // The rail's tooltip, for the host to paint on a layer of its own: anchored here, the pill
@@ -104,8 +105,8 @@ export component SettingsNav inherits Rectangle {
     out property <string> tip-label: rail-search.has-hover ? rail-search.label
         : root.hovered-row >= 0 ? root.labels[root.hovered-row] : "";
     out property <length> tip-x: 0px;
-    out property <length> tip-y: rail-search.has-hover ? root.card-pad
-        : scroller.y + root.hovered-row * (root.row-h + root.row-gap) + scroller.content-y;
+    out property <length> tip-y: scroller.y + scroller.content-y + (rail-search.has-hover ? 0px
+        : list-hover.y + root.hovered-row * (root.row-h + root.row-gap));
     out property <length> tip-w: root.width;
     out property <length> tip-h: root.row-h;
 
@@ -134,89 +135,93 @@ export component SettingsNav inherits Rectangle {
 
     VerticalLayout {
         padding: root.card-pad;
-        // The inset again, which a card's title band counts on (`SettingsPage.card-header-h`).
-        spacing: root.card-pad;
 
-        // One of the two shows, so they share a layout without spacing.
-        VerticalLayout {
-            // Explicit bounds, not `visible` alone, which would still claim the slot; the zero
-            // `min-width` replaces the bar's own, which would hold the rail open.
-            Rectangle {
-                min-width: 0px;
-                min-height: 0px;
-                preferred-height: root.compact ? 0px : search.height;
-                max-height: root.compact ? 0px : search.height;
-                visible: !root.compact;
-
-                // The page's own bar at the rows' corner, minus the swell: in a column of rows it
-                // would crowd them.
-                search := SearchBar {
-                    x: 0;
-                    y: 0;
-                    focus-swell: false;
-                    corner-radius: Theme.radius-md;
-                    bar-height: root.row-h;
-                    input-width: root.drawn-w - 2 * root.card-pad;
-                    text <=> root.filter;
-                    placeholder: root.filter-placeholder;
-                    blur-trigger: root.blur-tick;
-                    edited => { root.search-edited(); }
-                }
-            }
-
-            rail-search := NavRow {
-                height: root.compact ? root.row-h : 0px;
-                visible: root.compact;
-                icon: "search";
-                label: @tr("Search");
-                show-label: false;
-                selected: root.search-active;
-                pad-left: root.rail-inset;
-                pad-right: root.rail-inset;
-                ease-padding: false;
-                selected-fill: Theme.accent.with-alpha(0.16);
-                hover-fill: Theme.surface1;
-                clicked => { root.search-clicked(); }
-            }
-        }
-
-        // Asks for the whole list, so the card hugs it and only scrolls on a page too short to.
+        // Asks for the whole column, so the card hugs it and only scrolls on a page too short to.
+        // The search box scrolls with the rows, as one more entry in the list.
         scroller := ScrollView {
             vertical-stretch: 1;
-            preferred-height: list.preferred-height;
-            max-height: list.preferred-height;
+            preferred-height: column.preferred-height;
+            max-height: column.preferred-height;
             // The std scroller floors its own width, which would draw the rail's rows past it.
             min-width: 0px;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
             mouse-drag-pan-enabled: false;
-            // The content is a hover area rather than a layout, so its extent is spelled out.
-            content-height: list.preferred-height;
+            // Spelled out: the default is the column's minimum, which the search box's zero floor
+            // sits under, so a short page would squash the box into the rows.
+            content-height: column.preferred-height;
 
-            // An ancestor of the rows, so it sees the pointer on the filter pass and still hands
-            // every click and hover through to them.
-            list-hover := TouchArea {
-                width: 100%;
-                height: 100%;
+            column := VerticalLayout {
+                // The inset again, which a card's title band counts on
+                // (`SettingsPage.card-header-h`).
+                spacing: root.card-pad;
 
-                list := VerticalLayout {
-                    spacing: root.row-gap;
+                // One of the two shows, so they share a layout without spacing.
+                VerticalLayout {
+                    // Explicit bounds, not `visible` alone, which would still claim the slot; the
+                    // zero `min-width` replaces the bar's own, which would hold the rail open.
+                    Rectangle {
+                        min-width: 0px;
+                        min-height: 0px;
+                        preferred-height: root.compact ? 0px : search.height;
+                        max-height: root.compact ? 0px : search.height;
+                        visible: !root.compact;
 
-                    for label[i] in root.labels: NavRow {
-                        height: root.row-h;
-                        icon: root.icons[i];
-                        label: label;
-                        selected: i == root.selected-index;
-                        show-label: !root.compact;
-                        pad-left: root.compact ? root.rail-inset : root.row-pad;
-                        pad-right: root.compact ? root.rail-inset : root.row-pad;
-                        ease-padding: root.eased;
-                        // `selectable-picker.slint`'s pair, the panel being the same `surface0`.
+                        // The page's own bar at the rows' corner, minus the swell: in a column of
+                        // rows it would crowd them.
+                        search := SearchBar {
+                            x: 0;
+                            y: 0;
+                            focus-swell: false;
+                            corner-radius: Theme.radius-md;
+                            bar-height: root.row-h;
+                            input-width: root.drawn-w - 2 * root.card-pad;
+                            text <=> root.filter;
+                            placeholder: root.filter-placeholder;
+                            blur-trigger: root.blur-tick;
+                            edited => { root.search-edited(); }
+                        }
+                    }
+
+                    rail-search := NavRow {
+                        height: root.compact ? root.row-h : 0px;
+                        visible: root.compact;
+                        icon: "search";
+                        label: @tr("Search");
+                        show-label: false;
+                        selected: root.search-active;
+                        pad-left: root.rail-inset;
+                        pad-right: root.rail-inset;
+                        ease-padding: false;
                         selected-fill: Theme.accent.with-alpha(0.16);
                         hover-fill: Theme.surface1;
-                        clicked => {
-                            root.selected-index = i;
-                            root.selected(i);
+                        clicked => { root.search-clicked(); }
+                    }
+                }
+
+                // An ancestor of the rows, so it sees the pointer on the filter pass and still
+                // hands every click and hover through to them.
+                list-hover := TouchArea {
+                    list := VerticalLayout {
+                        spacing: root.row-gap;
+
+                        for label[i] in root.labels: NavRow {
+                            height: root.row-h;
+                            icon: root.icons[i];
+                            label: label;
+                            selected: i == root.selected-index;
+                            show-label: !root.compact;
+                            pad-left: root.compact ? root.rail-inset : root.row-pad;
+                            pad-right: root.compact ? root.rail-inset : root.row-pad;
+                            ease-padding: root.eased;
+                            // `selectable-picker.slint`'s pair, the panel being the same
+                            // `surface0`.
+                            selected-fill: Theme.accent.with-alpha(0.16);
+                            hover-fill: Theme.surface1;
+                            clicked => {
+                                root.selected-index = i;
+                                root.selected(i);
+                            }
                         }
                     }
                 }
