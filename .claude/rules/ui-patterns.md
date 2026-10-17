@@ -1491,6 +1491,13 @@ edit would otherwise reverse.
   `nav-collapse-body-w`. The two-column flip is gone: with one to three cards per category it
   mostly stranded a lone card off-centre.
 
+- **The panel and the cards start level, and three files hold it.** `settings-view.slint` gives
+  both columns the same `pad-lg` above them, `SectionCard` draws its title *inside* the fill (a
+  label above it dropped every card's box below the panel's), and `SettingsPage.card-header-h`
+  sizes that title band off the panel's row height and inset, which `settings-nav.slint` reads from
+  the same global. A heading put back above a card, or a panel metric spelled locally again, breaks
+  the line with nothing failing.
+
 - **Every card child that wraps text is measured at `card-w` through a pinned cell.** All of them
   sit behind an `if`, and Slint measures a repeated element's height at the width its contents ask
   for, which no pin on its root reaches (`slint-pitfalls.md`). `setting-row.slint` argues the

@@ -40,9 +40,9 @@ export component SettingsNav inherits Rectangle {
 
     // Every row, the rail's search button and both search boxes share it, so swapping one for the
     // other on a fold moves nothing beneath them.
-    out property <length> row-h: 36px;
+    out property <length> row-h: SettingsPage.nav-row-h;
     property <length> row-gap: Theme.pad-xs;
-    property <length> card-pad: Theme.pad-sm;
+    property <length> card-pad: SettingsPage.nav-pad;
     property <length> row-pad: Theme.pad-md;
     // Centres `NavRow`'s 22 px glyph in a square row.
     property <length> rail-inset: (root.row-h - 22px) / 2;
@@ -134,7 +134,8 @@ export component SettingsNav inherits Rectangle {
 
     VerticalLayout {
         padding: root.card-pad;
-        spacing: Theme.pad-sm;
+        // The inset again, which a card's title band counts on (`SettingsPage.card-header-h`).
+        spacing: root.card-pad;
 
         // One of the two shows, so they share a layout without spacing.
         VerticalLayout {

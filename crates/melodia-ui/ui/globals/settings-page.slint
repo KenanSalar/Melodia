@@ -72,6 +72,13 @@ export global SettingsPage {
     // The glyph column both settings rows lead with, here so the two can't drift apart.
     out property <length> row-icon-w: 22px;
 
+    // The panel's row height and inset. Here because a card's title band is the panel's search row
+    // with that inset either side, so the title shares the search box's centre line and the rule
+    // under it meets the first category row.
+    out property <length> nav-row-h: 36px;
+    out property <length> nav-pad: Theme.pad-sm;
+    out property <length> card-header-h: root.nav-row-h + 2 * root.nav-pad;
+
     // Slint 1.18 has no `.contains()` on string, so the test is wired in Rust.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
