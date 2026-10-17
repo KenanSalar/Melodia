@@ -38,7 +38,9 @@ export component SettingsNav inherits Rectangle {
         search.focus-input();
     }
 
-    property <length> row-h: 36px;
+    // Every row, the rail's search button and both search boxes share it, so swapping one for the
+    // other on a fold moves nothing beneath them.
+    out property <length> row-h: 36px;
     property <length> row-gap: Theme.pad-xs;
     property <length> card-pad: Theme.pad-sm;
     property <length> row-pad: Theme.pad-md;
@@ -145,10 +147,12 @@ export component SettingsNav inherits Rectangle {
                 max-height: root.compact ? 0px : search.height;
                 visible: !root.compact;
 
+                // The page's own pill, minus the swell: in a column of rows it would crowd them.
                 search := SearchBar {
                     x: 0;
                     y: 0;
-                    inset: true;
+                    focus-swell: false;
+                    bar-height: root.row-h;
                     input-width: root.drawn-w - 2 * root.card-pad;
                     text <=> root.filter;
                     placeholder: root.filter-placeholder;

@@ -76,16 +76,12 @@ export component SettingsView inherits Rectangle {
     property <bool> watched-searching: root.searching;
     changed watched-searching => { sv.content-y = 0px; }
 
-    // The rail's search field. **A query keeps it open**, the page still being filtered by it;
-    // with nothing typed it closes once it loses focus, as a field opened by mistake should.
+    // The rail's search field, which **only its button closes**: losing focus, in the page or to
+    // another window, leaves it open with its text, as the panel's own box stays put. Closing
+    // clears the query: a page filtered by a field nobody can see reads as missing settings,
+    // which is also why a live query keeps the field showing however it was opened.
     property <bool> search-open: false;
     property <bool> flyout-shown: nav.compact && (root.search-open || SettingsPage.search-input != "");
-    property <bool> flyout-focused: flyout.has-focus;
-    changed flyout-focused => {
-        if (!self.flyout-focused && SettingsPage.search-input == "") {
-            root.search-open = false;
-        }
-    }
 
     function toggle-flyout() {
         if (root.flyout-shown) {
@@ -98,7 +94,8 @@ export component SettingsView inherits Rectangle {
     }
 
     // Crossing the threshold hands the focus to whichever box is about to show, so typing carries
-    // on. On a mirror because `changed` rejects a path into a child.
+    // on. Widening always lets the field go, the panel's box taking over; narrowing brings it back
+    // only for a query or a focused box. On a mirror because `changed` rejects a path into a child.
     property <bool> watched-compact: nav.compact;
     changed watched-compact => {
         if (self.watched-compact) {
@@ -106,9 +103,11 @@ export component SettingsView inherits Rectangle {
                 root.search-open = true;
                 focus-flyout.running = true;
             }
-        } else if (flyout.has-focus) {
+        } else {
+            if (flyout.has-focus) {
+                focus-panel-search.running = true;
+            }
             root.search-open = false;
-            focus-panel-search.running = true;
         }
     }
 
@@ -179,18 +178,30 @@ export component SettingsView inherits Rectangle {
             Rectangle {
                 min-width: 0px;
                 min-height: 0px;
-                preferred-height: root.flyout-shown ? root.flyout-top + flyout.height + root.clip-gap : 0px;
-                max-height: root.flyout-shown ? root.flyout-top + flyout.height + root.clip-gap : 0px;
+                preferred-height: root.flyout-shown ? flyout-row.preferred-height : 0px;
+                max-height: root.flyout-shown ? flyout-row.preferred-height : 0px;
                 visible: root.flyout-shown;
 
-                flyout := SearchBar {
-                    x: root.gap;
-                    y: root.flyout-top;
-                    input-width: SettingsPage.card-w;
-                    text <=> SettingsPage.search-input;
-                    placeholder: @tr("Search settings…");
-                    blur-trigger: SettingsPage.blur-search-tick;
-                    edited => { root.filter-tick-pending += 1; }
+                // A layout rather than a placed child, so the bar is drawn at `input-width`: a
+                // plain `Rectangle` hands a component its own full width, which ran the bar past
+                // the page by the gap it was offset by.
+                flyout-row := HorizontalLayout {
+                    padding-top: root.flyout-top;
+                    padding-bottom: root.clip-gap;
+                    padding-left: root.gap;
+                    padding-right: Theme.pad-lg;
+                    alignment: start;
+
+                    // At the card column's width, and floating over the page like any other
+                    // page's bar, so it keeps the swell the panel's own box goes without.
+                    flyout := SearchBar {
+                        bar-height: nav.row-h;
+                        input-width: SettingsPage.card-w;
+                        text <=> SettingsPage.search-input;
+                        placeholder: @tr("Search settings…");
+                        blur-trigger: SettingsPage.blur-search-tick;
+                        edited => { root.filter-tick-pending += 1; }
+                    }
                 }
             }
 

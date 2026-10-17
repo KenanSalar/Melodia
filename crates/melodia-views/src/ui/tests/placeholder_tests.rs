@@ -227,9 +227,16 @@ fn an_inset_bar_does_not_swell() {
         "search-bar.slint's variant no longer defaults to the floating shape, which is what the \
          three mounts that never name it are asking for"
     );
+    // Two halves, since a host can now turn the swell off on a stadium too: the default has to
+    // follow `inset`, and the scale has to follow the knob.
     assert!(
-        src.contains("focus-scale: input.has-focus && !root.inset ? 1.015 : 1.0;"),
-        "an inset SearchBar swells on focus, shoving whatever the surface seats beside it"
+        src.contains("in property <bool> focus-swell: !root.inset;"),
+        "an inset SearchBar swells on focus by default, shoving whatever the surface seats \
+         beside it"
+    );
+    assert!(
+        src.contains("focus-scale: input.has-focus && root.focus-swell ? 1.015 : 1.0;"),
+        "search-bar.slint's swell no longer follows `focus-swell`"
     );
 }
 

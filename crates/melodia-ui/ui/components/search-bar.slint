@@ -43,6 +43,11 @@ export component SearchBar inherits Rectangle {
     // stadium, and no swell — inside a popup there is nothing to be above. Fills, border
     // tint, placeholder and icon are unchanged, so both shapes read as one control.
     in property <bool> inset: false;
+    // The swell says "above the content". Its own knob for a stadium that sits *in* a column of
+    // rows rather than over one, where growing would crowd its neighbours.
+    in property <bool> focus-swell: !root.inset;
+    // For a bar that has to line up with the rows it sits among.
+    in property <length> bar-height: 32px;
 
     // Slint has no click-outside behaviour for `TextInput`, so each increment fires
     // `clear-focus()` on the inner input.
@@ -105,13 +110,13 @@ export component SearchBar inherits Rectangle {
     min-width: root.min-w;
     preferred-width: input-width;
     max-width: input-width;
-    height: 32px;
+    height: root.bar-height;
     background: transparent;
 
     // Holds all the visible styling and scales from the *centre* by binding `x`/`y` to a half-delta
     // against the outer slot — Slint Rectangles have no scale transform.
     chrome := Rectangle {
-        property <float> focus-scale: input.has-focus && !root.inset ? 1.015 : 1.0;
+        property <float> focus-scale: input.has-focus && root.focus-swell ? 1.015 : 1.0;
         animate focus-scale { duration: Theme.dur-fast; easing: ease-in-out; }
 
         width: root.width * focus-scale;

@@ -75,7 +75,9 @@ the catalogs.
 - the testkit's `declared_tab_count`, now `declared_count(src, property)`.
 
 **Grown:**
-- `SearchBar` publishes `has-focus`.
+- `SearchBar` publishes `has-focus` and takes `focus-swell` (default `!inset`) and `bar-height`:
+  the panel's box is the page's pill without the swell, and both boxes sit at the rows' height.
+  The rail's field closes only from its button, which clears the query; losing focus keeps it.
 - `TooltipFrame` takes a `gap`, defaulting to the value it had.
 
 **Vocabulary:** "tab" becomes "category" throughout Settings (Slint, Rust, the `views.json` field and
