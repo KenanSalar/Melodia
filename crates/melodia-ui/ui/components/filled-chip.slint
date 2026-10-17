@@ -8,6 +8,11 @@ export component FilledChip inherits Rectangle {
     // Keeps the hover fill while something the chip opened has the pointer, `has-hover` going false
     // the moment a popup takes input.
     in property <bool> held;
+    // The unselected fills, which follow the ground the chip sits on. **Theme tokens only**: the
+    // ease below can't tell a stepped brush from an eased one, and the recolouring gate is what
+    // lets it ride a palette fade.
+    in property <brush> idle-fill: Theme.surface1;
+    in property <brush> hover-fill: Theme.surface2;
     out property <brush> ink: root.selected ? Theme.accent-text : Theme.text;
 
     callback clicked();
@@ -15,7 +20,7 @@ export component FilledChip inherits Rectangle {
     border-radius: self.height / 2;
     background: root.selected
         ? Theme.accent
-        : (touch.has-hover || root.held ? Theme.surface2 : Theme.surface1);
+        : (touch.has-hover || root.held ? root.hover-fill : root.idle-fill);
     animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     @children

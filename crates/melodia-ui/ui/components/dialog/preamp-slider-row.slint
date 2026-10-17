@@ -33,6 +33,7 @@ export component PreampSliderRow inherits HorizontalLayout {
         horizontal-stretch: 1;
         value: root.preamp-to-frac(root.preamp);
         is-disabled: !root.enabled;
+        track-color: Theme.card-control;
         seam-mask-color: Theme.surface0;
         changed(v) => { root.changed(root.frac-to-preamp(v)); }
         committed(v) => { root.committed(root.frac-to-preamp(v)); }

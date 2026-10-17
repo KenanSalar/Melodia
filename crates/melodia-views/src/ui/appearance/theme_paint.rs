@@ -171,6 +171,8 @@ fn blend(from: &Painted, to: &Painted, t: f32) -> Painted {
             subtext0: mix(a.subtext0, b.subtext0),
             subtext1: mix(a.subtext1, b.subtext1),
             border: mix(a.border, b.border),
+            card_control: mix(a.card_control, b.card_control),
+            card_control_hover: mix(a.card_control_hover, b.card_control_hover),
             red: mix(a.red, b.red),
             green: mix(a.green, b.green),
             yellow: mix(a.yellow, b.yellow),
@@ -223,6 +225,10 @@ fn write(ui: &AppWindow, painted: &Painted) {
     g.set_subtext0(brush(p.subtext0));
     g.set_subtext1(brush(p.subtext1));
     g.set_border(brush(p.border));
+
+    // Card controls
+    g.set_card_control(brush(p.card_control));
+    g.set_card_control_hover(brush(p.card_control_hover));
 
     // Semantic palette slots
     g.set_red(brush(p.red));

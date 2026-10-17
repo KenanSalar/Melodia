@@ -23,6 +23,10 @@ pub struct Palette {
     pub subtext0: u32,
     pub subtext1: u32,
     pub border: u32,
+    // 2 card controls: a control resting on a `surface0` card, and its hover. Slots of their own
+    // because most palettes keep `surface1` all but level with the card.
+    pub card_control: u32,
+    pub card_control_hover: u32,
     // 3 semantic. Every palette names all three — there is deliberately no
     // struct-update fallback to fill them, because the one that used to exist
     // let the two generated palettes (Material You, KDE-from-kdeglobals) ship
@@ -32,6 +36,24 @@ pub struct Palette {
     pub red: u32,
     pub green: u32,
     pub yellow: u32,
+}
+
+/// How far `card_control` sits from `surface0` toward `text`, in percent: what a generated
+/// palette fills the slot with, and where a hand-written table starts before it is tuned.
+pub const CARD_CONTROL_PERCENT: u32 = 20;
+/// [`CARD_CONTROL_PERCENT`]'s twin for `card_control_hover`.
+pub const CARD_CONTROL_HOVER_PERCENT: u32 = 30;
+
+/// Returns `from` moved `percent` of the way to `to`, each channel rounded to the nearest step;
+/// past 100 it lands on `to`. Toward a palette's `text` it lifts a dark surface and sinks a light
+/// one, so no caller has to ask which the palette is.
+pub fn toward(from: u32, to: u32, percent: u32) -> u32 {
+    let percent = percent.min(100);
+    let channel = |shift: u32| {
+        let (a, b) = ((from >> shift) & 0xff, (to >> shift) & 0xff);
+        (a * (100 - percent) + b * percent + 50) / 100
+    };
+    (channel(16) << 16) | (channel(8) << 8) | channel(0)
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -52,7 +52,7 @@ export component EqBandSlider inherits Rectangle {
         height: root.fill-top + root.tuck;
         border-top-left-radius: min(self.width, self.height) / 2;
         border-top-right-radius: min(self.width, self.height) / 2;
-        background: Theme.surface1;
+        background: Theme.card-control;
     }
     Rectangle {
         x: root.track-cx - root.track-w / 2;
@@ -61,7 +61,7 @@ export component EqBandSlider inherits Rectangle {
         height: root.height - self.y;
         border-bottom-left-radius: min(self.width, self.height) / 2;
         border-bottom-right-radius: min(self.width, self.height) / 2;
-        background: Theme.surface1;
+        background: Theme.card-control;
     }
 
     // Active fill from the 0 dB centre to the thumb.
@@ -83,7 +83,7 @@ export component EqBandSlider inherits Rectangle {
         y: root.centre-cy - 0.5px;
         width: 12px;
         height: 1px;
-        background: Theme.surface2;
+        background: Theme.card-control-hover;
     }
 
     // Thumb — thin horizontal pill in the active accent.

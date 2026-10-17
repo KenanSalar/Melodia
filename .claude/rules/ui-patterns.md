@@ -174,9 +174,17 @@ silently miss the other.
 
 - **A surface that floats over the app edges with `Theme.surface2`, never `Theme.border`.** All
   four Catppuccin variants define `border` as the same hex as `surface0`, so a `surface0` card
-  bordered with it has no rim at all. `Theme.border` is still right for an **input field** on
-  `surface1`. The test is the fill underneath, not the element's kind: lift a surface off its
-  background, or recess a field into one.
+  bordered with it has no rim at all. The test is the fill underneath, not the element's kind:
+  lift a surface off its background.
+
+- **A control resting on a card fills with `Theme.card-control`, and its hover or rim with
+  `card-control-hover`, never `surface1`/`surface2`**, which most palettes keep all but level with
+  the card. Switches, dropdowns, outline buttons, progress bars and dialog fields take the pair by
+  default, mounting only on cards. `FilledChip` and `SliderTrack` keep `surface1` defaults for
+  their hosts off a card (Radio's chips, the seek row, the volume popup), so a card host passes the
+  pair itself, as `ChipGroup` and `SettingSlider` do. Both are palette slots rather than a Slint mix
+  of other brushes so each theme sets its own; `themes::toward` is the rule the generated palettes
+  fill them by.
 
 - **A sort row's Rust half is two shared helpers** — `next_sort` decides the pick (same field
   flips, a new one starts ascending), `persist_view_sort` writes it, `persisted_sort` seeds the

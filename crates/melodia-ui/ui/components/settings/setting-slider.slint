@@ -20,6 +20,7 @@ export component SettingSlider inherits HorizontalLayout {
     SliderTrack {
         horizontal-stretch: 1;
         value: root.value;
+        track-color: Theme.card-control;
         seam-mask-color: SettingsPage.card-fill;
         changed(v) => { root.changed(v); }
         committed(v) => { root.committed(v); }

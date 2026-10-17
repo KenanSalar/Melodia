@@ -13,10 +13,11 @@ export component ToggleSwitch inherits Rectangle {
     // flipping themselves.
     in property <bool> manual: false;
 
-    // The Settings palette by default. Now Playing hands in its own tier, which is written once per
-    // track rather than eased, so the `animate background`s below never restart on it.
+    // A card's palette by default, every default mount sitting on one. Now Playing hands in its own
+    // tier, which is written once per track rather than eased, so the `animate background`s below
+    // never restart on it.
     in property <brush> track-on: Theme.accent;
-    in property <brush> track-off: Theme.surface1;
+    in property <brush> track-off: Theme.card-control;
     in property <brush> thumb-on: Theme.accent-text;
     in property <brush> thumb-off: Theme.text;
     // `IconButton`'s, set by that host.

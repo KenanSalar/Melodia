@@ -18,6 +18,8 @@ const DARK: Palette = Palette {
     subtext0: 0xc5c5c5,
     subtext1: 0xd4d4d4,
     border: 0x3d3d3d,
+    card_control: 0x575757,
+    card_control_hover: 0x6c6c6c,
     red: 0xff6767,
     // Win11 Fluent positive / cautionary tokens — mirror the existing
     // Green / Gold accents so the macOS-style titlebar traffic lights
@@ -42,6 +44,8 @@ const LIGHT: Palette = Palette {
     subtext0: 0x616161,
     subtext1: 0x424242,
     border: 0xc4c4c4,
+    card_control: 0xb8b8b8,
+    card_control_hover: 0xa5a5a5,
     red: 0xc42b1c,
     yellow: 0xeab308,
     green: 0x107c10,
