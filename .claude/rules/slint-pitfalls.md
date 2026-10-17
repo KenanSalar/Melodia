@@ -329,12 +329,11 @@ this file is what builds, looks right, and is wrong.
   item.** Cells are top-aligned to a row as tall as its tallest, so a short item is followed by
   dead space down to the next row. No per-column flow, and a `FlexboxLayout` of columns can't stand
   in for it over cards like these (the flex measuring entry below).
-  Restructure: one cell per column, each a `VerticalLayout` of the items
-  (`views/settings/pages/*.slint` place *columns*, not cards). Two consequences: stacked, it is
-  column A's items then column B's, so columns want to be **contiguous halves** of the list rather
-  than alternating; and a page with fewer items than columns leaves one empty, so an item that
-  must not fill the surplus width needs its own `max-width` (`SectionCard` pins one beside its
-  `preferred-width`).
+  Restructure: one cell per column, each a `VerticalLayout` of the items. Two consequences:
+  stacked, it is column A's items then column B's, so columns want to be **contiguous halves** of
+  the list rather than alternating; and a page with fewer items than columns leaves one empty, so
+  an item that must not fill the surplus width needs its own `max-width` (`SectionCard` pins one
+  beside its `preferred-width`).
 
 - **A `FlexboxLayout` measures its items at a width it hasn't committed to, and only a
   layout-rooted component can answer.** taffy solves both axes in one pass, so placing an item
@@ -347,8 +346,8 @@ this file is what builds, looks right, and is wrong.
   depends on its drawn width, which comes from the solve still in progress. Symptom: `Recursion
   detected` at `i-slint-core/properties.rs`, at run time only and on the first layout, through
   `layout_item_info_at_cross_width` and `*_layoutinfo_v_with_constraint` frames; the build and
-  every test stay green. A flex Settings body of two card columns hit it on opening Interface and
-  went back to the `GridLayout` above, which solves widths before heights. **What a flex may hold
+  every test stay green. A flex Settings body of card columns hit it on opening a page of rows,
+  which is why that body is box layouts, solving widths before heights. **What a flex may hold
   is fixed-height, layout-rooted or `Text`-rooted**, wrapped or not: a `Text` is a builtin
   height-for-width cell, so the flex hands it the trial width as its `cross_axis_constraint`, which
   `text_layout_info` (`items/text.rs`) reads ahead of the drawn `width`. Every flex in the tree
@@ -382,11 +381,23 @@ this file is what builds, looks right, and is wrong.
   `…_width ()`; the first is a bug only where something reads that layout's reported height.
   Pinned by `ui::hero_chips::tests::the_strip_measures_its_rows_at_the_width_it_draws`.
 
+- **The same holds for any component behind an `if` or `for`, and a pin on its root can't
+  steer it.** The vertical arm measures at the width the root's *child layout* computes; an
+  explicit `preferred-width`/`max-width` on the root reaches only the horizontal arm (the compiler
+  calls it "a single-line-height approximation", `get_layout_info_v_constrained_for_repeated`). So
+  a row of wrapped text reports one line, and the card sized from it lets the rest spill out below.
+  Shrinking the texts' preferred width to let a root pin win overshoots the other way: the row is
+  measured as a narrow column and its card runs on behind the next. Cure: pin a **cell**, where an
+  explicit `preferred-width` replaces what the cell asks for (on a component root it only raises
+  it, `LayoutInfo::merge` taking the max), so the row is one cell of a `VerticalLayout` carrying
+  the pin (`setting-row.slint`, `SectionCard`'s body). Tell, in `app-window.rs`: the repeated
+  `Vertical` arm reads `(… + …_layoutinfo_h ()).preferred` where the `Horizontal` arm shows the pin.
+
 - **`GridLayout` honours a runtime expression for `row`/`col` on a plain child, and forces `Auto`
   on a repeated one.** `convert_row_col_expr` lowers `RowColExpr::Named` to a `PropertyReference`
-  read per layout pass, so `row: SomeGlobal.grid-row(1)` re-flows the grid reactively — how the
-  Settings body swings its columns from side-by-side to stacked with every card still **mounted
-  exactly once**. Two constraints. (1) `passes/lower_layout.rs`'s `add_element` forces
+  read per layout pass, so `row: SomeGlobal.grid-row(1)` re-flows the grid reactively, which is how
+  a grid swings its columns from side-by-side to stacked with every item still **mounted exactly
+  once**. Two constraints. (1) `passes/lower_layout.rs`'s `add_element` forces
   `col_expr`/`row_expr` to `Auto` when `repeated.is_some()`, so a `for`-loop's items can't place
   themselves; only `colspan`/`rowspan` survive. (2) `check_numbering_consistency` rejects
   **mixing** auto-numbering with runtime expressions for the same property — once one child spells
@@ -495,10 +506,10 @@ this file is what builds, looks right, and is wrong.
   `fire() => { SettingsPage.search-query = SettingsPage.search-input; }`, with the `SearchBar`
   bound to the *input* and the section cards reading the *query*. The shape follows where the cost
   lands — a list view debounces a model rebuild in Rust, where a Settings keystroke fans out to
-  three `SettingsPage.matches` round-trips per row across all five tab pages, so the expensive
+  three `SettingsPage.matches` round-trips per row across every category page, so the expensive
   work is Slint's own re-evaluation and the settled value must be a property it can read. Clear
-  both on nav-away and on a tab pick; clearing only the settled one leaves the box holding text
-  the page is no longer filtered by.
+  both on nav-away and on a category pick; clearing only the settled one leaves the box holding
+  text the page is no longer filtered by.
 
 - **`PopupWindow.y: -self.height - …` needs explicit `width`/`height`.** Else `self.height` is 0
   before first layout — popup lands above trigger top, expands downward. Canonical:
@@ -787,7 +798,7 @@ this file is what builds, looks right, and is wrong.
   `changed width => { self.<mirror> = self.width; }` idiom is the recurring victim and always owes
   that seed**: a window opened at its final size never *resizes*, so the mirror keeps its declared
   seed forever and every width derived from it is wrong until something moves the window. Bit
-  `settings-view.slint`'s `page-w` and `now-playing-bar.slint`'s `bar-w` (the latter hidden by
+  `settings-view.slint`'s `view-w` and `now-playing-bar.slint`'s `bar-w` (the latter hidden by
   consumers that `clamp` well below its 1100 px seed); both now carry the timer.
 
 - **A `changed` handler inside an `if` outlives its branch, and whether that is fatal comes down

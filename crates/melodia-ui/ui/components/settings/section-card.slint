@@ -51,6 +51,12 @@ export component SectionCard inherits Rectangle {
         // blurs the card's text on HiDPI. Nothing needs it: rows and dividers inset by `pad-lg`, so
         // nothing reaches the rounded corners.
         Rectangle {
+            // **The root's pair, again on a cell**, which is the only place it reaches the card's
+            // height: mounted behind an `if`, the card is measured at the width its contents ask
+            // for, and a pin on a cell replaces what that cell asks for where the root's cannot.
+            // Both bounds, so neither a wider heading nor a long folder path widens it.
+            preferred-width: root.card-width;
+            max-width: root.card-width;
             background: SettingsPage.card-fill;
             border-radius: Theme.radius-lg;
 
