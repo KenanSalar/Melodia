@@ -147,11 +147,13 @@ export component SettingsNav inherits Rectangle {
                 max-height: root.compact ? 0px : search.height;
                 visible: !root.compact;
 
-                // The page's own pill, minus the swell: in a column of rows it would crowd them.
+                // The page's own bar at the rows' corner, minus the swell: in a column of rows it
+                // would crowd them.
                 search := SearchBar {
                     x: 0;
                     y: 0;
                     focus-swell: false;
+                    corner-radius: Theme.radius-md;
                     bar-height: root.row-h;
                     input-width: root.drawn-w - 2 * root.card-pad;
                     text <=> root.filter;

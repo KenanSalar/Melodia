@@ -46,6 +46,9 @@ export component SearchBar inherits Rectangle {
     // The swell says "above the content". Its own knob for a stadium that sits *in* a column of
     // rows rather than over one, where growing would crowd its neighbours.
     in property <bool> focus-swell: !root.inset;
+    // At rest; the swell scales it, so the stadium stays one. A host whose cards aren't stadiums
+    // hands in their corner, where a pill would look out of place among them.
+    in property <length> corner-radius: root.inset ? Theme.radius-md : root.height / 2;
     // For a bar that has to line up with the rows it sits among.
     in property <length> bar-height: 32px;
 
@@ -131,7 +134,7 @@ export component SearchBar inherits Rectangle {
             ? Theme.surface0
             : Theme.floating-chrome-bg;
         // The `ActionPill` outline at rest; focus tints the ring faintly toward the accent.
-        border-radius: root.inset ? Theme.radius-md : self.height / 2;
+        border-radius: root.corner-radius * self.focus-scale;
         border-width: 1px;
         border-color: input.has-focus
             ? Theme.accent.with-alpha(0.18)

@@ -193,8 +193,10 @@ export component SettingsView inherits Rectangle {
                     alignment: start;
 
                     // At the card column's width, and floating over the page like any other
-                    // page's bar, so it keeps the swell the panel's own box goes without.
+                    // page's bar, so it keeps the swell the panel's own box goes without. Cornered
+                    // like the rail's button that opens it.
                     flyout := SearchBar {
+                        corner-radius: Theme.radius-md;
                         bar-height: nav.row-h;
                         input-width: SettingsPage.card-w;
                         text <=> SettingsPage.search-input;

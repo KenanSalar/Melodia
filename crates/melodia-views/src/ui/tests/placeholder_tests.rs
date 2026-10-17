@@ -203,13 +203,18 @@ fn an_inset_bar_takes_the_popup_surfaces_own_corner() {
     let surface_corner = binding_value(&surface_src, "border-radius:")
         .rsplit_once(':')
         .map_or("", |(_, arm)| arm.trim());
-    let bar_corner = binding_value(&bar_src, "border-radius: root.inset ?")
+    let bar_corner = binding_value(&bar_src, "corner-radius: root.inset ?")
         .split_once(':')
         .map_or("", |(arm, _)| arm.trim());
 
     assert!(
         surface_corner.starts_with("Theme."),
         "popup-surface.slint no longer ends its radius ternary on a theme token"
+    );
+    assert_eq!(
+        binding_value(&bar_src, "border-radius:").trim(),
+        "root.corner-radius * self.focus-scale",
+        "search-bar.slint's chrome no longer draws the corner its `corner-radius` asks for"
     );
     assert_eq!(
         bar_corner, surface_corner,
