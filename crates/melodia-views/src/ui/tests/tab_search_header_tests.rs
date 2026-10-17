@@ -180,14 +180,14 @@ fn every_painted_brush_is_an_input() {
     }
 }
 
-/// The three hosts, and that each still mounts the row rather than growing its own.
+/// The two hosts, and that each still mounts the row rather than growing its own.
 ///
 /// A page that re-inlines a `TabBar` and a `SearchBar` passes every pin above — they only
 /// ever look at this file — so the count of mounts is the half that has to be checked from
 /// outside.
 #[test]
 fn every_tabbed_page_mounts_the_shared_row() {
-    const HOSTS: [(&str, &str); 3] = [
+    const HOSTS: [(&str, &str); 2] = [
         (
             "library-tab-band.slint",
             include_str!("../../../../melodia-ui/ui/components/hero/library-tab-band.slint"),
@@ -195,10 +195,6 @@ fn every_tabbed_page_mounts_the_shared_row() {
         (
             "mosaic-tab-hero.slint",
             include_str!("../../../../melodia-ui/ui/components/hero/mosaic-tab-hero.slint"),
-        ),
-        (
-            "settings-view.slint",
-            include_str!("../../../../melodia-ui/ui/views/settings-view.slint"),
         ),
     ];
 

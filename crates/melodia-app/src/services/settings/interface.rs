@@ -1,5 +1,5 @@
-//! The flag structs behind the Settings ▸ Interface tab: window chrome, the tray, layout and the
-//! backdrop.
+//! The flag structs behind Settings ▸ Appearance and ▸ Window: window chrome, the tray, layout and
+//! the backdrop.
 
 use serde::{Deserialize, Serialize};
 

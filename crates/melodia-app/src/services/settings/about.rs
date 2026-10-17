@@ -1,5 +1,5 @@
-//! The flag structs behind the Settings ▸ About tab: updates, diagnostics, and what the welcome card
-//! and the support prompt remember.
+//! The flag structs behind Settings ▸ Updates and ▸ About: updates, diagnostics, and what the
+//! welcome card and the support prompt remember.
 
 use serde::{Deserialize, Serialize};
 

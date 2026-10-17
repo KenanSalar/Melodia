@@ -61,12 +61,12 @@ export component OverflowMenuSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> tab-name;
+    in property <string> category-name;
 
     property <string> card-title: @tr("Player Bar");
 
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, root.card-title,
+        return SettingsPage.row-visible(root.category-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }

@@ -1,0 +1,13 @@
+import { OutputSection } from "../output-section.slint";
+
+// The device Melodia plays through and what reaches it. The page shape is `library-page.slint`'s.
+export component OutputPage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: output.has-matches;
+
+    VerticalLayout {
+        output := OutputSection { category-name: @tr("Output"); }
+    }
+}

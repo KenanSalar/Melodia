@@ -1,4 +1,4 @@
-//! The flag structs behind the Settings ▸ Playback tab.
+//! The flag structs behind Settings ▸ Playback and ▸ Output.
 
 use std::time::Duration;
 

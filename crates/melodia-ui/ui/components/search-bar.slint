@@ -25,6 +25,9 @@ export component SearchBar inherits Rectangle {
     // the `TabBar.compact-w` contract. What the host leaves behind is exactly what this shrinks to.
     out property <length> min-w: 140px;
 
+    // For a host with two boxes on one filter, handing the focus across when it swaps them.
+    out property <bool> has-focus: input.has-focus;
+
     // Named because `chrome-overhead` has to add the same number the layout does.
     property <length> icon-size: 16px;
     // Everything in the pill that isn't the text. The clear button stays out: it only mounts

@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Tìm kiếm"
 
@@ -37,7 +38,8 @@ msgstr "Đã phát gần đây"
 msgid "Settings"
 msgstr "Cài đặt"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Radio"
@@ -649,7 +651,9 @@ msgstr "Chi tiết"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Lời bài hát"
 
@@ -1206,8 +1210,9 @@ msgstr "Không có bản nhạc tiếp theo"
 msgid "Visualizer"
 msgstr "Sóng nhạc"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Diện mạo"
 
@@ -2432,27 +2437,38 @@ msgstr "Hiện tất cả {} bài hát"
 msgid "Top Result"
 msgstr "Kết quả hàng đầu"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Giao diện"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Thư viện"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Đầu ra"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Phát nhạc"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Tích hợp"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Cửa sổ"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Giới thiệu"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Dịch vụ"
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Cập nhật"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2680,10 +2696,6 @@ msgstr "Phông nền album"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Tô trình phát mini bằng màu của album đang phát, giống như màn hình Đang phát."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Đầu ra"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -3173,13 +3185,9 @@ msgstr "Kết nối ListenBrainz"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Hãy bật Last.fm hoặc ListenBrainz ở trên trước"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Không có cài đặt phù hợp"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Cập nhật"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3256,10 +3264,6 @@ msgstr "Bản cập nhật quan trọng"
 #: ui/views/settings/update-section.slint
 msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Bản cập nhật này sửa một lỗi nghiêm trọng và không thể bỏ qua."
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Cửa sổ"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"

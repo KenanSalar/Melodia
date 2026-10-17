@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Пошук"
 
@@ -37,7 +38,8 @@ msgstr "Нещодавно прослухане"
 msgid "Settings"
 msgstr "Налаштування"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Радіо"
@@ -651,7 +653,9 @@ msgstr "Подробиці"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Текст пісні"
 
@@ -1210,8 +1214,9 @@ msgstr "Далі треків немає"
 msgid "Visualizer"
 msgstr "Візуалізатор"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Вигляд"
 
@@ -2484,27 +2489,38 @@ msgstr "Показати всі пісні ({})"
 msgid "Top Result"
 msgstr "Найкращий результат"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Інтерфейс"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Медіатека"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Виведення"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Відтворення"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Інтеграції"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Вікно"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Про програму"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Сервіси"
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Оновлення"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2732,10 +2748,6 @@ msgstr "Фон з обкладинки"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Фарбувати мініплеєр у кольори альбому, що грає, як це робить екран «Зараз грає»."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Виведення"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -3225,13 +3237,9 @@ msgstr "Підключити ListenBrainz"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Спершу ввімкніть Last.fm або ListenBrainz вище"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Відповідних налаштувань немає"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Оновлення"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3308,10 +3316,6 @@ msgstr "Критичне оновлення"
 #: ui/views/settings/update-section.slint
 msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Це оновлення виправляє критичну проблему, і його не можна пропустити."
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Вікно"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"

@@ -1,35 +1,13 @@
-import { Theme } from "../../../theme.slint";
-import { SettingsPage } from "../../../globals/settings-page.slint";
 import { PlaybackSection } from "../playback-section.slint";
-import { OutputSection } from "../output-section.slint";
 
-// Playback tab: the playback card, and the output card beside it.
+// How tracks follow one another, and the visualizer. The page shape is `library-page.slint`'s.
 export component PlaybackPage inherits Rectangle {
-    background: transparent;
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    out property <bool> has-matches: pb.has-matches || output.has-matches;
+    out property <bool> has-matches: pb.has-matches;
 
-    // See `library-page.slint` for why the cards live in columns that place
-    // themselves.
-    GridLayout {
-        spacing: Theme.pad-lg;
-
-        VerticalLayout {
-            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
-            alignment: start;
-            spacing: Theme.pad-lg;
-
-            pb := PlaybackSection { tab-name: @tr("Playback"); }
-        }
-
-        VerticalLayout {
-            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1);
-            alignment: start;
-            spacing: Theme.pad-lg;
-
-            output := OutputSection { tab-name: @tr("Playback"); }
-        }
+    VerticalLayout {
+        pb := PlaybackSection { category-name: @tr("Playback"); }
     }
 }

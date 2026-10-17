@@ -4,24 +4,30 @@ import { Settings } from "../settings.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { WindowChrome } from "../globals/shell.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
+import { NavRow } from "../components/nav-row.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 
 // Single nav row. Reads selected state from Nav, fires `select` on click.
-component SidebarItem inherits Rectangle {
+component SidebarItem inherits NavRow {
     in property <int> index;
-    in property <string> label;
-    in property <string> icon;
 
-    height: 36px;
-    background: transparent;
-
-    private property <bool> selected: Nav.selected-index == root.index;
+    selected: Nav.selected-index == root.index;
+    show-label: !Nav.sidebar-collapsed;
+    // Collapsed, it centres the icon in the content row; expanded, it tracks a fraction of the
+    // sidebar width so icons drift outward as the user resizes. **Mirrors the clamp the Sidebar
+    // applies to its own `width`**, so this follows the *rendered* width rather than the raw
+    // stored value.
+    pad-left: Nav.sidebar-collapsed
+        ? 4px
+        : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
+    pad-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
+    ease-padding: !Nav.sidebar-dragging;
 
     // The collapsed rail hides the label, so the row hands `Nav` its identity and rect
     // and `app-window.slint` paints the pill beside the rail — the global says why it
     // can't be mounted here. **Published in both states**, so the tooltip is already
     // armed when Ctrl+B collapses the rail under a parked pointer.
-    private property <bool> hover-mirror: touch.has-hover;
+    private property <bool> hover-mirror: root.has-hover;
     changed hover-mirror => {
         if (self.hover-mirror) {
             Nav.sidebar-tip-idx = root.index;
@@ -33,80 +39,18 @@ component SidebarItem inherits Rectangle {
         }
     }
 
-    // Gentler than the now-playing-bar buttons' shrink, a full-width row's wobble
-    // reading much stronger than a compact circular one. **Only the factor is
-    // animated**, not the width and height derived from it: those also move when the
-    // sidebar collapses or resizes, so easing them directly would set every row
-    // wobbling through the collapse.
-    property <float> press-scale: touch.pressed ? 0.97 : 1.0;
-    animate press-scale {
-        duration: touch.pressed ? 100ms : Theme.dur-med;
-        easing: cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    // The root keeps its fixed layout slot so sibling rows never reflow; `row` is what
-    // scales on press.
-    row := Rectangle {
-        width: parent.width * root.press-scale;
-        height: parent.height * root.press-scale;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
-        border-radius: Theme.radius-md;
-        background: root.selected
-            ? Theme.surface1
-            : (touch.has-hover ? Theme.surface0 : transparent);
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
-
-        HorizontalLayout {
-            // Collapsed, it centres the icon in the content row; expanded, it tracks a
-            // fraction of the sidebar width so icons drift outward as the user resizes.
-            // **Mirrors the clamp the Sidebar applies to its own `width`**, so this
-            // follows the *rendered* width rather than the raw stored value.
-            padding-left: Nav.sidebar-collapsed
-                ? 4px
-                : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
-            padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
-            spacing: Theme.pad-md;
-            alignment: start;
-            cross-axis-alignment: center;
-            animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
-
-            MaterialIcon {
-                name: root.icon;
-                // Scaled directly so the wobble is visible on a collapsed rail too:
-                // otherwise only the row's fill shrinks, by a pixel or so, and the
-                // press feels inert with the label hidden.
-                icon-size: 22px * root.press-scale;
-                icon-color: root.selected ? Theme.accent : Theme.text;
-                filled: root.selected;
-            }
-
-            if !Nav.sidebar-collapsed: Text {
-                text: root.label;
-                color: root.selected ? Theme.text : Theme.subtext0;
-                font-size: Theme.font-size-md * root.press-scale;
-                font-weight: root.selected ? 600 : 500;
-                vertical-alignment: center;
-                overflow: elide;
-            }
-        }
-    }
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        // Closes Now Playing too — it sits over any section, so any nav click dismisses
-        // it. **A detail id is not reset here**: it belongs to that tab's state, so
-        // leaving and returning restores the last open one, and the band's back arrow is
-        // the only way out.
-        clicked => {
-            // Sidebar nav is always lateral, so the direction is set **before** the
-            // index write and the new branch drops in whatever the last one left behind.
-            Nav.pending-enter-from = NavEnterFrom.above;
-            Nav.now-playing-open = false;
-            Nav.selected-index = root.index;
-            // Persisted, so a restart reopens on the same section.
-            Nav.persist-selected-index(root.index);
-        }
+    // Closes Now Playing too — it sits over any section, so any nav click dismisses
+    // it. **A detail id is not reset here**: it belongs to that tab's state, so
+    // leaving and returning restores the last open one, and the band's back arrow is
+    // the only way out.
+    clicked => {
+        // Sidebar nav is always lateral, so the direction is set **before** the
+        // index write and the new branch drops in whatever the last one left behind.
+        Nav.pending-enter-from = NavEnterFrom.above;
+        Nav.now-playing-open = false;
+        Nav.selected-index = root.index;
+        // Persisted, so a restart reopens on the same section.
+        Nav.persist-selected-index(root.index);
     }
 }
 

@@ -3,7 +3,7 @@
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::ui::settings::settings_page::{self, SettingsTab};
+use crate::ui::settings::settings_page::{self, SettingsCategory};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Onboarding, Settings, Theme};
@@ -27,12 +27,12 @@ fn wire_run_again(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Land on Settings ▸ Services and close the card.
+/// Land on Settings ▸ Integrations and close the card.
 fn wire_open_services(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<Onboarding>().on_open_services(move || {
         let Some(ui) = weak.upgrade() else { return };
-        settings_page::open_on(&ui, SettingsTab::Services);
+        settings_page::open_on(&ui, SettingsCategory::Integrations);
         ui.global::<Onboarding>().invoke_dismiss();
     });
 }

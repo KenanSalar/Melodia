@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=1; plural=0;\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr ""
 
@@ -37,7 +38,8 @@ msgstr ""
 msgid "Settings"
 msgstr ""
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr ""
@@ -650,7 +652,9 @@ msgstr ""
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr ""
 
@@ -1208,8 +1212,9 @@ msgstr ""
 msgid "Visualizer"
 msgstr ""
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr ""
 
@@ -2458,12 +2463,13 @@ msgstr ""
 msgid "Top Result"
 msgstr ""
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr ""
-
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
+msgstr ""
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
 msgstr ""
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
@@ -2471,13 +2477,23 @@ msgstr ""
 msgid "Playback"
 msgstr ""
 
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr ""
+
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr ""
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr ""
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
 msgstr ""
 
 #: ui/views/settings-view.slint
@@ -2705,10 +2721,6 @@ msgstr ""
 
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
-msgstr ""
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
 msgstr ""
 
 #: ui/views/settings/output-section.slint
@@ -3199,12 +3211,8 @@ msgstr ""
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr ""
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
-msgstr ""
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
 msgstr ""
 
 #: ui/views/settings/update-section.slint
@@ -3281,10 +3289,6 @@ msgstr ""
 
 #: ui/views/settings/update-section.slint
 msgid "This update fixes a critical issue and can't be skipped."
-msgstr ""
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "Window"
 msgstr ""
 
 #: ui/views/settings/window-chrome-section.slint

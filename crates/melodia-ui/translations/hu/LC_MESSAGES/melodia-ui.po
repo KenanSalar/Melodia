@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Keresés"
 
@@ -37,7 +38,8 @@ msgstr "Nemrég lejátszottak"
 msgid "Settings"
 msgstr "Beállítások"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Rádió"
@@ -652,7 +654,9 @@ msgstr "Részletek"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Dalszöveg"
 
@@ -1210,8 +1214,9 @@ msgstr "Nincs következő szám"
 msgid "Visualizer"
 msgstr "Vizualizáció"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Megjelenés"
 
@@ -2460,27 +2465,38 @@ msgstr "Az összes dal megjelenítése ({})"
 msgid "Top Result"
 msgstr "Legjobb találat"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Felület"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Könyvtár"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Kimenet"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Lejátszás"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Integrációk"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Ablak"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Névjegy"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Szolgáltatások"
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Frissítések"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2708,10 +2724,6 @@ msgstr "Albumháttér"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "A minilejátszó a lejátszott album színeit kapja, ahogy a Most szól nézet is."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Kimenet"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -3201,13 +3213,9 @@ msgstr "ListenBrainz csatlakoztatása"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Előbb kapcsold be fent a Last.fm-et vagy a ListenBrainzt"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Nincs egyező beállítás"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Frissítések"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3284,10 +3292,6 @@ msgstr "Kritikus frissítés"
 #: ui/views/settings/update-section.slint
 msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Ez a frissítés kritikus hibát javít, ezért nem hagyható ki."
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Ablak"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"

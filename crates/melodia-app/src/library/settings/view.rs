@@ -103,16 +103,16 @@ pub fn set_artist_albums_collapsed(paths: &Paths, collapsed: bool) -> Result<(),
     })
 }
 
-/// Persist the Settings page's active tab so re-entering the page lands where the user left it.
-/// Same no-kick shape as the collapse flag above: `SettingsPage.tab-idx` is two-way bound to the
-/// tab bar, so the Slint side is already correct.
-pub fn set_settings_tab(paths: &Paths, tab: i32) -> Result<(), AppError> {
+/// Persist the Settings page's active category so re-entering the page lands where the user left
+/// it. Same no-kick shape as the collapse flag above: `SettingsPage.category-idx` is two-way bound
+/// to the category panel, so the Slint side is already correct.
+pub fn set_settings_category(paths: &Paths, category: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(paths, move |s| {
-        s.settings_tab = tab;
+        s.settings_category = category;
     })
 }
 
-/// Persist the Favorites page's active tab. Same contract as [`set_settings_tab`] —
+/// Persist the Favorites page's active tab. Same contract as [`set_settings_category`] —
 /// `Favorites.tab-idx` is two-way bound to its tab bar, so this write is pure catch-up.
 pub fn set_favorites_tab(paths: &Paths, tab: i32) -> Result<(), AppError> {
     services::view_state::mutate_view_state(paths, move |s| {

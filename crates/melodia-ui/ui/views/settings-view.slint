@@ -3,16 +3,20 @@ import { Theme } from "../theme.slint";
 import { SettingsPage } from "../globals/settings-page.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
 import { TooltipFrame } from "../components/tooltip-frame.slint";
-import { TabSearchHeader } from "../components/hero/tab-search-header.slint";
+import { TooltipSide } from "../components/tooltip.slint";
+import { SearchBar } from "../components/search-bar.slint";
 import { FilterThrottle } from "../components/filter-throttle.slint";
-import { SettingsTabs } from "settings/settings-tabs.slint";
+import { SettingsNav } from "settings/settings-nav.slint";
+import { SettingsRouter } from "settings/settings-router.slint";
 
-// A pinned header over a vertically scrolling, width-clamped body.
+// The category panel beside a vertically scrolling, width-clamped column of cards, the two centred
+// as one group.
 //
-// **Page chrome only** — the search bar, the tab bar, the scroll body and its overlay scrollbar.
-// Which cards live on which tab is `settings/settings-tabs.slint`'s job. The scrollbar follows the
-// Tracks view: both inner policies off and an `OverlayScrollbar` at the root, so it sits flush with
-// the content panel's right edge rather than beside the centred card column.
+// **Page chrome only** — where the panel sits, the search row the rail opens, the scroll body and
+// its overlay scrollbar, the rail's tooltip. The panel's own behaviour is
+// `settings/settings-nav.slint`'s and which cards live in which category
+// `settings/settings-router.slint`'s. The scrollbar follows the Tracks view: both inner policies
+// off and an `OverlayScrollbar` at the root, so it sits flush with the content panel's right edge.
 export component SettingsView inherits Rectangle {
     // No background of its own, so the panel's `Theme.base` shows through at the rounded corners.
 
@@ -23,145 +27,201 @@ export component SettingsView inherits Rectangle {
     }
 
     // The throttle every filterable view mounts. Expensive here despite driving only visibility: a
-    // query mounts all five tab pages and fans out to three Rust round-trips per row.
+    // query mounts every category page and fans out to three Rust round-trips per row.
     property <int> filter-tick-pending;
     FilterThrottle {
         pending: root.filter-tick-pending;
         fire() => { SettingsPage.search-query = SettingsPage.search-input; }
     }
 
-    // Reads the **settled** query, not the input. The two-column flip is suppressed while
-    // searching, and flipping a frame before the five pages mount is the one ordering that shows.
+    // Reads the **settled** query, not the input.
     property <bool> searching: SettingsPage.search-query != "";
 
     // Mirrored imperatively rather than read live: a binding reading `root.width` and feeding a
     // child's size re-enters the shell's layout pass, surfacing as a `RefCell already borrowed`
     // panic in parley's text measurement. **The mirror costs a frame, so the seed is a real
-    // decision**: seeded wide, the bar draws five full-width tabs into a panel that can't seat them;
-    // seeded at the header row's own floor it draws the icons it would have drawn anyway and widens
-    // once. The floor comes off the row rather than being respelled here.
-    property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
-    changed width => {
-        self.page-w = self.width;
-        SettingsPage.page-w = self.width;
-    }
+    // decision**: seeded at zero the panel's first verdict is the rail, which a narrow page draws
+    // anyway and a wide one widens out of once, where a wide seed would draw the full panel into a
+    // page that can't seat it.
+    property <length> view-w: 0px;
+    changed width => { self.view-w = self.width; }
 
     // **The seed obliges this**: `changed` doesn't fire when the first layout settles directly on
-    // the final value, and a window opened straight into Settings is never *resized*. It also
-    // publishes the column count, which `changed watched-two-col` can't — `SettingsPage` outlives
-    // this page, so a wide visit leaves `body-cols` at 2.
+    // the final value, and a window opened straight into Settings is never *resized*.
     Timer {
         interval: 1ms;
         triggered => {
-            root.page-w = root.width;
-            SettingsPage.page-w = root.width;
-            SettingsPage.body-cols = root.two-col ? 2 : 1;
+            root.view-w = root.width;
             self.running = false;
         }
     }
 
-    // The page less its own padding — what the header row divides up and the body fills.
-    // **`SettingsPage.body-avail` computes the same subtraction and is not the same number**, so
-    // don't collapse this onto it: that one reads the *global* `page-w` and this the local mirror,
-    // and they differ for the one frame the tab bar's floor seed exists for.
-    property <length> content-w: root.page-w - 2 * Theme.pad-lg;
+    property <length> gap: Theme.pad-lg;
+    // What the panel and the body beside it share: the page less its own padding and the gap.
+    property <length> shared-w: max(0px, root.view-w - 2 * Theme.pad-lg - root.gap);
+    // Centres the panel and one card at the cap as a group, down to the page padding.
+    property <length> lead: max(Theme.pad-lg,
+        (root.view-w - nav.drawn-w - root.gap - SettingsPage.card-cap) / 2);
+    // What's right of the panel, less the gap and the right padding — published, since a card is
+    // drawn at it and can't measure its own column (`SettingsPage.card-w`).
+    property <length> body-avail: max(0px,
+        root.view-w - root.lead - nav.drawn-w - root.gap - Theme.pad-lg);
+    changed body-avail => { SettingsPage.body-avail = self.body-avail; }
 
-    // A second column appears exactly when two cards **at `card-cap`** fit beside each other, not a
-    // pixel sooner — that is what makes a card's width monotonic, so the flip adds a column without
-    // resizing anything. **Search is single-column regardless**: it mounts all five pages and hides
-    // the non-matching cards, and a hidden card still claims its grid cell. Measured against the raw
-    // `content-w` and deliberately *not* `SettingsPage.body-w`, which is a function of this verdict
-    // and would close a cycle. Latched for the `tab-bar.slint` reason — here a whole column blinks.
-    property <bool> two-col-latched: false;
-    property <bool> two-col: !root.searching
-        && root.content-w >= 2 * SettingsPage.card-cap + Theme.pad-lg
-            - (root.two-col-latched ? 24px : 0px);
-
-    property <bool> watched-two-col: root.two-col;
-    changed watched-two-col => {
-        root.two-col-latched = root.two-col;
-        SettingsPage.body-cols = root.two-col ? 2 : 1;
-        // Halving the body's height under a parked offset otherwise paints blank — the
-        // reason the two mirrors below reset it too.
-        sv.content-y = 0px;
-    }
-
-    // A fresh tab, or entering or leaving search, starts at the top — a tall tab to a short one
-    // otherwise leaves the viewport parked past the new content. Written **imperatively**: a `<=>`
-    // on `content-y` disables Slint's own out-of-bounds correction.
-    property <int> watched-tab: SettingsPage.tab-idx;
-    changed watched-tab => { sv.content-y = 0px; }
+    // A fresh category, or entering or leaving search, starts at the top — a tall page to a short
+    // one otherwise leaves the viewport parked past the new content. Written **imperatively**: a
+    // `<=>` on `content-y` disables Slint's own out-of-bounds correction.
+    property <int> watched-category: SettingsPage.category-idx;
+    changed watched-category => { sv.content-y = 0px; }
     property <bool> watched-searching: root.searching;
     changed watched-searching => { sv.content-y = 0px; }
 
-    // How far under the tab bar's divider a scrolled card is cut off. Everything between the two
-    // hides content, so it stays tight and the rest of the header's clearance scrolls with the cards.
+    // The rail's search field. **A query keeps it open**, the page still being filtered by it;
+    // with nothing typed it closes once it loses focus, as a field opened by mistake should.
+    property <bool> search-open: false;
+    property <bool> flyout-shown: nav.compact && (root.search-open || SettingsPage.search-input != "");
+    property <bool> flyout-focused: flyout.has-focus;
+    changed flyout-focused => {
+        if (!self.flyout-focused && SettingsPage.search-input == "") {
+            root.search-open = false;
+        }
+    }
+
+    function toggle-flyout() {
+        if (root.flyout-shown) {
+            SettingsPage.clear-search();
+            root.search-open = false;
+        } else {
+            root.search-open = true;
+            focus-flyout.running = true;
+        }
+    }
+
+    // Crossing the threshold hands the focus to whichever box is about to show, so typing carries
+    // on. On a mirror because `changed` rejects a path into a child.
+    property <bool> watched-compact: nav.compact;
+    changed watched-compact => {
+        if (self.watched-compact) {
+            if (nav.search-has-focus) {
+                root.search-open = true;
+                focus-flyout.running = true;
+            }
+        } else if (flyout.has-focus) {
+            root.search-open = false;
+            focus-panel-search.running = true;
+        }
+    }
+
+    // A Timer, not a call in the same handler: the box only becomes visible on the next pass, and
+    // `search-view.slint` focuses its bar the same way.
+    focus-flyout := Timer {
+        interval: 1ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            flyout.focus-input();
+        }
+    }
+    focus-panel-search := Timer {
+        interval: 1ms;
+        running: false;
+        triggered => {
+            self.running = false;
+            nav.focus-search();
+        }
+    }
+
+    // How far under the search row a scrolled card is cut off. Everything between the two hides
+    // content, so it stays tight and the rest of the row's clearance scrolls with the cards.
     property <length> clip-gap: Theme.pad-sm;
+    // Lined up with the rail's search button, whose field this is.
+    property <length> flyout-top: Theme.pad-lg + nav.rail-search-center-y - flyout.height / 2;
 
-    VerticalLayout {
-        padding-top: Theme.pad-lg;
-        padding-left: Theme.pad-lg;
-        padding-right: Theme.pad-lg;
-        // **No `padding-bottom`** — reserved out here it sits *outside* the viewport and reads as a
-        // dead strip between the last card and the panel border; it belongs to the scrolling column
-        // below. The header's clearance splits the same way, only `clip-gap` of it sitting out here.
-        spacing: root.clip-gap;
+    HorizontalLayout {
+        padding-left: root.lead;
 
-        // **The same row the two hero bands wear**, on a flat page — so this is the mount taking
-        // its `Theme.*` brush defaults, there being no blur under it. The page hands it no leading
-        // slot and reads back only the width floor and the tooltip anchor. **The title is gone
-        // rather than moved**: the five tab names name the page better than the word above them.
-        // **The label array must stay an inline literal** so `@tr` registers the msgids at codegen,
-        // in `tab-*` order. The bar stays mounted while searching — picking a tab is the way out.
-        header := TabSearchHeader {
-            tab-labels: [@tr("Library"), @tr("Playback"), @tr("Interface"),
-                         @tr("Services"), @tr("About")];
-            tab-icons: ["library_music", "play_circle", "palette", "link", "info"];
-            tab-idx <=> SettingsPage.tab-idx;
-            avail-w: root.content-w;
+        // Outside the scroller, so the panel stays put while the cards scroll beside it.
+        VerticalLayout {
+            padding-top: Theme.pad-lg;
+            padding-bottom: Theme.pad-lg;
+            alignment: start;
 
-            filter <=> SettingsPage.search-input;
-            filter-placeholder: @tr("Search settings…");
-            blur-tick: SettingsPage.blur-search-tick;
+            // **The label array must stay an inline literal** so `@tr` registers the msgids at
+            // codegen, in `category-*` order.
+            nav := SettingsNav {
+                labels: [@tr("Library"), @tr("Playback"), @tr("Output"), @tr("Appearance"),
+                         @tr("Window"), @tr("Radio"), @tr("Lyrics"), @tr("Integrations"),
+                         @tr("Updates"), @tr("About")];
+                icons: ["library_music", "play_circle", "volume_up", "palette", "crop_square",
+                        "radio", "lyrics", "link", "system_update", "info"];
+                selected-index <=> SettingsPage.category-idx;
+                avail-w: root.shared-w;
+                search-active: root.flyout-shown;
 
-            // The filter reset rides `tab-changed` in Rust, so the welcome card's deep link
-            // into Services clears it too.
-            tab-selected(i) => { SettingsPage.tab-changed(i); }
-            search-edited => { root.filter-tick-pending += 1; }
+                filter <=> SettingsPage.search-input;
+                filter-placeholder: @tr("Search settings…");
+                blur-tick: SettingsPage.blur-search-tick;
+
+                // The filter reset rides `category-changed` in Rust, so the deep links into a
+                // category clear it too.
+                selected(i) => { SettingsPage.category-changed(i); }
+                search-edited => { root.filter-tick-pending += 1; }
+                search-clicked => { root.toggle-flyout(); }
+            }
         }
 
-        // The body is centred between elastic spacers and capped at one card column, or two plus
-        // their gap, off `SettingsPage` so the width the columns are sized to and the width the body
-        // is drawn at can't be two numbers. **It has no floor**: below the cap it shrinks with the
-        // panel down to whatever its cards report, which is what lets the page fit the narrowest
-        // panel and why there is no horizontal scrollbar.
-        sv := ScrollView {
+        VerticalLayout {
             horizontal-stretch: 1;
-            vertical-stretch: 1;
-            horizontal-scrollbar-policy: always-off;
-            vertical-scrollbar-policy: always-off;
 
-            HorizontalLayout {
-                alignment: center;
+            // Collapsed through explicit bounds and `visible` rather than an `if`, so the bar's
+            // `changed blur-trigger` tracker never outlives a branch; the zero `min-width` replaces
+            // the bar's own, which would floor the body column at it.
+            Rectangle {
+                min-width: 0px;
+                min-height: 0px;
+                preferred-height: root.flyout-shown ? root.flyout-top + flyout.height + root.clip-gap : 0px;
+                max-height: root.flyout-shown ? root.flyout-top + flyout.height + root.clip-gap : 0px;
+                visible: root.flyout-shown;
 
-                Rectangle {
-                    max-width: SettingsPage.body-w;
-                    horizontal-stretch: 1;
+                flyout := SearchBar {
+                    x: root.gap;
+                    y: root.flyout-top;
+                    input-width: SettingsPage.card-w;
+                    text <=> SettingsPage.search-input;
+                    placeholder: @tr("Search settings…");
+                    blur-trigger: SettingsPage.blur-search-tick;
+                    edited => { root.filter-tick-pending += 1; }
+                }
+            }
+
+            // The body sits beside the panel at `card-w`, which has no floor: below the cap it
+            // shrinks with the page down to whatever its cards report, which is what lets the page
+            // fit the narrowest panel and why there is no horizontal scrollbar.
+            sv := ScrollView {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy: always-off;
+
+                HorizontalLayout {
+                    padding-left: root.gap;
+                    padding-right: Theme.pad-lg;
+                    alignment: start;
 
                     VerticalLayout {
-                        spacing: Theme.pad-lg;
-                        // In here so both scroll with the cards rather than being
-                        // reserved outside the viewport, see the root layout above.
-                        padding-top: 2 * Theme.pad-lg - root.clip-gap;
-                        padding-bottom: Theme.pad-lg;
+                        // In here so both scroll with the cards rather than being reserved outside
+                        // the viewport, which reads as a dead strip. Under the search row the
+                        // clearance splits around `clip-gap`, as above.
+                        padding-top: root.flyout-shown ? 2 * Theme.pad-lg - root.clip-gap : Theme.pad-lg;
+                        // The last card carries the gap under it, see `SectionCard`.
 
-                        SettingsTabs {
-                            tab-index: SettingsPage.tab-idx;
+                        SettingsRouter {
+                            category-index: SettingsPage.category-idx;
                             searching: root.searching;
                         }
 
-                        // Collects the surplus when the mounted tab is shorter than the viewport;
-                        // without it the column stretches the cards themselves instead.
+                        // Collects the surplus when the mounted category is shorter than the
+                        // viewport; without it the column stretches the cards themselves instead.
                         Rectangle {
                             vertical-stretch: 1;
                         }
@@ -187,15 +247,17 @@ export component SettingsView inherits Rectangle {
         scroll-to(o) => { sv.content-y = -o; }
     }
 
-    // Declared last so it paints above the scroll body — left on the tab, a below-anchored tooltip
-    // lands in the body's band and the first card covers it. The frame-tracks-the-host idiom; the
-    // rect derives from the hovered *index*, which the equal-width cells make possible.
+    // Declared last so it paints above the cards — left inside the panel, the pill beside the rail
+    // lands over the body and the first card covers it. The frame-tracks-the-host idiom; the rect
+    // derives from the hovered *row*, which the equal-height rows make possible.
     TooltipFrame {
-        x: header.absolute-position.x - root.absolute-position.x + header.tip-x;
-        y: header.absolute-position.y - root.absolute-position.y + header.tip-y;
-        width: header.tip-w;
-        height: header.tip-h;
-        label: header.tip-label;
-        shown: header.tip-visible;
+        x: nav.absolute-position.x - root.absolute-position.x + nav.tip-x;
+        y: nav.absolute-position.y - root.absolute-position.y + nav.tip-y;
+        width: nav.tip-w;
+        height: nav.tip-h;
+        label: nav.tip-label;
+        shown: nav.tip-visible;
+        side: TooltipSide.right;
+        gap: Theme.pad-md;
     }
 }

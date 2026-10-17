@@ -1,0 +1,13 @@
+import { RadioSection } from "../radio-section.slint";
+
+// The radio directory, which needs no account. The page shape is `library-page.slint`'s.
+export component RadioPage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: radio.has-matches;
+
+    VerticalLayout {
+        radio := RadioSection { category-name: @tr("Radio"); }
+    }
+}

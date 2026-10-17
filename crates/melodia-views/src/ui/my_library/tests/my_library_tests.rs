@@ -58,7 +58,7 @@ fn declared_tabs() -> Vec<String> {
 }
 
 fn declared_tab_count() -> usize {
-    let parsed = melodia_testkit::declared_tab_count(GLOBAL);
+    let parsed = melodia_testkit::declared_count(GLOBAL, "tab-count");
     // The whole line rather than the digits the parser failed on — if it failed, the
     // digits are whatever the split happened to leave, which explains nothing.
     let declared =

@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Szukaj"
 
@@ -37,7 +38,8 @@ msgstr "Ostatnio odtwarzane"
 msgid "Settings"
 msgstr "Ustawienia"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Radio"
@@ -651,7 +653,9 @@ msgstr "Szczegóły"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Tekst"
 
@@ -1210,8 +1214,9 @@ msgstr "Brak następnych utworów"
 msgid "Visualizer"
 msgstr "Wizualizacja"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Wygląd"
 
@@ -2484,27 +2489,38 @@ msgstr "Pokaż wszystkie utwory ({})"
 msgid "Top Result"
 msgstr "Najlepszy wynik"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Interfejs"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Biblioteka"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Wyjście"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Odtwarzanie"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Integracje"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Okno"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "O programie"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Usługi"
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Aktualizacje"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2732,10 +2748,6 @@ msgstr "Tło z albumu"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Maluj miniodtwarzacz kolorami odtwarzanego albumu, tak jak widok Teraz odtwarzane."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Wyjście"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -3225,13 +3237,9 @@ msgstr "Połącz z ListenBrainz"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Najpierw włącz Last.fm lub ListenBrainz powyżej"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Brak pasujących ustawień"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Aktualizacje"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3308,10 +3316,6 @@ msgstr "Aktualizacja krytyczna"
 #: ui/views/settings/update-section.slint
 msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Ta aktualizacja usuwa krytyczny problem i nie można jej pominąć."
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Okno"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"

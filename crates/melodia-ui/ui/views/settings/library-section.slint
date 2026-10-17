@@ -22,7 +22,7 @@ export component LibrarySection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> tab-name;
+    in property <string> category-name;
 
     property <string> manage-label: @tr("Manage Folders");
     property <string> add-label: @tr("Add Folder");
@@ -30,7 +30,7 @@ export component LibrarySection inherits Rectangle {
     property <string> card-title: @tr("Library Folders");
 
     out property <bool> has-matches:
-        SettingsPage.row-visible(root.tab-name, root.card-title,
+        SettingsPage.row-visible(root.category-name, root.card-title,
                                  manage-label + " " + add-label,
                                  SettingsPage.search-query);
 

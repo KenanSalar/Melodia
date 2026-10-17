@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Αναζήτηση"
 
@@ -37,7 +38,8 @@ msgstr "Πρόσφατα αναπαραγόμενα"
 msgid "Settings"
 msgstr "Ρυθμίσεις"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Ραδιόφωνο"
@@ -651,7 +653,9 @@ msgstr "Λεπτομέρειες"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Στίχοι"
 
@@ -1209,8 +1213,9 @@ msgstr "Δεν υπάρχουν επόμενα κομμάτια"
 msgid "Visualizer"
 msgstr "Οπτικοποίηση"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Εμφάνιση"
 
@@ -2460,27 +2465,38 @@ msgstr "Εμφάνιση και των {} τραγουδιών"
 msgid "Top Result"
 msgstr "Κορυφαίο αποτέλεσμα"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Διεπαφή"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Βιβλιοθήκη"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Έξοδος"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Αναπαραγωγή"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Ενσωματώσεις"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Παράθυρο"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Σχετικά"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Υπηρεσίες"
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Ενημερώσεις"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2710,10 +2726,6 @@ msgstr "Φόντο άλμπουμ"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Βάφει τον μίνι αναπαραγωγέα με τα χρώματα του άλμπουμ που παίζει, όπως κάνει η προβολή «Αναπαράγεται τώρα»."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Έξοδος"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -3203,13 +3215,9 @@ msgstr "Σύνδεση ListenBrainz"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Ενεργοποιήστε πρώτα το Last.fm ή το ListenBrainz παραπάνω"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Καμία ρύθμιση δεν ταιριάζει"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Ενημερώσεις"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3286,10 +3294,6 @@ msgstr "Κρίσιμη ενημέρωση"
 #: ui/views/settings/update-section.slint
 msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Αυτή η ενημέρωση διορθώνει ένα κρίσιμο πρόβλημα και δεν μπορεί να παραλειφθεί."
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Παράθυρο"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"

@@ -22,7 +22,7 @@ const TABS: usize = 3;
 /// matching body branch leaves the page blank on that tab.
 #[test]
 fn tab_count_matches_the_tabs_slint_declares() {
-    let declared = melodia_testkit::declared_tab_count(GLOBAL);
+    let declared = melodia_testkit::declared_count(GLOBAL, "tab-count");
     assert_eq!(
         declared,
         Some(TABS),

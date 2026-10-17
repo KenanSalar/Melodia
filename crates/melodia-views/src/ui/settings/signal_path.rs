@@ -8,7 +8,7 @@
 use async_compat::Compat;
 use slint::{ComponentHandle, SharedString};
 
-use crate::ui::settings::settings_page::{self, SettingsTab};
+use crate::ui::settings::settings_page::{self, SettingsCategory};
 use crate::ui::util;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -31,7 +31,7 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     let weak = ui.as_weak();
     ui.global::<Settings>().on_open_signal_path(move || {
         if let Some(ui) = weak.upgrade() {
-            settings_page::open_on(&ui, SettingsTab::Playback);
+            settings_page::open_on(&ui, SettingsCategory::Output);
         }
     });
 
