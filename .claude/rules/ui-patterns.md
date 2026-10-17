@@ -182,9 +182,10 @@ silently miss the other.
   the card. Switches, dropdowns, outline buttons, progress bars and dialog fields take the pair by
   default, mounting only on cards. `FilledChip` and `SliderTrack` keep `surface1` defaults for
   their hosts off a card (Radio's chips, the seek row, the volume popup), so a card host passes the
-  pair itself, as `ChipGroup` and `SettingSlider` do. Both are palette slots rather than a Slint mix
-  of other brushes so each theme sets its own; `themes::toward` is the rule the generated palettes
-  fill them by.
+  pair itself, as `ChipGroup` and `SettingSlider` do. `SearchBar` floats by default and takes the
+  pair under `on-card`, which the Settings panel's box sets. Both are palette slots rather than a
+  Slint mix of other brushes so each theme sets its own; `themes::toward` is the rule the generated
+  palettes fill them by.
 
 - **A sort row's Rust half is two shared helpers** — `next_sort` decides the pick (same field
   flips, a new one starts ascending), `persist_view_sort` writes it, `persisted_sort` seeds the

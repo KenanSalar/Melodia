@@ -59,9 +59,10 @@ export component SettingsView inherits Rectangle {
     property <length> gap: Theme.pad-lg;
     // What the panel and the body beside it share: the page less its own padding and the gap.
     property <length> shared-w: max(0px, root.view-w - 2 * Theme.pad-lg - root.gap);
-    // Centres the panel and one card at the cap as a group, down to the page padding.
-    property <length> lead: max(Theme.pad-lg,
-        (root.view-w - nav.drawn-w - root.gap - SettingsPage.card-cap) / 2);
+    // Centres the panel and one card at the cap as a group, down to the page padding. Rounded,
+    // since a half-pixel origin splits every vertical rim on the page across two dim columns.
+    property <length> lead: Math.round(max(Theme.pad-lg,
+        (root.view-w - nav.drawn-w - root.gap - SettingsPage.card-cap) / 2) / 1phx) * 1phx;
     // What's right of the panel, less the gap and the right padding — published, since a card is
     // drawn at it and can't measure its own column (`SettingsPage.card-w`).
     property <length> body-avail: max(0px,

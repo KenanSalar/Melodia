@@ -229,8 +229,8 @@ fn an_inset_bar_does_not_swell() {
     let src = normalized(SEARCH_BAR);
     assert!(
         src.contains("in property <bool> inset: false;"),
-        "search-bar.slint's variant no longer defaults to the floating shape, which is what the \
-         three mounts that never name it are asking for"
+        "search-bar.slint's variant no longer defaults to the floating shape, which is what every \
+         mount that never names it is asking for"
     );
     // Two halves, since a host can now turn the swell off on a stadium too: the default has to
     // follow `inset`, and the scale has to follow the knob.

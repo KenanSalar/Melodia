@@ -50,11 +50,12 @@ export component SettingsNav inherits Rectangle {
 
     // **Measured, not a literal**, the labels being translated, and clamped so a long locale can't
     // take the page while the search box keeps room for its `min-w`. The chrome is the insets this
-    // panel hands each row plus `NavRow`'s glyph and the gap after it.
+    // panel hands each row plus `NavRow`'s glyph and the gap after it. Rounded up to a whole
+    // pixel, the measured label being fractional and the cards beside the panel taking its edge.
     property <length> label-w: ruler.preferred-width;
-    out property <length> expanded-w: clamp(
-        root.label-w + 2 * root.row-pad + 22px + Theme.pad-md + 2 * root.card-pad,
-        184px, 240px);
+    property <length> natural-w:
+        root.label-w + 2 * root.row-pad + 22px + Theme.pad-md + 2 * root.card-pad;
+    out property <length> expanded-w: clamp(Math.ceil(root.natural-w / 1phx) * 1phx, 184px, 240px);
 
     // The `TabBar` latch: a resize drag hands over a stream of one-pixel widths and a hand jitters
     // over the last of them, so a bare comparison flips on every one straddling the line.
@@ -173,6 +174,7 @@ export component SettingsNav inherits Rectangle {
                             x: 0;
                             y: 0;
                             focus-swell: false;
+                            on-card: true;
                             corner-radius: Theme.radius-md;
                             bar-height: root.row-h;
                             input-width: root.drawn-w - 2 * root.card-pad;
