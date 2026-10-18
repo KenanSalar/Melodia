@@ -81,3 +81,11 @@ pub struct TrackOrder {
     pub field: TrackSortField,
     pub dir: SortDir,
 }
+
+impl TrackOrder {
+    /// The order a header cell or a saved view names by its field token.
+    #[must_use]
+    pub fn new(field_token: &str, dir: SortDir) -> Self {
+        Self { field: TrackSortField::from_token(field_token), dir }
+    }
+}

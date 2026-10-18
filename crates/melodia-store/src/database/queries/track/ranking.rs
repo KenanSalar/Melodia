@@ -21,10 +21,15 @@ use melodia_core::utils::needle::Needle;
 /// last gap.
 const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added DESC, id ASC";
 
-/// Aggregate stats for the Favorites hero header: count, total duration, up to 4 artwork paths.
+/// Aggregate stats for the Favorites hero header: count, total duration, the artist and album
+/// spread, up to 4 artwork paths.
 pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
-    let (count, total_duration_ms): (i64, i64) = sqlx::query_as(
-        "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM tracks WHERE is_favorite = TRUE",
+    // `COUNT(DISTINCT …)` skips NULLs, so an untagged track adds no artist or album, as
+    // `ui::hero_folds::fold_tracks` reads the same two columns off a list's rows.
+    let (count, total_duration_ms, artists, albums): (i64, i64, i64, i64) = sqlx::query_as(
+        "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), \
+                COUNT(DISTINCT artist_id), COUNT(DISTINCT album_id) \
+           FROM tracks WHERE is_favorite = TRUE",
     )
     .fetch_one(db.read())
     .await?;
@@ -54,7 +59,7 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
     .fetch_all(db.read())
     .await?;
 
-    Ok(track::FavoriteStats { count, total_duration_ms, artwork_paths })
+    Ok(track::FavoriteStats { count, total_duration_ms, artists, albums, artwork_paths })
 }
 
 /// Favorite tracks by play count, most played first (only those with `play_count` > 0), ordered

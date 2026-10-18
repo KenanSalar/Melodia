@@ -1,116 +1,161 @@
-//! DB fetch + filter rebuild + favourite-row in-place update.
+//! The Songs list's keyset loads, and the row patch a favourite or rating takes.
+//!
+//! Every load takes its ticket on the thread that read its sort and filter, before it spawns, so
+//! the last one asked for is the one shown whichever query lands first.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Weak};
 
 use super::TracksUi;
+use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::list_selection;
-use crate::ui::track_list_cache::{CacheData, VisibleRows};
-use crate::ui::track_list_model::TrackListModel;
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
+use crate::ui::paged_rows::{Keyset, Ticket};
+use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder};
 use melodia_core::error::AppResult;
-use melodia_core::utils::needle::fold_needle;
-use melodia_ui::{AppWindow, Tracks};
+use melodia_core::utils::needle::{Needle, fold_needle};
+use melodia_ui::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
-/// Re-fetch the full list from the DB, store it in `tracks_ui`, then push the
-/// filtered+sorted view into the Slint model. Async — runs on the tokio
-/// runtime; the UI write is hopped back via `upgrade_in_event_loop`.
-///
-/// Cover thumbnails for unique paths are decoded in parallel via Rayon
-/// inside a `spawn_blocking` task, so the rows the `ListView` mounts find a
-/// warm tier instead of each dragging a decode onto the UI thread.
-pub async fn fetch_and_apply(
-    state: &AppState,
-    tracks_ui: &TracksUi,
-    weak: Weak<AppWindow>,
-    sort_field: String,
-    sort_dir: String,
-    filter: String,
-) -> AppResult<()> {
-    // Fetched in the query's fixed `sort_key` order — display order is derived
-    // entirely in memory below, so the cold fetch and a later header-click
-    // re-sort share the one `compute_track_order` code path.
-    let rows = library::tracks::get_tracks(&state.db).await?;
+/// The sort and the filter a load runs under, captured when it is asked for.
+pub struct SongsQuery {
+    order: TrackOrder,
+    needle: Needle,
+}
 
-    // Consumes `rows`: each DB row's strings are freed as its converted row
-    // is built, so the peak never holds the library's text twice.
-    tracks_ui.cache.store(rows, &sort_field, &sort_dir);
-
-    // Pre-warm the thumbnail cache off the runtime worker pool. Album art
-    // decoding is CPU-bound; Rayon parallelizes across cores while
-    // `spawn_blocking` keeps the tokio runtime responsive. Walked in
-    // DISPLAY order so that on a library with more unique covers than the
-    // cache holds, the entries surviving the cap are the ones the user sees
-    // first.
-    let snapshot = tracks_ui.cache.snapshot();
-    let unique_paths: Vec<PathBuf> = snapshot.artwork_paths(tracks_ui.cover_thumbs.capacity());
-    if !unique_paths.is_empty() {
-        let thumbs = tracks_ui.cover_thumbs.clone();
-        let _ = tokio::task::spawn_blocking(move || {
-            thumbs.prewarm(&unique_paths);
-        })
-        .await;
+impl SongsQuery {
+    pub fn new(sort_field: &str, sort_dir: &str, filter: &str) -> Self {
+        Self {
+            order: TrackOrder::new(sort_field, SortDir::from_token(sort_dir)),
+            needle: fold_needle(filter),
+        }
     }
-
-    apply(&weak, snapshot, &filter);
-    Ok(())
 }
 
-/// Re-derive the visible rows after a filter change. No DB hit, and no row
-/// copied: the model reads the cache's own.
-pub fn refilter(weak: &Weak<AppWindow>, tracks_ui: &TracksUi, filter: &str) {
-    apply(weak, tracks_ui.cache.snapshot(), filter);
-}
-
-/// Re-sort the Tracks view after a header-column click. Fully in memory:
-/// recomputes only the display permutation — no DB round-trip and no key
-/// rebuild, since a sort change reorders rows but leaves the `(row, key)`
-/// set alone.
-///
-/// Called from `on_request_sort` (already on the UI thread); the sort runs
-/// inline, then the model write hops through `upgrade_in_event_loop` exactly
-/// like `refilter`.
-pub fn resort_and_apply(
+/// Reload the list: its ids, the rows it opens on with their covers warm, and every row it still
+/// holds read again. What a launch, a re-enter and a library tick ask for.
+pub fn refresh(
+    state: &AppState,
+    tracks_ui: &Arc<TracksUi>,
     weak: &Weak<AppWindow>,
-    tracks_ui: &TracksUi,
-    sort_field: &str,
-    sort_dir: &str,
-    filter: &str,
+    query: SongsQuery,
 ) {
-    apply(weak, tracks_ui.cache.resort(sort_field, sort_dir), filter);
+    let ticket = tracks_ui.tickets.issue();
+    let s = state.clone();
+    let tu = Arc::clone(tracks_ui);
+    let weak = weak.clone();
+    spawn_logged!(s, "tracks::refresh", refresh_now(&s, tu, weak, ticket, query));
 }
 
-/// Filter `snapshot` into display order and show the result.
-///
-/// The walk runs on the **calling** thread — the runtime worker on the cold
-/// fetch path, the UI thread on a refilter or resort, which is where those
-/// two already are. Only the finished selection crosses the hop; deferring
-/// the walk instead would put the cold path's whole filter on the event loop.
-fn apply(weak: &Weak<AppWindow>, snapshot: Arc<CacheData>, filter: &str) {
-    let total = snapshot.total();
-    let visible = VisibleRows::new(snapshot, &fold_needle(filter));
+/// Reload the ids under a new sort or filter. The rows the list holds are still current and the
+/// library hasn't changed size, so it re-reads no row, warms no cover and leaves the count.
+pub fn requery(
+    state: &AppState,
+    tracks_ui: &Arc<TracksUi>,
+    weak: &Weak<AppWindow>,
+    query: SongsQuery,
+) {
+    let ticket = tracks_ui.tickets.issue();
+    let s = state.clone();
+    let tu = Arc::clone(tracks_ui);
+    let weak = weak.clone();
+    spawn_logged!(s, "tracks::requery", requery_now(&s, tu, weak, ticket, query));
+}
+
+/// Patch the row showing `id` after a favourite or rating write. Only that row is read again, so
+/// scroll position and its neighbours stay put.
+pub fn patch_row(
+    weak: &Weak<AppWindow>,
+    id: i64,
+    edit: impl FnOnce(&mut UiTrackListRow) + Send + 'static,
+) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
+        let rows = ui.global::<Tracks>().get_rows();
+        if let Some(model) = TrackRows::installed(&rows, "Tracks.rows") {
+            model.patch(id, edit);
+        }
+    });
+}
+
+async fn refresh_now(
+    state: &AppState,
+    tracks_ui: Arc<TracksUi>,
+    weak: Weak<AppWindow>,
+    ticket: Ticket,
+    query: SongsQuery,
+) -> AppResult<()> {
+    let keyset = track_rows::load(
+        state,
+        TrackListScope::Library,
+        query.order,
+        &query.needle,
+        &tracks_ui.scroll,
+    )
+    .await?;
+    let total = library_total(state, &keyset, &query.needle).await?;
+    track_rows::prewarm(&tracks_ui.cover_thumbs, &keyset).await;
+
+    let unfiltered = query.needle.is_empty();
+    let _ = weak.upgrade_in_event_loop(move |ui| {
+        if !tracks_ui.tickets.is_latest(ticket) {
+            return;
+        }
         let g = ui.global::<Tracks>();
         g.set_total_count(total);
         let rows = g.get_rows();
-        if let Some(model) = TrackListModel::installed(&rows, "Tracks.rows") {
-            list_selection::keep_selection_within(&g, || visible.held_ids());
-            model.show(visible);
+        let Some(model) = TrackRows::installed(&rows, "Tracks.rows") else {
+            return;
+        };
+        model.show(keyset);
+        model.reread();
+        // A filtered keyset no longer holds the rows the filter hides, and a filter drops no
+        // pick, so only an unfiltered one can say which picks the library has lost.
+        if unfiltered {
+            list_selection::keep_selection_within(&g, || model.row_ids().into_iter().collect());
         }
     });
+    Ok(())
 }
 
-/// Repaint the row showing `id` after a favourite or rating patch to the
-/// cache. Only that row is read again — scroll position and neighbouring
-/// rows stay put.
-pub fn repaint_row(weak: &Weak<AppWindow>, id: i64) {
+async fn requery_now(
+    state: &AppState,
+    tracks_ui: Arc<TracksUi>,
+    weak: Weak<AppWindow>,
+    ticket: Ticket,
+    query: SongsQuery,
+) -> AppResult<()> {
+    let keyset = track_rows::load(
+        state,
+        TrackListScope::Library,
+        query.order,
+        &query.needle,
+        &tracks_ui.scroll,
+    )
+    .await?;
     let _ = weak.upgrade_in_event_loop(move |ui| {
+        if !tracks_ui.tickets.is_latest(ticket) {
+            return;
+        }
         let rows = ui.global::<Tracks>().get_rows();
-        if let Some(model) = TrackListModel::installed(&rows, "Tracks.rows") {
-            model.repaint(id);
+        if let Some(model) = TrackRows::installed(&rows, "Tracks.rows") {
+            model.show(keyset);
         }
     });
+    Ok(())
+}
+
+/// The library's size, which the header states whatever the filter leaves.
+async fn library_total(
+    state: &AppState,
+    keyset: &Keyset<UiTrackListRow>,
+    needle: &Needle,
+) -> AppResult<i32> {
+    if needle.is_empty() {
+        return Ok(len_as_i32(keyset.ids.len()));
+    }
+    let count = library::tracks::count(&state.db).await?;
+    Ok(i32::try_from(count).unwrap_or(i32::MAX))
 }

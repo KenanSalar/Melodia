@@ -65,7 +65,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 g.set_most_played_count(UNFETCHED_COUNT);
                 g.set_artist_count(UNFETCHED_COUNT);
                 list_selection::clear_row_selection(&g);
-                favorites_ui_mod::hide_tracks(&g);
+                favorites_ui_mod::release_tracks(&g);
                 clear_vec_model::<UiEntityGridRow>(
                     &g.get_most_played_rows(),
                     "favorites: clear most-played",

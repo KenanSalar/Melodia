@@ -5,8 +5,8 @@
 //! the queue sheet patches two of its own: walk the model, mutate the rows that
 //! matter, write back only those. This module owns that walk; the per-view
 //! `apply_row_*` wrappers keep only their `upgrade_in_event_loop` hop and the global
-//! they read. The two Songs lists patch their cache instead and ask its
-//! [`TrackListModel`](crate::ui::track_list_model::TrackListModel) to repaint.
+//! they read. The two Songs lists patch the row their
+//! [`PagedRows`](crate::ui::paged_rows::PagedRows) holds instead.
 
 use slint::{Model, ModelRc, VecModel};
 

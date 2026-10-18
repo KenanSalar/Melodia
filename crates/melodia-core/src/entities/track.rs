@@ -19,9 +19,9 @@
 //! | [`TrackLinks`] | the three FK ids a "Go to …" menu entry navigates by |
 //!
 //! A new caller takes the closest existing projection rather than adding a
-//! near-duplicate of one. Where the problem is instead a list held *resident*
-//! carrying columns it never draws, the answer is `ui::track_list_cache`, which
-//! converts at fetch and frees the rest.
+//! near-duplicate of one. A list that can be library-sized holds no projection
+//! per track at all: it keeps ids and fetches the rows near its viewport
+//! (`ui::paged_rows`).
 
 use sqlx::FromRow;
 
@@ -348,10 +348,14 @@ pub struct Track {
 }
 
 /// Aggregate stats for the Favorites hero header.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct FavoriteStats {
     pub count: i64,
     pub total_duration_ms: i64,
+    /// Distinct primary artists (`tracks.artist_id`), the spread the Songs tab's band states.
+    pub artists: i64,
+    /// Distinct albums (`tracks.album_id`).
+    pub albums: i64,
     pub artwork_paths: Vec<String>,
 }
 

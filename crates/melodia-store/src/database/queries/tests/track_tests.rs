@@ -413,38 +413,6 @@ async fn set_favorite_flips_flag() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn get_favorite_tracks_returns_only_favorites() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db).await?;
-
-    // Favorite the first track
-    queries::track::set_favorite(&db, &[all[0].id], true).await?;
-
-    let favs = queries::track::get_favorite_tracks_for_list(&db).await?;
-    assert_eq!(favs.len(), 1);
-    assert_eq!(favs[0].id, all[0].id);
-    assert!(favs[0].is_favorite);
-    Ok(())
-}
-
-#[tokio::test]
-async fn the_favorites_fetch_shares_the_whole_table_order() -> Result<(), AppError> {
-    // The Songs tab hands its own permutation to `store_in_order`, computed
-    // before the section guards let it store — so the two orders only line up
-    // because this fetch and `get_all_tracks_for_list` share one clause.
-    // Backwards-seeded for the reason the whole-table pin above is.
-    let db = seed_db_inserted_backwards().await?;
-    let all = queries::track::get_all_tracks(&db).await?;
-    let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
-    queries::track::set_favorite(&db, &ids, true).await?;
-
-    let favs = queries::track::get_favorite_tracks_for_list(&db).await?;
-    let titles: Vec<&str> = favs.iter().map(|t| t.title.as_str()).collect();
-    assert_eq!(titles, ["Alpha", "Beta", "Gamma"]);
-    Ok(())
-}
-
-#[tokio::test]
 async fn set_favorite_empty_ids_is_noop() -> Result<(), AppError> {
     let db = seed_db().await?;
     // Should not error

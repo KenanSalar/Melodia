@@ -173,7 +173,6 @@ pub fn install_views(
 
     // The Now-Playing heart and star rating fan into every per-row cache.
     let row_flags = ui::callbacks::RowFlagHandles {
-        tracks: &tracks_ui,
         browse: &browse_ui,
         albums: &albums_ui,
         artists: &artists_ui,

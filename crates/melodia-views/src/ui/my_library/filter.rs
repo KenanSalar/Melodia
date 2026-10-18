@@ -133,12 +133,12 @@ pub fn clear_mounted(ui: &AppWindow) {
 /// so all that is owed here is not to have overwritten [`UNFETCHED_COUNT`] in between.
 ///
 /// **Songs and the four details are excluded, and neither is an omission.** Songs' model
-/// survives the leave, so `refilter` re-derives a true count off a warm cache; a detail
-/// arm writes no grid count at all, its own `open_*` re-running on the same enter.
+/// survives the leave and a requery leaves its count alone, so the count is still true; a
+/// detail arm writes no grid count at all, its own `open_*` re-running on the same enter.
 fn rewind_grid_count(ui: &AppWindow) {
     let surface = mounted_surface(ui);
     // Songs falls in the grid arm too, so it is excluded here rather than by the
-    // dispatch: `Tracks` carries no `total-count` for the header to read.
+    // dispatch: its count describes the rows its leave kept.
     if surface.tab == MyLibraryTab::Songs {
         return;
     }

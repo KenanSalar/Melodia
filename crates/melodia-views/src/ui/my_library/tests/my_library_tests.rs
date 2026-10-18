@@ -485,13 +485,13 @@ fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
 /// therefore rebuilds each grid tab from nothing — `total-count = 0` and an empty model,
 /// precisely the pair `GridEmptyState` mounts on, overwriting the `UNFETCHED_COUNT`
 /// sentinel the leave wrote to keep that panel quiet until the fetch answers. Songs pays
-/// the same write without the lie: a second full-library row build on the event loop.
+/// the dispatch without the lie: a keyset query for a list nothing narrowed.
 ///
 /// **And where it does dispatch, it puts the sentinel back.** The guard removes the
 /// common case and not the rare one — a tab left *filtered* is still cleared through the
 /// rebuild, so the `0` still lands, and `rewind_grid_count` is what makes that honest.
-/// Songs is excluded because its model survives the leave and `refilter` re-derives a
-/// true count; the four details because a detail arm writes no grid count at all.
+/// Songs is excluded because its model survives the leave and a requery leaves its count
+/// alone; the four details because a detail arm writes no grid count at all.
 ///
 /// The mutation to check is reinstating the bare `dispatch(&ui, "")`, which
 /// [`a_tab_pick_clears_the_filter_on_both_sides`] passes on just as happily: the box
@@ -532,8 +532,7 @@ fn a_tab_pick_dispatches_only_into_a_tab_that_is_filtered() {
     assert!(
         rewind.contains("MyLibraryTab::Songs") && rewind.contains("return;"),
         "`rewind_grid_count` must bail on Songs before it dispatches — its model survives \
-         the leave, so `refilter` re-derives a true count off a warm cache and there is \
-         nothing to take back",
+         the leave and a requery leaves its count alone, so there is nothing to take back",
     );
 
     let handler = CALLBACKS

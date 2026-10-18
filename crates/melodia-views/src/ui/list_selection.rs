@@ -15,7 +15,7 @@ use std::hash::BuildHasher;
 
 use slint::{Model, ModelRc, VecModel};
 
-use crate::ui::track_list_model::TrackListModel;
+use crate::ui::paged_rows::track_rows::TrackRows;
 use melodia_ui::{
     AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed, Search,
     TrackListRow as UiTrackListRow, Tracks,
@@ -75,13 +75,13 @@ pub fn compute_click_selection(
 /// Re-stamp `selected: bool` on every visible row to match `desired`. Rows
 /// whose flag already matches are skipped — `set_row_data` invalidates the
 /// `ListView` delegate cache for that row, so a full rewrite would re-build
-/// every row component on every click. A [`TrackListModel`] keeps the set
-/// itself and makes the same skip without cloning a row. UI-thread only.
+/// every row component on every click. A [`TrackRows`] keeps the set
+/// itself and makes the same skip without fetching a row. UI-thread only.
 pub fn stamp_rows_selected<S: BuildHasher>(
     rows: &ModelRc<UiTrackListRow>,
     desired: &HashSet<i32, S>,
 ) {
-    if let Some(model) = TrackListModel::of(rows) {
+    if let Some(model) = TrackRows::of(rows) {
         model.select(desired);
         return;
     }
@@ -123,11 +123,11 @@ pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
 /// accessor to make either clone free. Keeps that function's skip-if-unchanged guard for the
 /// same reason it has one.
 ///
-/// A [`TrackListModel`] answers from its snapshot, every row it holds being a library row.
-/// Falls back to [`displayed_ids`] where the model is neither, which is [`stamp_rows_selected`]'s
-/// own early return: there is nothing to stamp either way.
+/// A [`TrackRows`] answers from its keyset, every id in it being a library row, and walking it
+/// would fetch every page. Falls back to [`displayed_ids`] where the model is neither, which is
+/// [`stamp_rows_selected`]'s own early return: there is nothing to stamp either way.
 pub fn select_all_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
-    if let Some(model) = TrackListModel::of(rows) {
+    if let Some(model) = TrackRows::of(rows) {
         return model.select_all();
     }
     let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
@@ -324,10 +324,19 @@ pub fn keep_selection_within<V: RowSelectionView>(view: &V, held: impl FnOnce() 
     stamp_rows_selected(&view.track_rows(), &kept_set);
 }
 
+/// Drops `removed` from a view's selection, the anchor with it, when rows leave a list ahead of
+/// its refetch. Every other pick stays, the ones a filter hides included. UI-thread only.
+pub fn forget_rows<V: RowSelectionView, S: BuildHasher>(view: &V, removed: &HashSet<i32, S>) {
+    let anchor = view.anchor();
+    keep_selection_within(view, || {
+        view.selected_ids().iter().chain([anchor]).filter(|id| !removed.contains(id)).collect()
+    });
+}
+
 /// Every row's id in display order, one per row so a click's index still names its row.
 fn row_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
-    match TrackListModel::of(rows) {
-        Some(model) => model.ids(),
+    match TrackRows::of(rows) {
+        Some(model) => model.row_ids(),
         None => (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect(),
     }
 }

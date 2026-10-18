@@ -134,27 +134,18 @@ pub fn spawn_initial_tracks_fetch(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,
     view_state: Option<&services::view_state::ViewStateData>,
-    weak: slint::Weak<AppWindow>,
+    weak: &slint::Weak<AppWindow>,
 ) {
     if !tracks_ui.section_active() {
         tracks_ui.mark_dirty();
         return;
     }
-    let (sort_field, sort_dir) =
-        ui::callbacks::persisted_sort(view_state, ui::track_list_view::view_id::TRACKS)
-            .map_or_else(
-                || ("title".to_owned(), "asc".to_owned()),
-                |sort| (sort.field.clone(), sort.dir.as_str().to_owned()),
-            );
-    let s = state.clone();
-    let tu = tracks_ui.clone();
-    state.runtime.spawn(async move {
-        if let Err(e) =
-            ui::tracks::fetch_and_apply(&s, &tu, weak, sort_field, sort_dir, String::new()).await
-        {
-            log::warn!("initial tracks fetch: {}", describe(&e));
-        }
-    });
+    let query = ui::callbacks::persisted_sort(view_state, ui::track_list_view::view_id::TRACKS)
+        .map_or_else(
+            || ui::tracks::SongsQuery::new("title", "asc", ""),
+            |sort| ui::tracks::SongsQuery::new(&sort.field, sort.dir.as_str(), ""),
+        );
+    ui::tracks::refresh(state, tracks_ui, weak, query);
 }
 
 /// Kick off an entity grid's initial fetch, if the launch shows its My Library tab.
@@ -166,7 +157,7 @@ pub fn spawn_initial_tracks_fetch(
 /// A macro rather than a generic `fn` because each `fetch_grid` is a free function in
 /// its own module, and no trait the four `*Ui` types share carries it. Tracks is
 /// deliberately not among them, resolving a persisted sort and calling
-/// `fetch_and_apply` instead.
+/// `ui::tracks::refresh` instead.
 macro_rules! initial_grid_fetch {
     ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty, $label:literal) => {
         $(#[$doc])*

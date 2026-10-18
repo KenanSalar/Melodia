@@ -16,10 +16,10 @@ use slint::ComponentHandle;
 /// isn't observed — `changed()` only resolves on a real `send_modify` — so this
 /// doesn't race the explicit initial fetch.
 ///
-/// Gated on section visibility, because play-count flushes bump this channel
-/// after every track completion: ungated, plain listening re-fetches the whole
-/// library once per song with the view hidden. While hidden the bump folds into
-/// the `TracksUi` dirty flag and the section gate runs one refresh on re-enter.
+/// Gated on section visibility, because every favourite, rating, tag edit and
+/// watcher batch bumps this channel, and a list nobody can see has no reason to
+/// reload for one. While hidden the bump folds into the `TracksUi` dirty flag
+/// and the section gate runs one refresh on re-enter.
 pub fn install_library_changed_refresher(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,

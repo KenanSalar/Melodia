@@ -2,6 +2,7 @@ use super::apply::build_filtered_grids;
 use super::sort::{set_artist_sort, sort_artists};
 use super::warm::mounted_content;
 use crate::ui::favorites::{FavoritesTab, FavoritesUi};
+use crate::ui::paged_rows::ScrollPoint;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::artist::FavoriteArtist;
 use melodia_core::entities::track::MostPlayedFavorite;
@@ -36,7 +37,8 @@ fn favorite_artist(name: &str, favorite_count: i32) -> FavoriteArtist {
 }
 
 fn seeded(play_count: i32, favorite_count: i32) -> FavoritesUi {
-    let fav_ui = FavoritesUi::new(std::sync::Arc::new(CoverThumbs::new()), None);
+    let fav_ui =
+        FavoritesUi::new(std::sync::Arc::new(CoverThumbs::new()), None, ScrollPoint::default());
     *fav_ui.state().most_played.lock() = vec![most_played(play_count)];
     *fav_ui.state().fav_artists.lock() = vec![favorite_artist("Artist", favorite_count)];
     fav_ui
@@ -261,7 +263,8 @@ fn an_unknown_sort_field_falls_back_to_favorite_count() {
 /// own output and skip the one apply that had to run.
 #[test]
 fn a_re_sort_moves_the_artists_hash() {
-    let fav_ui = FavoritesUi::new(std::sync::Arc::new(CoverThumbs::new()), None);
+    let fav_ui =
+        FavoritesUi::new(std::sync::Arc::new(CoverThumbs::new()), None, ScrollPoint::default());
     *fav_ui.state().fav_artists.lock() = unsorted();
     // The grid is only walked while its own tab is mounted, and a re-sort is a
     // thing the user does from that tab.
@@ -283,7 +286,8 @@ fn a_re_sort_moves_the_artists_hash() {
 /// leave the cache itself in display order.
 #[test]
 fn set_artist_sort_reorders_the_cache_the_prewarm_reads() {
-    let fav_ui = FavoritesUi::new(std::sync::Arc::new(CoverThumbs::new()), None);
+    let fav_ui =
+        FavoritesUi::new(std::sync::Arc::new(CoverThumbs::new()), None, ScrollPoint::default());
     *fav_ui.state().fav_artists.lock() = unsorted();
 
     set_artist_sort(&fav_ui, "name".to_owned(), SortDir::Asc);

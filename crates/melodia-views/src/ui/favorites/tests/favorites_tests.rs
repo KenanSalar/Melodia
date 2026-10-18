@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use super::{FavoritesTab, FavoritesUi};
+use crate::ui::paged_rows::ScrollPoint;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::artist::FavoriteArtist;
 use melodia_testkit::write_test_png;
@@ -21,23 +22,17 @@ const SONGS_TAB: &str =
 const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
 
 /// `Favorites.tracks` feeds one element in the whole tree, under the Songs
-/// tab's `if` — so off that tab, every filter walk the Songs path runs
-/// reaches nothing and every snapshot it leaves in the model is pinned behind a
-/// view nobody can see.
+/// tab's `if` — so off that tab, every keyset load the Songs path runs
+/// reaches nothing.
 ///
-/// Four things hold that, and each fails differently. `build_filtered_tracks`'
-/// bail is what skips the cost; drop it and the tab gate becomes decorative,
-/// with the whole favourites list still walked per keystroke on the UI thread.
-/// `write_filtered_tracks`' is what survives a pick landing mid-post; drop it
-/// and the retention comes back on exactly the race the first one can't see. The
-/// tab-leave **clear** is what empties what the last visit left; drop it and the
-/// snapshot simply stays. And the tab pick writing through the **non-hopping**
-/// `apply_filtered_tracks_now` is what stops that clear becoming visible: the
-/// entering tab mounts on the next frame, and a posted write that loses the race
-/// paints a `TrackList` of headers over nothing.
+/// Two things hold that, and each fails differently. `requery_tracks`' bail is
+/// what skips the query; drop it and the tab gate becomes decorative, every
+/// keystroke on a grid tab reloading a list nobody can see. `show_tracks`'
+/// re-check is what survives a pick landing mid-load; drop it and a load the
+/// pick overtook replaces the list the tab left behind, without the dirty flag
+/// that tells the next visit to reload it.
 ///
-/// None of the four shows on screen except the last, and that one only for a
-/// frame — which is why they are pinned rather than trusted.
+/// Neither shows on screen, which is why they are pinned rather than trusted.
 #[test]
 fn the_songs_model_is_written_only_while_its_tab_is_mounted() {
     assert!(
@@ -45,27 +40,24 @@ fn the_songs_model_is_written_only_while_its_tab_is_mounted() {
         "songs-tab.slint is the sole reader of `Favorites.tracks` — if that moved, this gate needs re-deriving"
     );
 
-    let build =
-        SONGS.split_once("fn build_filtered_tracks").map(|(_, rest)| rest).unwrap_or_default();
+    let requery = SONGS
+        .split_once("pub fn requery_tracks(")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
     assert!(
-        build.contains("if fav_ui.active_tab() != FavoritesTab::Songs {"),
-        "`build_filtered_tracks` must bail before the prepare walk when Songs isn't mounted"
+        requery.contains("if fav_ui.active_tab() != FavoritesTab::Songs {"),
+        "`requery_tracks` must bail before the query when Songs isn't mounted"
     );
 
-    let write =
-        SONGS.split_once("fn write_filtered_tracks").map(|(_, rest)| rest).unwrap_or_default();
+    let show = SONGS
+        .split_once("fn show_tracks(")
+        .and_then(|(_, rest)| rest.split_once("\n}\n"))
+        .map(|(body, _)| body)
+        .unwrap_or_default();
     assert!(
-        write.contains("|| fav_ui.active_tab() != FavoritesTab::Songs"),
-        "`write_filtered_tracks` must re-check the tab — a pick can land while the post is in flight"
-    );
-
-    assert!(
-        SUBVIEWS.contains("favorites_ui_mod::hide_tracks(&g);"),
-        "leaving the Songs tab must empty `Favorites.tracks`, the way `write_filtered_grids` empties the grid it isn't mounting"
-    );
-    assert!(
-        SUBVIEWS.contains("apply_filtered_tracks_now(&ui, &fu)"),
-        "the tab pick must write without hopping the event loop, or the clear above shows as a bare list"
+        show.contains("|| fav_ui.active_tab() != FavoritesTab::Songs"),
+        "`show_tracks` must re-check the tab — a pick can land while the load is in flight"
     );
 }
 
@@ -307,7 +299,7 @@ fn a_leave_keeps_a_proxy_of_what_the_grid_painted() -> TestResult {
     let (_tmp, path) = write_test_png(512)?;
     let path = path.to_str().ok_or("temp path is not UTF-8")?;
 
-    let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()), None);
+    let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()), None, ScrollPoint::default());
     fav_ui.set_active_tab(FavoritesTab::Artists);
     *fav_ui.state().fav_artists.lock() = vec![FavoriteArtist {
         id: 1,
@@ -384,11 +376,14 @@ fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
 
     // Two ways of storing nothing per fetch: a failed query and a leave landing
     // mid-flight. `refresh_tracks` asks the section guard twice — before and
-    // after its cover prewarm — so it carries three marks in all.
+    // after its cover prewarm — `requery_tracks` re-arms on its own failed
+    // query, and `show_tracks`, which both write through, on a write the tab or
+    // the section overtook: five marks in all.
     assert_eq!(
         SONGS.matches("mark_songs_dirty()").count(),
-        3,
-        "`refresh_tracks` must re-arm on the failed query and on both section bails"
+        5,
+        "the Songs loads must re-arm on both failed queries, both section bails and a \
+         refused write"
     );
     assert_eq!(
         GRIDS_FETCH.matches("mark_grids_dirty()").count(),

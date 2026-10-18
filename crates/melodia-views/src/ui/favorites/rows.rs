@@ -4,8 +4,10 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::ui::track_list_model::TrackListModel;
+use crate::ui::paged_rows::ScrollPoint;
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
+use melodia_app::state::AppState;
 use melodia_core::entities::artist::FavoriteArtist;
 use melodia_core::entities::track::MostPlayedFavorite;
 use melodia_ui::{
@@ -13,9 +15,10 @@ use melodia_ui::{
 };
 
 /// Bind empty models for the two grid tabs, the Songs list and the selection
-/// set. Subsequent updates locate them by downcasting back from the UI thread:
-/// the Songs list to a [`TrackListModel`], the rest to `VecModel<T>`.
-pub(super) fn install_favorites_models(ui: &AppWindow) {
+/// set, returning where the Songs list is read for the loads that seed it.
+/// Subsequent updates locate them by downcasting back from the UI thread:
+/// the Songs list to a [`TrackRows`], the rest to `VecModel<T>`.
+pub(super) fn install_favorites_models(ui: &AppWindow, state: &AppState) -> ScrollPoint {
     let g = ui.global::<Favorites>();
 
     let most_played: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
@@ -24,11 +27,13 @@ pub(super) fn install_favorites_models(ui: &AppWindow) {
     let artists: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
     g.set_artist_rows(ModelRc::from(artists));
 
-    let tracks: Rc<TrackListModel> = Rc::new(TrackListModel::default());
+    let tracks: Rc<TrackRows> = TrackRows::new(track_rows::fetcher(state));
+    let songs_scroll = tracks.scroll_point();
     g.set_tracks(ModelRc::from(tracks));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     g.set_selected_ids(ModelRc::from(sel));
+    songs_scroll
 }
 
 /// Map a `MostPlayedFavorite` to its Slint card row. Subtitle is the

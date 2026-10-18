@@ -26,7 +26,9 @@ use melodia_app::library;
 use melodia_app::library::scan::{OnStop, ScanOutcome};
 use melodia_app::state::{AppState, StartupChannels};
 use melodia_core::config::Paths;
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::fold_needle;
 use melodia_testkit::http::{TestResponse, TestServer};
 
 /// The backend, and what has to live as long as it does.
@@ -126,7 +128,12 @@ async fn headless_scan_persists_track() -> Result<(), AppError> {
         "expected exactly the silence fixture to ingest"
     );
 
-    let tracks = library::tracks::get_tracks(&state.db).await?;
+    // Read the way the Songs tab reads it: the library's keyset, then its rows by id.
+    let order = TrackOrder::new("title", SortDir::Asc);
+    let ids =
+        library::keyset::track_ids(&state.db, TrackListScope::Library, order, &fold_needle(""))
+            .await?;
+    let tracks = library::keyset::rows_by_ids(&state.db, &ids).await?;
     assert_eq!(tracks.len(), 1, "exactly one track should be in DB");
 
     let row = &tracks[0];

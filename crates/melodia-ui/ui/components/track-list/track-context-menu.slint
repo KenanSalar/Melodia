@@ -39,9 +39,9 @@ export component TrackContextMenu inherits Rectangle {
     // The batch payload in multi mode. The host owns what it contains — a track list passes its
     // `selected-ids` verbatim, the queue passes a deduped copy.
     in property <[int]> effective-selection;
-    // What the labels count, and the *only* input to `multi-active`. Deliberately not
-    // `effective-selection.length`: the queue selects rows and acts on ids, and one track sitting
-    // in it twice makes those two different numbers.
+    // What the labels count, and all `multi-active` and Clear selection know of the set.
+    // Deliberately not `effective-selection.length`: the queue selects rows and acts on ids, and
+    // one track sitting in it twice makes those two different numbers.
     in property <int> selection-count;
 
     // Read by the host to route a batch action, so it sits on the root rather than in the popup.
@@ -304,12 +304,13 @@ export component TrackContextMenu inherits Rectangle {
         }
 
         // The selection group. With no clear button on any list, Clear is the only way
-        // out of a large set other than Escape, and it is gated on this row being *in*
-        // the set: a menu raised on an unselected row acts on that row alone and says
-        // nothing about a set it isn't part of. Select All is ungated, being an offer
-        // rather than a statement about the row. Both go through the host rather than a
-        // global: nine list globals keep their own set and the queue a tenth, and this
-        // component is deliberately told none of them.
+        // out of a large set other than Escape, so it is offered wherever the host holds
+        // a set, this row in it or not: on a long list the picks can sit far out of
+        // view, and gating on the row sent the user scrolling back to find one. The
+        // entries above still act on an unselected row alone. Select All is ungated, an
+        // offer rather than a statement about the row. Both go through the host rather
+        // than a global: nine list globals keep their own set and the queue a tenth, and
+        // this component is deliberately told none of them.
         if root.show-selection-actions: MenuSeparator {}
         if root.show-selection-actions: MenuItem {
             label: @tr("Select all");
@@ -319,7 +320,7 @@ export component TrackContextMenu inherits Rectangle {
                 root.dismiss();
             }
         }
-        if root.row-selected: MenuItem {
+        if root.show-selection-actions && root.selection-count > 0: MenuItem {
             label: @tr("Clear selection");
             icon: "close";
             clicked => {

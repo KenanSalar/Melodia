@@ -79,7 +79,7 @@ fn push_stats_to_slint(stats: &FavoriteStats, fav_ui: &Arc<FavoritesUi>, weak: &
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         // The leave can land while this post is in flight, and it rewinds the count on its
-        // way out — the same guard, in the same place, as `songs::apply_filtered_tracks`.
+        // way out — the same guard, in the same place, as `songs::show_tracks`.
         if !fav_ui.section_active() {
             return;
         }

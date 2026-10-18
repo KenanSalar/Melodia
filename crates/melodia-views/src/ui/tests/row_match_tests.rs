@@ -172,9 +172,9 @@ fn fold_needle_trims() {
 #[test]
 fn a_nul_in_a_field_matches_the_way_the_packed_key_does() {
     // ID3v2.4 joins a multi-value text frame with `\0`, so this is a real
-    // tag rather than a hypothetical. The cached lists' packed key maps it to
-    // a space (`track_list_cache_tests::a_nul_in_a_field_reads_as_a_space`);
-    // `Needle::contains` has to agree, on both its arms — the ASCII byte walk
+    // tag rather than a hypothetical. The packed `search_text` maps it to a
+    // space (`SearchFields::pack`); `Needle::contains` has to agree, on both
+    // its arms — the ASCII byte walk
     // used to skip the mapping, so one non-ASCII character anywhere in the
     // field flipped the answer.
     let row = plain("Track", Some("Queen\0David Bowie"), None);

@@ -70,7 +70,7 @@ pub(super) fn push_needle(qb: &mut QueryBuilder<Sqlite>, needle: &Needle) {
 enum Page {
     /// My Library's and Favorites' Songs tabs. A missing year sorts as `0` beside an explicit one
     /// rather than ahead of every year, and the length is clamped to what an `i32` of milliseconds
-    /// holds, as `ui::track_list_cache` reads its rows.
+    /// holds, the values a Songs row displays.
     Songs,
     /// The album, artist, genre and playlist pages, whose rows read as stored, ties going to the
     /// title.

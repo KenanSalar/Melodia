@@ -11,9 +11,8 @@ use melodia_core::error::AppError;
 /// The `ORDER BY` body every track fetch with no order of its own shares: the natural-ordering key
 /// built at scan time from title/artist/album.
 ///
-/// **Fixed**, because every view that reads one re-sorts what it gets, over rows it retains
-/// (`ui::track_list_cache`) or through `ui::track_sort` directly, so a per-column order here would
-/// be a second spelling of sort semantics that nothing consults.
+/// **Fixed**, because every view that reads one re-sorts what it gets through `ui::track_sort`,
+/// so a per-column order here would be a second spelling of sort semantics that nothing consults.
 ///
 /// **Which makes the clause dead on a detail page, and copying it into a batch-action query the
 /// trap.** `queries::track::entity_ids` decides the order a card's right-click Play queues in and
@@ -28,10 +27,10 @@ use melodia_core::error::AppError;
 /// reads as an index scan rather than a sort.
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
-/// Every track, as the Songs list retains it.
+/// Every track as a list row, in [`TRACK_LIST_ORDER`].
 ///
-/// The display order is the caller's: this hands back [`TRACK_LIST_ORDER`] and
-/// `ui::track_list_cache` permutes it.
+/// No list reads the whole table: a library-sized one holds a `keyset` and fetches its rows by
+/// id. What still wants every row at once is a check that holds an id query against them.
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = columns::TRACK_LIST.joined();
     let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
@@ -97,21 +96,6 @@ pub async fn get_tracks_by_genre_for_list(
     .bind(genre_id)
     .fetch_all(db.read())
     .await?;
-    Ok(tracks)
-}
-
-/// Every favorite track, as Favorites' Songs tab retains it.
-///
-/// Ordered like [`get_all_tracks_for_list`] and for the same reason — the tab's own sort is
-/// resolved over the retained rows, not here.
-pub async fn get_favorite_tracks_for_list(
-    db: &DbPool,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let sql =
-        format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {TRACK_LIST_ORDER}");
-    let tracks =
-        sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
     Ok(tracks)
 }
 

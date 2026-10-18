@@ -9,7 +9,7 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use crate::ui::callbacks::spawn_play_then_shuffle;
-use crate::ui::favorites::FavoritesUi;
+use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Favorites};
 
@@ -19,9 +19,11 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
 
     {
         let s = state.clone();
-        let fu = fav_ui.clone();
+        let weak = ui.as_weak();
         g.on_shuffle_all(move || {
-            spawn_play_then_shuffle(&s, "favorites::shuffle_all", fu.filtered_track_ids());
+            let Some(ui) = weak.upgrade() else { return };
+            let ids = favorites_ui_mod::displayed_ids(&ui.global::<Favorites>());
+            spawn_play_then_shuffle(&s, "favorites::shuffle_all", ids);
         });
     }
 

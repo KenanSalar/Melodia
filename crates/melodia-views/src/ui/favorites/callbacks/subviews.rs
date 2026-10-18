@@ -101,6 +101,15 @@ fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
         // reads the tab being entered.
         crate::ui::view_tag::log_current(&ui);
 
+        // A Songs list left filtered still holds the filtered ids, and the
+        // pick is about to clear the needle they were loaded under, so the
+        // pick that brings Songs back has to reload it.
+        let leaving_filtered_songs = fu.active_tab() == favorites_ui_mod::FavoritesTab::Songs
+            && !favorites_ui_mod::current_filter(&fu).is_empty();
+        if leaving_filtered_songs {
+            fu.mark_songs_dirty();
+        }
+
         // Shadow first: the model build below and every later fetch decide
         // which model to fill and which tier to warm from it, and both can
         // run off the UI thread where the global isn't reachable.
@@ -121,27 +130,14 @@ fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
         // true: the hidden tab's model is empty, and the count that gates
         // its empty state is not, so a grid that paints before its rows
         // land shows a bare panel rather than a placeholder.
+        //
+        // Songs needs no equivalent: its model is kept across the switch,
+        // a keyset and a few hundred rows being no second copy of every
+        // favourite, so it mounts on the list it last showed.
         favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
-        // Only when Songs is the tab being entered: filtering a list
-        // nobody can see walks every favourite on this thread, and every
-        // entry into Songs comes back through here. The `_now` variant for
-        // the reason the grids' is used two lines up — the tab mounts on the
-        // next frame, and a posted write can lose that race to a `TrackList`
-        // of headers over an emptied model.
-        // Leaving it empties that model rather than leaving it holding its
-        // last snapshot — the same trade `write_filtered_grids` makes for
-        // the grid it isn't mounting: a fetch replacing the cache behind a
-        // tab the user has left would otherwise leave this pinning a second
-        // copy of every favourite. `apply_filtered_tracks` refuses to refill
-        // it while that's true, so nothing puts one back.
-        if songs {
-            favorites_ui_mod::apply_filtered_tracks_now(&ui, &fu);
-        } else {
-            favorites_ui_mod::hide_tracks(&g);
-        }
 
-        // Spawned *after* the synchronous applies above, so whatever the
-        // cache already holds paints on this tick and the fetch refreshes
+        // Spawned *after* the synchronous apply above, so whatever the
+        // models already hold paints on this tick and the fetch refreshes
         // behind it.
         //
         // **And a grid pick has to take its count back, because the cache it

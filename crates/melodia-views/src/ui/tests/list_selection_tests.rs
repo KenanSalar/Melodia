@@ -8,9 +8,8 @@ use super::{
     NO_ANCHOR, RowSelectionView, clear_row_selection, compute_click_selection, displayed_ids,
     handle_row_click, keep_selection_within, restamp_selected, select_all_ids, select_all_rows,
 };
-use crate::ui::fixtures::{four_tracks, visible_rows};
-use crate::ui::track_list_cache::TrackListCache;
-use crate::ui::track_list_model::TrackListModel;
+use crate::ui::fixtures::track_keyset;
+use crate::ui::paged_rows::track_rows::TrackRows;
 use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Displayed order used by every shift-range case below.
@@ -202,33 +201,29 @@ fn a_model_that_is_not_a_vec_model_still_answers_with_its_ids() {
 
 // --- a list view's whole selection, over the Songs lists' model ---
 
-/// What a list view's global holds of its selection, showing [`four_tracks`] as the two Songs
-/// lists show their rows.
+/// What a list view's global holds of its selection, showing `fixtures::four_tracks` as the two
+/// Songs lists show their rows.
 struct FakeView {
     anchor: Cell<i32>,
     selected: Rc<VecModel<i32>>,
-    rows: Rc<TrackListModel>,
-    cache: TrackListCache,
+    rows: Rc<TrackRows>,
 }
 
 impl FakeView {
     /// Showing the tracks in title order, 2 4 3 1, under `needle`.
     fn showing(needle: &str) -> Self {
-        let cache = TrackListCache::new();
-        cache.store(four_tracks(), "title", "asc");
-        let rows = Rc::new(TrackListModel::default());
-        rows.show(visible_rows(&cache, needle));
-        Self { anchor: Cell::new(NO_ANCHOR), selected: Rc::new(VecModel::default()), rows, cache }
+        let rows = TrackRows::new(|_request| {});
+        rows.show(track_keyset(needle, "asc"));
+        Self { anchor: Cell::new(NO_ANCHOR), selected: Rc::new(VecModel::default()), rows }
     }
 
     fn refilter(&self, needle: &str) {
-        self.rows.show(visible_rows(&self.cache, needle));
+        self.rows.show(track_keyset(needle, "asc"));
     }
 
     /// Unfiltered, in reverse title order: 1 3 4 2.
     fn resort_descending(&self) {
-        self.cache.resort("title", "desc");
-        self.refilter("");
+        self.rows.show(track_keyset("", "desc"));
     }
 
     /// `(selected-ids, the anchor, each row's flag)`, the three things a click writes.
@@ -373,7 +368,7 @@ fn a_refilter_keeps_a_hidden_selection() {
     handle_row_click(&view, 3, 1, false, false);
     view.refilter("ha");
 
-    keep_selection_within(&view, || visible_rows(&view.cache, "ha").held_ids());
+    keep_selection_within(&view, || HashSet::from([1, 2, 3, 4]));
 
     assert_eq!(view.state(), (vec![1], 1, vec![false, false]));
 }

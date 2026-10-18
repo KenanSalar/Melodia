@@ -76,7 +76,7 @@ pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>,
 }
 
 /// How many tracks the library holds. The diagnostics bundle reports it as library shape — a bug
-/// that only shows up at scale is a different bug.
+/// that only shows up at scale is a different bug — and a filtered Songs list as its total.
 pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     Ok(count)

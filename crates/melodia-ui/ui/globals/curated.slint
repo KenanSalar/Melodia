@@ -61,8 +61,7 @@ export global Favorites {
     in-out property <string> artist-sort-dir: "desc";
     callback request-artist-sort(string /*field*/);
 
-    // The post-filter view the list renders: Rust filters an internal `tracks-all` cache
-    // in memory and writes the result here, as the Tracks view does.
+    // The post-filter view the list renders, the paged model the Tracks view's `rows` is.
     in-out property <[TrackListRow]> tracks;
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;

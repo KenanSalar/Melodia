@@ -12,7 +12,7 @@ use crate::ui::genres::GenresUi;
 use crate::ui::playlists::PlaylistsUi;
 use crate::ui::search::{self as search_ui_mod, SearchUi};
 use crate::ui::track_detail::DetailRows;
-use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
+use crate::ui::tracks as tracks_ui_mod;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -26,7 +26,6 @@ use melodia_ui::{AlbumDetail, AppWindow, ArtistDetail, GenreDetail, Player, Play
 /// one surface with no `library_changed` subscriber to correct a missed patch later.
 #[derive(Clone)]
 struct CurrentTrackMirrors {
-    tracks: Arc<TracksUi>,
     browse: Arc<BrowseUi>,
     albums: DetailRows<AlbumsUi>,
     artists: DetailRows<ArtistsUi>,
@@ -38,8 +37,7 @@ struct CurrentTrackMirrors {
 
 impl CurrentTrackMirrors {
     fn mirror_favorite(&self, id: i64, fav: bool) {
-        self.tracks.flip_favorite(id, fav);
-        tracks_ui_mod::repaint_row(&self.weak, id);
+        tracks_ui_mod::patch_row(&self.weak, id, move |row| row.is_favorite = fav);
         self.browse.flip_favorite(id, fav);
         browse_ui_mod::apply_row_favorite(&self.weak, id, fav);
         self.albums.mirror_favorite(id, fav);
@@ -51,8 +49,7 @@ impl CurrentTrackMirrors {
     }
 
     fn mirror_rating(&self, id: i64, rating: i32) {
-        self.tracks.flip_rating(id, rating);
-        tracks_ui_mod::repaint_row(&self.weak, id);
+        tracks_ui_mod::patch_row(&self.weak, id, move |row| row.rating = rating);
         self.browse.flip_rating(id, rating);
         browse_ui_mod::apply_row_rating(&self.weak, id, rating);
         self.albums.mirror_rating(id, rating);
@@ -66,7 +63,6 @@ impl CurrentTrackMirrors {
 
 fn mirrors(ui: &AppWindow, handles: RowFlagHandles<'_>) -> CurrentTrackMirrors {
     CurrentTrackMirrors {
-        tracks: handles.tracks.clone(),
         browse: handles.browse.clone(),
         albums: DetailRows::new(handles.albums, ui.global::<AlbumDetail>().as_weak()),
         artists: DetailRows::new(handles.artists, ui.global::<ArtistDetail>().as_weak()),
@@ -81,7 +77,6 @@ fn mirrors(ui: &AppWindow, handles: RowFlagHandles<'_>) -> CurrentTrackMirrors {
 /// reads as an ordering nobody can check at the call site.
 #[derive(Clone, Copy)]
 pub struct RowFlagHandles<'a> {
-    pub tracks: &'a Arc<TracksUi>,
     pub browse: &'a Arc<BrowseUi>,
     pub albums: &'a Arc<AlbumsUi>,
     pub artists: &'a Arc<ArtistsUi>,

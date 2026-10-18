@@ -1,0 +1,96 @@
+//! [`PagedRows`] over track-list rows, the binding both Songs tabs share: the placeholder, the
+//! row fetch, and the keyset load that opens a list on the screenful it is scrolled to.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use super::{Keyset, PagedRow, PagedRows, ReadStamp, RowRequest, ScrollPoint, window};
+use crate::ui::grid_prewarm;
+use crate::ui::tracks::to_slint_track_list_row;
+use crate::ui::util::{StringPool, clamp_i64_to_i32};
+use melodia_app::library;
+use melodia_app::state::AppState;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::entities::track_list::{TrackListScope, TrackOrder};
+use melodia_core::error::{AppResult, describe};
+use melodia_core::utils::needle::Needle;
+use melodia_ui::TrackListRow as UiTrackListRow;
+
+pub type TrackRows = PagedRows<UiTrackListRow>;
+
+impl PagedRow for UiTrackListRow {
+    // Blank but live: a row clicked before its fetch lands still plays, queues and picks by id.
+    fn placeholder(id: i64) -> Self {
+        Self { id: clamp_i64_to_i32(id), enabled: true, ..Self::default() }
+    }
+
+    fn set_selected(&mut self, selected: bool) {
+        self.selected = selected;
+    }
+}
+
+/// Fetches the rows a Songs list asks for. The query and the conversion run on the runtime, so the
+/// connection goes back to the pool as soon as the rows are read, however busy the event loop is
+/// drawing; only the landing waits for it.
+pub fn fetcher(state: &AppState) -> impl Fn(RowRequest<UiTrackListRow>) + 'static {
+    let db = state.db.clone();
+    let runtime = state.runtime.clone();
+    move |request| {
+        let db = db.clone();
+        let ids = request.ids().to_vec();
+        let rows = runtime.spawn(async move {
+            library::keyset::rows_by_ids(&db, &ids).await.map(|rows| convert(&rows))
+        });
+        let spawned = slint::spawn_local(async_compat::Compat::new(async move {
+            match rows.await {
+                Ok(Ok(rows)) => request.land(rows),
+                Ok(Err(e)) => log::warn!("track rows: fetch failed: {}", describe(&e)),
+                Err(e) => log::warn!("track rows: fetch task failed: {}", describe(&e)),
+            }
+        }));
+        if let Err(e) = spawned {
+            log::warn!("track rows: fetch not spawned: {}", describe(&e));
+        }
+    }
+}
+
+/// The ids in `scope` that `needle` matches, in `order`, with the rows of the [`window`] around
+/// `at`, so the list shows where it is scrolled rather than on placeholders.
+pub async fn load(
+    state: &AppState,
+    scope: TrackListScope,
+    order: TrackOrder,
+    needle: &Needle,
+    at: &ScrollPoint,
+) -> AppResult<Keyset<UiTrackListRow>> {
+    let read = ReadStamp::now();
+    let ids = library::keyset::track_ids(&state.db, scope, order, needle).await?;
+    // Asked once the ids are in, the latest the scroll position can be read before the seed.
+    let seed_ids = &ids[window(ids.len(), at.row())];
+    let seed = convert(&library::keyset::rows_by_ids(&state.db, seed_ids).await?);
+    Ok(Keyset { ids: ids.into(), seed, read })
+}
+
+/// Warm the row covers `keyset` opens on, in display order, before it shows: a cold tier would
+/// paint the first screen on placeholders. Every row past the seed asks the tier itself as it
+/// scrolls into view.
+pub async fn prewarm(thumbs: &Arc<CoverThumbs>, keyset: &Keyset<UiTrackListRow>) {
+    let paths: Vec<PathBuf> = grid_prewarm::unique_artwork_paths(
+        keyset.seed.iter().map(|(_, row)| Some(row.artwork_path.as_str())),
+        thumbs.capacity(),
+    );
+    if paths.is_empty() {
+        return;
+    }
+    let thumbs = Arc::clone(thumbs);
+    if let Err(e) = tokio::task::spawn_blocking(move || thumbs.prewarm(&paths)).await {
+        log::warn!("track rows: cover prewarm failed: {}", describe(&e));
+    }
+}
+
+/// One fetch's rows, sharing a pool so an album's tracks share their strings.
+fn convert(rows: &[RsTrackListRow]) -> Vec<(i64, UiTrackListRow)> {
+    let mut pool = StringPool::default();
+    rows.iter().map(|row| (row.id, to_slint_track_list_row(row, &mut pool))).collect()
+}

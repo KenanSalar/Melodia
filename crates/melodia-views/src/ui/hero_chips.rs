@@ -335,13 +335,16 @@ pub fn publish_station(ui: &AppWindow, facts: &StationFacts, section_active: boo
 /// stale, never half-built.
 pub fn publish_favorites(ui: &AppWindow, fav_ui: &FavoritesUi) {
     let state = fav_ui.state();
-    // One at a time: four sibling locks with no argued ordering, and a struct literal
+    // One at a time: three sibling locks with no argued ordering, and a struct literal
     // would hold every guard it built until the statement ended.
-    let (tracks, duration_ms) = {
+    let (tracks, duration_ms, songs) = {
         let stats = state.stats.lock();
-        (i32::try_from(stats.count).unwrap_or(i32::MAX), stats.total_duration_ms)
+        let spread = HeroFold {
+            artists: i32::try_from(stats.artists).unwrap_or(i32::MAX),
+            albums: i32::try_from(stats.albums).unwrap_or(i32::MAX),
+        };
+        (i32::try_from(stats.count).unwrap_or(i32::MAX), stats.total_duration_ms, spread)
     };
-    let songs = *state.songs_fold.lock();
     let most_played = *state.most_played_totals.lock();
     // The whole set, not the filtered grid: a band names the page it sits on, and the
     // filtered count is the one gating that tab's empty state.
