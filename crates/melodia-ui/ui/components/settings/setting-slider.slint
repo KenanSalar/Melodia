@@ -9,6 +9,7 @@ export component SettingSlider inherits HorizontalLayout {
     in property <string> readout;
     // Wide enough for the longest readout, so the track doesn't shift while it is dragged.
     in property <length> readout-width;
+    in property <bool> is-disabled: false;
 
     callback changed(float /* 0..1 */);
     callback committed(float /* 0..1 */);
@@ -20,6 +21,7 @@ export component SettingSlider inherits HorizontalLayout {
     SliderTrack {
         horizontal-stretch: 1;
         value: root.value;
+        is-disabled: root.is-disabled;
         track-color: Theme.card-control;
         seam-mask-color: SettingsPage.card-fill;
         changed(v) => { root.changed(v); }
@@ -27,7 +29,7 @@ export component SettingSlider inherits HorizontalLayout {
     }
     Text {
         text: root.readout;
-        color: Theme.subtext0;
+        color: root.is-disabled ? Theme.overlay0 : Theme.subtext0;
         font-size: Theme.font-size-sm;
         min-width: root.readout-width;
         horizontal-alignment: right;

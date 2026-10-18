@@ -281,11 +281,11 @@ msgstr "szám"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
 #: ui/components/track-copy-items.slint
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint ui/settings.slint
 #: ui/views/search/top-result-card.slint
-#: ui/views/settings/replaygain-section.slint
 msgid "Album"
 msgstr "Album"
 
@@ -595,8 +595,8 @@ msgstr "Összegzés"
 msgid "Tags"
 msgstr "Címkék"
 
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-#: ui/views/settings/replaygain-section.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
 msgid "Track"
 msgstr "Szám"
 
@@ -1075,6 +1075,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Próbáld újra a Dalszöveg menüből"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Kész"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Továbbiak"
 
@@ -1092,21 +1097,8 @@ msgid "Track end"
 msgstr "Szám vége"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/animations-section.slint
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/output-section.slint
-msgid "Equalizer"
-msgstr "Hangszínszabályzó"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Be"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1284,10 +1276,6 @@ msgstr "Kihagyás"
 msgid "Back"
 msgstr "Vissza"
 
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Kész"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Következő"
@@ -1296,9 +1284,93 @@ msgstr "Következő"
 msgid "Search…"
 msgstr "Keresés…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Hangszínszabályzó"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Hangszínszabályzó bekapcsolása"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Formáld a hangot tíz sávval, a bal oldali mélyektől a jobb oldali magasakig"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Előerősítés"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Klasszikus"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Lineáris"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Basszuskiemelés"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Elektronikus"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Magaskiemelés"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Ének"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Egyéni"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Visszaállítás"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Újraolvasás"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain bekapcsolása"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "A ReplayGain csak azokra a számokra hat, amelyekben már vannak hangosságcímkék. Ezek hozzáadásához dolgozd fel a könyvtáradat például az rsgain vagy a loudgain eszközzel."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Normalizálási mód"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Túlvezérlés megelőzése"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2630,72 +2702,15 @@ msgstr "Csatlakozva a Discordhoz"
 msgid "Discord not running"
 msgstr "A Discord nem fut"
 
-#: ui/views/settings/equalizer-section.slint
-msgid "Classical"
-msgstr "Klasszikus"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Flat"
-msgstr "Lineáris"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Bass Boost"
-msgstr "Basszuskiemelés"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Electronic"
-msgstr "Elektronikus"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Treble Boost"
-msgstr "Magaskiemelés"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Vocal"
-msgstr "Ének"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Custom"
-msgstr "Egyéni"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Enable equalizer"
-msgstr "Hangszínszabályzó bekapcsolása"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
-msgstr "Formáld a hangot tíz sávval, a bal oldali mélyektől a jobb oldali magasakig"
-
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint
 msgid "Preset"
 msgstr "Előbeállítás"
 
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "Preamp"
-msgstr "Előerősítés"
-
 #. Translators: the equalizer's frequency bands
 #: ui/views/settings/equalizer-section.slint
 msgid "Bands"
 msgstr "Sávok"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Reset"
-msgstr "Visszaállítás"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -3145,22 +3160,6 @@ msgstr "Értékelések mentése a fájlokba"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "A csillagos értékelések beírása a fájlok címkéibe, így megmaradnak újraolvasás után is, és más lejátszók is olvashatják őket."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Enable ReplayGain"
-msgstr "ReplayGain bekapcsolása"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "A ReplayGain csak azokra a számokra hat, amelyekben már vannak hangosságcímkék. Ezek hozzáadásához dolgozd fel a könyvtáradat például az rsgain vagy a loudgain eszközzel."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Normalization mode"
-msgstr "Normalizálási mód"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Prevent clipping"
-msgstr "Túlvezérlés megelőzése"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

@@ -1,0 +1,32 @@
+import { Theme } from "../../theme.slint";
+import { Equalizer } from "../../globals/audio.slint";
+import { EqualizerText, EqPresetPicker, EqPreampSlider, EqBandStrip } from "../settings/equalizer-controls.slint";
+import { DialogToggleRow } from "dialog-toggle-row.slint";
+import { DialogLabeledRow } from "dialog-labeled-row.slint";
+
+// The overflow menu's equalizer: the Settings ▸ Effects card's controls in a dialog's form. Every
+// row stays mounted while the equalizer is off, dimmed by the controls themselves, so the card
+// holds its size under the switch.
+export component EqualizerBody inherits VerticalLayout {
+    spacing: Theme.pad-lg;
+
+    // The preset docks into the toggle row's trailing slot.
+    DialogToggleRow {
+        label: EqualizerText.enable-label;
+        checked <=> Equalizer.enabled;
+        toggled(v) => { Equalizer.set-enabled(v); }
+
+        EqPresetPicker {
+            horizontal-stretch: 0;
+        }
+    }
+
+    DialogLabeledRow {
+        label: EqualizerText.preamp-label;
+        EqPreampSlider {
+            horizontal-stretch: 1;
+        }
+    }
+
+    EqBandStrip { }
+}

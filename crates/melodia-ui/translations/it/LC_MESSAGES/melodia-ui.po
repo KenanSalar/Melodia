@@ -279,11 +279,11 @@ msgstr "numero"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
 #: ui/components/track-copy-items.slint
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint ui/settings.slint
 #: ui/views/search/top-result-card.slint
-#: ui/views/settings/replaygain-section.slint
 msgid "Album"
 msgstr "Album"
 
@@ -593,8 +593,8 @@ msgstr "Riepilogo"
 msgid "Tags"
 msgstr "Tag"
 
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-#: ui/views/settings/replaygain-section.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
 msgid "Track"
 msgstr "Traccia"
 
@@ -1073,6 +1073,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Riprova dal menu Testo"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Fatto"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Altro"
 
@@ -1090,21 +1095,8 @@ msgid "Track end"
 msgstr "Fine brano"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/animations-section.slint
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/output-section.slint
-msgid "Equalizer"
-msgstr "Equalizzatore"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Attivo"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1282,10 +1274,6 @@ msgstr "Salta"
 msgid "Back"
 msgstr "Indietro"
 
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Fatto"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Successivo"
@@ -1294,9 +1282,93 @@ msgstr "Successivo"
 msgid "Search…"
 msgstr "Cerca…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Equalizzatore"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Attiva equalizzatore"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Modella il suono con dieci bande, dai bassi a sinistra agli alti a destra"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Preamplificazione"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Classica"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Neutro"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Enfasi bassi"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Elettronica"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Enfasi alti"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Voce"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Personalizzato"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Reimposta"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Riscansiona"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "Abilita ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain influisce solo sulle tracce che hanno già tag di volume. Analizza la tua libreria con uno strumento come rsgain o loudgain per aggiungerli."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Modalità di normalizzazione"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Previeni clipping"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2628,72 +2700,15 @@ msgstr "Connesso a Discord"
 msgid "Discord not running"
 msgstr "Discord non è in esecuzione"
 
-#: ui/views/settings/equalizer-section.slint
-msgid "Classical"
-msgstr "Classica"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Flat"
-msgstr "Neutro"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Bass Boost"
-msgstr "Enfasi bassi"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Electronic"
-msgstr "Elettronica"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Treble Boost"
-msgstr "Enfasi alti"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Vocal"
-msgstr "Voce"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Custom"
-msgstr "Personalizzato"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Enable equalizer"
-msgstr "Attiva equalizzatore"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
-msgstr "Modella il suono con dieci bande, dai bassi a sinistra agli alti a destra"
-
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint
 msgid "Preset"
 msgstr "Preimpostazione"
 
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "Preamp"
-msgstr "Preamplificazione"
-
 #. Translators: the equalizer's frequency bands
 #: ui/views/settings/equalizer-section.slint
 msgid "Bands"
 msgstr "Bande"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Reset"
-msgstr "Reimposta"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -3143,22 +3158,6 @@ msgstr "Salva le valutazioni nei file"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Scrive le valutazioni a stelle nei tag di ogni file, in modo che sopravvivano a una nuova scansione e altri lettori possano leggerle."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Enable ReplayGain"
-msgstr "Abilita ReplayGain"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain influisce solo sulle tracce che hanno già tag di volume. Analizza la tua libreria con uno strumento come rsgain o loudgain per aggiungerli."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Normalization mode"
-msgstr "Modalità di normalizzazione"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Prevent clipping"
-msgstr "Previeni clipping"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

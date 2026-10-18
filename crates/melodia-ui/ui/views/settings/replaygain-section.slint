@@ -4,54 +4,39 @@ import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
-import { ChipGroup } from "../../components/settings/chip-group.slint";
-import { PreampSlider } from "../../components/settings/preamp-slider.slint";
+import { ReplayGainText, RgModePicker, RgPreampSlider } from "../../components/settings/replaygain-controls.slint";
 
 // Loudness normalization, the equalizer card's shape: the mode, preamp and clipping guard mount only
-// while the switch is on. Every control drives the `ReplayGain` global, and Rust applies each
-// change to the live player and persists it.
+// while the switch is on. The controls are `replaygain-controls.slint`'s, shared with the overflow
+// menu's dialog.
 export component ReplayGainSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
     in property <string> category-name;
 
-    property <string> card-title: @tr("ReplayGain");
-
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.category-name, root.card-title,
+        return SettingsPage.row-visible(root.category-name, ReplayGainText.title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    // Order-matched to `RgMode`. Inline literals, since a Rust-seeded `[string]` renders
-    // untranslated.
-    property <[string]> mode-names: [@tr("Track"), @tr("Album")];
-
-    property <string> enable-label: @tr("Enable ReplayGain");
-    // The one thing to know before switching it on: it reads precomputed loudness tags, so it does
-    // nothing on a library no tagging tool has scanned.
-    property <string> enable-desc: @tr("ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them.");
-    property <string> mode-label: @tr("Normalization mode");
-    property <string> preamp-label: @tr("Preamp");
-    property <string> clipping-label: @tr("Prevent clipping");
-
     // One cluster, as on the equalizer card.
-    out property <bool> has-matches: row-visible(enable-label, enable-desc)
-        || row-visible(mode-label, "")
-        || row-visible(preamp-label, "")
-        || row-visible(clipping-label, "");
+    out property <bool> has-matches: row-visible(ReplayGainText.enable-label, ReplayGainText.enable-desc)
+        || row-visible(ReplayGainText.mode-label, "")
+        || row-visible(ReplayGainText.preamp-label, "")
+        || row-visible(ReplayGainText.clipping-label, "");
 
     property <bool> show-details: root.has-matches && ReplayGain.enabled;
 
     VerticalLayout {
         if has-matches: SectionCard {
-            title: root.card-title;
+            title: ReplayGainText.title;
 
             SettingRow {
                 icon: "tune";
-                label: root.enable-label;
-                description: root.enable-desc;
+                label: ReplayGainText.enable-label;
+                description: ReplayGainText.enable-desc;
                 ToggleSwitch {
                     checked <=> ReplayGain.enabled;
                     toggled(v) => { ReplayGain.set-enabled(v); }
@@ -60,30 +45,19 @@ export component ReplayGainSection inherits Rectangle {
 
             if root.show-details: SettingRowStacked {
                 icon: "album";
-                label: root.mode-label;
-                ChipGroup {
-                    options: root.mode-names;
-                    selected-index <=> ReplayGain.mode-idx;
-                    selected(i) => { ReplayGain.set-mode(i); }
-                }
+                label: ReplayGainText.mode-label;
+                RgModePicker { }
             }
 
-            // Extra gain on top of the tag's own value.
             if root.show-details: SettingRowStacked {
                 icon: "volume_up";
-                label: root.preamp-label;
-                PreampSlider {
-                    preamp: ReplayGain.preamp;
-                    min-preamp: ReplayGain.min-preamp;
-                    max-preamp: ReplayGain.max-preamp;
-                    changed(db) => { ReplayGain.set-preamp(db); }
-                    committed(db) => { ReplayGain.commit-preamp(db); }
-                }
+                label: ReplayGainText.preamp-label;
+                RgPreampSlider { }
             }
 
             if root.show-details: SettingRow {
                 icon: "shield";
-                label: root.clipping-label;
+                label: ReplayGainText.clipping-label;
                 ToggleSwitch {
                     checked <=> ReplayGain.prevent-clipping;
                     toggled(v) => { ReplayGain.set-prevent-clipping(v); }

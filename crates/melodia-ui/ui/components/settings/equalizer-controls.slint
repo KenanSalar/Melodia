@@ -1,0 +1,94 @@
+import { Theme } from "../../theme.slint";
+import { Equalizer } from "../../globals/audio.slint";
+import { Dropdown } from "dropdown.slint";
+import { SectionButton } from "section-button.slint";
+import { PreampSlider } from "preamp-slider.slint";
+import { EqBandSlider } from "eq-band-slider.slint";
+
+// The equalizer's controls, mounted by its Settings ▸ Effects card and by the overflow menu's
+// dialog. Each surface lays them out in its own chrome; what a control sets, and which callback a
+// drag or a release fires, is stated here once. Rust applies every change to the live player and
+// persists it.
+//
+// The bound controls dim while the equalizer is off. Only the dialog shows it: the card unmounts
+// them instead, where the dialog keeps them on screen so it holds still under the switch.
+
+// The words both surfaces print, so a reworded label can't leave the other on its old msgid.
+export global EqualizerText {
+    out property <string> title: @tr("Equalizer");
+    out property <string> enable-label: @tr("Enable equalizer");
+    out property <string> enable-desc: @tr("Shape the sound with ten bands, from bass on the left to treble on the right");
+    out property <string> preamp-label: @tr("Preamp");
+}
+
+export component EqPresetPicker inherits HorizontalLayout {
+    // Order-matched to `equalizer::PRESETS`, plus the "Custom" Rust selects once a band moves.
+    // Inline literals, since a Rust-seeded `[string]` renders untranslated.
+    property <[string]> preset-names: [
+        @tr("Flat"), @tr("Rock"), @tr("Pop"), @tr("Jazz"), @tr("Classical"),
+        @tr("Bass Boost"), @tr("Treble Boost"), @tr("Vocal"), @tr("Electronic"),
+        @tr("Custom"),
+    ];
+
+    alignment: start;
+    spacing: Theme.pad-sm;
+
+    Dropdown {
+        options: root.preset-names;
+        trigger-width: 150px;
+        selected-index <=> Equalizer.preset-idx;
+        selected(i) => { Equalizer.select-preset(i); }
+    }
+    SectionButton {
+        label: @tr("Reset");
+        icon: "";
+        primary: false;
+        clicked => { Equalizer.reset(); }
+    }
+}
+
+// Master gain, so a boost has headroom and doesn't clip.
+export component EqPreampSlider inherits PreampSlider {
+    preamp: Equalizer.preamp;
+    min-preamp: Equalizer.min-preamp;
+    max-preamp: Equalizer.max-preamp;
+    is-disabled: !Equalizer.enabled;
+    changed(db) => { Equalizer.set-preamp(db); }
+    committed(db) => { Equalizer.commit-preamp(db); }
+}
+
+// No spacing: each column centres its thumb in whatever it is given, and the ten slider minimums
+// alone are what the narrowest host has to seat.
+export component EqBandStrip inherits HorizontalLayout {
+    // Order-matched to `equalizer::BAND_FREQS`; numeric, so untranslated.
+    property <[string]> band-freqs: ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
+
+    for freq[i] in root.band-freqs: VerticalLayout {
+        spacing: Theme.pad-xs;
+        horizontal-stretch: 1;
+
+        Text {
+            text: (Equalizer.band-gains[i] > 0 ? "+" : "") + round(Equalizer.band-gains[i]);
+            color: Equalizer.enabled ? Theme.subtext0 : Theme.overlay0;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+        }
+
+        EqBandSlider {
+            height: 150px;
+            value: Equalizer.band-gains[i];
+            min-db: Equalizer.min-gain;
+            max-db: Equalizer.max-gain;
+            is-disabled: !Equalizer.enabled;
+            changed(v) => { Equalizer.set-band(i, v); }
+            committed(v) => { Equalizer.commit-band(i, v); }
+        }
+
+        Text {
+            text: freq;
+            color: Theme.subtext1;
+            font-size: Theme.font-size-sm;
+            horizontal-alignment: center;
+        }
+    }
+}

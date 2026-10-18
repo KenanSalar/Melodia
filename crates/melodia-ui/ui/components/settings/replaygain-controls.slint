@@ -1,0 +1,36 @@
+import { ReplayGain } from "../../globals/audio.slint";
+import { ChipGroup } from "chip-group.slint";
+import { PreampSlider } from "preamp-slider.slint";
+
+// ReplayGain's controls, `equalizer-controls.slint`'s split for the same two surfaces: the Settings
+// ▸ Effects card and the overflow menu's dialog. The switches stay in each surface's own row, being
+// a binding and a callback apiece.
+
+export global ReplayGainText {
+    out property <string> title: @tr("ReplayGain");
+    out property <string> enable-label: @tr("Enable ReplayGain");
+    // The one thing to know before switching it on: it reads precomputed loudness tags, so it does
+    // nothing on a library no tagging tool has scanned.
+    out property <string> enable-desc: @tr("ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them.");
+    out property <string> mode-label: @tr("Normalization mode");
+    out property <string> preamp-label: @tr("Preamp");
+    out property <string> clipping-label: @tr("Prevent clipping");
+}
+
+export component RgModePicker inherits ChipGroup {
+    // Order-matched to `RgMode`. Inline literals, since a Rust-seeded `[string]` renders
+    // untranslated.
+    options: [@tr("Track"), @tr("Album")];
+    selected-index <=> ReplayGain.mode-idx;
+    selected(i) => { ReplayGain.set-mode(i); }
+}
+
+// Extra gain on top of the tag's own value.
+export component RgPreampSlider inherits PreampSlider {
+    preamp: ReplayGain.preamp;
+    min-preamp: ReplayGain.min-preamp;
+    max-preamp: ReplayGain.max-preamp;
+    is-disabled: !ReplayGain.enabled;
+    changed(db) => { ReplayGain.set-preamp(db); }
+    committed(db) => { ReplayGain.commit-preamp(db); }
+}

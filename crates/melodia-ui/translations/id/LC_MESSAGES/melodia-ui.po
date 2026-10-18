@@ -278,11 +278,11 @@ msgstr "angka"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
 #: ui/components/track-copy-items.slint
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint ui/settings.slint
 #: ui/views/search/top-result-card.slint
-#: ui/views/settings/replaygain-section.slint
 msgid "Album"
 msgstr "Album"
 
@@ -592,8 +592,8 @@ msgstr "Ringkasan"
 msgid "Tags"
 msgstr "Tag"
 
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-#: ui/views/settings/replaygain-section.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
 msgid "Track"
 msgstr "Trek"
 
@@ -1071,6 +1071,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Coba lagi dari menu Lirik"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Selesai"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Lainnya"
 
@@ -1088,21 +1093,8 @@ msgid "Track end"
 msgstr "Akhir lagu"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/animations-section.slint
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/output-section.slint
-msgid "Equalizer"
-msgstr "Equalizer"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Aktif"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1279,10 +1271,6 @@ msgstr "Lewati"
 msgid "Back"
 msgstr "Kembali"
 
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Selesai"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Berikutnya"
@@ -1291,9 +1279,93 @@ msgstr "Berikutnya"
 msgid "Search…"
 msgstr "Cari…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Equalizer"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Aktifkan equalizer"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Bentuk suara dengan sepuluh pita frekuensi, dari bass di kiri hingga treble di kanan"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Preamp"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Klasik"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Datar"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Penguat Bass"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Elektronik"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Penguat Treble"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Vokal"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Kustom"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Atur ulang"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Pindai ulang"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "Aktifkan ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain hanya berlaku untuk lagu yang sudah memiliki tag kenyaringan. Pindai pustaka Anda dengan alat seperti rsgain atau loudgain untuk menambahkannya."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Mode normalisasi"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Cegah clipping"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2602,72 +2674,15 @@ msgstr "Terhubung ke Discord"
 msgid "Discord not running"
 msgstr "Discord tidak berjalan"
 
-#: ui/views/settings/equalizer-section.slint
-msgid "Classical"
-msgstr "Klasik"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Flat"
-msgstr "Datar"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Bass Boost"
-msgstr "Penguat Bass"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Electronic"
-msgstr "Elektronik"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Treble Boost"
-msgstr "Penguat Treble"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Vocal"
-msgstr "Vokal"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Custom"
-msgstr "Kustom"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Enable equalizer"
-msgstr "Aktifkan equalizer"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
-msgstr "Bentuk suara dengan sepuluh pita frekuensi, dari bass di kiri hingga treble di kanan"
-
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint
 msgid "Preset"
 msgstr "Preset"
 
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "Preamp"
-msgstr "Preamp"
-
 #. Translators: the equalizer's frequency bands
 #: ui/views/settings/equalizer-section.slint
 msgid "Bands"
 msgstr "Pita frekuensi"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Reset"
-msgstr "Atur ulang"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -3117,22 +3132,6 @@ msgstr "Simpan rating ke berkas"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Tulis rating bintang ke tag setiap berkas, agar tetap ada setelah pemindaian ulang dan dapat dibaca pemutar lain."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Enable ReplayGain"
-msgstr "Aktifkan ReplayGain"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain hanya berlaku untuk lagu yang sudah memiliki tag kenyaringan. Pindai pustaka Anda dengan alat seperti rsgain atau loudgain untuk menambahkannya."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Normalization mode"
-msgstr "Mode normalisasi"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Prevent clipping"
-msgstr "Cegah clipping"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

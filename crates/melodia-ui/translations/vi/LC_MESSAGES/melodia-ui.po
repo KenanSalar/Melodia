@@ -278,11 +278,11 @@ msgstr "số"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
 #: ui/components/track-copy-items.slint
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint ui/settings.slint
 #: ui/views/search/top-result-card.slint
-#: ui/views/settings/replaygain-section.slint
 msgid "Album"
 msgstr "Album"
 
@@ -592,8 +592,8 @@ msgstr "Tóm tắt"
 msgid "Tags"
 msgstr "Thẻ"
 
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-#: ui/views/settings/replaygain-section.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
 msgid "Track"
 msgstr "Bản nhạc"
 
@@ -1071,6 +1071,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Thử lại từ menu Lời bài hát"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Xong"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Khác"
 
@@ -1088,21 +1093,8 @@ msgid "Track end"
 msgstr "Cuối bản nhạc"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/animations-section.slint
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/output-section.slint
-msgid "Equalizer"
-msgstr "Bộ chỉnh âm"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Bật"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1279,10 +1271,6 @@ msgstr "Bỏ qua"
 msgid "Back"
 msgstr "Quay lại"
 
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Xong"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Tiếp theo"
@@ -1291,9 +1279,93 @@ msgstr "Tiếp theo"
 msgid "Search…"
 msgstr "Tìm kiếm…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Bộ chỉnh âm"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Bật bộ chỉnh âm"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Điều chỉnh âm thanh với mười dải tần, từ âm trầm bên trái đến âm cao bên phải"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Tiền khuếch đại"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Cổ điển"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Phẳng"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Tăng âm trầm"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Điện tử"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Tăng âm cao"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Giọng hát"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Tùy chỉnh"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Đặt lại"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Quét lại"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "Bật ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain chỉ áp dụng cho các bản nhạc đã có thẻ độ lớn âm thanh. Hãy quét thư viện bằng công cụ như rsgain hoặc loudgain để thêm các thẻ này."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Chế độ chuẩn hóa"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Ngăn méo tiếng"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2602,72 +2674,15 @@ msgstr "Đã kết nối với Discord"
 msgid "Discord not running"
 msgstr "Discord chưa chạy"
 
-#: ui/views/settings/equalizer-section.slint
-msgid "Classical"
-msgstr "Cổ điển"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Flat"
-msgstr "Phẳng"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Bass Boost"
-msgstr "Tăng âm trầm"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Electronic"
-msgstr "Điện tử"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Treble Boost"
-msgstr "Tăng âm cao"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Vocal"
-msgstr "Giọng hát"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Custom"
-msgstr "Tùy chỉnh"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Enable equalizer"
-msgstr "Bật bộ chỉnh âm"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
-msgstr "Điều chỉnh âm thanh với mười dải tần, từ âm trầm bên trái đến âm cao bên phải"
-
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint
 msgid "Preset"
 msgstr "Cài đặt sẵn"
 
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "Preamp"
-msgstr "Tiền khuếch đại"
-
 #. Translators: the equalizer's frequency bands
 #: ui/views/settings/equalizer-section.slint
 msgid "Bands"
 msgstr "Dải tần"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Reset"
-msgstr "Đặt lại"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -3117,22 +3132,6 @@ msgstr "Lưu đánh giá vào tệp"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Ghi số sao đánh giá vào thẻ của từng tệp, để không bị mất khi quét lại và các trình phát khác cũng đọc được."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Enable ReplayGain"
-msgstr "Bật ReplayGain"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain chỉ áp dụng cho các bản nhạc đã có thẻ độ lớn âm thanh. Hãy quét thư viện bằng công cụ như rsgain hoặc loudgain để thêm các thẻ này."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Normalization mode"
-msgstr "Chế độ chuẩn hóa"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Prevent clipping"
-msgstr "Ngăn méo tiếng"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

@@ -1,0 +1,44 @@
+import { Theme } from "../../theme.slint";
+import { ReplayGain } from "../../globals/audio.slint";
+import { ReplayGainText, RgModePicker, RgPreampSlider } from "../settings/replaygain-controls.slint";
+import { DialogToggleRow } from "dialog-toggle-row.slint";
+import { DialogLabeledRow } from "dialog-labeled-row.slint";
+
+// The overflow menu's ReplayGain, the equalizer dialog's shape. The loudness-tag note is the
+// dialog's message rather than a line here: wrapped text in a body behind the overlay's `if` is
+// measured at its single-line width, which sizes the card for one line of it.
+export component ReplayGainBody inherits VerticalLayout {
+    spacing: Theme.pad-lg;
+
+    DialogToggleRow {
+        label: ReplayGainText.enable-label;
+        checked <=> ReplayGain.enabled;
+        toggled(v) => { ReplayGain.set-enabled(v); }
+    }
+
+    // Stacked, the chips filling the column: a wrapping strip beside a label is handed its
+    // near-square preferred width and breaks where one line would fit.
+    VerticalLayout {
+        spacing: Theme.pad-sm;
+
+        Text {
+            text: ReplayGainText.mode-label;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+        }
+        RgModePicker { }
+    }
+
+    DialogLabeledRow {
+        label: ReplayGainText.preamp-label;
+        RgPreampSlider {
+            horizontal-stretch: 1;
+        }
+    }
+
+    DialogToggleRow {
+        label: ReplayGainText.clipping-label;
+        checked <=> ReplayGain.prevent-clipping;
+        toggled(v) => { ReplayGain.set-prevent-clipping(v); }
+    }
+}

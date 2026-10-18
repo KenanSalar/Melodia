@@ -1,4 +1,5 @@
-//! Wire the graphic equalizer, the Equalizer card on Settings ▸ Effects, to Rust.
+//! Wire the graphic equalizer to Rust: the Equalizer card on Settings ▸ Effects and the overflow
+//! menu's dialog, both driving the one `Equalizer` global.
 //!
 //! Seeds the `Equalizer` global from `settings.json` at startup (enabled flag,
 //! the band-gains model, and the selected-preset dropdown index) and registers
@@ -50,7 +51,7 @@ fn custom_preset_index() -> i32 {
 
 /// Write the persisted state onto the global, handing back the backing model
 /// for the `band-gains` `[float]` property. Cloned into the callbacks, so
-/// preset / reset / drag updates mutate the same model the card reads.
+/// preset / reset / drag updates mutate the same model the card and the dialog read.
 fn seed(ui: &AppWindow, state: &AppState) -> Rc<VecModel<f32>> {
     // A missing / unreadable file falls back to the inert defaults (off, flat,
     // "Flat").
@@ -70,7 +71,7 @@ fn seed(ui: &AppWindow, state: &AppState) -> Rc<VecModel<f32>> {
 
     // Seed the dB ranges from the DSP constants so Rust stays the single source
     // of truth (the band/preamp sliders read these). Runs at boot, before the
-    // card can mount.
+    // card or the dialog can mount.
     eq.set_min_gain(equalizer::MIN_GAIN_DB);
     eq.set_max_gain(equalizer::MAX_GAIN_DB);
     eq.set_min_preamp(equalizer::MIN_PREAMP_DB);

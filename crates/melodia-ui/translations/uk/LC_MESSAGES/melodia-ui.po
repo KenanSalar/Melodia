@@ -280,11 +280,11 @@ msgstr "число"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
 #: ui/components/track-copy-items.slint
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint ui/settings.slint
 #: ui/views/search/top-result-card.slint
-#: ui/views/settings/replaygain-section.slint
 msgid "Album"
 msgstr "Альбом"
 
@@ -594,8 +594,8 @@ msgstr "Загальне"
 msgid "Tags"
 msgstr "Теги"
 
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-#: ui/views/settings/replaygain-section.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
 msgid "Track"
 msgstr "Трек"
 
@@ -1075,6 +1075,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Спробуйте ще раз з меню «Текст пісні»"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Готово"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Більше"
 
@@ -1092,21 +1097,8 @@ msgid "Track end"
 msgstr "Кінець треку"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/animations-section.slint
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/output-section.slint
-msgid "Equalizer"
-msgstr "Еквалайзер"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Увімк."
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1285,10 +1277,6 @@ msgstr "Пропустити"
 msgid "Back"
 msgstr "Назад"
 
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Готово"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Далі"
@@ -1297,9 +1285,93 @@ msgstr "Далі"
 msgid "Search…"
 msgstr "Пошук…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Еквалайзер"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Увімкнути еквалайзер"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Налаштуйте звучання за десятьма смугами, від басів ліворуч до високих частот праворуч"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Передпідсилення"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Класика"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Рівний"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Джаз"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Поп"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Рок"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Підсилення басів"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Електроніка"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Підсилення високих"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Вокал"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Власний"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Скинути"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Пересканувати"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "Увімкнути ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain діє лише на треки, що вже мають теги гучності. Щоб додати їх, проскануйте медіатеку програмою на кшталт rsgain або loudgain."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Режим нормалізації"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Запобігати кліпінгу"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2654,72 +2726,15 @@ msgstr "Підключено до Discord"
 msgid "Discord not running"
 msgstr "Discord не запущено"
 
-#: ui/views/settings/equalizer-section.slint
-msgid "Classical"
-msgstr "Класика"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Flat"
-msgstr "Рівний"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Jazz"
-msgstr "Джаз"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Pop"
-msgstr "Поп"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Rock"
-msgstr "Рок"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Bass Boost"
-msgstr "Підсилення басів"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Electronic"
-msgstr "Електроніка"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Treble Boost"
-msgstr "Підсилення високих"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Vocal"
-msgstr "Вокал"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Custom"
-msgstr "Власний"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Enable equalizer"
-msgstr "Увімкнути еквалайзер"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
-msgstr "Налаштуйте звучання за десятьма смугами, від басів ліворуч до високих частот праворуч"
-
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint
 msgid "Preset"
 msgstr "Пресет"
 
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "Preamp"
-msgstr "Передпідсилення"
-
 #. Translators: the equalizer's frequency bands
 #: ui/views/settings/equalizer-section.slint
 msgid "Bands"
 msgstr "Смуги"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Reset"
-msgstr "Скинути"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -3169,22 +3184,6 @@ msgstr "Зберігати оцінки у файли"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Записувати оцінки в теги кожного файлу, щоб вони зберігалися під час повторного сканування і їх могли читати інші плеєри."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Enable ReplayGain"
-msgstr "Увімкнути ReplayGain"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain діє лише на треки, що вже мають теги гучності. Щоб додати їх, проскануйте медіатеку програмою на кшталт rsgain або loudgain."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Normalization mode"
-msgstr "Режим нормалізації"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Prevent clipping"
-msgstr "Запобігати кліпінгу"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

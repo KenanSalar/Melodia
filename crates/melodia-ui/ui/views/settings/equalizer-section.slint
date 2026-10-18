@@ -1,67 +1,47 @@
-import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { Equalizer } from "../../globals/audio.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
-import { Dropdown } from "../../components/settings/dropdown.slint";
-import { SectionButton } from "../../components/settings/section-button.slint";
-import { PreampSlider } from "../../components/settings/preamp-slider.slint";
-import { EqBandSlider } from "../../components/settings/eq-band-slider.slint";
+import { EqualizerText, EqPresetPicker, EqPreampSlider, EqBandStrip } from "../../components/settings/equalizer-controls.slint";
 
 // The graphic equalizer, one cluster on crossfade's shape in `playback-section.slint`: the preset,
-// preamp and bands mount only while the switch is on. Every control drives the `Equalizer` global,
-// and Rust applies each change to the live player and persists it.
+// preamp and bands mount only while the switch is on. The controls are `equalizer-controls.slint`'s,
+// shared with the overflow menu's dialog.
 export component EqualizerSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
     in property <string> category-name;
 
-    property <string> card-title: @tr("Equalizer");
-
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.category-name, root.card-title,
+        return SettingsPage.row-visible(root.category-name, EqualizerText.title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
 
-    // Order-matched to `equalizer::BAND_FREQS`; numeric, so untranslated.
-    property <[string]> band-freqs: ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
-
-    // Order-matched to `equalizer::PRESETS`, plus the "Custom" Rust selects once a band moves.
-    // Inline literals, since a Rust-seeded `[string]` renders untranslated.
-    property <[string]> preset-names: [
-        @tr("Flat"), @tr("Rock"), @tr("Pop"), @tr("Jazz"), @tr("Classical"),
-        @tr("Bass Boost"), @tr("Treble Boost"), @tr("Vocal"), @tr("Electronic"),
-        @tr("Custom"),
-    ];
-
-    property <string> enable-label: @tr("Enable equalizer");
-    property <string> enable-desc: @tr("Shape the sound with ten bands, from bass on the left to treble on the right");
     // Translators: an equalizer preset, such as Rock or Jazz
     property <string> preset-label: @tr("Preset");
-    property <string> preamp-label: @tr("Preamp");
     // Translators: the equalizer's frequency bands
     property <string> bands-label: @tr("Bands");
 
     // The whole card is one cluster, so every row's label is a term of the switch's visibility.
-    out property <bool> has-matches: row-visible(enable-label, enable-desc)
+    out property <bool> has-matches: row-visible(EqualizerText.enable-label, EqualizerText.enable-desc)
         || row-visible(preset-label, "")
-        || row-visible(preamp-label, "")
+        || row-visible(EqualizerText.preamp-label, "")
         || row-visible(bands-label, "");
 
     property <bool> show-details: root.has-matches && Equalizer.enabled;
 
     VerticalLayout {
         if has-matches: SectionCard {
-            title: root.card-title;
+            title: EqualizerText.title;
 
             SettingRow {
                 icon: "graphic_eq";
-                label: root.enable-label;
-                description: root.enable-desc;
+                label: EqualizerText.enable-label;
+                description: EqualizerText.enable-desc;
                 ToggleSwitch {
                     checked <=> Equalizer.enabled;
                     toggled(v) => { Equalizer.set-enabled(v); }
@@ -72,71 +52,19 @@ export component EqualizerSection inherits Rectangle {
             if root.show-details: SettingRowStacked {
                 icon: "music_note";
                 label: root.preset-label;
-                HorizontalLayout {
-                    alignment: start;
-                    spacing: Theme.pad-sm;
-                    Dropdown {
-                        options: root.preset-names;
-                        trigger-width: 150px;
-                        selected-index <=> Equalizer.preset-idx;
-                        selected(i) => { Equalizer.select-preset(i); }
-                    }
-                    SectionButton {
-                        label: @tr("Reset");
-                        icon: "";
-                        primary: false;
-                        clicked => { Equalizer.reset(); }
-                    }
-                }
+                EqPresetPicker { }
             }
 
-            // Master gain, so a boost has headroom and doesn't clip.
             if root.show-details: SettingRowStacked {
                 icon: "volume_up";
-                label: root.preamp-label;
-                PreampSlider {
-                    preamp: Equalizer.preamp;
-                    min-preamp: Equalizer.min-preamp;
-                    max-preamp: Equalizer.max-preamp;
-                    changed(db) => { Equalizer.set-preamp(db); }
-                    committed(db) => { Equalizer.commit-preamp(db); }
-                }
+                label: EqualizerText.preamp-label;
+                EqPreampSlider { }
             }
 
             if root.show-details: SettingRowStacked {
                 icon: "bar_chart";
                 label: root.bands-label;
-                // No spacing: each column centres its thumb in whatever it is given, and the ten
-                // slider minimums alone are what the narrowest card has to seat.
-                HorizontalLayout {
-                    for freq[i] in root.band-freqs: VerticalLayout {
-                        spacing: Theme.pad-xs;
-                        horizontal-stretch: 1;
-
-                        Text {
-                            text: (Equalizer.band-gains[i] > 0 ? "+" : "") + round(Equalizer.band-gains[i]);
-                            color: Theme.subtext0;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                        }
-
-                        EqBandSlider {
-                            height: 150px;
-                            value: Equalizer.band-gains[i];
-                            min-db: Equalizer.min-gain;
-                            max-db: Equalizer.max-gain;
-                            changed(v) => { Equalizer.set-band(i, v); }
-                            committed(v) => { Equalizer.commit-band(i, v); }
-                        }
-
-                        Text {
-                            text: freq;
-                            color: Theme.subtext1;
-                            font-size: Theme.font-size-sm;
-                            horizontal-alignment: center;
-                        }
-                    }
-                }
+                EqBandStrip { }
             }
         }
     }

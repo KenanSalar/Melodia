@@ -281,11 +281,11 @@ msgstr "sayı"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
 #: ui/components/track-copy-items.slint
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint ui/settings.slint
 #: ui/views/search/top-result-card.slint
-#: ui/views/settings/replaygain-section.slint
 msgid "Album"
 msgstr "Albüm"
 
@@ -595,8 +595,8 @@ msgstr "Özet"
 msgid "Tags"
 msgstr "Etiketler"
 
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-#: ui/views/settings/replaygain-section.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
 msgid "Track"
 msgstr "Parça"
 
@@ -1075,6 +1075,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Şarkı Sözleri menüsünden tekrar deneyin"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Tamam"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Diğer Seçenekler"
 
@@ -1092,21 +1097,8 @@ msgid "Track end"
 msgstr "Parça sonu"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/animations-section.slint
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/output-section.slint
-msgid "Equalizer"
-msgstr "Ekolayzer"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Açık"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1285,10 +1277,6 @@ msgstr "Atla"
 msgid "Back"
 msgstr "Geri"
 
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Tamam"
-
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Sonraki"
@@ -1297,9 +1285,93 @@ msgstr "Sonraki"
 msgid "Search…"
 msgstr "Ara…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Ekolayzer"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Ekolayzırı etkinleştir"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Sesi on bantla şekillendirin, soldaki baslardan sağdaki tizlere kadar"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Ön yükseltici"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Klasik"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Düz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Caz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Bas Yükseltme"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Elektronik"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Tiz Yükseltme"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Vokal"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Özel"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Sıfırla"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Yeniden Tara"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain'i etkinleştir"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Normalleştirme modu"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Kırpılmayı önle"
 
 # Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
 #: ui/components/settings/scan-progress.slint
@@ -2639,72 +2711,15 @@ msgstr "Discord'a bağlandı"
 msgid "Discord not running"
 msgstr "Discord çalışmıyor"
 
-#: ui/views/settings/equalizer-section.slint
-msgid "Classical"
-msgstr "Klasik"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Flat"
-msgstr "Düz"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Jazz"
-msgstr "Caz"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Bass Boost"
-msgstr "Bas Yükseltme"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Electronic"
-msgstr "Elektronik"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Treble Boost"
-msgstr "Tiz Yükseltme"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Vocal"
-msgstr "Vokal"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Custom"
-msgstr "Özel"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Enable equalizer"
-msgstr "Ekolayzırı etkinleştir"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
-msgstr "Sesi on bantla şekillendirin, soldaki baslardan sağdaki tizlere kadar"
-
 #. Translators: an equalizer preset, such as Rock or Jazz
 #: ui/views/settings/equalizer-section.slint
 msgid "Preset"
 msgstr "Ön ayar"
 
-#: ui/views/settings/equalizer-section.slint
-#: ui/views/settings/replaygain-section.slint
-msgid "Preamp"
-msgstr "Ön yükseltici"
-
 #. Translators: the equalizer's frequency bands
 #: ui/views/settings/equalizer-section.slint
 msgid "Bands"
 msgstr "Bantlar"
-
-#: ui/views/settings/equalizer-section.slint
-msgid "Reset"
-msgstr "Sıfırla"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -3154,22 +3169,6 @@ msgstr "Puanları dosyalara kaydet"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Yıldız puanlarını her dosyanın etiketlerine yazar; böylece yeniden tarama sonrasında korunur ve diğer oynatıcılar bunları okuyabilir."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Enable ReplayGain"
-msgstr "ReplayGain'i etkinleştir"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Normalization mode"
-msgstr "Normalleştirme modu"
-
-#: ui/views/settings/replaygain-section.slint
-msgid "Prevent clipping"
-msgstr "Kırpılmayı önle"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

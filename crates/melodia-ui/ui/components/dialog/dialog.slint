@@ -5,6 +5,8 @@ import { SectionButton } from "../settings/section-button.slint";
 import { PlaylistMosaicPicker } from "playlist-mosaic-picker.slint";
 import { PlaylistPicker } from "playlist-picker.slint";
 import { ExportPlaylistPicker } from "export-playlist-picker.slint";
+import { EqualizerBody } from "equalizer-body.slint";
+import { ReplayGainBody } from "replaygain-body.slint";
 import { SmartPlaylistEditorBody } from "smart-playlist-editor-body.slint";
 import { TagEditorBody } from "tag-editor-body.slint";
 import { ScrobbleLastfmBody } from "scrobble-lastfm-body.slint";
@@ -75,7 +77,9 @@ export component DialogOverlay inherits Rectangle {
         // Per kind, so a picker's grid and preview have room without pinching while
         // every other kind stays at the regular footprint.
         property <length> max-w:
-            DialogGlobal.kind == DialogKind.edit-playlist-artwork ? 520px
+            DialogGlobal.kind == DialogKind.equalizer ? 600px
+            : DialogGlobal.kind == DialogKind.replaygain ? 480px
+            : DialogGlobal.kind == DialogKind.edit-playlist-artwork ? 520px
             : DialogGlobal.kind == DialogKind.smart-playlist-editor ? 760px
             : DialogGlobal.kind == DialogKind.edit-tags ? 720px
             : DialogGlobal.kind == DialogKind.scrobble-lastfm-login ? 460px
@@ -239,6 +243,12 @@ export component DialogOverlay inherits Rectangle {
 
             // The same toolkit, committing through its own primary button.
             if DialogGlobal.kind == DialogKind.export-playlists: ExportPlaylistPicker { }
+
+            // Changes apply live and persist; the footer keeps only its Done button,
+            // the caller leaving `cancel-label` empty.
+            if DialogGlobal.kind == DialogKind.equalizer: EqualizerBody { }
+
+            if DialogGlobal.kind == DialogKind.replaygain: ReplayGainBody { }
 
             // The rule builder; the dispatcher routes Accept to its commit.
             if DialogGlobal.kind == DialogKind.smart-playlist-editor: SmartPlaylistEditorBody { }

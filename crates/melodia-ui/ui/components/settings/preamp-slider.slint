@@ -1,12 +1,13 @@
 import { SettingSlider } from "setting-slider.slint";
 
-// The preamp both effect cards mount. It owns the dB ↔ 0..1 mapping, off bounds the host seeds from
-// its own DSP constants, so the formula exists once. It emits dB, which the host splits into live
-// and persist.
+// The preamp both effects mount, on their Settings cards and in their dialogs. It owns the
+// dB ↔ 0..1 mapping, off bounds the host seeds from its own DSP constants, so the formula exists
+// once. It emits dB, which the host splits into live and persist.
 export component PreampSlider inherits HorizontalLayout {
     in property <float> preamp; // dB
     in property <float> min-preamp; // dB
     in property <float> max-preamp; // dB
+    in property <bool> is-disabled: false;
 
     callback changed(float /* dB */);
     callback committed(float /* dB */);
@@ -23,6 +24,7 @@ export component PreampSlider inherits HorizontalLayout {
         // A unit symbol, so untranslated.
         readout: (root.preamp > 0 ? "+" : "") + round(root.preamp) + " dB";
         readout-width: 48px;
+        is-disabled: root.is-disabled;
         changed(v) => { root.changed(root.frac-to-preamp(v)); }
         committed(v) => { root.committed(root.frac-to-preamp(v)); }
     }

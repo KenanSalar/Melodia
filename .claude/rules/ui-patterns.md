@@ -1555,5 +1555,15 @@ edit would otherwise reverse.
 
 - **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
   `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold mount it
-  directly, and the two effect cards' preamps through `preamp-slider.slint`'s `PreampSlider`, the
-  one copy of the dB mapping. `SettingSlider`'s header says what stays the host's.
+  directly, and both effects' preamps through `preamp-slider.slint`'s `PreampSlider`, the one copy
+  of the dB mapping, on their cards and in their dialogs alike. `SettingSlider`'s header says what
+  stays the host's.
+
+- **A setting with a quick dialog as well as a card shares its controls, never its chrome.** The
+  equalizer and ReplayGain each keep a `components/settings/*-controls.slint` holding every control
+  bound to their global and a `*Text` global of the words both surfaces print. The Effects cards
+  lay those controls out in `SettingRow`s, and the overflow menu's dialogs in `DialogToggleRow` and
+  `DialogLabeledRow`. Mounting the card's rows in the dialog is the shortcut that looks like more
+  sharing: `SettingRow` measures itself at `card-w`, so the dialog would be sized for the Settings
+  column rather than its own. What each surface does while the effect is off is its own call,
+  argued in `equalizer-controls.slint`'s header.
