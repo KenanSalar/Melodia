@@ -5,11 +5,12 @@ use parking_lot::Mutex;
 
 use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
 use crate::ui::mosaic_hero::MosaicGuard;
-use crate::ui::row_match::Needle;
 use crate::ui::track_list_cache::TrackListCache;
-use melodia_app::services::settings::{SortDir, ViewSort};
+use melodia_app::services::settings::ViewSort;
 use melodia_core::entities::artist::FavoriteArtist;
 use melodia_core::entities::track::{FavoriteStats, MostPlayedFavorite};
+use melodia_core::entities::track_list::SortDir;
+use melodia_core::utils::needle::Needle;
 
 /// Per-section cached snapshots — every fetch lands here so callbacks can recover the underlying
 /// Rust data without round-tripping through Slint. Each field is mutated only on its own fetch

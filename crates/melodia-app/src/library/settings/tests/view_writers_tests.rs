@@ -12,6 +12,7 @@ use super::{
 use crate::services;
 use crate::state::fixtures::seeded_root;
 use melodia_core::entities::locale::{DEFAULT_LOCALE, SUPPORTED_LOCALES};
+use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::AppError;
 
 /// A code with no bundled catalogue is refused before the write, so `settings.json` cannot be
@@ -118,10 +119,7 @@ fn a_view_with_no_persisted_sort_answers_none() -> Result<(), AppError> {
 #[test]
 fn a_persisted_sort_comes_back_for_its_own_view_only() -> Result<(), AppError> {
     let (_tmp, paths) = seeded_root()?;
-    let sort = services::settings::ViewSort {
-        field: "album".to_owned(),
-        dir: services::settings::SortDir::Desc,
-    };
+    let sort = services::settings::ViewSort { field: "album".to_owned(), dir: SortDir::Desc };
     services::view_state::mutate_view_state(&paths, |s| {
         s.view_sort.insert("tracks".to_owned(), sort.clone());
     })?;

@@ -26,6 +26,7 @@ pub fn spawn_background_tasks(
     tasks::file_event_processor::spawn(spawner, state, channels.file_event_rx);
     tasks::queue_prune::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
+    tasks::search_text_backfill::spawn(spawner, state);
     // Puts back a stored cover a cache finds missing: mid-session, and with watching off, where no
     // boot scan reconciles the library, one gone while the app was closed too.
     tasks::artwork_restore::spawn(spawner, state);

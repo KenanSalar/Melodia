@@ -12,11 +12,12 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 use super::state::SongsTotals;
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::list_selection;
-use crate::ui::row_match::{self, Needle};
+use crate::ui::row_match;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Read-and-return the active filter needle, folded by [`set_filter`] and ready to hand to a
@@ -32,7 +33,7 @@ pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> Needle {
 /// and stays on the UI thread; the Most Played walk is not, so it is built on a worker and carries
 /// this back to prove it is still the answer being asked for.
 pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: &str) -> u64 {
-    *rp_ui.state().filter.lock() = row_match::fold_needle(filter);
+    *rp_ui.state().filter.lock() = fold_needle(filter);
     rp_ui.bump_filter_generation()
 }
 

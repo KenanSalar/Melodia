@@ -10,6 +10,8 @@
 
 use super::*;
 use crate::ui::fixtures::{four_tracks, track_row, visible_rows};
+use crate::ui::row_match;
+use melodia_core::utils::needle::fold_needle;
 
 /// A row with a distinct value in every searchable field, so a needle can
 /// only be answered by the field it names.
@@ -30,15 +32,15 @@ fn row(id: i64) -> RsTrackListRow {
 fn the_packed_key_matches_every_searchable_field() {
     let key = RowSearchKey::from_row(&row(1));
     for needle in ["ghost", "specials", "various", "more", "ska", "1981", "198"] {
-        assert!(key.matches(&row_match::fold_needle(needle)), "missed {needle:?}");
+        assert!(key.matches(&fold_needle(needle)), "missed {needle:?}");
     }
-    assert!(!key.matches(&row_match::fold_needle("zzz")));
+    assert!(!key.matches(&fold_needle("zzz")));
 }
 
 #[test]
 fn an_empty_needle_matches_the_packed_key() {
     // The unfiltered list relies on this rather than branching itself.
-    assert!(RowSearchKey::from_row(&row(1)).matches(&row_match::fold_needle("")));
+    assert!(RowSearchKey::from_row(&row(1)).matches(&fold_needle("")));
 }
 
 #[test]
@@ -47,31 +49,31 @@ fn the_packed_key_folds_accents() {
     r.artist = Some("Björk".to_owned());
     r.title = "Bế Tắc".to_owned();
     let key = RowSearchKey::from_row(&r);
-    assert!(key.matches(&row_match::fold_needle("bjork")));
-    assert!(key.matches(&row_match::fold_needle("be")));
+    assert!(key.matches(&fold_needle("bjork")));
+    assert!(key.matches(&fold_needle("be")));
 }
 
 #[test]
 fn a_needle_cannot_straddle_the_packed_separator() {
-    // Fields are joined by `\0`; a needle spanning two of them would make
-    // the cached lists match rows no other list does.
+    // A needle spanning two packed fields would make the cached lists match
+    // rows no other list does.
     let key = RowSearchKey::from_row(&row(1));
-    assert!(!key.matches(&row_match::fold_needle("townthe")));
+    assert!(!key.matches(&fold_needle("townthe")));
 }
 
 #[test]
-fn a_nul_in_a_field_cannot_forge_a_separator() {
-    // `push_folded` maps NUL to a space, so a tag carrying one can't split
-    // its own field in two and let a needle match across the seam.
+fn a_nul_in_a_field_reads_as_a_space() {
+    // ID3v2.4 joins multiple values with one, and `push_folded` maps it to a
+    // space, so a needle typed with the space still finds the tag.
     let mut r = row(1);
     r.title = "Ghost\0Town".to_owned();
     let key = RowSearchKey::from_row(&r);
-    assert!(key.matches(&row_match::fold_needle("ghost town")));
+    assert!(key.matches(&fold_needle("ghost town")));
 }
 
 #[test]
 fn the_packed_key_and_track_matches_agree_field_for_field() {
-    // Structural drift is already hard — both read `row_match::search_fields`
+    // Structural drift is already hard — both read `SearchFields`
     // — but the year is matched by a rule each calls separately, and a
     // disagreement would show as the cached lists narrowing differently from
     // every detail page for the same query.
@@ -89,7 +91,7 @@ fn the_packed_key_and_track_matches_agree_field_for_field() {
         for needle in
             ["ghost", "specials", "various", "more", "ska", "1981", "198", "queen david", "zzz", ""]
         {
-            let folded = row_match::fold_needle(needle);
+            let folded = fold_needle(needle);
             assert_eq!(
                 key.matches(&folded),
                 row_match::track_matches(&r, &folded),
@@ -158,7 +160,7 @@ fn the_cache_sorts_exactly_as_the_db_rows_do() {
 
             let cache = TrackListCache::new();
             cache.store(rows.clone(), field, dir);
-            let actual = cache.snapshot().ids_filtered(&row_match::fold_needle(""));
+            let actual = cache.snapshot().ids_filtered(&fold_needle(""));
 
             assert_eq!(actual, expected, "cache diverged on {field:?}/{dir:?}");
         }
@@ -167,7 +169,7 @@ fn the_cache_sorts_exactly_as_the_db_rows_do() {
 
 /// Every row a list showing `snap` under `needle` would paint, in order.
 fn shown(snap: &Arc<CacheData>, needle: &str) -> Vec<UiTrackListRow> {
-    let visible = VisibleRows::new(Arc::clone(snap), &row_match::fold_needle(needle));
+    let visible = VisibleRows::new(Arc::clone(snap), &fold_needle(needle));
     (0..visible.len()).filter_map(|pos| visible.row(pos)).collect()
 }
 
@@ -185,7 +187,7 @@ fn a_stored_set_leaves_its_vectors_aligned() {
 
     // Every row is reachable exactly once, and the ids the sort keys carry
     // line up with the rows the display walk yields.
-    let ids = snap.ids_filtered(&row_match::fold_needle(""));
+    let ids = snap.ids_filtered(&fold_needle(""));
     let mut seen = ids.clone();
     seen.sort_unstable();
     assert_eq!(seen, [1, 2, 3, 4]);
@@ -204,7 +206,7 @@ fn a_filter_narrows_both_walks_the_same_way() {
     cache.store(sortable_rows(), "title", "asc");
     let snap = cache.snapshot();
 
-    let needle = row_match::fold_needle("mango");
+    let needle = fold_needle("mango");
     assert_eq!(snap.ids_filtered(&needle), [3, 4]);
     assert_eq!(shown(&snap, "mango").len(), 2);
     // The unfiltered count is the view's `total-count` and must not follow
@@ -236,7 +238,7 @@ fn a_removal_keeps_the_order_pointing_at_the_rows_it_names() {
     let snap = cache.snapshot();
     assert_eq!(snap.total(), 3);
 
-    let ids = snap.ids_filtered(&row_match::fold_needle(""));
+    let ids = snap.ids_filtered(&fold_needle(""));
     assert!(!ids.contains(&3), "removed id still in display order");
     let mut seen = ids.clone();
     seen.sort_unstable();
@@ -331,7 +333,7 @@ fn a_cleared_cache_reads_as_empty_rather_than_stale() {
     let snap = cache.snapshot();
     assert!(snap.is_empty());
     assert_eq!(snap.total(), 0);
-    assert!(snap.ids_filtered(&row_match::fold_needle("")).is_empty());
+    assert!(snap.ids_filtered(&fold_needle("")).is_empty());
     assert!(shown(&snap, "").is_empty());
 }
 
@@ -358,5 +360,5 @@ fn the_cache_conflates_a_zero_year_with_a_missing_one() {
     // Cache: tied on year, so `sort_key` decides and row 2 leads.
     let cache = TrackListCache::new();
     cache.store(rows, "year", "asc");
-    assert_eq!(cache.snapshot().ids_filtered(&row_match::fold_needle("")), [2, 1]);
+    assert_eq!(cache.snapshot().ids_filtered(&fold_needle("")), [2, 1]);
 }

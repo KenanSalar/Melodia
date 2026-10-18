@@ -12,11 +12,11 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
 use super::state::{GridData, GridIndexCache};
 use super::{GenresUi, to_slint_genre_row};
 use crate::ui::grid_rows::chunk_rows;
-use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_core::utils::needle::fold_needle;
 use melodia_ui::{AppWindow, GenreGridRow as UiGenreGridRow, Genres};
 
 /// Fetch the genre list from the DB into `genres_ui.grid.data`, then
@@ -96,14 +96,14 @@ pub fn rebuild_grid(ui: &AppWindow, genres_ui: &GenresUi) {
 /// Filter + sort the grid data into a display-order list of genre
 /// indices. Pure / no UI state. The name sort reads `data.keys`
 /// (pre-lowercased in `fetch_grid`); the filter walks the raw names
-/// through `row_match`, which folds only the ones carrying an accent.
+/// through `Needle`, which folds only the ones carrying an accent.
 pub(super) fn compute_indices(
     data: &GridData,
     sort_field: &str,
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = row_match::fold_needle(filter);
+    let needle = fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.genres.len()).collect()
     } else {

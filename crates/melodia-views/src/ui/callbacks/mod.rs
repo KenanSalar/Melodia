@@ -29,9 +29,10 @@ use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
 
 use melodia_app::library;
-use melodia_app::services::settings::{SortDir, ViewSort};
+use melodia_app::services::settings::ViewSort;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, Nav, Player};
 

@@ -27,6 +27,7 @@ pub mod resume_watching;
 pub mod retroactive_hash;
 pub mod rss_sampler;
 pub mod scrobble;
+pub mod search_text_backfill;
 pub mod spawner;
 pub mod tag_backfill;
 pub mod updater_daily;

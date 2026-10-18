@@ -2,8 +2,9 @@
 //! tab's whole meaning.
 
 use crate::ui::favorites::FavoritesUi;
-use melodia_app::services::settings::{SortDir, ViewSort};
+use melodia_app::services::settings::ViewSort;
 use melodia_core::entities::artist::FavoriteArtist;
+use melodia_core::entities::track_list::SortDir;
 
 /// Order the Favorite Artists cache in place.
 ///

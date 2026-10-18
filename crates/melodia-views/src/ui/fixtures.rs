@@ -4,8 +4,8 @@
 //! own tests reads it.
 
 use melodia_core::entities::track::TrackListRow;
+use melodia_core::utils::needle::fold_needle;
 
-use crate::ui::row_match;
 use crate::ui::track_list_cache::{TrackListCache, VisibleRows};
 
 /// A track titled `title` with every other field empty, for a test to fill in the ones it reads.
@@ -45,5 +45,5 @@ pub(crate) fn four_tracks() -> Vec<TrackListRow> {
 
 /// What a list showing `cache` under `needle` holds.
 pub(crate) fn visible_rows(cache: &TrackListCache, needle: &str) -> VisibleRows {
-    VisibleRows::new(cache.snapshot(), &row_match::fold_needle(needle))
+    VisibleRows::new(cache.snapshot(), &fold_needle(needle))
 }

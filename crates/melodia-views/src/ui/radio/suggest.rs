@@ -21,9 +21,9 @@ use std::sync::Arc;
 use slint::{ComponentHandle, Model, SharedString};
 
 use crate::ui::model_diff::replace_rows;
-use crate::ui::row_match::{self, Needle};
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{Facet, StationSearch};
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{AppWindow, Radio, RadioSuggestionRow};
 
 use super::facets::{self, ChipFilter, FacetIndex};
@@ -198,7 +198,7 @@ pub(super) fn refresh(ui: &AppWindow, radio_ui: &Arc<RadioUi>) {
     let g = ui.global::<Radio>();
     let rows = if offers_scopes(&g) {
         let search = browse::query(radio_ui);
-        let needle = row_match::fold_needle(&search.name);
+        let needle = fold_needle(&search.name);
         suggestions(&needle, &radio_ui.facet_index.lock(), &search)
             .into_iter()
             .map(|s| to_row(&g, &s))

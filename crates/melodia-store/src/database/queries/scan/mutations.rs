@@ -8,6 +8,7 @@ use sqlx::{AssertSqlSafe, Row};
 
 use crate::database::{MAX_BINDS_PER_STATEMENT, placeholders};
 use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::entities::track_search::SearchFields;
 use melodia_core::error::AppError;
 
 use super::ResolvedIds;
@@ -33,7 +34,7 @@ const TRACK_INSERT_COLUMNS: &str = "file_path, file_name,
     duration_ms, file_size, codec, bitrate, channels, sample_rate, bit_depth,
     artwork_path,
     album_id, artist_id, genre_id, folder_id,
-    date_modified, sort_key,
+    date_modified, sort_key, search_text,
     play_count, skip_count, rating, is_favorite, last_played, last_position,
     date_added";
 
@@ -94,17 +95,17 @@ impl<'q, Sep: std::fmt::Display> TrackBinder<'q>
     }
 }
 
-/// Bind the canonical 50-column block shared by `insert_track`,
+/// Bind the canonical column block shared by `insert_track`,
 /// `insert_tracks_batch` and `update_track_metadata`: 44 metadata fields
 /// (`file_hash` through `artwork_path`), 4 foreign-key ids (`album_id`, `artist_id`, `genre_id`,
-/// `folder_id`), then `date_modified` and `sort_key`. All three call sites place
+/// `folder_id`), then `date_modified` and the two [`DerivedColumns`]. All three call sites place
 /// these in the same order in their respective SQL so this single helper
 /// covers schema changes in one place.
 fn bind_track_columns<'q, B: TrackBinder<'q>>(
     binder: B,
     meta: &'q melodia_core::entities::scan::ExtractedMetadata,
     ids: &'q ResolvedIds,
-    sort_key: &'q str,
+    derived: &'q DerivedColumns,
 ) -> B {
     binder
         .bind_col(&meta.file_hash)
@@ -156,15 +157,33 @@ fn bind_track_columns<'q, B: TrackBinder<'q>>(
         .bind_col(ids.genre_id)
         .bind_col(ids.folder_id)
         .bind_col(&meta.date_modified)
-        .bind_col(sort_key)
+        .bind_col(&derived.sort_key)
+        .bind_col(&derived.search_text)
 }
 
-/// The string a track's `sort_key` is derived from: the file's `TITLESORT` where it has one, the
-/// title otherwise. Spelled once because `insert_track`, `insert_tracks_batch` and
-/// `update_track_metadata` all need it and a row sorting by a different rule than its neighbours
-/// is invisible until a list is read top to bottom.
-fn sort_source(meta: &ExtractedMetadata) -> &str {
-    meta.sort.title.as_deref().unwrap_or(&meta.title)
+/// The two columns computed from a file's tags rather than read off them. Built once per file
+/// because `insert_track`, `insert_tracks_batch` and `update_track_metadata` all bind both, and a
+/// row sorting or filtering by a different rule than its neighbours is invisible until a list is
+/// read top to bottom.
+struct DerivedColumns {
+    sort_key: String,
+    search_text: String,
+}
+
+impl DerivedColumns {
+    fn of(meta: &ExtractedMetadata) -> Self {
+        // The file's `TITLESORT` where it has one, the title otherwise.
+        let sort_source = meta.sort.title.as_deref().unwrap_or(&meta.title);
+        let search_text = SearchFields {
+            title: &meta.title,
+            artist: meta.artist.line().unwrap_or_default(),
+            album_artist: meta.album_artist.line().unwrap_or_default(),
+            album: meta.album.as_deref().unwrap_or_default(),
+            genre: meta.genres.line().unwrap_or_default(),
+        }
+        .pack();
+        Self { sort_key: to_natural_sort_key(sort_source), search_text }
+    }
 }
 
 /// Insert a new track into the database. Returns the new track's `id` so the
@@ -180,17 +199,17 @@ pub(crate) async fn insert_track(
     now: &str,
     names: &mut NameCache,
 ) -> Result<i64, AppError> {
-    let sort_key = to_natural_sort_key(sort_source(meta));
+    let derived = DerivedColumns::of(meta);
 
-    // Column order: file_path, file_name, then the 50-column shared block
-    // bound by `bind_track_columns`, then the playback defaults and date_added.
+    // Column order: file_path, file_name, then the shared block bound by
+    // `bind_track_columns`, then the playback defaults and date_added.
     let sql = format!(
         "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) VALUES ({})",
         placeholders(TRACK_INSERT_COLUMN_COUNT)
     );
     let q = sqlx::query(AssertSqlSafe(sql)).bind(file_path).bind(file_name);
 
-    let q = bind_track_columns(q, meta, ids, &sort_key);
+    let q = bind_track_columns(q, meta, ids, &derived);
 
     let result = q
         .bind(0i32) // play_count
@@ -241,16 +260,16 @@ pub(crate) async fn insert_tracks_batch(
 ) -> Result<Vec<i64>, AppError> {
     let mut out = Vec::with_capacity(rows.len());
     for chunk in rows.chunks(INSERT_CHUNK_ROWS) {
-        let sort_keys: Vec<String> =
-            chunk.iter().map(|r| to_natural_sort_key(sort_source(r.meta))).collect();
+        let derived: Vec<DerivedColumns> =
+            chunk.iter().map(|r| DerivedColumns::of(r.meta)).collect();
 
         let mut qb = sqlx::QueryBuilder::<sqlx::Sqlite>::new(format!(
             "INSERT INTO tracks ({TRACK_INSERT_COLUMNS}) "
         ));
-        qb.push_values(chunk.iter().zip(sort_keys.iter()), |mut b, (row, sort_key)| {
+        qb.push_values(chunk.iter().zip(derived.iter()), |mut b, (row, derived)| {
             let meta = row.meta;
             b.push_bind(&row.file_path).push_bind(&row.file_name);
-            bind_track_columns(&mut b, meta, &row.ids, sort_key);
+            bind_track_columns(&mut b, meta, &row.ids, derived);
             // Playback defaults as SQL literals (play_count, skip_count,
             // is_favorite, last_played, last_position); the rating comes off
             // the file's tag, so it binds.
@@ -335,7 +354,7 @@ pub(crate) async fn update_track_metadata(
     ids: &ResolvedIds,
     names: &mut NameCache,
 ) -> Result<(), AppError> {
-    let sort_key = to_natural_sort_key(sort_source(meta));
+    let derived = DerivedColumns::of(meta);
     let q = sqlx::query(
         "UPDATE tracks SET
             file_hash = ?, title = ?, artist = ?, album_artist = ?, album = ?,
@@ -354,11 +373,11 @@ pub(crate) async fn update_track_metadata(
             channels = ?, sample_rate = ?, bit_depth = ?,
             artwork_path = COALESCE(?, artwork_path),
             album_id = ?, artist_id = ?, genre_id = ?, folder_id = ?,
-            date_modified = ?, sort_key = ?,
+            date_modified = ?, sort_key = ?, search_text = ?,
             rating = CASE WHEN ? = 0 THEN rating ELSE ? END
          WHERE file_path = ? RETURNING id",
     );
-    let q = bind_track_columns(q, meta, ids, &sort_key);
+    let q = bind_track_columns(q, meta, ids, &derived);
     let tag_rating = meta.rating.unwrap_or(0);
     let updated =
         q.bind(tag_rating).bind(tag_rating).bind(file_path).fetch_optional(&mut **tx).await?;

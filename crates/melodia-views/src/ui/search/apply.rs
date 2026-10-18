@@ -17,10 +17,10 @@ use crate::ui::list_selection;
 use crate::ui::model_patch;
 use crate::ui::track_sort::sort_track_rows_by;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32, opt_shared};
-use melodia_app::services::settings::SortDir;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::search::SearchResults;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::entities::track_list::SortDir;
 use melodia_ui::{
     AppWindow, EntityStripRow as UiEntityStripRow, Search, TrackListRow as UiTrackListRow,
 };

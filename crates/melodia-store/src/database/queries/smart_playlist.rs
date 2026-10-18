@@ -62,15 +62,30 @@ pub async fn get_smart_playlist_tracks_for_export(
 
 /// `SELECT columns FROM tracks` over the criteria's membership, ordered and capped.
 fn membership_query(columns: &str, criteria: &SmartCriteria) -> QueryBuilder<Sqlite> {
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {columns} FROM tracks"));
-    push_where(&mut qb, criteria);
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {columns}"));
+    push_membership(&mut qb, criteria);
+    qb
+}
+
+/// The membership as `(id, position)` rows, `position` numbering the criteria's own order, for a
+/// query that sorts or filters the set further and still needs that order to fall back on.
+pub(crate) fn push_positioned_membership(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+    qb.push("SELECT id, ROW_NUMBER() OVER (")
+        .push(order_by_fragment(criteria.limit.as_ref()))
+        .push(") AS position");
+    push_membership(qb, criteria);
+}
+
+/// `FROM tracks` plus the criteria's `WHERE`, order and cap.
+fn push_membership(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+    qb.push(" FROM tracks");
+    push_where(qb, criteria);
     if let Some(limit) = &criteria.limit {
-        push_order_and_limit(&mut qb, limit);
+        push_order_and_limit(qb, limit);
     } else {
         // Unlimited: fall back to the natural display order.
         qb.push(order_by_fragment(None));
     }
-    qb
 }
 
 /// `(track_count, total_duration_ms)` for a smart playlist without projecting

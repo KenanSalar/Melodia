@@ -1,12 +1,14 @@
 //! The play-count rankings: the Favorites hero and its Most Played tab, and the library-wide Most
 //! Played tab.
 
-use sqlx::AssertSqlSafe;
+use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite};
 
 use super::columns;
+use super::keyset::push_needle;
 use crate::database::DbPool;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 
 /// The `ORDER BY` body every "most played" surface ranks with, the Favorites hero mosaic included.
 ///
@@ -104,4 +106,34 @@ pub async fn get_most_played(db: &DbPool) -> Result<Vec<track::MostPlayedFavorit
     .fetch_all(db.read())
     .await?;
     Ok(rows)
+}
+
+/// The library-wide Most Played tab as `(id, play_count)` pairs, ranked as [`get_most_played`]
+/// ranks its cards and narrowed by `needle`: what a grid holding only ids keeps.
+pub async fn most_played_ids(db: &DbPool, needle: &Needle) -> Result<Vec<(i64, i32)>, AppError> {
+    ranked_ids(db, "play_count > 0", needle).await
+}
+
+/// [`most_played_ids`] over the favorites alone, as [`get_most_played_favorites`] ranks them.
+pub async fn most_played_favorite_ids(
+    db: &DbPool,
+    needle: &Needle,
+) -> Result<Vec<(i64, i32)>, AppError> {
+    ranked_ids(db, "is_favorite = TRUE AND play_count > 0", needle).await
+}
+
+async fn ranked_ids(
+    db: &DbPool,
+    membership: &'static str,
+    needle: &Needle,
+) -> Result<Vec<(i64, i32)>, AppError> {
+    let mut qb = QueryBuilder::<Sqlite>::new("SELECT id, play_count FROM tracks WHERE ");
+    qb.push(membership);
+    if !needle.is_empty() {
+        qb.push(" AND ");
+        push_needle(&mut qb, needle);
+    }
+    qb.push(" ORDER BY ").push(MOST_PLAYED_ORDER);
+    let ranked = qb.build_query_as::<(i64, i32)>().persistent(false).fetch_all(db.read()).await?;
+    Ok(ranked)
 }

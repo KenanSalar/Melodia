@@ -14,3 +14,5 @@ pub mod search;
 pub mod smart_criteria;
 pub mod tags;
 pub mod track;
+pub mod track_list;
+pub mod track_search;

@@ -6,10 +6,10 @@ use std::collections::HashSet;
 use parking_lot::Mutex;
 
 use super::{DetailGlobal, selection};
-use crate::ui::row_match::{self, Needle};
 use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::utils::needle::{Needle, fold_needle};
 
 /// One detail's cached rows, needle and selection shadow.
 pub struct DetailCache {
@@ -63,7 +63,7 @@ impl DetailCache {
     }
 
     pub fn set_filter(&self, text: &str) {
-        *self.filter.lock() = row_match::fold_needle(text);
+        *self.filter.lock() = fold_needle(text);
     }
 
     pub fn needle(&self) -> Needle {

@@ -787,11 +787,14 @@ three components that answer it, and each argues its geometry at its own file.
 
 ### Filtering
 
-- **Every filter box answers "does this row match" through `crates/melodia-views/src/ui/row_match.rs`, and none of them
-  spells `to_lowercase().contains(…)`.** It owns `search_fields` (ordered like the `tracks_fts`
-  column list it mirrors), the `fold_needle` pair folding case **and accents**, and the predicates
-  over them. Sixteen surfaces route through it; on all three tabbed pages the needle is **one
-  shadow shared across the tabs**, cleared on both sides by a tab pick.
+- **Every filter box answers "does this row match" through `Needle` and `crates/melodia-views/src/ui/row_match.rs`, and
+  none of them spells `to_lowercase().contains(…)`.** `melodia_core`'s `utils::needle` owns the
+  `fold_needle` pair folding case **and accents**, its `entities::track_search::SearchFields` what
+  a track is searchable by (ordered like the `tracks_fts` column list it mirrors), and `row_match`
+  the row predicates over both. The first two sit in `melodia-core` because the store matches them
+  too: `tracks.search_text` is `SearchFields::pack()`, and the SQL filter takes the same `Needle`
+  (`library-data.md` owns that side). Sixteen surfaces route through it; on all three tabbed pages
+  the needle is **one shadow shared across the tabs**, cleared on both sides by a tab pick.
 
 - **Radio's Browse box narrows nothing, and is the one box with no row predicate to find.** The
   directory searches one field per request, so the needle *is* the query, and what else it could
@@ -1455,7 +1458,7 @@ edit would otherwise reverse.
 - **The search box takes two properties**: `search-input` for the `SearchBar`s, `search-query` for
   the sections, joined by a `FilterThrottle`. Mounting every page is what makes a keystroke
   expensive here with no model in sight. Both are cleared together on nav-away and on a category
-  pick. `on_matches` memoizes the fold against the raw needle, this being the one `row_match`
+  pick. `on_matches` memoizes the fold against the raw needle, this being the one `Needle`
   caller that can't hold a folded shadow: it is invoked per *field*, not per pass.
   **Two boxes write `search-input`**, the panel's own and the field the rail's button opens. Both
   stay mounted, each carrying a `changed blur-trigger` tracker an `if` would strand, and

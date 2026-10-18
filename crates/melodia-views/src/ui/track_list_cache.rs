@@ -26,17 +26,17 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use parking_lot::Mutex;
 
-use crate::ui::row_match::{self, Needle};
 use crate::ui::track_sort::{self, TrackSortFields};
 use crate::ui::tracks::to_slint_track_list_row;
 use crate::ui::util::{StringPool, len_as_i32};
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::entities::track_search::SearchFields;
+use melodia_core::utils::needle::Needle;
 use melodia_ui::TrackListRow as UiTrackListRow;
 
-/// Pre-folded text columns for filtering: one packed `Box<str>` of
-/// [`row_match::search_fields`] joined by `\0`, so one heap allocation per row rather than
-/// a `String` header per column. `\0` is safe as a separator — needles come from text
-/// input and `push_folded` maps away the rare field value carrying one.
+/// Pre-folded text columns for filtering: the row's [`SearchFields`] packed into one
+/// `Box<str>`, the same text `tracks.search_text` holds, so one heap allocation per row
+/// rather than a `String` header per column.
 ///
 /// `year` stays an integer beside the packed text, so this and every `track_matches`
 /// surface run the *same* [`Needle::matches_number`] rule rather than two spellings of it.
@@ -52,17 +52,7 @@ pub struct RowSearchKey {
 
 impl RowSearchKey {
     pub fn from_row(r: &RsTrackListRow) -> Self {
-        let fields = row_match::search_fields(r);
-        let text_len: usize = fields.iter().map(|f| f.len()).sum();
-        // One separator per pair, so one fewer than there are fields.
-        let mut buf = String::with_capacity(text_len + fields.len() - 1);
-        for (i, field) in fields.iter().enumerate() {
-            if i > 0 {
-                buf.push('\0');
-            }
-            melodia_core::utils::fold::push_folded(&mut buf, field);
-        }
-        Self { packed: buf.into_boxed_str(), year: r.year }
+        Self { packed: SearchFields::from(r).pack().into_boxed_str(), year: r.year }
     }
 
     /// A plain `str::contains` on the packed text, both sides already folded — the one

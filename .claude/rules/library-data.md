@@ -164,8 +164,11 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     `get_favorite_tracks_for_list` lost their `sort_by`/`sort_dir` when their callers started
     re-permuting retained rows through `ui::track_sort`, and the eight-arm `track_list_order_by`
     behind them went with them — one fixed `TRACK_LIST_ORDER` const in its place, argued at its
-    definition. Don't reintroduce a sort parameter for a fifth caller; retain and permute like the
-    other two.
+    definition. Don't reintroduce a sort parameter on them.
+    **`queries::track::keyset` is the other answer**, for a list that holds only ids: it sorts and
+    filters in SQL with arms that reproduce `ui::track_sort`'s one for one, the Songs tabs' reading
+    of a missing year and of the length included, each ending in the id so a descending sort is the
+    exact reverse. `crates/melodia/tests/cross_tier.rs` holds every arm against the comparator.
 
   - **Which makes a `for_list` query's own `ORDER BY` dead, and copying one the trap.** Every
     detail view re-sorts what it fetched, so that clause decides nothing there.
@@ -180,7 +183,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     being Rust against SQL, so the pin is `crates/melodia/tests/cross_tier.rs`'s
     `a_card_queues_its_{artist,genre,album}_in_the_order_the_page_shows_it`: it asks both sides over
     a library built out of the partitions they answer differently, a tidy fixture agreeing by
-    accident. A new batch-action query states which arm it reproduces and joins that walk. **The
+    accident. A new batch-action query states which arm it reproduces and joins that walk.
+    `entity_ids` takes both of its orders from `keyset::detail_order`, so a card and the keyset of
+    the page beside it share one SQL spelling as well as one oracle. **The
     page's own default is the other half and moves separately**, so it is read off each detail
     file's `resolve_view_sort` literal beside them.
 
@@ -190,13 +195,26 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   weights with the argument for each, which is `20260910000000` and was `20260802000001` before it
   — a rebuild moves that text rather than amending it, so read the latest one;
   `crates/melodia-store/src/database/queries/search.rs` carries the query shape and the folding
-  asymmetry. Two things neither of them can tell you: **a ninth column is two edits**, since the
-  per-view filter boxes never touch this index and walk in-memory caches through
-  `ui::row_match::search_fields`, which mirrors the column list by hand
-  (`.claude/rules/ui-patterns.md` owns that side, including the two places the answers deliberately
-  diverge); and **nothing outside that migration and `search_tests` may name a shadow table**,
+  asymmetry. Two things neither of them can tell you: **a ninth column is three edits**, since the
+  per-view filter boxes never touch this index. They match through `SearchFields`, which mirrors
+  the column list by hand (`.claude/rules/ui-patterns.md` owns that side, including the two places
+  the answers deliberately diverge), and the library-sized lists match its packed copy,
+  `tracks.search_text`, so the third edit is a migration blanking that column for the per-launch
+  backfill to refill in the new shape. `search_tests` pins the first against the index. And
+  **nothing outside that migration and `search_tests` may name a shadow table**,
   `tracks_fts_{data,idx,docsize,config}` being fts5's private storage, taking no foreign key and
   none of it droppable, `_docsize` least of all since bm25 reads it.
+
+- **A statement writing any of the five searchable columns writes `search_text` beside it.** Title,
+  artist, album artist, album and genre are folded into that column at write time, and today only
+  `bind_track_columns` writes them, through `DerivedColumns`. An `UPDATE` rewriting a rendered
+  artist line on its own leaves every library-sized filter matching the old name, and nothing
+  fails: the column is filled, so the backfill never looks at it again.
+
+- **`UNICODE_LOWER` is a query-side collation and never schema.** `database::collation` registers it
+  on every pool so an `ORDER BY` can reproduce `to_lowercase()`; an index, view, trigger or column
+  naming it leaves the table unreadable to any connection without it, the `sqlite3` CLI included.
+  Written here because the place to break it is a migration, nowhere near that module.
 
 ## Ratings
 

@@ -86,7 +86,7 @@ impl TracksUi {
     pub fn current_ids_filtered(&self, filter: &str) -> Vec<i64> {
         // One lock, one `Arc::clone`, then walk off it — a concurrent fetch
         // can swap the cache underneath but not tear the set we hold.
-        self.cache.snapshot().ids_filtered(&crate::ui::row_match::fold_needle(filter))
+        self.cache.snapshot().ids_filtered(&melodia_core::utils::needle::fold_needle(filter))
     }
 
     /// Surgical mutation of `is_favorite` on the cached row. Combined with

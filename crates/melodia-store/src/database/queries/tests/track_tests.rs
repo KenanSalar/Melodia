@@ -3,7 +3,9 @@ use crate::database::queries;
 use crate::database::queries::fixtures::*;
 use crate::database::{DbPool, IDS_PER_SET};
 use melodia_core::entities::track::TrackMeta;
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::{Needle, fold_needle};
 
 async fn seed_db() -> Result<DbPool, AppError> {
     let db = DbPool::test_pool().await?;
@@ -1296,5 +1298,192 @@ async fn an_empty_library_marks_nothing_stale() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
 
     assert_eq!(queries::track::mark_every_track_stale(&db).await?, 0);
+    Ok(())
+}
+
+// === The search column, keysets and rows by id ===
+
+async fn id_of(db: &DbPool, title: &str) -> Result<i64, AppError> {
+    let id = sqlx::query_scalar("SELECT id FROM tracks WHERE title = ?")
+        .bind(title)
+        .fetch_one(db.read())
+        .await?;
+    Ok(id)
+}
+
+async fn search_texts(db: &DbPool) -> Result<Vec<String>, AppError> {
+    let texts = sqlx::query_scalar("SELECT search_text FROM tracks ORDER BY id")
+        .fetch_all(db.read())
+        .await?;
+    Ok(texts)
+}
+
+/// **The backfill owes exactly the rows a migration left empty.** Every write path fills the
+/// column, so `''` is what a row from before it looks like, and one holding anything else is a row
+/// a scan has written since: overwriting it would put back fields the scan replaced.
+#[tokio::test]
+async fn the_backfill_fills_the_empty_rows_and_only_those() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET search_text = '' WHERE title IN ('Alpha', 'Gamma')")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET search_text = 'kept' WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let filled = queries::track::backfill_search_text(&db).await?;
+
+    assert_eq!(filled, 2);
+    assert_eq!(
+        search_texts(&db).await?,
+        ["alpha\nzeta artist\n\nb album\npop", "kept", "gamma\nalpha artist\n\na album\nrock"]
+    );
+    Ok(())
+}
+
+/// What makes the pass cheap enough to run on every launch.
+#[tokio::test]
+async fn a_filled_library_gives_the_backfill_nothing_to_do() -> Result<(), AppError> {
+    let db = seed_db().await?;
+
+    assert_eq!(queries::track::backfill_search_text(&db).await?, 0);
+    Ok(())
+}
+
+/// **A row the backfill hasn't reached matches every needle**, so the window after an upgrade
+/// widens a filtered list rather than hiding rows from it.
+#[tokio::test]
+async fn a_row_without_search_text_matches_every_needle() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET search_text = '' WHERE title = 'Gamma'")
+        .execute(db.write())
+        .await?;
+    let natural = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+
+    let ids =
+        queries::track::track_ids(&db, TrackListScope::Library, natural, &fold_needle("zeta"))
+            .await?;
+
+    assert_eq!(ids, [id_of(&db, "Alpha").await?, id_of(&db, "Gamma").await?]);
+    Ok(())
+}
+
+/// The page a list draws comes back in the order the keyset holds it, a row deleted since the
+/// keyset was read leaves a gap rather than an error, and an id asked twice comes back once, as
+/// `get_track_summaries_by_ids` has always answered.
+#[tokio::test]
+async fn rows_by_id_come_back_in_the_order_asked_and_once_each() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+
+    let rows =
+        queries::track::get_track_list_rows_by_ids(&db, &[gamma, alpha, 999_999, gamma, beta])
+            .await?;
+
+    let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(titles, ["Gamma", "Alpha", "Beta"]);
+    Ok(())
+}
+
+/// The keyset a Most Played grid holds ranks as the cards it replaces did, ties broken the same
+/// way, with the counts beside the ids.
+#[tokio::test]
+async fn the_most_played_ids_rank_as_the_cards_do() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+    queries::track::add_play_counts(
+        &db,
+        &[(alpha, 2), (beta, 5), (gamma, 2)],
+        "2026-10-18T00:00:00Z",
+    )
+    .await?;
+
+    let ranked = queries::track::most_played_ids(&db, &Needle::default()).await?;
+
+    let cards: Vec<(i64, i32)> = queries::track::get_most_played(&db)
+        .await?
+        .iter()
+        .map(|card| (card.id, card.play_count))
+        .collect();
+    assert_eq!(ranked, cards);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_favorite_ranking_holds_only_played_favorites_the_needle_matches()
+-> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+    queries::track::set_favorite(&db, &[alpha, beta], true).await?;
+    queries::track::add_play_counts(
+        &db,
+        &[(alpha, 2), (beta, 5), (gamma, 7)],
+        "2026-10-18T00:00:00Z",
+    )
+    .await?;
+
+    let ranked = queries::track::most_played_favorite_ids(&db, &fold_needle("zeta")).await?;
+
+    assert_eq!(ranked, [(alpha, 2)]);
+    Ok(())
+}
+
+/// **A playlist's own order is its positions**, and descending is their exact reverse.
+#[tokio::test]
+async fn a_playlist_keyset_follows_its_positions() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+    let playlist =
+        queries::playlist::create_playlist_with_tracks(&db, "Mix", None, &[gamma, alpha, beta])
+            .await?;
+    let scope = TrackListScope::Playlist(playlist);
+    let by_position = |dir| TrackOrder { field: TrackSortField::Position, dir };
+    let empty = Needle::default();
+
+    let ascending =
+        queries::track::track_ids(&db, scope, by_position(SortDir::Asc), &empty).await?;
+    let descending =
+        queries::track::track_ids(&db, scope, by_position(SortDir::Desc), &empty).await?;
+
+    assert_eq!(ascending, [gamma, alpha, beta]);
+    assert_eq!(descending, [beta, alpha, gamma]);
+    Ok(())
+}
+
+/// **A smart playlist's own order is its criteria's, and the cap applies before any other sort.**
+/// Sorting the top two by title has to sort those two, not take two off the whole library sorted
+/// by title.
+#[tokio::test]
+async fn a_smart_playlist_keyset_sorts_its_capped_membership() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+    queries::track::add_play_counts(
+        &db,
+        &[(alpha, 4), (beta, 1), (gamma, 9)],
+        "2026-10-18T00:00:00Z",
+    )
+    .await?;
+    let smart = queries::playlist::create_smart_playlist(
+        &db,
+        "Top two",
+        None,
+        r#"{"limit":{"count":2,"order":"play_count_desc"}}"#,
+    )
+    .await?;
+    let scope = TrackListScope::Playlist(smart.id);
+    let empty = Needle::default();
+
+    let by_position = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
+    let by_title = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+    let ranked = queries::track::track_ids(&db, scope, by_position, &empty).await?;
+    let titled = queries::track::track_ids(&db, scope, by_title, &empty).await?;
+
+    assert_eq!(ranked, [gamma, alpha]);
+    assert_eq!(titled, [alpha, gamma]);
     Ok(())
 }

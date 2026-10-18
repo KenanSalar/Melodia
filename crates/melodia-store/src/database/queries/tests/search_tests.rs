@@ -282,10 +282,58 @@ async fn bm25_weights_cover_every_indexed_column() -> Result<(), AppError> {
     Ok(())
 }
 
-// What the fts5 column list covers is load-bearing outside the file that declares it: the
-// per-view filter boxes narrow in-memory caches through `ui::row_match::search_fields`, which
-// mirrors it by hand. Pinning the two against each other names a `ui::` module, so it lives in
-// `crates/melodia/tests/cross_tier.rs`.
+/// The per-view filter boxes never reach the fts5 index: they narrow through `SearchFields`, which
+/// mirrors the column list by hand. So a ninth column is two edits, and only the first of them
+/// fails anything on its own: the Search view answers a query the filter box beside it comes up
+/// empty on, which is the split `20260802000001` was written to close in the first place. Reading
+/// the applied schema rather than a copied array is what makes it a pin on both sides at once.
+#[tokio::test]
+async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result<(), AppError> {
+    // `credits` has no slot on `TrackListRow`: the role credits live in `track_credits` and reach
+    // the index through a denormalized column no list renders. `file_name` is left out
+    // deliberately: the tiebreaker weight that keeps a filename echo below the tags it repeats has
+    // no equivalent in an unranked substring filter. `year` is an integer that joins the match
+    // through `Needle::matches_number` instead of the text list.
+    const NOT_TEXT_SEARCHED: [&str; 3] = ["credits", "file_name", "year"];
+
+    let db = DbPool::test_pool().await?;
+    let indexed: Vec<String> =
+        sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
+            .fetch_all(db.read())
+            .await?;
+    let expected: Vec<&str> =
+        indexed.iter().map(String::as_str).filter(|c| !NOT_TEXT_SEARCHED.contains(c)).collect();
+
+    // Every searchable field holds its own column name, so `SearchFields` hands back the list it
+    // claims to mirror and a failure names the column that drifted. The literal is exhaustive on
+    // purpose: a new `TrackListRow` field fails this file to compile, which is the prompt to
+    // decide whether it belongs in the index and in the fold.
+    let row = melodia_core::entities::track::TrackListRow {
+        id: 1,
+        title: "title".to_owned(),
+        artist: Some("artist".to_owned()),
+        album_artist: Some("album_artist".to_owned()),
+        album: Some("album".to_owned()),
+        genre: Some("genre".to_owned()),
+        track_number: None,
+        disc_number: None,
+        year: None,
+        artwork_path: None,
+        duration_ms: 0,
+        is_favorite: false,
+        rating: 0,
+        album_id: None,
+        artist_id: None,
+        genre_id: None,
+        sort_key: None,
+    };
+    assert_eq!(
+        melodia_core::entities::track_search::SearchFields::from(&row).as_array().as_slice(),
+        expected,
+        "the fts5 column list and what the filter boxes search have drifted"
+    );
+    Ok(())
+}
 
 /// A filename normally repeats the title and artist beside it, so under the
 /// default uniform weights a filename echo outranks the track the query

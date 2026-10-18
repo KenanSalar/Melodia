@@ -3,13 +3,16 @@
 //! Each one pins a value in one layer against a value in another, and each was written in the
 //! lower of the two — where it compiled while the tree was one crate and would stop the moment
 //! the boundary became a manifest line. A store test may not name the UI's cover tiers, a
-//! settings test may not name the nav map, and a database test may not name the filter boxes.
+//! settings test may not name the nav map, and a database test may not name the lists' sort.
 //! Held from outside all of them instead, which is also the only place that can see both.
 //!
 //! `.claude/rules/testing.md` gives every corpus walk one home; these are the walks'
 //! compile-time cousins and land in the same place for the same reason.
 
+use melodia_core::entities::track::TrackListRow;
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
+use melodia_views::ui::track_sort::TrackSortFields;
 
 /// The invariant `STORE_MAX_DIM` was picked from: the store must hold at least what the largest
 /// tier decodes, or every tier upscales from a source the store already threw away.
@@ -65,62 +68,6 @@ fn the_nav_bound_reaches_the_highest_section_that_routes() {
         "Radio is the highest index `nav.slint` routes, so the bound is its index — a section \
          added above it moves both"
     );
-}
-
-/// The per-view filter boxes never reach the fts5 index — they narrow in-memory caches through
-/// `ui::row_match::search_fields`, which mirrors the column list by hand. So a ninth column is
-/// two edits, and only the first of them fails anything on its own: the Search view answers a
-/// query the filter box beside it comes up empty on, which is the split `20260802000001` was
-/// written to close in the first place. Reading the applied schema rather than a copied array is
-/// what makes it a pin on both sides at once.
-#[tokio::test]
-async fn the_filter_boxes_search_every_indexed_column_they_can_reach() -> Result<(), AppError> {
-    use melodia_store::database::DbPool;
-
-    // `credits` has no slot on `TrackListRow` — the role credits live in `track_credits` and reach
-    // the index through a denormalized column no list renders. `file_name` is left out
-    // deliberately: the tiebreaker weight that keeps a filename echo below the tags it repeats has
-    // no equivalent in an unranked substring filter. `year` is an integer that joins the match
-    // through `row_match::Needle::matches_number` instead of the text list.
-    const NOT_TEXT_SEARCHED: [&str; 3] = ["credits", "file_name", "year"];
-
-    let db = DbPool::test_pool().await?;
-    let indexed: Vec<String> =
-        sqlx::query_scalar("SELECT name FROM pragma_table_info('tracks_fts')")
-            .fetch_all(db.read())
-            .await?;
-    let expected: Vec<&str> =
-        indexed.iter().map(String::as_str).filter(|c| !NOT_TEXT_SEARCHED.contains(c)).collect();
-
-    // Every searchable field holds its own column name, so `search_fields` hands back the list it
-    // claims to mirror and a failure names the column that drifted. The literal is exhaustive on
-    // purpose: a new `TrackListRow` field fails this file to compile, which is the prompt to
-    // decide whether it belongs in the index and in the fold.
-    let row = melodia_core::entities::track::TrackListRow {
-        id: 1,
-        title: "title".to_owned(),
-        artist: Some("artist".to_owned()),
-        album_artist: Some("album_artist".to_owned()),
-        album: Some("album".to_owned()),
-        genre: Some("genre".to_owned()),
-        track_number: None,
-        disc_number: None,
-        year: None,
-        artwork_path: None,
-        duration_ms: 0,
-        is_favorite: false,
-        rating: 0,
-        album_id: None,
-        artist_id: None,
-        genre_id: None,
-        sort_key: None,
-    };
-    assert_eq!(
-        melodia_views::ui::row_match::search_fields(&row).as_slice(),
-        expected,
-        "the fts5 column list and what the filter boxes search have drifted"
-    );
-    Ok(())
 }
 
 /// **The persisted nav index is clamped in one crate and guarded in another**, and both ends have
@@ -230,9 +177,10 @@ struct Sorted {
 
 /// A library built out of the partitions the two sides answer differently: a missing album where
 /// the comparator reads `""` and `SQLite` sorts `NULL` first, an untagged track number where the
-/// comparator sorts last and `SQLite` sorts first, and a case-mixed album name. Its title order,
-/// its `sort_key` order and its album order all disagree, so a tidy fixture's accidental
-/// agreement cannot carry the assertion.
+/// comparator sorts last and `SQLite` sorts first, a case-mixed album name, and an accented case
+/// pair that `to_lowercase()` ties and `NOCASE` does not. Its title order, its `sort_key` order and
+/// its album order all disagree, so a tidy fixture's accidental agreement cannot carry the
+/// assertion.
 async fn sorted_library() -> Result<Sorted, AppError> {
     use melodia_core::entities::artist::ArtistCredit;
     use melodia_core::entities::genre::GenreList;
@@ -243,7 +191,7 @@ async fn sorted_library() -> Result<Sorted, AppError> {
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
 
-    let staged: [StagedTrack; 8] = [
+    let staged: [StagedTrack; 10] = [
         // The album arm's own partitions: an untagged number and a zero disc beside real ones.
         ("One", Some("Mid"), Some(1), None),
         ("Two", Some("Mid"), Some(1), Some(1)),
@@ -255,6 +203,9 @@ async fn sorted_library() -> Result<Sorted, AppError> {
         ("Five", Some(""), None, Some(1)),
         ("Six", Some("apple"), Some(1), Some(1)),
         ("Seven", Some("Banana"), Some(1), Some(1)),
+        // Tied by `to_lowercase()`, so the title decides; `NOCASE` puts `Émile` first instead.
+        ("Eleven", Some("émile"), Some(1), Some(1)),
+        ("Twelve", Some("Émile"), Some(1), Some(1)),
     ];
     for (title, album, disc, track) in staged {
         let mut meta = make_test_metadata(title);
@@ -281,10 +232,7 @@ async fn sorted_library() -> Result<Sorted, AppError> {
 }
 
 /// The ids `sort_track_list_rows` puts `rows` in, which is the order the page paints.
-fn as_the_page_shows(
-    mut rows: Vec<melodia_core::entities::track::TrackListRow>,
-    field: &str,
-) -> Vec<i64> {
+fn as_the_page_shows(mut rows: Vec<TrackListRow>, field: &str) -> Vec<i64> {
     melodia_views::ui::track_sort::sort_track_list_rows(&mut rows, field, "asc");
     rows.into_iter().map(|r| r.id).collect()
 }
@@ -358,4 +306,303 @@ fn every_detail_page_still_defaults_to_the_arm_its_card_reproduces() {
              reproduces that arm, so it has to move with it"
         );
     }
+}
+
+// === The keysets against the comparator ===
+//
+// `queries::track::keyset` sorts and filters in SQL for a list holding only ids, and has to land
+// every row where `ui::track_sort` and `ui::row_match` put it in memory. Rust against SQL again,
+// held from here for the reason the card tests above give.
+
+/// Every token a header cell or a saved view can hand over, plus one nothing spells, which both
+/// sides read as the natural order. `"position"` is a playlist's alone and is the natural order
+/// everywhere else.
+const SORT_TOKENS: [&str; 9] =
+    ["title", "track_number", "artist", "album", "genre", "year", "length", "position", "unknown"];
+
+const DIRECTIONS: [SortDir; 2] = [SortDir::Asc, SortDir::Desc];
+
+/// One row of [`parity_library`]: title, artist, album, genre, year, track, disc, length in ms,
+/// favourite.
+type ParityTrack = (
+    &'static str,
+    &'static str,
+    Option<&'static str>,
+    &'static str,
+    Option<i32>,
+    Option<i32>,
+    Option<i32>,
+    i64,
+    bool,
+);
+
+/// A library out of the partitions SQL and the comparator could answer differently: accented and
+/// non-Latin case pairs, a final sigma, missing, empty and case-mixed albums, missing, zero and
+/// negative years, missing and zero track and disc numbers, tied lengths, and two rows equal on
+/// every key, which only the id can order.
+async fn parity_library() -> Result<melodia_store::database::DbPool, AppError> {
+    use melodia_core::entities::artist::ArtistCredit;
+    use melodia_core::entities::genre::GenreList;
+    use melodia_store::database::DbPool;
+    use melodia_store::database::queries;
+    use melodia_store::database::queries::fixtures::{insert_tagged_track, make_test_metadata};
+
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let staged: [ParityTrack; 11] = [
+        ("Zebra", "beta", Some("Émile"), "Rock", Some(1999), Some(2), Some(1), 1000, true),
+        ("apple", "Alpha", Some("émile"), "rock", None, None, None, 2000, true),
+        ("Éclair", "ALPHA", None, "Jazz", Some(0), Some(1), Some(0), 3000, true),
+        ("éclair", "Ωmega", Some(""), "jazz", Some(-5), Some(0), Some(2), 3000, true),
+        ("ΟΔΟΣ", "ΟΔΟΣ", Some("apple"), "Σ", Some(2001), Some(3), Some(1), 1000, false),
+        ("οδος", "οδος", Some("Banana"), "σ", Some(1999), Some(1), Some(1), 1000, false),
+        ("Mango", "Mango", Some("Banana"), "Pop", Some(1999), Some(1), Some(1), 1000, true),
+        ("mango", "mango", Some("banana"), "pop", Some(1999), Some(1), Some(1), 1000, true),
+        ("mango", "mango", Some("banana"), "pop", Some(1999), Some(1), Some(1), 1000, true),
+        ("Björk song", "Björk", Some("Banana"), "Pop", Some(1981), Some(4), Some(1), 500, false),
+        ("ΣΟΦΙΑ", "x", Some("apple"), "Σ", None, Some(2), None, 500, false),
+    ];
+    for (i, (title, artist, album, genre, year, track, disc, length, favorite)) in
+        staged.into_iter().enumerate()
+    {
+        let mut meta = make_test_metadata(title);
+        meta.artist = ArtistCredit::from_name(artist);
+        meta.album = album.map(str::to_owned);
+        meta.genres = GenreList::from_name(genre);
+        meta.year = year;
+        meta.track_number = track;
+        meta.disc_number = disc;
+        meta.duration_ms = length;
+        let path = std::path::Path::new("/music").join(format!("{i}.mp3"));
+        let id = insert_tagged_track(&db, &path.to_string_lossy(), &meta).await?;
+        if favorite {
+            queries::track::set_favorite(&db, &[id], true).await?;
+        }
+    }
+    Ok(db)
+}
+
+/// How the Songs tabs read a row: a missing year as `0` and the length clamped to an `i32` of
+/// milliseconds, the way their converted display rows hold both.
+struct SongsRow<'a>(&'a TrackListRow);
+
+impl TrackSortFields for SongsRow<'_> {
+    fn disc(&self) -> i32 {
+        self.0.disc()
+    }
+    fn track(&self) -> i64 {
+        self.0.track()
+    }
+    fn artist(&self) -> &str {
+        self.0.artist()
+    }
+    fn album(&self) -> &str {
+        self.0.album()
+    }
+    fn genre(&self) -> &str {
+        self.0.genre()
+    }
+    fn year(&self) -> Option<i32> {
+        Some(self.0.year.unwrap_or(0))
+    }
+    fn duration_ms(&self) -> i64 {
+        self.0.duration_ms.clamp(0, i64::from(i32::MAX))
+    }
+    fn sort_key(&self) -> &str {
+        self.0.sort_key()
+    }
+}
+
+/// The comparator's order for a Songs tab, over `rows` handed over in id order: the order SQL
+/// breaks a full tie in, which the comparator's stable sort keeps.
+fn as_the_songs_tab_shows(rows: &[TrackListRow], token: &str, dir: SortDir) -> Vec<i64> {
+    let songs: Vec<SongsRow> = rows.iter().map(SongsRow).collect();
+    melodia_views::ui::track_sort::compute_track_order(&songs, token, dir.as_str())
+        .into_iter()
+        .map(|i| rows[i].id)
+        .collect()
+}
+
+/// [`as_the_songs_tab_shows`] for a detail page, which sorts its rows as stored.
+fn as_the_detail_shows(rows: &[TrackListRow], token: &str, dir: SortDir) -> Vec<i64> {
+    let mut sorted = rows.to_vec();
+    melodia_views::ui::track_sort::sort_track_list_rows(&mut sorted, token, dir.as_str());
+    sorted.iter().map(|r| r.id).collect()
+}
+
+async fn keyset(
+    db: &melodia_store::database::DbPool,
+    scope: TrackListScope,
+    token: &str,
+    dir: SortDir,
+) -> Result<Vec<i64>, AppError> {
+    let order = TrackOrder { field: TrackSortField::from_token(token), dir };
+    let empty = melodia_core::utils::needle::Needle::default();
+    melodia_store::database::queries::track::track_ids(db, scope, order, &empty).await
+}
+
+async fn every_row_by_id(
+    db: &melodia_store::database::DbPool,
+) -> Result<Vec<TrackListRow>, AppError> {
+    let mut rows = melodia_store::database::queries::track::get_all_tracks_for_list(db).await?;
+    rows.sort_by_key(|r| r.id);
+    Ok(rows)
+}
+
+#[tokio::test]
+async fn the_library_keyset_sorts_as_the_songs_tab_does() -> Result<(), AppError> {
+    let db = parity_library().await?;
+    let rows = every_row_by_id(&db).await?;
+
+    for token in SORT_TOKENS {
+        for dir in DIRECTIONS {
+            assert_eq!(
+                keyset(&db, TrackListScope::Library, token, dir).await?,
+                as_the_songs_tab_shows(&rows, token, dir),
+                "Songs by {token} {}",
+                dir.as_str()
+            );
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_favorites_keyset_sorts_as_its_songs_tab_does() -> Result<(), AppError> {
+    let db = parity_library().await?;
+    let favorites: Vec<TrackListRow> =
+        every_row_by_id(&db).await?.into_iter().filter(|r| r.is_favorite).collect();
+
+    for token in SORT_TOKENS {
+        for dir in DIRECTIONS {
+            assert_eq!(
+                keyset(&db, TrackListScope::Favorites, token, dir).await?,
+                as_the_songs_tab_shows(&favorites, token, dir),
+                "Favorites by {token} {}",
+                dir.as_str()
+            );
+        }
+    }
+    Ok(())
+}
+
+/// The album, artist and genre pages, each over the set its `for_list` fetch answers.
+#[tokio::test]
+async fn a_detail_keyset_sorts_as_its_page_does() -> Result<(), AppError> {
+    use melodia_store::database::queries::track;
+
+    let db = parity_library().await?;
+    let id_of = |sql: &'static str| sqlx::query_scalar::<_, i64>(sql).fetch_one(db.read());
+    let album = id_of("SELECT id FROM albums WHERE name = 'Banana'").await?;
+    let artist = id_of("SELECT id FROM artists WHERE name = 'Mango'").await?;
+    let genre = id_of("SELECT id FROM genres WHERE name = 'Pop'").await?;
+    let pages = [
+        (
+            "album",
+            TrackListScope::Album(album),
+            track::get_tracks_by_album_for_list(&db, album).await?,
+        ),
+        (
+            "artist",
+            TrackListScope::Artist(artist),
+            track::get_tracks_by_artist_for_list(&db, artist).await?,
+        ),
+        (
+            "genre",
+            TrackListScope::Genre(genre),
+            track::get_tracks_by_genre_for_list(&db, genre).await?,
+        ),
+    ];
+
+    for (page, scope, mut rows) in pages {
+        rows.sort_by_key(|r| r.id);
+        for token in SORT_TOKENS {
+            for dir in DIRECTIONS {
+                assert_eq!(
+                    keyset(&db, scope, token, dir).await?,
+                    as_the_detail_shows(&rows, token, dir),
+                    "{page} detail by {token} {}",
+                    dir.as_str()
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A playlist sorted by anything but its own order sorts as a detail page does. Its own order is
+/// pinned beside the query, needing no comparator.
+#[tokio::test]
+async fn a_playlist_keyset_sorts_as_its_page_does() -> Result<(), AppError> {
+    let db = parity_library().await?;
+    let rows = every_row_by_id(&db).await?;
+    let ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
+    let playlist = melodia_store::database::queries::playlist::create_playlist_with_tracks(
+        &db,
+        "Everything",
+        None,
+        &ids,
+    )
+    .await?;
+
+    for token in SORT_TOKENS.iter().filter(|&&token| token != "position") {
+        for dir in DIRECTIONS {
+            assert_eq!(
+                keyset(&db, TrackListScope::Playlist(playlist), token, dir).await?,
+                as_the_detail_shows(&rows, token, dir),
+                "playlist by {token} {}",
+                dir.as_str()
+            );
+        }
+    }
+    Ok(())
+}
+
+/// **The SQL filter keeps the rows `track_matches` keeps**, accent and case folding, the year's
+/// substring rule and a needle naming no field included, in the order the Songs tab shows them.
+#[tokio::test]
+async fn the_sql_filter_keeps_the_rows_the_filter_boxes_keep() -> Result<(), AppError> {
+    use melodia_core::utils::needle::fold_needle;
+
+    let db = parity_library().await?;
+    let rows = every_row_by_id(&db).await?;
+    let natural = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+    let needles = [
+        "",
+        "emile",
+        "BJORK",
+        "björk song",
+        "οδος",
+        "σοφια",
+        "19",
+        "199",
+        "0",
+        "5",
+        "-5",
+        "pop",
+        "ma",
+        "zzz",
+    ];
+
+    for raw in needles {
+        let needle = fold_needle(raw);
+        let kept: Vec<TrackListRow> = rows
+            .iter()
+            .filter(|r| melodia_views::ui::row_match::track_matches(r, &needle))
+            .cloned()
+            .collect();
+        let filtered = melodia_store::database::queries::track::track_ids(
+            &db,
+            TrackListScope::Library,
+            natural,
+            &needle,
+        )
+        .await?;
+        assert_eq!(
+            filtered,
+            as_the_songs_tab_shows(&kept, "title", SortDir::Asc),
+            "needle {raw:?}"
+        );
+    }
+    Ok(())
 }

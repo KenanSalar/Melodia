@@ -1,6 +1,6 @@
 //! The Playlists grid's filter + sort pass — the last of the four entity
 //! grids to get one. Same three cases its siblings pin, since all four run
-//! the identical `row_match::Needle::contains` walk over a single name.
+//! the identical `Needle::contains` walk over a single name.
 //!
 //! Plus the four things drag-to-reorder needs to stay alive, none of which any
 //! other pin can see go missing.

@@ -20,12 +20,12 @@ use slint::{ComponentHandle, Weak};
 
 use crate::ui::grid_rows::chunk_built_rows;
 use crate::ui::model_diff::replace_rows;
-use crate::ui::row_match::{self, Needle};
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
-use melodia_app::services::settings::SortDir;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::RadioStation;
+use melodia_core::entities::track_list::SortDir;
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{AppWindow, Radio, RadioStationGridRow};
 
 use super::state::KeptAnswers;
@@ -40,7 +40,7 @@ pub struct KeptState {
 
 impl KeptState {
     fn matches(&self) -> impl Iterator<Item = &RadioStation> {
-        let needle = row_match::fold_needle(&self.filter);
+        let needle = fold_needle(&self.filter);
         self.stations.iter().filter(move |station| station_matches(station, &needle))
     }
 }

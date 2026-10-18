@@ -89,16 +89,48 @@ pub async fn get_track_summaries_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TrackSummary>, AppError> {
-    let cols = columns::TRACK_SUMMARY.joined();
-    let summaries: Vec<track::TrackSummary> = chunked_in_query(db.read(), ids, |placeholders| {
+    rows_in_id_order(db, columns::TRACK_SUMMARY.joined(), ids, |t: &track::TrackSummary| t.id).await
+}
+
+/// Fetch `TrackListRow` projections by IDs, preserving the input order: the page of rows a list
+/// holding only its ids draws.
+pub async fn get_track_list_rows_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<track::TrackListRow>, AppError> {
+    rows_in_id_order(db, columns::TRACK_LIST.joined(), ids, |t: &track::TrackListRow| t.id).await
+}
+
+/// Fetch `MostPlayedFavorite` cards by IDs, preserving the input order, for a Most Played grid
+/// holding only its ranked ids.
+pub async fn get_most_played_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
+    rows_in_id_order(db, columns::MOST_PLAYED.joined(), ids, |t: &track::MostPlayedFavorite| t.id)
+        .await
+}
+
+/// `cols` of every row in `ids`, put back in the order `ids` asked for. A row the fetch didn't
+/// return, deleted since the ids were read, is skipped, and so is a second ask for one id.
+async fn rows_in_id_order<T>(
+    db: &DbPool,
+    cols: &str,
+    ids: &[i64],
+    id_of: impl Fn(&T) -> i64,
+) -> Result<Vec<T>, AppError>
+where
+    T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
+{
+    let rows: Vec<T> = chunked_in_query(db.read(), ids, |placeholders| {
         format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
     })
     .await?;
 
-    let mut map: HashMap<i64, track::TrackSummary> = HashMap::with_capacity(summaries.len());
-    map.extend(summaries.into_iter().map(|t| (t.id, t)));
+    let mut by_id: HashMap<i64, T> = HashMap::with_capacity(rows.len());
+    by_id.extend(rows.into_iter().map(|row| (id_of(&row), row)));
 
-    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+    Ok(ids.iter().filter_map(|id| by_id.remove(id)).collect())
 }
 
 /// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information dialog, preserving the
@@ -114,16 +146,7 @@ pub async fn get_tag_edit_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TagEditRow>, AppError> {
-    let cols = columns::TRACK_TAG_EDIT.joined();
-    let rows: Vec<track::TagEditRow> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-
-    let mut map: HashMap<i64, track::TagEditRow> = HashMap::with_capacity(rows.len());
-    map.extend(rows.into_iter().map(|t| (t.id, t)));
-
-    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+    rows_in_id_order(db, columns::TRACK_TAG_EDIT.joined(), ids, |t: &track::TagEditRow| t.id).await
 }
 
 /// Fetch `(id, file_path)` pairs by IDs, preserving the input order. The tag writer marks each
@@ -133,15 +156,7 @@ pub async fn get_track_paths_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<(i64, String)>, AppError> {
-    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT id, file_path FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-
-    let mut map: HashMap<i64, String> = HashMap::with_capacity(rows.len());
-    map.extend(rows);
-
-    Ok(ids.iter().filter_map(|id| map.remove(id).map(|path| (*id, path))).collect())
+    rows_in_id_order(db, "id, file_path", ids, |&(id, _): &(i64, String)| id).await
 }
 
 /// Fetch `TrackLinks` projections by IDs, preserving the input order. The queue sheet renders from
@@ -151,16 +166,7 @@ pub async fn get_track_links_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TrackLinks>, AppError> {
-    let cols = columns::TRACK_LINKS.joined();
-    let links: Vec<track::TrackLinks> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-
-    let mut map: HashMap<i64, track::TrackLinks> = HashMap::with_capacity(links.len());
-    map.extend(links.into_iter().map(|l| (l.id, l)));
-
-    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+    rows_in_id_order(db, columns::TRACK_LINKS.joined(), ids, |l: &track::TrackLinks| l.id).await
 }
 
 /// The subset of `ids` that still has a row.

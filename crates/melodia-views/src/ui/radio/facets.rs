@@ -18,10 +18,10 @@ use std::sync::Arc;
 use slint::{ComponentHandle, SharedString};
 
 use crate::ui::model_diff::replace_rows;
-use crate::ui::row_match;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::radio::{Facet, FacetKind, StationSearch, UNKNOWN_CODEC};
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{AppWindow, Radio};
 
 use super::{RadioUi, browse, rows};
@@ -248,7 +248,7 @@ pub fn request(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, idx: i
 
 /// Narrow the open picker's list to `needle`.
 ///
-/// Through `row_match`'s fold like every other filter box in the tree, so a country typed without
+/// Through `Needle`'s fold like every other filter box in the tree, so a country typed without
 /// its accents still matches.
 pub fn filter(ui: &AppWindow, radio_ui: &Arc<RadioUi>, needle: &str) {
     let Some(facets) = radio_ui.facet_list.lock().clone() else {
@@ -278,7 +278,7 @@ fn write_filtered(g: &Radio<'_>, facets: &[Facet], needle: &str) {
     // Off the global rather than threaded in: the picker only ever draws the chip it is showing,
     // and both callers have already made `facet-shown` that chip.
     let chip = chip_from_index(g, g.get_facet_shown());
-    let folded = row_match::fold_needle(needle);
+    let folded = fold_needle(needle);
     // `Needle::contains` answers true for an empty needle, so the filter is the identity there and
     // the cap alone decides what an untouched picker draws.
     let facet_rows: Vec<_> = facets
@@ -315,21 +315,13 @@ fn rewritten_label(chip: Option<ChipFilter>, facet: &Facet) -> Option<Cow<'_, st
 }
 
 /// Whether `needle` matches this facet, on either spelling.
-pub(super) fn matches_needle(
-    chip: Option<ChipFilter>,
-    facet: &Facet,
-    needle: &row_match::Needle,
-) -> bool {
+pub(super) fn matches_needle(chip: Option<ChipFilter>, facet: &Facet, needle: &Needle) -> bool {
     needle.contains(&facet.name)
         || rewritten_label(chip, facet).is_some_and(|label| needle.contains(&label))
 }
 
 /// Whether `needle` *is* this facet, on either spelling. The suggestion ranking's exactness term.
-pub(super) fn equals_needle(
-    chip: Option<ChipFilter>,
-    facet: &Facet,
-    needle: &row_match::Needle,
-) -> bool {
+pub(super) fn equals_needle(chip: Option<ChipFilter>, facet: &Facet, needle: &Needle) -> bool {
     needle.equals(&facet.name)
         || rewritten_label(chip, facet).is_some_and(|label| needle.equals(&label))
 }

@@ -477,9 +477,9 @@ this file is what builds, looks right, and is wrong.
 - **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`,
   `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop
   `TouchArea { clicked => { SomeGlobal.blur-search-tick += 1; } }` at view root before content;
-  (3) clear filter + bump blur tick on nav-away. Match in Rust through `crates/melodia-views/src/ui/row_match.rs`,
-  never a hand-rolled `to_lowercase().contains(…)`; Settings routes there via
-  `pure callback SettingsPage.matches(...)`.
+  (3) clear filter + bump blur tick on nav-away. Match in Rust through `Needle` and
+  `crates/melodia-views/src/ui/row_match.rs` (`ui-patterns.md`'s Filtering), never a hand-rolled
+  `to_lowercase().contains(…)`; Settings routes there via `pure callback SettingsPage.matches(...)`.
   **A page whose box describes more than one surface takes the same three steps against one global
   and dispatches in Rust.** My Library's band is the tree's only one: the bar binds
   `MyLibrary.filter` / `.blur-search-tick`, and `ui::my_library::filter::dispatch` routes a

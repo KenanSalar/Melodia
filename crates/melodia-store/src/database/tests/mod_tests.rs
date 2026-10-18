@@ -1,10 +1,38 @@
 use crate::database::queries;
 use crate::database::queries::fixtures::insert_test_track;
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, init_database};
+use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
 // Private to `database/mod.rs`; reachable from this child test module via `super::`.
 use super::{FTS_OPTIMIZE, strip_windows_verbatim_paths};
+
+/// Strings `to_lowercase()` orders differently from `NOCASE`, which folds ASCII alone, and from a
+/// char-by-char lowercase, which misses the final sigma. Ties go to the raw bytes so the expected
+/// order is total.
+const UNICODE_LOWER_ORDER: &str = "\
+    WITH v(s) AS (VALUES ('Zebra'), ('b'), ('Ωmega'), ('apple'), ('Émile'), ('οδος'), ('éa'), \
+                         ('ΟΔΟΣ'), ('αlpha')) \
+    SELECT s FROM v ORDER BY s COLLATE UNICODE_LOWER, s";
+
+/// **Every connection a keyset query can run on knows `UNICODE_LOWER`**, the writer and the test
+/// pool included: one without it fails any statement naming it, and one that registered a looser
+/// fold would sort an artist list differently from the comparator it reproduces.
+#[tokio::test]
+async fn every_pool_orders_text_the_way_to_lowercase_does() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let paths = Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+    let db = init_database(&paths).await?;
+    let test_pool = DbPool::test_pool().await?;
+    let expected = ["apple", "b", "Zebra", "éa", "Émile", "αlpha", "ΟΔΟΣ", "οδος", "Ωmega"];
+
+    for (pool, name) in [(db.read(), "read"), (db.write(), "write"), (test_pool.read(), "test")] {
+        let order: Vec<String> = sqlx::query_scalar(UNICODE_LOWER_ORDER).fetch_all(pool).await?;
+        assert_eq!(order, expected, "the {name} pool");
+    }
+    Ok(())
+}
 
 #[test]
 fn max_binds_per_statement_is_999() {

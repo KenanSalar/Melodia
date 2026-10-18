@@ -11,14 +11,15 @@ use slint::{ComponentHandle, Weak};
 
 use super::{FavoritesTab, FavoritesUi};
 use crate::ui::list_selection;
-use crate::ui::row_match::{self, Needle};
 use crate::ui::track_list_cache::VisibleRows;
 use crate::ui::track_list_model::TrackListModel;
 use crate::ui::track_sort;
 use melodia_app::library;
-use melodia_app::services::settings::{SortDir, ViewSort};
+use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
+use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::AppResult;
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{AppWindow, Favorites};
 
 /// The active sort. Slint mirrors it in `Favorites.sort-*`, but this cache is the source of truth
@@ -65,7 +66,7 @@ pub fn resort_and_apply(fav_ui: &Arc<FavoritesUi>, weak: &Weak<AppWindow>) {
 /// Update the cached filter needle, so the live-refresh subscriber can re-walk on a background
 /// thread without reading the Slint global. Folded on the way in, so all four readers share one.
 pub fn set_filter(fav_ui: &FavoritesUi, filter: &str) {
-    *fav_ui.state().filter.lock() = row_match::fold_needle(filter);
+    *fav_ui.state().filter.lock() = fold_needle(filter);
 }
 
 /// Fetch the full favourites list, cache it under the current sort's display order, then re-apply

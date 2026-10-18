@@ -24,6 +24,7 @@ pub mod entity_tracks;
 pub mod favorites;
 pub mod genres;
 pub mod import;
+pub mod keyset;
 pub mod lyrics;
 pub mod playback;
 pub mod playlist_files;

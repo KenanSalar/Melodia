@@ -13,8 +13,8 @@ use slint::{FilterModel, Model, ModelRc};
 
 use super::TrackListModel;
 use crate::ui::fixtures::{four_tracks, visible_rows};
-use crate::ui::row_match;
 use crate::ui::track_list_cache::{TrackListCache, VisibleRows};
+use melodia_core::utils::needle::fold_needle;
 use melodia_ui::TrackListRow as UiTrackListRow;
 
 type Reread = Box<dyn Fn(&UiTrackListRow) -> bool>;
@@ -177,8 +177,7 @@ fn a_hidden_list_paints_its_selection_again_on_return() {
 fn a_hidden_list_holds_no_snapshot() {
     let cache = stored();
     let snapshot = cache.snapshot();
-    let watched =
-        Watched::showing(VisibleRows::new(Arc::clone(&snapshot), &row_match::fold_needle("")));
+    let watched = Watched::showing(VisibleRows::new(Arc::clone(&snapshot), &fold_needle("")));
 
     watched.model.show(VisibleRows::default());
 

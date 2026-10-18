@@ -3,7 +3,7 @@
 //! toggle every sortable view routes through.
 
 use super::{next_sort, next_sort_with_natural, play_row_start};
-use melodia_app::services::settings::SortDir;
+use melodia_core::entities::track_list::SortDir;
 
 #[test]
 fn aligned_index_is_taken_as_is() {

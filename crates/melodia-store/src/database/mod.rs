@@ -1,4 +1,5 @@
 mod backup;
+mod collation;
 pub mod queries;
 
 use sqlx::AssertSqlSafe;
@@ -254,7 +255,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // connection, WAL readers that don't block writers, and no second process
     // opening the file. DEFERRED stays — revisit if a sidecar tool or a
     // multi-window mode ever adds a second writer.
-    let write_opts = SqliteConnectOptions::from_str(&db_url)?
+    let write_opts = collation::register(SqliteConnectOptions::from_str(&db_url)?)
         .journal_mode(SqliteJournalMode::Wal)
         .create_if_missing(true)
         .busy_timeout(Duration::from_secs(5))
@@ -334,7 +335,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .map_or(4, |n| u32::try_from(n.get()).unwrap_or(u32::MAX))
         .clamp(2, 4);
 
-    let read_opts = SqliteConnectOptions::from_str(&db_url)?
+    let read_opts = collation::register(SqliteConnectOptions::from_str(&db_url)?)
         .journal_mode(SqliteJournalMode::Wal)
         .read_only(true)
         .busy_timeout(Duration::from_secs(5))
@@ -365,7 +366,7 @@ impl DbPool {
     /// An in-memory `DbPool` for tests. Read and write share one connection,
     /// in-memory `SQLite` being per-connection.
     pub async fn test_pool() -> Result<Self, AppError> {
-        let opts = SqliteConnectOptions::from_str("sqlite::memory:")?
+        let opts = collation::register(SqliteConnectOptions::from_str("sqlite::memory:")?)
             .pragma("foreign_keys", "ON")
             .pragma("synchronous", "NORMAL")
             .pragma("temp_store", "MEMORY");

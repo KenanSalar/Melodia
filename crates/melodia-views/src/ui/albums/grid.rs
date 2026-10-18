@@ -9,11 +9,11 @@ use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{AlbumsUi, to_slint_album_row};
 use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::chunk_rows;
-use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_core::utils::needle::fold_needle;
 use melodia_ui::{AlbumGridRow as UiAlbumGridRow, Albums, AppWindow};
 
 /// Fetch the album list from the DB into `albums_ui.grid.data`, prewarm
@@ -98,7 +98,7 @@ pub fn rebuild_grid(ui: &AppWindow, albums_ui: &AlbumsUi) {
 /// Filter + sort the grid data into a display-order list of album indices.
 /// Pure / no UI state. The name / artist sorts read `data.keys`
 /// (pre-lowercased in `fetch_grid`); the filter walks the raw fields
-/// through `row_match`, which folds only the rows that carry an accent.
+/// through `Needle`, which folds only the rows that carry an accent.
 ///
 /// Matching `year` is what lets a query the Search view answers with a
 /// decade ("199") narrow this grid too — `AlbumStats` carries it, so it
@@ -109,7 +109,7 @@ pub(super) fn compute_indices(
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = row_match::fold_needle(filter);
+    let needle = fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.albums.len()).collect()
     } else {

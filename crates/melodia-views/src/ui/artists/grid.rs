@@ -10,11 +10,11 @@ use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{ArtistsUi, to_slint_artist_row};
 use crate::ui::grid_prewarm;
 use crate::ui::grid_rows::chunk_rows;
-use crate::ui::row_match;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_core::utils::needle::fold_needle;
 use melodia_ui::{AppWindow, ArtistGridRow as UiArtistGridRow, Artists};
 
 /// Fetch the artist list from the DB into `artists_ui.grid.data`, prewarm
@@ -83,7 +83,7 @@ pub(super) fn compute_indices(
     sort_dir: &str,
     filter: &str,
 ) -> Vec<usize> {
-    let needle = row_match::fold_needle(filter);
+    let needle = fold_needle(filter);
     let mut indices: Vec<usize> = if needle.is_empty() {
         (0..data.artists.len()).collect()
     } else {

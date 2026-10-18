@@ -6,18 +6,22 @@ mod credits;
 mod entity_ids;
 #[cfg(test)]
 mod full_rows;
+mod keyset;
 mod list;
 mod lookup;
 mod ranking;
+mod search_text;
 mod write;
 
 pub use credits::*;
 pub use entity_ids::*;
 #[cfg(test)]
 pub use full_rows::*;
+pub use keyset::*;
 pub use list::*;
 pub use lookup::*;
 pub use ranking::*;
+pub use search_text::*;
 pub use write::*;
 
 #[cfg(test)]
