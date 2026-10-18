@@ -150,25 +150,22 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     populated from the rendered line splits `Chanson, Francaise` into two genres and saving makes
     that permanent.
 
-  - **The other half of narrowing is `ui::track_list_cache`**: the two views that retain a whole
-    list resident (My Library's Songs tab, Favorites') keep *converted* rows rather than
-    `TrackListRow`s, so the columns a list doesn't render are freed at fetch rather than held for
-    the session, and `ui::track_list_model` shows them to Slint in place, so the set is held once
-    rather than again as a `VecModel` copy. **Recently Played's Songs tab retains a list too and
-    deliberately stays off it** — `get_recently_played` is capped at 200 rows, so what the cache is
-    for (a resident set large enough that a second copy of it is the view's footprint) doesn't
-    apply, and it keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped*
-    fourth view belongs on the cache and its model, not on a sixth projection.
+  - **The other half of narrowing is the keyset**: the two views that can hold the whole library
+    (My Library's Songs tab, Favorites') keep only their ids and fetch the rows near the viewport
+    by id (`get_track_list_rows_by_ids`), converted as they land (`ui::paged_rows`), so no list
+    holds a row per track. **Recently Played's Songs tab retains a list and deliberately stays off
+    it**: `get_recently_played` is capped at 200 rows, so a keyset saves nothing there, and it
+    keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped* list belongs on
+    a keyset and `ui::paged_rows`, not on a sixth projection.
 
-  - **It is also why the whole-table fetches take no sort**: `get_all_tracks_for_list` and
-    `get_favorite_tracks_for_list` lost their `sort_by`/`sort_dir` when their callers started
-    re-permuting retained rows through `ui::track_sort`, and the eight-arm `track_list_order_by`
-    behind them went with them — one fixed `TRACK_LIST_ORDER` const in its place, argued at its
-    definition. Don't reintroduce a sort parameter on them.
-    **`queries::track::keyset` is the other answer**, for a list that holds only ids: it sorts and
-    filters in SQL with arms that reproduce `ui::track_sort`'s one for one, the Songs tabs' reading
-    of a missing year and of the length included, each ending in the id so a descending sort is the
-    exact reverse. `crates/melodia/tests/cross_tier.rs` holds every arm against the comparator.
+  - **`queries::track::keyset` sorts and filters in SQL**, with arms that reproduce
+    `ui::track_sort`'s one for one, the Songs tabs' reading of a missing year and of the length
+    included, each ending in the id so a descending sort is the exact reverse.
+    `crates/melodia/tests/cross_tier.rs` holds every arm against the comparator, including the
+    order the packed result is read back in, which `track_ids` argues. **The whole-table
+    `get_all_tracks_for_list` serves no list any more**: it is the comparator's input in
+    `cross_tier.rs` and the rating-import tests, in the fixed `TRACK_LIST_ORDER` argued at its
+    definition. Don't give it a sort parameter back; a list that needs an order takes a keyset.
 
   - **Which makes a `for_list` query's own `ORDER BY` dead, and copying one the trap.** Every
     detail view re-sorts what it fetched, so that clause decides nothing there.

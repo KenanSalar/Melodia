@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 and 1 done, Phase 2 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 2's new tests pending, Phase 3 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -74,11 +74,15 @@ All of it grows linearly with the library, and the README's footprint runs (open
    - **No filter gate** (amended 2026-10-18): the clause is `search_text = '' OR instr(…)`, so a row the backfill hasn't reached matches every needle rather than none.
 4. **One Slint model type for every paged list: `ui::paged_rows::PagedRows<R>`.** It holds:
    - the keyset as an `Arc<[i64]>`;
-   - an LRU of pages: 64 rows each, 8 pages cap, prefetch 2 pages either side of what Slint last asked for (512 rows, the Android rule);
-   - the selected-id set, which `TrackListModel` already keeps as a `HashSet<i32>`;
-   - a generation.
+   - an LRU of rows **keyed by id** (amended 2026-10-18 from pages), capped at 512 rows, the Android rule over 64-row pages and 2 pages of prefetch either side. A row reads the same wherever it sits, so a resort, a refilter or a removal keeps every cached row valid;
+   - the selected-id set, which `TrackListModel` already kept as a `HashSet<i32>`;
+   - a read stamp per row instead of a generation: a row read before the one the list holds never replaces it, so a late fetch can't revert a patch.
 
-   `row_data` answers from a cached page, or returns a placeholder row (id, `selected`, empty text) and schedules that page plus its prefetch. When the page lands, `row_changed` is fired for its range. That is the contract the cover tiers already run (`get_or_schedule_opt` plus a generation repaint, `ui-patterns.md` "Covers").
+   `row_data` answers from the cache, or returns a placeholder row (id, `selected`, empty text) and asks for what the window lacks. The window is the page Slint last read and 2 pages either side.
+
+   **One fetch is in flight per list** (amended 2026-10-18, after the first hand test). It asks for up to 128 missing rows nearest the row Slint read last, and each landing asks again from wherever the list has got to. The query and the conversion run on tokio, and a landing repaints only the window. The first cut fetched every page Slint passed and polled the fetches on the UI thread: a fast drag on the 51k library queued enough of them that the read pool logged 2 s waits, and each landing walked the whole keyset to find its rows.
+
+   **A load seeds the window where the list is scrolled** (amended 2026-10-18), read off `ScrollPoint`, Slint keeping the scroll offset across a reset. Seeding the top painted placeholders after any sort made while scrolled down.
 
    Two things must hold:
    - **`selected` never depends on the page.** `track-list.slint:116-117` and `queue-sheet.slint:297-298` read the neighbours' `.selected`.
@@ -89,7 +93,7 @@ All of it grows linearly with the library, and the README's footprint runs (open
    - **A miss:** every synchronous transition reads the window. On a miss it returns one new action, `PlayerAction::StartWhenResolved { id, mode }`, which `execute_actions` turns into a fetch followed by `emit_and_execute` if that id is still the slot it was. The gapless and crossfade gates treat a missing next as "no next yet" and re-ask every 500 ms tick, so a transition loses gapless only if the window is still empty in its final `PRELOAD_LEAD_MS`.
    - **Publishing:** `QueueViewModel` carries the ids as an `Arc<[i64]>` shared copy-on-write with `QueueState`. Publishing on every advance becomes O(1), where `state/mod.rs:240-244` rebuilds a whole `Vec<Arc<_>>` under the lock today.
    - **Duplicates and missing rows** keep today's answer: `get_track_summaries_by_ids` drops both (`lookup.rs:98-101`), so `player_play_tracks` dedups and drops through `existing_ids`.
-6. **Lists refetch their keyset, never their rows.** A `library_changed` tick refetches ids (one indexed query) and drops the page cache. A heart or star click patches the cached row and refetches only the keysets whose membership it moves (Favorites, smart playlists).
+6. **Lists refetch their keyset, never their rows.** A `library_changed` tick refetches ids (one indexed query) and re-reads the rows the list holds, those around the viewport first (amended 2026-10-18 from dropping the cache, which would put every row on screen back on placeholders at each tick). A heart or star click patches the cached row and refetches only the keysets whose membership it moves (Favorites, smart playlists). The write still bumps `library_changed`, so a visible Songs tab follows a click with one keyset query and that re-read.
 
    Today every click refetches and reconverts the whole library while Songs is visible (`subscribers.rs:23-36`; `favorites.rs:57,84`; `ratings.rs:41,83`).
 7. **Details** take their membership ids from SQL and sort them there with their own arm.
@@ -110,7 +114,7 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `crates/melodia-core/src/utils/needle.rs` (new, Phase 1) | `Needle` and `fold_needle`, moved from `row_match` |
 | `migrations/20261018000000_track_search_text.sql` (new, Phase 1) | `search_text TEXT NOT NULL DEFAULT ''` and the partial index over unfilled rows |
 | `crates/melodia-store/src/database/collation.rs` (new, Phase 1) | `UNICODE_LOWER`; `register` is called on the write, read and test pool options |
-| `crates/melodia-store/src/database/queries/track/keyset.rs` (new, Phase 1) | `track_ids` per scope with the sort arm and needle, the needle clause, and `detail_order` that `entity_ids` now takes its two orders from |
+| `crates/melodia-store/src/database/queries/track/keyset.rs` (new, Phase 1) | `track_ids` per scope with the sort arm and needle, read back as one packed row (Phase 2), the needle clause, and `detail_order` that `entity_ids` now takes its two orders from |
 | `crates/melodia-store/src/database/queries/track/ranking.rs` | `most_played_ids` and `most_played_favorite_ids`, beside `MOST_PLAYED_ORDER` |
 | `crates/melodia-store/src/database/queries/track/lookup.rs` | `get_track_list_rows_by_ids` (which also serves the queue sheet, every `QueueRow` field being on `TrackListRow`) and `get_most_played_by_ids`, sharing one in-order helper with the four by-id fetches that each spelled it |
 | `crates/melodia-store/src/database/queries/track/search_text.rs` (new, Phase 1) | `backfill_search_text`, paged by id, writing only rows still `''` |
@@ -120,8 +124,9 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `crates/melodia-app/src/tasks/queue_window.rs` (new) | the window prefetch |
 | `crates/melodia-engine/src/player/engine/queue.rs` (510) | ids and orders |
 | `crates/melodia-engine/src/player/engine/queue_window.rs` (new) | `TrackWindow`. Keeps `handlers.rs` (666) from growing. `backend/mod.rs` (795) is not touched. |
-| `crates/melodia-views/src/ui/paged_rows.rs` (new) | `PagedRows<R>`: the model, page cache, fetch scheduling and selection |
-| `crates/melodia-views/src/ui/track_list_cache.rs` (498), `track_list_model.rs` (127) | deleted |
+| `crates/melodia-views/src/ui/paged_rows/mod.rs` (new, Phase 2) | `PagedRows<R>`: the model, the row cache, the window and its one fetch, `ScrollPoint`, the selection, and the `KeysetTickets` that order a list's loads |
+| `crates/melodia-views/src/ui/paged_rows/track_rows.rs` (new, Phase 2) | `TrackRows` over `TrackListRow`: the placeholder, the fetcher, the seeded `load` and the cover prewarm |
+| `crates/melodia-views/src/ui/track_list_cache.rs` (498), `track_list_model.rs` (127) | deleted (Phase 2) |
 | `crates/melodia-views/src/ui/track_detail/cache.rs` (132) | the keyset and needle only |
 | `crates/melodia-views/src/ui/queue_sheet/links.rs` (106) | deleted; the album, artist and genre ids arrive with the row fetch |
 | `crates/melodia-views/src/ui/{favorites,recently_played}/rows.rs` | one `to_slint_most_played_row`, not two identical copies (`favorites/rows.rs:37`, `recently_played/rows.rs:34`) |
@@ -164,20 +169,47 @@ Memory: none at runtime. Disk: `search_text` holds 3,889,324 B over 51,012 track
 
 ## Phase 2: `PagedRows` plus Songs and Favorites Songs
 
-Status: not started.
+Status: done (2026-10-18), `3327af38` and `cfc224e2`. Passed by hand in debug and release; fmt, clippy and the full suite green. New tests pending.
 
-- [ ] `PagedRows<UiTrackListRow>`, installed once per list. `Tracks.rows` and Favorites' rows go through it.
-- [ ] The Songs and Favorites fetch paths keep the keyset only:
-  - `fetch_and_apply`, `refilter` and `resort_and_apply` (`tracks/fetch.rs:25,64,76`);
-  - `refresh_tracks`, `build_filtered_tracks` and `write_filtered_tracks` (`favorites/songs.rs:75-242`).
+- [x] `PagedRows<UiTrackListRow>`, installed once per list. `Tracks.rows` and Favorites' rows go through it.
+- [x] The Songs and Favorites fetch paths keep the keyset only. Play and Shuffle read it. Each load takes a ticket when it reads its sort and filter, and only the newest is shown, so a keystroke, a header click and a library tick can land in any order.
+- [x] Hearts and stars patch the cached row. A Favorites unfavourite drops the ids from that keyset at once. The Now Playing mirror reaches the same patch. The band's artist and album spread comes from `get_favorite_stats`, which retired the Songs fold.
+- [x] Favorites ▸ Songs keeps its model across a tab pick; leaving it filtered marks it dirty, the pick clearing the shared needle.
+- [x] `install_library_changed_refresher` refetches the keyset, and its stale comment is fixed.
+- [x] Deleted `TrackListCache`, `TrackListModel`, their tests, `get_favorite_tracks_for_list` and its two store tests.
+- [x] After the first hand test, three fixes and one speed-up:
+  - one fetch in flight per list, run on tokio, landing only inside the window (decision 4's amendment), which ended the pool's 2 s waits;
+  - a load seeds the rows where the list is scrolled;
+  - the row menu's Clear selection shows wherever the list holds a set, the picks on a 51k list sitting far out of view;
+  - `track_ids` reads its ids back as one `group_concat` row, ordered by a subquery. sqlx hands each row across from its worker thread on its own, and that hand-off was most of a sort's time. Checked by mutation: dropping the subquery's `ORDER BY` fails all five `cross_tier` keyset tests.
+- [x] Tried and dropped: storing lowered `artist`, `album` and `genre` keys, so those sorts compare bytes instead of calling the collation. In release they went from 46–57 ms to 31–41 ms, and in the debug build from 287–353 ms to 73–83 ms. Not worth three permanent columns, their write-through and a backfill, with release already instant.
+- [x] Doc edits: `CLAUDE.md`'s "Models from background", `library-data.md`'s narrowing and keyset paragraphs, and `ui-patterns.md`'s paged-list entry, shared-helpers line, Favorites delta and the Clear selection rule.
+- [ ] Tests:
+  - `paged_rows`, ported from the deleted model: only the patched row repaints, an unchanged refresh notifies nothing, selection survives a swap and a clear.
+  - `paged_rows`, new: one fetch in flight, a window already scrolled past is never fetched, a late fetch never reverts a patch, an absent row is not re-asked in a loop, and the seed covers the scroll point.
+  - The `SearchFields::pack` pins the cache's tests carried (separator straddle, NUL, accents, agreement with `track_matches`), moved to `melodia-core`.
+  - Leaving a filtered Favorites Songs tab marks it dirty; the `FavoriteStats` spread against `fold_tracks`; the Clear selection gate; an empty keyset.
 
-  Play and Shuffle read the keyset (`current_ids_filtered`, `filtered_track_ids`).
-- [ ] Hearts and stars patch the cached row. A Favorites unfavourite removes the id from that keyset, as `TrackListCache::remove` does today. The Now Playing mirror (`CurrentTrackMirrors`) reaches the same patch.
-- [ ] `install_library_changed_refresher` refetches the keyset. Fix its stale comment (`subscribers.rs:19-22` still says play-count flushes bump this channel).
-- [ ] Delete `TrackListCache`, `TrackListModel` and their tests. Port the pins that still mean something: repaint, refetch diff and selection survival to `paged_rows` tests.
-- [ ] Update `CLAUDE.md` (the "Models from background" sentence naming `TrackListModel::installed`) and `library-data.md` (the "retain and permute" paragraph this plan reverses).
+Memory, Songs open as the first view on the 51k library, release, settled 3 minutes (2026-10-18). This is not the Appendix B path (playlist idle, then Songs), so [Targets](#targets) waits for that run:
 
-Memory: Songs open stays within the [Targets](#targets).
+| Build | Anonymous | Live heap |
+|---|---|---|
+| `3327af38` | 37.5 MiB | 17.14 MiB |
+| `cfc224e2`, two launches | 36.1 and 34.8 MiB | 17.37 and 16.95 MiB |
+
+The keyset is one 409,584 B chunk, 8.0 B per track, and no main-arena size class holds 0.8 × 51,012 live chunks, so nothing is kept per row. Cover pixels were 0.59 MiB, 87 covers. The dropped stored keys left the live heap where it was and moved Anonymous between 40.5 and 50.2 MiB on two launches. A `malloc_trim` handed 11.1 MiB of the 50.2 back, so that spread was the allocator keeping freed pages, not data.
+
+Sorts, release, the `track_ids` median on the 51k dev database (row-per-id at `3327af38`, then packed):
+
+| Column | `3327af38` | `cfc224e2` |
+|---|---|---|
+| Title asc / desc | 33 / 35 ms | 9.8 / 12.9 ms |
+| Artist | 46–49 ms | 28–31 ms |
+| Album | 53 ms | 34 ms |
+| Genre | 53–57 ms | 31 ms |
+| Year | 40–41 ms | 17 ms |
+| Length | 39–41 ms | 16.5 ms |
+| Track number | 45 ms | 21 ms |
 
 ## Phase 3: The four details
 

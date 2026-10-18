@@ -106,10 +106,11 @@ silently miss the other.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
   the right-click menu's, on rows and cards alike: "Select all" ungated wherever the host has a set,
-  "Clear selection" gated on the clicked *row* being in the set, so a menu raised beside one still
-  acts on that row alone.
-  **A card gates it on the scope holding a set instead**, a card having no second activation with
-  which to reach a set it can no longer see; `card-context-menu.slint` argues it. The other exits
+  "Clear selection" wherever it holds one, the clicked item in it or not, while the batch entries
+  still need the clicked item in the set, so a menu raised beside one acts on that item alone.
+  **Clear is gated on the set rather than the item because a set can sit out of reach**: a card has
+  no second activation to get back to one, and a library-sized list can hold its picks thousands of
+  rows away. `card-context-menu.slint` and `track-context-menu.slint` argue it. The other exits
   are Escape (`Selection.clear-live()`), a section leave, and unpicking the last item. A surface
   that grows a "{n} selected" chip is putting a second affordance in front of the menu that
   already carries all of them. **A body click that picks fires on `clicked`**, for the
@@ -652,11 +653,13 @@ three components that answer it, and each argues its geometry at its own file.
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
-- **A list holding its whole set in a `TrackListCache` shows it through
-  `ui::track_list_model::TrackListModel`, never a `VecModel` copy.** My Library's Songs tab and
-  Favorites' are the two today. A favourite or rating change writes the cache and asks the model to
-  `repaint` the row, where the `VecModel` lists go through `model_patch`; the `list_selection`
-  helpers take either model.
+- **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
+  `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and
+  its module doc argues the window, the one fetch in flight and the seed a load fetches where the
+  list is scrolled. My Library's Songs tab and Favorites' are the two today, both
+  `track_rows::TrackRows`. A favourite or rating change patches the cached row, where the
+  `VecModel` lists go through `model_patch`; the `list_selection` helpers take either model. A
+  third such list implements `PagedRow` for its row rather than growing a second model.
 
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
@@ -1397,8 +1400,8 @@ block first; each page's section below is deltas only.** The nav-index map is in
   Tracks' leave releases nothing, so it owes none.
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
-  `ui::grid_rows::chunk_entity_rows`, `ui::model_diff::replace_rows`, `ui::track_list_cache`
-  with the `ui::track_list_model` that shows it,
+  `ui::grid_rows::chunk_entity_rows`, `ui::model_diff::replace_rows`, `ui::paged_rows` with the
+  `track_rows::TrackRows` both Songs tabs show,
   `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
@@ -1408,8 +1411,11 @@ Each page's own tree is the reference for how it fills; what follows is only the
 edit would otherwise reverse.
 
 - **Favorites** (three tabs) — `refresh_hero` stays **ungated**, answering the count, running time
-  and collage the band states on all three tabs, which is why Songs owes no count rewind. Both sorts
-  resolve **in memory**, the fetch having lost its sort parameters entirely. **The artist sort
+  and collage the band states on all three tabs, which is why Songs owes no count rewind.
+  **Songs sorts and filters in SQL and keeps its model across a tab pick**, a keyset and a few
+  hundred rows being nothing to hand back. The one pick it can't answer is leaving it filtered:
+  the pick clears the shared needle, so it marks Songs dirty on the way out
+  (`callbacks/subviews.rs`). The artist grid sorts **in memory**. **The artist sort
   applies to the cached `Vec`, not the filtered copy** — `first_screenful_paths` picks prewarm
   targets off that cache, so sorting downstream warms the covers of whichever artists SQL returned
   first while the grid paints a different prefix. **A tab pick prewarms `GRID_PREWARM_AHEAD`, not
