@@ -1,7 +1,7 @@
 //! Chrome wiring for the Settings page — the search predicate its sections filter through,
 //! the persistence for which category is showing, and the deep link landing on one from
-//! elsewhere. Distinct from the per-concern installers,
-//! which wire the values the page *configures*.
+//! elsewhere. Distinct from the per-concern installers, which wire the values the page
+//! *configures*.
 
 use std::cell::RefCell;
 use std::sync::Arc;

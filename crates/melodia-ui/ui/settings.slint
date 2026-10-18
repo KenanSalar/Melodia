@@ -184,9 +184,6 @@ export global Settings {
     // nothing about the claim, so a toggle applies at once and reopens nothing.
     in-out property <bool> output-release-paused: false;
     callback output-release-paused-changed(bool);
-    // Lands on Settings ▸ Output, where the signal path reads in full: the quality chip, its
-    // overflow-menu row and the refused claim's toast action.
-    callback open-signal-path();
     // The silence a reopen onto a new rate writes first, for the DACs that mute while they relock.
     // The drag only moves the readout: nothing hears the value until the next rate change, so it
     // goes to the engine and to disk together on release.

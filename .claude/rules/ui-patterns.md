@@ -1470,9 +1470,7 @@ edit would otherwise reverse.
   rather than a fold; `ViewStateData::settings_category` says why.
 
 - **A link into a category from outside the page is `SettingsPage.open-category`**, the Slint face
-  of `settings_page::open_on`, as the overflow menu's Equalizer and ReplayGain rows land on
-  Effects. `Settings.open-signal-path` is the one named link, kept because Rust's refused-claim
-  toast invokes it as well as two `.slint` sites.
+  of `settings_page::open_on`, never a callback named for its destination.
 
 - **The category's own name is part of each card's search term**: search escapes the categories,
   so a category name is what a user types, and "Integrations" appears in no card's text otherwise.
@@ -1513,10 +1511,10 @@ edit would otherwise reverse.
   the line with nothing failing.
 
 - **Every card child that wraps text is measured at `card-w` through a pinned cell.** Each sits
-  behind an `if`, its own or its card's, and Slint measures a repeated element's height at the width its contents ask
-  for, which no pin on its root reaches (`slint-pitfalls.md`). `setting-row.slint` argues the
-  wrapper and `SectionCard` carries the same pair on its body cell; a new row shape behind an `if`
-  owes one, or its card is sized for a single line of what wraps.
+  behind an `if`, its own or its card's, and Slint measures a repeated element's height at the
+  width its contents ask for, which no pin on its root reaches (`slint-pitfalls.md`).
+  `setting-row.slint` argues the wrapper and `SectionCard` carries the same pair on its body cell;
+  a new row shape behind an `if` owes one, or its card is sized for a single line of what wraps.
 
 - **Each card carries the gap under it**, so pages and the router spell no `spacing`: a section
   that filters itself away still holds a layout slot, and a gap between slots would leave a hole

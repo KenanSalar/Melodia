@@ -218,8 +218,6 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // Both land on Settings ▸ Effects, where the two cards sit side by side, as the
-                // Signal Path row lands on Output.
                 OverflowRow {
                     icon: "graphic_eq";
                     label: @tr("Equalizer");
@@ -321,7 +319,7 @@ export component OverflowMenu inherits Rectangle {
                     icon: "graphic_eq";
                     label: SignalPathUi.verdict-label;
                     trailing-text: SignalPathUi.device-rate;
-                    clicked => { Settings.open-signal-path(); root.dismiss(); }
+                    clicked => { SettingsPage.open-category(SettingsPage.category-output); root.dismiss(); }
                 }
             }
         }

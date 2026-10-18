@@ -1,5 +1,5 @@
-//! The flag structs behind Settings ▸ Playback, ▸ Effects and ▸ Output, and the visualizer's
-//! on ▸ Appearance.
+//! The flag structs behind Settings ▸ Playback, ▸ Effects and ▸ Output, and behind the
+//! visualizer on ▸ Appearance.
 
 use std::time::Duration;
 

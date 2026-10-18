@@ -16,7 +16,7 @@ use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use melodia_ui::{
     AppWindow, MelodiaUpdater, NotificationKind, NotificationRow, NotificationVariant,
-    Notifications, Settings,
+    Notifications, Settings, SettingsPage,
 };
 
 /// Maximum visible notifications. Pushing past it drops the oldest first, so the stack
@@ -310,7 +310,10 @@ fn run_action(ui: &AppWindow, kind: NotificationKind) {
         NotificationKind::UpdateRestart => ui.global::<MelodiaUpdater>().invoke_restart(),
         NotificationKind::CrashReport => ui.global::<Settings>().invoke_open_log_folder(),
         NotificationKind::SupportMelodia => ui.global::<Settings>().invoke_open_kofi(),
-        NotificationKind::ExclusiveRefused => ui.global::<Settings>().invoke_open_signal_path(),
+        NotificationKind::ExclusiveRefused => {
+            let page = ui.global::<SettingsPage>();
+            page.invoke_open_category(page.get_category_output());
+        }
         // Kinds that only group rows; their rows carry no button.
         NotificationKind::None
         | NotificationKind::UpdateFailed

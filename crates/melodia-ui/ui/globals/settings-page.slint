@@ -27,9 +27,9 @@ export global SettingsPage {
     in-out property <int> category-idx: 0;
     callback category-changed(int);
 
-    // Lands on a category from anywhere, Now Playing included, as the overflow menu's Equalizer and
-    // ReplayGain rows do. The Slint face of `settings_page::open_on`; a pick in the panel is
-    // `category-changed`, the page already being on screen.
+    // Lands on a category from anywhere, Now Playing included: the Slint face of
+    // `settings_page::open_on`. A pick in the panel is `category-changed`, the page already being
+    // on screen.
     callback open-category(int);
 
     // What the user is typing, and what the page is filtered by. **Two properties**, joined by a
