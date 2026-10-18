@@ -571,6 +571,24 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
     Ok(())
 }
 
+/// The Songs band's spread, which `ui::hero_folds::fold_tracks` used to count off the resident
+/// rows. Beta and Gamma share one artist and one album; the untagged Delta is credited to the
+/// unknown artist, as every scan credits one, and has no album; Alpha's own pair is no favourite's.
+#[tokio::test]
+async fn the_favorite_spread_counts_each_artist_and_album_of_the_favorites_once()
+-> Result<(), AppError> {
+    let db = seed_db().await?;
+    insert_test_track(&db, "/music/delta.mp3", "Delta", "", "", "").await?;
+    let favorites =
+        [id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?, id_of(&db, "Delta").await?];
+    queries::track::set_favorite(&db, &favorites, true).await?;
+
+    let stats = queries::track::get_favorite_stats(&db).await?;
+
+    assert_eq!((stats.count, stats.artists, stats.albums), (3, 2, 1));
+    Ok(())
+}
+
 /// The hero mosaic and the Most Played tab are the same list seen two ways, so
 /// they have to resolve a tie the same way. The mosaic used to rank distinct
 /// covers by `MAX(play_count)` under a tiebreaker of its own, and the grid broke
@@ -1333,6 +1351,36 @@ async fn a_row_without_search_text_matches_every_needle() -> Result<(), AppError
             .await?;
 
     assert_eq!(ids, [id_of(&db, "Alpha").await?, id_of(&db, "Gamma").await?]);
+    Ok(())
+}
+
+/// The aggregate the ids are packed into is NULL over no rows at all.
+#[tokio::test]
+async fn a_keyset_with_no_track_in_it_is_empty() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let natural = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+
+    let ids =
+        queries::track::track_ids(&db, TrackListScope::Favorites, natural, &Needle::default())
+            .await?;
+
+    assert_eq!(ids, Vec::<i64>::new());
+    Ok(())
+}
+
+/// One id packs with no separator to split on.
+#[tokio::test]
+async fn a_keyset_of_one_track_is_that_track() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let beta = id_of(&db, "Beta").await?;
+    queries::track::set_favorite(&db, &[beta], true).await?;
+    let natural = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+
+    let ids =
+        queries::track::track_ids(&db, TrackListScope::Favorites, natural, &Needle::default())
+            .await?;
+
+    assert_eq!(ids, [beta]);
     Ok(())
 }
 

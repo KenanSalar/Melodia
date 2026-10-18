@@ -15,6 +15,9 @@ use melodia_ui::TrackListRow as UiTrackListRow;
 /// Displayed order used by every shift-range case below.
 const VISIBLE: [i32; 6] = [10, 20, 30, 40, 50, 60];
 
+const ROW_MENU: &str =
+    include_str!("../../../../melodia-ui/ui/components/track-list/track-context-menu.slint");
+
 fn visible() -> Vec<i32> {
     VISIBLE.to_vec()
 }
@@ -380,4 +383,19 @@ fn nothing_to_keep_builds_no_set() {
     keep_selection_within(&view, || unreachable!("an empty selection has nothing to prune"));
 
     assert_eq!(view.state(), (Vec::new(), NO_ANCHOR, vec![false; 4]));
+}
+
+/// On a library-sized list the picks can sit thousands of rows from the row right-clicked, and
+/// with Clear gated on that row being picked the user scrolled back to find one first.
+#[test]
+fn the_row_menu_offers_clear_selection_wherever_the_list_holds_a_set() {
+    let gate = ROW_MENU
+        .split_once("label: @tr(\"Clear selection\");")
+        .and_then(|(head, _)| head.trim_end().lines().last())
+        .map(str::trim);
+
+    assert_eq!(
+        gate,
+        Some("if root.show-selection-actions && root.selection-count > 0: MenuItem {")
+    );
 }

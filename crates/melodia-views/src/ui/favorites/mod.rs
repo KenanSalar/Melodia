@@ -141,6 +141,12 @@ impl FavoritesUi {
         FavoritesTab::from_code(self.active_tab.load(Ordering::Relaxed))
     }
 
+    /// Whether Songs is mounted showing a filtered list, the ids a tab pick clearing the shared
+    /// needle leaves out of date.
+    pub fn shows_filtered_songs(&self) -> bool {
+        self.active_tab() == FavoritesTab::Songs && !current_filter(self).is_empty()
+    }
+
     /// Remember that a refresh tick reached the page with Songs not mounted.
     pub fn mark_songs_dirty(&self) {
         self.songs_dirty.store(true, Ordering::Release);

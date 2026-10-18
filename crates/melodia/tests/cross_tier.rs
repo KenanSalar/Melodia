@@ -340,6 +340,10 @@ type ParityTrack = (
 /// non-Latin case pairs, a final sigma, missing, empty and case-mixed albums, missing, zero and
 /// negative years, missing and zero track and disc numbers, tied lengths, and two rows equal on
 /// every key, which only the id can order.
+///
+/// The Songs tabs read a length clamped to `0..=i32::MAX`, so the last five sit on and either side
+/// of both ends, titled against their raw order: wherever the clamp ties two of them, the title
+/// puts them the other way round.
 async fn parity_library() -> Result<melodia_store::database::DbPool, AppError> {
     use melodia_core::entities::artist::ArtistCredit;
     use melodia_core::entities::genre::GenreList;
@@ -349,7 +353,7 @@ async fn parity_library() -> Result<melodia_store::database::DbPool, AppError> {
 
     let db = DbPool::test_pool().await?;
     queries::folder::insert_folder(&db, "/music", true).await?;
-    let staged: [ParityTrack; 11] = [
+    let staged: [ParityTrack; 16] = [
         ("Zebra", "beta", Some("Émile"), "Rock", Some(1999), Some(2), Some(1), 1000, true),
         ("apple", "Alpha", Some("émile"), "rock", None, None, None, 2000, true),
         ("Éclair", "ALPHA", None, "Jazz", Some(0), Some(1), Some(0), 3000, true),
@@ -361,6 +365,11 @@ async fn parity_library() -> Result<melodia_store::database::DbPool, AppError> {
         ("mango", "mango", Some("banana"), "pop", Some(1999), Some(1), Some(1), 1000, true),
         ("Björk song", "Björk", Some("Banana"), "Pop", Some(1981), Some(4), Some(1), 500, false),
         ("ΣΟΦΙΑ", "x", Some("apple"), "Σ", None, Some(2), None, 500, false),
+        ("Rowan", "x", None, "", None, None, None, 0, true),
+        ("Sorrel", "x", None, "", None, None, None, -1, true),
+        ("Zinnia", "x", None, "", None, None, None, i64::from(i32::MAX) - 1, true),
+        ("Yarrow", "x", None, "", None, None, None, i64::from(i32::MAX), true),
+        ("Willow", "x", None, "", None, None, None, i64::from(i32::MAX) + 1, true),
     ];
     for (i, (title, artist, album, genre, year, track, disc, length, favorite)) in
         staged.into_iter().enumerate()

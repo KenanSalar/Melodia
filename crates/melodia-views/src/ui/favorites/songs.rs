@@ -12,7 +12,7 @@ use slint::{ComponentHandle, Weak};
 use super::{FavoritesTab, FavoritesUi};
 use crate::ui::list_selection;
 use crate::ui::paged_rows::track_rows::{self, TrackRows};
-use crate::ui::paged_rows::{Keyset, Ticket};
+use crate::ui::paged_rows::{Keyset, Load, Ticket};
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
@@ -53,13 +53,25 @@ pub fn set_filter(fav_ui: &FavoritesUi, filter: &str) {
 /// live-refresh subscriber.
 ///
 /// Every way of showing nothing re-arms the flag, the caller having consumed it before spawning
-/// this: a failed query, a leave landing mid-flight, and a write [`show_tracks`] refuses.
+/// this: a failed query, a leave landing mid-flight, and a write [`show_tracks`] refuses. A load
+/// another overtook leaves the list to that one.
 pub async fn refresh_tracks(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,
     weak: &Weak<AppWindow>,
 ) -> AppResult<()> {
-    let ticket = fav_ui.state().song_tickets.issue();
+    let ticket = fav_ui.state().song_tickets.issue_reload();
+    reload_tracks(state, fav_ui, weak, ticket).await
+}
+
+/// [`refresh_tracks`] under a ticket already issued, which a requery overtaking a refresh runs in
+/// that one's place.
+async fn reload_tracks(
+    state: &AppState,
+    fav_ui: &Arc<FavoritesUi>,
+    weak: &Weak<AppWindow>,
+    ticket: Ticket,
+) -> AppResult<()> {
     let (order, needle) = current_query(fav_ui);
     let keyset =
         track_rows::load(state, TrackListScope::Favorites, order, &needle, &fav_ui.songs_scroll)
@@ -70,6 +82,10 @@ pub async fn refresh_tracks(
     // this would undo that teardown behind a view nobody can see.
     if !fav_ui.section_active() {
         fav_ui.mark_songs_dirty();
+        return Ok(());
+    }
+    // Overtaken already: the newer load owns the list, and nothing this warms would be drawn.
+    if !fav_ui.state().song_tickets.is_latest(ticket) {
         return Ok(());
     }
     track_rows::prewarm(&fav_ui.cover_thumbs, &keyset).await;
@@ -85,6 +101,7 @@ pub async fn refresh_tracks(
     let _ = weak.upgrade_in_event_loop(move |ui| {
         show_tracks(&ui, &fav_ui, ticket, keyset, |g, model| {
             model.reread();
+            fav_ui.state().song_tickets.reload_shown(ticket);
             // A filtered keyset no longer holds the rows the filter hides, and a filter drops no
             // pick, so only an unfiltered one can say which picks the favourites have lost.
             if unfiltered {
@@ -96,7 +113,8 @@ pub async fn refresh_tracks(
 }
 
 /// Reload the ids after a header click or a keystroke. The rows the list holds are still current,
-/// so it re-reads none of them and warms no covers.
+/// so it re-reads none of them and warms no covers, unless it overtakes a refresh, which it then
+/// runs in that one's place.
 ///
 /// Nothing is loaded while another tab is mounted: entering Songs clears the shared filter, and a
 /// Songs tab left filtered is marked dirty on its way out, so the pick that brings it back
@@ -105,11 +123,21 @@ pub fn requery_tracks(state: &AppState, fav_ui: &Arc<FavoritesUi>, weak: &Weak<A
     if fav_ui.active_tab() != FavoritesTab::Songs {
         return;
     }
-    let ticket = fav_ui.state().song_tickets.issue();
-    let (order, needle) = current_query(fav_ui);
     let s = state.clone();
     let fu = Arc::clone(fav_ui);
     let weak = weak.clone();
+    let ticket = match fav_ui.state().song_tickets.issue_requery() {
+        Load::Requery(ticket) => ticket,
+        Load::Reload(ticket) => {
+            state.runtime.spawn(async move {
+                if let Err(e) = reload_tracks(&s, &fu, &weak, ticket).await {
+                    log::warn!("favorites::requery_tracks: {}", describe(&e));
+                }
+            });
+            return;
+        }
+    };
+    let (order, needle) = current_query(fav_ui);
     state.runtime.spawn(async move {
         match track_rows::load(&s, TrackListScope::Favorites, order, &needle, &fu.songs_scroll)
             .await

@@ -20,6 +20,9 @@ use melodia_core::utils::needle::Needle;
 /// tagged one, where `SQLite` would put a NULL first.
 const UNTAGGED_TRACK_LAST: i32 = i32::MAX;
 
+/// The longest a Songs row's length reads, the most milliseconds the `i32` it displays holds.
+const SONGS_LENGTH_CAP_MS: i32 = i32::MAX;
+
 /// The scan's natural-order key, folded the way `to_ascii_lowercase` folds it.
 const NATURAL: &str = "COALESCE(t.sort_key, '') COLLATE NOCASE";
 
@@ -111,10 +114,10 @@ impl Page {
         }
     }
 
-    fn length(self) -> &'static str {
+    fn length(self) -> String {
         match self {
-            Self::Songs => "MIN(MAX(t.duration_ms, 0), 2147483647)",
-            Self::Detail => "t.duration_ms",
+            Self::Songs => format!("MIN(MAX(t.duration_ms, 0), {SONGS_LENGTH_CAP_MS})"),
+            Self::Detail => "t.duration_ms".to_owned(),
         }
     }
 }
@@ -139,7 +142,7 @@ fn order_by(page: Page, order: TrackOrder, position: Option<&str>) -> String {
         (TrackSortField::Album, _) => then_tie(&lowered("t.album")),
         (TrackSortField::Genre, _) => then_tie(&lowered("t.genre")),
         (TrackSortField::Year, _) => then_tie(page.year()),
-        (TrackSortField::Length, _) => then_tie(page.length()),
+        (TrackSortField::Length, _) => then_tie(&page.length()),
         (TrackSortField::Position, Some(position)) => format!("{position} {dir}, t.id {dir}"),
         // On the Songs tabs the natural key is the tie-break too, so it is compared once.
         (TrackSortField::Title | TrackSortField::Position, _) => match page {

@@ -35,6 +35,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use lru::LruCache;
+use parking_lot::Mutex;
 use slint::{Model, ModelNotify, ModelRc, ModelTracker};
 
 use crate::ui::util::clamp_i64_to_i32;
@@ -489,18 +490,67 @@ impl<R: PagedRow> Drop for RowRequest<R> {
 /// Orders a list's keyset loads, so whichever was asked for last is the one shown, however they
 /// land. A load takes its ticket before reading the sort and the filter it runs under, and shows
 /// only while that ticket is still the latest.
+///
+/// A reload, what a library change asks for, also re-reads the rows the list holds, and a sort or
+/// keystroke overtaking it would drop that re-read with it. So a reload stays owed until one
+/// shows, and a requery issued meanwhile runs as one. Deciding that and issuing the ticket are one
+/// step under the lock, or a reload issued on another thread between the two is overtaken anyway.
 #[derive(Default)]
-pub struct KeysetTickets(AtomicU64);
+pub struct KeysetTickets(Mutex<Issued>);
+
+#[derive(Default)]
+struct Issued {
+    latest: u64,
+    /// The newest reload no load has shown yet.
+    reload_owed: Option<u64>,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Ticket(u64);
 
+/// What a sort or a filter has to run as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Load {
+    /// The ids alone, every row the list holds being current.
+    Requery(Ticket),
+    /// A reload, standing in for one this load overtakes.
+    Reload(Ticket),
+}
+
 impl KeysetTickets {
-    pub fn issue(&self) -> Ticket {
-        Ticket(self.0.fetch_add(1, Ordering::AcqRel) + 1)
+    /// The ticket for a reload, owed until [`Self::reload_shown`] hands it back.
+    pub fn issue_reload(&self) -> Ticket {
+        let mut issued = self.0.lock();
+        issued.latest += 1;
+        issued.reload_owed = Some(issued.latest);
+        Ticket(issued.latest)
+    }
+
+    /// The ticket for a sort or a filter, which takes over a reload still owed.
+    pub fn issue_requery(&self) -> Load {
+        let mut issued = self.0.lock();
+        issued.latest += 1;
+        let ticket = Ticket(issued.latest);
+        if issued.reload_owed.is_none() {
+            return Load::Requery(ticket);
+        }
+        issued.reload_owed = Some(ticket.0);
+        Load::Reload(ticket)
     }
 
     pub fn is_latest(&self, ticket: Ticket) -> bool {
-        self.0.load(Ordering::Acquire) == ticket.0
+        self.0.lock().latest == ticket.0
+    }
+
+    /// Settle the reload `ticket` showed. One issued after it stays owed.
+    pub fn reload_shown(&self, ticket: Ticket) {
+        let mut issued = self.0.lock();
+        if issued.reload_owed == Some(ticket.0) {
+            issued.reload_owed = None;
+        }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/paged_rows_tests.rs"]
+mod tests;

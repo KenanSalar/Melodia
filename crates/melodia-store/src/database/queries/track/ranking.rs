@@ -24,8 +24,9 @@ const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added D
 /// Aggregate stats for the Favorites hero header: count, total duration, the artist and album
 /// spread, up to 4 artwork paths.
 pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
-    // `COUNT(DISTINCT …)` skips NULLs, so an untagged track adds no artist or album, as
-    // `ui::hero_folds::fold_tracks` reads the same two columns off a list's rows.
+    // `COUNT(DISTINCT …)` skips NULLs, so a track with no album adds none, and an untagged artist
+    // is the one unknown-artist row, as `ui::hero_folds::fold_tracks` reads the same two columns
+    // off a list's rows.
     let (count, total_duration_ms, artists, albums): (i64, i64, i64, i64) = sqlx::query_as(
         "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), \
                 COUNT(DISTINCT artist_id), COUNT(DISTINCT album_id) \

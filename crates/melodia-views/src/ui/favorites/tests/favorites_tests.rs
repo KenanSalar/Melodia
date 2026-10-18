@@ -471,3 +471,25 @@ fn the_grid_counts_are_written_before_the_signature_can_skip_them() {
         );
     }
 }
+
+/// A tab pick clears the needle the three tabs share, so a Songs list left filtered holds ids the
+/// next visit doesn't show. Only that corner owes a reload: unfiltered, the list is already what
+/// the pick will show, and a grid tab's needle never reached the Songs keyset.
+#[test]
+fn only_a_filtered_songs_tab_is_left_owing_a_reload() {
+    const CASES: [(FavoritesTab, &str, bool, &str); 4] = [
+        (FavoritesTab::Songs, "ha", true, "Songs, filtered"),
+        (FavoritesTab::Songs, "", false, "Songs, unfiltered"),
+        (FavoritesTab::Songs, "   ", false, "Songs, a needle of spaces, which trims to nothing"),
+        (FavoritesTab::Artists, "ha", false, "a grid tab, filtered"),
+    ];
+    for (tab, filter, expected, case) in CASES {
+        let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()), None, ScrollPoint::default());
+        fav_ui.set_active_tab(tab);
+        super::set_filter(&fav_ui, filter);
+
+        let owed = fav_ui.shows_filtered_songs();
+
+        assert_eq!(owed, expected, "{case}");
+    }
+}

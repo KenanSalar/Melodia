@@ -101,12 +101,10 @@ fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
         // reads the tab being entered.
         crate::ui::view_tag::log_current(&ui);
 
-        // A Songs list left filtered still holds the filtered ids, and the
-        // pick is about to clear the needle they were loaded under, so the
+        // Asked before the shadow moves, so it reads the tab being left: the
+        // pick is about to clear the needle Songs was loaded under, and the
         // pick that brings Songs back has to reload it.
-        let leaving_filtered_songs = fu.active_tab() == favorites_ui_mod::FavoritesTab::Songs
-            && !favorites_ui_mod::current_filter(&fu).is_empty();
-        if leaving_filtered_songs {
+        if fu.shows_filtered_songs() {
             fu.mark_songs_dirty();
         }
 

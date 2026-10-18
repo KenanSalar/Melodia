@@ -78,3 +78,7 @@ impl<'a> From<&'a MostPlayedFavorite> for SearchFields<'a> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "tests/track_search_tests.rs"]
+mod tests;

@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 2's new tests pending, Phase 3 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -124,7 +124,7 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `crates/melodia-app/src/tasks/queue_window.rs` (new) | the window prefetch |
 | `crates/melodia-engine/src/player/engine/queue.rs` (510) | ids and orders |
 | `crates/melodia-engine/src/player/engine/queue_window.rs` (new) | `TrackWindow`. Keeps `handlers.rs` (666) from growing. `backend/mod.rs` (795) is not touched. |
-| `crates/melodia-views/src/ui/paged_rows/mod.rs` (new, Phase 2) | `PagedRows<R>`: the model, the row cache, the window and its one fetch, `ScrollPoint`, the selection, and the `KeysetTickets` that order a list's loads |
+| `crates/melodia-views/src/ui/paged_rows/mod.rs` (new, Phase 2) | `PagedRows<R>`: the model, the row cache, the window and its one fetch, `ScrollPoint`, the selection, and the `KeysetTickets` that order a list's loads and keep a library change's re-read owed until one shows |
 | `crates/melodia-views/src/ui/paged_rows/track_rows.rs` (new, Phase 2) | `TrackRows` over `TrackListRow`: the placeholder, the fetcher, the seeded `load` and the cover prewarm |
 | `crates/melodia-views/src/ui/track_list_cache.rs` (498), `track_list_model.rs` (127) | deleted (Phase 2) |
 | `crates/melodia-views/src/ui/track_detail/cache.rs` (132) | the keyset and needle only |
@@ -169,7 +169,7 @@ Memory: none at runtime. Disk: `search_text` holds 3,889,324 B over 51,012 track
 
 ## Phase 2: `PagedRows` plus Songs and Favorites Songs
 
-Status: done (2026-10-18), `3327af38` and `cfc224e2`. Passed by hand in debug and release; fmt, clippy and the full suite green. New tests pending.
+Status: done (2026-10-18), `3327af38` and `cfc224e2`. Passed by hand in debug and release; fmt, clippy and the full suite green. Tests and one fix landed after a whole-branch validation.
 
 - [x] `PagedRows<UiTrackListRow>`, installed once per list. `Tracks.rows` and Favorites' rows go through it.
 - [x] The Songs and Favorites fetch paths keep the keyset only. Play and Shuffle read it. Each load takes a ticket when it reads its sort and filter, and only the newest is shown, so a keystroke, a header click and a library tick can land in any order.
@@ -184,11 +184,14 @@ Status: done (2026-10-18), `3327af38` and `cfc224e2`. Passed by hand in debug an
   - `track_ids` reads its ids back as one `group_concat` row, ordered by a subquery. sqlx hands each row across from its worker thread on its own, and that hand-off was most of a sort's time. Checked by mutation: dropping the subquery's `ORDER BY` fails all five `cross_tier` keyset tests.
 - [x] Tried and dropped: storing lowered `artist`, `album` and `genre` keys, so those sorts compare bytes instead of calling the collation. In release they went from 46–57 ms to 31–41 ms, and in the debug build from 287–353 ms to 73–83 ms. Not worth three permanent columns, their write-through and a backfill, with release already instant.
 - [x] Doc edits: `CLAUDE.md`'s "Models from background", `library-data.md`'s narrowing and keyset paragraphs, and `ui-patterns.md`'s paged-list entry, shared-helpers line, Favorites delta and the Clear selection rule.
-- [ ] Tests:
-  - `paged_rows`, ported from the deleted model: only the patched row repaints, an unchanged refresh notifies nothing, selection survives a swap and a clear.
-  - `paged_rows`, new: one fetch in flight, a window already scrolled past is never fetched, a late fetch never reverts a patch, an absent row is not re-asked in a loop, and the seed covers the scroll point.
-  - The `SearchFields::pack` pins the cache's tests carried (separator straddle, NUL, accents, agreement with `track_matches`), moved to `melodia-core`.
-  - Leaving a filtered Favorites Songs tab marks it dirty; the `FavoriteStats` spread against `fold_tracks`; the Clear selection gate; an empty keyset.
+- [x] After the validation, one fix: a sort or keystroke overtaking a library tick's refresh took the newer ticket, and the refresh's re-read, count and selection prune went with it, leaving edited rows on their old text until the next change. `KeysetTickets` now keeps a refresh owed until one shows, and a requery issued meanwhile runs as one, decided under the same lock that issues its ticket. An overtaken refresh also skips its cover prewarm. Hand check pending.
+- [x] Tests:
+  - `paged_rows/tests/paged_rows_tests.rs`: the `window` boundaries; one fetch in flight; a landing asks nearest the row read last; a page scrolled past is never fetched; an absent row is not re-asked until a new keyset; a failed fetch waits for the next read; a landing after `clear` stores nothing; an empty list; the flag on a placeholder; the scroll point; the repaints (a patch, an uncached patch, an unchanged and a one-row-changed show, a late fetch against a patch, one and two removals); and the `KeysetTickets` decision table. Selection surviving a swap and a clear was already pinned in `list_selection_tests.rs`.
+  - `melodia-core`'s `track_search_tests.rs`: the packed format, four separators for five empty fields, NUL as a space, no match across two fields, and the packed text agreeing with the fields over six partitions.
+  - Store: an empty and a one-id keyset; the favourite spread as written-out counts (an untagged track is the unknown artist, so it counts as one).
+  - `favorites_tests.rs`: which tab and needle leave Songs owing a reload. `list_selection_tests.rs`: the Clear selection gate.
+  - `cross_tier`'s parity fixture gains lengths on and either side of both ends of the Songs clamp: moving the bound passed every test before.
+  - Checked by mutation, each failing only its own pins: the in-flight guard, the `absent` filter, the read-stamp arm, the owed-reload settle and takeover, the separator, `DISTINCT`, the menu gate, the Favorites tab check, and both ends of the length clamp. A repaint outside the window is deliberately not pinned: Slint ignores a row it doesn't hold, so it costs time, never a wrong row.
 
 Memory, Songs open as the first view on the 51k library, release, settled 3 minutes (2026-10-18). This is not the Appendix B path (playlist idle, then Songs), so [Targets](#targets) waits for that run:
 
