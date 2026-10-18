@@ -12,6 +12,7 @@ use slint::{Brush, ComponentHandle, SharedString};
 
 use super::theme_apply::accent_brushes;
 use melodia_app::state::AppState;
+use melodia_core::themes::material3::MATERIAL3;
 use melodia_core::themes::{MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings};
 
@@ -24,7 +25,7 @@ use super::{
 /// `Settings.material-you-active` and `accent_id` resolution inside
 /// [`super::apply_and_seed`].
 pub(super) fn material_you_active(theme_id: &str, system: &SystemColorState) -> bool {
-    theme_id == "material3" && system.material_you.is_some()
+    theme_id == MATERIAL3.id && system.material_you.is_some()
 }
 
 /// The theme's accents shaded for `variant_id`, with the names their tooltips carry.

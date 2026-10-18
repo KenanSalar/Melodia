@@ -12,7 +12,7 @@ use tokio::sync::watch;
 use super::repaint::{apply_settings, repaint_from_settings};
 use super::{
     AppearanceHandles, PersistedAccent, accent_picker, material_you_sync,
-    read_initial_system_state, seed_theme_names, system_watcher, theme_picker, window_border,
+    read_initial_system_state, seed_theme_registry, system_watcher, theme_picker, window_border,
     window_settings,
 };
 use melodia_app::library;
@@ -51,7 +51,7 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
         kick.clone(),
     );
 
-    seed_theme_names(ui);
+    seed_theme_registry(ui);
     // Ahead of `apply_settings`, whose palette apply resolves the border colour seeded here.
     window_border::seed(ui, &settings.window);
     apply_settings(ui, &settings, &initial_state);
@@ -200,13 +200,7 @@ fn wire_pickers(
         os_state.clone(),
         persisted_accent.clone(),
     );
-    material_you_sync::wire_color_style_changed(
-        ui,
-        state,
-        os_state.clone(),
-        kick.clone(),
-        persisted_accent.clone(),
-    );
+    material_you_sync::wire_color_style_changed(ui, state, kick.clone(), persisted_accent.clone());
 }
 
 fn wire_window_rows(ui: &AppWindow, state: &AppState) {

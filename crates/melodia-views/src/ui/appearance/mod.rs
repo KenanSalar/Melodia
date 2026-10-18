@@ -82,10 +82,14 @@ pub(super) fn read_initial_system_state() -> SystemColorState {
     }
 }
 
-pub(super) fn seed_theme_names(ui: &AppWindow) {
+pub(super) fn seed_theme_registry(ui: &AppWindow) {
     let names: Vec<SharedString> =
         themes::registry().iter().map(|t| SharedString::from(t.name)).collect();
-    ui.global::<Settings>().set_theme_names(ModelRc::from(Rc::new(VecModel::from(names))));
+    let slot = |theme: &ThemeDef| apply_and_seed_to_i32(themes::theme_index(theme.id));
+    let g = ui.global::<Settings>();
+    g.set_theme_names(ModelRc::from(Rc::new(VecModel::from(names))));
+    g.set_catppuccin_idx(slot(&themes::catppuccin::CATPPUCCIN));
+    g.set_material3_idx(slot(&themes::material3::MATERIAL3));
 }
 
 /// Look up `theme_preferences[theme_id].last_static_accent` in the

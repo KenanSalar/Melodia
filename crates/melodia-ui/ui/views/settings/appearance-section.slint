@@ -65,7 +65,7 @@ export component AppearanceSection inherits Rectangle {
     property <bool> show-follow-artwork: Settings.material-you-enabled
         && row-visible(follow-artwork-label, follow-artwork-desc);
     property <bool> show-accent: show-accent-row() && row-visible(accent-label, "");
-    property <bool> show-color-style: Settings.theme-idx == 4
+    property <bool> show-color-style: Settings.material3-selected
         && row-visible(color-style-label, color-style-desc);
     property <bool> show-backdrop: row-visible(backdrop-label, backdrop-desc);
 
@@ -113,7 +113,7 @@ export component AppearanceSection inherits Rectangle {
             label: root.variant-label;
             description: "";
             ChipGroup {
-                options: Settings.theme-idx == 0
+                options: Settings.catppuccin-selected
                     ? ["Latte", "Frappe", "Macchiato", "Mocha", @tr("System")]
                     : [@tr("Dark"), @tr("Light"), @tr("System")];
                 selected-index <=> Settings.variant-idx;

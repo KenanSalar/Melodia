@@ -6,16 +6,15 @@
 //! committed.
 
 use std::cell::Cell;
-use std::sync::Arc;
 
-use parking_lot::RwLock;
 use slint::ComponentHandle;
 
 use melodia_app::library;
 use melodia_app::state::{AppState, Signal};
 use melodia_artwork::media::image::material_you::SchemeStyle;
 use melodia_core::error::describe;
-use melodia_core::themes::{MATERIAL_YOU_ACCENT_ID, SystemColorState};
+use melodia_core::themes::MATERIAL_YOU_ACCENT_ID;
+use melodia_core::themes::material3::MATERIAL3;
 use melodia_ui::{AppWindow, Settings};
 
 use super::accent_picker::seat_accent;
@@ -24,7 +23,6 @@ use super::{PersistedAccent, read_last_static_accent, registry_get, usize_from, 
 pub(super) fn wire_color_style_changed(
     ui: &AppWindow,
     state: &AppState,
-    _os_state: Arc<RwLock<SystemColorState>>,
     kick: Signal,
     persisted_accent: PersistedAccent,
 ) {
@@ -41,7 +39,7 @@ pub(super) fn wire_color_style_changed(
 
         // Snapshot the theme + variant on the UI thread so the spawn_blocking task below doesn't
         // need any UI access.
-        let material3 = registry_get(g.get_theme_idx()).filter(|t| t.id == "material3");
+        let material3 = registry_get(g.get_theme_idx()).filter(|t| t.id == MATERIAL3.id);
         let variant_id: Option<String> = material3.map(|t| {
             variant_id_at(t, usize_from(g.get_variant_idx()))
                 .unwrap_or(t.default_variant)

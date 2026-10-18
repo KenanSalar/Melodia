@@ -28,7 +28,7 @@ pub(super) fn kde_system_active(
     variant_id: &str,
     system: &SystemColorState,
 ) -> bool {
-    if theme_id != "kde-breeze" || variant_id != themes::SYSTEM_VARIANT_ID {
+    if theme_id != themes::kde::KDE.id || variant_id != themes::SYSTEM_VARIANT_ID {
         return false;
     }
     #[cfg(target_os = "linux")]
@@ -116,7 +116,7 @@ fn lookup_remembered(state: &AppState, theme: &ThemeDef) -> (String, String) {
     // dynamic-colour pipeline resolves at paint time. Without this, switching themes
     // through material3 forgets the user's pick on every round trip.
     let accent_known = theme.accent(&pref.accent).is_some()
-        || (theme.id == "material3" && pref.accent == MATERIAL_YOU_ACCENT_ID);
+        || (theme.id == themes::material3::MATERIAL3.id && pref.accent == MATERIAL_YOU_ACCENT_ID);
     let accent = if accent_known { pref.accent.clone() } else { theme.default_accent.to_owned() };
     (variant, accent)
 }

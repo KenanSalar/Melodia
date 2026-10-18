@@ -6,7 +6,12 @@
 export global Settings {
     // Stable across runs — populated once at startup from `themes::registry()`.
     in property <[string]> theme-names;
+    // Seeded beside `theme-names`, so no binding here spells a registry position.
+    in property <int> catppuccin-idx: -1;
+    in property <int> material3-idx: -1;
     in-out property <int> theme-idx;
+    out property <bool> catppuccin-selected: root.theme-idx == root.catppuccin-idx;
+    out property <bool> material3-selected: root.theme-idx == root.material3-idx;
 
     // The chips themselves are inline `@tr` literals in `appearance-section.slint`, so
     // bundled translations re-render them on a locale switch; Rust drives only the
@@ -39,9 +44,9 @@ export global Settings {
     // colour is live.
     in property <bool> material-you-active;
 
-    // Material 3 (theme 4) with a Color Style set. Unlike `material-you-active` it holds with
-    // nothing playing, so the rows it shows don't come and go between tracks.
-    out property <bool> material-you-enabled: root.theme-idx == 4 && root.color-style-idx != 0;
+    // Material 3 with a Color Style set. Unlike `material-you-active` it holds with nothing
+    // playing, so the rows it shows don't come and go between tracks.
+    out property <bool> material-you-enabled: root.material3-selected && root.color-style-idx != 0;
 
     // Fired on chip / dot click. Rust resolves idx → id, persists, applies the new
     // palette and writes the lists back.

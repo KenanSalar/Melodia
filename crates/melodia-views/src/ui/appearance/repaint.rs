@@ -90,7 +90,8 @@ pub fn apply_and_seed(
     let style_idx = SchemeStyle::all().iter().position(|s| s.as_id() == style_id).unwrap_or(0);
     // The switch keeps reading on while nothing is playing, so it seats the persisted pick. Only
     // with no Color Style, where there is no artwork to follow, does the painted fallback show.
-    let can_follow = theme.id == "material3" && SchemeStyle::from_id(style_id) != SchemeStyle::None;
+    let can_follow = theme.id == themes::material3::MATERIAL3.id
+        && SchemeStyle::from_id(style_id) != SchemeStyle::None;
     let seated_id = if can_follow { accent_id } else { effective_id };
 
     let g = ui.global::<Settings>();

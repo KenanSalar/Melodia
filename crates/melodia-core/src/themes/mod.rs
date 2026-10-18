@@ -47,8 +47,7 @@ static REGISTRY: &[&ThemeDef] = &[
     &windows::WINDOWS,
 ];
 
-/// All registered themes in display order. Keep in sync with the chip order
-/// the Settings UI shows.
+/// All registered themes in display order.
 pub fn registry() -> &'static [&'static ThemeDef] {
     REGISTRY
 }
