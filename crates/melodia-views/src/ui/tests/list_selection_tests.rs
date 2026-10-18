@@ -9,7 +9,7 @@ use super::{
     handle_row_click, keep_selection_within, restamp_selected, select_all_ids, select_all_rows,
 };
 use crate::ui::fixtures::track_keyset;
-use crate::ui::paged_rows::track_rows::TrackRows;
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Displayed order used by every shift-range case below.
@@ -374,6 +374,30 @@ fn a_refilter_keeps_a_hidden_selection() {
     keep_selection_within(&view, || HashSet::from([1, 2, 3, 4]));
 
     assert_eq!(view.state(), (vec![1], 1, vec![false, false]));
+}
+
+/// The reload a removal brings prunes nothing under a filter, and a pick left behind out of sight
+/// is one a Ctrl-click carries into the next batch action.
+#[test]
+fn a_removal_under_a_filter_drops_the_removed_rows_from_the_selection() {
+    let view = FakeView::showing("ha");
+    handle_row_click(&view, 0, 2, false, false);
+    handle_row_click(&view, 1, 3, false, true);
+
+    track_rows::remove_rows(&view, &view.rows, &[3]);
+
+    assert_eq!(view.state(), (vec![2], NO_ANCHOR, vec![true]));
+}
+
+#[test]
+fn a_removal_keeps_a_pick_the_filter_hides() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 3, 1, false, false);
+    view.refilter("ha");
+
+    track_rows::remove_rows(&view, &view.rows, &[3]);
+
+    assert_eq!(view.state(), (vec![1], 1, vec![false]));
 }
 
 #[test]

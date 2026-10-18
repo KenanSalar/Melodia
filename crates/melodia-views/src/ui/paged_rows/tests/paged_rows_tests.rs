@@ -1,5 +1,5 @@
-//! What a paged list asks the database for, what it tells Slint to read again, and the order its
-//! keyset loads show in.
+//! What a paged list asks the database for, what it tells Slint to read again, how a drag moves a
+//! row, and the order its keyset loads show in.
 //!
 //! Two doubles stand in for what surrounds a list. The fetcher is the one the model takes as a
 //! parameter, recording each request until a test lands it or drops it, which is a fetch failing.
@@ -400,6 +400,58 @@ fn removing_two_rows_resets_the_list() {
     assert_eq!((watched.list.row_count(), watched.seen()), (2, vec![2, 3]));
 }
 
+// --- a playlist drag ---
+
+/// `to` is counted once the row has left, which is the index a drop hands over.
+#[test]
+fn a_move_lands_the_row_where_the_drag_drops_it() {
+    const CASES: [(usize, usize, [i64; 4], &str); 3] = [
+        (0, 3, [4, 3, 1, 2], "the top row to the slot after the last"),
+        (3, 0, [1, 2, 4, 3], "the last row to the top"),
+        (1, 2, [2, 3, 4, 1], "one row down"),
+    ];
+    for (from, to, expected, case) in CASES {
+        let watched = Watched::new();
+
+        let moved = watched.rows.move_row(from, to);
+
+        assert_eq!((moved, &watched.rows.ids()[..]), (true, &expected[..]), "{case}");
+    }
+}
+
+/// One row leaves and one arrives, so every other row keeps its `ListView` delegate.
+#[test]
+fn a_move_rereads_only_the_row_it_moved() {
+    let watched = Watched::new();
+
+    watched.rows.move_row(0, 3);
+
+    assert_eq!((watched.list.row_count(), watched.seen()), (4, vec![2]));
+}
+
+#[test]
+fn a_move_from_or_to_outside_the_list_moves_nothing() {
+    const CASES: [(usize, usize, &str); 2] =
+        [(4, 0, "a source one past the last row"), (0, 5, "a drop past the end of the list")];
+    for (from, to, case) in CASES {
+        let watched = Watched::new();
+
+        let moved = watched.rows.move_row(from, to);
+
+        let unmoved = (false, &[2, 4, 3, 1][..], Vec::<i32>::new());
+        assert_eq!((moved, &watched.rows.ids()[..], watched.seen()), unmoved, "{case}");
+    }
+}
+
+#[test]
+fn an_empty_list_moves_nothing() {
+    let list = Fetching::over(0);
+
+    let moved = list.rows.move_row(0, 0);
+
+    assert!(!moved);
+}
+
 // --- the order loads show in ---
 
 #[test]
@@ -467,4 +519,51 @@ fn an_older_reload_showing_leaves_a_newer_one_owed() {
     let load = tickets.issue_requery();
 
     assert!(matches!(load, Load::Reload(_)), "{load:?}");
+}
+
+/// An open overtaken by a keystroke on the page it leaves asks again before that keystroke's load
+/// lands, which is then refused, so the reload the open owed rides on the second requery.
+#[test]
+fn a_requery_overtaking_a_stand_in_still_runs_as_the_reload() {
+    let tickets = KeysetTickets::default();
+    let _ = tickets.issue_reload();
+    let _ = tickets.issue_requery();
+
+    let load = tickets.issue_requery();
+
+    assert!(matches!(load, Load::Reload(_)), "{load:?}");
+}
+
+/// A close or a section leave empties the list a load in flight would land in.
+#[test]
+fn a_revoke_refuses_the_newest_load() {
+    let tickets = KeysetTickets::default();
+    let reload = tickets.issue_reload();
+
+    tickets.revoke();
+
+    assert!(!tickets.is_latest(reload));
+}
+
+/// The next load seats a fresh keyset, so a released list owes no re-read.
+#[test]
+fn a_revoke_leaves_no_reload_owed() {
+    let tickets = KeysetTickets::default();
+    let _ = tickets.issue_reload();
+    tickets.revoke();
+
+    let load = tickets.issue_requery();
+
+    assert!(matches!(load, Load::Requery(_)), "{load:?}");
+}
+
+/// A detail reopened after a release shows its load.
+#[test]
+fn a_load_asked_for_after_a_revoke_is_the_latest() {
+    let tickets = KeysetTickets::default();
+    tickets.revoke();
+
+    let reload = tickets.issue_reload();
+
+    assert!(tickets.is_latest(reload));
 }

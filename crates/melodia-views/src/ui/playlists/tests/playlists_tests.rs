@@ -2,8 +2,8 @@
 //! grids to get one. Same three cases its siblings pin, since all four run
 //! the identical `Needle::contains` walk over a single name.
 //!
-//! Plus the four things drag-to-reorder needs to stay alive, none of which any
-//! other pin can see go missing.
+//! Plus what drag-to-reorder and the row menu's removal need to stay alive,
+//! none of which any other pin can see go missing.
 
 use super::detail::{POSITION_FIELD, is_manual_order};
 use super::*;
@@ -16,6 +16,7 @@ const DETAIL_VIEW: &str =
     include_str!("../../../../../melodia-ui/ui/views/my-library/playlist-detail.slint");
 const SHARED_DETAIL_WIRING: &str = include_str!("../../callbacks/track_detail.rs");
 const DETAIL: &str = include_str!("../detail.rs");
+const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
 
 /// Minimal `PlaylistStats` builder — only the fields the grid filter / sort
 /// read matter. Regular playlist, so `smart_criteria` never parses.
@@ -172,8 +173,7 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 #[test]
 fn the_optimistic_reorder_refuses_a_filtered_list() {
     let src = code_tokens(DETAIL);
-    let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
-    let guard = body.split_once("let rows =").map_or("", |(head, _)| head);
+    let guard = reorder_guard(&src);
     assert!(
         guard.contains("!is_manual_order(&field, &dir)"),
         "the order half must be asked before the display indices reach the keyset"
@@ -181,6 +181,39 @@ fn the_optimistic_reorder_refuses_a_filtered_list() {
     assert!(
         guard.contains("|| playlists_ui.detail.is_filtered()"),
         "so must the filter half — a filtered index is in range, so the write lands"
+    );
+}
+
+/// The two terms above read what the page asked for, which a list shows a load later, and an
+/// overtaken open leaves another playlist's rows up under this one's id. Only the list on show
+/// can say its indices are positions.
+#[test]
+fn the_optimistic_reorder_refuses_a_list_not_shown_in_the_playlists_own_order() {
+    let src = code_tokens(DETAIL);
+    assert!(
+        reorder_guard(&src).contains("|| !playlists_ui.detail.shows_own_order()"),
+        "the guard must ask the list on show, not only the sort and filter the page asked for"
+    );
+}
+
+/// `apply_optimistic_reorder` up to where the display indices reach the keyset.
+fn reorder_guard(src: &str) -> &str {
+    let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
+    body.split_once("let rows =").map_or("", |(head, _)| head)
+}
+
+/// The reload a removal brings prunes nothing under a filter, so the removal drops its own rows
+/// and their picks, past the write's early return so a failed write leaves both alone.
+#[test]
+fn a_removal_drops_its_rows_and_their_picks_once_the_write_lands() {
+    let src = code_tokens(DETAIL_CALLBACKS);
+    let after_write = src
+        .split_once("fn wire_remove_track(")
+        .and_then(|(_, body)| body.split_once("remove_tracks_from_playlist_batch("))
+        .map_or("", |(_, rest)| rest);
+    assert!(
+        after_write.contains("remove_rows(&*pu, id_vec);"),
+        "left to the reload, a filtered removal keeps its picks out of sight"
     );
 }
 

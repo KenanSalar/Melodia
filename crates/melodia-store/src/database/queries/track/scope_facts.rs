@@ -44,3 +44,7 @@ pub async fn genre_lines(
     let lines = qb.build_query_as().persistent(false).fetch_all(db.read()).await?;
     Ok(lines)
 }
+
+#[cfg(test)]
+#[path = "../tests/scope_facts_tests.rs"]
+mod tests;

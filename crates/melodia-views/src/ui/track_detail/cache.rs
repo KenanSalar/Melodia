@@ -105,3 +105,7 @@ impl<G: StrongHandle> DetailCache<G> {
         *self.own_order_shown.lock() = None;
     }
 }
+
+#[cfg(test)]
+#[path = "tests/cache_tests.rs"]
+mod tests;

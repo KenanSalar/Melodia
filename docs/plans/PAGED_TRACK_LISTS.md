@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked and measured with its new tests pending, Phase 3.5 open to discuss, Phase 4 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with two fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -221,7 +221,7 @@ Sorts, release, the `track_ids` median on the 51k dev database (row-per-id at `3
 
 ## Phase 3: The four details
 
-Status: implemented, hand-checked and measured (2026-10-18), `00bab609`. fmt, clippy and the full suite green; two fixes from a validation of that commit await their hand check, and new tests wait for Kenan's go, so the phase stays open.
+Status: implemented, hand-checked and measured (2026-10-18), `00bab609`, its new tests landed (2026-10-19). fmt, clippy and the full suite green; two fixes from a validation of that commit await their hand check, so the phase stays open.
 
 - [x] Each detail lists its entity as a `TrackRows` installed once per global. `DetailCache` keeps no rows: the entity, the sort and needle its loads run under, its `KeysetTickets` and the scroll point. `seat_unfiltered`, both row `Vec`s, the selection shadow and the `VecModel` went.
 - [x] `open_*_with` fetches the ids under the view's `resolve_view_sort` arm through `track_detail::load::open`, and its closure seats them (`Opening::seat`). `cross_tier`'s `DETAIL_DEFAULTS` still reads those literals in each `detail.rs`.
@@ -247,7 +247,14 @@ Status: implemented, hand-checked and measured (2026-10-18), `00bab609`. fmt, cl
 - [x] After the validation of `00bab609`, two fixes. Hand check pending.
   - Removing tracks from a filtered playlist left them in the selection, out of sight, for a Ctrl-click to carry into the next batch action: the reload under a filter prunes nothing. The removal now drops its rows and their picks on the tick the write lands (`track_detail::remove_rows`), through the helper Favorites' unfavourite already used, now shared as `track_rows::remove_rows`. A library tick under a filter still prunes nothing, as above.
   - The drag guard read the sort and filter the page asked for, which a requery shows a query later, so a drag released in between wrote the old list's indices as positions. `DetailCache` now records the entity whose own order is on show, unfiltered, and the guard asks it too (`shows_own_order`), which also covers an overtaken open leaving another playlist's rows up under the new id.
-- [ ] New tests, after the hand check: `move_row`'s bounds and notifications, `revoke`, `scope_facts` per scope (a smart playlist's limit and an empty scope among them), `genre_lines`' grouping and order, the weighted tie, an overtaken open requerying, a filtered removal dropping its picks, and the drag guard refusing a list whose shown order isn't the playlist's own.
+- [x] New tests (2026-10-19):
+  - `paged_rows_tests.rs`: where `move_row` lands a row, that it re-reads only that row, and a source or drop outside the list and an empty list moving nothing; `revoke` refusing the newest load, leaving no reload owed and letting a later load show; and a requery over a stand-in still owed running as the reload, the ticket half of an overtaken open.
+  - `track_detail/tests/cache_tests.rs` (new): `shows_own_order` holds only for the open playlist shown by position, ascending and unfiltered, and not for a descending, title or filtered list, a page that asked for its own order before a load showed it, the playlist left on screen under an overtaken open, or a released list.
+  - `list_selection_tests.rs`: `track_rows::remove_rows` under a filter drops the removed rows' picks and keeps a pick the filter hides. `playlists_tests.rs`: the drag guard asks `shows_own_order`, and the removal calls `remove_rows` past the write's early return.
+  - `hero_folds_tests.rs`: a weighted tie goes to the first name in the commonest line.
+  - Store `scope_facts_tests.rs` (new): a genre counting a track tagged with it second, a playlist counting only its own items, a capped smart playlist counted under its cap, an empty and a deleted playlist stating nothing; `genre_lines` grouping per rendered line, commonest first and ties by lowest id.
+  - Checked by mutation, each failing only its own pins (SQL the keysets share failing their pins too): the move's bounds, its notification and where it counts `to`, both halves of `revoke`, the stand-in carrying the owed reload, `shows_own_order`'s three terms, its id check and `forget_shown`, the guard's term, the removal's call and its selection half, the commonest line settling a tie, the deleted-playlist lookup, both `genre_lines` order keys, the playlist filter and the smart cap. Dropping the `COALESCE` in `scope_facts` fails nothing, sqlx decoding a NULL sum as 0, so the empty test rests on the deleted playlist.
+  - `Opening::seat`'s overtaken branch has no unit seam, no views test building a window or an `AppState`, so the hand check holds it.
 
 Memory, 51k dev library, release, one launch per build on the dev folder with a 25-track queue, everything restored after (2026-10-18). Before is `main` at `065275c4` (the Phase 0 binary, sha256 `43d06cbc…`, on the pre-migration copy of the database); after is this branch's working tree (sha256 `46b3193b…`). The smart playlist is a seeded "Whole library" with empty rules, matching all 51,012 tracks. MiB:
 

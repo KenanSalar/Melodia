@@ -129,6 +129,15 @@ fn two_genres_over_the_majority_are_settled_by_tag_order() {
     assert_eq!(dominant_genre(&reversed).as_deref(), Some("Metal"));
 }
 
+/// Two names every track carries tie however their lines order them, and the commonest line's
+/// order settles it, `genre_lines` handing that line over first. Read off whichever row came first
+/// instead, an open and a refresh named different genres.
+#[test]
+fn a_weighted_tie_goes_to_the_first_name_in_the_commonest_line() {
+    let tied = lines(&[("Metal, Rock", 3), ("Rock, Metal", 2)]);
+    assert_eq!(dominant_genre(&tied).as_deref(), Some("Metal"));
+}
+
 /// Tallied per name rather than per rendered line: three of these four tracks carry `Rock`, but
 /// only two spell it the same way, so a per-line tally finds no majority at all.
 #[test]
