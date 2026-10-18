@@ -6,7 +6,7 @@ const SETTINGS_PAGE: &str = include_str!("../settings_page.rs");
 
 /// The category count Slint declares today. Kept local so a change to
 /// `SettingsPage.category-count` doesn't silently rewrite what these assert.
-const CATEGORIES: i32 = 11;
+const CATEGORIES: i32 = 12;
 
 const GLOBAL: &str = include_str!("../../../../../melodia-ui/ui/globals/settings-page.slint");
 const ROUTER: &str =
@@ -37,7 +37,7 @@ const CARD_CHILDREN: [(&str, &str, &str); 3] = [
 ];
 
 /// One page per category, by name so a failure says which file.
-const PAGES: [(&str, &str); 11] = [
+const PAGES: [(&str, &str); 12] = [
     (
         "library-page",
         include_str!("../../../../../melodia-ui/ui/views/settings/pages/library-page.slint"),
@@ -45,6 +45,10 @@ const PAGES: [(&str, &str); 11] = [
     (
         "playback-page",
         include_str!("../../../../../melodia-ui/ui/views/settings/pages/playback-page.slint"),
+    ),
+    (
+        "effects-page",
+        include_str!("../../../../../melodia-ui/ui/views/settings/pages/effects-page.slint"),
     ),
     (
         "output-page",

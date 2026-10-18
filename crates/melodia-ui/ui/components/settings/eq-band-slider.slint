@@ -12,7 +12,6 @@ export component EqBandSlider inherits Rectangle {
     in property <float> value;            // current gain, dB
     in property <float> min-db: -12.0;
     in property <float> max-db: 12.0;
-    in property <bool>  is-disabled: false;
 
     callback changed(float /*dB*/);
     callback committed(float /*dB*/);
@@ -74,7 +73,7 @@ export component EqBandSlider inherits Rectangle {
         // corner's x- and y-radii independently, so a width-only radius would
         // pinch the fill into a lens as it emerges from centre.
         border-radius: min(self.width, self.height) / 2;
-        background: root.is-disabled ? Theme.overlay0 : Theme.accent;
+        background: Theme.accent;
     }
 
     // 0 dB centre tick.
@@ -93,12 +92,11 @@ export component EqBandSlider inherits Rectangle {
         width: root.thumb-w;
         height: root.thumb-h;
         border-radius: self.height / 2;
-        background: root.is-disabled ? Theme.overlay0 : Theme.accent;
+        background: Theme.accent;
     }
 
     // Graphic-EQ sliders jump to the click, so every press moves the band and commits.
     touch := SliderPointer {
-        enabled: !root.is-disabled;
         orientation: Orientation.vertical;
         grabs-thumb: false;
         changed(v) => { root.changed(root.min-db + v * root.span); }

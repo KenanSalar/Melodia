@@ -1,5 +1,6 @@
-//! Chrome wiring for the Settings page — the search predicate its sections filter through
-//! and the persistence for which category is showing. Distinct from the per-concern installers,
+//! Chrome wiring for the Settings page — the search predicate its sections filter through,
+//! the persistence for which category is showing, and the deep link landing on one from
+//! elsewhere. Distinct from the per-concern installers,
 //! which wire the values the page *configures*.
 
 use std::cell::RefCell;
@@ -24,6 +25,7 @@ const NAV_SETTINGS: i32 = 9;
 pub enum SettingsCategory {
     Library,
     Playback,
+    Effects,
     Output,
     Appearance,
     Language,
@@ -38,9 +40,10 @@ pub enum SettingsCategory {
 impl SettingsCategory {
     /// Every variant, so a category added to the `.slint` without one here fails a test rather
     /// than falling through [`category_from_index`]'s default.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Library,
         Self::Playback,
+        Self::Effects,
         Self::Output,
         Self::Appearance,
         Self::Language,
@@ -67,6 +70,7 @@ fn category_index(page: &SettingsPage<'_>, category: SettingsCategory) -> i32 {
     match category {
         SettingsCategory::Library => page.get_category_library(),
         SettingsCategory::Playback => page.get_category_playback(),
+        SettingsCategory::Effects => page.get_category_effects(),
         SettingsCategory::Output => page.get_category_output(),
         SettingsCategory::Appearance => page.get_category_appearance(),
         SettingsCategory::Language => page.get_category_language(),
@@ -129,6 +133,13 @@ pub fn install(ui: &AppWindow, state: &AppState) {
             memo.0 = needle.into();
         }
         memo.1.contains(&haystack)
+    });
+
+    let weak = ui.as_weak();
+    page.on_open_category(move |idx| {
+        let Some(ui) = weak.upgrade() else { return };
+        let category = category_from_index(&ui.global::<SettingsPage>(), idx);
+        open_on(&ui, category);
     });
 
     // The panel two-way binds `category-idx`, so the UI is already showing the new category

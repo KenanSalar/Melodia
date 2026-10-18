@@ -42,7 +42,7 @@ Six theme families, light and dark variants, configurable accents, and Material 
 <table>
   <tr>
     <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Internet Radio</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate. Off until you switch it on, under Settings ▸ Radio.</sub></td>
-    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: eleven categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: twelve categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
   </tr>
 </table>
 
@@ -83,8 +83,8 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 ### Playback
 - Gapless, including the AAC encoder delay and padding read back from `iTunSMPB` or the MP4 edit list, and the trailing padding a Matroska file states
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks, and under exclusive output too wherever the next track needs no change of device format
-- 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter
-- ReplayGain in track or album mode, with preamp and peak-based clip prevention
+- 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, under Settings ▸ Effects
+- ReplayGain in track or album mode, with preamp and peak-based clip prevention, next to the equalizer
 - Queue with shuffle and repeat; playing from any list queues that list behind your pick
 - Hold Previous or Next to scan through a track in short audible jumps that grow the longer you hold, and hold Play/Pause to stop, which takes the track back to its start
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors

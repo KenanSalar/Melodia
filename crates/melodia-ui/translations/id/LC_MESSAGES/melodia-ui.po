@@ -189,54 +189,6 @@ msgstr "Buka Last.fm"
 msgid "Connect"
 msgstr "Hubungkan"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Klasik"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Datar"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Penguat Bass"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Elektronik"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Penguat Treble"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Vokal"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Kustom"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Aktifkan equalizer"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Atur ulang"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Tidak ada playlist untuk diekspor"
@@ -272,42 +224,6 @@ msgstr "Sudah ditambahkan"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{} dari {} sudah ditambahkan"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Preamp"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Album"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Trek"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "Aktifkan ReplayGain"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Mode normalisasi"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Cegah clipping"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain hanya berlaku untuk lagu yang sudah memiliki tag kenyaringan. Pindai pustaka Anda dengan alat seperti rsgain atau loudgain untuk menambahkannya."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -358,6 +274,17 @@ msgstr "hari"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "angka"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Album"
+msgstr "Album"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -664,6 +591,11 @@ msgstr "Ringkasan"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Tag"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Track"
+msgstr "Trek"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -1156,8 +1088,9 @@ msgid "Track end"
 msgstr "Akhir lagu"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/equalizer-section.slint
 #: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
 msgid "Equalizer"
 msgstr "Equalizer"
 
@@ -1166,12 +1099,8 @@ msgid "On"
 msgstr "Aktif"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Selesai"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint
+#: ui/views/settings/replaygain-section.slint
 msgid "ReplayGain"
 msgstr "ReplayGain"
 
@@ -1207,7 +1136,7 @@ msgid "No tracks up next"
 msgstr "Tidak ada lagu berikutnya"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Visualizer"
 
@@ -1349,6 +1278,10 @@ msgstr "Lewati"
 #: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
 msgid "Back"
 msgstr "Kembali"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Selesai"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
@@ -2437,6 +2370,11 @@ msgstr "Tampilkan semua {} lagu"
 msgid "Top Result"
 msgstr "Hasil Teratas"
 
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Efek"
+
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Pustaka"
@@ -2515,6 +2453,35 @@ msgstr "Jalankan lagi penyiapan awal."
 msgid "Show"
 msgstr "Tampilkan"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Animasi"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Animasi Tombol Putar"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Efek visual pada tombol putar saat musik diputar"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Tampilkan visualizer audio di layar Sedang Diputar"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Gaya Visualizer"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Pilih cara visualizer menggambar audio"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Tidak ada"
+
 #: ui/views/settings/appearance-section.slint
 msgid "Material You Accent"
 msgstr "Aksen Material You"
@@ -2542,11 +2509,6 @@ msgstr "Latar Aurora"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Warnai header album, playlist, dan Sedang Diputar dengan sapuan warna album itu sendiri, alih-alih salinan sampulnya yang diburamkan. Tidak ada yang perlu diburamkan, jadi header muncul lebih cepat dan Melodia tetap ringan. Perlu mulai ulang untuk menerapkan."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Tidak ada"
 
 #: ui/views/settings/appearance-section.slint
 msgid "Tonal Spot"
@@ -2639,6 +2601,73 @@ msgstr "Terhubung ke Discord"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord tidak berjalan"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Classical"
+msgstr "Klasik"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Flat"
+msgstr "Datar"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Bass Boost"
+msgstr "Penguat Bass"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Electronic"
+msgstr "Elektronik"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Treble Boost"
+msgstr "Penguat Treble"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Vocal"
+msgstr "Vokal"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Custom"
+msgstr "Kustom"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Enable equalizer"
+msgstr "Aktifkan equalizer"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Bentuk suara dengan sepuluh pita frekuensi, dari bass di kiri hingga treble di kanan"
+
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Preset"
+
+#: ui/views/settings/equalizer-section.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Preamp"
+msgstr "Preamp"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Pita frekuensi"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Reset"
+msgstr "Atur ulang"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -2912,10 +2941,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, dibulatkan agar muat dalam float 32-bit"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Efek"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Normal"
 
@@ -3013,14 +3038,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Transisi mulus antarlagu tanpa jeda hening"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Animasi Tombol Putar"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Efek visual pada tombol putar saat musik diputar"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Lanjutkan Saat Mulai"
 
@@ -3068,18 +3085,6 @@ msgstr "Memudar saat dijeda"
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "Pudarkan musik saat menjeda atau menghentikan, dan munculkan kembali saat melanjutkan"
 
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Tampilkan visualizer audio di layar Sedang Diputar"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Gaya Visualizer"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Pilih cara visualizer menggambar audio"
-
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
 msgid "{} s"
@@ -3112,6 +3117,22 @@ msgstr "Simpan rating ke berkas"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Tulis rating bintang ke tag setiap berkas, agar tetap ada setelah pemindaian ulang dan dapat dibaca pemutar lain."
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Enable ReplayGain"
+msgstr "Aktifkan ReplayGain"
+
+#: ui/views/settings/replaygain-section.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain hanya berlaku untuk lagu yang sudah memiliki tag kenyaringan. Pindai pustaka Anda dengan alat seperti rsgain atau loudgain untuk menambahkannya."
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Normalization mode"
+msgstr "Mode normalisasi"
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Prevent clipping"
+msgstr "Cegah clipping"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

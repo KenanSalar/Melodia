@@ -1,0 +1,16 @@
+import { EqualizerSection } from "../equalizer-section.slint";
+import { ReplayGainSection } from "../replaygain-section.slint";
+
+// What changes the sound on its way to the device, the two stages the Output card's signal path
+// reports as effects. The page shape is `library-page.slint`'s.
+export component EffectsPage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: equalizer.has-matches || replaygain.has-matches;
+
+    VerticalLayout {
+        equalizer := EqualizerSection { category-name: @tr("Effects"); }
+        replaygain := ReplayGainSection { category-name: @tr("Effects"); }
+    }
+}

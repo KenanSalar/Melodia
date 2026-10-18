@@ -135,7 +135,7 @@ counter, both worth reading before changing a gate.
 
 ## The two style pickers
 
-- **Settings → Playback chips and the Now-Playing picker render the same list**, so the
+- **Settings → Appearance chips and the Now-Playing picker render the same list**, so the
   translated names live once as the `viz-style-names` `@tr` literal array in
   `flyout-presets.slint`, and the flyout's style rows take their picker index off the `for name[i]`
   loop so its leading "Off" row can't shift them.

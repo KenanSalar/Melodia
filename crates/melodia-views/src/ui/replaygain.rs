@@ -1,4 +1,4 @@
-//! Wire the `ReplayGain` dialog (`DialogKind::Replaygain`) to Rust.
+//! Wire loudness normalization, the `ReplayGain` card on Settings ▸ Effects, to Rust.
 //!
 //! Seeds the `ReplayGain` global from `settings.json` at startup (enabled flag,
 //! mode dropdown index, preamp, prevent-clipping) and registers the callbacks.
@@ -32,8 +32,8 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
     rg.set_prevent_clipping(flags.rg_prevent_clipping);
 
     // Seed the dB ranges from the DSP constants so Rust stays the single source
-    // of truth (the preamp slider reads these). Runs at boot, before the dialog
-    // can open.
+    // of truth (the preamp slider reads these). Runs at boot, before the card
+    // can mount.
     rg.set_min_preamp(replaygain::RG_MIN_PREAMP_DB);
     rg.set_max_preamp(replaygain::RG_MAX_PREAMP_DB);
 

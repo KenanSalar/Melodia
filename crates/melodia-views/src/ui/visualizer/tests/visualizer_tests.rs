@@ -18,8 +18,8 @@
 use super::*;
 use melodia_app::services::settings::{DEFAULT_VIZ_STYLE, VisualizerFlags};
 
-const PLAYBACK_SECTION: &str =
-    include_str!("../../../../../melodia-ui/ui/views/settings/playback-section.slint");
+const ANIMATIONS_SECTION: &str =
+    include_str!("../../../../../melodia-ui/ui/views/settings/animations-section.slint");
 const FLYOUT_PRESETS: &str =
     include_str!("../../../../../melodia-ui/ui/components/now-playing/flyout-presets.slint");
 const STRIP: &str =
@@ -47,7 +47,7 @@ fn the_settings_picker_renders_the_shared_name_list() {
     // Both pickers have to name the same styles in the same order, which they can only
     // do by rendering the one array — a local copy here would drift silently.
     assert!(
-        PLAYBACK_SECTION.contains("options: VizStylePresets.viz-style-names;"),
+        ANIMATIONS_SECTION.contains("options: VizStylePresets.viz-style-names;"),
         "the Settings style picker no longer binds the shared name list"
     );
 }

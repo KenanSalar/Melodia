@@ -8,23 +8,29 @@ export global SettingsPage {
     // index, and so adding a category is a rename-safe edit.
     out property <int> category-library: 0;
     out property <int> category-playback: 1;
-    out property <int> category-output: 2;
-    out property <int> category-appearance: 3;
-    out property <int> category-language: 4;
-    out property <int> category-window: 5;
-    out property <int> category-radio: 6;
-    out property <int> category-lyrics: 7;
-    out property <int> category-integrations: 8;
-    out property <int> category-updates: 9;
-    out property <int> category-about: 10;
+    out property <int> category-effects: 2;
+    out property <int> category-output: 3;
+    out property <int> category-appearance: 4;
+    out property <int> category-language: 5;
+    out property <int> category-window: 6;
+    out property <int> category-radio: 7;
+    out property <int> category-lyrics: 8;
+    out property <int> category-integrations: 9;
+    out property <int> category-updates: 10;
+    out property <int> category-about: 11;
 
     // **The sole definition of how many categories exist.** Rust clamps the persisted index
     // against it rather than carrying a copy.
-    out property <int> category-count: 11;
+    out property <int> category-count: 12;
 
     // Seeded from `views.json` at boot and persisted on change.
     in-out property <int> category-idx: 0;
     callback category-changed(int);
+
+    // Lands on a category from anywhere, Now Playing included, as the overflow menu's Equalizer and
+    // ReplayGain rows do. The Slint face of `settings_page::open_on`; a pick in the panel is
+    // `category-changed`, the page already being on screen.
+    callback open-category(int);
 
     // What the user is typing, and what the page is filtered by. **Two properties**, joined by a
     // `FilterThrottle`: `row-visible` is three `matches` round-trips into Rust across dozens of call

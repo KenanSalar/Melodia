@@ -149,11 +149,12 @@ export component SettingsView inherits Rectangle {
             // **The label array must stay an inline literal** so `@tr` registers the msgids at
             // codegen, in `category-*` order.
             nav := SettingsNav {
-                labels: [@tr("Library"), @tr("Playback"), @tr("Output"), @tr("Appearance"),
-                         @tr("Language"), @tr("Window"), @tr("Radio"), @tr("Lyrics"),
-                         @tr("Integrations"), @tr("Updates"), @tr("About")];
-                icons: ["library_music", "play_circle", "volume_up", "palette", "translate",
-                        "crop_square", "radio", "lyrics", "link", "system_update", "info"];
+                labels: [@tr("Library"), @tr("Playback"), @tr("Effects"), @tr("Output"),
+                         @tr("Appearance"), @tr("Language"), @tr("Window"), @tr("Radio"),
+                         @tr("Lyrics"), @tr("Integrations"), @tr("Updates"), @tr("About")];
+                icons: ["library_music", "play_circle", "graphic_eq", "volume_up", "palette",
+                        "translate", "crop_square", "radio", "lyrics", "link", "system_update",
+                        "info"];
                 selected-index <=> SettingsPage.category-idx;
                 avail-w: root.shared-w;
                 search-active: root.flyout-shown;

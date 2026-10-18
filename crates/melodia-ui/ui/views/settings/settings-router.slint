@@ -2,6 +2,7 @@ import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 import { LibraryPage } from "pages/library-page.slint";
 import { PlaybackPage } from "pages/playback-page.slint";
+import { EffectsPage } from "pages/effects-page.slint";
 import { OutputPage } from "pages/output-page.slint";
 import { AppearancePage } from "pages/appearance-page.slint";
 import { LanguagePage } from "pages/language-page.slint";
@@ -31,6 +32,7 @@ export component SettingsRouter inherits Rectangle {
         if root.searching: VerticalLayout {
             library := LibraryPage {}
             playback := PlaybackPage {}
+            effects := EffectsPage {}
             output := OutputPage {}
             appearance := AppearancePage {}
             language := LanguagePage {}
@@ -43,8 +45,8 @@ export component SettingsRouter inherits Rectangle {
 
             // Only reachable here — outside search every card is visible. One term per page
             // rather than per card, because each page folds its own.
-            if !library.has-matches && !playback.has-matches && !output.has-matches
-                    && !appearance.has-matches && !language.has-matches && !window.has-matches
+            if !library.has-matches && !playback.has-matches && !effects.has-matches
+                    && !output.has-matches && !appearance.has-matches && !language.has-matches && !window.has-matches
                     && !radio.has-matches && !lyrics.has-matches && !integrations.has-matches
                     && !updates.has-matches && !about.has-matches: Rectangle {
                 height: 200px;
@@ -65,6 +67,7 @@ export component SettingsRouter inherits Rectangle {
 
         if !root.searching && root.category-index == SettingsPage.category-library: LibraryPage {}
         if !root.searching && root.category-index == SettingsPage.category-playback: PlaybackPage {}
+        if !root.searching && root.category-index == SettingsPage.category-effects: EffectsPage {}
         if !root.searching && root.category-index == SettingsPage.category-output: OutputPage {}
         if !root.searching && root.category-index == SettingsPage.category-appearance: AppearancePage {}
         if !root.searching && root.category-index == SettingsPage.category-language: LanguagePage {}

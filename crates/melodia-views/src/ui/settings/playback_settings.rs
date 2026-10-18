@@ -26,7 +26,7 @@ use melodia_playback::player::playback::crossfade;
 use melodia_ui::{AppWindow, Settings};
 
 /// The on-disk token as a Slint chip index, in lock-step with the inline literal in
-/// `views/settings/playback-section.slint` — both sides have to agree on the order or
+/// `views/settings/animations-section.slint` — both sides have to agree on the order or
 /// the chip paints the wrong selection. Anything unrecognised lands on index 0, matching
 /// `SettingsData::default()`.
 fn play_button_anim_idx_from_token(token: &str) -> i32 {

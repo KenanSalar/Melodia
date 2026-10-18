@@ -1,14 +1,11 @@
 import { Theme } from "../../theme.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
 
-// A toggle beside a stretching label, with `@children` as an optional trailing
-// slot — the equalizer docks its preset dropdown and Reset there. Call sites
-// chain the two-way binding through to their global and forward `toggled`.
+// A toggle beside a stretching label, for a dialog form whose value the call site chains through
+// to its global with a two-way binding.
 export component DialogToggleRow inherits HorizontalLayout {
     in property <string> label;
     in-out property <bool> checked;
-
-    callback toggled(bool);
 
     spacing: Theme.pad-md;
     alignment: stretch;
@@ -16,7 +13,6 @@ export component DialogToggleRow inherits HorizontalLayout {
 
     ToggleSwitch {
         checked <=> root.checked;
-        toggled(v) => { root.toggled(v); }
     }
     Text {
         horizontal-stretch: 1;
@@ -24,6 +20,4 @@ export component DialogToggleRow inherits HorizontalLayout {
         color: Theme.text;
         font-size: Theme.font-size-md;
     }
-
-    @children
 }

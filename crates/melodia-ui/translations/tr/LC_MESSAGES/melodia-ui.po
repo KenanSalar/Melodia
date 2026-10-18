@@ -192,54 +192,6 @@ msgstr "Last.fm'i aç"
 msgid "Connect"
 msgstr "Bağlan"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Klasik"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Düz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Caz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Bas Yükseltme"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Elektronik"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Tiz Yükseltme"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Vokal"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Özel"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Ekolayzırı etkinleştir"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Sıfırla"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Dışa aktarılacak çalma listesi yok"
@@ -275,42 +227,6 @@ msgstr "Zaten ekli"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{} / {} zaten ekli"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Ön yükseltici"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Albüm"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Parça"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "ReplayGain'i etkinleştir"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Normalleştirme modu"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Kırpılmayı önle"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -361,6 +277,17 @@ msgstr "gün"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "sayı"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Album"
+msgstr "Albüm"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -667,6 +594,11 @@ msgstr "Özet"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Etiketler"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Track"
+msgstr "Parça"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -1160,8 +1092,9 @@ msgid "Track end"
 msgstr "Parça sonu"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/equalizer-section.slint
 #: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
 msgid "Equalizer"
 msgstr "Ekolayzer"
 
@@ -1170,12 +1103,8 @@ msgid "On"
 msgstr "Açık"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Tamam"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint
+#: ui/views/settings/replaygain-section.slint
 msgid "ReplayGain"
 msgstr "ReplayGain"
 
@@ -1211,7 +1140,7 @@ msgid "No tracks up next"
 msgstr "Sırada başka parça yok"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Görselleştirici"
 
@@ -1355,6 +1284,10 @@ msgstr "Atla"
 #: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
 msgid "Back"
 msgstr "Geri"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Tamam"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
@@ -2474,6 +2407,11 @@ msgstr "Tüm {} şarkıyı göster"
 msgid "Top Result"
 msgstr "En İyi Sonuç"
 
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Efektler"
+
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Kitaplık"
@@ -2552,6 +2490,35 @@ msgstr "İlk kurulumu yeniden gösterin."
 msgid "Show"
 msgstr "Göster"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Animasyonlar"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Çal Düğmesi Animasyonu"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Müzik çalarken çal düğmesindeki görsel efekt"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Şimdi çalınıyor ekranında bir ses görselleştirici göster"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Görselleştirici Stili"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Görselleştiricinin sesi nasıl çizeceğini seçin"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Yok"
+
 #: ui/views/settings/appearance-section.slint
 msgid "Material You Accent"
 msgstr "Material You Vurgusu"
@@ -2579,11 +2546,6 @@ msgstr "Aurora Arka Planı"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Albüm, çalma listesi ve “Şimdi Çalıyor” başlıklarını, kapak görselinin bulanık bir kopyası yerine albümün kendi renkleriyle boya. Bulanıklaştırılacak bir şey olmadığı için başlıklar daha erken görünür ve Melodia daha hafif kalır. Uygulamak için yeniden başlatma gerekir."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Yok"
 
 #: ui/views/settings/appearance-section.slint
 msgid "Tonal Spot"
@@ -2676,6 +2638,73 @@ msgstr "Discord'a bağlandı"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord çalışmıyor"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Classical"
+msgstr "Klasik"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Flat"
+msgstr "Düz"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Jazz"
+msgstr "Caz"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Bass Boost"
+msgstr "Bas Yükseltme"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Electronic"
+msgstr "Elektronik"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Treble Boost"
+msgstr "Tiz Yükseltme"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Vocal"
+msgstr "Vokal"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Custom"
+msgstr "Özel"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Enable equalizer"
+msgstr "Ekolayzırı etkinleştir"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Sesi on bantla şekillendirin, soldaki baslardan sağdaki tizlere kadar"
+
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Ön ayar"
+
+#: ui/views/settings/equalizer-section.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Preamp"
+msgstr "Ön yükseltici"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Bantlar"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Reset"
+msgstr "Sıfırla"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -2949,10 +2978,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, 32 bit kayan noktaya yuvarlanır"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Efektler"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Normal"
 
@@ -3050,14 +3075,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Parçalar arasında sessizlik olmadan kesintisiz geçişler"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Çal Düğmesi Animasyonu"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Müzik çalarken çal düğmesindeki görsel efekt"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Başlangıçta Devam Et"
 
@@ -3105,18 +3122,6 @@ msgstr "Duraklatırken kıs"
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "Duraklatırken veya durdururken müziği kıs, devam ederken yeniden aç"
 
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Şimdi çalınıyor ekranında bir ses görselleştirici göster"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Görselleştirici Stili"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Görselleştiricinin sesi nasıl çizeceğini seçin"
-
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
 msgid "{} s"
@@ -3149,6 +3154,22 @@ msgstr "Puanları dosyalara kaydet"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Yıldız puanlarını her dosyanın etiketlerine yazar; böylece yeniden tarama sonrasında korunur ve diğer oynatıcılar bunları okuyabilir."
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain'i etkinleştir"
+
+#: ui/views/settings/replaygain-section.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Normalization mode"
+msgstr "Normalleştirme modu"
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Prevent clipping"
+msgstr "Kırpılmayı önle"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

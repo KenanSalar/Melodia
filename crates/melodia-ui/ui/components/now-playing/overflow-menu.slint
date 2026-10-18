@@ -1,8 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { Settings } from "../../settings.slint";
 import { Equalizer, ReplayGain } from "../../globals/audio.slint";
-import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { Player } from "../../globals/player.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { Queue } from "../../globals/queue.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
 import { WindowChrome } from "../../globals/shell.slint";
@@ -218,44 +218,31 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // **Closes** the popup, a modal taking over, and populates `Dialog`
-                // inline; the apply-and-persist wiring lives on `Equalizer`.
+                // Both land on Settings ▸ Effects, where the two cards sit side by side, as the
+                // Signal Path row lands on Output.
                 OverflowRow {
                     icon: "graphic_eq";
                     label: @tr("Equalizer");
                     trailing-text: Equalizer.enabled ? @tr("On") : @tr("Off");
                     active: Equalizer.enabled;
                     clicked => {
+                        SettingsPage.open-category(SettingsPage.category-effects);
                         root.dismiss();
-                        Dialog.kind = DialogKind.equalizer;
-                        Dialog.title = @tr("Equalizer");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Done");
-                        Dialog.cancel-label = "";
-                        Dialog.destructive = false;
-                        Dialog.open = true;
                     }
                 }
 
-                // The Equalizer row's shape, over loudness normalization.
                 OverflowRow {
                     icon: "tune";
                     label: @tr("ReplayGain");
                     trailing-text: ReplayGain.enabled ? @tr("On") : @tr("Off");
                     active: ReplayGain.enabled;
                     clicked => {
+                        SettingsPage.open-category(SettingsPage.category-effects);
                         root.dismiss();
-                        Dialog.kind = DialogKind.replaygain;
-                        Dialog.title = @tr("ReplayGain");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Done");
-                        Dialog.cancel-label = "";
-                        Dialog.destructive = false;
-                        Dialog.open = true;
                     }
                 }
 
-                // Inline, so unlike the dialog rows it neither closes the popup nor
+                // Inline, so unlike the rows above it neither closes the popup nor
                 // opens a flyout: a star applies immediately.
                 rating-row := Rectangle {
                     // Not an `OverflowRow`, so it has to take the shared row

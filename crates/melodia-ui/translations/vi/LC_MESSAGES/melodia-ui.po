@@ -189,54 +189,6 @@ msgstr "Mở Last.fm"
 msgid "Connect"
 msgstr "Kết nối"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Cổ điển"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Phẳng"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Tăng âm trầm"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Điện tử"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Tăng âm cao"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Giọng hát"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Tùy chỉnh"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Bật bộ chỉnh âm"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Đặt lại"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Không có danh sách phát nào để xuất"
@@ -272,42 +224,6 @@ msgstr "Đã thêm"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{} / {} đã được thêm"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Tiền khuếch đại"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Album"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Bản nhạc"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "Bật ReplayGain"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Chế độ chuẩn hóa"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Ngăn méo tiếng"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain chỉ áp dụng cho các bản nhạc đã có thẻ độ lớn âm thanh. Hãy quét thư viện bằng công cụ như rsgain hoặc loudgain để thêm các thẻ này."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -358,6 +274,17 @@ msgstr "ngày"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "số"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Album"
+msgstr "Album"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -664,6 +591,11 @@ msgstr "Tóm tắt"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Thẻ"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Track"
+msgstr "Bản nhạc"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -1156,8 +1088,9 @@ msgid "Track end"
 msgstr "Cuối bản nhạc"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/equalizer-section.slint
 #: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
 msgid "Equalizer"
 msgstr "Bộ chỉnh âm"
 
@@ -1166,12 +1099,8 @@ msgid "On"
 msgstr "Bật"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Xong"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint
+#: ui/views/settings/replaygain-section.slint
 msgid "ReplayGain"
 msgstr "ReplayGain"
 
@@ -1207,7 +1136,7 @@ msgid "No tracks up next"
 msgstr "Không có bản nhạc tiếp theo"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Sóng nhạc"
 
@@ -1349,6 +1278,10 @@ msgstr "Bỏ qua"
 #: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
 msgid "Back"
 msgstr "Quay lại"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Xong"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
@@ -2437,6 +2370,11 @@ msgstr "Hiện tất cả {} bài hát"
 msgid "Top Result"
 msgstr "Kết quả hàng đầu"
 
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Hiệu ứng"
+
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Thư viện"
@@ -2515,6 +2453,35 @@ msgstr "Chạy lại phần thiết lập lần đầu."
 msgid "Show"
 msgstr "Hiện"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Hoạt ảnh"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Hiệu ứng nút phát"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Hiệu ứng hình ảnh trên nút phát khi đang phát nhạc"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Hiện sóng nhạc trên màn hình Đang phát"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Kiểu sóng nhạc"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Chọn cách hiển thị sóng nhạc"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Không có"
+
 #: ui/views/settings/appearance-section.slint
 msgid "Material You Accent"
 msgstr "Màu nhấn Material You"
@@ -2542,11 +2509,6 @@ msgstr "Phông nền cực quang"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Tô phần đầu trang album, danh sách phát và Đang phát bằng một lớp màu lấy từ chính album, thay vì bản sao làm mờ của ảnh bìa. Không cần làm mờ nên phần đầu trang hiện nhanh hơn và Melodia nhẹ hơn. Cần khởi động lại để áp dụng."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Không có"
 
 #: ui/views/settings/appearance-section.slint
 msgid "Tonal Spot"
@@ -2639,6 +2601,73 @@ msgstr "Đã kết nối với Discord"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord chưa chạy"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Classical"
+msgstr "Cổ điển"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Flat"
+msgstr "Phẳng"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Bass Boost"
+msgstr "Tăng âm trầm"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Electronic"
+msgstr "Điện tử"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Treble Boost"
+msgstr "Tăng âm cao"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Vocal"
+msgstr "Giọng hát"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Custom"
+msgstr "Tùy chỉnh"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Enable equalizer"
+msgstr "Bật bộ chỉnh âm"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Điều chỉnh âm thanh với mười dải tần, từ âm trầm bên trái đến âm cao bên phải"
+
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Cài đặt sẵn"
+
+#: ui/views/settings/equalizer-section.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Preamp"
+msgstr "Tiền khuếch đại"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Dải tần"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Reset"
+msgstr "Đặt lại"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -2912,10 +2941,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, làm tròn cho vừa số thực 32-bit"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Hiệu ứng"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Bình thường"
 
@@ -3013,14 +3038,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Chuyển tiếp giữa các bản nhạc không có khoảng lặng"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Hiệu ứng nút phát"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Hiệu ứng hình ảnh trên nút phát khi đang phát nhạc"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Tiếp tục phát khi khởi động"
 
@@ -3068,18 +3085,6 @@ msgstr "Giảm dần âm lượng khi tạm dừng"
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "Giảm dần âm lượng khi tạm dừng hoặc dừng, và tăng dần trở lại khi tiếp tục"
 
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Hiện sóng nhạc trên màn hình Đang phát"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Kiểu sóng nhạc"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Chọn cách hiển thị sóng nhạc"
-
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
 msgid "{} s"
@@ -3112,6 +3117,22 @@ msgstr "Lưu đánh giá vào tệp"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Ghi số sao đánh giá vào thẻ của từng tệp, để không bị mất khi quét lại và các trình phát khác cũng đọc được."
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Enable ReplayGain"
+msgstr "Bật ReplayGain"
+
+#: ui/views/settings/replaygain-section.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain chỉ áp dụng cho các bản nhạc đã có thẻ độ lớn âm thanh. Hãy quét thư viện bằng công cụ như rsgain hoặc loudgain để thêm các thẻ này."
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Normalization mode"
+msgstr "Chế độ chuẩn hóa"
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Prevent clipping"
+msgstr "Ngăn méo tiếng"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"

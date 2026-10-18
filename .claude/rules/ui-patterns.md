@@ -1469,6 +1469,11 @@ edit would otherwise reverse.
   to it. **Reordering the categories renumbers what `views.json` holds**, which takes a new key
   rather than a fold; `ViewStateData::settings_category` says why.
 
+- **A link into a category from outside the page is `SettingsPage.open-category`**, the Slint face
+  of `settings_page::open_on`, as the overflow menu's Equalizer and ReplayGain rows land on
+  Effects. `Settings.open-signal-path` is the one named link, kept because Rust's refused-claim
+  toast invokes it as well as two `.slint` sites.
+
 - **The category's own name is part of each card's search term**: search escapes the categories,
   so a category name is what a user types, and "Integrations" appears in no card's text otherwise.
   It reaches `row-visible` as a **term of its own**, not a prefix spliced onto each title: the join
@@ -1507,8 +1512,8 @@ edit would otherwise reverse.
   the same global. A heading put back above a card, or a panel metric spelled locally again, breaks
   the line with nothing failing.
 
-- **Every card child that wraps text is measured at `card-w` through a pinned cell.** All of them
-  sit behind an `if`, and Slint measures a repeated element's height at the width its contents ask
+- **Every card child that wraps text is measured at `card-w` through a pinned cell.** Each sits
+  behind an `if`, its own or its card's, and Slint measures a repeated element's height at the width its contents ask
   for, which no pin on its root reaches (`slint-pitfalls.md`). `setting-row.slint` argues the
   wrapper and `SectionCard` carries the same pair on its body cell; a new row shape behind an `if`
   owes one, or its card is sized for a single line of what wraps.
@@ -1551,5 +1556,6 @@ edit would otherwise reverse.
   not a page of rows.
 
 - **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
-  `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its
-  two mounts, and the component's header says what stays the host's.
+  `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold mount it
+  directly, and the two effect cards' preamps through `preamp-slider.slint`'s `PreampSlider`, the
+  one copy of the dB mapping. `SettingSlider`'s header says what stays the host's.

@@ -190,54 +190,6 @@ msgstr "Last.fm öffnen"
 msgid "Connect"
 msgstr "Verbinden"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Klassik"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Neutral"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Bassverstärkung"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Elektronisch"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Höhenverstärkung"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Gesang"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Benutzerdefiniert"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Equalizer aktivieren"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Zurücksetzen"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Keine Playlists zum Exportieren"
@@ -273,42 +225,6 @@ msgstr "Bereits hinzugefügt"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{} von {} bereits hinzugefügt"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Vorverstärkung"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Album"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Titel"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "ReplayGain aktivieren"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Normalisierungsmodus"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Übersteuerung verhindern"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain wirkt sich nur auf Titel aus, die bereits Lautstärke-Tags haben. Scanne deine Bibliothek mit einem Werkzeug wie rsgain oder loudgain, um sie hinzuzufügen."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -359,6 +275,17 @@ msgstr "Tage"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "Zahl"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Album"
+msgstr "Album"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -665,6 +592,11 @@ msgstr "Übersicht"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Tags"
+
+#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Track"
+msgstr "Titel"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -1158,8 +1090,9 @@ msgid "Track end"
 msgstr "Titelende"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/equalizer-section.slint
 #: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
 msgid "Equalizer"
 msgstr "Equalizer"
 
@@ -1168,12 +1101,8 @@ msgid "On"
 msgstr "An"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Fertig"
-
-#: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/output-section.slint
+#: ui/views/settings/replaygain-section.slint
 msgid "ReplayGain"
 msgstr "ReplayGain"
 
@@ -1209,7 +1138,7 @@ msgid "No tracks up next"
 msgstr "Keine weiteren Titel"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Visualisierung"
 
@@ -1352,6 +1281,10 @@ msgstr "Überspringen"
 #: ui/components/onboarding/onboarding-overlay.slint ui/views/browse-view.slint
 msgid "Back"
 msgstr "Zurück"
+
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Fertig"
 
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
@@ -2464,6 +2397,11 @@ msgstr "Alle {} Titel anzeigen"
 msgid "Top Result"
 msgstr "Bestes Ergebnis"
 
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Effekte"
+
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Bibliothek"
@@ -2542,6 +2480,35 @@ msgstr "Die Ersteinrichtung erneut anzeigen."
 msgid "Show"
 msgstr "Anzeigen"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Animationen"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Wiedergabetaste-Animation"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Visueller Effekt auf der Wiedergabetaste während der Musikwiedergabe"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Eine Audiovisualisierung im Wiedergabe-Bildschirm anzeigen"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Visualisierungsstil"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Festlegen, wie die Visualisierung den Ton darstellt"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Keine"
+
 #: ui/views/settings/appearance-section.slint
 msgid "Material You Accent"
 msgstr "Material-You-Akzent"
@@ -2569,11 +2536,6 @@ msgstr "Aurora-Hintergrund"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Die Kopfbereiche von Album, Playlist und „Aktuelle Wiedergabe“ mit den Farben des Albums einfärben, anstatt mit einer verwischten Kopie des Covers. Es muss nichts verwischt werden – die Kopfbereiche erscheinen schneller und Melodia bleibt schlanker. Zum Anwenden ist ein Neustart nötig."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Keine"
 
 #: ui/views/settings/appearance-section.slint
 msgid "Tonal Spot"
@@ -2666,6 +2628,73 @@ msgstr "Mit Discord verbunden"
 #: ui/views/settings/discord-section.slint
 msgid "Discord not running"
 msgstr "Discord läuft nicht"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Classical"
+msgstr "Klassik"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Flat"
+msgstr "Neutral"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Bass Boost"
+msgstr "Bassverstärkung"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Electronic"
+msgstr "Elektronisch"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Treble Boost"
+msgstr "Höhenverstärkung"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Vocal"
+msgstr "Gesang"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Custom"
+msgstr "Benutzerdefiniert"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Enable equalizer"
+msgstr "Equalizer aktivieren"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Den Klang mit zehn Bändern formen, von den Bässen links bis zu den Höhen rechts"
+
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Voreinstellung"
+
+#: ui/views/settings/equalizer-section.slint
+#: ui/views/settings/replaygain-section.slint
+msgid "Preamp"
+msgstr "Vorverstärkung"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Frequenzbänder"
+
+#: ui/views/settings/equalizer-section.slint
+msgid "Reset"
+msgstr "Zurücksetzen"
 
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
@@ -2939,10 +2968,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, auf 32-Bit-Gleitkomma gerundet"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Effekte"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Normal"
 
@@ -3040,14 +3065,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Nahtlose Übergänge zwischen Liedern ohne Stille"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Wiedergabetaste-Animation"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Visueller Effekt auf der Wiedergabetaste während der Musikwiedergabe"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Beim Start fortsetzen"
 
@@ -3095,18 +3112,6 @@ msgstr "Beim Pausieren ausblenden"
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "Die Musik beim Pausieren oder Stoppen aus- und beim Fortsetzen wieder einblenden"
 
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Eine Audiovisualisierung im Wiedergabe-Bildschirm anzeigen"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Visualisierungsstil"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Festlegen, wie die Visualisierung den Ton darstellt"
-
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
 msgid "{} s"
@@ -3139,6 +3144,22 @@ msgstr "Bewertungen in Dateien speichern"
 #: ui/views/settings/ratings-section.slint
 msgid "Write star ratings into each file's tags, so they survive a rescan and other players can read them."
 msgstr "Schreibt Sternebewertungen in die Tags jeder Datei, damit sie einen erneuten Scan überstehen und andere Player sie lesen können."
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain aktivieren"
+
+#: ui/views/settings/replaygain-section.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain wirkt sich nur auf Titel aus, die bereits Lautstärke-Tags haben. Scanne deine Bibliothek mit einem Werkzeug wie rsgain oder loudgain, um sie hinzuzufügen."
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Normalization mode"
+msgstr "Normalisierungsmodus"
+
+#: ui/views/settings/replaygain-section.slint
+msgid "Prevent clipping"
+msgstr "Übersteuerung verhindern"
 
 #: ui/views/settings/scrobbling-section.slint
 msgid "Last.fm"
