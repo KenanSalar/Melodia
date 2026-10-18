@@ -268,6 +268,29 @@ Status: not started.
 - [ ] `.claude/rules/ui-patterns.md`: the "Lists and playback" and "Covers" entries naming `TrackListModel` and the queue sheet's globals.
 - [ ] `.claude/rules/audio-stack.md`: the queue holds ids and the window.
 
+## Phase 7 (to discuss): the card grids and Browse
+
+Status: not decided. Kenan investigates and discusses this before anything here is planned.
+
+**The question:** Phase 5 gives the two Most Played grids a keyset and a memoized chunk model (decision 8), because they rank tracks and so grow with the library. If that chunk model comes out generic, should every surface that draws a grid take it, or only the ones that can grow that large?
+
+- **The surfaces to decide on:**
+  - My Library's four grid tabs: Albums, Artists, Genres and Playlists. They grow with the entity count, not the track count: 4,806 albums, 3,098 artists and 497 genres on the 51k dev library (Evidence). Playlists are the user's own.
+  - Favorites' Favorite Artists grid.
+  - Browse in card mode, and Browse's track list (below).
+  - Radio's station grids, likely out of scope: its Browse tab appends pages from a remote directory whose rows have no local id, and its kept tabs hold the user's own stations.
+- **Measure first.** No census so far has had a grid tab open. Run Appendix B's census with Albums open, then Artists, against the idle state. The grid cover tier is already bounded by the display (Checked and left alone), so what a run measures is the entity rows, the chunk models and their strings.
+- **What paging a grid would take**, by code reading:
+  - entity keysets sorted in SQL, the name sorts through `UNICODE_LOWER`;
+  - a filter in SQL. The grids match raw fields today (`ui-patterns.md` Filtering), so an accent-folded filter needs a stored folded column per entity table, a migration each, as `search_text` was for tracks;
+  - decision 8's chunk model, which returns the same `ModelRc` for the same chunk, so a column-count change becomes index arithmetic over the ids;
+  - reworking what reads the whole list today: the first-screenful cover prewarm, the grid signature, the lone-row card count, and card selection over cards not fetched yet.
+- **Browse is the odd one out** (decision 9). It shows one directory at a time, and its disk-only rows have no track id, so a keyset of track ids can't hold them; a paged Browse would key by path. Its list and its cards are bounded by the largest directory, so the question is whether a library keeps tens of thousands of files in one folder. Measure a large flat folder before deciding.
+  - **To discuss:** the two move together, the cards being the list's own rows (`BrowseCardGrid` reads the list's selection), so the answer would be one path-keyed paged source behind both, never the grid alone. Leaning towards leaving Browse as it is, for the two reasons above; open until the flat-folder measurement says otherwise.
+- **The outcome:** for each surface, keep it in memory as it is, or page it in a phase of its own.
+
+Memory: unmeasured.
+
 ## Targets
 
 51k library, same machine and protocol. "After" is filled from census runs, never estimated.
