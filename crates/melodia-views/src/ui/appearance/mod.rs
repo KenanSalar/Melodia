@@ -196,3 +196,7 @@ pub(super) fn usize_from(idx: i32) -> usize {
 pub(super) fn apply_and_seed_to_i32(idx: usize) -> i32 {
     idx as i32
 }
+
+#[cfg(test)]
+#[path = "tests/appearance_tests.rs"]
+mod tests;

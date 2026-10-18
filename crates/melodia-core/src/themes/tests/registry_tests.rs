@@ -78,6 +78,73 @@ fn every_variant_defines_three_distinct_semantic_colours() {
     }
 }
 
+fn luma(rgb: u32) -> f64 {
+    let [_, r, g, b] = rgb.to_be_bytes();
+    LUMA_R * f64::from(r) + LUMA_G * f64::from(g) + LUMA_B * f64::from(b)
+}
+
+/// The reason the two slots exist: most palettes keep `surface1` all but level with the card, so a
+/// control filled with it disappeared into the card it sat on.
+#[test]
+fn every_card_control_stands_further_off_its_card_than_surface1() {
+    for theme in registry() {
+        for variant in theme.variants {
+            let p = &variant.palette;
+            let off_the_card = |fill: u32| (luma(fill) - luma(p.surface0)).abs();
+
+            assert!(
+                off_the_card(p.card_control) > off_the_card(p.surface1),
+                "{}/{}: card_control sits no further off the card than surface1",
+                theme.id,
+                variant.id,
+            );
+        }
+    }
+}
+
+/// Lifted on a dark card and sunk on a light one, with the hover a step further the same way. A
+/// table may tune either slot, but not turn it back toward the card.
+#[test]
+fn every_card_control_runs_from_its_card_toward_its_text() {
+    for theme in registry() {
+        for variant in theme.variants {
+            let p = &variant.palette;
+            let ramp = [p.surface0, p.card_control, p.card_control_hover, p.text].map(luma);
+
+            assert!(
+                ramp.is_sorted_by(|a, b| a < b) || ramp.is_sorted_by(|a, b| a > b),
+                "{}/{}: card, control, hover and text don't run one way: {ramp:?}",
+                theme.id,
+                variant.id,
+            );
+        }
+    }
+}
+
+#[test]
+fn toward_at_zero_percent_stays_on_the_start() {
+    assert_eq!(toward(0x102030, 0xa0b0c0, 0), 0x102030);
+}
+
+#[test]
+fn toward_at_a_hundred_percent_lands_on_the_target() {
+    assert_eq!(toward(0x102030, 0xa0b0c0, 100), 0xa0b0c0);
+}
+
+/// Unclamped, `100 - percent` underflows.
+#[test]
+fn toward_past_a_hundred_percent_stays_on_the_target() {
+    assert_eq!(toward(0x102030, 0xa0b0c0, 101), 0xa0b0c0, "one past");
+    assert_eq!(toward(0x102030, 0xa0b0c0, u32::MAX), 0xa0b0c0, "the far end");
+}
+
+/// Red rises to 2.7 and green sinks to 5.9, where truncating would land each a step off; blue
+/// holds. A channel read from its neighbour shows too, each moving its own way.
+#[test]
+fn toward_rounds_each_channel_to_its_nearest_step() {
+    assert_eq!(toward(0x000840, 0x090140, 30), 0x030640);
+}
+
 #[test]
 fn theme_index_matches_registry_order() {
     assert_eq!(theme_index("catppuccin"), 0);

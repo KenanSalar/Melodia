@@ -13,7 +13,8 @@ use melodia_testkit::with_env_var;
 
 use super::*;
 use crate::services::settings::{
-    ONBOARDING_VERSION, PausedDevice, TitlebarButtonStyle, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder,
+    BorderTint, ONBOARDING_VERSION, PausedDevice, TitlebarButtonStyle, WINDOW_BORDER_SYSTEM_COLOR,
+    WindowBorder,
 };
 
 fn json_err(e: &serde_json::Error) -> AppError {
@@ -222,6 +223,45 @@ fn a_hidden_window_border_reads_back_from_its_token() -> Result<(), AppError> {
     let border: WindowBorder = serde_json::from_str(r#""hidden""#).map_err(|e| json_err(&e))?;
 
     assert_eq!(border, WindowBorder::Hidden);
+    Ok(())
+}
+
+/// The artwork's palette is what the System border was mixed from before the tint had a switch, so
+/// an older file keeps the outline it had.
+#[test]
+fn a_settings_file_from_before_the_tint_mixes_the_border_from_the_artwork() -> Result<(), AppError>
+{
+    let window: WindowFlags =
+        serde_json::from_str(r#"{"window_border_color": "system"}"#).map_err(|e| json_err(&e))?;
+
+    assert_eq!(window.window_border_tint, BorderTint::Artwork);
+    Ok(())
+}
+
+const BORDER_TINT_TOKENS: [(BorderTint, &str); 2] =
+    [(BorderTint::Artwork, r#""artwork""#), (BorderTint::Theme, r#""theme""#)];
+
+#[test]
+fn every_border_tint_persists_as_its_token() -> Result<(), AppError> {
+    let written = BORDER_TINT_TOKENS
+        .iter()
+        .map(|(tint, _)| serde_json::to_string(tint))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| json_err(&e))?;
+
+    assert_eq!(written, BORDER_TINT_TOKENS.map(|(_, token)| token));
+    Ok(())
+}
+
+#[test]
+fn every_border_tint_reads_back_from_its_token() -> Result<(), AppError> {
+    let read = BORDER_TINT_TOKENS
+        .iter()
+        .map(|(_, token)| serde_json::from_str::<BorderTint>(token))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| json_err(&e))?;
+
+    assert_eq!(read, BORDER_TINT_TOKENS.map(|(tint, _)| tint));
     Ok(())
 }
 

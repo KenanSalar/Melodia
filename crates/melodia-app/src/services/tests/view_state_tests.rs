@@ -61,6 +61,19 @@ fn test_view_state_ignores_the_retired_collapse_flags() -> Result<(), AppError> 
     Ok(())
 }
 
+/// The five tabs' numbers overlap the categories' (3 was Services, it is Appearance now), so a
+/// `views.json` from before the panel has to open Settings on the first category rather than on
+/// whichever one its old tab's number lands on. An alias for the old key is the fold this refuses.
+#[test]
+fn the_retired_settings_tab_is_not_read_as_a_category() -> Result<(), AppError> {
+    let legacy = r#"{"settings_tab": 3}"#;
+
+    let vs: ViewStateData = serde_json::from_str(legacy).map_err(|e| json_err(&e))?;
+
+    assert_eq!(vs.settings_category, 0);
+    Ok(())
+}
+
 #[test]
 fn test_view_state_roundtrip() -> Result<(), AppError> {
     let vs = ViewStateData {

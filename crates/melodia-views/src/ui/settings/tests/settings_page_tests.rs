@@ -226,6 +226,33 @@ fn every_card_child_insets_its_content_from_the_rounded_edge() {
     );
 }
 
+/// A search mounts every page, and "No matching settings" shows once none has a match. A page
+/// mounted there without a term of its own in that condition draws the line under its own matching
+/// cards, and only for a query nothing else answers.
+#[test]
+fn the_no_match_line_asks_every_page_a_search_mounts() {
+    let router = melodia_testkit::code_tokens(ROUTER);
+    let tokens: Vec<&str> = router.split_whitespace().collect();
+
+    let mut mounted: Vec<&str> = tokens
+        .windows(3)
+        .filter_map(|mount| match mount {
+            [id, ":=", element] if element.ends_with("Page") => Some(*id),
+            _ => None,
+        })
+        .collect();
+    let mut asked: Vec<&str> = tokens
+        .iter()
+        .filter_map(|token| token.strip_prefix('!'))
+        .filter_map(|term| term.trim_end_matches(':').strip_suffix(".has-matches"))
+        .collect();
+    mounted.sort_unstable();
+    asked.sort_unstable();
+
+    assert!(!mounted.is_empty(), "settings-router.slint mounts no page — the scan matched nothing");
+    assert_eq!(asked, mounted, "the no-match condition and the search mounts name different pages");
+}
+
 /// Every deep link into Settings writes the category before the nav index, so the page mounts on
 /// the body it is meant to show rather than on whichever category it was last left at.
 ///

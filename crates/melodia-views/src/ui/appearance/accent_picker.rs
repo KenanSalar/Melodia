@@ -147,3 +147,7 @@ pub(super) fn wire_follows_artwork_changed(
         persist(&s, theme.id, variant_id, accent_id);
     });
 }
+
+#[cfg(test)]
+#[path = "tests/accent_picker_tests.rs"]
+mod tests;

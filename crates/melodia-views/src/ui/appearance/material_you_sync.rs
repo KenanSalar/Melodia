@@ -35,7 +35,7 @@ pub(super) fn wire_color_style_changed(
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Settings>();
         let style = style_at(idx);
-        let was_none = last_style.replace(style) == SchemeStyle::None;
+        let outgoing = last_style.replace(style);
 
         // Snapshot the theme + variant on the UI thread so the spawn_blocking task below doesn't
         // need any UI access.
@@ -47,18 +47,15 @@ pub(super) fn wire_color_style_changed(
         });
 
         // Off the shadow, which an accent click whose write hasn't committed has already moved.
-        // Following the artwork comes on only on the way out of None: a new style over an accent
-        // picked by hand is a different palette, not a request to follow the artwork again.
         let new_accent: Option<String> = material3.and_then(|theme| {
-            let following = *persisted_accent.lock() == MATERIAL_YOU_ACCENT_ID;
-            match style {
-                SchemeStyle::None if following => Some(
+            let change = accent_change(outgoing, style, &persisted_accent.lock());
+            match change {
+                AccentChange::Keep => None,
+                AccentChange::Follow => Some(MATERIAL_YOU_ACCENT_ID.to_owned()),
+                AccentChange::Restore => Some(
                     read_last_static_accent(&s, theme.id)
                         .unwrap_or_else(|| theme.default_accent.to_owned()),
                 ),
-                SchemeStyle::None => None,
-                _ if was_none && !following => Some(MATERIAL_YOU_ACCENT_ID.to_owned()),
-                _ => None,
             }
         });
 
@@ -123,3 +120,30 @@ pub(super) fn wire_color_style_changed(
 fn style_at(idx: i32) -> SchemeStyle {
     SchemeStyle::all().get(usize_from(idx)).copied().unwrap_or(SchemeStyle::None)
 }
+
+/// What a Color Style pick does to the Material 3 accent.
+#[derive(Debug, PartialEq, Eq)]
+enum AccentChange {
+    Keep,
+    /// Follow the artwork.
+    Follow,
+    /// Take back the last accent picked by hand.
+    Restore,
+}
+
+/// Following the artwork comes on only on the way out of None: a new style over an accent picked
+/// by hand is a different palette, not a request to follow the artwork again. None has no artwork
+/// to follow, so it hands a following accent back.
+fn accent_change(outgoing: SchemeStyle, incoming: SchemeStyle, accent_id: &str) -> AccentChange {
+    let following = accent_id == MATERIAL_YOU_ACCENT_ID;
+    match incoming {
+        SchemeStyle::None if following => AccentChange::Restore,
+        SchemeStyle::None => AccentChange::Keep,
+        _ if outgoing == SchemeStyle::None && !following => AccentChange::Follow,
+        _ => AccentChange::Keep,
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/material_you_sync_tests.rs"]
+mod tests;
