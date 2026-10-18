@@ -2,6 +2,7 @@
 //! placeholder, the row fetch, the keyset load that opens a list on the screenful it is scrolled
 //! to, and what a reload owes once it shows.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -108,6 +109,15 @@ pub fn settle_reload(
     if unfiltered {
         list_selection::keep_selection_within(view, || model.row_ids().into_iter().collect());
     }
+}
+
+/// Drop `ids` from the list and from its selection, for rows the user's own write just took out,
+/// ahead of the reload it brings. That reload can't drop them under a filter (`settle_reload`), and
+/// a pick left behind is one the next batch action acts on unseen. UI thread.
+pub fn remove_rows(view: &impl RowSelectionView, model: &TrackRows, ids: &[i64]) {
+    model.remove(&ids.iter().copied().collect::<HashSet<i64>>());
+    let removed: HashSet<i32> = ids.iter().map(|&id| clamp_i64_to_i32(id)).collect();
+    list_selection::forget_rows(view, &removed);
 }
 
 /// One fetch's rows, sharing a pool so an album's tracks share their strings.

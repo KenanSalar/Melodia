@@ -155,10 +155,11 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     keeps only its ids and fetches the rows near the viewport by id
     (`get_track_list_rows_by_ids`), converted as they land (`ui::paged_rows`), so no list holds a
     row per track. A detail's hero facts come off the same membership in SQL
-    (`queries::track::scope_facts`, `genre_lines`), the page holding no rows to fold them from. **Recently Played's Songs tab retains a list and deliberately stays off
-    it**: `get_recently_played` is capped at 200 rows, so a keyset saves nothing there, and it
-    keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped* list belongs on
-    a keyset and `ui::paged_rows`, not on a sixth projection.
+    (`queries::track::scope_facts`, `genre_lines`), the page holding no rows to fold them from.
+    **Recently Played's Songs tab retains a list and deliberately stays off it**:
+    `get_recently_played` is capped at 200 rows, so a keyset saves nothing there, and it keeps the
+    plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped* list belongs on a keyset
+    and `ui::paged_rows`, not on a sixth projection.
 
   - **`queries::track::keyset` sorts and filters in SQL**, with arms that reproduce
     `ui::track_sort`'s one for one, the Songs tabs' reading of a missing year and of the length
@@ -224,9 +225,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   helper (over `player::state::sync_current_track_if_in`) that flips the playing track's cached
   field + emits, so the NP star updates from a list-row edit — it re-checks the id under the emit
   lock, safe against a mid-write track change. Rating **never changes list membership**, so every
-  surface is optimistic (`flip_rating`/`apply_row_rating`, a paged list's `PagedRows::patch`), wired via
-  `wire_row_flag!`; Search included, having no `library_changed` subscriber to fall back on. NP
-  parity via `wire_now_playing_rating`.
+  surface is optimistic (`flip_rating`/`apply_row_rating`, a paged list's `PagedRows::patch`),
+  wired via `wire_row_flag!`; Search included, having no `library_changed` subscriber to fall back
+  on. NP parity via `wire_now_playing_rating`.
 
 ## Write-through to files
 

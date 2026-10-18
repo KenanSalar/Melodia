@@ -69,12 +69,9 @@ pub(super) use grid::rebuild_grid;
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
-    let tracks = install_models(cx.app, cx.state);
-    let artists_ui = Arc::new(ArtistsUi::new(
-        tracks,
-        cx.cover_thumbs.clone(),
-        detail_artwork::blur_spec(cx.app),
-    ));
+    let cache = install_models(cx.app, cx.state);
+    let artists_ui =
+        Arc::new(ArtistsUi::new(cache, cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
     callbacks::wire(cx.app, cx.state, cx.view_state, &artists_ui, albums_ui);
     artists_ui
 }
@@ -98,7 +95,7 @@ pub struct ArtistsUi {
 
 impl ArtistsUi {
     fn new(
-        tracks: DetailCache<ArtistDetail<'static>>,
+        cache: DetailCache<ArtistDetail<'static>>,
         cover_thumbs: Arc<CoverThumbs>,
         hero_blur: Option<BlurSpec>,
     ) -> Self {
@@ -107,7 +104,7 @@ impl ArtistsUi {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
                 index_cache: Mutex::new(None),
             },
-            detail: ArtistDetailState { cache: tracks, albums: Mutex::new(Vec::new()) },
+            detail: ArtistDetailState { cache, albums: Mutex::new(Vec::new()) },
             cover_thumbs,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),

@@ -4,16 +4,13 @@
 //! and filter, both answered in SQL, and the rows near the viewport. Its model is kept across a
 //! tab switch, being a keyset and a few hundred rows, and handed back on the section leave.
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use slint::{ComponentHandle, Weak};
 
 use super::{FavoritesTab, FavoritesUi};
-use crate::ui::list_selection;
 use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::paged_rows::{Keyset, Load, Ticket};
-use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder};
@@ -170,12 +167,9 @@ pub fn remove_rows(weak: &Weak<AppWindow>, ids: Vec<i64>) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<Favorites>();
         let rows = g.get_tracks();
-        let Some(model) = TrackRows::installed(&rows, TRACKS_LABEL) else {
-            return;
-        };
-        model.remove(&ids.iter().copied().collect::<HashSet<i64>>());
-        let removed: HashSet<i32> = ids.iter().map(|&id| clamp_i64_to_i32(id)).collect();
-        list_selection::forget_rows(&g, &removed);
+        if let Some(model) = TrackRows::installed(&rows, TRACKS_LABEL) {
+            track_rows::remove_rows(&g, model, &ids);
+        }
     });
 }
 

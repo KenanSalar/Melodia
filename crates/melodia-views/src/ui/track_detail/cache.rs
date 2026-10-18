@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use slint::{StrongHandle, Weak};
 
 use crate::ui::paged_rows::{KeysetTickets, ScrollPoint};
-use melodia_core::entities::track_list::{SortDir, TrackOrder};
+use melodia_core::entities::track_list::{SortDir, TrackOrder, TrackSortField};
 use melodia_core::utils::needle::{Needle, fold_needle};
 
 pub struct DetailCache<G: StrongHandle> {
@@ -19,6 +19,10 @@ pub struct DetailCache<G: StrongHandle> {
     /// once a load holds its ticket, so the newest load runs under what the page shows.
     order: Mutex<TrackOrder>,
     filter: Mutex<Needle>,
+    /// The entity the keyset on show lists in its own order, unfiltered: a playlist by position.
+    /// The two above move at a pick and this one only once a load shows, and a row's index on
+    /// screen is a position only while it names the open entity.
+    own_order_shown: Mutex<Option<i64>>,
     pub(super) tickets: KeysetTickets,
     /// Where the list was last read, which every load seeds its rows around.
     pub(super) scroll: ScrollPoint,
@@ -31,6 +35,7 @@ impl<G: StrongHandle> DetailCache<G> {
             id: Mutex::new(-1),
             order: Mutex::new(TrackOrder::new("", SortDir::Asc)),
             filter: Mutex::new(Needle::default()),
+            own_order_shown: Mutex::new(None),
             tickets: KeysetTickets::default(),
             scroll,
         }
@@ -64,6 +69,12 @@ impl<G: StrongHandle> DetailCache<G> {
         !self.filter.lock().is_empty()
     }
 
+    /// Whether the open entity is on show in its own order, unfiltered.
+    pub fn shows_own_order(&self) -> bool {
+        let id = self.id();
+        *self.own_order_shown.lock() == Some(id)
+    }
+
     pub fn clear(&self) {
         self.set_id(-1);
         self.filter.lock().clear();
@@ -79,5 +90,18 @@ impl<G: StrongHandle> DetailCache<G> {
         self.set_id(id);
         self.set_order(order);
         self.filter.lock().clear();
+    }
+
+    /// Notes the query of the keyset just put on show. UI thread.
+    pub(super) fn record_shown(&self, id: i64, order: TrackOrder, needle: &Needle) {
+        let own_order = matches!(order.field, TrackSortField::Position)
+            && matches!(order.dir, SortDir::Asc)
+            && needle.is_empty();
+        *self.own_order_shown.lock() = own_order.then_some(id);
+    }
+
+    /// The list was emptied, so it shows no order at all.
+    pub(super) fn forget_shown(&self) {
+        *self.own_order_shown.lock() = None;
     }
 }

@@ -221,7 +221,7 @@ Sorts, release, the `track_ids` median on the 51k dev database (row-per-id at `3
 
 ## Phase 3: The four details
 
-Status: implemented, hand-checked and measured (2026-10-18), not committed. fmt, clippy and the full suite green; new tests wait for Kenan's go, so the phase stays open.
+Status: implemented, hand-checked and measured (2026-10-18), `00bab609`. fmt, clippy and the full suite green; two fixes from a validation of that commit await their hand check, and new tests wait for Kenan's go, so the phase stays open.
 
 - [x] Each detail lists its entity as a `TrackRows` installed once per global. `DetailCache` keeps no rows: the entity, the sort and needle its loads run under, its `KeysetTickets` and the scroll point. `seat_unfiltered`, both row `Vec`s, the selection shadow and the `VecModel` went.
 - [x] `open_*_with` fetches the ids under the view's `resolve_view_sort` arm through `track_detail::load::open`, and its closure seats them (`Opening::seat`). `cross_tier`'s `DETAIL_DEFAULTS` still reads those literals in each `detail.rs`.
@@ -244,7 +244,10 @@ Status: implemented, hand-checked and measured (2026-10-18), not committed. fmt,
   - `hero_folds_tests` take weighted lines with the same expectations; `playlists_tests`' reorder-guard pin splits at the new end of the guard.
 - [x] Doc edits: `CLAUDE.md`'s "Models from background", `ui-patterns.md` (the paged-list, details, selection and hero-facts entries and the shared-helpers line) and `library-data.md` (the keyset paragraph, the card-order paragraph that replaced the `for_list` trap, and the ratings line).
 - [x] Hand check, passed by Kenan: every header sort and the playlist's return to its own order, the filter and the artist strip, every selection gesture, Play-row and Shuffle, hearts and stars from a row and the bar, drag-reorder, remove from playlist, a tag edit while open, close and reopen, a tab leave and return, a relaunch onto a persisted detail, a row menu's Go to, and Mouse-4/5, on an album, an artist, a genre and both a manual and a smart playlist. A smart playlist refusing a drag is the `!PlaylistDetail.playlist.is_smart` term `reorder-enabled` has carried since smart playlists landed, not a regression.
-- [ ] New tests, after the hand check: `move_row`'s bounds and notifications, `revoke`, `scope_facts` per scope (a smart playlist's limit and an empty scope among them), `genre_lines`' grouping and order, the weighted tie, and an overtaken open requerying.
+- [x] After the validation of `00bab609`, two fixes. Hand check pending.
+  - Removing tracks from a filtered playlist left them in the selection, out of sight, for a Ctrl-click to carry into the next batch action: the reload under a filter prunes nothing. The removal now drops its rows and their picks on the tick the write lands (`track_detail::remove_rows`), through the helper Favorites' unfavourite already used, now shared as `track_rows::remove_rows`. A library tick under a filter still prunes nothing, as above.
+  - The drag guard read the sort and filter the page asked for, which a requery shows a query later, so a drag released in between wrote the old list's indices as positions. `DetailCache` now records the entity whose own order is on show, unfiltered, and the guard asks it too (`shows_own_order`), which also covers an overtaken open leaving another playlist's rows up under the new id.
+- [ ] New tests, after the hand check: `move_row`'s bounds and notifications, `revoke`, `scope_facts` per scope (a smart playlist's limit and an empty scope among them), `genre_lines`' grouping and order, the weighted tie, an overtaken open requerying, a filtered removal dropping its picks, and the drag guard refusing a list whose shown order isn't the playlist's own.
 
 Memory, 51k dev library, release, one launch per build on the dev folder with a 25-track queue, everything restored after (2026-10-18). Before is `main` at `065275c4` (the Phase 0 binary, sha256 `43d06cbc…`, on the pre-migration copy of the database); after is this branch's working tree (sha256 `46b3193b…`). The smart playlist is a seeded "Whole library" with empty rules, matching all 51,012 tracks. MiB:
 

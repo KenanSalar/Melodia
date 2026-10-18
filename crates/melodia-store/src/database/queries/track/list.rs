@@ -17,9 +17,9 @@ use melodia_core::error::AppError;
 /// catalogue by title under a page that shows it by album.
 ///
 /// What the clause is for is **determinism**: the in-memory comparator these rows are handed to
-/// appends `sort_key` as its tie-breaker and `sort_by_cached_key` is stable, so rows tied on it fall
-/// back to the order `SQLite` handed over. Dropping the clause would leave that to the query plan,
-/// and it is close to free, `idx_tracks_sort_key` being the same expression under the same
+/// appends `sort_key` as its tie-breaker and `sort_by_cached_key` is stable, so rows tied on it
+/// fall back to the order `SQLite` handed over. Dropping the clause would leave that to the query
+/// plan, and it is close to free, `idx_tracks_sort_key` being the same expression under the same
 /// collation, so this reads as an index scan rather than a sort.
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 

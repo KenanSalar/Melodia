@@ -230,7 +230,12 @@ pub fn apply_optimistic_reorder(
     // Asked here as well as in `reorder-enabled`, this being where the display indices reach the
     // keyset. The filter term is the sharp one: filtered, the list is a subset of the playlist, so
     // `from` names a different track — and the write still lands, a filtered index being in range.
-    if !is_manual_order(&field, &dir) || playlists_ui.detail.is_filtered() {
+    // The list on show is asked too: it takes a sort or a needle a query after the page does, and
+    // an overtaken open can leave another playlist's rows up under this one's id.
+    if !is_manual_order(&field, &dir)
+        || playlists_ui.detail.is_filtered()
+        || !playlists_ui.detail.shows_own_order()
+    {
         return false;
     }
     let rows = g.get_tracks();

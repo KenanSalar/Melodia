@@ -9,7 +9,7 @@ use super::artwork::open_edit_artwork;
 use crate::ui::callbacks::track_detail;
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::track_detail::load;
+use crate::ui::track_detail::{load, remove_rows};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -102,8 +102,8 @@ fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
 }
 
 /// The row menu's removal. One row and a whole selection both arrive as `[int]` and collapse to
-/// one batched write; `refresh_detail` prunes the removed ids out of the selection on the way
-/// back.
+/// one batched write. Once it lands the rows and their picks leave on that tick, filtered or not,
+/// and `refresh_detail` reloads the rest.
 fn wire_remove_track(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
@@ -118,13 +118,17 @@ fn wire_remove_track(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
         let pu = pu.clone();
         let weak = weak.clone();
         s.runtime.clone().spawn(async move {
-            if let Err(e) =
-                library::playlists::remove_tracks_from_playlist_batch(&s.db, playlist_id, id_vec)
-                    .await
+            if let Err(e) = library::playlists::remove_tracks_from_playlist_batch(
+                &s.db,
+                playlist_id,
+                id_vec.clone(),
+            )
+            .await
             {
                 log::warn!("playlists::remove_track: {}", describe(&e));
                 return;
             }
+            remove_rows(&*pu, id_vec);
             if let Err(e) =
                 playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), playlist_id).await
             {

@@ -7,7 +7,8 @@
 //!
 //! These arms answer a header click on every list held in memory, and the SQL keyset that
 //! orders the two Songs tabs and the four details reproduces them arm for arm,
-//! `crates/melodia/tests/cross_tier.rs` holding the two together. `ui::tests::track_sort_tests` pins which tokens can reach them.
+//! `crates/melodia/tests/cross_tier.rs` holding the two together. `ui::tests::track_sort_tests`
+//! pins which tokens can reach them.
 //!
 //! `sort_by_cached_key` is deliberate: a plain `sort_by` would re-`to_lowercase()` both
 //! operands on every one of its `O(n log n)` comparisons. `field` is fixed for the whole

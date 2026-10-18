@@ -14,7 +14,7 @@ use slint::{ModelRc, SharedString};
 
 use crate::ui::list_selection::RowSelectionView;
 use crate::ui::my_library::MyLibraryTab;
-use crate::ui::paged_rows::track_rows::TrackRows;
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::section_state::SectionState;
 use crate::ui::track_list_view::{TrackListActions, TrackListColumnState};
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -151,10 +151,22 @@ pub fn patch_row<V: TrackDetail>(
     });
 }
 
+/// Drop the rows the user just took out of the entity, and their picks, ahead of the reload the
+/// write owes. A no-op for ids the detail doesn't list. Safe from any thread.
+pub fn remove_rows<V: TrackDetail>(view: &V, ids: Vec<i64>) {
+    let _ = view.cache().global().upgrade_in_event_loop(move |g| {
+        let rows = g.track_rows();
+        if let Some(model) = TrackRows::installed(&rows, V::VIEW_ID) {
+            track_rows::remove_rows(&g, model, &ids);
+        }
+    });
+}
+
 /// Empty the detail's list, its ids and cached rows with it, and refuse every load still on its
 /// way to it. For a close and a section leave. UI thread.
 pub fn release_rows<V: TrackDetail>(view: &V, g: &impl DetailGlobal) {
     view.cache().tickets.revoke();
+    view.cache().forget_shown();
     let rows = g.track_rows();
     if let Some(model) = TrackRows::installed(&rows, V::VIEW_ID) {
         model.clear();

@@ -4,8 +4,9 @@
 //! A load takes its ticket before reading the sort and filter it runs under, so whichever was asked
 //! for last is the one shown however they land, and a sort or keystroke asked for while a library
 //! change's reload is still owed runs as that reload. It shows only while its detail still lists
-//! the entity it loaded, and a close or a leave revokes every ticket out, so nothing refills a
-//! model they released.
+//! the entity it loaded, and a close or a leave revokes every ticket out, so no load already on its
+//! way lands in a model they released. An open landing after one asks again, being a navigation of
+//! its own.
 
 use std::sync::Arc;
 
@@ -63,7 +64,8 @@ impl Opening {
     pub fn seat<V: TrackDetail>(self, state: &AppState, view: &Arc<V>) {
         let cache = view.cache();
         let Some(g) = cache.global().upgrade() else { return };
-        cache.seat(self.id, TrackOrder::new(&self.sort_field, SortDir::from_token(&self.sort_dir)));
+        let order = TrackOrder::new(&self.sort_field, SortDir::from_token(&self.sort_dir));
+        cache.seat(self.id, order);
         g.set_sort(&self.sort_field, &self.sort_dir);
         g.clear_filter();
         list_selection::clear_row_selection(&g);
@@ -77,6 +79,7 @@ impl Opening {
         // Every row it holds afterwards is one this open fetched, so none owes a re-read.
         model.clear();
         model.show(self.keyset);
+        cache.record_shown(self.id, order, &Needle::default());
         cache.tickets.reload_shown(self.ticket);
     }
 }
@@ -135,7 +138,7 @@ async fn reload_under<V: TrackDetail>(
     let global = cache.global().clone();
     let view = Arc::clone(view);
     let _ = global.upgrade_in_event_loop(move |g| {
-        show(&*view, &g, id, ticket, keyset, |model| {
+        show(&*view, &g, (id, order, needle), ticket, keyset, |model| {
             track_rows::settle_reload(&g, model, &view.cache().tickets, ticket, unfiltered);
         });
     });
@@ -154,16 +157,19 @@ async fn requery_now<V: TrackDetail>(
     }
     let keyset = track_rows::load(state, V::scope(id), order, &needle, &cache.scroll).await?;
     let global = cache.global().clone();
-    let _ = global.upgrade_in_event_loop(move |g| show(&*view, &g, id, ticket, keyset, |_| {}));
+    let _ = global.upgrade_in_event_loop(move |g| {
+        show(&*view, &g, (id, order, needle), ticket, keyset, |_| {});
+    });
     Ok(())
 }
 
-/// Show `keyset` and run `then` over the model it went into, unless a newer load was asked for
-/// since `ticket` or the detail no longer lists entity `id`. UI thread.
+/// Show `keyset`, loaded for entity `id` under `order` and `needle`, and run `then` over the model
+/// it went into, unless a newer load was asked for since `ticket` or the detail no longer lists
+/// `id`. UI thread.
 fn show<V: TrackDetail>(
     view: &V,
     g: &V::Global,
-    id: i64,
+    (id, order, needle): (i64, TrackOrder, Needle),
     ticket: Ticket,
     keyset: Keyset<UiTrackListRow>,
     then: impl FnOnce(&TrackRows),
@@ -178,5 +184,6 @@ fn show<V: TrackDetail>(
         view.rows_moving(g);
     }
     model.show(keyset);
+    cache.record_shown(id, order, &needle);
     then(model);
 }
