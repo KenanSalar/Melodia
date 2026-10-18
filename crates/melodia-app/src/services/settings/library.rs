@@ -1,4 +1,4 @@
-//! The flag struct behind the Settings ▸ Library tab.
+//! The flag struct behind Settings ▸ Library.
 
 use serde::{Deserialize, Serialize};
 

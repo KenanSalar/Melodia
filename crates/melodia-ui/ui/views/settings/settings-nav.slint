@@ -196,7 +196,7 @@ export component SettingsNav inherits Rectangle {
                         pad-right: root.rail-inset;
                         ease-padding: false;
                         selected-fill: Theme.accent.with-alpha(0.16);
-                        hover-fill: Theme.surface1;
+                        hover-fill: Theme.card-control;
                         clicked => { root.search-clicked(); }
                     }
                 }
@@ -216,10 +216,9 @@ export component SettingsNav inherits Rectangle {
                             pad-left: root.compact ? root.rail-inset : root.row-pad;
                             pad-right: root.compact ? root.rail-inset : root.row-pad;
                             ease-padding: root.eased;
-                            // `selectable-picker.slint`'s pair, the panel being the same
-                            // `surface0`.
+                            // `ChoiceList`'s pair, the panel being the same card fill.
                             selected-fill: Theme.accent.with-alpha(0.16);
-                            hover-fill: Theme.surface1;
+                            hover-fill: Theme.card-control;
                             clicked => {
                                 root.selected-index = i;
                                 root.selected(i);

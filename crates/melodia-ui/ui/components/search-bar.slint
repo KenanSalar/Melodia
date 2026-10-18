@@ -147,9 +147,9 @@ export component SearchBar inherits Rectangle {
             : (root.on-card ? self.fill : Theme.surface2);
         // **The ease belongs on the scale, not on the dimensions.** Animating a binding derived
         // from another animating property phase-lags, and `width`/`height` derive from this while
-        // `x`/`y` derive from those. Second reason: `width` also multiplies `root.width`, which the
-        // Settings header drives off the live window width, and Slint restarts an animated binding
-        // on dependency *dirtiness* — so an eased `width` re-based on every event of a resize drag.
+        // `x`/`y` derive from those. Second reason: `width` also multiplies `root.width`, which a
+        // host drives off its mirrored page width, and Slint restarts an animated binding on
+        // dependency *dirtiness* — so an eased `width` re-based on every event of a resize drag.
         // `focus-scale` reads the focus flag and a mount-constant variant, so it only ever sees
         // the toggle.
         animate background, border-color {

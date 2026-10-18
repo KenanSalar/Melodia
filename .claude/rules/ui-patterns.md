@@ -67,7 +67,7 @@ silently miss the other.
   Slint paints later (bands, header strips): `components/tooltip-frame.slint`'s `TooltipFrame`,
   declared *after* the occluder, tracking the host via `absolute-position` deltas the host spells
   itself. `sidebar-tip` is the deliberate exception and should stay one — its `x` rides the live
-  rail width, it owns a `held` latch, and it is the only frame passing `gap`.
+  rail width and it owns a `held` latch.
 
 - **A band publishes an anchor and draws no pill.** Pinned by walks, not lists —
   `no_page_or_shell_mounts_a_bare_tooltip` over `views/` **and `layout/`**, and

@@ -165,9 +165,9 @@ export component TabBar inherits Rectangle {
     in property <[string]> labels;
     in property <[string]> icons;
 
-    // **Every brush the bar paints with is an input.** The defaults are the Settings page's plain
-    // case; a bar on a hero blur hands over `HeroBackdrop` tiers instead, a `Theme.*` brush
-    // answering a question about a *page* background there is none of under a hero.
+    // **Every brush the bar paints with is an input.** The defaults are a flat page's; a bar on a
+    // hero blur hands over `HeroBackdrop` tiers instead, a `Theme.*` brush answering a question
+    // about a *page* background there is none of under a hero.
     in property <brush> label-color: Theme.text;
     in property <brush> active-color: Theme.accent;
     in property <brush> hover-fill: Theme.surface0;

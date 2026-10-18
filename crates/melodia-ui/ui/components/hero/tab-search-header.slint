@@ -42,8 +42,8 @@ export component TabSearchHeader inherits HorizontalLayout {
     // the whole inset can ease to zero. Only `LibraryTabBand` uses it, for its morphing back button.
     in property <length> lead-w: 0px;
 
-    // Every brush the row paints with, defaulted to the theme. Settings takes the defaults; the two
-    // hero bands hand over solved `HeroBackdrop` tiers, neither being right for both surfaces.
+    // Every brush the row paints with, defaulted to the theme for a flat page. The two hero bands
+    // hand over solved `HeroBackdrop` tiers, a `Theme.*` brush being wrong on a hero.
     in property <brush> label-color: Theme.text;
     in property <brush> active-color: Theme.accent;
     in property <brush> hover-fill: Theme.surface0;
