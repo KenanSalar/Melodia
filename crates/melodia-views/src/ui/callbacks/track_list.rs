@@ -1,7 +1,7 @@
 //! The callbacks the track lists wire alike, written once: Play Next, Add to Queue and the column
 //! toggle over [`TrackListActions`] for all nine, the five list views and the four details through
-//! [`super::track_detail`], and selection over [`RowSelectionView`] for the four list views that
-//! select over their displayed rows (Browse keeps its own).
+//! [`super::track_detail`], and selection over [`RowSelectionView`] for the eight that select over
+//! their displayed rows (Browse keeps its own).
 
 use slint::{ModelRc, StrongHandle, Weak};
 
@@ -65,8 +65,8 @@ where
     });
 }
 
-/// Modifier-aware row clicks, Select All and the clear, for a list view selecting over its displayed
-/// rows. The details select over their cache instead, through [`super::track_detail`].
+/// Modifier-aware row clicks, Select All and the clear, for a list selecting over its displayed
+/// rows: the four list views, and the four details through [`super::track_detail`].
 pub(in crate::ui) fn wire_row_selection<G>(weak: &Weak<G>)
 where
     G: RowSelectionView + StrongHandle + 'static,

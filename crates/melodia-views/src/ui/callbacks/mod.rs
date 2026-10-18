@@ -176,9 +176,9 @@ pub(super) fn next_sort_with_natural(
     (natural.unwrap_or(clicked).to_owned(), SortDir::Asc)
 }
 
-/// Persist `view_id`'s sort into `views.json`, fire-and-forget: the in-memory re-sort
-/// already applied, so the only loss is across a restart. Shared by every
-/// `on_request_sort`.
+/// Persist `view_id`'s sort into `views.json`, fire-and-forget: the view has already
+/// asked for its rows in the new order, so the only loss is across a restart. Shared by
+/// every `on_request_sort`.
 pub(super) fn persist_view_sort(
     state: &AppState,
     view_id: &'static str,

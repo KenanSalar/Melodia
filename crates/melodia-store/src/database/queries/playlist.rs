@@ -228,25 +228,6 @@ pub async fn get_playlist_tracks(
     Ok(tracks)
 }
 
-/// Lightweight version of `get_playlist_tracks` for list views.
-pub async fn get_playlist_tracks_for_list(
-    db: &DbPool,
-    playlist_id: i64,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.prefixed("t");
-    let sql = format!(
-        "SELECT {cols} FROM tracks t \
-         JOIN playlist_items pi ON pi.track_id = t.id \
-         WHERE pi.playlist_id = ? \
-         ORDER BY pi.position ASC"
-    );
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
-        .bind(playlist_id)
-        .fetch_all(db.read())
-        .await?;
-    Ok(tracks)
-}
-
 /// Slim projection for M3U export — `file_path`, `file_hash`, title, artist,
 /// `duration_ms` in playlist order. Far cheaper than `get_playlist_tracks`
 /// (full `Track`) which the export path doesn't need.

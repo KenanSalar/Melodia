@@ -237,21 +237,30 @@ fn as_the_page_shows(mut rows: Vec<TrackListRow>, field: &str) -> Vec<i64> {
     rows.into_iter().map(|r| r.id).collect()
 }
 
+/// The rows a detail page lists for `scope`, read through its own keyset, in id order: the order
+/// SQL breaks a full tie in, which the comparator's stable sort keeps.
+async fn page_rows_by_id(
+    db: &melodia_store::database::DbPool,
+    scope: TrackListScope,
+) -> Result<Vec<TrackListRow>, AppError> {
+    let mut ids = keyset(db, scope, "", SortDir::Asc).await?;
+    ids.sort_unstable();
+    melodia_store::database::queries::track::get_track_list_rows_by_ids(db, &ids).await
+}
+
 fn queued(pairs: &[(i64, i64)]) -> Vec<i64> {
     pairs.iter().map(|&(_, track_id)| track_id).collect()
 }
 
-/// **What `library-data.md` said nothing could check.** A detail page re-sorts what it fetched, so
-/// its query's own `ORDER BY` decides nothing; the card beside it has no re-sort and its clause is
-/// the whole answer. The two are Rust against SQL in crates that cannot name each other, and they
-/// have already shipped disagreeing: the same set played in one order from the page and another
-/// from the card.
+/// **What `library-data.md` said nothing could check.** The card beside a detail page queues
+/// through `entity_ids`, a second SQL spelling of the page's default order, and the two have
+/// already shipped disagreeing: the same set played in one order from the page and another from
+/// the card. Both are held to the comparator, Rust against SQL in crates that cannot name each
+/// other, over the page's own membership.
 #[tokio::test]
 async fn a_card_queues_its_artist_in_the_order_the_page_shows_it() -> Result<(), AppError> {
     let s = sorted_library().await?;
-    let rows =
-        melodia_store::database::queries::track::get_tracks_by_artist_for_list(&s.db, s.artist)
-            .await?;
+    let rows = page_rows_by_id(&s.db, TrackListScope::Artist(s.artist)).await?;
 
     let queued_by_the_card =
         melodia_store::database::queries::track::track_ids_by_artists(&s.db, &[s.artist]).await?;
@@ -263,9 +272,7 @@ async fn a_card_queues_its_artist_in_the_order_the_page_shows_it() -> Result<(),
 #[tokio::test]
 async fn a_card_queues_its_genre_in_the_order_the_page_shows_it() -> Result<(), AppError> {
     let s = sorted_library().await?;
-    let rows =
-        melodia_store::database::queries::track::get_tracks_by_genre_for_list(&s.db, s.genre)
-            .await?;
+    let rows = page_rows_by_id(&s.db, TrackListScope::Genre(s.genre)).await?;
 
     let queued_by_the_card =
         melodia_store::database::queries::track::track_ids_by_genres(&s.db, &[s.genre]).await?;
@@ -277,9 +284,7 @@ async fn a_card_queues_its_genre_in_the_order_the_page_shows_it() -> Result<(), 
 #[tokio::test]
 async fn a_card_queues_its_album_in_the_order_the_page_shows_it() -> Result<(), AppError> {
     let s = sorted_library().await?;
-    let rows =
-        melodia_store::database::queries::track::get_tracks_by_album_for_list(&s.db, s.album)
-            .await?;
+    let rows = page_rows_by_id(&s.db, TrackListScope::Album(s.album)).await?;
 
     let queued_by_the_card =
         melodia_store::database::queries::track::track_ids_by_albums(&s.db, &[s.album]).await?;
@@ -495,36 +500,27 @@ async fn the_favorites_keyset_sorts_as_its_songs_tab_does() -> Result<(), AppErr
     Ok(())
 }
 
-/// The album, artist and genre pages, each over the set its `for_list` fetch answers.
+/// The album, artist and genre pages, each over the rows the whole table holds for it. Every
+/// track in [`parity_library`] carries one artist and one genre, so its first credit and first tag
+/// name the entity its join tables do.
 #[tokio::test]
 async fn a_detail_keyset_sorts_as_its_page_does() -> Result<(), AppError> {
-    use melodia_store::database::queries::track;
-
     let db = parity_library().await?;
     let id_of = |sql: &'static str| sqlx::query_scalar::<_, i64>(sql).fetch_one(db.read());
     let album = id_of("SELECT id FROM albums WHERE name = 'Banana'").await?;
     let artist = id_of("SELECT id FROM artists WHERE name = 'Mango'").await?;
     let genre = id_of("SELECT id FROM genres WHERE name = 'Pop'").await?;
+    let rows = every_row_by_id(&db).await?;
+    let held = |of: fn(&TrackListRow) -> Option<i64>, id: i64| -> Vec<TrackListRow> {
+        rows.iter().filter(|r| of(r) == Some(id)).cloned().collect()
+    };
     let pages = [
-        (
-            "album",
-            TrackListScope::Album(album),
-            track::get_tracks_by_album_for_list(&db, album).await?,
-        ),
-        (
-            "artist",
-            TrackListScope::Artist(artist),
-            track::get_tracks_by_artist_for_list(&db, artist).await?,
-        ),
-        (
-            "genre",
-            TrackListScope::Genre(genre),
-            track::get_tracks_by_genre_for_list(&db, genre).await?,
-        ),
+        ("album", TrackListScope::Album(album), held(|r| r.album_id, album)),
+        ("artist", TrackListScope::Artist(artist), held(|r| r.artist_id, artist)),
+        ("genre", TrackListScope::Genre(genre), held(|r| r.genre_id, genre)),
     ];
 
-    for (page, scope, mut rows) in pages {
-        rows.sort_by_key(|r| r.id);
+    for (page, scope, rows) in pages {
         for token in SORT_TOKENS {
             for dir in DIRECTIONS {
                 assert_eq!(

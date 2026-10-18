@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::ui::track_detail::DetailCache;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::smart_criteria::SmartCriteria;
 
@@ -88,18 +87,6 @@ impl GridIndexCache {
 pub(super) struct PlaylistGridState {
     pub data: Mutex<Arc<GridData>>,
     pub index_cache: Mutex<Option<GridIndexCache>>,
-}
-
-/// Detail-side state: the shared track cache plus the curated order only this detail has.
-pub(super) struct PlaylistDetailState {
-    pub cache: DetailCache,
-    /// Track ids in CANONICAL position (insertion / drag-reorder) order.
-    /// Drag-reorder mutates this **optimistically** before the DB write
-    /// lands, so the `"position"` sort can rebuild `tracks` from this
-    /// without a re-fetch. Always in lock-step with the playlist's
-    /// `playlist_items.position` column on disk modulo the in-flight
-    /// optimistic write.
-    pub position_order: Mutex<Vec<i64>>,
 }
 
 /// How many leading playlists' covers `fetch_grid` prewarms before the

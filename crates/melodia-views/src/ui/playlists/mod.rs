@@ -11,10 +11,10 @@
 //!   `updated_at DESC` order and rebuilt on every `fetch_grid`.
 //!
 //! * `PlaylistDetail` — the full playlist detail view. `open_playlist`
-//!   fetches the header + track list; the rows in a [`DetailCache`] plus the
-//!   canonical position-order id list let `play-row`, selection,
-//!   drag-reorder and the `"position"` sort recover indices without reading
-//!   the Slint model back.
+//!   fetches the header and the playlist's tracks as a keyset in a
+//!   [`TrackRows`], whose [`DetailCache`] holds the sort and filter its loads
+//!   run under. In its own order the keyset *is* the playlist's, so a drag
+//!   moves one id in it.
 //!
 //! Cross-thread layout mirrors `albums.rs`: `PlaylistsUi` is `Send + Sync`,
 //! cloned into callbacks / tokio tasks; Slint properties and models are
@@ -30,22 +30,24 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global as _, ModelRc, SharedString, VecModel};
 
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::track_detail::{DetailCache, TrackDetail};
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
+use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_ui::{
     AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow,
-    Playlists, TrackListRow as UiTrackListRow,
+    Playlists,
 };
 
-use state::{GridData, PlaylistDetailState, PlaylistGridState};
+use state::{GridData, PlaylistGridState};
 
 #[cfg(test)]
 use grid::compute_indices;
@@ -59,9 +61,7 @@ pub use grid::fetch_grid;
 
 // Reached from this slice's own `callbacks/`. `pub(super)` is `pub(in crate::ui)`
 // here, one notch wider than that.
-pub(super) use detail::{
-    apply_optimistic_reorder, open_playlist, refresh_detail, restore_detail, rollback_reorder,
-};
+pub(super) use detail::{apply_optimistic_reorder, open_playlist, refresh_detail, restore_detail};
 pub(super) use grid::{fetch_grid_stats, rebuild_grid};
 
 /// The M3U8 import / export and Add-to-Playlist wiring, kept out of [`install`] because each
@@ -74,9 +74,12 @@ pub use callbacks::wire_files;
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
-    install_models(cx.app);
-    let playlists_ui =
-        Arc::new(PlaylistsUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
+    let detail = install_models(cx.app, cx.state);
+    let playlists_ui = Arc::new(PlaylistsUi::new(
+        detail,
+        cx.cover_thumbs.clone(),
+        detail_artwork::blur_spec(cx.app),
+    ));
     callbacks::wire(cx.app, cx.state, &playlists_ui);
     playlists_ui
 }
@@ -86,7 +89,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
 /// `AlbumsUi` field-for-field.
 pub struct PlaylistsUi {
     grid: PlaylistGridState,
-    detail: PlaylistDetailState,
+    detail: DetailCache<PlaylistDetail<'static>>,
     /// Row-tier cache — shared with Tracks / Browse — backs the
     /// detail track-list's artwork column.
     /// The grid cards draw from `ui::grid_prewarm::tier()`, which no view holds.
@@ -100,16 +103,17 @@ pub struct PlaylistsUi {
 }
 
 impl PlaylistsUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>) -> Self {
+    fn new(
+        detail: DetailCache<PlaylistDetail<'static>>,
+        cover_thumbs: Arc<CoverThumbs>,
+        hero_blur: Option<BlurSpec>,
+    ) -> Self {
         Self {
             grid: PlaylistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
                 index_cache: Mutex::new(None),
             },
-            detail: PlaylistDetailState {
-                cache: DetailCache::default(),
-                position_order: Mutex::new(Vec::new()),
-            },
+            detail,
             cover_thumbs,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
@@ -117,9 +121,9 @@ impl PlaylistsUi {
     }
 
     /// Drop everything resident in the Playlists section — grid covers,
-    /// detail artwork pair, canonical grid data, memoized indices,
-    /// cached detail tracks, applied-selection shadow — then return the
-    /// freed pages to the OS. Race-correct against an in-flight
+    /// detail artwork pair, canonical grid data and memoized indices, the
+    /// caller having cleared the detail's rows on the UI thread — then return
+    /// the freed pages to the OS. Race-correct against an in-flight
     /// `fetch_grid` via `mutation_gate` (see `AlbumsUi::release_section_state`
     /// for the contract).
     pub fn release_section_state(&self) {
@@ -135,8 +139,6 @@ impl PlaylistsUi {
             }
             *self.grid.data.lock() = Arc::new(GridData::new(Vec::new()));
             *self.grid.index_cache.lock() = None;
-            self.detail.cache.release_rows();
-            self.detail.position_order.lock().clear();
         }
         melodia_platform::services::platform::allocator::trim();
     }
@@ -164,7 +166,7 @@ impl PlaylistsUi {
 
     /// Playlist id currently open in the detail view (`-1` = grid).
     pub fn detail_playlist_id(&self) -> i64 {
-        self.detail.cache.id()
+        self.detail.id()
     }
 
     /// Whether the cached grid holds any smart playlist whose criteria depend on
@@ -209,21 +211,25 @@ impl PlaylistsUi {
     }
 }
 
-/// Build the empty `VecModel`s the Playlists grid (chunked + flat),
-/// the detail track list, and the detail selection need, and hand them
-/// to the Slint globals as `ModelRc`s.
-fn install_models(ui: &AppWindow) {
+/// Build the empty models the Playlists grid (chunked + flat), the detail
+/// track list, and the detail selection need, and hand them to the Slint
+/// globals as `ModelRc`s. The track list is a [`TrackRows`], installed once
+/// for every playlist it will show.
+fn install_models(ui: &AppWindow, state: &AppState) -> DetailCache<PlaylistDetail<'static>> {
     let grid: Rc<VecModel<UiPlaylistGridRow>> = Rc::new(VecModel::default());
     ui.global::<Playlists>().set_grid_rows(ModelRc::from(grid));
 
     let flat: Rc<VecModel<UiPlaylistRow>> = Rc::new(VecModel::default());
     ui.global::<Playlists>().set_rows(ModelRc::from(flat));
 
-    let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
-    ui.global::<PlaylistDetail>().set_tracks(ModelRc::from(tracks));
+    let g = ui.global::<PlaylistDetail>();
+    let tracks: Rc<TrackRows> = TrackRows::new(track_rows::fetcher(state));
+    let detail = DetailCache::new(g.as_weak(), tracks.scroll_point());
+    g.set_tracks(ModelRc::from(tracks));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
-    ui.global::<PlaylistDetail>().set_selected_ids(ModelRc::from(sel));
+    g.set_selected_ids(ModelRc::from(sel));
+    detail
 }
 
 /// Convert a `PlaylistStats` into the Slint `PlaylistRow` an `EntityCard`

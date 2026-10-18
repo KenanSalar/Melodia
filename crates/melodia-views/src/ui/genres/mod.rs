@@ -1,6 +1,6 @@
 //! The Genres page: a virtualized card grid, and the detail view a card drills
 //! into. Shaped like [`crate::ui::albums`], whose module docs argue the grid
-//! data and the cached detail rows.
+//! data and the detail's keyset.
 //!
 //! What differs is that **no cover or hero-blur caches live here** — genres have
 //! no intrinsic artwork. Each tile renders `EntityCard`'s fallback glyph, and
@@ -18,17 +18,18 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global as _, ModelRc, SharedString, VecModel};
 
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::track_detail::DetailCache;
 use crate::ui::util::clamp_i64_to_i32;
 use crate::ui::view_ctx::ViewCtx;
+use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::genre::GenreStats;
 use melodia_ui::{
     AppWindow, GenreDetail, GenreGridRow as UiGenreGridRow, GenreRow as UiGenreRow, Genres,
-    TrackListRow as UiTrackListRow,
 };
 
 use state::{GenreGridState, GridData};
@@ -63,8 +64,8 @@ pub(super) use grid::rebuild_grid;
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
-    install_models(cx.app);
-    let genres_ui = Arc::new(GenresUi::new(cx.cover_thumbs.clone()));
+    let detail = install_models(cx.app, cx.state);
+    let genres_ui = Arc::new(GenresUi::new(detail, cx.cover_thumbs.clone()));
     callbacks::wire(cx.app, cx.state, cx.view_state, &genres_ui);
     genres_ui
 }
@@ -75,7 +76,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
 /// page having no artwork.
 pub struct GenresUi {
     grid: GenreGridState,
-    detail: DetailCache,
+    detail: DetailCache<GenreDetail<'static>>,
     /// The shared row tier, for the detail `TrackList`'s artwork column. This
     /// page never clears it.
     cover_thumbs: Arc<CoverThumbs>,
@@ -87,13 +88,13 @@ pub struct GenresUi {
 }
 
 impl GenresUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
+    fn new(detail: DetailCache<GenreDetail<'static>>, cover_thumbs: Arc<CoverThumbs>) -> Self {
         Self {
             grid: GenreGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
                 index_cache: Mutex::new(None),
             },
-            detail: DetailCache::default(),
+            detail,
             cover_thumbs,
             section: SectionState::new(),
         }
@@ -106,10 +107,10 @@ impl GenresUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
-    /// Drop *everything* the section keeps resident — the canonical grid data,
-    /// the memoized indices, the cached detail rows and the selection shadow —
-    /// then hand the freed pages back. Runs off the UI thread on section leave;
-    /// the caller has already cleared the Slint models there. Re-entry
+    /// Drop *everything* the section keeps resident — the canonical grid data
+    /// and the memoized indices — then hand the freed pages back. Runs off the
+    /// UI thread on section leave; the caller has already cleared the Slint
+    /// models there, the detail's rows with them. Re-entry
     /// re-fetches through [`fetch_grid`], and re-runs `open_genre` if a detail
     /// was open.
     ///
@@ -127,7 +128,6 @@ impl GenresUi {
             }
             *self.grid.data.lock() = Arc::new(GridData::new(Vec::new()));
             *self.grid.index_cache.lock() = None;
-            self.detail.release_rows();
         }
         melodia_platform::services::platform::allocator::trim();
     }
@@ -138,17 +138,21 @@ impl GenresUi {
     }
 }
 
-/// Hand the two globals their empty `VecModel`s. Later updates find them by
+/// Hand the two globals their empty models, the detail's tracks a [`TrackRows`]
+/// installed once for every genre it will show. Later updates find them by
 /// downcasting back.
-fn install_models(ui: &AppWindow) {
+fn install_models(ui: &AppWindow, state: &AppState) -> DetailCache<GenreDetail<'static>> {
     let grid: Rc<VecModel<UiGenreGridRow>> = Rc::new(VecModel::default());
     ui.global::<Genres>().set_grid_rows(ModelRc::from(grid));
 
-    let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
-    ui.global::<GenreDetail>().set_tracks(ModelRc::from(tracks));
+    let g = ui.global::<GenreDetail>();
+    let tracks: Rc<TrackRows> = TrackRows::new(track_rows::fetcher(state));
+    let detail = DetailCache::new(g.as_weak(), tracks.scroll_point());
+    g.set_tracks(ModelRc::from(tracks));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
-    ui.global::<GenreDetail>().set_selected_ids(ModelRc::from(sel));
+    g.set_selected_ids(ModelRc::from(sel));
+    detail
 }
 
 /// A `GenreStats` as the `GenreRow` an `EntityCard` and the detail header

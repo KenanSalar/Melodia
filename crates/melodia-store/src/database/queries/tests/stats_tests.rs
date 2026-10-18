@@ -4,7 +4,9 @@ use crate::database::queries::fixtures::*;
 use melodia_core::entities::artist::{self, ArtistCredit};
 use melodia_core::entities::genre::{self, GenreList};
 use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 
 #[tokio::test]
 async fn recalculate_stats_produces_correct_counts() -> Result<(), AppError> {
@@ -145,9 +147,12 @@ fn multi_tagged(
     meta
 }
 
-/// A page's length in the same type its count is stored as, so the two can be asserted together.
-fn listed(rows: &[melodia_core::entities::track::TrackListRow]) -> i32 {
-    i32::try_from(rows.len()).unwrap_or(i32::MAX)
+/// How many tracks the detail page for `scope` lists, in the type its count is stored as, so the
+/// two can be asserted together.
+async fn listed(db: &DbPool, scope: TrackListScope) -> Result<i32, AppError> {
+    let natural = TrackOrder::new("", SortDir::Asc);
+    let ids = queries::track::track_ids(db, scope, natural, &Needle::default()).await?;
+    Ok(i32::try_from(ids.len()).unwrap_or(i32::MAX))
 }
 
 async fn genre_named(db: &DbPool, name: &str) -> Result<genre::GenreStats, AppError> {
@@ -188,12 +193,12 @@ async fn a_genre_counts_exactly_the_tracks_its_page_lists() -> Result<(), AppErr
 
     let rock = genre_named(&db, "Rock").await?;
     let metal = genre_named(&db, "Metal").await?;
-    let rock_page = queries::track::get_tracks_by_genre_for_list(&db, rock.id).await?;
-    let metal_page = queries::track::get_tracks_by_genre_for_list(&db, metal.id).await?;
+    let rock_page = listed(&db, TrackListScope::Genre(rock.id)).await?;
+    let metal_page = listed(&db, TrackListScope::Genre(metal.id)).await?;
 
-    assert_eq!((rock.track_count, listed(&rock_page)), (2, 2));
+    assert_eq!((rock.track_count, rock_page), (2, 2));
     // The secondary genre is the one a `tracks.genre_id` reader listed nothing at all for.
-    assert_eq!((metal.track_count, listed(&metal_page)), (1, 1));
+    assert_eq!((metal.track_count, metal_page), (1, 1));
     Ok(())
 }
 
@@ -209,9 +214,9 @@ async fn a_guest_credit_is_counted_and_listed_under_the_artist_it_names() -> Res
     insert_tagged_track(&db, "/music/t1.mp3", &featured).await?;
 
     let bob = artist_named(&db, "Bob").await?;
-    let bob_page = queries::track::get_tracks_by_artist_for_list(&db, bob.id).await?;
+    let bob_page = listed(&db, TrackListScope::Artist(bob.id)).await?;
 
-    assert_eq!((bob.track_count, listed(&bob_page)), (1, 1));
+    assert_eq!((bob.track_count, bob_page), (1, 1));
     // The whole credit line is not an artist — that row is what keying on it used to create.
     assert!(artist_named(&db, "Alice feat. Bob").await.is_err());
     Ok(())

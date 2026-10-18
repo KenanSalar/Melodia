@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use super::import::import_and_summarize;
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::CoverCache;
-use melodia_core::entities::{playlist, track};
+use melodia_core::entities::playlist;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
@@ -28,13 +28,6 @@ pub async fn get_playlist_detail(
     id: i64,
 ) -> Result<playlist::PlaylistStats, AppError> {
     queries::playlist::get_playlist_by_id(db, id).await
-}
-
-pub async fn get_playlist_tracks(
-    db: &DbPool,
-    playlist_id: i64,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::playlist::get_playlist_tracks_for_list(db, playlist_id).await
 }
 
 pub async fn update_playlist(

@@ -10,18 +10,15 @@ use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
-use crate::ui::list_selection::NO_ANCHOR;
+use crate::ui::list_selection;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::{TrackDetail, restore};
+use crate::ui::track_detail::{self, TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{
-    AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, CardSelection,
-    TrackListRow as UiTrackListRow,
-};
+use melodia_ui::{AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, CardSelection};
 
 /// Wire the Albums section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
@@ -61,7 +58,7 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>
             // `release_section_state` only drops the LRU's ref; the
             // detail's `slint::Image` properties hold their own refs to
             // the `SharedPixelBuffer` Arcs and the `tracks` /
-            // `grid-rows` `VecModel`s carry `SharedString` allocations
+            // `grid-rows` models carry `SharedString` allocations
             // — neither releases until we explicitly drop the
             // properties / clear the models here. `AlbumDetail.album-id`
             // is left untouched so the section-enter handler can
@@ -76,9 +73,8 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>
 
             let d = ui.global::<AlbumDetail>();
             release_detail_hero_images(&ui, &d);
-            clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "albums: clear detail tracks");
-            clear_vec_model::<i32>(&d.get_selected_ids(), "albums: clear detail selection");
-            d.set_selection_anchor(NO_ANCHOR);
+            track_detail::release_rows(&*au, &d);
+            list_selection::clear_row_selection(&d);
             // The card grid's set goes back with the models it describes;
             // `card-selection.slint` argues why it cannot outlive the leave.
             ui.global::<CardSelection>().invoke_clear();

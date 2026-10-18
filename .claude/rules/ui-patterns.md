@@ -533,8 +533,10 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **`HeroChips` publishers take their facts as arguments or off their own section handle, and read
   back no Slint property** — lifting a count off the global the caller just wrote makes write order
-  part of the contract. **Facts a stats row doesn't carry are folded on the worker, never in the
-  closure** (`ui::hero_folds`), their `Copy` results riding into `upgrade_in_event_loop`; **Most
+  part of the contract. **Facts a stats row doesn't carry are answered on the worker, never in the
+  closure**: in SQL where the page holds only ids (`queries::track::scope_facts` and
+  `genre_lines`, folded by `ui::hero_folds`), off the rows themselves where it holds them, their
+  `Copy` results riding into `upgrade_in_event_loop`; **Most
   Played sums itself**, its query being a strict subset of the Songs tab. **Moving a fold onto the
   worker moves its teardown with it** — `release_section_state` resets the folds beside the caches
   they summarise, a derived value outliving its source being the one thing the band can state that
@@ -656,24 +658,27 @@ three components that answer it, and each argues its geometry at its own file.
 - **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and
   its module doc argues the window, the one fetch in flight and the seed a load fetches where the
-  list is scrolled. My Library's Songs tab and Favorites' are the two today, both
+  list is scrolled. Both Songs tabs and the four details are the six today, all
   `track_rows::TrackRows`. A favourite or rating change patches the cached row, where the
   `VecModel` lists go through `model_patch`; the `list_selection` helpers take either model. A
-  third such list implements `PagedRow` for its row rather than growing a second model.
+  list over another row type implements `PagedRow` for it rather than growing a second model.
 
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
-  `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
-  rows in a `DetailCache`. A fifth detail implements both traits rather than copying a
+  `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle). Each
+  lists its entity as a `TrackRows`, its `DetailCache` holding the sort and filter the loads run
+  under, and `track_detail::load` is the open, reload and requery all four share. A close or a
+  section leave releases the list and revokes every load still on its way to it
+  (`track_detail::release_rows`). A fifth detail implements both traits rather than copying a
   `callbacks/detail.rs`.
 
 - **All nine track lists share Play Next, Add to Queue and the column toggle**, written once in
   `callbacks::track_list` over `track_list_view::TrackListActions`, which `track_list_views!`
   implements beside the column state, plus the `play-row` tail as `play_displayed`. A list
   supplies only what differs: its id source, and Browse its non-zero id filter. **Selection is
-  shared there too, by the four flat list views**: `wire_row_selection` over
+  shared there too, by the four flat list views and the four details**: `wire_row_selection` over
   `list_selection::RowSelectionView`, ranging over the rows on screen. Browse keeps its own
-  wiring for its disk-only rows and the details select through `track_detail::selection`, both
-  over the same `compute_click_selection`, whose anchor is the id of the row last clicked.
+  wiring for its disk-only rows, over the same `compute_click_selection`, whose anchor is the id
+  of the row last clicked.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
@@ -1401,7 +1406,7 @@ block first; each page's section below is deltas only.** The nav-index map is in
 
 - Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
   `ui::grid_rows::chunk_entity_rows`, `ui::model_diff::replace_rows`, `ui::paged_rows` with the
-  `track_rows::TrackRows` both Songs tabs show,
+  `track_rows::TrackRows` both Songs tabs and the four details show,
   `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 

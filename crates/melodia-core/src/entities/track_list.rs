@@ -89,3 +89,13 @@ impl TrackOrder {
         Self { field: TrackSortField::from_token(field_token), dir }
     }
 }
+
+/// What a scope's tracks add up to: how many there are, how long they run, and how many artists
+/// and albums they span.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ScopeFacts {
+    pub tracks: i64,
+    pub duration_ms: i64,
+    pub artists: i64,
+    pub albums: i64,
+}

@@ -264,6 +264,27 @@ impl<R: PagedRow> PagedRows<R> {
         }
     }
 
+    /// Move the row at `from` to `to`, counted once it has left, which is where a drag drops it.
+    /// One row leaves and one arrives, so every other row keeps its delegate. Answers whether it
+    /// moved: `from` past the end, or `to` past the slot after the last row, moves nothing.
+    pub fn move_row(&self, from: usize, to: usize) -> bool {
+        let (moved, at) = {
+            let keyset = self.keyset.borrow();
+            if from >= keyset.len() || to > keyset.len() {
+                return false;
+            }
+            let mut ids = keyset.to_vec();
+            let id = ids.remove(from);
+            let at = to.min(ids.len());
+            ids.insert(at, id);
+            (Arc::<[i64]>::from(ids), at)
+        };
+        *self.keyset.borrow_mut() = moved;
+        self.notify.row_removed(from, 1);
+        self.notify.row_added(at, 1);
+        true
+    }
+
     /// Empty the list and its cache. The selection stays, as `selected-ids` does.
     pub fn clear(&self) {
         *self.keyset.borrow_mut() = Arc::from([]);
@@ -548,6 +569,15 @@ impl KeysetTickets {
         if issued.reload_owed == Some(ticket.0) {
             issued.reload_owed = None;
         }
+    }
+
+    /// Refuse every load issued so far, for a list whose rows were just released: nothing they
+    /// fetched has anywhere to go, and the list's next load seats a fresh keyset, so no reload
+    /// stays owed either.
+    pub fn revoke(&self) {
+        let mut issued = self.0.lock();
+        issued.latest += 1;
+        issued.reload_owed = None;
     }
 }
 

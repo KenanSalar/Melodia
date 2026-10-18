@@ -8,8 +8,8 @@
 //!   circular and pull their cover lazily via `request-cover`.
 //!
 //! * `ArtistDetail` — the full Artist Detail view. `open_artist` fetches the header, the albums
-//!   sub-section and the full track list; the rows sit in a [`DetailCache`], so `play-row`,
-//!   selection and an in-memory re-sort work without reading the Slint model back.
+//!   sub-section and the artist's tracks as a keyset in a [`TrackRows`], whose [`DetailCache`]
+//!   holds the sort and filter its loads run under.
 //!
 //! Cross-thread layout mirrors `albums.rs`: `ArtistsUi` is `Send + Sync`, and Slint properties and
 //! models are only touched from the UI thread via `Weak<AppWindow>::upgrade_in_event_loop`.
@@ -23,20 +23,22 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global as _, ModelRc, SharedString, VecModel};
 
 use crate::ui::albums::AlbumsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::detail_artwork::{self, DetailArtwork};
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::track_detail::{DetailCache, TrackDetail};
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
+use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_ui::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow,
-    ArtistRow as UiArtistRow, Artists, TrackListRow as UiTrackListRow,
+    ArtistRow as UiArtistRow, Artists,
 };
 
 use state::{ArtistDetailState, ArtistGridState, GridData};
@@ -67,9 +69,12 @@ pub(super) use grid::rebuild_grid;
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
-    install_models(cx.app);
-    let artists_ui =
-        Arc::new(ArtistsUi::new(cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
+    let tracks = install_models(cx.app, cx.state);
+    let artists_ui = Arc::new(ArtistsUi::new(
+        tracks,
+        cx.cover_thumbs.clone(),
+        detail_artwork::blur_spec(cx.app),
+    ));
     callbacks::wire(cx.app, cx.state, cx.view_state, &artists_ui, albums_ui);
     artists_ui
 }
@@ -92,16 +97,17 @@ pub struct ArtistsUi {
 }
 
 impl ArtistsUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>) -> Self {
+    fn new(
+        tracks: DetailCache<ArtistDetail<'static>>,
+        cover_thumbs: Arc<CoverThumbs>,
+        hero_blur: Option<BlurSpec>,
+    ) -> Self {
         Self {
             grid: ArtistGridState {
                 data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
                 index_cache: Mutex::new(None),
             },
-            detail: ArtistDetailState {
-                cache: DetailCache::default(),
-                albums: Mutex::new(Vec::new()),
-            },
+            detail: ArtistDetailState { cache: tracks, albums: Mutex::new(Vec::new()) },
             cover_thumbs,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
@@ -109,11 +115,11 @@ impl ArtistsUi {
     }
 
     /// Drop *everything* the Artists section is keeping resident — the detail artwork, the canonical
-    /// grid data, the memoized filter/sort indices, the cached detail track rows and the
-    /// applied-selection shadow — then hand the freed pages back to the OS. Called off the UI
-    /// thread on section leave. Re-entry re-fetches via [`fetch_grid`]; an open detail is
-    /// repopulated by the caller re-running `open_artist`. **The caller clears the Slint-side
-    /// properties on the UI thread before this runs.**
+    /// grid data, the memoized filter/sort indices and the detail's Albums strip — then hand the
+    /// freed pages back to the OS. Called off the UI thread on section leave. Re-entry re-fetches
+    /// via [`fetch_grid`]; an open detail is repopulated by the caller re-running `open_artist`.
+    /// **The caller clears the Slint-side properties on the UI thread before this runs**, the
+    /// detail's track rows with them.
     ///
     /// Race-correct against an in-flight [`fetch_grid`] via the same early-check +
     /// gated-bulk-writes shape as [`crate::ui::albums::AlbumsUi::release_section_state`].
@@ -130,7 +136,6 @@ impl ArtistsUi {
             }
             *self.grid.data.lock() = Arc::new(GridData::new(Vec::new()));
             *self.grid.index_cache.lock() = None;
-            self.detail.cache.release_rows();
             self.detail.albums.lock().clear();
         }
         melodia_platform::services::platform::allocator::trim();
@@ -162,20 +167,24 @@ impl ArtistsUi {
     }
 }
 
-/// Build the empty `VecModel`s the Artists grid, the detail track list, the detail Albums
-/// sub-section and the detail selection need, and hand them to the Slint globals as `ModelRc`s.
-fn install_models(ui: &AppWindow) {
+/// Build the empty models the Artists grid, the detail track list, the detail Albums sub-section
+/// and the detail selection need, and hand them to the Slint globals as `ModelRc`s. The track list
+/// is a [`TrackRows`], installed once for every artist it will show.
+fn install_models(ui: &AppWindow, state: &AppState) -> DetailCache<ArtistDetail<'static>> {
     let grid: Rc<VecModel<UiArtistGridRow>> = Rc::new(VecModel::default());
     ui.global::<Artists>().set_grid_rows(ModelRc::from(grid));
 
-    let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
-    ui.global::<ArtistDetail>().set_tracks(ModelRc::from(tracks));
+    let g = ui.global::<ArtistDetail>();
+    let tracks: Rc<TrackRows> = TrackRows::new(track_rows::fetcher(state));
+    let cache = DetailCache::new(g.as_weak(), tracks.scroll_point());
+    g.set_tracks(ModelRc::from(tracks));
 
     let albums: Rc<VecModel<UiAlbumRow>> = Rc::new(VecModel::default());
-    ui.global::<ArtistDetail>().set_albums(ModelRc::from(albums));
+    g.set_albums(ModelRc::from(albums));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
-    ui.global::<ArtistDetail>().set_selected_ids(ModelRc::from(sel));
+    g.set_selected_ids(ModelRc::from(sel));
+    cache
 }
 
 /// Convert an `ArtistStats` into the Slint `ArtistRow` an `EntityCard` (and

@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Global as _};
+use slint::ComponentHandle;
 
 use crate::ui::callbacks::track_detail;
 use crate::ui::genres::GenresUi;
@@ -13,7 +13,7 @@ use melodia_ui::{AppWindow, GenreDetail};
 
 /// Wire the `GenreDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
-    track_detail::wire(&ui.global::<GenreDetail>().as_weak(), state, genres_ui);
+    track_detail::wire(state, genres_ui);
     wire_close(ui, state, genres_ui);
 }
 

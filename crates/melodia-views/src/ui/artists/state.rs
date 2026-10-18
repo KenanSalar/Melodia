@@ -8,6 +8,7 @@ use parking_lot::Mutex;
 use crate::ui::track_detail::DetailCache;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
+use melodia_ui::ArtistDetail;
 
 /// An artist's pre-lowercased `name`, computed once per `fetch_grid` so
 /// the name sort allocates nothing. Positionally aligned with
@@ -57,9 +58,9 @@ pub(super) struct ArtistGridState {
     pub index_cache: Mutex<Option<GridIndexCache>>,
 }
 
-/// Detail-side state: the shared track cache plus the Albums strip only this detail has.
+/// Detail-side state: the shared track list's cache plus the Albums strip only this detail has.
 pub(super) struct ArtistDetailState {
-    pub cache: DetailCache,
+    pub cache: DetailCache<ArtistDetail<'static>>,
     /// The artist's albums, unfiltered: the filter pass narrows the strip from this.
     pub albums: Mutex<Vec<AlbumStats>>,
 }

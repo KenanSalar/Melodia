@@ -5,7 +5,9 @@ use chrono::TimeZone;
 #[allow(clippy::wildcard_imports)]
 use super::*;
 use melodia_core::entities::smart_criteria::{Rule, RuleField, RuleOp, RuleValue};
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 use melodia_store::database::DbPool;
 use melodia_store::database::queries;
 use melodia_store::database::queries::fixtures::insert_test_track;
@@ -239,7 +241,7 @@ async fn playlist_with_tracks(db: &DbPool, name: &str, ids: &[i64]) -> Result<i6
 }
 
 async fn titles_in(db: &DbPool, playlist_id: i64) -> Result<Vec<String>, AppError> {
-    Ok(queries::playlist::get_playlist_tracks_for_list(db, playlist_id)
+    Ok(queries::playlist::get_playlist_tracks_for_export(db, playlist_id)
         .await?
         .into_iter()
         .map(|t| t.title)
@@ -437,12 +439,14 @@ async fn an_exported_playlist_imports_back_with_the_same_tracks() -> Result<(), 
     assert_eq!(result.matched_by_path, 3);
     assert_eq!(result.missing, 0);
 
-    let restored: Vec<i64> =
-        queries::playlist::get_playlist_tracks_for_list(&db, result.playlist_id)
-            .await?
-            .into_iter()
-            .map(|t| t.id)
-            .collect();
+    let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
+    let restored = queries::track::track_ids(
+        &db,
+        TrackListScope::Playlist(result.playlist_id),
+        own_order,
+        &Needle::default(),
+    )
+    .await?;
     assert_eq!(restored, ids);
     Ok(())
 }

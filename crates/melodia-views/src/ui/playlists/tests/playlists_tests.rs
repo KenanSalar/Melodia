@@ -114,8 +114,8 @@ fn every_draggable_list_opts_out_of_drag_panning() {
 }
 
 /// All four terms, since each fails differently and only the first is obvious.
-/// `sort_playlist_tracks` reverses on `"desc"`, and the drag writes display
-/// indices straight into `position_order`, so a reversed position sort lands
+/// A descending position sort shows the playlist reversed, and the drag moves
+/// display indices straight in the keyset, so a reversed position sort lands
 /// every drop at the mirrored slot; a filter makes those indices name a
 /// different track entirely; and a smart playlist has no curated order to
 /// reorder into. Dropping one of the last three costs no wrong write —
@@ -159,9 +159,9 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 }
 
 /// `is_manual_order` answers two of `reorder-enabled`'s terms; the filter is the
-/// third the drag depends on, and the one that fails silently — filtered,
-/// `tracks` is a subset of `position_order`, so a display index is still in
-/// range and the DB write lands on a different track than the one dragged.
+/// third the drag depends on, and the one that fails silently — filtered, the
+/// list is a subset of the playlist, so a display index is still in range and
+/// the DB write lands on a different track than the one dragged.
 ///
 /// Scoped to the guard rather than searched for over the file, so a later site
 /// reading the same field elsewhere in `detail.rs` can't satisfy the assertion
@@ -173,13 +173,13 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 fn the_optimistic_reorder_refuses_a_filtered_list() {
     let src = code_tokens(DETAIL);
     let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
-    let guard = body.split_once("let saved =").map_or("", |(head, _)| head);
+    let guard = body.split_once("let rows =").map_or("", |(head, _)| head);
     assert!(
         guard.contains("!is_manual_order(&field, &dir)"),
-        "the order half must be asked before the display indices reach `position_order`"
+        "the order half must be asked before the display indices reach the keyset"
     );
     assert!(
-        guard.contains("|| playlists_ui.detail.cache.is_filtered()"),
+        guard.contains("|| playlists_ui.detail.is_filtered()"),
         "so must the filter half — a filtered index is in range, so the write lands"
     );
 }

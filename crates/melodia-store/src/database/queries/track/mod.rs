@@ -9,7 +9,9 @@ mod full_rows;
 mod keyset;
 mod list;
 mod lookup;
+mod membership;
 mod ranking;
+mod scope_facts;
 mod search_text;
 mod write;
 
@@ -21,6 +23,7 @@ pub use keyset::*;
 pub use list::*;
 pub use lookup::*;
 pub use ranking::*;
+pub use scope_facts::*;
 pub use search_text::*;
 pub use write::*;
 

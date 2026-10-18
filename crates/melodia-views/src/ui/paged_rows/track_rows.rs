@@ -1,11 +1,15 @@
-//! [`PagedRows`] over track-list rows, the binding both Songs tabs share: the placeholder, the
-//! row fetch, and the keyset load that opens a list on the screenful it is scrolled to.
+//! [`PagedRows`] over track-list rows, the binding the Songs tabs and the four details share: the
+//! placeholder, the row fetch, the keyset load that opens a list on the screenful it is scrolled
+//! to, and what a reload owes once it shows.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::{Keyset, PagedRow, PagedRows, ReadStamp, RowRequest, ScrollPoint, window};
+use super::{
+    Keyset, KeysetTickets, PagedRow, PagedRows, ReadStamp, RowRequest, ScrollPoint, Ticket, window,
+};
 use crate::ui::grid_prewarm;
+use crate::ui::list_selection::{self, RowSelectionView};
 use crate::ui::tracks::to_slint_track_list_row;
 use crate::ui::util::{StringPool, clamp_i64_to_i32};
 use melodia_app::library;
@@ -30,7 +34,7 @@ impl PagedRow for UiTrackListRow {
     }
 }
 
-/// Fetches the rows a Songs list asks for. The query and the conversion run on the runtime, so the
+/// Fetches the rows a track list asks for. The query and the conversion run on the runtime, so the
 /// connection goes back to the pool as soon as the rows are read, however busy the event loop is
 /// drawing; only the landing waits for it.
 pub fn fetcher(state: &AppState) -> impl Fn(RowRequest<UiTrackListRow>) + 'static {
@@ -86,6 +90,23 @@ pub async fn prewarm(thumbs: &Arc<CoverThumbs>, keyset: &Keyset<UiTrackListRow>)
     let thumbs = Arc::clone(thumbs);
     if let Err(e) = tokio::task::spawn_blocking(move || thumbs.prewarm(&paths)).await {
         log::warn!("track rows: cover prewarm failed: {}", describe(&e));
+    }
+}
+
+/// What a reload owes once its keyset shows: every row the list still holds read again, the reload
+/// settled, and the picks the list no longer holds dropped. Only an unfiltered keyset can say which
+/// those are, a filter hiding rows without dropping their picks. UI thread.
+pub fn settle_reload(
+    view: &impl RowSelectionView,
+    model: &TrackRows,
+    tickets: &KeysetTickets,
+    ticket: Ticket,
+    unfiltered: bool,
+) {
+    model.reread();
+    tickets.reload_shown(ticket);
+    if unfiltered {
+        list_selection::keep_selection_within(view, || model.row_ids().into_iter().collect());
     }
 }
 

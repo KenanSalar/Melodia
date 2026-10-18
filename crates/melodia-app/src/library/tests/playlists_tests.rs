@@ -102,7 +102,7 @@ async fn a_dropped_batch_lands_in_natural_order_rather_than_the_order_it_arrived
             .await?;
     assert_eq!(result.added_count, 3);
 
-    let titles: Vec<String> = queries::playlist::get_playlist_tracks_for_list(&db, playlist.id)
+    let titles: Vec<String> = queries::playlist::get_playlist_tracks_for_export(&db, playlist.id)
         .await?
         .into_iter()
         .map(|t| t.title)
@@ -131,7 +131,7 @@ async fn a_drop_with_nothing_importable_adds_nothing_to_the_playlist() -> Result
     assert_eq!(result.imported_count, 0);
     assert_eq!(result.failed_paths.len(), 1);
     assert!(
-        queries::playlist::get_playlist_tracks_for_list(&db, playlist.id).await?.is_empty(),
+        queries::playlist::get_playlist_tracks_for_export(&db, playlist.id).await?.is_empty(),
         "a refused drop must not leave the playlist holding anything"
     );
     Ok(())

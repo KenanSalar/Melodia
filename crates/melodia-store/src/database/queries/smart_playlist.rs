@@ -19,24 +19,12 @@ use melodia_core::entities::smart_criteria::{
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
-/// Resolve a smart playlist's current membership as list-view rows, in the
-/// criteria's order (and capped by its optional limit).
-pub async fn get_smart_playlist_tracks(
-    db: &DbPool,
-    criteria: &SmartCriteria,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let mut qb = membership_query(columns::TRACK_LIST.joined(), criteria);
-    let rows =
-        qb.build_query_as::<track::TrackListRow>().persistent(false).fetch_all(db.read()).await?;
-    Ok(rows)
-}
-
-/// [`get_smart_playlist_tracks`] as ids alone, for a caller that only needs the membership.
+/// A smart playlist's current membership as ids, in the criteria's order and under its optional
+/// cap.
 ///
 /// **Backs the card menu's batch actions**, which resolve a selection to track ids and act on
-/// those: going through the list projection there materialises every `TrackListRow` column only
-/// to read `id` off it. Same criteria, same order, same cap, so the ids arrive in the order the
-/// rows would have.
+/// those. The detail page lists the same membership through its keyset, which reads it off
+/// [`push_positioned_membership`].
 pub async fn get_smart_playlist_track_ids(
     db: &DbPool,
     criteria: &SmartCriteria,
@@ -46,7 +34,7 @@ pub async fn get_smart_playlist_track_ids(
     Ok(ids)
 }
 
-/// [`get_smart_playlist_tracks`] as M3U export rows, in the same order and under the same cap.
+/// [`get_smart_playlist_track_ids`] as M3U export rows, in the same order and under the same cap.
 pub async fn get_smart_playlist_tracks_for_export(
     db: &DbPool,
     criteria: &SmartCriteria,

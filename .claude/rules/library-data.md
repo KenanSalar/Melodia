@@ -150,10 +150,12 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     populated from the rendered line splits `Chanson, Francaise` into two genres and saving makes
     that permanent.
 
-  - **The other half of narrowing is the keyset**: the two views that can hold the whole library
-    (My Library's Songs tab, Favorites') keep only their ids and fetch the rows near the viewport
-    by id (`get_track_list_rows_by_ids`), converted as they land (`ui::paged_rows`), so no list
-    holds a row per track. **Recently Played's Songs tab retains a list and deliberately stays off
+  - **The other half of narrowing is the keyset**: every list that can grow with the library (both
+    Songs tabs, and the four details, a broad genre or a smart playlist running as long as one)
+    keeps only its ids and fetches the rows near the viewport by id
+    (`get_track_list_rows_by_ids`), converted as they land (`ui::paged_rows`), so no list holds a
+    row per track. A detail's hero facts come off the same membership in SQL
+    (`queries::track::scope_facts`, `genre_lines`), the page holding no rows to fold them from. **Recently Played's Songs tab retains a list and deliberately stays off
     it**: `get_recently_played` is capped at 200 rows, so a keyset saves nothing there, and it
     keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped* list belongs on
     a keyset and `ui::paged_rows`, not on a sixth projection.
@@ -167,24 +169,23 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     `cross_tier.rs` and the rating-import tests, in the fixed `TRACK_LIST_ORDER` argued at its
     definition. Don't give it a sort parameter back; a list that needs an order takes a keyset.
 
-  - **Which makes a `for_list` query's own `ORDER BY` dead, and copying one the trap.** Every
-    detail view re-sorts what it fetched, so that clause decides nothing there.
-    `queries::track::entity_ids`, which answers what a card's right-click Play queues, has no
-    re-sort behind it and its clause is the whole answer. The two have to agree on the page's
-    **default** and can agree on nothing else, `resolve_view_sort` reading a field the user
-    persisted into `views.json`. Short of that they disagree from the first row: the same set
-    plays in one order from the page and another from the card beside it, which is what shipped:
-    `sort_key` where Artist and Genre Detail default to `"album"`, and bare nullable columns where
-    `ui::track_sort` maps an untagged track to `i32::MAX` and SQLite sorts NULL first. **Neither
-    crate can check it**, `melodia-store` being unable to name `melodia-views` and the comparator
-    being Rust against SQL, so the pin is `crates/melodia/tests/cross_tier.rs`'s
+  - **A card queues its tracks through a second query, and that query owes the page's default.**
+    `queries::track::entity_ids` answers what a card's right-click Play queues, while the page
+    beside it lists its keyset. The two have to agree on the page's **default** and can agree on
+    nothing else, `resolve_view_sort` reading a field the user persisted into `views.json`. Short
+    of that they disagree from the first row: the same set plays in one order from the page and
+    another from the card beside it, which is what shipped: `sort_key` where Artist and Genre
+    Detail default to `"album"`, and bare nullable columns where `ui::track_sort` maps an untagged
+    track to `i32::MAX` and SQLite sorts NULL first. **Neither crate can check it**,
+    `melodia-store` being unable to name `melodia-views` and the comparator being Rust against SQL,
+    so the pin is `crates/melodia/tests/cross_tier.rs`'s
     `a_card_queues_its_{artist,genre,album}_in_the_order_the_page_shows_it`: it asks both sides over
     a library built out of the partitions they answer differently, a tidy fixture agreeing by
-    accident. A new batch-action query states which arm it reproduces and joins that walk.
-    `entity_ids` takes both of its orders from `keyset::detail_order`, so a card and the keyset of
-    the page beside it share one SQL spelling as well as one oracle. **The
-    page's own default is the other half and moves separately**, so it is read off each detail
-    file's `resolve_view_sort` literal beside them.
+    accident. A new batch-action query states which arm it reproduces and joins that walk, and
+    copying `TRACK_LIST_ORDER` into one is the trap its definition argues. `entity_ids` takes both
+    of its orders from `keyset::detail_order`, so a card and the keyset of the page beside it share
+    one SQL spelling as well as one oracle. **The page's own default is the other half and moves
+    separately**, so it is read off each detail file's `resolve_view_sort` literal beside them.
 
 - **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
   no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
@@ -223,7 +224,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   helper (over `player::state::sync_current_track_if_in`) that flips the playing track's cached
   field + emits, so the NP star updates from a list-row edit — it re-checks the id under the emit
   lock, safe against a mid-write track change. Rating **never changes list membership**, so every
-  surface is optimistic (`flip_rating`/`apply_row_rating`, detail siblings), wired via
+  surface is optimistic (`flip_rating`/`apply_row_rating`, a paged list's `PagedRows::patch`), wired via
   `wire_row_flag!`; Search included, having no `library_changed` subscriber to fall back on. NP
   parity via `wire_now_playing_rating`.
 

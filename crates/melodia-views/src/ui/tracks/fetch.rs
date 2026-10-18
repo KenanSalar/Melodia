@@ -10,7 +10,6 @@ use slint::{ComponentHandle, Weak};
 
 use super::TracksUi;
 use crate::ui::callbacks::macros::spawn_logged;
-use crate::ui::list_selection;
 use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::paged_rows::{Keyset, Load, Ticket};
 use crate::ui::util::len_as_i32;
@@ -130,13 +129,7 @@ async fn refresh_now(
             return;
         };
         model.show(keyset);
-        model.reread();
-        tracks_ui.tickets.reload_shown(ticket);
-        // A filtered keyset no longer holds the rows the filter hides, and a filter drops no
-        // pick, so only an unfiltered one can say which picks the library has lost.
-        if unfiltered {
-            list_selection::keep_selection_within(&g, || model.row_ids().into_iter().collect());
-        }
+        track_rows::settle_reload(&g, model, &tracks_ui.tickets, ticket, unfiltered);
     });
     Ok(())
 }

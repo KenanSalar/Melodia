@@ -3,7 +3,7 @@
 //! takes the pool and returns `Result<_, AppError>`; the UI bridge
 //! (`melodia-views`' `ui/genres/`) does the in-memory sorting / filtering / chunking.
 
-use melodia_core::entities::{genre, track};
+use melodia_core::entities::genre;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
@@ -20,15 +20,4 @@ pub async fn get_genres(db: &DbPool) -> Result<Vec<genre::GenreStats>, AppError>
 /// render and click).
 pub async fn get_genre_detail(db: &DbPool, id: i64) -> Result<genre::GenreStats, AppError> {
     queries::genre::get_genre_by_id(db, id).await
-}
-
-/// Every track tagged with the given genre, in the list-view projection
-/// the shared `TrackList` component renders. Default order is the natural
-/// `sort_key` (title) — the UI re-sorts in memory for the visible sort
-/// header.
-pub async fn get_genre_tracks(
-    db: &DbPool,
-    genre_id: i64,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_tracks_by_genre_for_list(db, genre_id).await
 }

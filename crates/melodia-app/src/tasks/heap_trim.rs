@@ -1,12 +1,13 @@
-//! One-shot glibc heap trim ~5 s after startup.
+//! Two glibc heap trims after startup.
 //!
 //! Init-phase work — config load, DB pool warmup, folder-scan kickoff, Slint scene
 //! build — churns short-lived allocations, and glibc's arena retains the freed pages
 //! above its internal threshold rather than releasing them via
-//! `madvise(MADV_DONTNEED)`. A single `malloc_trim(0)` once that has settled hands
-//! the slack back to the kernel.
+//! `madvise(MADV_DONTNEED)`. The first `malloc_trim(0)` hands that slack back once it
+//! has settled. The second waits for the pool to close the connections the boot
+//! opened, whose page caches and statements free a few MiB more after the first.
 //!
-//! **It must stay one-shot.** A periodic trim was measured against the RSS climb
+//! **It must not become periodic.** A periodic trim was measured against the RSS climb
 //! over a long session with Now Playing open and produced no sawtooth at any
 //! cadence, because that growth is not reclaimable heap: `malloc_trim` releases only
 //! fully-free, page-aligned runs, and what grows is *live* — Wayland event closures
@@ -20,21 +21,36 @@
 
 use std::time::Duration;
 
+use tokio::time::Instant;
+
 use crate::tasks::TaskSpawner;
 use melodia_platform::services::platform::allocator::trim;
+use melodia_store::database::IDLE_CONNECTIONS_CLOSED_WITHIN;
 
-/// How long to let the startup churn settle before the one-shot trim.
-const STARTUP_DELAY: Duration = Duration::from_secs(5);
+/// How long to let the startup churn settle before the first trim.
+const AFTER_STARTUP: Duration = Duration::from_secs(10);
+
+/// How long past the pool closing the boot's connections the second trim waits, the reaper's tick
+/// being counted from the pool's creation rather than from this task's.
+const AFTER_POOL_CLOSES: Duration = Duration::from_secs(15);
+
+const TRIMS: [Duration; 2] =
+    [AFTER_STARTUP, IDLE_CONNECTIONS_CLOSED_WITHIN.saturating_add(AFTER_POOL_CLOSES)];
 
 pub fn spawn(spawner: &TaskSpawner) {
-    spawner.spawn_cancellable(|shutdown| async move {
-        tokio::select! {
-            biased;
-            () = shutdown.cancelled() => {}
-            () = tokio::time::sleep(STARTUP_DELAY) => {
-                trim();
+    let started = Instant::now();
+    spawner.spawn_cancellable(move |shutdown| async move {
+        for after in TRIMS {
+            tokio::select! {
+                biased;
+                () = shutdown.cancelled() => return,
+                () = tokio::time::sleep_until(started + after) => trim(),
             }
         }
     });
-    log::info!("Heap trim scheduled (5s after startup)");
+    log::info!(
+        "Heap trims scheduled ({}s and {}s after startup)",
+        TRIMS[0].as_secs(),
+        TRIMS[1].as_secs()
+    );
 }

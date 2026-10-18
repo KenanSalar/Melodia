@@ -3,12 +3,9 @@
 //! math, the diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
 //!
 //! Every list implements the same click semantics (plain click = single, Ctrl = toggle, Shift =
-//! range over the displayed order). The four list views get the whole of it from
-//! [`handle_row_click`], [`select_all_rows`] and [`clear_row_selection`], wired once by
+//! range over the displayed order). The four list views and the four details get the whole of it
+//! from [`handle_row_click`], [`select_all_rows`] and [`clear_row_selection`], wired once by
 //! `callbacks::track_list::wire_row_selection`.
-//!
-//! [`crate::ui::track_detail::selection`] is the other consumer of the trait: same accessors,
-//! cache-indexed selection with different complexity trade-offs.
 
 use std::collections::HashSet;
 use std::hash::BuildHasher;
@@ -104,8 +101,7 @@ pub fn stamp_rows_selected<S: BuildHasher>(
 ///
 /// Read off the Slint model rather than any view's cache, so one projection answers for every
 /// flat list: the model *is* the display order, post-filter and post-sort, whatever each view
-/// rebuilt it from. A detail reads its own cache instead, kept in lockstep with its model.
-/// Disk-only Browse rows are dropped here rather than at that view — they arrive
+/// rebuilt it from. Disk-only Browse rows are dropped here rather than at that view — they arrive
 /// `enabled == false` and all share `id == 0`, which an id-keyed selection cannot hold.
 pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
     (0..rows.row_count())
@@ -179,11 +175,9 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
     }
 }
 
-/// The per-view Slint surface both selection layers drive. Each global implements it by routing
+/// The per-view Slint surface the selection helpers drive. Each global implements it by routing
 /// through its auto-generated `get_*` / `set_*` accessors; the trait method names are deliberately
-/// distinct from those so the bodies are unambiguous. Here rather than in
-/// [`crate::ui::track_detail::selection`] because the *logic* differs between the two layers and
-/// the accessors don't.
+/// distinct from those so the bodies are unambiguous.
 pub trait RowSelectionView {
     /// The id of the row a shift-range runs from, or [`NO_ANCHOR`].
     fn anchor(&self) -> i32;

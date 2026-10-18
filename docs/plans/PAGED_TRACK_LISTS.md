@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked and measured with its new tests pending, Phase 3.5 open to discuss, Phase 4 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -115,19 +115,24 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `migrations/20261018000000_track_search_text.sql` (new, Phase 1) | `search_text TEXT NOT NULL DEFAULT ''` and the partial index over unfilled rows |
 | `crates/melodia-store/src/database/collation.rs` (new, Phase 1) | `UNICODE_LOWER`; `register` is called on the write, read and test pool options |
 | `crates/melodia-store/src/database/queries/track/keyset.rs` (new, Phase 1) | `track_ids` per scope with the sort arm and needle, read back as one packed row (Phase 2), the needle clause, and `detail_order` that `entity_ids` now takes its two orders from |
+| `crates/melodia-store/src/database/queries/track/membership.rs` (new, Phase 3) | `Membership`, moved out of `keyset.rs`: which tracks a scope holds, as the `FROM` and `WHERE` both the keysets and the scope facts start from |
+| `crates/melodia-store/src/database/queries/track/scope_facts.rs` (new, Phase 3) | `scope_facts` (count, running time, artist and album spread in one aggregate, which `get_favorite_stats` reads too) and `genre_lines` (each genre line with its track count, the album hero's genre chip) |
+| `crates/melodia-store/src/database/queries/track/list.rs` | `get_all_tracks_for_list`, the comparator's input, and Browse's fetches. The three per-entity `for_list` fetches went in Phase 3, with `get_playlist_tracks_for_list` and `get_smart_playlist_tracks` |
 | `crates/melodia-store/src/database/queries/track/ranking.rs` | `most_played_ids` and `most_played_favorite_ids`, beside `MOST_PLAYED_ORDER` |
 | `crates/melodia-store/src/database/queries/track/lookup.rs` | `get_track_list_rows_by_ids` (which also serves the queue sheet, every `QueueRow` field being on `TrackListRow`) and `get_most_played_by_ids`, sharing one in-order helper with the four by-id fetches that each spelled it |
 | `crates/melodia-store/src/database/queries/track/search_text.rs` (new, Phase 1) | `backfill_search_text`, paged by id, writing only rows still `''` |
 | `crates/melodia-store/src/database/queries/scan/mutations.rs` | writes `search_text` through `DerivedColumns`, which also took over the sort key all three writers computed |
-| `crates/melodia-app/src/library/keyset.rs` (new, Phase 1) | the library API over it |
+| `crates/melodia-app/src/library/keyset.rs` (new, Phase 1) | the library API over it, `facts` and `genre_lines` included (Phase 3) |
 | `crates/melodia-app/src/tasks/search_text_backfill.rs` (new, Phase 1) | the per-launch backfill, spawned beside `retroactive_hash` |
 | `crates/melodia-app/src/tasks/queue_window.rs` (new) | the window prefetch |
 | `crates/melodia-engine/src/player/engine/queue.rs` (510) | ids and orders |
 | `crates/melodia-engine/src/player/engine/queue_window.rs` (new) | `TrackWindow`. Keeps `handlers.rs` (666) from growing. `backend/mod.rs` (795) is not touched. |
-| `crates/melodia-views/src/ui/paged_rows/mod.rs` (new, Phase 2) | `PagedRows<R>`: the model, the row cache, the window and its one fetch, `ScrollPoint`, the selection, and the `KeysetTickets` that order a list's loads and keep a library change's re-read owed until one shows |
-| `crates/melodia-views/src/ui/paged_rows/track_rows.rs` (new, Phase 2) | `TrackRows` over `TrackListRow`: the placeholder, the fetcher, the seeded `load` and the cover prewarm |
+| `crates/melodia-views/src/ui/paged_rows/mod.rs` (new, Phase 2) | `PagedRows<R>`: the model, the row cache, the window and its one fetch, `ScrollPoint`, the selection, `move_row` for a drag (Phase 3), and the `KeysetTickets` that order a list's loads, keep a library change's re-read owed until one shows, and `revoke` every load out when a list is released (Phase 3) |
+| `crates/melodia-views/src/ui/paged_rows/track_rows.rs` (new, Phase 2) | `TrackRows` over `TrackListRow`: the placeholder, the fetcher, the seeded `load`, the cover prewarm, and `settle_reload`, the reload tail Songs, Favorites and the details share (Phase 3) |
 | `crates/melodia-views/src/ui/track_list_cache.rs` (498), `track_list_model.rs` (127) | deleted (Phase 2) |
-| `crates/melodia-views/src/ui/track_detail/cache.rs` (132) | the keyset and needle only |
+| `crates/melodia-views/src/ui/track_detail/cache.rs` (132) | `DetailCache<G>`: the global's weak handle, the entity, the sort and needle a load runs under, the tickets and the scroll point. No rows (Phase 3) |
+| `crates/melodia-views/src/ui/track_detail/load.rs` (new, Phase 3) | the list half of every detail's open (`Opening::seat`), reload and requery |
+| `crates/melodia-views/src/ui/track_detail/{filter,selection}.rs` | deleted (Phase 3); the details select through `wire_row_selection` like the flat lists |
 | `crates/melodia-views/src/ui/queue_sheet/links.rs` (106) | deleted; the album, artist and genre ids arrive with the row fetch |
 | `crates/melodia-views/src/ui/{favorites,recently_played}/rows.rs` | one `to_slint_most_played_row`, not two identical copies (`favorites/rows.rs:37`, `recently_played/rows.rs:34`) |
 
@@ -216,15 +221,70 @@ Sorts, release, the `track_ids` median on the 51k dev database (row-per-id at `3
 
 ## Phase 3: The four details
 
-Status: not started.
+Status: implemented, hand-checked and measured (2026-10-18), not committed. fmt, clippy and the full suite green; new tests wait for Kenan's go, so the phase stays open.
 
-- [ ] `DetailCache` keeps the keyset and needle. `seat_unfiltered`'s second copy (`cache.rs:79-84`) and the `VecModel` go.
-- [ ] `open_*_with` fetches ids sorted by the view's `resolve_view_sort` arm. `cross_tier.rs:347` keeps reading those literals.
-- [ ] Hero folds come from SQL aggregates.
-- [ ] Release the detail model on close.
-- [ ] Playlist drag-reorder and rollback work on the keyset.
+- [x] Each detail lists its entity as a `TrackRows` installed once per global. `DetailCache` keeps no rows: the entity, the sort and needle its loads run under, its `KeysetTickets` and the scroll point. `seat_unfiltered`, both row `Vec`s, the selection shadow and the `VecModel` went.
+- [x] `open_*_with` fetches the ids under the view's `resolve_view_sort` arm through `track_detail::load::open`, and its closure seats them (`Opening::seat`). `cross_tier`'s `DETAIL_DEFAULTS` still reads those literals in each `detail.rs`.
+  - An open overtaken by a load asked for on the page being left asks again under its own query; where a library change overtook it, that requery runs as the reload it owes.
+  - A header click and a keystroke requery in SQL; a library tick, a playlist edit and a play-count flush reload, re-reading the rows the list holds and, unfiltered, pruning the selection (`track_rows::settle_reload`, now shared with both Songs tabs).
+- [x] Hero facts come from SQL: `scope_facts` gives a smart playlist its count and running time and a genre or playlist its artist and album spread; `genre_lines` feeds `dominant_genre`, now a tally over weighted lines. `get_favorite_stats` reads its four numbers through `scope_facts` too.
+- [x] The detail model is released on close (`forget_closed`) and on a section leave, both through `track_detail::release_rows`, which also revokes every load still in flight. That revoke is the gate rather than a section-active check: a cross-tab drill seats its list before its section turns active.
+- [x] Playlist drag-reorder moves one id in the keyset (`PagedRows::move_row`), and the write's return, Ok or Err, requeries. The rollback is asking SQL what order it holds, which also corrects a refresh that landed mid-write and showed the order from before the drop. `position_order`, `rollback_reorder` and `PlaylistDetailState` went.
+- [x] Selection goes through the flat lists' `wire_row_selection`, which already answers a `TrackRows` without fetching a row. `DetailRows` went: hearts and stars, the Now Playing mirror included, patch through `track_detail::patch_row`.
+- [x] Deleted as dead once the details stopped reading them: `get_tracks_by_{album,artist,genre}_for_list`, `get_playlist_tracks_for_list`, `get_smart_playlist_tracks`, their five library wrappers, and `model_diff::permute_rows_by_id`. `hero_folds::fold_tracks` stays for Recently Played's capped Songs tab.
+- [x] Two visible differences, both deliberate:
+  - two genres that each hold an album's majority now resolve to the first in the commonest line's tag order, where an open and a refresh could disagree before;
+  - a refresh under a live filter no longer drops picks that left the entity, only an unfiltered one does, as on the Songs tabs.
+- [x] Tests the phase broke, fixed in the phase:
+  - `cross_tier`: the card tests read the page's rows by id over its own keyset, still sorted by the comparator; the detail parity test takes each page's rows off the whole table.
+  - `stats_tests`: the genre-page and guest-credit pins read the keyset, which is now the page.
+  - `smart_playlist_tests`: `resolve` stores the criteria as a playlist and reads its keyset, so the evaluator tests go through the page's own path, and the id projection is held to the page.
+  - `track_tests`: the three `for_list` order tests went with their functions.
+  - App `playlists_tests` and `playlist_files_tests` read titles through the export query and ids through the keyset.
+  - `hero_folds_tests` take weighted lines with the same expectations; `playlists_tests`' reorder-guard pin splits at the new end of the guard.
+- [x] Doc edits: `CLAUDE.md`'s "Models from background", `ui-patterns.md` (the paged-list, details, selection and hero-facts entries and the shared-helpers line) and `library-data.md` (the keyset paragraph, the card-order paragraph that replaced the `for_list` trap, and the ratings line).
+- [x] Hand check, passed by Kenan: every header sort and the playlist's return to its own order, the filter and the artist strip, every selection gesture, Play-row and Shuffle, hearts and stars from a row and the bar, drag-reorder, remove from playlist, a tag edit while open, close and reopen, a tab leave and return, a relaunch onto a persisted detail, a row menu's Go to, and Mouse-4/5, on an album, an artist, a genre and both a manual and a smart playlist. A smart playlist refusing a drag is the `!PlaylistDetail.playlist.is_smart` term `reorder-enabled` has carried since smart playlists landed, not a regression.
+- [ ] New tests, after the hand check: `move_row`'s bounds and notifications, `revoke`, `scope_facts` per scope (a smart playlist's limit and an empty scope among them), `genre_lines`' grouping and order, the weighted tie, and an overtaken open requerying.
 
-Memory: a 20k-track genre detail costs the keyset, not about 28 MB (estimate by code reading).
+Memory, 51k dev library, release, one launch per build on the dev folder with a 25-track queue, everything restored after (2026-10-18). Before is `main` at `065275c4` (the Phase 0 binary, sha256 `43d06cbc…`, on the pre-migration copy of the database); after is this branch's working tree (sha256 `46b3193b…`). The smart playlist is a seeded "Whole library" with empty rules, matching all 51,012 tracks. MiB:
+
+| Step | Before: Anonymous | Before: live heap | After: Anonymous | After: live heap |
+|---|---|---|---|---|
+| Idle, Synthwave playlist open | 36.6 | 16.07 | 41.0 | 16.40 |
+| Zydeco genre open (1,076 tracks) | 37.5 | 18.41 | 40.1 | 17.11 |
+| Zydeco closed, Genres grid | 35.7 | 17.06 | 37.5 | 16.33 |
+| Whole library open (51,012 tracks) | 100.8 | 82.22 | 40.1 | 18.77 |
+| Whole library closed, Playlists grid | 82.6 | 54.60 | 39.6 | 18.58 |
+
+- **Compare on live heap.** The after run was given one `malloc_trim(0)` by hand after its idle reading, which took Anonymous from 41.0 to 37.7 and left the live heap where it was, so its later Anonymous figures start 3.3 MiB lower than they would have.
+- **Idle is level in live data** (+0.33 MiB). The Anonymous gap is freed memory: after the trim the after run still held 5.07 MiB of sub-page fragments against before's 1.53, which no trim returns. Its idle was read once the pool had reaped the connection the Synthwave open made, that open having come after the settle.
+- **Whole library:** before held three arrays sized to the library (339.2, 264.0 and 88.0 B per track, 35.3 MB) plus about eleven owned strings per track, 513 row covers (3.46 MiB) and a 301.8 MB peak RSS; after holds one 409,584 B keyset (8.0 B per track) and 105 row covers (0.77 MiB). Closing it frees the keyset; before kept all three arrays after the close, `release_rows` emptying its two `Vec`s without freeing them and the Slint model living until the tab leave.
+- **A detail's own cost:** Zydeco added 2.34 MiB of live heap before and 0.71 after; closing it returned after to idle, where before kept 0.99 MiB until the tab leave. Most of the rise to Whole library closed is the Playlists grid's own covers (1.43 MiB of pixels against Genres' 0.33).
+- **After's peak RSS was 452 MB at boot,** file pages, not heap: each pooled connection that runs one of the boot's full scans of `tracks` maps nearly the whole 66 MiB file, and RSS counts every mapping (PSS 61 MiB, the file once). Not a regression: before on the same data mapped 244 MiB across four connections against after's 250 across five. Before's run read less only because its older database copy re-ingested at boot, SQLite serving those pages from the WAL.
+- **The mid-sized chunks after's census listed and before's didn't are in both builds:** two are `notify`'s inotify maps (6,318 path entries each, one per watched directory) and the third (307,184 B, holding only "Invalid context") is most likely the NVIDIA EGL driver's. The census lists mmapped chunks only, and glibc places a block of that size in the arena or in its own mapping by what the heap looks like at the time.
+- **Freed-but-resident at idle was 2.84 MiB trimmable**, past this plan's 2 MiB threshold for adding a trim (Checked and left alone), the one boot trim at 5 s running before the folder rescan and the 120 s pool reap. `tasks::heap_trim` now trims at 10 s and 15 s after the pool's boot connections close (135 s), not yet measured.
+
+## Phase 3.5 (open to discuss): index the boot's whole-table reads
+
+Status: not decided. Kenan investigates and discusses this before anything here is implemented.
+
+**What you see today.** For the first two minutes after launch RSS sits around 370 to 430 MB on the 51k library, in both builds (Phase 3's Memory). It is file pages, not heap: every pooled connection that runs one of the boot's full scans of `tracks` (34.3 MiB) maps nearly the whole 66 MiB database, and RSS counts each mapping. They go when the pool closes the boot's connections at the 120 s reap.
+
+**What would change.** Two partial indexes, so the per-launch checks read an index instead of the table:
+- `tracks(artwork_path) WHERE artwork_path IS NOT NULL AND artwork_path <> ''` for the artwork reference set (`queries::artwork::REFERENCED_PATHS` and its library arms), which the boot reads four times: the sweep, the renormalize pass, and the scan repair once per folder.
+- `tracks(id) WHERE file_hash IS NULL` for `retroactive_hash`'s per-launch check, the shape `search_text`'s backfill already uses.
+
+No query or Rust code changes. On a copy of the dev database (2026-10-18) both plans switched: the reference set to a covering scan of a 3.66 MiB index, the hash check to an empty partial index. What still reads the whole table is the folder rescan (one connection) and a smart playlist's recount where its rule can't use an index.
+
+**No new migration.** Both indexes go into this branch's own `20261018000000_track_search_text.sql`, which no release has shipped. An existing dev database has already applied it, so sqlx's checksum check refuses the edited file there: reset `Melodia-dev` from `backups/melodia-v20261014000000.db` (or another pre-migration copy) before the first launch, as Phase 1's first run did.
+
+**Estimates, to be replaced by measurement:** boot database mappings from about 250 MiB to about 60 to 120 MiB, so boot RSS around 190 to 300 MB instead of 370 to 430, for those two minutes. Anonymous and live heap unchanged. The four reference-set scans (22 to 24 ms each in the boot log) and the hash check (6.5 ms) become index reads.
+
+**Costs:**
+- Disk: +3.66 MiB for the artwork index, which stays for as long as the index exists and grows with the number of tracks holding a cover. The hash index stays at one page once the library is hashed.
+- Writes: every insert or update of a track's cover also updates the artwork index; it matters mostly on a large first import.
+
+**Measured when implemented**, on the same data before and after: the boot sampling Phase 3's investigation used (database mappings, RSS and PSS at 3, 8, 30 and 125 s), the boot statements' timings from the sqlx log, Anonymous at idle, and the time a full rescan of the 50.5k folder takes. **Dropped if any of those regress.**
 
 ## Phase 4: Queue as ids, plus the queue sheet and Up Next
 
@@ -252,27 +312,11 @@ Status: not started.
 
 Memory: Play all and queue sheet open both within the [Targets](#targets), and closing the sheet returns to the Play-all reading.
 
-## Phase 5: Most Played
-
-Status: not started.
-
-- [ ] Both grids take a keyset of `(id, play_count)` and a memoized chunk model. The two `to_slint_most_played_row` copies become one.
-
-Memory: Most Played on a library with many played tracks costs the keyset.
-
-## Phase 6: Docs
-
-Status: not started.
-
-- [ ] README Footprint: re-run both tables, and add the Songs / Play all / Queue sheet rows the old protocol never exercised.
-- [ ] `.claude/rules/ui-patterns.md`: the "Lists and playback" and "Covers" entries naming `TrackListModel` and the queue sheet's globals.
-- [ ] `.claude/rules/audio-stack.md`: the queue holds ids and the window.
-
-## Phase 7 (to discuss): the card grids and Browse
+## Phase 4.5 (to discuss): the card grids and Browse
 
 Status: not decided. Kenan investigates and discusses this before anything here is planned.
 
-**The question:** Phase 5 gives the two Most Played grids a keyset and a memoized chunk model (decision 8), because they rank tracks and so grow with the library. If that chunk model comes out generic, should every surface that draws a grid take it, or only the ones that can grow that large?
+**The question:** Phase 5 gives the two Most Played grids a keyset and a memoized chunk model (decision 8), because they rank tracks and so grow with the library. Should every surface that draws a grid take that model, or only the ones that can grow that large? The answer decides whether Phase 5 builds it generic or for Most Played alone.
 
 - **The surfaces to decide on:**
   - My Library's four grid tabs: Albums, Artists, Genres and Playlists. They grow with the entity count, not the track count: 4,806 albums, 3,098 artists and 497 genres on the 51k dev library (Evidence). Playlists are the user's own.
@@ -290,6 +334,22 @@ Status: not decided. Kenan investigates and discusses this before anything here 
 - **The outcome:** for each surface, keep it in memory as it is, or page it in a phase of its own.
 
 Memory: unmeasured.
+
+## Phase 5: Most Played
+
+Status: not started.
+
+- [ ] Both grids take a keyset of `(id, play_count)` and a memoized chunk model. The two `to_slint_most_played_row` copies become one.
+
+Memory: Most Played on a library with many played tracks costs the keyset.
+
+## Phase 6: Docs
+
+Status: not started.
+
+- [ ] README Footprint: re-run both tables, and add the Songs / Play all / Queue sheet rows the old protocol never exercised.
+- [ ] `.claude/rules/ui-patterns.md`: the "Lists and playback" and "Covers" entries naming `TrackListModel` and the queue sheet's globals.
+- [ ] `.claude/rules/audio-stack.md`: the queue holds ids and the window.
 
 ## Targets
 

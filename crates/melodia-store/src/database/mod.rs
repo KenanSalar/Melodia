@@ -236,6 +236,11 @@ const MMAP_SIZE: &str = "268435456";
 /// both footprint scripts in `scripts/` size their settle past.
 const IDLE_TIMEOUT: Duration = Duration::from_mins(1);
 
+/// By when the pool has closed a connection left idle since launch: [`IDLE_TIMEOUT`] twice, the
+/// reaper's first check finding it not yet idle long enough.
+pub const IDLE_CONNECTIONS_CLOSED_WITHIN: Duration =
+    Duration::from_secs(IDLE_TIMEOUT.as_secs() * 2);
+
 pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     let db_path = paths.db_path.clone();
     let db_url = format!("sqlite:{}", db_path.display());

@@ -6,18 +6,8 @@
 use crate::state::AppState;
 use melodia_core::entities::playlist::{Playlist, PlaylistStats};
 use melodia_core::entities::smart_criteria::SmartCriteria;
-use melodia_core::entities::track::TrackListRow;
 use melodia_core::error::{AppError, describe};
 use melodia_store::database::{DbPool, queries};
-
-/// Resolve a smart playlist's current membership from its criteria (ordered and
-/// capped per the criteria's optional limit).
-pub async fn evaluate(
-    db: &DbPool,
-    criteria: &SmartCriteria,
-) -> Result<Vec<TrackListRow>, AppError> {
-    queries::smart_playlist::get_smart_playlist_tracks(db, criteria).await
-}
 
 /// `(track_count, total_duration_ms)` for a smart playlist, whose stats can't come from the
 /// `playlist_items` triggers.

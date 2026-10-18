@@ -100,13 +100,7 @@ async fn reload_tracks(
     let unfiltered = needle.is_empty();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         show_tracks(&ui, &fav_ui, ticket, keyset, |g, model| {
-            model.reread();
-            fav_ui.state().song_tickets.reload_shown(ticket);
-            // A filtered keyset no longer holds the rows the filter hides, and a filter drops no
-            // pick, so only an unfiltered one can say which picks the favourites have lost.
-            if unfiltered {
-                list_selection::keep_selection_within(g, || model.row_ids().into_iter().collect());
-            }
+            track_rows::settle_reload(g, model, &fav_ui.state().song_tickets, ticket, unfiltered);
         });
     });
     Ok(())

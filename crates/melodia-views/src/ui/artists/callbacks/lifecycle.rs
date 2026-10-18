@@ -10,17 +10,17 @@ use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
-use crate::ui::list_selection::NO_ANCHOR;
+use crate::ui::list_selection;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::{TrackDetail, restore};
+use crate::ui::track_detail::{self, TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
     AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, Artists,
-    CardSelection, TrackListRow as UiTrackListRow,
+    CardSelection,
 };
 
 /// Wire the Artists section-lifecycle callbacks. See [`super::wire`].
@@ -58,10 +58,9 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsU
 
             let d = ui.global::<ArtistDetail>();
             release_detail_hero_images(&ui, &d);
-            clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "artists: clear detail tracks");
+            track_detail::release_rows(&*au, &d);
             clear_vec_model::<UiAlbumRow>(&d.get_albums(), "artists: clear detail albums");
-            clear_vec_model::<i32>(&d.get_selected_ids(), "artists: clear detail selection");
-            d.set_selection_anchor(NO_ANCHOR);
+            list_selection::clear_row_selection(&d);
             // The card grid's set goes back with the models it describes;
             // `card-selection.slint` argues why it cannot outlive the leave.
             ui.global::<CardSelection>().invoke_clear();

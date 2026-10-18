@@ -14,7 +14,9 @@ use melodia_core::entities::smart_criteria::{
     ops_for,
 };
 use melodia_core::entities::track::TrackListRow;
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 
 /// RFC-3339 timestamp `n` days before now — for staging `last_played`.
 fn days_ago(n: i64) -> String {
@@ -78,8 +80,21 @@ fn ids(rows: &[TrackListRow]) -> HashSet<i64> {
     rows.iter().map(|r| r.id).collect()
 }
 
+/// What a smart playlist's page lists under `c`, in its own order: the criteria stored as a
+/// playlist, its keyset, then the rows behind it.
 async fn resolve(db: &DbPool, c: &SmartCriteria) -> Result<Vec<TrackListRow>, AppError> {
-    queries::smart_playlist::get_smart_playlist_tracks(db, c).await
+    let criteria = c.to_json().map_err(|e| AppError::io("serialize smart_criteria", e))?;
+    let playlist =
+        queries::playlist::create_smart_playlist(db, "Resolved", None, &criteria).await?;
+    let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
+    let ids = queries::track::track_ids(
+        db,
+        TrackListScope::Playlist(playlist.id),
+        own_order,
+        &Needle::default(),
+    )
+    .await?;
+    queries::track::get_track_list_rows_by_ids(db, &ids).await
 }
 
 #[tokio::test]
@@ -738,12 +753,12 @@ async fn an_exported_row_carries_what_its_entry_is_written_from() -> Result<(), 
     Ok(())
 }
 
-/// The card menu's batch actions resolve a smart playlist through the id projection rather than
-/// the row one, so the two have to answer identically. Order and cap are the halves a narrowed
-/// projection can lose in silence, and a different order means the same playlist queues one way
-/// from its page and another from the card beside it.
+/// The card menu's batch actions resolve a smart playlist through the id projection and its page
+/// through the keyset, so the two have to answer identically. Order and cap are the halves either
+/// can lose in silence, and a different order means the same playlist queues one way from its page
+/// and another from the card beside it.
 #[tokio::test]
-async fn the_id_projection_answers_in_the_row_projection_s_order() -> Result<(), AppError> {
+async fn the_id_projection_answers_in_the_page_s_order() -> Result<(), AppError> {
     let s = seed().await?;
     let c = SmartCriteria {
         rules: vec![Rule {
@@ -759,7 +774,7 @@ async fn the_id_projection_answers_in_the_row_projection_s_order() -> Result<(),
     let ids = queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?;
 
     assert_eq!(ids, rows.iter().map(|r| r.id).collect::<Vec<i64>>());
-    assert_eq!(ids, [s.t1, s.t3], "the cap and the order are both the row query's");
+    assert_eq!(ids, [s.t1, s.t3], "the cap and the order are both the page's");
     Ok(())
 }
 

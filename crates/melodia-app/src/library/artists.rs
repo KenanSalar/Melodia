@@ -4,7 +4,7 @@
 //! bridge (`melodia-views`' `ui/artists/`) does the in-memory sorting / filtering /
 //! chunking.
 
-use melodia_core::entities::{album, artist, track};
+use melodia_core::entities::{album, artist};
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
@@ -29,14 +29,4 @@ pub async fn get_artist_albums(
     artist_id: i64,
 ) -> Result<Vec<album::AlbumStats>, AppError> {
     queries::album::get_albums_by_artist(db, artist_id).await
-}
-
-/// Every track credited to the artist, in the list-view projection the
-/// shared `TrackList` component renders. Default order is the natural
-/// `sort_key` (title) — the UI re-sorts in memory for the visible sort pill.
-pub async fn get_artist_tracks(
-    db: &DbPool,
-    artist_id: i64,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_tracks_by_artist_for_list(db, artist_id).await
 }

@@ -1,11 +1,10 @@
 //! What the four track-list details (Album, Artist, Genre and Playlist) share: the Slint surface
-//! of their globals, the view handle the shared wiring drives, the Rust-side cache, and the
-//! launch's reopen. The wiring itself is [`crate::ui::callbacks::track_detail`].
+//! of their globals, the view handle the shared wiring drives, the list each keeps as a keyset,
+//! and the launch's reopen. The wiring itself is [`crate::ui::callbacks::track_detail`].
 
 mod cache;
-pub mod filter;
+pub mod load;
 pub mod restore;
-pub mod selection;
 
 pub use cache::DetailCache;
 
@@ -15,8 +14,11 @@ use slint::{ModelRc, SharedString};
 
 use crate::ui::list_selection::RowSelectionView;
 use crate::ui::my_library::MyLibraryTab;
+use crate::ui::paged_rows::track_rows::TrackRows;
 use crate::ui::section_state::SectionState;
 use crate::ui::track_list_view::{TrackListActions, TrackListColumnState};
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
+use melodia_core::entities::track_list::TrackListScope;
 use melodia_ui::{
     AlbumDetail, ArtistDetail, GenreDetail, PlaylistDetail, TrackListRow as UiTrackListRow,
 };
@@ -100,21 +102,27 @@ pub trait TrackDetail: Send + Sync + 'static {
     /// The My Library tab the detail opens over.
     const TAB: MyLibraryTab;
 
-    fn cache(&self) -> &DetailCache;
+    fn cache(&self) -> &DetailCache<Self::Global>;
 
     fn section(&self) -> &SectionState;
+
+    /// The row tier the rows a load opens on are warmed into.
+    fn row_covers(&self) -> &Arc<CoverThumbs>;
+
+    /// The tracks the detail of entity `id` lists.
+    fn scope(id: i64) -> TrackListScope;
 
     fn detail_open(&self) -> bool {
         self.cache().id() >= 0
     }
 
-    fn resort(&self, g: &Self::Global) {
-        self.cache().resort(g);
-    }
+    /// Narrows whatever else on the page the filter box describes. Artist Detail's Albums strip
+    /// is the one.
+    fn refilter_beside(&self, _g: &Self::Global) {}
 
-    fn refilter(&self, g: &Self::Global) {
-        filter::apply_filtered_detail(g, self.cache());
-    }
+    /// A load is about to show ids other than the ones on screen, so anything keyed on a row index
+    /// is stale. Playlist Detail's drag is the one.
+    fn rows_moving(&self, _g: &Self::Global) {}
 
     /// Drops the detail's Rust-side state once its id is back to `-1`.
     fn clear_detail(&self) {
@@ -122,40 +130,33 @@ pub trait TrackDetail: Send + Sync + 'static {
     }
 }
 
-/// A detail's cached rows and its model, for a heart or a star landing on a track it may list.
-/// Neither changes list membership, so both patch in place: no re-fetch, and the scroll holds.
-pub struct DetailRows<V: TrackDetail> {
-    view: Arc<V>,
-    global: slint::Weak<V::Global>,
+/// The ids the detail shows, in order, for a play or a shuffle.
+pub fn displayed_ids<G: DetailGlobal>(g: &G) -> Vec<i64> {
+    TrackRows::ids_of(&g.track_rows(), G::VIEW_ID)
 }
 
-// By hand, a derive bounding `V: Clone` where only the `Arc` is cloned.
-impl<V: TrackDetail> Clone for DetailRows<V> {
-    fn clone(&self) -> Self {
-        Self { view: self.view.clone(), global: self.global.clone() }
-    }
+/// Patch the row showing `id` after a heart or a star, a no-op where the detail doesn't list it.
+/// Neither moves a track in or out of a detail, so nothing is fetched and the scroll holds. Safe
+/// from any thread.
+pub fn patch_row<V: TrackDetail>(
+    view: &V,
+    id: i64,
+    edit: impl FnOnce(&mut UiTrackListRow) + Send + 'static,
+) {
+    let _ = view.cache().global().upgrade_in_event_loop(move |g| {
+        let rows = g.track_rows();
+        if let Some(model) = TrackRows::installed(&rows, V::VIEW_ID) {
+            model.patch(id, edit);
+        }
+    });
 }
 
-impl<V: TrackDetail> DetailRows<V> {
-    pub fn new(view: &Arc<V>, global: slint::Weak<V::Global>) -> Self {
-        Self { view: view.clone(), global }
-    }
-
-    /// A no-op where the track isn't listed. Safe from any thread.
-    pub fn mirror_favorite(&self, id: i64, fav: bool) {
-        self.view.cache().flip_favorite(id, fav);
-        self.patch_row(id, move |r| r.is_favorite = fav);
-    }
-
-    /// [`Self::mirror_favorite`]'s star-rating twin.
-    pub fn mirror_rating(&self, id: i64, rating: i32) {
-        self.view.cache().flip_rating(id, rating);
-        self.patch_row(id, move |r| r.rating = rating);
-    }
-
-    fn patch_row(&self, id: i64, patch: impl Fn(&mut UiTrackListRow) + Send + 'static) {
-        let _ = self.global.upgrade_in_event_loop(move |g| {
-            crate::ui::model_patch::patch_track_row_by_id(&g.track_rows(), id, patch);
-        });
+/// Empty the detail's list, its ids and cached rows with it, and refuse every load still on its
+/// way to it. For a close and a section leave. UI thread.
+pub fn release_rows<V: TrackDetail>(view: &V, g: &impl DetailGlobal) {
+    view.cache().tickets.revoke();
+    let rows = g.track_rows();
+    if let Some(model) = TrackRows::installed(&rows, V::VIEW_ID) {
+        model.clear();
     }
 }

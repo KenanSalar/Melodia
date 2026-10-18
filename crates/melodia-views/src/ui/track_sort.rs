@@ -6,8 +6,8 @@
 //! `match field → sort_by_cached_key → reverse-if-desc` shape behind a generic accessor.
 //!
 //! These arms answer a header click on every list held in memory, and the SQL keyset that
-//! orders the two Songs tabs reproduces them arm for arm, `crates/melodia/tests/cross_tier.rs`
-//! holding the two together. `ui::tests::track_sort_tests` pins which tokens can reach them.
+//! orders the two Songs tabs and the four details reproduces them arm for arm,
+//! `crates/melodia/tests/cross_tier.rs` holding the two together. `ui::tests::track_sort_tests` pins which tokens can reach them.
 //!
 //! `sort_by_cached_key` is deliberate: a plain `sort_by` would re-`to_lowercase()` both
 //! operands on every one of its `O(n log n)` comparisons. `field` is fixed for the whole
@@ -161,9 +161,9 @@ fn sort_rows<T, F, R, S>(
     }
 }
 
-/// Sort a detail view's `TrackListRow` slice in place, with the track title as the
-/// tie-breaker — the shared shape for the Album / Artist / Genre detail lists. Playlist
-/// Detail has its own position-aware variant and doesn't use this.
+/// Sort a `TrackListRow` slice in place the way a detail page orders it, the track title
+/// breaking ties. The pages sort in SQL now, so this is the comparator `cross_tier` holds
+/// their keyset arms to.
 pub fn sort_track_list_rows(rows: &mut [RsTrackListRow], field: &str, dir: &str) {
     sort_track_rows_by(rows, field, dir, |r| r, |r| r.title.to_lowercase());
 }

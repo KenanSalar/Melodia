@@ -1,7 +1,7 @@
 //! The track ids behind a set of entities, for the card grids' right-click actions.
 //!
-//! Id-only and batched, where the `for_list` siblings are per-entity and return whole rows: queueing
-//! five albums is one statement rather than five that fetch a projection the caller throws away.
+//! Batched, where a page's keyset is one entity's: queueing five albums is one statement rather
+//! than five.
 //!
 //! **Each returns `(entity_id, track_id)` pairs, per-entity order preserved, grouping left to the
 //! caller.** `chunked_in_query` splits on the *entity* ids, so every one of an entity's rows lands
@@ -14,13 +14,11 @@ use melodia_core::entities::track_list::TrackSortField;
 use melodia_core::error::AppError;
 
 /// Album tracks in the order Album Detail defaults to: `ui::track_sort`'s `"track_number"` arm,
-/// not the bare columns [`super::get_tracks_by_album_for_list`] spells.
+/// not the bare disc and track columns.
 ///
-/// **That sibling's `ORDER BY` is overwritten by an in-memory re-sort where this one is what
-/// plays**, so the two have to be read separately. They disagree on NULL, which both columns
-/// allow: `SQLite` sorts it first and the comparator sorts an untagged track last, which the arm
-/// closes. It gives up the ordering half of `idx_tracks_album_disc_track` to sort sets one album
-/// wide; the `album_id` lookup still uses it.
+/// The two disagree on NULL, which both columns allow: `SQLite` sorts it first and the comparator
+/// sorts an untagged track last, which the arm closes. It gives up the ordering half of
+/// `idx_tracks_album_disc_track` to sort sets one album wide; the `album_id` lookup still uses it.
 pub async fn track_ids_by_albums(
     db: &DbPool,
     album_ids: &[i64],
@@ -37,14 +35,13 @@ pub async fn track_ids_by_albums(
 }
 
 /// Artist tracks in the order Artist Detail defaults to: by album, then title, which is
-/// `ui::track_sort`'s `"album"` arm. **Not `sort_key`**, the `for_list` sibling's order, which an
-/// in-memory re-sort overwrites there. Copying it queues a catalogue alphabetically by title
-/// under a page that shows it by album.
+/// `ui::track_sort`'s `"album"` arm. **Not `sort_key`**, which queues a catalogue alphabetically
+/// by title under a page that shows it by album.
 ///
-/// **Joins where [`super::get_tracks_by_artist_for_list`] deliberately doesn't**, the artist id
-/// having to be in the projection for the caller to group on. So a row repeats both across
-/// selected artists and inside one that credits the same artist twice, and the caller's dedupe is
-/// what covers the second case here.
+/// **Joins where the page's keyset deliberately doesn't**, the artist id having to be in the
+/// projection for the caller to group on. So a row repeats both across selected artists and inside
+/// one that credits the same artist twice, and the caller's dedupe is what covers the second case
+/// here.
 pub async fn track_ids_by_artists(
     db: &DbPool,
     artist_ids: &[i64],

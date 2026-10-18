@@ -9,18 +9,17 @@ use slint::ComponentHandle;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
-use crate::ui::list_selection::NO_ANCHOR;
+use crate::ui::list_selection;
 use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::{TrackDetail, restore};
+use crate::ui::track_detail::{self, TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
     AppWindow, CardSelection, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
-    TrackListRow as UiTrackListRow,
 };
 
 /// Wire the Playlists section-lifecycle callbacks. See
@@ -53,9 +52,8 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
 
             let d = ui.global::<PlaylistDetail>();
             release_detail_hero_images(&ui, &d);
-            clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "playlists: clear detail tracks");
-            clear_vec_model::<i32>(&d.get_selected_ids(), "playlists: clear detail selection");
-            d.set_selection_anchor(NO_ANCHOR);
+            track_detail::release_rows(&*pu, &d);
+            list_selection::clear_row_selection(&d);
             // The card grid's set goes back with the models it describes;
             // `card-selection.slint` argues why it cannot outlive the leave.
             ui.global::<CardSelection>().invoke_clear();

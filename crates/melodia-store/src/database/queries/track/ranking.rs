@@ -7,6 +7,7 @@ use super::columns;
 use super::keyset::push_needle;
 use crate::database::DbPool;
 use melodia_core::entities::track;
+use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
 
@@ -24,16 +25,7 @@ const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added D
 /// Aggregate stats for the Favorites hero header: count, total duration, the artist and album
 /// spread, up to 4 artwork paths.
 pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
-    // `COUNT(DISTINCT …)` skips NULLs, so a track with no album adds none, and an untagged artist
-    // is the one unknown-artist row, as `ui::hero_folds::fold_tracks` reads the same two columns
-    // off a list's rows.
-    let (count, total_duration_ms, artists, albums): (i64, i64, i64, i64) = sqlx::query_as(
-        "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), \
-                COUNT(DISTINCT artist_id), COUNT(DISTINCT album_id) \
-           FROM tracks WHERE is_favorite = TRUE",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let facts = super::scope_facts(db, TrackListScope::Favorites).await?;
 
     // Up to 4 *distinct* artworks for the Favorites banner collage: walk the
     // favourites in `MOST_PLAYED_ORDER` and keep each cover's best slot, which
@@ -60,7 +52,13 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
     .fetch_all(db.read())
     .await?;
 
-    Ok(track::FavoriteStats { count, total_duration_ms, artists, albums, artwork_paths })
+    Ok(track::FavoriteStats {
+        count: facts.tracks,
+        total_duration_ms: facts.duration_ms,
+        artists: facts.artists,
+        albums: facts.albums,
+        artwork_paths,
+    })
 }
 
 /// Favorite tracks by play count, most played first (only those with `play_count` > 0), ordered

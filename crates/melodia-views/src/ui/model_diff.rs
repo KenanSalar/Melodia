@@ -1,6 +1,5 @@
 //! Reusable `VecModel<T>` swap helpers. [`apply_rows_keyed`] prefers per-row updates over
-//! full-model replacement; [`permute_rows_by_id`] and [`replace_rows`] are the two whose
-//! job the replacement is.
+//! full-model replacement; [`replace_rows`] is the one whose job the replacement is.
 //!
 //! Slint's `VecModel::set_vec` fires a `reset()` that tears down and re-instantiates every
 //! visible `ListView` delegate; `set_row_data` only fires `row_changed`, so the delegate
@@ -11,8 +10,6 @@
 //! `slint::Image`'s equality bottoms out in a pointer compare on the shared pixel buffer,
 //! so two rows handed the same cached cover compare equal without touching the data. A
 //! false "changed" verdict is the only possible error and it just writes the row.
-
-use std::collections::HashMap;
 
 use slint::{Model, ModelRc, VecModel};
 
@@ -54,34 +51,6 @@ where
     }
     vec_model.set_vec(new_rows);
     true
-}
-
-/// Reorder a `VecModel<T>`-backed model into `order`, matching rows by the identity `id_of`
-/// extracts. Ids naming no row are dropped, and rows `order` doesn't name go with them.
-///
-/// Moving each existing row rather than rebuilding it is the point — no decode, no `format!`,
-/// no `SharedString` alloc — and each row carries its `selected` flag along, which is why the
-/// four detail views only re-sync selection defensively afterwards. `set_vec` on purpose: a
-/// permutation is structural, so [`apply_rows_keyed`] would fall back to one anyway.
-pub fn permute_rows_by_id<T, F>(model: &ModelRc<T>, order: &[i32], id_of: F)
-where
-    T: Clone + 'static,
-    F: Fn(&T) -> i32,
-{
-    let Some(vec_model) = model.as_any().downcast_ref::<VecModel<T>>() else {
-        // The caller has already sorted its Rust caches, and every index-to-track lookup it
-        // serves reads those, so a silent bail leaves the two disagreeing rather than idle.
-        log::warn!("permute_rows_by_id: VecModel downcast failed, rows left in the old order");
-        return;
-    };
-    let mut by_id: HashMap<i32, T> = HashMap::with_capacity(vec_model.row_count());
-    for i in 0..vec_model.row_count() {
-        if let Some(row) = vec_model.row_data(i) {
-            by_id.insert(id_of(&row), row);
-        }
-    }
-    let reordered: Vec<T> = order.iter().filter_map(|id| by_id.remove(id)).collect();
-    vec_model.set_vec(reordered);
 }
 
 /// Swap `rows` into a `VecModel<T>`-backed model, or log under `label` and leave the model alone

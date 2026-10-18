@@ -3,12 +3,13 @@
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Global as _};
+use slint::ComponentHandle;
 
 use super::artwork::open_edit_artwork;
 use crate::ui::callbacks::track_detail;
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
+use crate::ui::track_detail::load;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -16,7 +17,7 @@ use melodia_ui::{AppWindow, PlaylistDetail};
 
 /// Wire the `PlaylistDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    track_detail::wire(&ui.global::<PlaylistDetail>().as_weak(), state, playlists_ui);
+    track_detail::wire(state, playlists_ui);
     wire_close(ui, state, playlists_ui);
     wire_reorder(ui, state, playlists_ui);
     wire_edit_artwork(ui, state, playlists_ui);
@@ -44,8 +45,9 @@ fn wire_close(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>)
     });
 }
 
-/// A row drag released. Optimistically permutes the visible rows and the position-order cache,
-/// then writes; a failed write rolls both back.
+/// A row drag released. Optimistically moves the row, writes, then asks the database for the
+/// order it holds: a failed write is rolled back that way, and a refresh that landed mid-write and
+/// showed the order from before the drop is put right.
 fn wire_reorder(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
@@ -65,22 +67,17 @@ fn wire_reorder(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi
         if playlist_id < 0 {
             return;
         }
-        let Some(previous_order) =
-            playlists_ui_mod::apply_optimistic_reorder(&ui, &pu, from_u, to_u)
-        else {
+        if !playlists_ui_mod::apply_optimistic_reorder(&ui, &pu, from_u, to_u) {
             return;
-        };
+        }
         let s = s.clone();
         let pu = pu.clone();
-        let weak = weak.clone();
         s.runtime.clone().spawn(async move {
             if let Err(e) = library::playlists::reorder_playlist(&s.db, playlist_id, from, to).await
             {
                 log::warn!("playlists::reorder: {}", describe(&e));
-                let _ = weak.upgrade_in_event_loop(move |ui| {
-                    playlists_ui_mod::rollback_reorder(&ui, &pu, previous_order);
-                });
             }
+            load::requery(&s, &pu);
         });
     });
 }

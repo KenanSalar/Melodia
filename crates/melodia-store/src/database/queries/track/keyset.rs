@@ -8,10 +8,9 @@
 
 use sqlx::{QueryBuilder, Sqlite};
 
+use super::membership::Membership;
 use crate::database::DbPool;
 use crate::database::collation::UNICODE_LOWER;
-use crate::database::queries::smart_playlist::push_positioned_membership;
-use melodia_core::entities::smart_criteria::SmartCriteria;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
@@ -45,10 +44,12 @@ pub async fn track_ids(
         QueryBuilder::<Sqlite>::new("SELECT group_concat(id, ',') FROM (SELECT t.id FROM ");
     membership.push_source(&mut qb);
     if !needle.is_empty() {
-        qb.push(if membership.narrows() { " AND " } else { " WHERE " });
+        membership.push_and(&mut qb);
         push_needle(&mut qb, needle);
     }
-    qb.push(" ORDER BY ").push(order_by(membership.page(), order, membership.position())).push(")");
+    qb.push(" ORDER BY ")
+        .push(order_by(Page::of(&membership), order, membership.position()))
+        .push(")");
     let packed: Option<String> =
         qb.build_query_scalar().persistent(false).fetch_one(db.read()).await?;
     packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
@@ -100,6 +101,13 @@ enum Page {
 }
 
 impl Page {
+    fn of(membership: &Membership) -> Self {
+        match membership {
+            Membership::Library | Membership::Favorites => Self::Songs,
+            _ => Self::Detail,
+        }
+    }
+
     fn tie_break(self) -> String {
         match self {
             Self::Songs => NATURAL.to_owned(),
@@ -156,105 +164,4 @@ fn order_by(page: Page, order: TrackOrder, position: Option<&str>) -> String {
 /// NULL would sort ahead of, then folded through `to_lowercase()`.
 fn lowered(column: &str) -> String {
     format!("COALESCE({column}, '') COLLATE {UNICODE_LOWER}")
-}
-
-/// Where a list's tracks come from.
-enum Membership {
-    Library,
-    Favorites,
-    Album(i64),
-    Artist(i64),
-    Genre(i64),
-    ManualPlaylist(i64),
-    SmartPlaylist(SmartCriteria),
-}
-
-impl Membership {
-    /// A playlist is the one scope that can't say where its tracks come from without asking: a
-    /// smart one has no `playlist_items` rows and resolves through its stored criteria. One that
-    /// no longer exists reads as an empty manual playlist.
-    async fn resolve(db: &DbPool, scope: TrackListScope) -> Result<Self, AppError> {
-        Ok(match scope {
-            TrackListScope::Library => Self::Library,
-            TrackListScope::Favorites => Self::Favorites,
-            TrackListScope::Album(id) => Self::Album(id),
-            TrackListScope::Artist(id) => Self::Artist(id),
-            TrackListScope::Genre(id) => Self::Genre(id),
-            TrackListScope::Playlist(id) => {
-                let verdict: Option<(bool, Option<String>)> =
-                    sqlx::query_as("SELECT is_smart, smart_criteria FROM playlists WHERE id = ?")
-                        .bind(id)
-                        .fetch_optional(db.read())
-                        .await?;
-                match verdict {
-                    Some((true, criteria)) => {
-                        Self::SmartPlaylist(SmartCriteria::from_json_opt(criteria.as_deref()))
-                    }
-                    _ => Self::ManualPlaylist(id),
-                }
-            }
-        })
-    }
-
-    fn page(&self) -> Page {
-        match self {
-            Self::Library | Self::Favorites => Page::Songs,
-            _ => Page::Detail,
-        }
-    }
-
-    /// Whether [`Self::push_source`] already opened a `WHERE`.
-    fn narrows(&self) -> bool {
-        !matches!(self, Self::Library | Self::SmartPlaylist(_))
-    }
-
-    fn position(&self) -> Option<&'static str> {
-        match self {
-            Self::ManualPlaylist(_) | Self::SmartPlaylist(_) => Some("m.position"),
-            _ => None,
-        }
-    }
-
-    /// Pushes the `FROM`, and the `WHERE` that narrows it to this membership where one does. An
-    /// artist or genre is matched through its join table with `IN` rather than a join, for
-    /// `get_tracks_by_artist_for_list`'s reason: a credit naming one artist twice would join a
-    /// track in twice.
-    fn push_source(&self, qb: &mut QueryBuilder<Sqlite>) {
-        match self {
-            Self::Library => {
-                qb.push("tracks t");
-            }
-            Self::Favorites => {
-                qb.push("tracks t WHERE t.is_favorite = TRUE");
-            }
-            Self::Album(id) => {
-                qb.push("tracks t WHERE t.album_id = ").push_bind(*id);
-            }
-            Self::Artist(id) => {
-                qb.push(
-                    "tracks t WHERE t.id IN (SELECT track_id FROM track_artists WHERE artist_id = ",
-                )
-                .push_bind(*id)
-                .push(")");
-            }
-            Self::Genre(id) => {
-                qb.push(
-                    "tracks t WHERE t.id IN (SELECT track_id FROM track_genres WHERE genre_id = ",
-                )
-                .push_bind(*id)
-                .push(")");
-            }
-            Self::ManualPlaylist(id) => {
-                qb.push(
-                    "playlist_items m JOIN tracks t ON t.id = m.track_id WHERE m.playlist_id = ",
-                )
-                .push_bind(*id);
-            }
-            Self::SmartPlaylist(criteria) => {
-                qb.push("(");
-                push_positioned_membership(qb, criteria);
-                qb.push(") m JOIN tracks t ON t.id = m.id");
-            }
-        }
-    }
 }
