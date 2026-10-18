@@ -72,11 +72,16 @@ component NotificationCard inherits Rectangle {
         viewbox-height: self.h;
         fill: root.look.accent;
         // Counter-clockwise and closed up the right edge, or it fills as a hole with no
-        // antialiasing: `slint-pitfalls.md`'s `Path` entry.
-        commands: "M " + self.end + " " + (self.r - self.reach)
-            + " A " + self.arc + " " + self.arc + " 0 0 0 " + self.inset + " " + self.r
-            + " V " + (self.h - self.r)
-            + " A " + self.arc + " " + self.arc + " 0 0 0 " + self.end + " " + (self.h - self.r + self.reach)
+        // antialiasing: `slint-pitfalls.md`'s `Path` entry. Numbers go in unlocalized, a bare `+`
+        // writing the translation's decimal separator, which the path parser rejects.
+        commands: "M " + self.end.to-string-unlocalized()
+            + " " + (self.r - self.reach).to-string-unlocalized()
+            + " A " + self.arc.to-string-unlocalized() + " " + self.arc.to-string-unlocalized()
+            + " 0 0 0 " + self.inset.to-string-unlocalized() + " " + self.r.to-string-unlocalized()
+            + " V " + (self.h - self.r).to-string-unlocalized()
+            + " A " + self.arc.to-string-unlocalized() + " " + self.arc.to-string-unlocalized()
+            + " 0 0 0 " + self.end.to-string-unlocalized()
+            + " " + (self.h - self.r + self.reach).to-string-unlocalized()
             + " Z";
     }
 

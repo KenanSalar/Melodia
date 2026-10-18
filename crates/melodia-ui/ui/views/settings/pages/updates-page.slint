@@ -1,0 +1,14 @@
+import { UpdateSection } from "../update-section.slint";
+
+// Which version is installed and how it gets to the next one. The page shape is
+// `library-page.slint`'s.
+export component UpdatesPage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: updates.has-matches;
+
+    VerticalLayout {
+        updates := UpdateSection { category-name: @tr("Updates"); }
+    }
+}

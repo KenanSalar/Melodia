@@ -18,6 +18,8 @@ const DARK: Palette = Palette {
     subtext0: 0xb0b0b8,
     subtext1: 0x8c8c94,
     border: 0x434349,
+    card_control: 0x606066,
+    card_control_hover: 0x747479,
     red: 0xc01c28,
     // GNOME Adwaita success / warning tokens (GNOME 4) — keep the
     // macOS-style titlebar traffic lights in palette on GNOME themes.
@@ -39,6 +41,8 @@ const LIGHT: Palette = Palette {
     subtext0: 0x737378,
     subtext1: 0x505054,
     border: 0xd0d0d4,
+    card_control: 0xb6b6ba,
+    card_control_hover: 0xa3a3a7,
     red: 0xe01b24,
     yellow: 0xe5a50a,
     green: 0x33d17a,

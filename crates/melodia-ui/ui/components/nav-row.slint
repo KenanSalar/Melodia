@@ -1,0 +1,82 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+
+// An icon + label navigation row, in the main sidebar's look. What the row selects and where its
+// hover is published stay the host's; so do the fills, which follow the ground the row sits on.
+export component NavRow inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+    in property <bool> selected;
+    // Popped through an `if` rather than faded, so a collapsed rail is icons only.
+    in property <bool> show-label: true;
+    in property <length> pad-left: Theme.pad-md;
+    in property <length> pad-right: Theme.pad-md;
+    // Off while the host's width follows a drag, so the inset doesn't ease behind the pointer.
+    in property <bool> ease-padding: true;
+    // **Theme tokens only**: the ease below can't tell a stepped brush from an eased one, and the
+    // recolouring gate is what lets it ride a palette fade.
+    in property <brush> selected-fill: Theme.surface1;
+    in property <brush> hover-fill: Theme.surface0;
+
+    out property <bool> has-hover: touch.has-hover;
+    callback clicked();
+
+    height: 36px;
+
+    // Gentler than the now-playing-bar buttons' shrink, a full-width row's wobble reading much
+    // stronger than a compact circular one. **Only the factor is animated**, not the width and
+    // height derived from it: those also move when the host collapses or resizes, so easing them
+    // directly would set every row wobbling through the collapse.
+    property <float> press-scale: touch.pressed ? 0.97 : 1.0;
+    animate press-scale {
+        duration: touch.pressed ? 100ms : Theme.dur-med;
+        easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    // The root keeps its fixed layout slot so sibling rows never reflow; `row` is what scales on
+    // press.
+    row := Rectangle {
+        width: parent.width * root.press-scale;
+        height: parent.height * root.press-scale;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        border-radius: Theme.radius-md;
+        background: root.selected
+            ? root.selected-fill
+            : (touch.has-hover ? root.hover-fill : transparent);
+        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+        HorizontalLayout {
+            padding-left: root.pad-left;
+            padding-right: root.pad-right;
+            spacing: Theme.pad-md;
+            alignment: start;
+            cross-axis-alignment: center;
+            animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: root.ease-padding; }
+
+            MaterialIcon {
+                name: root.icon;
+                // Scaled directly so the wobble is visible on a collapsed rail too: otherwise only
+                // the row's fill shrinks, by a pixel or so, and the press feels inert with the
+                // label hidden.
+                icon-size: 22px * root.press-scale;
+                icon-color: root.selected ? Theme.accent : Theme.text;
+                filled: root.selected;
+            }
+
+            if root.show-label: Text {
+                text: root.label;
+                color: root.selected ? Theme.text : Theme.subtext0;
+                font-size: Theme.font-size-md * root.press-scale;
+                font-weight: root.selected ? 600 : 500;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}

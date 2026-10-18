@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Keresés"
 
@@ -37,7 +38,8 @@ msgstr "Nemrég lejátszottak"
 msgid "Settings"
 msgstr "Beállítások"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Rádió"
@@ -190,54 +192,6 @@ msgstr "Last.fm megnyitása"
 msgid "Connect"
 msgstr "Csatlakozás"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Klasszikus"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Lineáris"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Basszuskiemelés"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Elektronikus"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Magaskiemelés"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Ének"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Egyéni"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Hangszínszabályzó bekapcsolása"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Visszaállítás"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Nincs exportálható lejátszási lista"
@@ -273,42 +227,6 @@ msgstr "Már hozzáadva"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{}/{} már hozzáadva"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Előerősítés"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Album"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Szám"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "ReplayGain bekapcsolása"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Normalizálási mód"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Túlvezérlés megelőzése"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "A ReplayGain csak azokra a számokra hat, amelyekben már vannak hangosságcímkék. Ezek hozzáadásához dolgozd fel a könyvtáradat például az rsgain vagy a loudgain eszközzel."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -359,6 +277,17 @@ msgstr "napban"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "szám"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Album"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -652,7 +581,9 @@ msgstr "Részletek"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Dalszöveg"
 
@@ -663,6 +594,11 @@ msgstr "Összegzés"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Címkék"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
+msgid "Track"
+msgstr "Szám"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -708,7 +644,8 @@ msgstr "Sorszám"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Nyelv"
 
@@ -1138,6 +1075,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Próbáld újra a Dalszöveg menüből"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Kész"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Továbbiak"
 
@@ -1155,24 +1097,8 @@ msgid "Track end"
 msgstr "Szám vége"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "Equalizer"
-msgstr "Hangszínszabályzó"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Be"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Kész"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1206,12 +1132,13 @@ msgid "No tracks up next"
 msgstr "Nincs következő szám"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Vizualizáció"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Megjelenés"
 
@@ -1231,7 +1158,6 @@ msgstr "Témaváltozat"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Rendszer"
 
@@ -1358,9 +1284,93 @@ msgstr "Következő"
 msgid "Search…"
 msgstr "Keresés…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Hangszínszabályzó"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Hangszínszabályzó bekapcsolása"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Formáld a hangot tíz sávval, a bal oldali mélyektől a jobb oldali magasakig"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Előerősítés"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Klasszikus"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Lineáris"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Basszuskiemelés"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Elektronikus"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Magaskiemelés"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Ének"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Egyéni"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Visszaállítás"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Újraolvasás"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain bekapcsolása"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "A ReplayGain csak azokra a számokra hat, amelyekben már vannak hangosságcímkék. Ezek hozzáadásához dolgozd fel a könyvtáradat például az rsgain vagy a loudgain eszközzel."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Normalizálási mód"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Túlvezérlés megelőzése"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2460,27 +2470,43 @@ msgstr "Az összes dal megjelenítése ({})"
 msgid "Top Result"
 msgstr "Legjobb találat"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Felület"
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Effektek"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Könyvtár"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Kimenet"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Lejátszás"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Ablak"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Névjegy"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Szolgáltatások"
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Integrációk"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Frissítések"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2527,6 +2553,43 @@ msgstr "Az első indításkori beállítás újbóli futtatása."
 msgid "Show"
 msgstr "Mutasd"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Animációk"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Lejátszás gomb animációja"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Vizuális effekt a lejátszás gombon, amíg szól a zene"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Hangvizualizáció megjelenítése a Most szól képernyőn"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Vizualizáció stílusa"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Válaszd ki, hogyan rajzolja ki a vizualizáció a hangot"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Nincs"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Material You kiemelőszín"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "A kiemelőszín átvétele a jelenlegi szám borítójából."
+
 #: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Színstílus"
@@ -2546,11 +2609,6 @@ msgstr "Aurora háttér"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Az album-, lejátszásilista- és Most szól fejlécek az album saját színeiből kevert színfátylat kapják a borító elmosott másolata helyett. Nincs mit elmosni, így a fejlécek hamarabb megjelennek, és a Melodia kevesebb erőforrást használ. Az érvényesítéshez újraindítás szükséges."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Nincs"
 
 #: ui/views/settings/appearance-section.slint
 msgid "Tonal Spot"
@@ -2644,6 +2702,16 @@ msgstr "Csatlakozva a Discordhoz"
 msgid "Discord not running"
 msgstr "A Discord nem fut"
 
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Előbeállítás"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Sávok"
+
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
 msgstr "Fájlfigyelés"
@@ -2655,10 +2723,6 @@ msgstr "Fájlváltozások figyelése"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Automatikus észlelés, ha a könyvtármappáidban fájlok jelennek meg, törlődnek vagy módosulnak."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Válaszd ki a kívánt nyelvet"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"
@@ -2708,10 +2772,6 @@ msgstr "Albumháttér"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "A minilejátszó a lejátszott album színeit kapja, ahogy a Most szól nézet is."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Kimenet"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -2924,10 +2984,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, 32 bites lebegőpontos formára kerekítve"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Effektek"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Normál"
 
@@ -3025,14 +3081,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Zökkenőmentes átmenet a számok között, csendes szünetek nélkül"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Lejátszás gomb animációja"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Vizuális effekt a lejátszás gombon, amíg szól a zene"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Folytatás indításkor"
 
@@ -3079,18 +3127,6 @@ msgstr "Elhalkítás szüneteltetéskor"
 #: ui/views/settings/playback-section.slint
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "A zene elhalkul szüneteltetéskor vagy leállításkor, és visszaerősödik folytatáskor"
-
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Hangvizualizáció megjelenítése a Most szól képernyőn"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Vizualizáció stílusa"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Válaszd ki, hogyan rajzolja ki a vizualizáció a hangot"
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
@@ -3201,13 +3237,9 @@ msgstr "ListenBrainz csatlakoztatása"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Előbb kapcsold be fent a Last.fm-et vagy a ListenBrainzt"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Nincs egyező beállítás"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Frissítések"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3286,10 +3318,6 @@ msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Ez a frissítés kritikus hibát javít, ezért nem hagyható ki."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Ablak"
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"
 msgstr "Az operációs rendszer kezeli"
 
@@ -3330,16 +3358,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Vékony körvonal az egész ablak körül, a minilejátszót is beleértve."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Ablakkeret színe"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "A Rendszer beállítás azt a színt követi, amellyel az operációs rendszer a saját ablakkereteit rajzolja."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Csak akkor érhető el, ha az ablakkeret látható."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Rendszer szerinti keretszín"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Annak a színnek a használata, amellyel az operációs rendszer a saját ablakkereteit rajzolja."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Material You keret"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "A rendszer szerinti keretszín árnyalása a jelenlegi szám borítójával."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Ablakkeret színe"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

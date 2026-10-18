@@ -5,10 +5,10 @@ use super::*;
 
 const CHROME_SECTION: &str =
     include_str!("../../../../../melodia-ui/ui/views/settings/window-chrome-section.slint");
-const DOT_GRID: &str =
-    include_str!("../../../../../melodia-ui/ui/components/settings/color-dot-grid.slint");
 
 const TOGGLE_ROW: &str = "if root.show-window-border: SettingRow {";
+const SYSTEM_ROW: &str = "if root.show-border-system: SettingRow {";
+const TINT_ROW: &str = "if root.show-border-tint: SettingRow {";
 const COLOR_ROW: &str = "if root.show-border-color: SettingRowStacked {";
 
 /// A shipped theme, so the slots are the real grid rather than a fixture that could drift from it.
@@ -75,50 +75,46 @@ fn no_pick_paints_system() {
     );
 }
 
+// System is the switch, so the grid checks nothing while it holds.
 #[test]
-fn system_is_the_first_slot() {
-    assert_eq!(swatch_index(theme(), WINDOW_BORDER_SYSTEM_COLOR), 0);
+fn system_holds_no_slot() {
+    assert_eq!(accent_slot(theme(), WINDOW_BORDER_SYSTEM_COLOR), None);
 }
 
-/// A pick made under a theme that had it, read back under one that doesn't, has to land on the
-/// colour it paints as rather than on nothing selected.
+/// A pick made under a theme that had it, read back under one that doesn't, has to read as the
+/// System it paints as rather than as a swatch it doesn't paint.
 #[test]
-fn an_id_the_theme_does_not_have_selects_system() {
-    assert_eq!(swatch_index(theme(), "not-an-accent"), 0);
+fn an_id_the_theme_does_not_have_reads_as_system() {
+    assert_eq!(accent_slot(theme(), "not-an-accent"), None);
 }
 
+// Both ends of the accent run, where an off-by-one shows.
 #[test]
-fn the_accents_follow_system_in_the_themes_order() -> Result<(), AppError> {
+fn the_accents_sit_in_the_themes_order() -> Result<(), AppError> {
     let (Some(first), Some(last)) = (theme().accents.first(), theme().accents.last()) else {
         return Err(AppError::NotFound("the fixture theme ships no accents".to_owned()));
     };
 
-    assert_eq!(swatch_index(theme(), first.id), 1);
-    assert_eq!(swatch_index(theme(), last.id), theme().accents.len());
+    assert_eq!(accent_slot(theme(), first.id), Some(0));
+    assert_eq!(accent_slot(theme(), last.id), Some(theme().accents.len() - 1));
     Ok(())
 }
 
-#[test]
-fn clicking_the_first_slot_picks_system() {
-    assert_eq!(color_id_at(theme(), 0), Some(WINDOW_BORDER_SYSTEM_COLOR));
-}
-
-// Both ends of the accent run, where an off-by-one in the System offset shows.
 #[test]
 fn clicking_an_accent_slot_picks_that_accent() -> Result<(), AppError> {
     let (Some(first), Some(last)) = (theme().accents.first(), theme().accents.last()) else {
         return Err(AppError::NotFound("the fixture theme ships no accents".to_owned()));
     };
 
-    assert_eq!(color_id_at(theme(), 1), Some(first.id));
-    assert_eq!(color_id_at(theme(), theme().accents.len()), Some(last.id));
+    assert_eq!(accent_at(theme(), 0), Some(first.id));
+    assert_eq!(accent_at(theme(), theme().accents.len() - 1), Some(last.id));
     Ok(())
 }
 
 // A stale index from a theme with more accents picks nothing rather than a neighbour.
 #[test]
 fn clicking_past_the_grid_picks_nothing() {
-    assert_eq!(color_id_at(theme(), theme().accents.len() + 1), None);
+    assert_eq!(accent_at(theme(), theme().accents.len()), None);
 }
 
 /// The native titlebar still drops its frame for the miniplayer, so a row greyed out under it puts
@@ -126,17 +122,21 @@ fn clicking_past_the_grid_picks_nothing() {
 #[test]
 fn no_border_row_greys_out_under_the_native_titlebar() -> Result<(), AppError> {
     let section = code_tokens(CHROME_SECTION);
-    let (Some(toggle), Some(color)) =
-        (row_body(&section, TOGGLE_ROW), row_body(&section, COLOR_ROW))
-    else {
+    let (Some(toggle), Some(system), Some(tint), Some(color)) = (
+        row_body(&section, TOGGLE_ROW),
+        row_body(&section, SYSTEM_ROW),
+        row_body(&section, TINT_ROW),
+        row_body(&section, COLOR_ROW),
+    ) else {
         return Err(AppError::NotFound(
             "a window border row is no longer mounted where this pin looks".to_owned(),
         ));
     };
 
-    let gated = [toggle, color].iter().any(|row| row.contains("native-titlebar"));
+    let rows = [toggle, system, tint, color];
+    let gated = rows.iter().any(|row| row.contains("native-titlebar"));
 
-    assert!(!gated, "a window border row reads the titlebar mode:\n{toggle}\n{color}");
+    assert!(!gated, "a window border row reads the titlebar mode:\n{}", rows.join("\n"));
     Ok(())
 }
 
@@ -153,30 +153,5 @@ fn the_border_description_names_only_the_miniplayer_under_the_native_titlebar() 
             r#"root.native-titlebar ? @tr("Draw a thin outline around the miniplayer."#
         ),
         "the native titlebar's border description no longer limits itself to the miniplayer:\n{desc}"
-    );
-}
-
-/// Rust names the System slot with an empty string, `@tr` translating only literals, so the mount
-/// has to name it or the swatch's tooltip is blank.
-#[test]
-fn the_system_swatch_is_named_at_the_mount() {
-    let section = code_tokens(CHROME_SECTION);
-
-    let named = section.matches(r#"first-label: @tr("System");"#).count();
-
-    assert_eq!(named, 1, "the border grid no longer names its System swatch");
-}
-
-/// The grid's half: a `first-label` it never reads names nothing.
-#[test]
-fn the_grid_names_its_first_swatch_by_first_label_when_given_one() {
-    let grid = code_tokens(DOT_GRID);
-
-    let label = binding_value(&grid, "label: i == 0 &&").trim();
-
-    assert_eq!(
-        label,
-        r#"root.first-label != "" ? root.first-label : i < root.labels.length ? root.labels[i] : """#,
-        "the colour grid no longer lets `first-label` name its first swatch"
     );
 }

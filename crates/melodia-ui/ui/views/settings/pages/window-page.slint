@@ -1,0 +1,19 @@
+import { WindowChromeSection } from "../window-chrome-section.slint";
+import { OverflowMenuSection } from "../overflow-menu-section.slint";
+import { MiniPlayerSection } from "../mini-player-section.slint";
+
+// The window's frame and tray, which buttons the player bar folds away, and the miniplayer. The
+// page shape is `library-page.slint`'s.
+export component WindowPage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: window.has-matches || overflow.has-matches
+        || mini.has-matches;
+
+    VerticalLayout {
+        window := WindowChromeSection { category-name: @tr("Window"); }
+        overflow := OverflowMenuSection { category-name: @tr("Window"); }
+        mini := MiniPlayerSection { category-name: @tr("Window"); }
+    }
+}

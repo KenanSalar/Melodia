@@ -18,6 +18,8 @@ const DARK: Palette = Palette {
     subtext0: 0xababab,
     subtext1: 0x8e8e8e,
     border: 0x3e3e3e,
+    card_control: 0x5b5b5b,
+    card_control_hover: 0x707070,
     red: 0xff453a,
     // System Yellow / Green Dark mode (mirrors the macOS accents of the
     // same name) — used by the macOS-style titlebar traffic lights so
@@ -40,6 +42,8 @@ const LIGHT: Palette = Palette {
     subtext0: 0x86868b,
     subtext1: 0x636366,
     border: 0xd2d2d7,
+    card_control: 0xb2b2b6,
+    card_control_hover: 0x9f9fa3,
     red: 0xff3b30,
     // System Yellow / Green Light mode.
     yellow: 0xffcc00,

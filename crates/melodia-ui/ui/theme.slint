@@ -1,4 +1,4 @@
-// Catppuccin Mocha tokens. The 19 theme-dependent brushes are `in-out` so `themes::apply()` can
+// Catppuccin Mocha tokens. The 21 theme-dependent brushes are `in-out` so `themes::apply()` can
 // swap palettes at runtime, the values here painting correctly before settings load; layout,
 // typography and motion stay `out` — design system, not user choice.
 
@@ -14,6 +14,10 @@ export global Theme {
     in-out property <brush> surface0: #313244;
     in-out property <brush> surface1: #45475a;
     in-out property <brush> surface2: #585b70;
+    // A control resting on a `surface0` card (a chip, a switch's track, a dropdown, a field) and
+    // its hover. Not `surface1`, which most palettes keep all but level with the card.
+    in-out property <brush> card-control: #505367;
+    in-out property <brush> card-control-hover: #606379;
 
     // Overlays / text
     in-out property <brush> overlay0: #6c7086;

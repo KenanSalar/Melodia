@@ -1,5 +1,5 @@
 import { Theme } from "../theme.slint";
-import { Settings } from "../settings.slint";
+import { SettingsPage } from "../globals/settings-page.slint";
 import { SignalPathUi } from "../globals/signal-path.slint";
 import { GradeDot } from "grade-dot.slint";
 import { Tooltip } from "tooltip.slint";
@@ -49,6 +49,6 @@ export component QualityChip inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
-        clicked => { Settings.open-signal-path(); }
+        clicked => { SettingsPage.open-category(SettingsPage.category-output); }
     }
 }

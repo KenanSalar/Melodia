@@ -1,0 +1,92 @@
+import { Settings } from "../../settings.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { Visualizer } from "../../globals/audio.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SectionDivider } from "../../components/settings/section-divider.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { ChipGroup } from "../../components/settings/chip-group.slint";
+import { VizStylePresets } from "../../components/now-playing/flyout-presets.slint";
+
+// What moves with the music: the play button's animation, and the visualizer, whose style picker
+// mounts only while it is on. Search visibility follows `language-section.slint`.
+export component AnimationsSection inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> category-name;
+
+    property <string> card-title: @tr("Animations");
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.category-name, root.card-title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    property <string> anim-label: @tr("Play Button Animation");
+    property <string> anim-desc: @tr("Visual effect on the play button while music is playing");
+    property <string> visualizer-label: @tr("Visualizer");
+    property <string> visualizer-desc: @tr("Show an audio visualizer on the Now Playing screen");
+    property <string> viz-style-label: @tr("Visualizer Style");
+    property <string> viz-style-desc: @tr("Choose how the visualizer draws the audio");
+
+    property <bool> show-anim: row-visible(anim-label, anim-desc);
+    // One unit, so the style row's pair is a term too: left off, it is reachable only by scrolling.
+    property <bool> show-visualizer: row-visible(visualizer-label, visualizer-desc)
+        || row-visible(viz-style-label, viz-style-desc);
+
+    // An `if` rather than `visible`, which would still claim the layout slot.
+    property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
+
+    out property <bool> has-matches: show-anim || show-visualizer;
+
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: root.card-title;
+
+            // The chips' order is `playback_settings::play_button_anim_idx_from_token`'s.
+            if root.show-anim: SettingRowStacked {
+                icon: "animation";
+                label: root.anim-label;
+                description: root.anim-desc;
+                ChipGroup {
+                    options: [
+                        @tr("None"),
+                        @tr("Equalizer"),
+                    ];
+                    selected-index <=> Settings.play-button-animation-idx;
+                    selected(i) => { Settings.play-button-animation-changed(i); }
+                }
+            }
+            if root.show-anim && root.show-visualizer: SectionDivider {}
+
+            // Binds `Visualizer` directly rather than mirroring its flags onto `Settings`, since it
+            // owns its own state and callbacks, as `Equalizer` does. Both two-way bindings have
+            // landed the value by the time the callback fires, so the callbacks only persist.
+            if root.show-visualizer: SettingRow {
+                icon: "bar_chart";
+                label: root.visualizer-label;
+                description: root.visualizer-desc;
+                ToggleSwitch {
+                    checked <=> Visualizer.enabled;
+                    toggled(v) => { Visualizer.set-enabled(v); }
+                }
+            }
+            if root.show-visualizer && root.show-viz-style: SectionDivider {}
+
+            if root.show-viz-style: SettingRowStacked {
+                icon: "show_chart";
+                label: root.viz-style-label;
+                description: root.viz-style-desc;
+                // The same list the Now-Playing flyout renders, so the two pickers can't drift.
+                ChipGroup {
+                    options: VizStylePresets.viz-style-names;
+                    selected-index <=> Visualizer.style-idx;
+                    selected(i) => { Visualizer.set-style(i); }
+                }
+            }
+        }
+    }
+}

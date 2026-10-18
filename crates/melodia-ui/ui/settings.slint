@@ -6,7 +6,12 @@
 export global Settings {
     // Stable across runs — populated once at startup from `themes::registry()`.
     in property <[string]> theme-names;
+    // Seeded beside `theme-names`, so no binding here spells a registry position.
+    in property <int> catppuccin-idx: -1;
+    in property <int> material3-idx: -1;
     in-out property <int> theme-idx;
+    out property <bool> catppuccin-selected: root.theme-idx == root.catppuccin-idx;
+    out property <bool> material3-selected: root.theme-idx == root.material3-idx;
 
     // The chips themselves are inline `@tr` literals in `appearance-section.slint`, so
     // bundled translations re-render them on a locale switch; Rust drives only the
@@ -20,6 +25,11 @@ export global Settings {
     in property <[string]> accent-names;
     in-out property <int> accent-idx;
 
+    // The accent is Material You's, which follows the artwork rather than naming a swatch, so
+    // `accent-idx` is -1 while it holds. The switch shows under Material 3 with a Color Style set,
+    // playing or not, so the choice doesn't vanish with the artwork.
+    in-out property <bool> accent-follows-artwork;
+
     // The palette is coming from Plasma's live colour scheme rather than the static
     // Light/Dark tables: KDE Breeze, variant "System", and a parsed `kdeglobals`. The
     // Accent Color row hides its dot grid on it, the OS having already picked one.
@@ -30,15 +40,20 @@ export global Settings {
     in-out property <int> color-style-idx;
 
     // A non-`None` Color Style *and* a seed the coordinator actually extracted from the
-    // artwork. Prepends the dynamic-primary swatch to `accent-colors`, and flips the
-    // Color Style row's description so it's clear whether dynamic colour is live.
+    // artwork. Flips the Color Style row's description so it's clear whether dynamic
+    // colour is live.
     in property <bool> material-you-active;
+
+    // Material 3 with a Color Style set. Unlike `material-you-active` it holds with nothing
+    // playing, so the rows it shows don't come and go between tracks.
+    out property <bool> material-you-enabled: root.material3-selected && root.color-style-idx != 0;
 
     // Fired on chip / dot click. Rust resolves idx → id, persists, applies the new
     // palette and writes the lists back.
     callback theme-changed(int);
     callback variant-changed(int);
     callback accent-changed(int);
+    callback accent-follows-artwork-changed(bool);
     callback color-style-changed(int);
 
     // Hides the "Match Unfocused Window Background" row entirely off-KDE — the
@@ -169,9 +184,6 @@ export global Settings {
     // nothing about the claim, so a toggle applies at once and reopens nothing.
     in-out property <bool> output-release-paused: false;
     callback output-release-paused-changed(bool);
-    // Lands on the Playback tab, where the signal path reads in full: the quality chip, its
-    // overflow-menu row and the refused claim's toast action.
-    callback open-signal-path();
     // The silence a reopen onto a new rate writes first, for the DACs that mute while they relock.
     // The drag only moves the readout: nothing hears the value until the next rate change, so it
     // goes to the engine and to disk together on release.
@@ -297,12 +309,15 @@ export global Settings {
     in-out property <bool> window-border-shown: true;
     callback window-border-shown-changed(bool);
 
-    // The System swatch followed by the theme's accents in the live variant's shade, re-seeded on
-    // every palette change, since a variant reshades both. 1:1 with `window-border-names`, whose
-    // first entry is empty: the grid names the System swatch itself, so it stays translated.
-    in property <[brush]> window-border-colors;
-    in property <[string]> window-border-names;
-    in-out property <int> window-border-color-idx;
+    // System is the OS's own colour rather than a swatch, so `window-border-color-idx` is -1
+    // while it holds. The swatches are the theme's accents, which the grid reads off
+    // `accent-colors` and `accent-names`.
+    in-out property <bool> window-border-system: true;
+    callback window-border-system-changed(bool);
+    // Under Material You, System mixes from the artwork's palette rather than the theme's own.
+    in-out property <bool> window-border-material-you: true;
+    callback window-border-material-you-changed(bool);
+    in-out property <int> window-border-color-idx: -1;
     callback window-border-color-changed(int);
 
     // Mirrors `SettingsData.overflow_buttons`, a `Vec<String>` of ids. Discrete bools
@@ -323,6 +338,8 @@ export global Settings {
     // re-renders every `@tr` on the next frame, then spawns the disk persist.
     in property <[string]> language-names;
     in property <[string]> language-codes;
+    // The native names joined, for the Language card's search term.
+    in property <string> language-search-terms;
     in-out property <int>  language-idx;
     callback language-changed(int);
 

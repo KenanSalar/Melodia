@@ -38,16 +38,16 @@ export component SectionButton inherits Rectangle {
     horizontal-stretch: 0;
     border-radius: root.corner-radius;
     background: (!root.button-enabled
-            ? Theme.surface1
+            ? Theme.card-control
             : (root.primary
                 ? (root.destructive
                     ? (touch.has-hover ? Theme.danger.brighter(10%) : Theme.danger)
                     : (touch.has-hover ? Theme.accent.brighter(10%) : Theme.accent))
-                : (touch.has-hover ? Theme.surface2 : Theme.surface1)))
+                : (touch.has-hover ? Theme.card-control-hover : Theme.card-control)))
         .transparentize(1.0 - root.fade);
     border-color: root.primary || !root.button-enabled
         ? transparent
-        : Theme.surface2;
+        : Theme.card-control-hover;
     border-width: 1px;
     animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 

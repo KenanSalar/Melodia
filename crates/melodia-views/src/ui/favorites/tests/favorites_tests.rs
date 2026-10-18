@@ -75,7 +75,7 @@ const TABS: usize = 3;
 
 /// The `N` in `Favorites`'s `tab-count: N;`.
 fn declared_tab_count() -> Option<usize> {
-    melodia_testkit::declared_tab_count(GLOBAL)
+    melodia_testkit::declared_count(GLOBAL, "tab-count")
 }
 
 /// The body of an inline `name: [ … ];` array literal in `favorites-view.slint`.

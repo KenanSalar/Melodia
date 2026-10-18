@@ -56,12 +56,12 @@ export component OutputSection inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> tab-name;
+    in property <string> category-name;
 
     property <string> card-title: @tr("Output");
 
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, root.card-title,
+        return SettingsPage.row-visible(root.category-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
@@ -375,61 +375,67 @@ export component OutputSection inherits Rectangle {
             }
         }
 
+        // `setting-row.slint`'s wrapper, for its reason: behind an `if`, the stages are measured at
+        // the width their contents ask for, so the one cell holding them asks for the card's.
         if root.show-signal-path && SignalPathUi.playing: VerticalLayout {
             padding-bottom: Theme.pad-md;
 
-            StageRow {
-                grade: SignalPathUi.source-grade;
-                label: @tr("Source");
-                value: SignalPathUi.source-grade == 0 ? SignalPathUi.source-format
-                    : SignalPathUi.source-lossy ? @tr("{}, decoded from a lossy codec", SignalPathUi.source-format)
-                    : @tr("{}, rounded to fit 32-bit float", SignalPathUi.source-format);
-            }
-            StageRow {
-                grade: SignalPathUi.dsp-grade;
-                label: @tr("Effects");
-                value: root.effects-text;
-            }
-            StageRow {
-                grade: SignalPathUi.speed-grade;
-                label: @tr("Speed");
-                value: SignalPathUi.speed-grade == 0 ? @tr("Normal") : SignalPathUi.speed;
-            }
-            StageRow {
-                grade: SignalPathUi.volume-grade;
-                label: @tr("Volume");
-                value: SignalPathUi.muted ? @tr("Muted")
-                    : SignalPathUi.device-muted ? @tr("{}% (the device muted)", SignalPathUi.volume)
-                    : SignalPathUi.volume-on-device ? @tr("{}% on the device", SignalPathUi.volume)
-                    : SignalPathUi.device-level >= 0 && SignalPathUi.device-level < 100
-                        ? @tr("{}% (the device at {}%)", SignalPathUi.volume, SignalPathUi.device-level)
-                    : SignalPathUi.volume + "%";
-            }
-            StageRow {
-                grade: SignalPathUi.crossfade-grade;
-                label: @tr("Crossfade");
-                value: SignalPathUi.crossfade-grade == 0 ? @tr("Not fading") : @tr("Fading between tracks");
-            }
-            StageRow {
-                grade: SignalPathUi.rate-grade;
-                label: @tr("Sample Rate");
-                value: SignalPathUi.rate-grade == 0 ? SignalPathUi.source-rate
-                    : Settings.resampler-linear ? @tr("{} resampled linearly to {}", SignalPathUi.source-rate, SignalPathUi.device-rate)
-                    : @tr("{} resampled to {}", SignalPathUi.source-rate, SignalPathUi.device-rate);
-            }
-            StageRow {
-                grade: SignalPathUi.channels-grade;
-                label: @tr("Channels");
-                value: SignalPathUi.channels-grade == 0 ? @tr("Unchanged") : @tr("Mixed down for the device");
-            }
-            StageRow {
-                grade: SignalPathUi.output-grade;
-                label: @tr("Device");
-                value: SignalPathUi.fallback-reason >= 0 && SignalPathUi.refused-by != "" ? @tr("{} refused exclusive output because {}. Playing shared on {}", SignalPathUi.refused-by, root.fallback-text, root.device-text)
-                    : SignalPathUi.fallback-reason >= 0 ? @tr("{}, shared: exclusive output was refused because {}", root.device-text, root.fallback-text)
-                    : !SignalPathUi.exclusive ? @tr("{}, shared: the system mixer may still convert it", root.device-text)
-                    : SignalPathUi.output-grade == 0 ? @tr("{}, exclusive", root.device-text)
-                    : @tr("{}, exclusive, in a format that can't hold the source exactly", root.device-text);
+            VerticalLayout {
+                preferred-width: SettingsPage.card-w;
+
+                StageRow {
+                    grade: SignalPathUi.source-grade;
+                    label: @tr("Source");
+                    value: SignalPathUi.source-grade == 0 ? SignalPathUi.source-format
+                        : SignalPathUi.source-lossy ? @tr("{}, decoded from a lossy codec", SignalPathUi.source-format)
+                        : @tr("{}, rounded to fit 32-bit float", SignalPathUi.source-format);
+                }
+                StageRow {
+                    grade: SignalPathUi.dsp-grade;
+                    label: @tr("Effects");
+                    value: root.effects-text;
+                }
+                StageRow {
+                    grade: SignalPathUi.speed-grade;
+                    label: @tr("Speed");
+                    value: SignalPathUi.speed-grade == 0 ? @tr("Normal") : SignalPathUi.speed;
+                }
+                StageRow {
+                    grade: SignalPathUi.volume-grade;
+                    label: @tr("Volume");
+                    value: SignalPathUi.muted ? @tr("Muted")
+                        : SignalPathUi.device-muted ? @tr("{}% (the device muted)", SignalPathUi.volume)
+                        : SignalPathUi.volume-on-device ? @tr("{}% on the device", SignalPathUi.volume)
+                        : SignalPathUi.device-level >= 0 && SignalPathUi.device-level < 100
+                            ? @tr("{}% (the device at {}%)", SignalPathUi.volume, SignalPathUi.device-level)
+                        : SignalPathUi.volume + "%";
+                }
+                StageRow {
+                    grade: SignalPathUi.crossfade-grade;
+                    label: @tr("Crossfade");
+                    value: SignalPathUi.crossfade-grade == 0 ? @tr("Not fading") : @tr("Fading between tracks");
+                }
+                StageRow {
+                    grade: SignalPathUi.rate-grade;
+                    label: @tr("Sample Rate");
+                    value: SignalPathUi.rate-grade == 0 ? SignalPathUi.source-rate
+                        : Settings.resampler-linear ? @tr("{} resampled linearly to {}", SignalPathUi.source-rate, SignalPathUi.device-rate)
+                        : @tr("{} resampled to {}", SignalPathUi.source-rate, SignalPathUi.device-rate);
+                }
+                StageRow {
+                    grade: SignalPathUi.channels-grade;
+                    label: @tr("Channels");
+                    value: SignalPathUi.channels-grade == 0 ? @tr("Unchanged") : @tr("Mixed down for the device");
+                }
+                StageRow {
+                    grade: SignalPathUi.output-grade;
+                    label: @tr("Device");
+                    value: SignalPathUi.fallback-reason >= 0 && SignalPathUi.refused-by != "" ? @tr("{} refused exclusive output because {}. Playing shared on {}", SignalPathUi.refused-by, root.fallback-text, root.device-text)
+                        : SignalPathUi.fallback-reason >= 0 ? @tr("{}, shared: exclusive output was refused because {}", root.device-text, root.fallback-text)
+                        : !SignalPathUi.exclusive ? @tr("{}, shared: the system mixer may still convert it", root.device-text)
+                        : SignalPathUi.output-grade == 0 ? @tr("{}, exclusive", root.device-text)
+                        : @tr("{}, exclusive, in a format that can't hold the source exactly", root.device-text);
+                }
             }
         }
     }

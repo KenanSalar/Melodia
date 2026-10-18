@@ -1,5 +1,5 @@
-//! The flag structs behind the Settings ▸ Services tab. Scrobbling and Discord keep theirs in
-//! `melodia_core::entities::integrations`.
+//! The flag structs behind Settings ▸ Radio and ▸ Lyrics. Scrobbling and Discord, the Integrations
+//! category, keep theirs in `melodia_core::entities::integrations`.
 
 use serde::{Deserialize, Serialize};
 

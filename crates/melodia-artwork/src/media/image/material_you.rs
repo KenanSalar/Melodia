@@ -28,7 +28,9 @@ use slint::{Rgb8Pixel, SharedPixelBuffer};
 
 use crate::media::image::image_decode::decode_capped;
 use melodia_core::error::describe;
-use melodia_core::themes::{Palette, material3};
+use melodia_core::themes::{
+    CARD_CONTROL_HOVER_PERCENT, CARD_CONTROL_PERCENT, Palette, material3, toward,
+};
 
 /// The seven Material 3 scheme variants, plus a `None` that disables Material
 /// You and falls back to the static M3 palette.
@@ -375,6 +377,10 @@ pub fn generate_palette(source_rgb: u32, is_dark: bool, style: SchemeStyle) -> (
         subtext1: outline,
         // One surface up, where the other theme families put it.
         border: surface_container_highest,
+        // M3 sets its controls off a container by outline rather than fill, so these take the
+        // shared rule instead of a role.
+        card_control: toward(surface_container_high, on_surface, CARD_CONTROL_PERCENT),
+        card_control_hover: toward(surface_container_high, on_surface, CARD_CONTROL_HOVER_PERCENT),
         red: error,
         green,
         yellow,

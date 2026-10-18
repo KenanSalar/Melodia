@@ -28,15 +28,16 @@ fn wiring_sources() -> Vec<(String, String)> {
 /// Every `views.json` index write in a source, **found rather than listed**: a sixth page
 /// is a setter of its own, and a list is exactly what would not notice one.
 ///
-/// The shape is `library::settings::set_<name>(`, kept when `<name>` is a tab index or the
-/// nav index. Every other `library::settings` setter writes a value no second call in the
-/// same tick competes for.
+/// The shape is `library::settings::set_<name>(`, kept when `<name>` is a tab index, the
+/// Settings category or the nav index. Every other `library::settings` setter writes a value
+/// no second call in the same tick competes for.
 fn index_write_sites(src: &str) -> Vec<usize> {
     const PREFIX: &str = "library::settings::set_";
     src.match_indices(PREFIX)
         .filter_map(|(at, _)| {
             let name = src.get(at + PREFIX.len()..)?.split_once('(')?.0;
-            let ordered = name.ends_with("_tab") || name == "last_nav_index";
+            let ordered =
+                name.ends_with("_tab") || name == "settings_category" || name == "last_nav_index";
             ordered.then_some(at)
         })
         .collect()

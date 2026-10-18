@@ -203,13 +203,18 @@ fn an_inset_bar_takes_the_popup_surfaces_own_corner() {
     let surface_corner = binding_value(&surface_src, "border-radius:")
         .rsplit_once(':')
         .map_or("", |(_, arm)| arm.trim());
-    let bar_corner = binding_value(&bar_src, "border-radius: root.inset ?")
+    let bar_corner = binding_value(&bar_src, "corner-radius: root.inset ?")
         .split_once(':')
         .map_or("", |(arm, _)| arm.trim());
 
     assert!(
         surface_corner.starts_with("Theme."),
         "popup-surface.slint no longer ends its radius ternary on a theme token"
+    );
+    assert_eq!(
+        binding_value(&bar_src, "border-radius:").trim(),
+        "root.corner-radius * self.focus-scale",
+        "search-bar.slint's chrome no longer draws the corner its `corner-radius` asks for"
     );
     assert_eq!(
         bar_corner, surface_corner,
@@ -224,12 +229,19 @@ fn an_inset_bar_does_not_swell() {
     let src = normalized(SEARCH_BAR);
     assert!(
         src.contains("in property <bool> inset: false;"),
-        "search-bar.slint's variant no longer defaults to the floating shape, which is what the \
-         three mounts that never name it are asking for"
+        "search-bar.slint's variant no longer defaults to the floating shape, which is what every \
+         mount that never names it is asking for"
+    );
+    // Two halves, since a host can now turn the swell off on a stadium too: the default has to
+    // follow `inset`, and the scale has to follow the knob.
+    assert!(
+        src.contains("in property <bool> focus-swell: !root.inset;"),
+        "an inset SearchBar swells on focus by default, shoving whatever the surface seats \
+         beside it"
     );
     assert!(
-        src.contains("focus-scale: input.has-focus && !root.inset ? 1.015 : 1.0;"),
-        "an inset SearchBar swells on focus, shoving whatever the surface seats beside it"
+        src.contains("focus-scale: input.has-focus && root.focus-swell ? 1.015 : 1.0;"),
+        "search-bar.slint's swell no longer follows `focus-swell`"
     );
 }
 

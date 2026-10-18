@@ -8,6 +8,7 @@
 
 use slint::Brush;
 
+use melodia_core::themes::material3::MATERIAL3;
 use melodia_core::themes::palette::{MATERIAL_YOU_ACCENT_ID, ThemeDef, Variant};
 use melodia_core::themes::system_color_state::SystemColorState;
 use melodia_ui::AppWindow;
@@ -41,7 +42,7 @@ pub fn apply(
     // id, which is why this sits above the System branch. The accent picker
     // stays independent: `MATERIAL_YOU_ACCENT_ID` follows the dynamic primary,
     // and a static accent overrides only the accent, keeping dynamic surfaces.
-    if theme_id == "material3"
+    if theme_id == MATERIAL3.id
         && let Some((palette, dyn_accent)) = &system.material_you
     {
         let accent_hex = if accent_id == MATERIAL_YOU_ACCENT_ID {
@@ -62,7 +63,7 @@ pub fn apply(
     #[cfg(target_os = "linux")]
     if variant_id == melodia_core::themes::palette::SYSTEM_VARIANT_ID
         && theme.supports_system_mode
-        && theme_id == "kde-breeze"
+        && theme_id == melodia_core::themes::kde::KDE.id
         && let Some(kde) = &system.kde_palette
     {
         let palette = melodia_core::themes::kde::palette_from_kde(kde);

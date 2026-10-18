@@ -1,0 +1,19 @@
+import { Theme } from "../../theme.slint";
+
+// A label beside the control it names, for a dialog form. The control arrives through `@children`
+// and takes whatever width it stretches to.
+export component DialogLabeledRow inherits HorizontalLayout {
+    in property <string> label;
+
+    spacing: Theme.pad-md;
+    alignment: stretch;
+    cross-axis-alignment: center;
+
+    Text {
+        text: root.label;
+        color: Theme.text;
+        font-size: Theme.font-size-md;
+    }
+
+    @children
+}

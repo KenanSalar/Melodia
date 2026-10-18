@@ -42,6 +42,8 @@ const DARK: Palette = Palette {
     subtext0: 0xbdc3c7,
     subtext1: 0xa1a9b1,
     border: 0x3f444a,
+    card_control: 0x5a5e62,
+    card_control_hover: 0x6e7175,
     red: 0xda4453,
     // KDE Breeze positive / neutral tokens — keep the macOS-style
     // titlebar traffic lights vivid on a Breeze palette. (Yellow uses
@@ -65,6 +67,8 @@ const LIGHT: Palette = Palette {
     subtext0: 0x585e64,
     subtext1: 0x707d8a,
     border: 0xc9cdd1,
+    card_control: 0xb0b1b3,
+    card_control_hover: 0x9ea0a2,
     red: 0xda4453,
     yellow: 0xf67400,
     green: 0x27ae60,
@@ -133,23 +137,29 @@ pub fn parse_hex_color(s: &str) -> Option<u32> {
 /// parseable. They fire only if that stops being true.
 #[cfg(target_os = "linux")]
 pub fn palette_from_kde(kde: &KdeColorPalette) -> Palette {
+    use super::{CARD_CONTROL_HOVER_PERCENT, CARD_CONTROL_PERCENT, toward};
+
     let g =
         |key: &str| -> u32 { kde.colors.get(key).and_then(|s| parse_hex_color(s)).unwrap_or(0) };
     let overlay1 = g("overlay1");
+    let (surface0, text) = (g("surface0"), g("text"));
     Palette {
         base: g("base"),
         mantle: g("mantle"),
         crust: g("crust"),
-        surface0: g("surface0"),
+        surface0,
         surface1: g("surface1"),
         surface2: g("surface2"),
         overlay0: g("overlay0"),
         overlay1,
         overlay2: g("overlay2"),
-        text: g("text"),
+        text,
         subtext0: g("subtext0"),
         subtext1: g("subtext1"),
         border: g("border"),
+        // A scheme has no role for these, so they take the generated palettes' rule.
+        card_control: toward(surface0, text, CARD_CONTROL_PERCENT),
+        card_control_hover: toward(surface0, text, CARD_CONTROL_HOVER_PERCENT),
         red: parse_hex_color(&kde.red).unwrap_or(0x00da_4453),
         green: parse_hex_color(&kde.green).unwrap_or(0x0027_ae60),
         yellow: parse_hex_color(&kde.yellow).unwrap_or(0x00f6_7400),

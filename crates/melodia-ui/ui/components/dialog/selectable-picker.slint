@@ -154,7 +154,7 @@ export component SelectAllHeader inherits Rectangle {
             border-radius: self.height / 2;
             background: root.selected-count > 0
                 ? Theme.accent.with-alpha(0.18)
-                : Theme.surface1;
+                : Theme.card-control;
             animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
             chip-l := HorizontalLayout {

@@ -1,29 +1,25 @@
 import { Settings } from "../../settings.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
-import { Visualizer } from "../../globals/audio.slint";
 import { SectionCard } from "../../components/settings/section-card.slint";
 import { SectionDivider } from "../../components/settings/section-divider.slint";
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
-import { ChipGroup } from "../../components/settings/chip-group.slint";
 import { SettingSlider } from "../../components/settings/setting-slider.slint";
-import { VizStylePresets } from "../../components/now-playing/flyout-presets.slint";
 
-// Three plain rows, plus two clusters whose sub-rows mount only while their
-// toggle is on: crossfade (duration slider + three sub-toggles) and the
-// visualizer (style picker). Search visibility follows `language-section.slint`.
+// Two plain rows, plus crossfade, a cluster whose duration slider and three sub-toggles mount only
+// while its toggle is on. Search visibility follows `language-section.slint`.
 export component PlaybackSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    in property <string> tab-name;
+    in property <string> category-name;
 
     property <string> card-title: @tr("Playback");
 
     pure function row-visible(label: string, desc: string) -> bool {
-        return SettingsPage.row-visible(root.tab-name, root.card-title,
+        return SettingsPage.row-visible(root.category-name, root.card-title,
                                         label + " " + desc,
                                         SettingsPage.search-query);
     }
@@ -44,8 +40,6 @@ export component PlaybackSection inherits Rectangle {
     // search matches on.
     property <string> gapless-label: @tr("Gapless Playback");
     property <string> gapless-desc: @tr("Seamless transitions between tracks without silence gaps");
-    property <string> anim-label: @tr("Play Button Animation");
-    property <string> anim-desc: @tr("Visual effect on the play button while music is playing");
     property <string> resume-label: @tr("Resume on Startup");
     property <string> resume-desc: @tr("Automatically resume the last track from where you left off when the app starts");
     property <string> crossfade-label: @tr("Crossfade");
@@ -59,14 +53,9 @@ export component PlaybackSection inherits Rectangle {
     property <string> xf-manual-desc: @tr("Crossfade when you skip to the next or previous track, not only at the end of one");
     property <string> xf-pause-label: @tr("Fade out on pause");
     property <string> xf-pause-desc: @tr("Fade the music out when pausing or stopping, and back in when resuming");
-    property <string> visualizer-label: @tr("Visualizer");
-    property <string> visualizer-desc: @tr("Show an audio visualizer on the Now Playing screen");
-    property <string> viz-style-label: @tr("Visualizer Style");
-    property <string> viz-style-desc: @tr("Choose how the visualizer draws the audio");
 
     // Per row, feeding both the inner `if` and the section's `has-matches`.
     property <bool> show-gapless: row-visible(gapless-label, gapless-desc);
-    property <bool> show-anim: row-visible(anim-label, anim-desc);
     property <bool> show-resume: row-visible(resume-label, resume-desc);
     // The cluster searches as one unit: any of its labels reveals the toggle plus whichever
     // sub-rows are mounted, so every sub-row's pair is a term here. Left off, a sub-row is
@@ -77,19 +66,10 @@ export component PlaybackSection inherits Rectangle {
         || row-visible(xf-manual-label, xf-manual-desc)
         || row-visible(xf-pause-label, xf-pause-desc);
 
-    // One unit again, which is also what keeps the upstream dividers' gates
-    // right with no further edits.
-    property <bool> show-visualizer: row-visible(visualizer-label, visualizer-desc)
-        || row-visible(viz-style-label, viz-style-desc);
-
     // An `if` rather than `visible`, which would still claim the layout slot.
-    property <bool> show-viz-style: root.show-visualizer && Visualizer.enabled;
-
-    // Same reason as the style row above.
     property <bool> show-crossfade-details: root.show-crossfade && Settings.crossfade-enabled;
 
-    out property <bool> has-matches:
-        show-gapless || show-anim || show-resume || show-crossfade || show-visualizer;
+    out property <bool> has-matches: show-gapless || show-resume || show-crossfade;
 
     // Wrapper so the root's preferred-height tracks the card's natural height —
     // a `Rectangle` sizes from a layout child, never from a conditional one.
@@ -108,7 +88,7 @@ export component PlaybackSection inherits Rectangle {
             }
         }
         // Each gates on a visible row either side, so none is left stranded.
-        if root.show-gapless && (root.show-crossfade || root.show-anim || root.show-resume || root.show-visualizer): SectionDivider {}
+        if root.show-gapless && (root.show-crossfade || root.show-resume): SectionDivider {}
 
         if root.show-crossfade: SettingRow {
             icon: "swap_horiz";
@@ -164,22 +144,7 @@ export component PlaybackSection inherits Rectangle {
                 toggled(v) => { Settings.crossfade-fade-on-pause-changed(v); }
             }
         }
-        if root.show-crossfade && (root.show-anim || root.show-resume || root.show-visualizer): SectionDivider {}
-
-        if root.show-anim: SettingRowStacked {
-            icon: "animation";
-            label: root.anim-label;
-            description: root.anim-desc;
-            ChipGroup {
-                options: [
-                    @tr("None"),
-                    @tr("Equalizer"),
-                ];
-                selected-index <=> Settings.play-button-animation-idx;
-                selected(i) => { Settings.play-button-animation-changed(i); }
-            }
-        }
-        if root.show-anim && (root.show-resume || root.show-visualizer): SectionDivider {}
+        if root.show-crossfade && root.show-resume: SectionDivider {}
 
         if root.show-resume: SettingRow {
             icon: "play_circle";
@@ -188,35 +153,6 @@ export component PlaybackSection inherits Rectangle {
             ToggleSwitch {
                 checked <=> Settings.resume-on-startup;
                 toggled(v) => { Settings.resume-on-startup-changed(v); }
-            }
-        }
-        if root.show-resume && root.show-visualizer: SectionDivider {}
-
-        // Binds `Visualizer` directly rather than mirroring its flags onto
-        // `Settings` — it owns its own state and callbacks, as the EQ dialog
-        // does. Both two-way bindings have landed the value by the time the
-        // callback fires, so the callbacks only persist.
-        if root.show-visualizer: SettingRow {
-            icon: "bar_chart";
-            label: root.visualizer-label;
-            description: root.visualizer-desc;
-            ToggleSwitch {
-                checked <=> Visualizer.enabled;
-                toggled(v) => { Visualizer.set-enabled(v); }
-            }
-        }
-        if root.show-visualizer && root.show-viz-style: SectionDivider {}
-
-        if root.show-viz-style: SettingRowStacked {
-            icon: "show_chart";
-            label: root.viz-style-label;
-            description: root.viz-style-desc;
-            // The same list the Now-Playing flyout renders, so the two pickers
-            // can't drift.
-            ChipGroup {
-                options: VizStylePresets.viz-style-names;
-                selected-index <=> Visualizer.style-idx;
-                selected(i) => { Visualizer.set-style(i); }
             }
         }
     }

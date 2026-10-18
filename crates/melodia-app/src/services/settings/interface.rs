@@ -1,5 +1,5 @@
-//! The flag structs behind the Settings ▸ Interface tab: window chrome, the tray, layout and the
-//! backdrop.
+//! The flag structs behind Settings ▸ Appearance and ▸ Window: window chrome, the tray, layout and
+//! the backdrop.
 
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +41,19 @@ pub enum WindowBorder {
     Hidden,
 }
 
+/// What the System border colour is mixed from while Material You paints the palette. A token for
+/// [`WindowBorder`]'s reason. Off Material You both read the same, the theme's palette being the
+/// only one painted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BorderTint {
+    /// The artwork's palette, so the outline follows the track.
+    #[default]
+    Artwork,
+    /// The theme's own, the palette Color Style None paints.
+    Theme,
+}
+
 /// The [`WindowFlags::window_border_color`] that follows the OS's own border colour. Every other
 /// value is an accent id of the active theme, and one the theme doesn't have reads as this.
 pub const WINDOW_BORDER_SYSTEM_COLOR: &str = "system";
@@ -63,6 +76,7 @@ pub struct WindowFlags {
     /// miniplayer under the native one.
     pub window_border: WindowBorder,
     pub window_border_color: String,
+    pub window_border_tint: BorderTint,
 }
 
 impl WindowFlags {
@@ -87,6 +101,7 @@ impl Default for WindowFlags {
             mini_player_button_style: TitlebarButtonStyle::Standard,
             window_border: WindowBorder::Shown,
             window_border_color: WINDOW_BORDER_SYSTEM_COLOR.to_owned(),
+            window_border_tint: BorderTint::Artwork,
         }
     }
 }

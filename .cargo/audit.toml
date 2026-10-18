@@ -30,4 +30,14 @@ ignore = [
     # paste 1.0.15 unmaintained: via lofty 0.25.4 (direct), which has no migration plan.
     # revisit: 2026-12-11
     "RUSTSEC-2024-0436",
+
+    # zvariant 5.15.0, zvariant_derive 5.15.0 and zbus_names 4.3.4 unmaintained: zbus 5's own
+    # sub-crates, merged into zbus 6.0.0 the day these were filed. Slint 1.18.1's winit backend,
+    # its accesskit / atspi chain and ksni 0.3.6 all require zbus ^5 at their newest releases, so
+    # moving our own zbus pin alone adds a second zbus and leaves all three here. Leaves once Slint
+    # and ksni ship on zbus 6, our bump following.
+    # revisit: 2026-12-11
+    "RUSTSEC-2026-0370",
+    "RUSTSEC-2026-0371",
+    "RUSTSEC-2026-0372",
 ]

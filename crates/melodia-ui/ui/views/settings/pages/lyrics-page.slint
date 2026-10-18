@@ -1,0 +1,13 @@
+import { LyricsSection } from "../lyrics-section.slint";
+
+// The lyrics panel and the directory behind it. The page shape is `library-page.slint`'s.
+export component LyricsPage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: lyrics.has-matches;
+
+    VerticalLayout {
+        lyrics := LyricsSection { category-name: @tr("Lyrics"); }
+    }
+}

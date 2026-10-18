@@ -393,7 +393,7 @@ fn wire_window_hidden(ui: &AppWindow, state: &AppState) {
 
 /// Persist only. Flipping the setting moves `AppWindow.watched-viz-active`, so arming here too
 /// would arm the tap for a view that isn't open. No write-back to `enabled` either: the
-/// Settings → Playback toggle two-way binds it, so it has already landed.
+/// Settings → Appearance toggle two-way binds it, so it has already landed.
 fn wire_set_enabled(ui: &AppWindow, state: &AppState) {
     let state = state.clone();
     ui.global::<Visualizer>().on_set_enabled(move |on| {

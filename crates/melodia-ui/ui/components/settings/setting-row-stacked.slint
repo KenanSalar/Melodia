@@ -17,60 +17,65 @@ export component SettingRowStacked inherits Rectangle {
     property <float> dim: root.disabled ? Theme.dim-disabled : 0.0;
     animate dim { duration: Theme.dur-fast; easing: ease-in-out; }
 
-    HorizontalLayout {
-        padding: Theme.pad-lg;
-        spacing: Theme.pad-lg;
-        alignment: stretch;
+    // `setting-row.slint`'s wrapper, for its reason: mounted behind an `if`, the row is measured
+    // at the width its contents ask for, so the one cell holding them asks for the card's.
+    VerticalLayout {
+        HorizontalLayout {
+            padding: Theme.pad-lg;
+            spacing: Theme.pad-lg;
+            alignment: stretch;
+            preferred-width: SettingsPage.card-w;
 
-        // Top-aligned so it sits beside the label, not centred in a row whose
-        // height includes the strip below.
-        VerticalLayout {
-            alignment: start;
-            // Lines the icon up with the label's baseline rather than the row's
-            // top padding.
-            padding-top: 2px;
-            MaterialIcon {
-                name: root.icon;
-                icon-size: SettingsPage.row-icon-w;
-                icon-color: Theme.text;
-                fade: 1.0 - root.dim;
-            }
-        }
-
-        VerticalLayout {
-            spacing: Theme.pad-xs;
-            horizontal-stretch: 1;
-
-            // Wrapped for `setting-row.slint`'s reason: a no-wrap `Text`'s
-            // minimum is its full width, which no narrowing can negotiate.
-            Text {
-                text: root.label;
-                color: Theme.text.transparentize(root.dim);
-                font-size: Theme.font-size-md;
-                wrap: word-wrap;
-            }
-            if root.description != "": Text {
-                text: root.description;
-                color: Theme.text-muted.transparentize(root.dim);
-                font-size: Theme.font-size-sm;
-                wrap: word-wrap;
+            // Top-aligned so it sits beside the label, not centred in a row whose
+            // height includes the strip below.
+            VerticalLayout {
+                alignment: start;
+                // Lines the icon up with the label's baseline rather than the row's
+                // top padding.
+                padding-top: 2px;
+                MaterialIcon {
+                    name: root.icon;
+                    icon-size: SettingsPage.row-icon-w;
+                    icon-color: Theme.text;
+                    fade: 1.0 - root.dim;
+                }
             }
 
-            // The margin is what reads as a break between the copy and the strip.
-            Rectangle {
-                vertical-stretch: 0;
-                VerticalLayout {
-                    padding-top: Theme.pad-sm;
-                    spacing: Theme.pad-sm;
-                    @children
+            VerticalLayout {
+                spacing: Theme.pad-xs;
+                horizontal-stretch: 1;
+
+                // Wrapped for `setting-row.slint`'s reason: a no-wrap `Text`'s
+                // minimum is its full width, which no narrowing can negotiate.
+                Text {
+                    text: root.label;
+                    color: Theme.text.transparentize(root.dim);
+                    font-size: Theme.font-size-md;
+                    wrap: word-wrap;
+                }
+                if root.description != "": Text {
+                    text: root.description;
+                    color: Theme.text-muted.transparentize(root.dim);
+                    font-size: Theme.font-size-sm;
+                    wrap: word-wrap;
                 }
 
-                if root.dim > 0: DisabledScrim {
-                    x: 0;
-                    y: 0;
-                    width: 100%;
-                    height: 100%;
-                    dim: root.dim;
+                // The margin is what reads as a break between the copy and the strip.
+                Rectangle {
+                    vertical-stretch: 0;
+                    VerticalLayout {
+                        padding-top: Theme.pad-sm;
+                        spacing: Theme.pad-sm;
+                        @children
+                    }
+
+                    if root.dim > 0: DisabledScrim {
+                        x: 0;
+                        y: 0;
+                        width: 100%;
+                        height: 100%;
+                        dim: root.dim;
+                    }
                 }
             }
         }

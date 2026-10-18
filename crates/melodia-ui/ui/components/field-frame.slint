@@ -6,8 +6,9 @@ import { Theme } from "../theme.slint";
 export component FieldFrame inherits Rectangle {
     in property <bool> focused;
 
-    background: Theme.surface1;
-    border-color: root.focused ? Theme.accent : Theme.border;
+    background: Theme.card-control;
+    // At rest the rim is the fill, as on the `Dropdown` the smart-playlist editor sets these beside.
+    border-color: root.focused ? Theme.accent : Theme.card-control;
     border-width: 1px;
     border-radius: Theme.radius-md;
     animate border-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }

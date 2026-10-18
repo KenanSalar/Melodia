@@ -1,66 +1,62 @@
-//! Accent dot-grid wiring + the swatch helpers shared with
-//! [`super::apply_and_seed`]. Owns the `MATERIAL_YOU_ACCENT_ID` resolution
-//! pathway: when MY is active the live dynamic primary sits at index 0 and
-//! the 8 static accents shift right; when MY isn't active those helpers
-//! collapse to the static-only grid.
+//! Accent dot-grid wiring, the Material You switch above it, and the swatch helpers shared with
+//! [`super::apply_and_seed`] and the window border's grid, which shows the same swatches.
+//!
+//! **Material You is a switch, not a swatch.** `MATERIAL_YOU_ACCENT_ID` follows the artwork rather
+//! than naming a colour, so while it is the persisted accent the grid checks nothing, and a pick
+//! in the grid turns it off.
 
 use std::sync::Arc;
 
 use parking_lot::RwLock;
 use slint::{Brush, ComponentHandle, SharedString};
 
-use super::rgb::brush;
 use super::theme_apply::accent_brushes;
 use melodia_app::state::AppState;
-use melodia_core::themes::{self, MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
+use melodia_core::themes::material3::MATERIAL3;
+use melodia_core::themes::{MATERIAL_YOU_ACCENT_ID, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings};
 
-use super::{PersistedAccent, persist, registry_get, usize_from};
+use super::{
+    PersistedAccent, persist, read_last_static_accent, registry_get, usize_from, variant_id_at,
+};
 
 /// True when the active theme is Material 3 *and* the coordinator has
 /// produced a dynamic palette + accent for the current artwork. Drives
-/// `Settings.material-you-active`, the Settings UI's "prepend the live
-/// primary as the 9th accent dot" decision, and `accent_id` resolution
-/// inside [`super::apply_and_seed`].
+/// `Settings.material-you-active` and `accent_id` resolution inside
+/// [`super::apply_and_seed`].
 pub(super) fn material_you_active(theme_id: &str, system: &SystemColorState) -> bool {
-    theme_id == "material3" && system.material_you.is_some()
+    theme_id == MATERIAL3.id && system.material_you.is_some()
 }
 
-/// Build the accent swatch list for the dot grid plus matching tooltip
-/// labels. When Material You is active for the current `theme` +
-/// `system`, a 9th brush rendered in the dynamic primary is prepended
-/// with label `"Material You"`; otherwise it's the existing 8-dot list
-/// from `theme_apply::accent_brushes` paired with each `AccentDef.name`.
-/// Returns the swatches, the labels, and a bool indicating whether the
-/// Material You dot was prepended.
-pub(super) fn accent_swatches_with_my(
+/// The theme's accents shaded for `variant_id`, with the names their tooltips carry.
+pub(super) fn accent_swatches(
     theme: &ThemeDef,
     variant_id: &str,
-    system: &SystemColorState,
-) -> (Vec<Brush>, Vec<SharedString>, bool) {
-    let my_active = material_you_active(theme.id, system);
-    let mut brushes = accent_brushes(theme, variant_id);
-    let mut labels: Vec<SharedString> =
-        theme.accents.iter().map(|a| SharedString::from(a.name)).collect();
-    if my_active && let Some((_, dyn_accent)) = &system.material_you {
-        brushes.insert(0, brush(*dyn_accent));
-        labels.insert(0, SharedString::from("Material You"));
-    }
-    (brushes, labels, my_active)
+) -> (Vec<Brush>, Vec<SharedString>) {
+    let labels = theme.accents.iter().map(|a| SharedString::from(a.name)).collect();
+    (accent_brushes(theme, variant_id), labels)
 }
 
-/// Map a persisted `accent_id` to its index in the visible swatch grid.
-/// When Material You is active the live `MATERIAL_YOU_ACCENT_ID` id
-/// sits at index 0 and the 8 static accents shift one slot to the right.
-/// The caller is expected to have already resolved the effective accent
-/// via [`effective_accent_id`] when MY is selected but inactive — this
-/// function does no fallback of its own.
-pub(super) fn accent_idx_in_grid(theme: &ThemeDef, accent_id: &str, my_active: bool) -> usize {
-    if my_active && accent_id == MATERIAL_YOU_ACCENT_ID {
-        return 0;
-    }
-    let static_idx = themes::accent_index(theme, accent_id);
-    static_idx + usize::from(my_active)
+/// The grid slot showing `accent_id`, `None` for an id that names no swatch: Material You's, the
+/// window border's System, or one the theme doesn't ship.
+pub(super) fn accent_slot(theme: &ThemeDef, accent_id: &str) -> Option<usize> {
+    theme.accents.iter().position(|a| a.id == accent_id)
+}
+
+/// The accent a clicked slot stands for, `None` past the grid's end.
+pub(super) fn accent_at(theme: &ThemeDef, slot: usize) -> Option<&'static str> {
+    theme.accents.get(slot).map(|a| a.id)
+}
+
+/// `slot` as a grid's `selected-index`, where -1 checks no swatch.
+pub(super) fn slot_index(slot: Option<usize>) -> i32 {
+    slot.map_or(-1, super::apply_and_seed_to_i32)
+}
+
+/// Seat `accent_id` in the grid and the Material You switch, which never both read as picked.
+pub(super) fn seat_accent(g: &Settings<'_>, theme: &ThemeDef, accent_id: &str) {
+    g.set_accent_follows_artwork(accent_id == MATERIAL_YOU_ACCENT_ID);
+    g.set_accent_idx(slot_index(accent_slot(theme, accent_id)));
 }
 
 /// Resolve the accent id we actually want to render and paint with.
@@ -82,21 +78,6 @@ pub(super) fn effective_accent_id<'a>(
     }
 }
 
-/// Reverse of [`accent_idx_in_grid`]: resolve a clicked grid index to a
-/// concrete accent id. Index 0 → `MATERIAL_YOU_ACCENT_ID` when active;
-/// otherwise the static accent at `idx - my_active as usize`.
-pub(super) fn accent_id_from_grid_idx(
-    theme: &ThemeDef,
-    idx: usize,
-    my_active: bool,
-) -> Option<&'static str> {
-    if my_active && idx == 0 {
-        return Some(MATERIAL_YOU_ACCENT_ID);
-    }
-    let offset = usize::from(my_active);
-    theme.accents.get(idx.saturating_sub(offset)).map(|a| a.id)
-}
-
 pub(super) fn wire_accent_changed(
     ui: &AppWindow,
     state: &AppState,
@@ -108,27 +89,18 @@ pub(super) fn wire_accent_changed(
     ui.global::<Settings>().on_accent_changed(move |idx| {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Settings>();
-        let theme_idx = g.get_theme_idx();
-        let variant_idx = g.get_variant_idx();
-        let Some(theme) = registry_get(theme_idx) else {
+        let Some(theme) = registry_get(g.get_theme_idx()) else {
             return;
         };
-
-        let i = usize_from(variant_idx);
-        let variant_id: &str = if theme.supports_system_mode && i == theme.variants.len() {
-            themes::SYSTEM_VARIANT_ID
-        } else if let Some(v) = theme.variants.get(i) {
-            v.id
-        } else {
+        let Some(variant_id) = variant_id_at(theme, usize_from(g.get_variant_idx())) else {
+            return;
+        };
+        let Some(accent_id) = accent_at(theme, usize_from(idx)) else {
             return;
         };
 
         let snapshot = os_state.read().clone();
-        let my_active = material_you_active(theme.id, &snapshot);
-        let Some(accent_id) = accent_id_from_grid_idx(theme, usize_from(idx), my_active) else {
-            return;
-        };
-        g.set_accent_idx(idx);
+        seat_accent(&g, theme, accent_id);
         super::apply_palette(&ui, theme.id, variant_id, accent_id, &snapshot);
         // Update the synchronous accent shadow before the async write
         // — a sibling `wire_variant_changed` that fires before the disk
@@ -138,3 +110,44 @@ pub(super) fn wire_accent_changed(
         persist(&s, theme.id, variant_id, accent_id);
     });
 }
+
+/// The Material You switch. Off takes back the theme's last accent picked by hand, as clearing the
+/// Color Style does.
+pub(super) fn wire_follows_artwork_changed(
+    ui: &AppWindow,
+    state: &AppState,
+    os_state: Arc<RwLock<SystemColorState>>,
+    persisted_accent: PersistedAccent,
+) {
+    let weak = ui.as_weak();
+    let s = state.clone();
+    ui.global::<Settings>().on_accent_follows_artwork_changed(move |follows| {
+        let Some(ui) = weak.upgrade() else { return };
+        let g = ui.global::<Settings>();
+        let Some(theme) = registry_get(g.get_theme_idx()) else {
+            return;
+        };
+        let Some(variant_id) = variant_id_at(theme, usize_from(g.get_variant_idx())) else {
+            return;
+        };
+
+        let last_static = read_last_static_accent(&s, theme.id);
+        let accent_id = if follows {
+            MATERIAL_YOU_ACCENT_ID
+        } else {
+            last_static.as_deref().unwrap_or(theme.default_accent)
+        };
+
+        let snapshot = os_state.read().clone();
+        let my_active = material_you_active(theme.id, &snapshot);
+        let painted = effective_accent_id(theme, accent_id, my_active, last_static.as_deref());
+        seat_accent(&g, theme, accent_id);
+        super::apply_palette(&ui, theme.id, variant_id, painted, &snapshot);
+        accent_id.clone_into(&mut persisted_accent.lock());
+        persist(&s, theme.id, variant_id, accent_id);
+    });
+}
+
+#[cfg(test)]
+#[path = "tests/accent_picker_tests.rs"]
+mod tests;

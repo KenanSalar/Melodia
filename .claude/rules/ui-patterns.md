@@ -67,7 +67,7 @@ silently miss the other.
   Slint paints later (bands, header strips): `components/tooltip-frame.slint`'s `TooltipFrame`,
   declared *after* the occluder, tracking the host via `absolute-position` deltas the host spells
   itself. `sidebar-tip` is the deliberate exception and should stay one — its `x` rides the live
-  rail width, it owns a `held` latch, and it is the only frame passing `gap`.
+  rail width and it owns a `held` latch.
 
 - **A band publishes an anchor and draws no pill.** Pinned by walks, not lists —
   `no_page_or_shell_mounts_a_bare_tooltip` over `views/` **and `layout/`**, and
@@ -174,9 +174,18 @@ silently miss the other.
 
 - **A surface that floats over the app edges with `Theme.surface2`, never `Theme.border`.** All
   four Catppuccin variants define `border` as the same hex as `surface0`, so a `surface0` card
-  bordered with it has no rim at all. `Theme.border` is still right for an **input field** on
-  `surface1`. The test is the fill underneath, not the element's kind: lift a surface off its
-  background, or recess a field into one.
+  bordered with it has no rim at all. The test is the fill underneath, not the element's kind:
+  lift a surface off its background.
+
+- **A control resting on a card fills with `Theme.card-control`, and its hover or rim with
+  `card-control-hover`, never `surface1`/`surface2`**, which most palettes keep all but level with
+  the card. Switches, dropdowns, outline buttons, progress bars and dialog fields take the pair by
+  default, mounting only on cards. `FilledChip` and `SliderTrack` keep `surface1` defaults for
+  their hosts off a card (Radio's chips, the seek row, the volume popup), so a card host passes the
+  pair itself, as `ChipGroup` and `SettingSlider` do. `SearchBar` floats by default and takes the
+  pair under `on-card`, which the Settings panel's box sets. Both are palette slots rather than a
+  Slint mix of other brushes so each theme sets its own; `themes::toward` is the rule the generated
+  palettes fill them by.
 
 - **A sort row's Rust half is two shared helpers** — `next_sort` decides the pick (same field
   flips, a new one starts ascending), `persist_view_sort` writes it, `persisted_sort` seeds the
@@ -1238,7 +1247,7 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
   index reaches for `previous-index`, never a mirror seeded at mount.
 
 - **Every brush it paints with is a defaulted `in property`**, which is what lets it sit on a hero.
-  Settings takes the defaults; the two bands hand over `HeroBackdrop` tiers for **all four** —
+  The defaults are a flat page's; the two bands hand over `HeroBackdrop` tiers for **all four** —
   **through four locally eased mirrors, never raw**, the bar being unable to ease a brush and the
   solve landing late either way. `MosaicTabHero`'s **own title takes `hero-label` too**, painting
   that same tier, so easing only the bar leaves the two halves of one text tier arriving apart.
@@ -1273,8 +1282,9 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
   host cannot supply — dropped, the pill lands a whole `lead-w` left of the tab it names, on the
   one mount with a leading slot.
 
-- **The Rust half is one function: `clamp_tab(tab, tab_count)`.** All four hosts clamp on *read*
-  against the Slint-declared `tab-count` — the bar can only produce a valid index, but a file left
+- **The Rust half is one function: `clamp_tab(tab, tab_count)`.** Every page persisting an index
+  clamps on *read* through it, against its global's own count (Settings' `category-count` and
+  Browse's `view-mode-count` included) — the bar can only produce a valid index, but a file left
   by a build with more tabs would select a branch that mounts nothing. The component's two
   source-level invariants (the written-not-bound `compact-t`, the root's `clip`) are pinned there
   too, no host owning the file.
@@ -1430,30 +1440,44 @@ edit would otherwise reverse.
 
 ## The Settings page
 
-- **The page is tabbed** — 5 tabs over the same section cards. `settings-view.slint` is page
-  chrome only, `settings-tabs.slint` the router, `views/settings/pages/*.slint` the five pages,
-  each owning its section list *and* an aggregate `has-matches`. **Search escapes the tabs**: a
-  non-empty query mounts all five pages at once, which is how the cross-tab flat list comes back
-  with no extra filtering logic, and why both modes mount the same five pages — the card-to-tab
-  mapping is stated once.
+- **A category panel beside one column of cards.** `settings-view.slint` is page chrome only,
+  `settings/settings-nav.slint` the panel, `settings/settings-router.slint` the router and
+  `views/settings/pages/*.slint` one page per category, each owning its card list *and* an aggregate
+  `has-matches`. **Search escapes the categories**: a non-empty query mounts every page at once,
+  which is how the flat cross-category list comes back with no filtering logic of its own, and why
+  both modes mount the same pages, the card-to-category mapping being stated once.
 
-- **The search box takes two properties** — `search-input` for the `SearchBar`, `search-query` for
-  the sections, joined by a `FilterThrottle`. Mounting all five pages is what makes a keystroke
-  expensive here with no model in sight. Both are cleared together on nav-away and on a tab pick.
-  `on_matches` memoizes the fold against the raw needle, this being the one `row_match` caller that
-  can't hold a folded shadow — it is invoked per *field*, not per pass.
+- **The panel is `TabBar`'s contract turned on its side**: parallel `labels`/`icons` and a
+  mirrored `avail-w` in, the `compact` verdict and the rail's tooltip rect out, the pill painted by
+  a `TooltipFrame` the view mounts last. Its rows are the sidebar's `NavRow`. The measured width,
+  the latch and the morph are `settings-nav.slint`'s.
 
-- **A new tab** is one page file + a `tab-*` index + two symmetric router lines + one entry in each
-  of the bar's two inline arrays + a `tab-name:` on every section that page mounts, with
-  `tab-count` the sole definition of how many there are. The bar's `labels` must stay an inline
-  `[@tr("…"), …]` literal in `tab-*` order.
+- **The search box takes two properties**: `search-input` for the `SearchBar`s, `search-query` for
+  the sections, joined by a `FilterThrottle`. Mounting every page is what makes a keystroke
+  expensive here with no model in sight. Both are cleared together on nav-away and on a category
+  pick. `on_matches` memoizes the fold against the raw needle, this being the one `row_match`
+  caller that can't hold a folded shadow: it is invoked per *field*, not per pass.
+  **Two boxes write `search-input`**, the panel's own and the field the rail's button opens. Both
+  stay mounted, each carrying a `changed blur-trigger` tracker an `if` would strand, and
+  `settings-view.slint` hands the focus across when the fold swaps them.
 
-- **The tab's own name is part of each card's search term** — search escapes the tabs, so a tab
-  name is what a user types, and "Interface"/"Services" appear in no card's text otherwise. It
-  reaches `row-visible` as a **term of its own**, not a prefix spliced onto each title: the join
-  lives in the global instead of twelve copies, and no card can match a substring spanning the
-  seam. A mount that forgets `tab-name:` still matches its own title, so the page looks right and
-  only the tab-name query comes up empty.
+- **A new category** is one page file + a `category-*` constant + one router branch and one
+  search-mode mount + an entry in each of the panel's two inline arrays + a `SettingsCategory`
+  variant with its `category_index` arm + a `category-name:` on every section the page mounts, with
+  `category-count` the sole definition of how many there are. The panel's `labels` must stay an
+  inline `[@tr("…"), …]` literal in `category-*` order, and `settings_page_tests` holds every count
+  to it. **Reordering the categories renumbers what `views.json` holds**, which takes a new key
+  rather than a fold; `ViewStateData::settings_category` says why.
+
+- **A link into a category from outside the page is `SettingsPage.open-category`**, the Slint face
+  of `settings_page::open_on`, never a callback named for its destination.
+
+- **The category's own name is part of each card's search term**: search escapes the categories,
+  so a category name is what a user types, and "Integrations" appears in no card's text otherwise.
+  It reaches `row-visible` as a **term of its own**, not a prefix spliced onto each title: the join
+  lives in the global instead of a copy per card, and no card can match a substring spanning the
+  seam. A mount that forgets `category-name:` still matches its own title, so the page looks right
+  and only the category's own query comes up empty.
 
 - **A row's label and description are declared once, as properties the visibility term and the row
   both read.** The section's local `row-visible(label, desc)` is fed `label + " " + desc`, so a pair
@@ -1466,29 +1490,35 @@ edit would otherwise reverse.
   where it comes back.
 
 - **The body's geometry is `SettingsPage`'s, and nothing in a card measures.**
-  `settings-view.slint` publishes `page-w` (the panel width it already mirrors — a live
-  `root.width` read feeding a child's size re-enters layout) and `body-cols`; the global derives
-  `body-w`/`card-w`. Every card spans a full body column, so those are exact. A control inside a
-  card that has to fit a width (the chip groups, the accent grids) wraps at the width it is drawn
-  rather than being handed one, so it needs no width mirror, no mount `Timer` and no `parent`
+  `settings-view.slint` publishes `body-avail`, the column right of the panel, off the width it
+  already mirrors (a live `root.width` read feeding a child's size re-enters layout), and the
+  global derives `card-w`. Every card spans the column, so that is exact. A control inside a card
+  that has to fit a width (the chip groups, the accent grids) wraps at the width it is drawn rather
+  than being handed one, so it needs no width mirror, no mount `Timer` and no `parent`
   reach-around.
 
-- **`card-cap` (800 px) is one number both layouts obey**: a card grows to the cap, stops, and
-  takes margins from there, and a second column appears exactly when two *capped* cards fit beside
-  it — so a card's width only ever grows and the flip resizes nothing. A threshold spelled
-  independently of the cap is the failure to avoid: set below it, the column divides before the cap
-  is reached, and what you see is a card that grows without limit and then halves, the cap still in
-  the source and simply unreachable. Latched with a 24 px band, and **never while searching**:
-  search mounts all five pages and hides the non-matching cards, and a hidden card still claims its
-  grid cell.
+- **`card-cap` (720 px) caps one column, and the panel and a capped card centre as a group**, so on
+  a wide window the panel stays beside the cards rather than at the page's edge. Below the cap the
+  column shrinks with the page, and the panel folds to its rail once the body would drop under
+  `nav-collapse-body-w`. The two-column flip is gone: with one to three cards per category it
+  mostly stranded a lone card off-centre.
 
-- **A page hands the `GridLayout` one cell per *column*, not per card**, placed through
-  `grid-row(i)`/`grid-col(i)`. That indirection is the whole reason the body reads as masonry:
-  cards as cells are row-aligned, and a grid row is as tall as its taller cell, so a short card left
-  a hole down to the next row. Columns are **contiguous halves** of the card list, so stacked they
-  read in source order. Every card is still **mounted exactly once** — a page reads `has-matches`
-  back off its section instances, and an element inside an `if` can't be read from outside it, so a
-  one-branch-per-column-count arrangement would break the no-results placeholder.
+- **The panel and the cards start level, and three files hold it.** `settings-view.slint` gives
+  both columns the same `pad-lg` above them, `SectionCard` draws its title *inside* the fill (a
+  label above it dropped every card's box below the panel's), and `SettingsPage.card-header-h`
+  sizes that title band off the panel's row height and inset, which `settings-nav.slint` reads from
+  the same global. A heading put back above a card, or a panel metric spelled locally again, breaks
+  the line with nothing failing.
+
+- **Every card child that wraps text is measured at `card-w` through a pinned cell.** Each sits
+  behind an `if`, its own or its card's, and Slint measures a repeated element's height at the
+  width its contents ask for, which no pin on its root reaches (`slint-pitfalls.md`).
+  `setting-row.slint` argues the wrapper and `SectionCard` carries the same pair on its body cell;
+  a new row shape behind an `if` owes one, or its card is sized for a single line of what wraps.
+
+- **Each card carries the gap under it**, so pages and the router spell no `spacing`: a section
+  that filters itself away still holds a layout slot, and a gap between slots would leave a hole
+  for every card a search hides.
 
 - **Nothing has a width floor any more**: the content column's `min-width` is gone with the
   horizontal scrollbar that existed to pan it, both row components' labels take `wrap: word-wrap`
@@ -1502,10 +1532,38 @@ edit would otherwise reverse.
   bound to the flex's `preferred-height`, without which a host with height to spare spreads the
   lines apart (`slint-pitfalls.md`'s two flex entries). An accent swatch picks its tooltip side
   off its cell's laid-out `y`, so the side follows wherever the flex broke the line.
-  **The body itself stays a `GridLayout`**: a flex body of card columns would measure each column
-  at a width it hasn't committed to, and these strips, `SettingRow`'s wrapped labels and the other
-  `Rectangle`-rooted controls answer at the width they were drawn, a cycle Slint panics on.
+  **The body itself stays box layouts**: a flex body would measure each card at a width it hasn't
+  committed to, and these strips, `SettingRow`'s wrapped labels and the other `Rectangle`-rooted
+  controls answer at the width they were drawn, a cycle Slint panics on.
+
+- **A colour that follows something is a switch above its grid, never a swatch in it.** Material
+  You Accent and System Border Color both work this way: while one is on, its grid's
+  `selected-index` is -1 so nothing is checked, and picking a swatch turns it off, so a colour is
+  one click either way. Rust writes the switch and the index together (`accent_picker::seat_accent`,
+  `window_border::seat`), which is what keeps the two from reading as picked at once. A mode drawn
+  as a swatch is what this replaced: it came and went with the artwork, shifting every index past
+  it, and showed a colour it couldn't promise. Both grids draw `Settings.accent-colors`.
+
+- **A one-of-many set on a card picks its control by length.** A short preset set (theme, variant,
+  color style) is a `ChipGroup`; a set too long or too ragged to read in order as chips is
+  `components/settings/choice-list.slint`'s `ChoiceList`, one row per option, which keeps
+  `ChipGroup`'s contract so a mount swaps between the two. The Language card is its mount, and
+  **Language is a category of its own** so a reader stranded in a language they can't read finds
+  the way back by the panel's `translate` glyph, not by a card at the foot of another page. The
+  first-run card keeps chips for the same names, a welcome panel having room for one strip and
+  not a page of rows.
 
 - **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
-  `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its
-  two mounts, and the component's header says what stays the host's.
+  `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold mount it
+  directly, and both effects' preamps through `preamp-slider.slint`'s `PreampSlider`, the one copy
+  of the dB mapping, on their cards and in their dialogs alike. `SettingSlider`'s header says what
+  stays the host's.
+
+- **A setting with a quick dialog as well as a card shares its controls, never its chrome.** The
+  equalizer and ReplayGain each keep a `components/settings/*-controls.slint` holding every control
+  bound to their global and a `*Text` global of the words both surfaces print. The Effects cards
+  lay those controls out in `SettingRow`s, and the overflow menu's dialogs in `DialogToggleRow` and
+  `DialogLabeledRow`. Mounting the card's rows in the dialog is the shortcut that looks like more
+  sharing: `SettingRow` measures itself at `card-w`, so the dialog would be sized for the Settings
+  column rather than its own. What each surface does while the effect is off is its own call,
+  argued in `equalizer-controls.slint`'s header.

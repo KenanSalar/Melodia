@@ -1,0 +1,16 @@
+import { AppearanceSection } from "../appearance-section.slint";
+import { AnimationsSection } from "../animations-section.slint";
+
+// How the app looks: how it is coloured, and what moves with the music. The page shape is
+// `library-page.slint`'s.
+export component AppearancePage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: appearance.has-matches || animations.has-matches;
+
+    VerticalLayout {
+        appearance := AppearanceSection { category-name: @tr("Appearance"); }
+        animations := AnimationsSection { category-name: @tr("Appearance"); }
+    }
+}

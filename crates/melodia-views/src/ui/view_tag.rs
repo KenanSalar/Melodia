@@ -22,7 +22,7 @@ use crate::ui::favorites::tab_from_index as favorites_tab;
 use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
 use crate::ui::radio::{NAV_RADIO, tab_from_index as radio_tab};
 use crate::ui::recently_played::tab_from_index as recently_played_tab;
-use crate::ui::settings::settings_page::tab_from_index as settings_tab;
+use crate::ui::settings::settings_page::category_from_index as settings_category;
 use melodia_ui::{
     AlbumDetail, AppWindow, ArtistDetail, Favorites, GenreDetail, MyLibrary, Nav, PlaylistDetail,
     Radio, RecentlyPlayed, SettingsPage,
@@ -115,7 +115,7 @@ pub fn format_view(ui: &AppWindow) -> String {
         }
         9 => {
             let g = ui.global::<SettingsPage>();
-            format!("Settings/{:?}", settings_tab(&g, g.get_tab_idx()))
+            format!("Settings/{:?}", settings_category(&g, g.get_category_idx()))
         }
         NAV_RADIO => radio_tag(ui),
         n => format!("Nav({n})"),

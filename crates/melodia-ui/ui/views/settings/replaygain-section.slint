@@ -1,0 +1,68 @@
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { ReplayGain } from "../../globals/audio.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { ReplayGainText, RgModePicker, RgPreampSlider } from "../../components/settings/replaygain-controls.slint";
+
+// Loudness normalization, the equalizer card's shape: the mode, preamp and clipping guard mount only
+// while the switch is on. The controls are `replaygain-controls.slint`'s, shared with the overflow
+// menu's dialog.
+export component ReplayGainSection inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> category-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.category-name, ReplayGainText.title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    // One cluster, as on the equalizer card.
+    out property <bool> has-matches: row-visible(ReplayGainText.enable-label, ReplayGainText.enable-desc)
+        || row-visible(ReplayGainText.mode-label, "")
+        || row-visible(ReplayGainText.preamp-label, "")
+        || row-visible(ReplayGainText.clipping-label, "");
+
+    property <bool> show-details: root.has-matches && ReplayGain.enabled;
+
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: ReplayGainText.title;
+
+            SettingRow {
+                icon: "tune";
+                label: ReplayGainText.enable-label;
+                description: ReplayGainText.enable-desc;
+                ToggleSwitch {
+                    checked <=> ReplayGain.enabled;
+                    toggled(v) => { ReplayGain.set-enabled(v); }
+                }
+            }
+
+            if root.show-details: SettingRowStacked {
+                icon: "album";
+                label: ReplayGainText.mode-label;
+                RgModePicker { }
+            }
+
+            if root.show-details: SettingRowStacked {
+                icon: "volume_up";
+                label: ReplayGainText.preamp-label;
+                RgPreampSlider { }
+            }
+
+            if root.show-details: SettingRow {
+                icon: "shield";
+                label: ReplayGainText.clipping-label;
+                ToggleSwitch {
+                    checked <=> ReplayGain.prevent-clipping;
+                    toggled(v) => { ReplayGain.set-prevent-clipping(v); }
+                }
+            }
+        }
+    }
+}

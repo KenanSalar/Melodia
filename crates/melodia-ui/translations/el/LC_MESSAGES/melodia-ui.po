@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Αναζήτηση"
 
@@ -37,7 +38,8 @@ msgstr "Πρόσφατα αναπαραγόμενα"
 msgid "Settings"
 msgstr "Ρυθμίσεις"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Ραδιόφωνο"
@@ -189,54 +191,6 @@ msgstr "Άνοιγμα Last.fm"
 msgid "Connect"
 msgstr "Σύνδεση"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Κλασική"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Επίπεδο"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Ενίσχυση μπάσων"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Ηλεκτρονική"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Ενίσχυση πρίμων"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Φωνητικά"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Προσαρμοσμένο"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Ενεργοποίηση ισοσταθμιστή"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Επαναφορά"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Δεν υπάρχουν λίστες για εξαγωγή"
@@ -272,42 +226,6 @@ msgstr "Έχουν ήδη προστεθεί"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{} από {} ήδη προστέθηκαν"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Προενίσχυση"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Άλμπουμ"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Κομμάτι"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "Ενεργοποίηση ReplayGain"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Λειτουργία κανονικοποίησης"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Αποτροπή ψαλιδίσματος"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -358,6 +276,17 @@ msgstr "ημέρες"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "αριθμός"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Άλμπουμ"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -651,7 +580,9 @@ msgstr "Λεπτομέρειες"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Στίχοι"
 
@@ -662,6 +593,11 @@ msgstr "Σύνοψη"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Ετικέτες"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
+msgid "Track"
+msgstr "Κομμάτι"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -707,7 +643,8 @@ msgstr "Αριθμός"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Γλώσσα"
 
@@ -1137,6 +1074,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Δοκιμάστε ξανά από το μενού Στίχοι"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Τέλος"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Περισσότερα"
 
@@ -1154,24 +1096,8 @@ msgid "Track end"
 msgstr "Τέλος κομματιού"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "Equalizer"
-msgstr "Ισοσταθμιστής"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Ενεργό"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Τέλος"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1205,12 +1131,13 @@ msgid "No tracks up next"
 msgstr "Δεν υπάρχουν επόμενα κομμάτια"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Οπτικοποίηση"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Εμφάνιση"
 
@@ -1230,7 +1157,6 @@ msgstr "Παραλλαγή θέματος"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Σύστημα"
 
@@ -1357,9 +1283,93 @@ msgstr "Επόμενο"
 msgid "Search…"
 msgstr "Αναζήτηση…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Ισοσταθμιστής"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Ενεργοποίηση ισοσταθμιστή"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Διαμορφώστε τον ήχο με δέκα ζώνες, από τα μπάσα αριστερά έως τα πρίμα δεξιά"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Προενίσχυση"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Κλασική"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Επίπεδο"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Ενίσχυση μπάσων"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Ηλεκτρονική"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Ενίσχυση πρίμων"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Φωνητικά"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Προσαρμοσμένο"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Επαναφορά"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Επανασάρωση"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "Ενεργοποίηση ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "Το ReplayGain επηρεάζει μόνο κομμάτια που έχουν ήδη ετικέτες έντασης ήχου. Σαρώστε τη βιβλιοθήκη σας με ένα εργαλείο όπως το rsgain ή το loudgain για να τις προσθέσετε."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Λειτουργία κανονικοποίησης"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Αποτροπή ψαλιδίσματος"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2460,27 +2470,43 @@ msgstr "Εμφάνιση και των {} τραγουδιών"
 msgid "Top Result"
 msgstr "Κορυφαίο αποτέλεσμα"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Διεπαφή"
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Εφέ"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Βιβλιοθήκη"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Έξοδος"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Αναπαραγωγή"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Παράθυρο"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Σχετικά"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Υπηρεσίες"
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Ενσωματώσεις"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Ενημερώσεις"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2528,6 +2554,43 @@ msgstr "Εμφανίστε ξανά την αρχική ρύθμιση."
 msgid "Show"
 msgstr "Εμφάνιση"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Κινήσεις"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Κίνηση κουμπιού αναπαραγωγής"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Οπτικό εφέ στο κουμπί αναπαραγωγής όσο παίζει η μουσική"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Εμφάνιση οπτικοποίησης ήχου στην οθόνη αναπαραγωγής"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Στυλ οπτικοποίησης"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Επιλέξτε πώς σχεδιάζει τον ήχο η οπτικοποίηση"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Κανένα"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Χρώμα τονισμού Material You"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "Λήψη του χρώματος τονισμού από το εξώφυλλο του τρέχοντος κομματιού."
+
 #: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Στυλ χρωμάτων"
@@ -2547,11 +2610,6 @@ msgstr "Φόντο Aurora"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Βάψτε τις κεφαλίδες άλμπουμ, λίστας αναπαραγωγής και «Αναπαράγεται τώρα» με τα χρώματα του ίδιου του άλμπουμ, αντί με ένα θολωμένο αντίγραφο του εξωφύλλου. Δεν χρειάζεται θόλωμα, οπότε οι κεφαλίδες εμφανίζονται πιο γρήγορα και το Melodia παραμένει πιο ελαφρύ. Απαιτείται επανεκκίνηση."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Κανένα"
 
 # A coined Material 3 term, kept verbatim; the other color styles are translated.
 #: ui/views/settings/appearance-section.slint
@@ -2646,6 +2704,16 @@ msgstr "Συνδεδεμένο με το Discord"
 msgid "Discord not running"
 msgstr "Το Discord δεν εκτελείται"
 
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Προεπιλογή"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Ζώνες συχνοτήτων"
+
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
 msgstr "Παρακολούθηση αρχείων"
@@ -2657,10 +2725,6 @@ msgstr "Παρακολούθηση αλλαγών αρχείων"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Εντοπίζει αυτόματα πότε προστίθενται, καταργούνται ή αλλάζουν αρχεία στους φακέλους της βιβλιοθήκης σου."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Επίλεξε τη γλώσσα που προτιμάς"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"
@@ -2710,10 +2774,6 @@ msgstr "Φόντο άλμπουμ"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Βάφει τον μίνι αναπαραγωγέα με τα χρώματα του άλμπουμ που παίζει, όπως κάνει η προβολή «Αναπαράγεται τώρα»."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Έξοδος"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -2926,10 +2986,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, στρογγυλεμένο σε float 32 bit"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Εφέ"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Κανονική"
 
@@ -3027,14 +3083,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Απρόσκοπτες μεταβάσεις μεταξύ κομματιών χωρίς διαστήματα σιωπής"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Κίνηση κουμπιού αναπαραγωγής"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Οπτικό εφέ στο κουμπί αναπαραγωγής όσο παίζει η μουσική"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Συνέχιση κατά την εκκίνηση"
 
@@ -3081,18 +3129,6 @@ msgstr "Σβήσιμο στην παύση"
 #: ui/views/settings/playback-section.slint
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "Χαμήλωσε σταδιακά τη μουσική στην παύση ή τη διακοπή και επανάφερέ την στη συνέχιση"
-
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Εμφάνιση οπτικοποίησης ήχου στην οθόνη αναπαραγωγής"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Στυλ οπτικοποίησης"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Επιλέξτε πώς σχεδιάζει τον ήχο η οπτικοποίηση"
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
@@ -3203,13 +3239,9 @@ msgstr "Σύνδεση ListenBrainz"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Ενεργοποιήστε πρώτα το Last.fm ή το ListenBrainz παραπάνω"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Καμία ρύθμιση δεν ταιριάζει"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Ενημερώσεις"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3288,10 +3320,6 @@ msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Αυτή η ενημέρωση διορθώνει ένα κρίσιμο πρόβλημα και δεν μπορεί να παραλειφθεί."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Παράθυρο"
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"
 msgstr "Διαχειρίζεται από το λειτουργικό σύστημα"
 
@@ -3332,16 +3360,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Σχεδιάζει ένα λεπτό περίγραμμα γύρω από ολόκληρο το παράθυρο, μαζί με τον μίνι αναπαραγωγέα."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Χρώμα περιγράμματος παραθύρου"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Το Σύστημα ακολουθεί το χρώμα με το οποίο το λειτουργικό σύστημα σχεδιάζει τα δικά του περιγράμματα παραθύρων."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Διαθέσιμο μόνο όταν εμφανίζεται το περίγραμμα παραθύρου."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Χρώμα περιγράμματος συστήματος"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Χρήση του χρώματος με το οποίο το λειτουργικό σύστημα σχεδιάζει τα δικά του περιγράμματα παραθύρων."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Περίγραμμα Material You"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "Απόχρωση του χρώματος περιγράμματος συστήματος με το εξώφυλλο του τρέχοντος κομματιού."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Χρώμα περιγράμματος παραθύρου"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

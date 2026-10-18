@@ -521,14 +521,15 @@ pub fn binding_value<'a>(src: &'a str, name: &str) -> &'a str {
     src.split_once(name).and_then(|(_, rest)| rest.split_once(';')).map_or("", |(value, _)| value)
 }
 
-/// The `N` in a global's `out property <int> tab-count: N;`.
+/// The `N` in a global's `out property <int> <property>: N;` — a tabbed page's `tab-count`,
+/// or Settings' `category-count`.
 ///
 /// `None` covers both "no such declaration" and "not a plain integer literal": Rust clamps
 /// the persisted index against this count, so anything unreadable is a page that can restore
 /// onto a branch mounting nothing. Takes the source rather than a path because the two
 /// curated globals share one file — a caller scopes to its own global's body first.
-pub fn declared_tab_count(src: &str) -> Option<usize> {
-    src.split_once("out property <int> tab-count:")
+pub fn declared_count(src: &str, property: &str) -> Option<usize> {
+    src.split_once(&format!("out property <int> {property}:"))
         .and_then(|(_, rest)| rest.split_once(';'))
         .and_then(|(digits, _)| digits.trim().parse().ok())
 }

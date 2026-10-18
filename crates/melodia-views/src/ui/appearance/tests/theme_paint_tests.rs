@@ -7,7 +7,7 @@ use super::{Fade, Painted, Shown, Source, blend, ease_in_out};
 const FROM: u32 = 0x10_2030;
 const TO: u32 = 0xa0_b0c0;
 
-/// Sixteen slots that differ from one another, so a slot read from its neighbour shows. Real
+/// Eighteen slots that differ from one another, so a slot read from its neighbour shows. Real
 /// palettes repeat slots (Material 3's dark one has `crust == base`).
 fn palette(seed: u32) -> Palette {
     Palette {
@@ -24,9 +24,11 @@ fn palette(seed: u32) -> Palette {
         subtext0: seed + 10,
         subtext1: seed + 11,
         border: seed + 12,
-        red: seed + 13,
-        green: seed + 14,
-        yellow: seed + 15,
+        card_control: seed + 13,
+        card_control_hover: seed + 14,
+        red: seed + 15,
+        green: seed + 16,
+        yellow: seed + 17,
     }
 }
 
@@ -34,9 +36,9 @@ fn palette(seed: u32) -> Palette {
 fn painted(seed: u32) -> Painted {
     Painted {
         palette: palette(seed),
-        accent: seed + 16,
-        accent_text: seed + 17,
-        mantle_unfocused: seed + 18,
+        accent: seed + 18,
+        accent_text: seed + 19,
+        mantle_unfocused: seed + 20,
     }
 }
 

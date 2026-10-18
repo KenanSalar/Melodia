@@ -1,42 +1,21 @@
-import { Theme } from "../../../theme.slint";
-import { SettingsPage } from "../../../globals/settings-page.slint";
 import { LibrarySection } from "../library-section.slint";
 import { FileWatchingSection } from "../file-watching-section.slint";
 import { RatingsSection } from "../ratings-section.slint";
 
-// Where music comes from and how it stays in sync. `has-matches` ORs the cards' own verdicts, so
-// the router can tell whether the page filtered itself away; every tab page carries it.
+// Where music comes from and how it stays in sync.
 //
-// **This is also the shape every page takes.** The `GridLayout` gets one cell per *column*, each a
-// `VerticalLayout` of cards placing itself through `SettingsPage.grid-row`/`grid-col`: side by side
-// when the body is wide, stacked when it isn't. Cards as cells would be row-aligned, so a short one
-// would leave a hole down to the next row. The columns are contiguous halves of the list, so
-// stacked they read in source order; each card is mounted exactly once.
+// **The shape every category page takes**: its cards in one column, each mounted exactly once and
+// named, so `has-matches` can OR their own verdicts and the router can tell a page that filtered
+// itself away. No `spacing` — each card carries the gap under it, see `SectionCard`.
 export component LibraryPage inherits Rectangle {
-    background: transparent;
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
     out property <bool> has-matches: lib.has-matches || fw.has-matches || ratings.has-matches;
 
-    GridLayout {
-        spacing: Theme.pad-lg;
-
-        VerticalLayout {
-            row: SettingsPage.grid-row(0); col: SettingsPage.grid-col(0);
-            alignment: start;
-            spacing: Theme.pad-lg;
-
-            lib := LibrarySection { tab-name: @tr("Library"); }
-        }
-
-        VerticalLayout {
-            row: SettingsPage.grid-row(1); col: SettingsPage.grid-col(1);
-            alignment: start;
-            spacing: Theme.pad-lg;
-
-            fw := FileWatchingSection { tab-name: @tr("Library"); }
-            ratings := RatingsSection { tab-name: @tr("Library"); }
-        }
+    VerticalLayout {
+        lib := LibrarySection { category-name: @tr("Library"); }
+        fw := FileWatchingSection { category-name: @tr("Library"); }
+        ratings := RatingsSection { category-name: @tr("Library"); }
     }
 }

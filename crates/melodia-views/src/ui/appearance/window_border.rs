@@ -1,29 +1,31 @@
 //! The Window Border rows: whether a frameless window draws the 1 px outline an OS draws round its
 //! own frames, and in what colour.
 //!
-//! **System is the OS's own colour.** On Windows that is the accent while the user has it on window
-//! borders. Everywhere else, and on Windows with it off, it is a neutral mixed from the palette's
-//! window surface and its text, which is how KDE's Breeze outline and the macOS and GNOME hairlines
-//! sit against a window. Mixed rather than fixed, so it keeps its weight on a light palette and a
-//! dark one alike.
+//! **System is the OS's own colour, and a switch rather than a swatch**, since what it paints is
+//! the OS's answer and no swatch could show it. On Windows that is the accent while the user has it
+//! on window borders. Everywhere else, and on Windows with it off, it is a neutral mixed from the
+//! palette's window surface and its text, which is how KDE's Breeze outline and the macOS and GNOME
+//! hairlines sit against a window. Mixed rather than fixed, so it keeps its weight on a light
+//! palette and a dark one alike. Under Material You the palette is the artwork's, so the neutral
+//! follows the track unless [`BorderTint::Theme`] mixes it from the theme's own instead.
 //!
-//! The other swatches are the theme's accents, and a pick is stored as the accent's id, so it
-//! follows a variant's shading the way the accent row does. An id the theme doesn't have paints as
-//! System.
+//! The swatches are the accent row's, and a pick is stored as the accent's id, so it follows a
+//! variant's shading the way the accent row does. An id the theme doesn't have paints as System.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::cell::{Cell, RefCell};
 
-use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Model};
 
 use melodia_app::library;
-use melodia_app::services::settings::{WINDOW_BORDER_SYSTEM_COLOR, WindowBorder, WindowFlags};
+use melodia_app::services::settings::{
+    BorderTint, WINDOW_BORDER_SYSTEM_COLOR, WindowBorder, WindowFlags,
+};
 use melodia_app::state::AppState;
 use melodia_core::themes::{self, SystemColorState, ThemeDef};
 use melodia_ui::{AppWindow, Settings, Theme, WindowChrome};
 
+use super::accent_picker::{accent_at, accent_slot, material_you_active, slot_index};
 use super::rgb::{brush, brush_to_rgb};
-use super::theme_apply::accent_brushes;
 use super::theme_paint;
 
 /// The neutral border's share of the text colour, out of [`NEUTRAL_PARTS`] with the rest the
@@ -36,16 +38,25 @@ thread_local! {
     /// The persisted colour id. A palette change re-resolves the pick from here rather than from
     /// `settings.json`, which a pick may still be writing.
     static COLOR_ID: RefCell<String> = RefCell::new(WINDOW_BORDER_SYSTEM_COLOR.to_owned());
+    /// The persisted tint, mirrored ahead of its write as the colour id is.
+    static TINT: Cell<BorderTint> = const { Cell::new(BorderTint::Artwork) };
+    /// The neutral off the theme's own palette while Material You paints the artwork's, `None`
+    /// while the theme's is the one painted. Re-solved on every palette change, so the tint switch
+    /// can repaint without one.
+    static THEME_NEUTRAL: Cell<Option<u32>> = const { Cell::new(None) };
 }
 
-/// Seed both rows from the persisted flags. Has to run ahead of the first palette apply, which
+/// Seed the rows from the persisted flags. Has to run ahead of the first palette apply, which
 /// resolves the colour seeded here.
 pub(super) fn seed(ui: &AppWindow, window: &WindowFlags) {
-    ui.global::<Settings>().set_window_border_shown(window.window_border == WindowBorder::Shown);
+    let g = ui.global::<Settings>();
+    g.set_window_border_shown(window.window_border == WindowBorder::Shown);
+    g.set_window_border_material_you(window.window_border_tint == BorderTint::Artwork);
     COLOR_ID.with_borrow_mut(|id| id.clone_from(&window.window_border_color));
+    TINT.set(window.window_border_tint);
 }
 
-/// Re-seed the swatch grid and repaint the outline against the palette `theme_paint` just painted.
+/// Re-seat the pick and repaint the outline against the palette `theme_paint` just painted.
 pub(super) fn republish_for_palette(
     ui: &AppWindow,
     theme_id: &str,
@@ -53,43 +64,24 @@ pub(super) fn republish_for_palette(
     system: &SystemColorState,
 ) {
     let theme = themes::get(theme_id);
-    let shade = theme.shade_for(variant_id, &system.theme).id;
-    let neutral = palette_neutral(ui);
-    let os_accent = os_accent();
-
-    let mut colors = accent_brushes(theme, shade);
-    colors.insert(0, brush(system_border(os_accent, neutral).0));
-    let names: Vec<SharedString> = std::iter::once(SharedString::new())
-        .chain(theme.accents.iter().map(|a| SharedString::from(a.name)))
-        .collect();
-
+    let shade = theme.shade_for(variant_id, &system.theme);
+    THEME_NEUTRAL.set(
+        material_you_active(theme_id, system)
+            .then(|| neutral_border(shade.palette.mantle, shade.palette.text)),
+    );
     let (slot, picked) =
-        COLOR_ID.with_borrow(|id| (swatch_index(theme, id), theme.accent_hex(id, shade)));
-    let g = ui.global::<Settings>();
-    g.set_window_border_colors(ModelRc::from(Rc::new(VecModel::from(colors))));
-    g.set_window_border_names(ModelRc::from(Rc::new(VecModel::from(names))));
-    g.set_window_border_color_idx(super::apply_and_seed_to_i32(slot));
-    paint(ui, border_colors(picked, os_accent, neutral));
+        COLOR_ID.with_borrow(|id| (accent_slot(theme, id), theme.accent_hex(id, shade.id)));
+    seat(&ui.global::<Settings>(), slot);
+    paint(ui, border_colors(picked, os_accent(), system_neutral(ui)));
 }
 
-/// Repaint the System swatch, and a System outline, against the OS's current answer.
+/// Repaint a System outline against the OS's current answer.
 ///
 /// Windows lets the accent go on or off window borders with Melodia running and tells a client
 /// nothing, so a focus gain, the first thing after a trip to the Settings app, asks again.
 #[cfg(target_os = "windows")]
 pub fn refresh_system_color(ui: &AppWindow) {
-    let g = ui.global::<Settings>();
-    let system = system_border(os_accent(), palette_neutral(ui));
-
-    let swatches = g.get_window_border_colors();
-    let swatch = brush(system.0);
-    if swatches.row_data(0).is_some_and(|seated| seated != swatch) {
-        swatches.set_row_data(0, swatch);
-    }
-
-    if g.get_window_border_color_idx() == 0 {
-        paint(ui, system);
-    }
+    repaint_system(ui);
 }
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState) {
@@ -103,33 +95,88 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState) {
 
     let weak = ui.as_weak();
     let s = state.clone();
+    ui.global::<Settings>().on_window_border_system_changed(move |system| {
+        let Some(ui) = weak.upgrade() else { return };
+        let g = ui.global::<Settings>();
+        let Some(theme) = super::registry_get(g.get_theme_idx()) else { return };
+        // Off takes the accent row's pick, the colour an outline most often matches, or the
+        // theme's default while that row follows the artwork.
+        let color_id = if system {
+            WINDOW_BORDER_SYSTEM_COLOR
+        } else {
+            accent_at(theme, super::usize_from(g.get_accent_idx())).unwrap_or(theme.default_accent)
+        };
+        pick(&ui, &s, theme, color_id);
+    });
+
+    let weak = ui.as_weak();
+    let s = state.clone();
     ui.global::<Settings>().on_window_border_color_changed(move |idx| {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Settings>();
         let Some(theme) = super::registry_get(g.get_theme_idx()) else { return };
-        let slot = super::usize_from(idx);
-        let Some(color_id) = color_id_at(theme, slot) else { return };
+        let Some(color_id) = accent_at(theme, super::usize_from(idx)) else { return };
+        pick(&ui, &s, theme, color_id);
+    });
 
-        g.set_window_border_color_idx(idx);
-        // The swatch is the pick already shaded for the live variant, which saves resolving it.
-        let picked = (slot > 0)
-            .then(|| g.get_window_border_colors().row_data(slot))
-            .flatten()
-            .map(|swatch| brush_to_rgb(&swatch));
-        paint(&ui, border_colors(picked, os_accent(), palette_neutral(&ui)));
-
-        // Ahead of the write, so a palette change landing before it commits re-resolves this pick.
-        COLOR_ID.with_borrow_mut(|id| color_id.clone_into(id));
-        s.persist_blocking("persist window_border_color", move |paths| {
-            library::window::set_window_border_color(paths, color_id.to_owned())
+    let weak = ui.as_weak();
+    let s = state.clone();
+    ui.global::<Settings>().on_window_border_material_you_changed(move |tinted| {
+        let Some(ui) = weak.upgrade() else { return };
+        let tint = if tinted { BorderTint::Artwork } else { BorderTint::Theme };
+        // Ahead of the repaint, which reads it, and of the write, for the colour id's reason.
+        TINT.set(tint);
+        repaint_system(&ui);
+        s.persist_blocking("persist window_border_tint", move |paths| {
+            library::window::set_window_border_tint(paths, tint)
         });
     });
+}
+
+/// Repaint the outline if it is System's, whose colour moves without a palette change.
+fn repaint_system(ui: &AppWindow) {
+    if ui.global::<Settings>().get_window_border_system() {
+        paint(ui, system_border(os_accent(), system_neutral(ui)));
+    }
+}
+
+/// Seat, paint and persist `color_id`, System's or one of the theme's accents.
+fn pick(ui: &AppWindow, state: &AppState, theme: &ThemeDef, color_id: &'static str) {
+    let g = ui.global::<Settings>();
+    let slot = accent_slot(theme, color_id);
+    seat(&g, slot);
+    // The swatch is the pick already shaded for the live variant, which saves resolving it.
+    let picked = slot
+        .and_then(|slot| g.get_accent_colors().row_data(slot))
+        .map(|swatch| brush_to_rgb(&swatch));
+    paint(ui, border_colors(picked, os_accent(), system_neutral(ui)));
+
+    // Ahead of the write, so a palette change landing before it commits re-resolves this pick.
+    COLOR_ID.with_borrow_mut(|id| color_id.clone_into(id));
+    state.persist_blocking("persist window_border_color", move |paths| {
+        library::window::set_window_border_color(paths, color_id.to_owned())
+    });
+}
+
+/// The switch and the grid never both read as picked: System holds no slot.
+fn seat(g: &Settings<'_>, slot: Option<usize>) {
+    g.set_window_border_system(slot.is_none());
+    g.set_window_border_color_idx(slot_index(slot));
 }
 
 fn paint(ui: &AppWindow, (focused, unfocused): (u32, u32)) {
     let chrome = ui.global::<WindowChrome>();
     chrome.set_border_color(brush(focused));
     chrome.set_border_color_unfocused(brush(unfocused));
+}
+
+/// System's neutral: the painted palette's, unless the tint asks for the theme's own while
+/// Material You paints the artwork's.
+fn system_neutral(ui: &AppWindow) -> u32 {
+    match (TINT.get(), THEME_NEUTRAL.get()) {
+        (BorderTint::Theme, Some(theme_neutral)) => theme_neutral,
+        _ => palette_neutral(ui),
+    }
 }
 
 /// The neutral border for the palette `Theme` is settling on, which mid-fade is not the blend the
@@ -172,20 +219,6 @@ fn neutral_border(surface: u32, ink: u32) -> u32 {
         ((s * (NEUTRAL_PARTS - NEUTRAL_INK_PARTS) + i * NEUTRAL_INK_PARTS) / NEUTRAL_PARTS) << shift
     };
     channel(16) | channel(8) | channel(0)
-}
-
-/// The grid slot a persisted id sits in: System first, then the theme's accents in order. An id
-/// the theme doesn't have is System, the colour it paints as.
-fn swatch_index(theme: &ThemeDef, color_id: &str) -> usize {
-    theme.accents.iter().position(|a| a.id == color_id).map_or(0, |at| at + 1)
-}
-
-/// The id a clicked slot stands for, `None` past the grid's end.
-fn color_id_at(theme: &ThemeDef, slot: usize) -> Option<&'static str> {
-    match slot.checked_sub(1) {
-        None => Some(WINDOW_BORDER_SYSTEM_COLOR),
-        Some(accent) => theme.accents.get(accent).map(|a| a.id),
-    }
 }
 
 #[cfg(test)]

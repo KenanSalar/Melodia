@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Ara"
 
@@ -37,7 +38,8 @@ msgstr "Son Çalınanlar"
 msgid "Settings"
 msgstr "Ayarlar"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Radyo"
@@ -190,54 +192,6 @@ msgstr "Last.fm'i aç"
 msgid "Connect"
 msgstr "Bağlan"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Klasik"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Düz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Caz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Bas Yükseltme"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Elektronik"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Tiz Yükseltme"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Vokal"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Özel"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Ekolayzırı etkinleştir"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Sıfırla"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Dışa aktarılacak çalma listesi yok"
@@ -273,42 +227,6 @@ msgstr "Zaten ekli"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{} / {} zaten ekli"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Ön yükseltici"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Albüm"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Parça"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "ReplayGain'i etkinleştir"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Normalleştirme modu"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Kırpılmayı önle"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -359,6 +277,17 @@ msgstr "gün"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "sayı"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Albüm"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -652,7 +581,9 @@ msgstr "Ayrıntılar"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Şarkı Sözleri"
 
@@ -663,6 +594,11 @@ msgstr "Özet"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Etiketler"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
+msgid "Track"
+msgstr "Parça"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -708,7 +644,8 @@ msgstr "Numara"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Dil"
 
@@ -1138,6 +1075,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Şarkı Sözleri menüsünden tekrar deneyin"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Tamam"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Diğer Seçenekler"
 
@@ -1155,24 +1097,8 @@ msgid "Track end"
 msgstr "Parça sonu"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "Equalizer"
-msgstr "Ekolayzer"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Açık"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Tamam"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1206,12 +1132,13 @@ msgid "No tracks up next"
 msgstr "Sırada başka parça yok"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Görselleştirici"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Görünüm"
 
@@ -1231,7 +1158,6 @@ msgstr "Tema Çeşidi"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Sistem"
 
@@ -1359,9 +1285,93 @@ msgstr "Sonraki"
 msgid "Search…"
 msgstr "Ara…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Ekolayzer"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Ekolayzırı etkinleştir"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Sesi on bantla şekillendirin, soldaki baslardan sağdaki tizlere kadar"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Ön yükseltici"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Klasik"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Düz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Caz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Bas Yükseltme"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Elektronik"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Tiz Yükseltme"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Vokal"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Özel"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Sıfırla"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Yeniden Tara"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain'i etkinleştir"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain yalnızca ses düzeyi etiketleri olan parçaları etkiler. Bunları eklemek için kitaplığınızı rsgain veya loudgain gibi bir araçla tarayın."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Normalleştirme modu"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Kırpılmayı önle"
 
 # Turkish doesn't pluralize a noun after a numeral, so both forms are the same.
 #: ui/components/settings/scan-progress.slint
@@ -2469,27 +2479,43 @@ msgstr "Tüm {} şarkıyı göster"
 msgid "Top Result"
 msgstr "En İyi Sonuç"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Arayüz"
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Efektler"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Kitaplık"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Çıkış"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Oynatma"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Pencere"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Hakkında"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Hizmetler"
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Entegrasyonlar"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Güncellemeler"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2536,6 +2562,43 @@ msgstr "İlk kurulumu yeniden gösterin."
 msgid "Show"
 msgstr "Göster"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Animasyonlar"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Çal Düğmesi Animasyonu"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Müzik çalarken çal düğmesindeki görsel efekt"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Şimdi çalınıyor ekranında bir ses görselleştirici göster"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Görselleştirici Stili"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Görselleştiricinin sesi nasıl çizeceğini seçin"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Yok"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Material You Vurgusu"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "Vurgu rengini geçerli parçanın kapağından al."
+
 #: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Renk Stili"
@@ -2555,11 +2618,6 @@ msgstr "Aurora Arka Planı"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Albüm, çalma listesi ve “Şimdi Çalıyor” başlıklarını, kapak görselinin bulanık bir kopyası yerine albümün kendi renkleriyle boya. Bulanıklaştırılacak bir şey olmadığı için başlıklar daha erken görünür ve Melodia daha hafif kalır. Uygulamak için yeniden başlatma gerekir."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Yok"
 
 #: ui/views/settings/appearance-section.slint
 msgid "Tonal Spot"
@@ -2653,6 +2711,16 @@ msgstr "Discord'a bağlandı"
 msgid "Discord not running"
 msgstr "Discord çalışmıyor"
 
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Ön ayar"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Bantlar"
+
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
 msgstr "Dosya İzleme"
@@ -2664,10 +2732,6 @@ msgstr "Dosya değişikliklerini izle"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Kitaplık klasörlerinde dosyaların ne zaman eklendiğini, kaldırıldığını veya değiştirildiğini otomatik olarak algıla."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Tercih ettiğin dili seç"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"
@@ -2717,10 +2781,6 @@ msgstr "Albüm arka planı"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Mini oynatıcıyı, “Şimdi Çalıyor” görünümünde olduğu gibi çalan albümün renkleriyle boyar."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Çıkış"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -2933,10 +2993,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, 32 bit kayan noktaya yuvarlanır"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Efektler"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Normal"
 
@@ -3034,14 +3090,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Parçalar arasında sessizlik olmadan kesintisiz geçişler"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Çal Düğmesi Animasyonu"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Müzik çalarken çal düğmesindeki görsel efekt"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Başlangıçta Devam Et"
 
@@ -3088,18 +3136,6 @@ msgstr "Duraklatırken kıs"
 #: ui/views/settings/playback-section.slint
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "Duraklatırken veya durdururken müziği kıs, devam ederken yeniden aç"
-
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Şimdi çalınıyor ekranında bir ses görselleştirici göster"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Görselleştirici Stili"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Görselleştiricinin sesi nasıl çizeceğini seçin"
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
@@ -3210,13 +3246,9 @@ msgstr "ListenBrainz'e bağlan"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Önce yukarıdan Last.fm'i veya ListenBrainz'i aç"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Eşleşen ayar yok"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Güncellemeler"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3295,10 +3327,6 @@ msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Bu güncelleme kritik bir sorunu düzeltir ve atlanamaz."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Pencere"
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"
 msgstr "İşletim sistemi tarafından yönetilir"
 
@@ -3339,16 +3367,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Mini oynatıcı dahil tüm pencerenin etrafına ince bir kenarlık çizer."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Pencere Kenarlığı Rengi"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Sistem, işletim sisteminin kendi pencere kenarlıklarını çizdiği rengi izler."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Yalnızca pencere kenarlığı gösterilirken kullanılabilir."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Sistem Kenarlık Rengi"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "İşletim sisteminin kendi pencere kenarlıklarını çizdiği rengi kullan."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Material You Kenarlığı"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "Sistem kenarlık rengini geçerli parçanın kapağıyla renklendir."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Pencere Kenarlığı Rengi"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

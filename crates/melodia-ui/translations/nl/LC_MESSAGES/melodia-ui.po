@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Zoeken"
 
@@ -37,7 +38,8 @@ msgstr "Recent afgespeeld"
 msgid "Settings"
 msgstr "Instellingen"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Radio"
@@ -188,54 +190,6 @@ msgstr "Last.fm openen"
 msgid "Connect"
 msgstr "Verbinden"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Klassiek"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Neutraal"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Jazz"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Pop"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Rock"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Basversterking"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Elektronisch"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Hogetonenversterking"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Zang"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Aangepast"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Equalizer inschakelen"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Resetten"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Geen afspeellijsten om te exporteren"
@@ -271,42 +225,6 @@ msgstr "Al toegevoegd"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{} van {} al toegevoegd"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Voorversterking"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Album"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Nummer"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "ReplayGain inschakelen"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Normalisatiemodus"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Oversturing voorkomen"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain werkt alleen op nummers die al luidheidstags hebben. Scan je bibliotheek met een programma als rsgain of loudgain om ze toe te voegen."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -357,6 +275,17 @@ msgstr "dagen"
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "getal"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Album"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -650,7 +579,9 @@ msgstr "Details"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Songtekst"
 
@@ -661,6 +592,11 @@ msgstr "Overzicht"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Tags"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
+msgid "Track"
+msgstr "Nummer"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -706,7 +642,8 @@ msgstr "Nummer"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Taal"
 
@@ -1136,6 +1073,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Probeer het opnieuw via het menu Songtekst"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Klaar"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Meer"
 
@@ -1153,24 +1095,8 @@ msgid "Track end"
 msgstr "Einde nummer"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "Equalizer"
-msgstr "Equalizer"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Aan"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Klaar"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1204,12 +1130,13 @@ msgid "No tracks up next"
 msgstr "Geen volgende nummers"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Visualisatie"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Weergave"
 
@@ -1229,7 +1156,6 @@ msgstr "Themavariant"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Systeem"
 
@@ -1356,9 +1282,93 @@ msgstr "Volgende"
 msgid "Search…"
 msgstr "Zoeken…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Equalizer"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Equalizer inschakelen"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Vorm het geluid met tien banden, van de lage tonen links tot de hoge tonen rechts"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Voorversterking"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Klassiek"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Neutraal"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Jazz"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Pop"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Rock"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Basversterking"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Elektronisch"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Hogetonenversterking"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Zang"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Aangepast"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Resetten"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Opnieuw scannen"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "ReplayGain inschakelen"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain werkt alleen op nummers die al luidheidstags hebben. Scan je bibliotheek met een programma als rsgain of loudgain om ze toe te voegen."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Normalisatiemodus"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Oversturing voorkomen"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2458,27 +2468,43 @@ msgstr "Alle {} nummers tonen"
 msgid "Top Result"
 msgstr "Beste resultaat"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Interface"
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Effecten"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Bibliotheek"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Uitvoer"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Afspelen"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Venster"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Over"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Diensten"
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Integraties"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Updates"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2525,6 +2551,43 @@ msgstr "Doorloop de eerste installatie opnieuw."
 msgid "Show"
 msgstr "Tonen"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Animaties"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Animatie van afspeelknop"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Visueel effect op de afspeelknop terwijl er muziek speelt"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Toon een audiovisualisatie op het scherm Nu aan het afspelen"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Stijl van visualisatie"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Kies hoe de visualisatie de audio tekent"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Geen"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Material You-accent"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "De accentkleur overnemen uit de hoes van het huidige nummer."
+
 #: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Kleurstijl"
@@ -2544,11 +2607,6 @@ msgstr "Aurora-achtergrond"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Kleur de kopteksten van albums, afspeellijsten en Nu aan het afspelen met een waas van de eigen kleuren van het album, in plaats van een vervaagde kopie van de hoes. Er hoeft niets vervaagd te worden, dus de kopteksten verschijnen sneller en Melodia blijft lichter. Opnieuw starten vereist om dit toe te passen."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Geen"
 
 #: ui/views/settings/appearance-section.slint
 msgid "Tonal Spot"
@@ -2642,6 +2700,16 @@ msgstr "Verbonden met Discord"
 msgid "Discord not running"
 msgstr "Discord is niet actief"
 
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Voorinstelling"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Frequentiebanden"
+
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
 msgstr "Bestandsbewaking"
@@ -2653,10 +2721,6 @@ msgstr "Bestandswijzigingen bewaken"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Automatisch detecteren wanneer bestanden in je bibliotheekmappen worden toegevoegd, verwijderd of gewijzigd."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Kies je voorkeurstaal"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"
@@ -2706,10 +2770,6 @@ msgstr "Albumachtergrond"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Kleur de minispeler met de kleuren van het album dat speelt, zoals de weergave Nu aan het afspelen doet."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Uitvoer"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -2922,10 +2982,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, afgerond naar 32-bits float"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Effecten"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Normaal"
 
@@ -3023,14 +3079,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Naadloze overgangen tussen nummers zonder stiltes"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Animatie van afspeelknop"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Visueel effect op de afspeelknop terwijl er muziek speelt"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Hervatten bij opstarten"
 
@@ -3077,18 +3125,6 @@ msgstr "Uitfaden bij pauzeren"
 #: ui/views/settings/playback-section.slint
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "Laat de muziek uitfaden bij pauzeren of stoppen, en weer infaden bij hervatten"
-
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Toon een audiovisualisatie op het scherm Nu aan het afspelen"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Stijl van visualisatie"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Kies hoe de visualisatie de audio tekent"
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
@@ -3199,13 +3235,9 @@ msgstr "ListenBrainz koppelen"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Zet eerst hierboven Last.fm of ListenBrainz aan"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Geen overeenkomende instellingen"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Updates"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3284,10 +3316,6 @@ msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Deze update verhelpt een kritiek probleem en kan niet worden overgeslagen."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Venster"
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"
 msgstr "Beheerd door het besturingssysteem"
 
@@ -3328,16 +3356,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Teken een dunne rand rond het hele venster, de minispeler inbegrepen."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Kleur van vensterrand"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "Systeem volgt de kleur waarin het besturingssysteem zijn eigen vensterranden tekent."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Alleen beschikbaar zolang de vensterrand wordt getoond."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Systeemkleur voor vensterrand"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "De kleur gebruiken waarin het besturingssysteem zijn eigen vensterranden tekent."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Material You-rand"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "De systeemkleur van de vensterrand tinten met de hoes van het huidige nummer."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Kleur van vensterrand"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"

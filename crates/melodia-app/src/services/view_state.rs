@@ -41,15 +41,20 @@ pub struct ViewStateData {
     /// Artist Detail's Albums header toggle. `true` hides the scroller so the
     /// all-tracks list claims that space.
     pub artist_albums_collapsed: bool,
-    /// The five page tabs at last shutdown, each clamped against its own
-    /// global's `tab-count`.
+    /// The Settings category and the four page tabs at last shutdown, each
+    /// clamped against its own global's count.
     ///
     /// An index rather than a set of bools, and that is the rule rather than a
     /// preference: `favorites_tab` replaced two `*_collapsed` flags that sat
     /// with `artist_albums_collapsed` exactly at clippy's
     /// `struct_excessive_bools` cap. **A persisted view flag is an int, a string
     /// or a map** — never a bool, whatever the current count.
-    pub settings_tab: i32,
+    ///
+    /// `settings_category` replaced a `settings_tab` that indexed the five tabs
+    /// before them. A new key rather than a fold: the old numbers overlap the
+    /// new ones, so a fold couldn't tell a file written before the change from
+    /// one written after it, and the old key is simply left unread.
+    pub settings_category: i32,
     pub favorites_tab: i32,
     pub recently_played_tab: i32,
     pub my_library_tab: i32,
@@ -67,7 +72,7 @@ impl Default for ViewStateData {
             last_nav_index: default_last_nav_index(),
             last_detail_ids: HashMap::new(),
             artist_albums_collapsed: false,
-            settings_tab: 0,
+            settings_category: 0,
             favorites_tab: 0,
             recently_played_tab: 0,
             my_library_tab: 0,

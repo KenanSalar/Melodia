@@ -4,7 +4,7 @@ import { Settings } from "../../settings.slint";
 import { ChipGroup } from "../settings/chip-group.slint";
 import { ColorDotGrid } from "../settings/color-dot-grid.slint";
 
-// Step 2. Every control here is the Interface tab's own and fires the same `Settings.*-changed`
+// Step 2. Every control here is the Settings page's own and fires the same `Settings.*-changed`
 // callback, so the card recolours itself under the pointer as they're used — which is the whole
 // demonstration and costs nothing to build.
 //
@@ -19,9 +19,9 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
         summary: @tr("Pick how Melodia looks. Every change applies as you make it.");
     }
 
-    // Chips rather than the Language card's `Dropdown`: a popup inside a branch this card drops on
-    // close is a question not worth having, and every name shown at once suits a welcome panel.
-    // The names are native and deliberately untranslated, so a Rust-pushed model is right here.
+    // Chips rather than the Language page's list: a welcome panel has room for one compact strip of
+    // every name, not a page of rows. The names are native and deliberately untranslated, so a
+    // Rust-pushed model is right here.
     VerticalLayout {
         spacing: Theme.pad-xs;
         padding-top: Theme.pad-sm;
@@ -69,7 +69,7 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
         // seeded `[string]` renders English whatever the locale. Order must match
         // `appearance-section.slint`'s copy of this list, both indexing `Settings.variant-idx`.
         ChipGroup {
-            options: Settings.theme-idx == 0
+            options: Settings.catppuccin-selected
                 ? ["Latte", "Frappe", "Macchiato", "Mocha", @tr("System")]
                 : [@tr("Dark"), @tr("Light"), @tr("System")];
             selected-index <=> Settings.variant-idx;
@@ -89,7 +89,6 @@ export component OnboardingAppearancePanel inherits VerticalLayout {
         ColorDotGrid {
             colors: Settings.accent-colors;
             labels: Settings.accent-names;
-            first-is-dynamic: Settings.material-you-active;
             selected-index <=> Settings.accent-idx;
             selected(i) => { Settings.accent-changed(i); }
         }

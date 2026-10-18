@@ -7,6 +7,9 @@ component Chip inherits FilledChip {
 
     height: 32px;
     horizontal-stretch: 0;
+    // Every group sits on a card.
+    idle-fill: Theme.card-control;
+    hover-fill: Theme.card-control-hover;
 
     HorizontalLayout {
         padding-left: Theme.pad-md;

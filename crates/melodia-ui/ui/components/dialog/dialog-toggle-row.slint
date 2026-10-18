@@ -1,9 +1,9 @@
 import { Theme } from "../../theme.slint";
 import { ToggleSwitch } from "../settings/toggle-switch.slint";
 
-// A toggle beside a stretching label, with `@children` as an optional trailing
-// slot — the equalizer docks its preset dropdown and Reset there. Call sites
-// chain the two-way binding through to their global and forward `toggled`.
+// A toggle beside a stretching label, with `@children` as an optional trailing slot: the equalizer
+// docks its preset picker there. A call site chains the two-way binding through to its global, and
+// forwards `toggled` where the flip has to reach Rust rather than only the property.
 export component DialogToggleRow inherits HorizontalLayout {
     in property <string> label;
     in-out property <bool> checked;

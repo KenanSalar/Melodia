@@ -208,13 +208,18 @@ the feature off the Rust side simply never wires or invokes them (unwired Slint
 callbacks are no-ops).
 
 > **Slint pitfall — do NOT wrap the mount in `if`.** In
-> `crates/melodia-ui/ui/views/settings/pages/about-page.slint:27` the section is
+> `crates/melodia-ui/ui/views/settings/pages/updates-page.slint:12` the section is
 > `updates := UpdateSection { … }`, and the page's `has-matches` references it by
-> id (`updates.has-matches`, line 14), which the tab-level no-results predicate in
-> `settings-tabs.slint` then reads. Wrapping `updates` in an `if` would put the id
+> id (`updates.has-matches`, line 9), which the no-results predicate in
+> `settings-router.slint` then reads. Wrapping `updates` in an `if` would put the id
 > inside a conditional and break that sibling reference (and the
 > `vertical-stretch` collapse math). Keep the component mounted; gate its content
 > + `has-matches` internally instead.
+>
+> **Updates is its own Settings category now**, so a feature-off build that hides the
+> card leaves the panel's Updates row opening an empty page, as a source build does
+> today. The panel's rows are an inline literal array, so dropping one is a decision
+> for this plan rather than a flag to flip.
 
 `crates/melodia-ui/ui/views/settings/about-section.slint` — unchanged (reads `current-version`,
 still seeded by the ungated `install()`).

@@ -1,5 +1,5 @@
 //! `settings.json` persistence. [`data`] is the root model, [`SettingsData`]; its `*Flags`
-//! substructs sit one file per Settings tab that edits them ([`playback`], [`interface`],
+//! substructs sit one file per area of Settings that edits them ([`playback`], [`interface`],
 //! [`library`], [`services`], [`about`]); [`io`] is load / save / atomic read-mutate-write. All are
 //! re-exported, so every `crate::services::settings::*` path resolves unchanged.
 //!

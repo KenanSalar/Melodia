@@ -1,6 +1,7 @@
-//! Chrome wiring for the Settings page — the search predicate its sections filter through
-//! and the persistence for which tab is showing. Distinct from the per-concern installers,
-//! which wire the values the page *configures*.
+//! Chrome wiring for the Settings page — the search predicate its sections filter through,
+//! the persistence for which category is showing, and the deep link landing on one from
+//! elsewhere. Distinct from the per-concern installers, which wire the values the page
+//! *configures*.
 
 use std::cell::RefCell;
 use std::sync::Arc;
@@ -19,63 +20,82 @@ use melodia_ui::{AppWindow, Nav, NavEnterFrom, SettingsPage};
 /// This page's `Nav.selected-index`, spelled once in Rust. The map itself is `globals/nav.slint`'s.
 const NAV_SETTINGS: i32 = 9;
 
-/// Which Settings tab is showing. The `FavoritesTab` / `RecentlyPlayedTab` shape.
+/// Which Settings category is showing. The `FavoritesTab` / `RecentlyPlayedTab` shape.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum SettingsTab {
+pub enum SettingsCategory {
     Library,
     Playback,
-    Interface,
-    Services,
+    Effects,
+    Output,
+    Appearance,
+    Language,
+    Window,
+    Radio,
+    Lyrics,
+    Integrations,
+    Updates,
     About,
 }
 
-impl SettingsTab {
-    /// Every variant, so a tab added to the `.slint` without one here fails a test rather
-    /// than falling through [`tab_from_index`]'s default arm.
-    pub const ALL: [Self; 5] =
-        [Self::Library, Self::Playback, Self::Interface, Self::Services, Self::About];
+impl SettingsCategory {
+    /// Every variant, so a category added to the `.slint` without one here fails a test rather
+    /// than falling through [`category_from_index`]'s default.
+    pub const ALL: [Self; 12] = [
+        Self::Library,
+        Self::Playback,
+        Self::Effects,
+        Self::Output,
+        Self::Appearance,
+        Self::Language,
+        Self::Window,
+        Self::Radio,
+        Self::Lyrics,
+        Self::Integrations,
+        Self::Updates,
+        Self::About,
+    ];
 }
 
-/// Resolve the page's live index against the Slint-declared `tab-*` constants, read rather
-/// than restated so the numbering lives in one place.
-pub fn tab_from_index(page: &SettingsPage<'_>, idx: i32) -> SettingsTab {
-    if idx == page.get_tab_playback() {
-        SettingsTab::Playback
-    } else if idx == page.get_tab_interface() {
-        SettingsTab::Interface
-    } else if idx == page.get_tab_services() {
-        SettingsTab::Services
-    } else if idx == page.get_tab_about() {
-        SettingsTab::About
-    } else {
-        SettingsTab::Library
+/// Resolve the page's live index against the Slint-declared `category-*` constants, read
+/// rather than restated so the numbering lives in one place.
+pub fn category_from_index(page: &SettingsPage<'_>, idx: i32) -> SettingsCategory {
+    SettingsCategory::ALL
+        .into_iter()
+        .find(|&category| category_index(page, category) == idx)
+        .unwrap_or(SettingsCategory::Library)
+}
+
+/// The page's index for `category`, the one place the variants meet the constants.
+fn category_index(page: &SettingsPage<'_>, category: SettingsCategory) -> i32 {
+    match category {
+        SettingsCategory::Library => page.get_category_library(),
+        SettingsCategory::Playback => page.get_category_playback(),
+        SettingsCategory::Effects => page.get_category_effects(),
+        SettingsCategory::Output => page.get_category_output(),
+        SettingsCategory::Appearance => page.get_category_appearance(),
+        SettingsCategory::Language => page.get_category_language(),
+        SettingsCategory::Window => page.get_category_window(),
+        SettingsCategory::Radio => page.get_category_radio(),
+        SettingsCategory::Lyrics => page.get_category_lyrics(),
+        SettingsCategory::Integrations => page.get_category_integrations(),
+        SettingsCategory::Updates => page.get_category_updates(),
+        SettingsCategory::About => page.get_category_about(),
     }
 }
 
-/// The page's index for `tab`, read off the same constants as [`tab_from_index`].
-fn tab_index(page: &SettingsPage<'_>, tab: SettingsTab) -> i32 {
-    match tab {
-        SettingsTab::Library => page.get_tab_library(),
-        SettingsTab::Playback => page.get_tab_playback(),
-        SettingsTab::Interface => page.get_tab_interface(),
-        SettingsTab::Services => page.get_tab_services(),
-        SettingsTab::About => page.get_tab_about(),
-    }
-}
-
-/// Opens Settings on `tab` from anywhere, Now Playing included.
+/// Opens Settings on `category` from anywhere, Now Playing included.
 ///
-/// Tab first, then nav, so the page mounts on the body it is meant to show, `my_library::go_to_tab`
-/// for the same reason. Both writes go through the callbacks that already own an `IndexPersist`;
-/// calling the disk setters directly would be a seventh writer, which
+/// Category first, then nav, so the page mounts on the body it is meant to show,
+/// `my_library::go_to_tab` for the same reason. Both writes go through the callbacks that already
+/// own an `IndexPersist`; calling the disk setters directly would be a seventh writer, which
 /// `crates/melodia/tests/index_persist.rs` pins against. The index moves only where it has to, as
 /// in `nav_history`'s `PendingNav::apply`: with Settings already under Now Playing, closing that is
 /// the whole of the navigation.
-pub fn open_on(ui: &AppWindow, tab: SettingsTab) {
+pub fn open_on(ui: &AppWindow, category: SettingsCategory) {
     let page = ui.global::<SettingsPage>();
-    let idx = tab_index(&page, tab);
-    page.set_tab_idx(idx);
-    page.invoke_tab_changed(idx);
+    let idx = category_index(&page, category);
+    page.set_category_idx(idx);
+    page.invoke_category_changed(idx);
 
     nav_transition::mark(ui, NavEnterFrom::Above);
     let nav = ui.global::<Nav>();
@@ -86,12 +106,12 @@ pub fn open_on(ui: &AppWindow, tab: SettingsTab) {
     }
 }
 
-/// Seed the active tab from `views.json`. Call from
+/// Seed the active category from `views.json`. Call from
 /// `boot::ui_setup::hydrate::hydrate_ui_from_settings`, which already has the view state loaded.
-pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
+pub fn seed_category(ui: &AppWindow, persisted_category: i32) {
     let page = ui.global::<SettingsPage>();
-    let clamped = clamp_tab(persisted_tab, page.get_tab_count());
-    page.set_tab_idx(clamped);
+    let clamped = clamp_tab(persisted_category, page.get_category_count());
+    page.set_category_idx(clamped);
 }
 
 /// Wire the Settings page's chrome. Call once during startup.
@@ -115,29 +135,39 @@ pub fn install(ui: &AppWindow, state: &AppState) {
         memo.1.contains(&haystack)
     });
 
-    // The tab bar two-way binds `tab-idx`, so the UI is already showing the new tab and
-    // the disk write is pure catch-up. Hand-rolled rather than `spawn_blocking_logged!`,
-    // which this otherwise matches: a tab pick already logs its own `nav:` line, so the
-    // macro's `view state:` line would say the same thing twice.
+    let weak = ui.as_weak();
+    page.on_open_category(move |idx| {
+        let Some(ui) = weak.upgrade() else { return };
+        let category = category_from_index(&ui.global::<SettingsPage>(), idx);
+        open_on(&ui, category);
+    });
+
+    // The panel two-way binds `category-idx`, so the UI is already showing the new category
+    // and the disk write is pure catch-up. Hand-rolled rather than `spawn_blocking_logged!`,
+    // which this otherwise matches: a pick already logs its own `nav:` line, so the macro's
+    // `view state:` line would say the same thing twice.
     let s = state.clone();
     let weak = ui.as_weak();
     // Ordered: a bounce queues a value per pick and two blocking tasks have none of their
-    // own, so a reversed pair reopens the page on a tab the user only passed through.
-    let persist = Arc::new(IndexPersist::new(page.get_tab_idx()));
-    page.on_tab_changed(move |tab| {
-        // As on the two curated pages: a tab pick moves no nav index, so
+    // own, so a reversed pair reopens the page on a category the user only passed through.
+    let persist = Arc::new(IndexPersist::new(page.get_category_idx()));
+    page.on_category_changed(move |category| {
+        // As on the two curated pages' tabs: a pick moves no nav index, so
         // `nav_history::record_current` never hears about it.
         if let Some(ui) = weak.upgrade() {
             ui.global::<SettingsPage>().invoke_clear_search();
             crate::ui::view_tag::log_current(&ui);
         }
-        persist.publish(tab);
+        persist.publish(category);
         let s_disk = s.clone();
         let persist = Arc::clone(&persist);
         s.runtime.spawn_blocking(move || {
-            persist.write_if_current(tab, || {
-                if let Err(e) = library::settings::set_settings_tab(&s_disk.paths, tab) {
-                    log::warn!("settings_page: set_settings_tab({tab}): {}", describe(&e));
+            persist.write_if_current(category, || {
+                if let Err(e) = library::settings::set_settings_category(&s_disk.paths, category) {
+                    log::warn!(
+                        "settings_page: set_settings_category({category}): {}",
+                        describe(&e)
+                    );
                 }
             });
         });

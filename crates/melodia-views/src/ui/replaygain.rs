@@ -1,7 +1,8 @@
-//! Wire the `ReplayGain` dialog (`DialogKind::Replaygain`) to Rust.
+//! Wire loudness normalization to Rust: the `ReplayGain` card on Settings ▸ Effects and the
+//! overflow menu's dialog, both driving the one `ReplayGain` global.
 //!
 //! Seeds the `ReplayGain` global from `settings.json` at startup (enabled flag,
-//! mode dropdown index, preamp, prevent-clipping) and registers the callbacks.
+//! mode index, preamp, prevent-clipping) and registers the callbacks.
 //! Each follows the two-phase shape (mirroring [`crate::ui::equalizer`]): apply
 //! to the live playback engine synchronously, then persist on the blocking pool.
 //! The preamp uses the live `set-preamp` / release `commit-preamp` split, like
@@ -32,8 +33,8 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
     rg.set_prevent_clipping(flags.rg_prevent_clipping);
 
     // Seed the dB ranges from the DSP constants so Rust stays the single source
-    // of truth (the preamp slider reads these). Runs at boot, before the dialog
-    // can open.
+    // of truth (the preamp slider reads these). Runs at boot, before the card
+    // or the dialog can mount.
     rg.set_min_preamp(replaygain::RG_MIN_PREAMP_DB);
     rg.set_max_preamp(replaygain::RG_MAX_PREAMP_DB);
 
@@ -45,7 +46,7 @@ pub fn install_replaygain(ui: &AppWindow, state: &AppState) {
         library::settings::set_replaygain_enabled,
     ));
 
-    // set-mode — Track / Album (dropdown index 0 / 1). Apply live + persist.
+    // set-mode — Track / Album (chip index 0 / 1). Apply live + persist.
     {
         let state = state.clone();
         rg.on_set_mode(move |idx| {

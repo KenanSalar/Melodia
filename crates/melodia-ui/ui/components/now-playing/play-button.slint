@@ -178,11 +178,14 @@ export component PlayButton inherits Rectangle {
             fit: fill;
             stroke: root.icon-color;
             stroke-width: 2px;
-            commands: "M 50 " + (50 - self.radius)
-                + " A " + self.radius + " " + self.radius + " 0 "
+            // Numbers go in unlocalized, a bare `+` writing the translation's decimal separator,
+            // which the path parser rejects.
+            commands: "M 50 " + (50 - self.radius).to-string-unlocalized()
+                + " A " + self.radius.to-string-unlocalized() + " "
+                + self.radius.to-string-unlocalized() + " 0 "
                 + (self.sweep > 180deg ? "1" : "0") + " 1 "
-                + (50 + self.radius * sin(self.sweep)) + " "
-                + (50 - self.radius * cos(self.sweep));
+                + (50 + self.radius * sin(self.sweep)).to-string-unlocalized() + " "
+                + (50 - self.radius * cos(self.sweep)).to-string-unlocalized();
         }
     }
 

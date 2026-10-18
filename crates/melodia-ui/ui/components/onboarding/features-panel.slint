@@ -19,7 +19,8 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
         summary: @tr("Melodia works offline. These are the parts that reach out.");
     }
 
-    // Same labels as the Services tab's own rows, so the two never describe one feature differently.
+    // Same labels as the Settings rows they mirror, so the two never describe one feature
+    // differently.
     OnboardingFeatureRow {
         icon: "radio";
         label: @tr("Internet radio");
@@ -54,7 +55,7 @@ export component OnboardingFeaturesPanel inherits VerticalLayout {
     SectionDivider {}
 
     // A button rather than a switch: both services need a login, which has no business inside a
-    // welcome card. It closes onto the tab that already does it properly.
+    // welcome card. It closes onto the Settings category that already does it properly.
     OnboardingFeatureRow {
         icon: "graphic_eq";
         label: @tr("Scrobbling");

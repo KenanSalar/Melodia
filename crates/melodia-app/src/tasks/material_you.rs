@@ -34,6 +34,7 @@ use melodia_artwork::media::image::material_you::{
     SchemeStyle, SeedCache, extract_source_rgb_from_rgb8, generate_palette,
 };
 use melodia_core::error::describe;
+use melodia_core::themes::material3::MATERIAL3;
 use melodia_core::themes::{Palette, SystemColorState};
 use melodia_engine::player::engine::state::PlayerViewModelLight;
 
@@ -201,7 +202,7 @@ async fn react(
         .map(PathBuf::from);
 
     // Decide.
-    let should_clear = theme_id != "material3"
+    let should_clear = theme_id != MATERIAL3.id
         || style == SchemeStyle::None
         || artwork.as_ref().is_none_or(|p| !p.exists());
 

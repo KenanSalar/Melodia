@@ -41,8 +41,8 @@ Six theme families, light and dark variants, configurable accents, and Material 
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Internet Radio</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate. Off until you switch it on, under Settings ▸ Services ▸ Radio.</sub></td>
-    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Interface tab"><br><sub><b>Settings</b>: five tabs and a search box, here on the theme, variant, accent, and backdrop.</sub></td>
+    <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Internet Radio</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate. Off until you switch it on, under Settings ▸ Radio.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: twelve categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
   </tr>
 </table>
 
@@ -83,18 +83,18 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 ### Playback
 - Gapless, including the AAC encoder delay and padding read back from `iTunSMPB` or the MP4 edit list, and the trailing padding a Matroska file states
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks, and under exclusive output too wherever the next track needs no change of device format
-- 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter
-- ReplayGain in track or album mode, with preamp and peak-based clip prevention
+- 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, adjusted from the player bar's overflow menu without leaving the page you're on, or under Settings ▸ Effects
+- ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways
 - Queue with shuffle and repeat; playing from any list queues that list behind your pick
 - Hold Previous or Next to scan through a track in short audible jumps that grow the longer you hold, and hold Play/Pause to stop, which takes the track back to its start
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
 - Right-click the playing song in the player bar for the menu its row has in a list: copy its details, add it to a playlist or your favorites, edit its tags, open its folder, or go to its album, artist or genre
 - Playback speed 0.25×–2.0×, a playback-linked sleep timer, resume on startup, media keys
-- Sample-rate conversion wherever a file's rate isn't the output's or the speed isn't 1×: band-limited to keep the full treble, or linear, light on the CPU at any device rate and the default on Windows, under Settings ▸ Playback ▸ Output. Either way it is carried across gapless track changes and skipped entirely where the rates already match
+- Sample-rate conversion wherever a file's rate isn't the output's or the speed isn't 1×: band-limited to keep the full treble, or linear, light on the CPU at any device rate and the default on Windows, under Settings ▸ Output. Either way it is carried across gapless track changes and skipped entirely where the rates already match
 - Responsive mini-player: shrink the window and the UI collapses to a strip, a card or a column with Up Next or lyrics, one layout that rearranges as you resize instead of jumping between them
 
 ### Bit-perfect output
-- **Exclusive output** on Linux and Windows, off until you choose it under Settings ▸ Playback ▸ Output. Melodia takes the audio device for itself and hands it the decoder's samples at each file's own sample rate and bit depth, with no system mixer in between: an ALSA `hw:` device on Linux, asked of the sound server so it is handed back cleanly, and WASAPI exclusive mode on Windows
+- **Exclusive output** on Linux and Windows, off until you choose it under Settings ▸ Output. Melodia takes the audio device for itself and hands it the decoder's samples at each file's own sample rate and bit depth, with no system mixer in between: an ALSA `hw:` device on Linux, asked of the sound server so it is handed back cleanly, and WASAPI exclusive mode on Windows
 - A **Signal Path** panel follows the playing track from the file to the device, grades every stage that can change it (the decoded format, EQ and ReplayGain, speed, volume, a crossfade, the sample rate, the channel layout and the output itself), and sums it up as Bit-perfect, Enhanced (only effects you chose), Converted, Lossy (a compressed file, whatever else the path does), or Fallback (a refused claim, which outranks the rest). **Make Bit-Perfect** switches off whatever you chose that changes the sound, and from shared output asks to switch to exclusive
 - A quality chip in the player bar carries that verdict and the device's rate, and opens the panel in one click. It shows only under exclusive output, and moves into the overflow menu if you'd rather
 - **Output Device** (**Exclusive Device** on Linux) picks the sound card exclusive output claims. On Windows it routes shared output too, and its System Default entry follows whichever device Windows makes the default. A chosen device you unplug hands playback to the default and is taken back as soon as it returns. On Linux the sound server routes shared output, and remembers where you moved it in its own mixer
@@ -108,16 +108,16 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Unplugging the device or restarting the sound server picks playback up on the new output at the same position
 
 ### Lyrics
-- A panel in the Now Playing column in place of Up Next, turned on from the switch in that view's header or under Settings ▸ Services ▸ Lyrics. A timed sheet follows the song line by line, and clicking a line seeks to it
+- A panel in the Now Playing column in place of Up Next, turned on from the switch in that view's header or under Settings ▸ Lyrics. A timed sheet follows the song line by line, and clicking a line seeks to it
 - **Off by default, and off means off**: while lyrics are switched off, Now Playing shows Up Next and nothing looks a sheet up or keeps one in memory
 - Read from a `.lrc` beside the track or from the file's own lyrics tag, so a library that already carries them needs no online lookup
-- **Online lookup is off until you switch it on**, from the lyrics menu or under Settings ▸ Services ▸ Lyrics. Nothing contacts **lrclib.net** until you do, and what it answers is cached under your data folder rather than written into your files
+- **Online lookup is off until you switch it on**, from the lyrics menu or under Settings ▸ Lyrics. Nothing contacts **lrclib.net** until you do, and what it answers is cached under your data folder rather than written into your files
 - Romanization printed under a line written in a script you don't read. Korean and Japanese each get an engine matched to them; around a hundred scripts are covered in all, Chinese, Cyrillic and Arabic among them. On by default, and it draws nothing for a sheet already in Latin letters
 - A bilingual sheet's translation is drawn under the words it glosses
 - **Look up again** when a sheet matched the wrong recording, **Save to file** to write the one on screen into the track's own tag, and **Edit lyrics…** when it is nearly right and a stamp needs typing. The Edit Tags dialog offers the same sheet above its Lyrics field
 
 ### Internet Radio
-- **Off until you switch it on**, under Settings ▸ Services ▸ Radio. Nothing contacts the directory until you do
+- **Off until you switch it on**, under Settings ▸ Radio. Nothing contacts the directory until you do
 - A worldwide directory (**radio-browser.info**, no account and no API key) narrowed by country, language, genre, codec, or bitrate
 - Your own stream URLs, checked at the dialog rather than at the first click; `.pls`, `.m3u`, and `.asx` resolve to the audio behind them
 - Live titles reach the player bar, Now Playing, your desktop's media controls, and Discord, with buffering and reconnection handled underneath
@@ -127,18 +127,18 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Segmented (HLS) stations play like any other
 
 ### Themes
-Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**. System dark/light is followed automatically, KDE color schemes are read from `kdeglobals`, and Material You derives a palette from the current artwork in seven color styles, fading the whole window into each new cover's colors. Material 3 and Material You both follow Google's 2025 Material color spec wherever it defines the style. Headers paint an aurora of the album's own colors by default, or a blurred cover instead. The titlebar is custom and transparent, with native decorations available, and KDE opens on its native one. A first launch picks the desktop's own theme too: Windows Fluent, KDE Breeze and GNOME Adwaita follow the system's light or dark mode, and any other desktop starts on Catppuccin Mocha.
+Six families, each with light and dark variants and configurable accents: **Catppuccin** (Latte, Frappé, Macchiato, Mocha), **Material 3**, **GNOME Adwaita**, **KDE Breeze**, **Windows Fluent**, and **macOS**. System dark/light is followed automatically, KDE color schemes are read from `kdeglobals`, and Material You derives a palette from the current artwork in seven color styles, fading the whole window into each new cover's colors. The accent and the window outline can follow the artwork too, each behind its own switch. Material 3 and Material You both follow Google's 2025 Material color spec wherever it defines the style. Headers paint an aurora of the album's own colors by default, or a blurred cover instead. The titlebar is custom and transparent, with native decorations available, and KDE opens on its native one. A first launch picks the desktop's own theme too: Windows Fluent, KDE Breeze and GNOME Adwaita follow the system's light or dark mode, and any other desktop starts on Catppuccin Mocha.
 
 ### Formats and languages
 MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), Opus (`.opus`, up to 7.1), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`), and CAF. Matroska and CAF carry no tags Melodia can read, so those tracks list under their filename, as does anything whose tags are too damaged to parse.
 
-Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Brazilian Portuguese, European Portuguese, Dutch, Polish, Indonesian, Russian, Ukrainian, Hungarian, Vietnamese), switchable at runtime with no restart.
+Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Brazilian Portuguese, European Portuguese, Dutch, Polish, Indonesian, Russian, Ukrainian, Hungarian, Vietnamese), switchable at runtime with no restart under Settings ▸ Language.
 
 ### System integration
 - Scrobbling to **Last.fm** and **ListenBrainz**, each independently, with loved-track sync that catches your existing favorites up on connect, and a durable offline queue. A ListenBrainz love needs the track's MusicBrainz recording ID in its tags
 - **Discord Rich Presence** (off by default): title, artist, album, and optionally a cover looked up on Deezer, sent to your running Discord client. Nothing leaves the machine while it is off
 - OS media controls (MPRIS2 on Linux, SMTC on Windows) and media keys
-- A system-tray icon with playback controls, on by default, and an optional close-to-tray; both under Settings ▸ Interface
+- A system-tray icon with playback controls, on by default, and an optional close-to-tray; both under Settings ▸ Window
 - A daily update check, named on first run and switchable under Settings ▸ Updates. It asks GitHub for a signed manifest and nothing else; package-managed installs skip it entirely
 - Set Melodia as your default player and double-click a track; it runs as a single instance, so files open in the window you already have
 - Always-on-top on Windows, on any X11 desktop, and on Wayland under KDE, or GNOME with the Window Calls extension

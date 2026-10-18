@@ -1,0 +1,16 @@
+import { ScrobblingSection } from "../scrobbling-section.slint";
+import { DiscordSection } from "../discord-section.slint";
+
+// The accounts and apps Melodia reports what it plays to: the two scrobbling services and Discord
+// Rich Presence. The page shape is `library-page.slint`'s.
+export component IntegrationsPage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: scrobbling.has-matches || discord.has-matches;
+
+    VerticalLayout {
+        scrobbling := ScrobblingSection { category-name: @tr("Integrations"); }
+        discord := DiscordSection { category-name: @tr("Integrations"); }
+    }
+}

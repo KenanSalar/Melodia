@@ -3,6 +3,7 @@ import { Settings } from "../../settings.slint";
 import { Equalizer, ReplayGain } from "../../globals/audio.slint";
 import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { Player } from "../../globals/player.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
 import { Queue } from "../../globals/queue.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
 import { WindowChrome } from "../../globals/shell.slint";
@@ -15,6 +16,8 @@ import { OverflowRow } from "./overflow-row.slint";
 import { SpeedFlyout } from "./speed-flyout.slint";
 import { SleepTimerFlyout } from "./sleep-timer-flyout.slint";
 import { FlyoutMetrics, SleepPresets, SpeedPresets } from "./flyout-presets.slint";
+import { EqualizerText } from "../settings/equalizer-controls.slint";
+import { ReplayGainText } from "../settings/replaygain-controls.slint";
 
 // The bar's overflow trigger and its popup: five permanent rows, two of which open a
 // left-side flyout, plus every button the user routed here.
@@ -45,6 +48,19 @@ export component OverflowMenu inherits Rectangle {
         pop.close();
         root.speed-flyout-open = false;
         root.sleep-flyout-open = false;
+    }
+
+    // **Closes** the popup, a modal taking over. Both effects apply and persist on every change,
+    // so their dialogs end on Done alone; each opens on its Settings card's description.
+    function open-effect-dialog(kind: DialogKind, title: string, message: string) {
+        root.dismiss();
+        Dialog.kind = kind;
+        Dialog.title = title;
+        Dialog.message = message;
+        Dialog.confirm-label = @tr("Done");
+        Dialog.cancel-label = "";
+        Dialog.destructive = false;
+        Dialog.open = true;
     }
 
     // The overflowed buttons only; the permanent rows are counted separately below. The
@@ -218,44 +234,29 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // **Closes** the popup, a modal taking over, and populates `Dialog`
-                // inline; the apply-and-persist wiring lives on `Equalizer`.
                 OverflowRow {
                     icon: "graphic_eq";
-                    label: @tr("Equalizer");
+                    label: EqualizerText.title;
                     trailing-text: Equalizer.enabled ? @tr("On") : @tr("Off");
                     active: Equalizer.enabled;
                     clicked => {
-                        root.dismiss();
-                        Dialog.kind = DialogKind.equalizer;
-                        Dialog.title = @tr("Equalizer");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Done");
-                        Dialog.cancel-label = "";
-                        Dialog.destructive = false;
-                        Dialog.open = true;
+                        root.open-effect-dialog(DialogKind.equalizer, EqualizerText.title,
+                                                EqualizerText.enable-desc);
                     }
                 }
 
-                // The Equalizer row's shape, over loudness normalization.
                 OverflowRow {
                     icon: "tune";
-                    label: @tr("ReplayGain");
+                    label: ReplayGainText.title;
                     trailing-text: ReplayGain.enabled ? @tr("On") : @tr("Off");
                     active: ReplayGain.enabled;
                     clicked => {
-                        root.dismiss();
-                        Dialog.kind = DialogKind.replaygain;
-                        Dialog.title = @tr("ReplayGain");
-                        Dialog.message = "";
-                        Dialog.confirm-label = @tr("Done");
-                        Dialog.cancel-label = "";
-                        Dialog.destructive = false;
-                        Dialog.open = true;
+                        root.open-effect-dialog(DialogKind.replaygain, ReplayGainText.title,
+                                                ReplayGainText.enable-desc);
                     }
                 }
 
-                // Inline, so unlike the dialog rows it neither closes the popup nor
+                // Inline, so unlike the dialog rows above it neither closes the popup nor
                 // opens a flyout: a star applies immediately.
                 rating-row := Rectangle {
                     // Not an `OverflowRow`, so it has to take the shared row
@@ -334,7 +335,7 @@ export component OverflowMenu inherits Rectangle {
                     icon: "graphic_eq";
                     label: SignalPathUi.verdict-label;
                     trailing-text: SignalPathUi.device-rate;
-                    clicked => { Settings.open-signal-path(); root.dismiss(); }
+                    clicked => { SettingsPage.open-category(SettingsPage.category-output); root.dismiss(); }
                 }
             }
         }

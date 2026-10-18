@@ -1,0 +1,71 @@
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { Equalizer } from "../../globals/audio.slint";
+import { SectionCard } from "../../components/settings/section-card.slint";
+import { SettingRow } from "../../components/settings/setting-row.slint";
+import { SettingRowStacked } from "../../components/settings/setting-row-stacked.slint";
+import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
+import { EqualizerText, EqPresetPicker, EqPreampSlider, EqBandStrip } from "../../components/settings/equalizer-controls.slint";
+
+// The graphic equalizer, one cluster on crossfade's shape in `playback-section.slint`: the preset,
+// preamp and bands mount only while the switch is on. The controls are `equalizer-controls.slint`'s,
+// shared with the overflow menu's dialog.
+export component EqualizerSection inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    in property <string> category-name;
+
+    pure function row-visible(label: string, desc: string) -> bool {
+        return SettingsPage.row-visible(root.category-name, EqualizerText.title,
+                                        label + " " + desc,
+                                        SettingsPage.search-query);
+    }
+
+    // Translators: an equalizer preset, such as Rock or Jazz
+    property <string> preset-label: @tr("Preset");
+    // Translators: the equalizer's frequency bands
+    property <string> bands-label: @tr("Bands");
+
+    // The whole card is one cluster, so every row's label is a term of the switch's visibility.
+    out property <bool> has-matches: row-visible(EqualizerText.enable-label, EqualizerText.enable-desc)
+        || row-visible(preset-label, "")
+        || row-visible(EqualizerText.preamp-label, "")
+        || row-visible(bands-label, "");
+
+    property <bool> show-details: root.has-matches && Equalizer.enabled;
+
+    VerticalLayout {
+        if has-matches: SectionCard {
+            title: EqualizerText.title;
+
+            SettingRow {
+                icon: "graphic_eq";
+                label: EqualizerText.enable-label;
+                description: EqualizerText.enable-desc;
+                ToggleSwitch {
+                    checked <=> Equalizer.enabled;
+                    toggled(v) => { Equalizer.set-enabled(v); }
+                }
+            }
+
+            // Stacked so the dropdown and Reset never contend with the label for the row's width.
+            if root.show-details: SettingRowStacked {
+                icon: "music_note";
+                label: root.preset-label;
+                EqPresetPicker { }
+            }
+
+            if root.show-details: SettingRowStacked {
+                icon: "volume_up";
+                label: EqualizerText.preamp-label;
+                EqPreampSlider { }
+            }
+
+            if root.show-details: SettingRowStacked {
+                icon: "bar_chart";
+                label: root.bands-label;
+                EqBandStrip { }
+            }
+        }
+    }
+}

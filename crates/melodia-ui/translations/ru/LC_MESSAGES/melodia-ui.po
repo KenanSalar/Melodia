@@ -12,6 +12,7 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
 #: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/views/settings/settings-nav.slint
 msgid "Search"
 msgstr "Поиск"
 
@@ -37,7 +38,8 @@ msgstr "Недавно прослушанное"
 msgid "Settings"
 msgstr "Настройки"
 
-#: ui/app-window.slint ui/layout/sidebar.slint
+#: ui/app-window.slint ui/layout/sidebar.slint ui/views/settings-view.slint
+#: ui/views/settings/pages/radio-page.slint
 #: ui/views/settings/radio-section.slint
 msgid "Radio"
 msgstr "Радио"
@@ -189,54 +191,6 @@ msgstr "Открыть Last.fm"
 msgid "Connect"
 msgstr "Подключить"
 
-#: ui/components/dialog/equalizer-body.slint
-msgid "Classical"
-msgstr "Классика"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Flat"
-msgstr "Ровный"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Jazz"
-msgstr "Джаз"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Pop"
-msgstr "Поп"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Rock"
-msgstr "Рок"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Bass Boost"
-msgstr "Усиление басов"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Electronic"
-msgstr "Электроника"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Treble Boost"
-msgstr "Усиление высоких"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Vocal"
-msgstr "Вокал"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Custom"
-msgstr "Свой"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Enable equalizer"
-msgstr "Включить эквалайзер"
-
-#: ui/components/dialog/equalizer-body.slint
-msgid "Reset"
-msgstr "Сбросить"
-
 #: ui/components/dialog/export-playlist-picker.slint
 msgid "No playlists to export"
 msgstr "Нет плейлистов для экспорта"
@@ -272,42 +226,6 @@ msgstr "Уже добавлено"
 #: ui/components/dialog/playlist-picker.slint
 msgid "{} of {} already added"
 msgstr "{} из {} уже добавлено"
-
-#: ui/components/dialog/preamp-slider-row.slint
-msgid "Preamp"
-msgstr "Предусиление"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/dialog/tag-editor-body.slint
-#: ui/components/grid/card-context-menu.slint
-#: ui/components/track-copy-items.slint
-#: ui/components/track-list/column-toggle-popup.slint
-#: ui/components/track-list/track-list-header.slint ui/settings.slint
-#: ui/views/search/top-result-card.slint
-msgid "Album"
-msgstr "Альбом"
-
-#: ui/components/dialog/replaygain-body.slint
-#: ui/components/dialog/tag-editor-body.slint ui/settings.slint
-msgid "Track"
-msgstr "Трек"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Enable ReplayGain"
-msgstr "Включить ReplayGain"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Normalization mode"
-msgstr "Режим нормализации"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "Prevent clipping"
-msgstr "Предотвращать клиппинг"
-
-#: ui/components/dialog/replaygain-body.slint
-msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
-msgstr "ReplayGain действует только на треки, в которых уже есть теги громкости. Чтобы добавить их, просканируйте медиатеку программой вроде rsgain или loudgain."
 
 #: ui/components/dialog/scrobble-lastfm-body.slint
 msgid "Click Open Last.fm to approve Melodia in your browser."
@@ -358,6 +276,17 @@ msgstr "дн."
 #: ui/components/dialog/smart-playlist-editor-body.slint
 msgid "number"
 msgstr "число"
+
+#: ui/components/dialog/smart-playlist-editor-body.slint
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/grid/card-context-menu.slint
+#: ui/components/settings/replaygain-controls.slint
+#: ui/components/track-copy-items.slint
+#: ui/components/track-list/column-toggle-popup.slint
+#: ui/components/track-list/track-list-header.slint ui/settings.slint
+#: ui/views/search/top-result-card.slint
+msgid "Album"
+msgstr "Альбом"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
 #: ui/components/dialog/tag-editor-body.slint ui/settings.slint
@@ -651,7 +580,9 @@ msgstr "Подробности"
 
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/now-playing/lyrics-menu.slint ui/settings.slint
-#: ui/views/now-playing-view.slint ui/views/settings/lyrics-section.slint
+#: ui/views/now-playing-view.slint ui/views/settings-view.slint
+#: ui/views/settings/lyrics-section.slint
+#: ui/views/settings/pages/lyrics-page.slint
 msgid "Lyrics"
 msgstr "Текст песни"
 
@@ -662,6 +593,11 @@ msgstr "Сводка"
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Tags"
 msgstr "Теги"
+
+#: ui/components/dialog/tag-editor-body.slint
+#: ui/components/settings/replaygain-controls.slint ui/settings.slint
+msgid "Track"
+msgstr "Трек"
 
 #: ui/components/dialog/tag-editor-body.slint
 msgid "Total"
@@ -707,7 +643,8 @@ msgstr "Номер"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Язык"
 
@@ -1138,6 +1075,11 @@ msgid "Try again from the Lyrics menu"
 msgstr "Повторите попытку из меню «Текст песни»"
 
 #: ui/components/now-playing/overflow-menu.slint
+#: ui/components/onboarding/onboarding-overlay.slint
+msgid "Done"
+msgstr "Готово"
+
+#: ui/components/now-playing/overflow-menu.slint
 msgid "More"
 msgstr "Ещё"
 
@@ -1155,24 +1097,8 @@ msgid "Track end"
 msgstr "Конец трека"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "Equalizer"
-msgstr "Эквалайзер"
-
-#: ui/components/now-playing/overflow-menu.slint
 msgid "On"
 msgstr "Вкл."
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/components/onboarding/onboarding-overlay.slint
-msgid "Done"
-msgstr "Готово"
-
-#: ui/components/now-playing/overflow-menu.slint
-#: ui/views/settings/output-section.slint
-msgid "ReplayGain"
-msgstr "ReplayGain"
 
 #: ui/components/now-playing/overflow-menu.slint
 #: ui/views/settings/overflow-menu-section.slint
@@ -1206,12 +1132,13 @@ msgid "No tracks up next"
 msgstr "Дальше треков нет"
 
 #: ui/components/now-playing/visualizer-picker.slint
-#: ui/views/settings/playback-section.slint
+#: ui/views/settings/animations-section.slint
 msgid "Visualizer"
 msgstr "Визуализатор"
 
-#: ui/components/onboarding/appearance-panel.slint
+#: ui/components/onboarding/appearance-panel.slint ui/views/settings-view.slint
 #: ui/views/settings/appearance-section.slint
+#: ui/views/settings/pages/appearance-page.slint
 msgid "Appearance"
 msgstr "Внешний вид"
 
@@ -1231,7 +1158,6 @@ msgstr "Вариант темы"
 
 #: ui/components/onboarding/appearance-panel.slint
 #: ui/views/settings/appearance-section.slint
-#: ui/views/settings/window-chrome-section.slint
 msgid "System"
 msgstr "Системный"
 
@@ -1359,9 +1285,93 @@ msgstr "Далее"
 msgid "Search…"
 msgstr "Поиск…"
 
+#: ui/components/settings/equalizer-controls.slint
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/output-section.slint
+msgid "Equalizer"
+msgstr "Эквалайзер"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Enable equalizer"
+msgstr "Включить эквалайзер"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Shape the sound with ten bands, from bass on the left to treble on the right"
+msgstr "Настройте звучание по десяти полосам, от басов слева до высоких частот справа"
+
+#: ui/components/settings/equalizer-controls.slint
+#: ui/components/settings/replaygain-controls.slint
+msgid "Preamp"
+msgstr "Предусиление"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Classical"
+msgstr "Классика"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Flat"
+msgstr "Ровный"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Jazz"
+msgstr "Джаз"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Pop"
+msgstr "Поп"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Rock"
+msgstr "Рок"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Bass Boost"
+msgstr "Усиление басов"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Electronic"
+msgstr "Электроника"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Treble Boost"
+msgstr "Усиление высоких"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Vocal"
+msgstr "Вокал"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Custom"
+msgstr "Свой"
+
+#: ui/components/settings/equalizer-controls.slint
+msgid "Reset"
+msgstr "Сбросить"
+
 #: ui/components/settings/folder-row.slint
 msgid "Rescan"
 msgstr "Пересканировать"
+
+#: ui/components/settings/replaygain-controls.slint
+#: ui/views/settings/output-section.slint
+msgid "ReplayGain"
+msgstr "ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Enable ReplayGain"
+msgstr "Включить ReplayGain"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "ReplayGain only affects tracks that already have loudness tags. Scan your library with a tool like rsgain or loudgain to add them."
+msgstr "ReplayGain действует только на треки, в которых уже есть теги громкости. Чтобы добавить их, просканируйте медиатеку программой вроде rsgain или loudgain."
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Normalization mode"
+msgstr "Режим нормализации"
+
+#: ui/components/settings/replaygain-controls.slint
+msgid "Prevent clipping"
+msgstr "Предотвращать клиппинг"
 
 #: ui/components/settings/scan-progress.slint
 msgid "Looking for music… {n} file found"
@@ -2484,27 +2494,43 @@ msgstr "Показать все песни ({})"
 msgid "Top Result"
 msgstr "Лучший результат"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/interface-page.slint
-msgid "Interface"
-msgstr "Интерфейс"
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/effects-page.slint
+msgid "Effects"
+msgstr "Эффекты"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/library-page.slint
 msgid "Library"
 msgstr "Медиатека"
+
+#: ui/views/settings-view.slint ui/views/settings/output-section.slint
+#: ui/views/settings/pages/output-page.slint
+msgid "Output"
+msgstr "Вывод"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/playback-page.slint
 #: ui/views/settings/playback-section.slint
 msgid "Playback"
 msgstr "Воспроизведение"
 
+#: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window"
+msgstr "Окно"
+
 #: ui/views/settings-view.slint ui/views/settings/about-section.slint
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "О программе"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/services-page.slint
-msgid "Services"
-msgstr "Сервисы"
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Интеграции"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
+#: ui/views/settings/update-section.slint
+msgid "Updates"
+msgstr "Обновления"
 
 #: ui/views/settings-view.slint
 msgid "Search settings…"
@@ -2551,6 +2577,43 @@ msgstr "Снова пройти первоначальную настройку.
 msgid "Show"
 msgstr "Показать"
 
+#: ui/views/settings/animations-section.slint
+msgid "Animations"
+msgstr "Анимации"
+
+#: ui/views/settings/animations-section.slint
+msgid "Play Button Animation"
+msgstr "Анимация кнопки воспроизведения"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visual effect on the play button while music is playing"
+msgstr "Визуальный эффект на кнопке воспроизведения, пока играет музыка"
+
+#: ui/views/settings/animations-section.slint
+msgid "Show an audio visualizer on the Now Playing screen"
+msgstr "Показывать визуализатор звука на экране «Сейчас играет»"
+
+#: ui/views/settings/animations-section.slint
+msgid "Visualizer Style"
+msgstr "Стиль визуализатора"
+
+#: ui/views/settings/animations-section.slint
+msgid "Choose how the visualizer draws the audio"
+msgstr "Выберите, как визуализатор рисует звук"
+
+#: ui/views/settings/animations-section.slint
+#: ui/views/settings/appearance-section.slint
+msgid "None"
+msgstr "Нет"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Material You Accent"
+msgstr "Акцент Material You"
+
+#: ui/views/settings/appearance-section.slint
+msgid "Take the accent color from the current track's artwork."
+msgstr "Брать акцентный цвет из обложки текущего трека."
+
 #: ui/views/settings/appearance-section.slint
 msgid "Color Style"
 msgstr "Цветовой стиль"
@@ -2570,11 +2633,6 @@ msgstr "Фон «Аврора»"
 #: ui/views/settings/appearance-section.slint
 msgid "Paint album, playlist and Now Playing headers with a wash of the album's own colors, instead of a blurred copy of its cover art. Nothing needs blurring, so headers appear sooner and Melodia stays lighter. Restart required to apply."
 msgstr "Заливать заголовки альбомов, плейлистов и экрана «Сейчас играет» собственными цветами альбома вместо размытой копии обложки. Размывать ничего не нужно, поэтому заголовки появляются быстрее, а Melodia расходует меньше ресурсов. Чтобы применить, нужен перезапуск."
-
-#: ui/views/settings/appearance-section.slint
-#: ui/views/settings/playback-section.slint
-msgid "None"
-msgstr "Нет"
 
 #: ui/views/settings/appearance-section.slint
 msgid "Tonal Spot"
@@ -2668,6 +2726,16 @@ msgstr "Подключено к Discord"
 msgid "Discord not running"
 msgstr "Discord не запущен"
 
+#. Translators: an equalizer preset, such as Rock or Jazz
+#: ui/views/settings/equalizer-section.slint
+msgid "Preset"
+msgstr "Пресет"
+
+#. Translators: the equalizer's frequency bands
+#: ui/views/settings/equalizer-section.slint
+msgid "Bands"
+msgstr "Полосы"
+
 #: ui/views/settings/file-watching-section.slint
 msgid "File Watching"
 msgstr "Отслеживание файлов"
@@ -2679,10 +2747,6 @@ msgstr "Отслеживать изменения файлов"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Автоматически замечать, когда в папках медиатеки файлы добавляются, удаляются или изменяются."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Выберите язык интерфейса"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"
@@ -2732,10 +2796,6 @@ msgstr "Фон из обложки"
 #: ui/views/settings/mini-player-section.slint
 msgid "Paint the miniplayer with the colors of the album that is playing, as the Now Playing view does."
 msgstr "Окрашивать мини-плеер в цвета играющего альбома, как это делает экран «Сейчас играет»."
-
-#: ui/views/settings/output-section.slint
-msgid "Output"
-msgstr "Вывод"
 
 #: ui/views/settings/output-section.slint
 msgid "Output Mode"
@@ -2948,10 +3008,6 @@ msgid "{}, rounded to fit 32-bit float"
 msgstr "{}, округлено до 32-битного float"
 
 #: ui/views/settings/output-section.slint
-msgid "Effects"
-msgstr "Эффекты"
-
-#: ui/views/settings/output-section.slint
 msgid "Normal"
 msgstr "Обычная"
 
@@ -3049,14 +3105,6 @@ msgid "Seamless transitions between tracks without silence gaps"
 msgstr "Бесшовные переходы между треками без пауз"
 
 #: ui/views/settings/playback-section.slint
-msgid "Play Button Animation"
-msgstr "Анимация кнопки воспроизведения"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visual effect on the play button while music is playing"
-msgstr "Визуальный эффект на кнопке воспроизведения, пока играет музыка"
-
-#: ui/views/settings/playback-section.slint
 msgid "Resume on Startup"
 msgstr "Продолжать при запуске"
 
@@ -3103,18 +3151,6 @@ msgstr "Затухание при паузе"
 #: ui/views/settings/playback-section.slint
 msgid "Fade the music out when pausing or stopping, and back in when resuming"
 msgstr "Плавно приглушать музыку при паузе или остановке и плавно возвращать при продолжении"
-
-#: ui/views/settings/playback-section.slint
-msgid "Show an audio visualizer on the Now Playing screen"
-msgstr "Показывать визуализатор звука на экране «Сейчас играет»"
-
-#: ui/views/settings/playback-section.slint
-msgid "Visualizer Style"
-msgstr "Стиль визуализатора"
-
-#: ui/views/settings/playback-section.slint
-msgid "Choose how the visualizer draws the audio"
-msgstr "Выберите, как визуализатор рисует звук"
 
 #. Translators: `{}` is a duration in seconds, such as 2.5
 #: ui/views/settings/playback-section.slint
@@ -3225,13 +3261,9 @@ msgstr "Подключить ListenBrainz"
 msgid "Turn on Last.fm or ListenBrainz above first"
 msgstr "Сначала включите Last.fm или ListenBrainz выше"
 
-#: ui/views/settings/settings-tabs.slint
+#: ui/views/settings/settings-router.slint
 msgid "No matching settings"
 msgstr "Подходящих настроек нет"
-
-#: ui/views/settings/update-section.slint
-msgid "Updates"
-msgstr "Обновления"
 
 #: ui/views/settings/update-section.slint
 msgid "Software Updates"
@@ -3310,10 +3342,6 @@ msgid "This update fixes a critical issue and can't be skipped."
 msgstr "Это обновление исправляет критическую проблему, и его нельзя пропустить."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window"
-msgstr "Окно"
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Managed by the operating system"
 msgstr "Управляется операционной системой"
 
@@ -3354,16 +3382,28 @@ msgid "Draw a thin outline around the whole window, the miniplayer included."
 msgstr "Рисовать тонкую рамку вокруг всего окна, включая мини-плеер."
 
 #: ui/views/settings/window-chrome-section.slint
-msgid "Window Border Color"
-msgstr "Цвет рамки окна"
-
-#: ui/views/settings/window-chrome-section.slint
-msgid "System follows the color the operating system draws its own window borders in."
-msgstr "«Системный» повторяет цвет, которым операционная система рисует рамки своих окон."
-
-#: ui/views/settings/window-chrome-section.slint
 msgid "Available only while the window border is shown."
 msgstr "Доступно, только пока показана рамка окна."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "System Border Color"
+msgstr "Системный цвет рамки"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Use the color the operating system draws its own window borders in."
+msgstr "Использовать цвет, которым операционная система рисует рамки своих окон."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Material You Border"
+msgstr "Рамка Material You"
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Tint the system border color with the current track's artwork."
+msgstr "Окрашивать системный цвет рамки в тон обложки текущего трека."
+
+#: ui/views/settings/window-chrome-section.slint
+msgid "Window Border Color"
+msgstr "Цвет рамки окна"
 
 #: ui/views/settings/window-chrome-section.slint
 msgid "Decoration Button Style"
