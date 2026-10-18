@@ -755,6 +755,21 @@ this file is what builds, looks right, and is wrong.
   vertical edge or one at `y = 0`. All four bit `waveform-trace.slint`, whose writer is
   `player::waveform::write_path_commands`; the winding bit `rounded-frame.slint` too.
 
+- **A number turned into a string inside `.slint` writes the running translation's decimal
+  separator, so a `commands` string built with `+` breaks in every bundled locale but English.**
+  `shared_string_from_number` (`i-slint-core/string.rs`) swaps the `.` for the separator
+  `select_bundled_translation` installs, and every non-English bundle sets `,`. `"A " + 5.5`
+  becomes `A 5,5`, the parser rejects it with a `Flag` error on stderr, and the path draws nothing:
+  the content panel's corner masks, the toast's accent bar and the play button's hold ring all
+  went missing that way. An integer has no `.` to swap, so a path off whole-pixel metrics passes
+  until a half-stroke inset or a `sin` lands a fraction, and English, the locale every review runs
+  in, never shows it. Cure: every number in a string something parses goes through
+  `.to-string-unlocalized()` (`rounded-frame.slint` names its three once as string twins,
+  `notification-stack.slint` and `play-button.slint` convert inline). Text a person reads keeps the
+  bare `+`, a localized decimal being right there, and a string built in Rust is unaffected,
+  `format!` knowing nothing of the bundle. Tell, in `app-window.rs`: a
+  `shared_string_from_number (` inside a `PathData :: Commands` binding.
+
 - **A round cap on a 1 px stroke draws nothing, and the stroke's two ends come out different.**
   femtovg's `expand_stroke` (`path/cache.rs`) tessellates a cap with `curve_divisions` over the
   half-width, which for a line one physical pixel wide lands on its floor of two, so

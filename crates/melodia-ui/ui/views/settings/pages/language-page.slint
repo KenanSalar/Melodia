@@ -1,0 +1,13 @@
+import { LanguageSection } from "../language-section.slint";
+
+// The language the app speaks. The page shape is `library-page.slint`'s.
+export component LanguagePage inherits Rectangle {
+    horizontal-stretch: 1;
+    vertical-stretch: 0;
+
+    out property <bool> has-matches: language.has-matches;
+
+    VerticalLayout {
+        language := LanguageSection { category-name: @tr("Language"); }
+    }
+}

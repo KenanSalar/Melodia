@@ -709,7 +709,8 @@ msgstr "Nomor"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Bahasa"
 
@@ -2450,10 +2451,6 @@ msgstr "Output"
 msgid "Playback"
 msgstr "Pemutaran"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
-msgid "Integrations"
-msgstr "Integrasi"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
 #: ui/views/settings/window-chrome-section.slint
 msgid "Window"
@@ -2463,6 +2460,10 @@ msgstr "Jendela"
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Tentang"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Integrasi"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
 #: ui/views/settings/update-section.slint
@@ -2650,10 +2651,6 @@ msgstr "Pantau perubahan berkas"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Deteksi otomatis saat berkas ditambahkan, dihapus, atau diubah di folder pustaka Anda."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Pilih bahasa yang Anda inginkan"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"

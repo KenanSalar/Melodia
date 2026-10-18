@@ -711,7 +711,8 @@ msgstr "Номер"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Мова"
 
@@ -2502,10 +2503,6 @@ msgstr "Виведення"
 msgid "Playback"
 msgstr "Відтворення"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
-msgid "Integrations"
-msgstr "Інтеграції"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
 #: ui/views/settings/window-chrome-section.slint
 msgid "Window"
@@ -2515,6 +2512,10 @@ msgstr "Вікно"
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Про програму"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Інтеграції"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
 #: ui/views/settings/update-section.slint
@@ -2702,10 +2703,6 @@ msgstr "Відстежувати зміни файлів"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Автоматично помічати, коли в теках медіатеки файли додаються, вилучаються або змінюються."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Виберіть мову інтерфейсу"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"

@@ -1,0 +1,72 @@
+import { Theme } from "../../theme.slint";
+import { SettingsPage } from "../../globals/settings-page.slint";
+import { MaterialIcon } from "../material-icon.slint";
+
+// One row in a `ChoiceList`. Unexported, as `ChipGroup`'s `Chip` is.
+component ChoiceRow inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+
+    callback clicked();
+
+    height: SettingsPage.nav-row-h;
+    border-radius: Theme.radius-md;
+    // The category panel's selected tint, and the fill a control resting on a card hovers to.
+    background: root.selected
+        ? Theme.accent.with-alpha(0.16)
+        : (touch.has-hover ? Theme.card-control : transparent);
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-md;
+
+        Text {
+            horizontal-stretch: 1;
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        // Held on every row, so a pick doesn't move the label's width. A plain `Rectangle` centres
+        // the glyph, which keeps the row off the layout's centring solve.
+        Rectangle {
+            width: 20px;
+            if root.selected: MaterialIcon {
+                name: "check";
+                icon-size: 20px;
+                icon-color: Theme.accent;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// A one-of-many list on a card, for a set too long or too ragged to read in order as a
+// `ChipGroup`. Same contract: a click writes `selected-index` and emits `selected(idx)`.
+export component ChoiceList inherits VerticalLayout {
+    in property <[string]> options;
+    in-out property <int> selected-index;
+
+    callback selected(int);
+
+    // `pad-sm` here and inside each row puts the labels on the card title's `pad-lg` inset.
+    padding: Theme.pad-sm;
+    spacing: Theme.pad-xs;
+
+    for option[idx] in root.options: ChoiceRow {
+        label: option;
+        selected: idx == root.selected-index;
+        clicked => {
+            root.selected-index = idx;
+            root.selected(idx);
+        }
+    }
+}

@@ -710,7 +710,8 @@ msgstr "Número"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Idioma"
 
@@ -2476,10 +2477,6 @@ msgstr "Saída"
 msgid "Playback"
 msgstr "Reprodução"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
-msgid "Integrations"
-msgstr "Integrações"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
 #: ui/views/settings/window-chrome-section.slint
 msgid "Window"
@@ -2489,6 +2486,10 @@ msgstr "Janela"
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Acerca de"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Integrações"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
 #: ui/views/settings/update-section.slint
@@ -2676,10 +2677,6 @@ msgstr "Monitorizar alterações nos ficheiros"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Deteta automaticamente quando são adicionados, removidos ou alterados ficheiros nas pastas da sua biblioteca."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Escolha o seu idioma preferido"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"

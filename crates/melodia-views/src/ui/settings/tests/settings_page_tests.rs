@@ -6,7 +6,7 @@ const SETTINGS_PAGE: &str = include_str!("../settings_page.rs");
 
 /// The category count Slint declares today. Kept local so a change to
 /// `SettingsPage.category-count` doesn't silently rewrite what these assert.
-const CATEGORIES: i32 = 10;
+const CATEGORIES: i32 = 11;
 
 const GLOBAL: &str = include_str!("../../../../../melodia-ui/ui/globals/settings-page.slint");
 const ROUTER: &str =
@@ -37,7 +37,7 @@ const CARD_CHILDREN: [(&str, &str, &str); 3] = [
 ];
 
 /// One page per category, by name so a failure says which file.
-const PAGES: [(&str, &str); 10] = [
+const PAGES: [(&str, &str); 11] = [
     (
         "library-page",
         include_str!("../../../../../melodia-ui/ui/views/settings/pages/library-page.slint"),
@@ -53,6 +53,10 @@ const PAGES: [(&str, &str); 10] = [
     (
         "appearance-page",
         include_str!("../../../../../melodia-ui/ui/views/settings/pages/appearance-page.slint"),
+    ),
+    (
+        "language-page",
+        include_str!("../../../../../melodia-ui/ui/views/settings/pages/language-page.slint"),
     ),
     (
         "window-page",
@@ -92,10 +96,9 @@ fn array_body(marker: &str) -> Option<&'static str> {
 
 /// `SettingsPage.category-count` is the sole definition of how many categories exist —
 /// Rust clamps the persisted index against it instead of carrying its own const. Nothing
-/// else in the build notices when it drifts from the categories actually declared: an
-/// eleventh added without bumping it stays clickable but can never be restored from
-/// `views.json`, and a bump without a matching router branch selects a branch that mounts
-/// nothing.
+/// else in the build notices when it drifts from the categories actually declared: one
+/// added without bumping it stays clickable but can never be restored from `views.json`,
+/// and a bump without a matching router branch selects a branch that mounts nothing.
 #[test]
 fn category_count_matches_the_categories_slint_declares() {
     let declared = declared_category_count();
@@ -151,9 +154,9 @@ fn category_count_matches_the_categories_slint_declares() {
         "every category label must stay an inline `@tr(\"…\")` literal"
     );
 
-    // `category_from_index` falls back to Library, so an eleventh category without a
-    // variant logs as `Settings/Library` — right-looking, and wrong on the one category
-    // nobody added a name for.
+    // `category_from_index` falls back to Library, so a new category without a variant
+    // logs as `Settings/Library` — right-looking, and wrong on the one category nobody
+    // added a name for.
     assert_eq!(
         SettingsCategory::ALL.len(),
         count,

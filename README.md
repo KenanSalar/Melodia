@@ -42,7 +42,7 @@ Six theme families, light and dark variants, configurable accents, and Material 
 <table>
   <tr>
     <td width="50%"><img src="assets/screenshots/radio-browse.png" alt="Radio browse view"><br><sub><b>Internet Radio</b>: a worldwide directory, narrowed by country, language, genre, codec, or bitrate. Off until you switch it on, under Settings ▸ Radio.</sub></td>
-    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: ten categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
+    <td width="50%"><img src="assets/screenshots/settings.png" alt="Settings on the Appearance category"><br><sub><b>Settings</b>: eleven categories beside the cards, searched all at once, here on the theme, variant, accent, and color style.</sub></td>
   </tr>
 </table>
 
@@ -132,7 +132,7 @@ Six families, each with light and dark variants and configurable accents: **Catp
 ### Formats and languages
 MP3, FLAC, M4A/M4B (AAC and ALAC), raw AAC (`.aac`), Ogg Vorbis (`.ogg`, `.oga`), Opus (`.opus`, up to 7.1), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska (`.mka`), and CAF. Matroska and CAF carry no tags Melodia can read, so those tracks list under their filename, as does anything whose tags are too damaged to parse.
 
-Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Brazilian Portuguese, European Portuguese, Dutch, Polish, Indonesian, Russian, Ukrainian, Hungarian, Vietnamese), switchable at runtime with no restart.
+Sixteen locales (English, German, French, Spanish, Turkish, Greek, Italian, Brazilian Portuguese, European Portuguese, Dutch, Polish, Indonesian, Russian, Ukrainian, Hungarian, Vietnamese), switchable at runtime with no restart under Settings ▸ Language.
 
 ### System integration
 - Scrobbling to **Last.fm** and **ListenBrainz**, each independently, with loved-track sync that catches your existing favorites up on connect, and a durable offline queue. A ListenBrainz love needs the track's MusicBrainz recording ID in its tags

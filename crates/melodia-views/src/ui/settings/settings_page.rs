@@ -26,6 +26,7 @@ pub enum SettingsCategory {
     Playback,
     Output,
     Appearance,
+    Language,
     Window,
     Radio,
     Lyrics,
@@ -37,11 +38,12 @@ pub enum SettingsCategory {
 impl SettingsCategory {
     /// Every variant, so a category added to the `.slint` without one here fails a test rather
     /// than falling through [`category_from_index`]'s default.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::Library,
         Self::Playback,
         Self::Output,
         Self::Appearance,
+        Self::Language,
         Self::Window,
         Self::Radio,
         Self::Lyrics,
@@ -67,6 +69,7 @@ fn category_index(page: &SettingsPage<'_>, category: SettingsCategory) -> i32 {
         SettingsCategory::Playback => page.get_category_playback(),
         SettingsCategory::Output => page.get_category_output(),
         SettingsCategory::Appearance => page.get_category_appearance(),
+        SettingsCategory::Language => page.get_category_language(),
         SettingsCategory::Window => page.get_category_window(),
         SettingsCategory::Radio => page.get_category_radio(),
         SettingsCategory::Lyrics => page.get_category_lyrics(),

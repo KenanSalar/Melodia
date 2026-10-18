@@ -85,6 +85,7 @@ pub fn install_locale(ui: &AppWindow, state: &AppState) {
         let g = ui.global::<Settings>();
         g.set_language_names(ModelRc::from(Rc::new(VecModel::from(names))));
         g.set_language_codes(ModelRc::from(Rc::new(VecModel::from(codes))));
+        g.set_language_search_terms(LOCALE_NATIVE_NAMES.join(" ").into());
         g.set_language_idx(i32::try_from(idx).unwrap_or(0));
     }
 

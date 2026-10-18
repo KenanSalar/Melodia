@@ -1442,7 +1442,7 @@ edit would otherwise reverse.
 
 - **A category panel beside one column of cards.** `settings-view.slint` is page chrome only,
   `settings/settings-nav.slint` the panel, `settings/settings-router.slint` the router and
-  `views/settings/pages/*.slint` the ten pages, each owning its card list *and* an aggregate
+  `views/settings/pages/*.slint` one page per category, each owning its card list *and* an aggregate
   `has-matches`. **Search escapes the categories**: a non-empty query mounts every page at once,
   which is how the flat cross-category list comes back with no filtering logic of its own, and why
   both modes mount the same pages, the card-to-category mapping being stated once.
@@ -1540,6 +1540,15 @@ edit would otherwise reverse.
   `window_border::seat`), which is what keeps the two from reading as picked at once. A mode drawn
   as a swatch is what this replaced: it came and went with the artwork, shifting every index past
   it, and showed a colour it couldn't promise. Both grids draw `Settings.accent-colors`.
+
+- **A one-of-many set on a card picks its control by length.** A short preset set (theme, variant,
+  color style) is a `ChipGroup`; a set too long or too ragged to read in order as chips is
+  `components/settings/choice-list.slint`'s `ChoiceList`, one row per option, which keeps
+  `ChipGroup`'s contract so a mount swaps between the two. The Language card is its mount, and
+  **Language is a category of its own** so a reader stranded in a language they can't read finds
+  the way back by the panel's `translate` glyph, not by a card at the foot of another page. The
+  first-run card keeps chips for the same names, a welcome panel having room for one strip and
+  not a page of rows.
 
 - **A slider on a card is `components/settings/setting-slider.slint`'s `SettingSlider`**, never a
   `SliderTrack` and a `Text` laid out by hand. The crossfade duration and the resync hold are its

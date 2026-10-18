@@ -1,15 +1,13 @@
-import { LanguageSection } from "../language-section.slint";
 import { AppearanceSection } from "../appearance-section.slint";
 
-// How the app reads and is coloured. The page shape is `library-page.slint`'s.
+// How the app is coloured. The page shape is `library-page.slint`'s.
 export component AppearancePage inherits Rectangle {
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    out property <bool> has-matches: appearance.has-matches || language.has-matches;
+    out property <bool> has-matches: appearance.has-matches;
 
     VerticalLayout {
         appearance := AppearanceSection { category-name: @tr("Appearance"); }
-        language := LanguageSection { category-name: @tr("Appearance"); }
     }
 }

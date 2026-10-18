@@ -336,6 +336,8 @@ export global Settings {
     // re-renders every `@tr` on the next frame, then spawns the disk persist.
     in property <[string]> language-names;
     in property <[string]> language-codes;
+    // The native names joined, for the Language card's search term.
+    in property <string> language-search-terms;
     in-out property <int>  language-idx;
     callback language-changed(int);
 

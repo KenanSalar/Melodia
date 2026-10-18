@@ -712,7 +712,8 @@ msgstr "Sorszám"
 #: ui/components/dialog/tag-editor-body.slint
 #: ui/components/onboarding/appearance-panel.slint ui/settings.slint
 #: ui/views/radio/suggestion-pill.slint ui/views/radio/tab-pills.slint
-#: ui/views/settings/language-section.slint
+#: ui/views/settings-view.slint ui/views/settings/language-section.slint
+#: ui/views/settings/pages/language-page.slint
 msgid "Language"
 msgstr "Nyelv"
 
@@ -2478,10 +2479,6 @@ msgstr "Kimenet"
 msgid "Playback"
 msgstr "Lejátszás"
 
-#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
-msgid "Integrations"
-msgstr "Integrációk"
-
 #: ui/views/settings-view.slint ui/views/settings/pages/window-page.slint
 #: ui/views/settings/window-chrome-section.slint
 msgid "Window"
@@ -2491,6 +2488,10 @@ msgstr "Ablak"
 #: ui/views/settings/pages/about-page.slint
 msgid "About"
 msgstr "Névjegy"
+
+#: ui/views/settings-view.slint ui/views/settings/pages/integrations-page.slint
+msgid "Integrations"
+msgstr "Integrációk"
 
 #: ui/views/settings-view.slint ui/views/settings/pages/updates-page.slint
 #: ui/views/settings/update-section.slint
@@ -2678,10 +2679,6 @@ msgstr "Fájlváltozások figyelése"
 #: ui/views/settings/file-watching-section.slint
 msgid "Automatically detect when files are added, removed, or changed in your library folders."
 msgstr "Automatikus észlelés, ha a könyvtármappáidban fájlok jelennek meg, törlődnek vagy módosulnak."
-
-#: ui/views/settings/language-section.slint
-msgid "Choose your preferred language"
-msgstr "Válaszd ki a kívánt nyelvet"
 
 #: ui/views/settings/library-section.slint
 msgid "Manage Folders"
