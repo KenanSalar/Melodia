@@ -24,6 +24,13 @@ const UNTAGGED_TRACK_LAST: i32 = i32::MAX;
 const NATURAL: &str = "COALESCE(t.sort_key, '') COLLATE NOCASE";
 
 /// The ids of every track in `scope` that `needle` matches, in `order`.
+///
+/// They come back as one comma-joined row rather than a row each: sqlx hands every row across
+/// from its connection's worker thread on its own, which over a library costs more than the sort.
+///
+/// The order is the subquery's, not the aggregate's own `ORDER BY`, which sorts slower wherever an
+/// index can't answer it. `SQLite`'s flattener keeps a FROM-clause subquery's `ORDER BY` under
+/// any aggregate but `count`, `min` and `max`, and `cross_tier` holds every arm to it.
 pub async fn track_ids(
     db: &DbPool,
     scope: TrackListScope,
@@ -31,14 +38,26 @@ pub async fn track_ids(
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
     let membership = Membership::resolve(db, scope).await?;
-    let mut qb = QueryBuilder::<Sqlite>::new("SELECT t.id FROM ");
+    let mut qb =
+        QueryBuilder::<Sqlite>::new("SELECT group_concat(id, ',') FROM (SELECT t.id FROM ");
     membership.push_source(&mut qb);
     if !needle.is_empty() {
         qb.push(if membership.narrows() { " AND " } else { " WHERE " });
         push_needle(&mut qb, needle);
     }
-    qb.push(" ORDER BY ").push(order_by(membership.page(), order, membership.position()));
-    let ids = qb.build_query_scalar::<i64>().persistent(false).fetch_all(db.read()).await?;
+    qb.push(" ORDER BY ").push(order_by(membership.page(), order, membership.position())).push(")");
+    let packed: Option<String> =
+        qb.build_query_scalar().persistent(false).fetch_one(db.read()).await?;
+    packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
+}
+
+/// The ids `group_concat` joined, in order. The aggregate is NULL where nothing matched, which
+/// [`track_ids`] answers before getting here.
+fn unpack_ids(packed: &str) -> Result<Vec<i64>, AppError> {
+    let mut ids = Vec::with_capacity(packed.bytes().filter(|&b| b == b',').count() + 1);
+    for id in packed.split(',') {
+        ids.push(id.parse().map_err(|e| sqlx::Error::Decode(Box::new(e)))?);
+    }
     Ok(ids)
 }
 
