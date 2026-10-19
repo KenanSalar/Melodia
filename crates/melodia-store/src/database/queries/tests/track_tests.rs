@@ -698,6 +698,25 @@ async fn get_recently_played_respects_limit() -> Result<(), AppError> {
     Ok(())
 }
 
+/// One flush stamps every play in its batch with the same `last_played`, and the page shows this
+/// order as it stands, so the id settles the tie and the cap keeps whichever it puts first.
+#[tokio::test]
+async fn get_recently_played_breaks_a_shared_stamp_toward_the_higher_id() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query(
+        "UPDATE tracks SET last_played = '2026-06-01T00:00:00+00:00' \
+         WHERE title IN ('Alpha', 'Beta')",
+    )
+    .execute(db.write())
+    .await?;
+
+    let rows = queries::track::get_recently_played(&db, 200).await?;
+
+    let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(titles, ["Beta", "Alpha"], "Beta was inserted after Alpha");
+    Ok(())
+}
+
 #[tokio::test]
 async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
     let db = seed_db().await?;

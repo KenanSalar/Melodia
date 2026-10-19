@@ -788,3 +788,90 @@ async fn an_unmatched_rule_set_resolves_to_no_ids() -> Result<(), AppError> {
     assert!(queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?.is_empty());
     Ok(())
 }
+
+// --- ties under a cap ---
+
+/// Four tracks equal on every column a cap orders by, in insertion order, so which of them a cap
+/// keeps is the tie-break's answer alone.
+async fn tied_seed() -> Result<(DbPool, [i64; 4]), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let ids = [
+        insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?,
+        insert_test_track(&db, "/music/2.mp3", "Two", "Artist", "Album", "Rock").await?,
+        insert_test_track(&db, "/music/3.mp3", "Three", "Artist", "Album", "Rock").await?,
+        insert_test_track(&db, "/music/4.mp3", "Four", "Artist", "Album", "Rock").await?,
+    ];
+    sqlx::query("UPDATE tracks SET date_added = ?, play_count = 3, last_played = ?, rating = 4")
+        .bind("2026-01-01T00:00:00+00:00")
+        .bind(days_ago(1))
+        .execute(db.write())
+        .await?;
+    Ok((db, ids))
+}
+
+fn capped(order: LimitOrder, rules: Vec<Rule>) -> SmartCriteria {
+    SmartCriteria { rules, limit: Some(SmartLimit { count: 2, order }), ..SmartCriteria::default() }
+}
+
+async fn listed_ids(db: &DbPool, c: &SmartCriteria) -> Result<Vec<i64>, AppError> {
+    Ok(resolve(db, c).await?.iter().map(|r| r.id).collect())
+}
+
+/// A cap falling inside a run of equal values keeps the tracks the id picks. Each direction is the
+/// one the order's unfiltered plan reaches tied rows in on its own, so a playlist with no rules
+/// keeps the tracks it held.
+#[tokio::test]
+async fn a_cap_inside_a_tie_keeps_the_tracks_the_id_picks() -> Result<(), AppError> {
+    let (db, [first, second, third, fourth]) = tied_seed().await?;
+    let cases = [
+        (LimitOrder::DateAddedDesc, [fourth, third]),
+        (LimitOrder::DateAddedAsc, [first, second]),
+        (LimitOrder::PlayCountDesc, [first, second]),
+        (LimitOrder::PlayCountAsc, [first, second]),
+        (LimitOrder::LastPlayedDesc, [first, second]),
+        (LimitOrder::LastPlayedAsc, [first, second]),
+        (LimitOrder::RatingDesc, [fourth, third]),
+    ];
+
+    for (order, expected) in cases {
+        assert_eq!(listed_ids(&db, &capped(order, Vec::new())).await?, expected, "{order:?}");
+    }
+    Ok(())
+}
+
+/// A rule a partial index can answer changes the plan, and with it the order `SQLite` reaches tied
+/// rows in: walking `idx_tracks_play_count` or `idx_tracks_last_played` backwards hands back the
+/// highest ids first, where the unfiltered sort hands back the lowest. The cap keeps the same
+/// tracks either way.
+#[tokio::test]
+async fn a_rule_that_changes_the_plan_leaves_a_tied_cap_on_the_same_tracks() -> Result<(), AppError>
+{
+    let (db, [first, second, ..]) = tied_seed().await?;
+    let played =
+        Rule { field: RuleField::PlayCount, op: RuleOp::Gt, value: Some(RuleValue::Number(0.0)) };
+    let recent =
+        Rule { field: RuleField::LastPlayed, op: RuleOp::InLast, value: Some(RuleValue::Days(30)) };
+    let cases = [(LimitOrder::PlayCountDesc, played), (LimitOrder::LastPlayedDesc, recent)];
+
+    for (order, rule) in cases {
+        assert_eq!(
+            listed_ids(&db, &capped(order, vec![rule])).await?,
+            [first, second],
+            "{order:?}"
+        );
+    }
+    Ok(())
+}
+
+/// Tracks sharing a title share a sort key, so the uncapped list's order between them is the id's.
+#[tokio::test]
+async fn an_uncapped_list_orders_a_shared_sort_key_by_id() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let first = insert_test_track(&db, "/music/a.mp3", "Same", "Artist", "Album", "Rock").await?;
+    let second = insert_test_track(&db, "/music/b.mp3", "Same", "Artist", "Album", "Rock").await?;
+
+    assert_eq!(listed_ids(&db, &SmartCriteria::default()).await?, [first, second]);
+    Ok(())
+}

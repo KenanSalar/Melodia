@@ -92,7 +92,9 @@ pub async fn get_tracks_in_directory(
 /// `update_play_count`), whose lexical order is chronological even though `chrono`'s `AutoSi`
 /// fractional seconds vary in width: the offset's `'+'` sorts below every digit, and `AutoSi` only
 /// drops trailing-zero groups. Rows without a `last_played` (never played) are excluded —
-/// index-backed by the partial `idx_tracks_last_played`.
+/// index-backed by the partial `idx_tracks_last_played`. `id DESC` settles the plays one flush
+/// stamped together, and is the order that index's walk already hands them back in, so it costs
+/// no sort.
 ///
 /// Returns the `TrackListRow` projection so the Recently-Played view can render
 /// through the shared `TrackList`; `last_played` itself is not selected (it is
@@ -106,7 +108,7 @@ pub async fn get_recently_played(
     let sql = format!(
         "SELECT {cols} FROM tracks \
          WHERE last_played IS NOT NULL \
-         ORDER BY last_played DESC \
+         ORDER BY last_played DESC, id DESC \
          LIMIT ?"
     );
     let rows = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))

@@ -484,17 +484,26 @@ fn push_order_and_limit(qb: &mut QueryBuilder<Sqlite>, limit: &SmartLimit) {
 /// A `&'static str` from an enum match — the selection order can't inject SQL.
 /// Lexical `TEXT` order over RFC-3339 `last_played`/`date_added` == chronological
 /// order (same invariant `get_recently_played` documents).
+///
+/// **Every arm ends in the id.** A cap falling inside a run of equal values (a scan stamps one
+/// `date_added` on its whole batch, and every unplayed track ties on play count) would otherwise
+/// keep whichever tied tracks the plan reaches first, and a rule bringing in a partial index, or
+/// the statistics `PRAGMA optimize` refreshes at close, can change the plan. Each direction is the
+/// one the arm's unfiltered plan already breaks ties in (an index walk carries the rowid with the
+/// column, a sort hands back the lowest ids first), so it is not a free choice: flipping one
+/// re-picks every playlist capped in that order, as borrowing `MOST_PLAYED_ORDER`'s extra keys for
+/// `PlayCountDesc` would.
 fn order_by_fragment(limit: Option<&SmartLimit>) -> &'static str {
     match limit.map(|l| l.order) {
-        Some(LimitOrder::DateAddedDesc) => " ORDER BY date_added DESC",
-        Some(LimitOrder::DateAddedAsc) => " ORDER BY date_added ASC",
-        Some(LimitOrder::PlayCountDesc) => " ORDER BY play_count DESC",
-        Some(LimitOrder::PlayCountAsc) => " ORDER BY play_count ASC",
-        Some(LimitOrder::LastPlayedDesc) => " ORDER BY last_played DESC",
-        Some(LimitOrder::LastPlayedAsc) => " ORDER BY last_played ASC",
-        Some(LimitOrder::RatingDesc) => " ORDER BY rating DESC",
+        Some(LimitOrder::DateAddedDesc) => " ORDER BY date_added DESC, id DESC",
+        Some(LimitOrder::DateAddedAsc) => " ORDER BY date_added ASC, id ASC",
+        Some(LimitOrder::PlayCountDesc) => " ORDER BY play_count DESC, id ASC",
+        Some(LimitOrder::PlayCountAsc) => " ORDER BY play_count ASC, id ASC",
+        Some(LimitOrder::LastPlayedDesc) => " ORDER BY last_played DESC, id ASC",
+        Some(LimitOrder::LastPlayedAsc) => " ORDER BY last_played ASC, id ASC",
+        Some(LimitOrder::RatingDesc) => " ORDER BY rating DESC, id DESC",
         Some(LimitOrder::Random) => " ORDER BY RANDOM()",
-        None => " ORDER BY sort_key COLLATE NOCASE ASC",
+        None => " ORDER BY sort_key COLLATE NOCASE ASC, id ASC",
     }
 }
 
