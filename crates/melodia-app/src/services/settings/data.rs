@@ -1,7 +1,7 @@
 //! `settings.json`'s root model, [`SettingsData`], with the view primitives it stores and the
 //! first-launch defaults no flag struct owns: the host's theme and the OS locale.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -119,8 +119,9 @@ pub struct SettingsData {
     pub corner_radius: u32,
     pub play_button_animation: String,
     pub dynamic_color_style: String,
+    /// A `BTreeMap` for the reason `views.json`'s maps are one: a stable key order on disk.
     #[serde(default)]
-    pub theme_preferences: HashMap<String, ThemePreference>,
+    pub theme_preferences: BTreeMap<String, ThemePreference>,
     #[serde(default)]
     pub overflow_buttons: Vec<String>,
     #[serde(default = "default_locale")]
@@ -194,7 +195,7 @@ impl Default for SettingsData {
             corner_radius: get_os_corner_radius(),
             play_button_animation: "none".to_owned(),
             dynamic_color_style: "none".to_owned(),
-            theme_preferences: HashMap::new(),
+            theme_preferences: BTreeMap::new(),
             overflow_buttons: Vec::new(),
             locale: default_locale(),
             playback: PlaybackFlags::default(),
