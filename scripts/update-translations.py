@@ -219,7 +219,9 @@ def part_names(work: Path) -> list[str]:
 
 
 def read_lines(path: Path) -> list[str]:
-    return path.read_text(encoding="utf-8").splitlines()
+    # Iterated rather than splitlines(), which would also split a msgid holding U+2028 or U+0085.
+    with open(path, encoding="utf-8") as file:
+        return [line.rstrip("\n") for line in file]
 
 
 def write_lines(path: Path, lines: list[str]) -> None:

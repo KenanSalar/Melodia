@@ -34,9 +34,10 @@ when it is missing or out of step. The second is GNU gettext:
 - Debian and Ubuntu: `sudo apt install gettext`, since the default `gettext-base` has no
   `msgmerge`
 - macOS: `brew install gettext`
-- Windows: `winget install mlocati.GetText`, then run the script as
+- Windows: `winget install mlocati.GetText`, and Python 3 from python.org if it isn't
+  installed, since that installer adds the `py` launcher. Then run the script as
   `py scripts\update-translations.py`. Open a new terminal first, since one already running
-  doesn't see the PATH the installer sets
+  doesn't see the PATH the installers set
 
 The script itself is Python 3, standard library only.
 

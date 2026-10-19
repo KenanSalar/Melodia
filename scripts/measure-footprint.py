@@ -408,10 +408,11 @@ def launch(settings: Settings) -> Target:
     environment = dict(os.environ)
     if settings.data_dir:
         environment["MELODIA_DATA_DIR"] = str(Path(settings.data_dir).resolve())
-    # A session of its own, so Ctrl-C here or closing the terminal leaves Melodia running. Its log
-    # is mirrored to stderr, which would scroll the progress bar away.
+    # A session of its own, so Ctrl-C here or closing the terminal leaves Melodia running. On
+    # Windows that means no console at all, since a console build would otherwise share this one.
+    # Its log is mirrored to stderr, which would scroll the progress bar away.
     detached: dict[str, Any] = (
-        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if WINDOWS else {"start_new_session": True}
+        {"creationflags": subprocess.DETACHED_PROCESS} if WINDOWS else {"start_new_session": True}
     )
     popen = subprocess.Popen(
         [str(exe)],
@@ -1212,20 +1213,22 @@ def read_journal_report(token: str, since: int) -> str:
 def describe_output(output: str) -> str:
     if shutil.which("kscreen-doctor") is None:
         return f"{output}, its mode unknown without kscreen-doctor"
+    # The report is written after the last scenario, so JSON shaped differently than expected costs
+    # this line rather than the whole summary.
     try:
         screens = json.loads(run_quietly(["kscreen-doctor", "--json"]) or "{}").get("outputs", [])
-    except json.JSONDecodeError:
-        screens = []
-    for screen in screens:
-        if screen.get("name") != output:
-            continue
-        for mode in screen.get("modes", []):
-            if mode.get("id") == screen.get("currentModeId"):
-                size = mode["size"]
-                return (
-                    f"{size['width']}x{size['height']} at {round(mode['refreshRate'])} Hz, scale "
-                    f"{json.dumps(screen.get('scale'))}, the screen the window was on"
-                )
+        for screen in screens:
+            if screen.get("name") != output:
+                continue
+            for mode in screen.get("modes", []):
+                if mode.get("id") == screen.get("currentModeId"):
+                    size = mode["size"]
+                    return (
+                        f"{size['width']}x{size['height']} at {round(mode['refreshRate'])} Hz, scale "
+                        f"{json.dumps(screen.get('scale'))}, the screen the window was on"
+                    )
+    except (ValueError, KeyError, TypeError, AttributeError):
+        pass
     return f"{output}, its mode unknown, the screen the window was on"
 
 
