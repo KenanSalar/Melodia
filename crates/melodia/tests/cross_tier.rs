@@ -9,6 +9,7 @@
 //! `.claude/rules/testing.md` gives every corpus walk one home; these are the walks'
 //! compile-time cousins and land in the same place for the same reason.
 
+use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track::TrackListRow;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
@@ -553,7 +554,8 @@ async fn a_playlist_keyset_sorts_as_its_page_does() -> Result<(), AppError> {
     for token in SORT_TOKENS.iter().filter(|&&token| token != "position") {
         for dir in DIRECTIONS {
             assert_eq!(
-                keyset(&db, TrackListScope::Playlist(playlist), token, dir).await?,
+                keyset(&db, TrackListScope::Playlist(playlist, Draw::default()), token, dir)
+                    .await?,
                 as_the_detail_shows(&rows, token, dir),
                 "playlist by {token} {}",
                 dir.as_str()

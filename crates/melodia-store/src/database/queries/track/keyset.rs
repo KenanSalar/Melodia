@@ -56,8 +56,8 @@ pub async fn track_ids(
 }
 
 /// The ids `group_concat` joined, in order. The aggregate is NULL where nothing matched, which
-/// [`track_ids`] answers before getting here.
-fn unpack_ids(packed: &str) -> Result<Vec<i64>, AppError> {
+/// the caller answers before getting here.
+pub(crate) fn unpack_ids(packed: &str) -> Result<Vec<i64>, AppError> {
     let mut ids = Vec::with_capacity(packed.bytes().filter(|&b| b == b',').count() + 1);
     for id in packed.split(',') {
         ids.push(id.parse().map_err(|e| sqlx::Error::Decode(Box::new(e)))?);

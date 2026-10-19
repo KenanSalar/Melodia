@@ -13,6 +13,7 @@ use crate::database::queries::fixtures::{insert_tagged_track, make_test_metadata
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
+use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track_list::{ScopeFacts, TrackListScope};
 use melodia_core::error::AppError;
 
@@ -112,7 +113,8 @@ async fn a_playlist_counts_its_own_items_and_no_other_playlists() -> Result<(), 
     queries::playlist::create_playlist_with_tracks(&lib.db, "Other", None, &[lib.two, lib.four])
         .await?;
 
-    let facts = queries::track::scope_facts(&lib.db, TrackListScope::Playlist(mix)).await?;
+    let scope = TrackListScope::Playlist(mix, Draw::default());
+    let facts = queries::track::scope_facts(&lib.db, scope).await?;
 
     assert_eq!(facts, ScopeFacts { tracks: 2, duration_ms: 500_000, artists: 2, albums: 2 });
     Ok(())
@@ -133,7 +135,8 @@ async fn a_capped_smart_playlist_is_counted_under_its_cap() -> Result<(), AppErr
         queries::playlist::create_smart_playlist(&lib.db, "Top two", None, TOP_TWO_BY_PLAYS)
             .await?;
 
-    let facts = queries::track::scope_facts(&lib.db, TrackListScope::Playlist(smart.id)).await?;
+    let scope = TrackListScope::Playlist(smart.id, Draw::default());
+    let facts = queries::track::scope_facts(&lib.db, scope).await?;
 
     assert_eq!(facts, ScopeFacts { tracks: 2, duration_ms: 500_000, artists: 2, albums: 2 });
     Ok(())
@@ -148,7 +151,8 @@ async fn an_empty_scope_states_nothing() -> Result<(), AppError> {
     let cases =
         [(empty.id, "an empty playlist"), (ABSENT_PLAYLIST_ID, "a playlist that no longer exists")];
     for (id, case) in cases {
-        let facts = queries::track::scope_facts(&lib.db, TrackListScope::Playlist(id)).await?;
+        let scope = TrackListScope::Playlist(id, Draw::default());
+        let facts = queries::track::scope_facts(&lib.db, scope).await?;
 
         assert_eq!(facts, ScopeFacts::default(), "{case}");
     }

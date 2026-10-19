@@ -110,7 +110,7 @@ pub trait TrackDetail: Send + Sync + 'static {
     fn row_covers(&self) -> &Arc<CoverThumbs>;
 
     /// The tracks the detail of entity `id` lists.
-    fn scope(id: i64) -> TrackListScope;
+    fn scope(&self, id: i64) -> TrackListScope;
 
     fn detail_open(&self) -> bool {
         self.cache().id() >= 0

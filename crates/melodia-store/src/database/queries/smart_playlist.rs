@@ -8,12 +8,14 @@
 //! bound" guarantee the rest of the query layer gets from `AssertSqlSafe(sql) +
 //! .bind()`. No user string can reach the SQL text.
 
+use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
+
 use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
-use crate::database::queries::track::columns;
+use crate::database::queries::track::{columns, unpack_ids};
 use melodia_core::entities::smart_criteria::{
-    LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
+    Draw, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
     ValueType, ops_for,
 };
 use melodia_core::entities::track;
@@ -24,7 +26,8 @@ use melodia_core::error::AppError;
 ///
 /// **Backs the card menu's batch actions**, which resolve a selection to track ids and act on
 /// those. The detail page lists the same membership through its keyset, which reads it off
-/// [`push_positioned_membership`].
+/// [`push_positioned_membership`], except under a random cap, where the page keeps its own
+/// [`pick_random`] and the two draw separately.
 pub async fn get_smart_playlist_track_ids(
     db: &DbPool,
     criteria: &SmartCriteria,
@@ -62,6 +65,41 @@ pub(crate) fn push_positioned_membership(qb: &mut QueryBuilder<Sqlite>, criteria
         .push(order_by_fragment(criteria.limit.as_ref()))
         .push(") AS position");
     push_membership(qb, criteria);
+}
+
+/// The `count` tracks `draw` picks from everything the rules match, in pick order: a
+/// [`LimitOrder::Random`] cap a page reads more than once.
+///
+/// In Rust because `RANDOM()` takes no seed, so every query a page runs would draw again. Ranked
+/// by a hash of the draw and the id rather than shuffled, so a track entering or leaving the
+/// matches moves only itself and the rest of the pick holds across a reload.
+pub(crate) async fn pick_random(
+    db: &DbPool,
+    criteria: &SmartCriteria,
+    count: u32,
+    draw: Draw,
+) -> Result<Vec<i64>, AppError> {
+    let mut qb: QueryBuilder<Sqlite> =
+        QueryBuilder::new("SELECT group_concat(id, ',') FROM tracks");
+    push_where(&mut qb, criteria);
+    let packed: Option<String> =
+        qb.build_query_scalar().persistent(false).fetch_one(db.read()).await?;
+    let matches = packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))?;
+    Ok(pick(matches, count, draw))
+}
+
+/// The `count` of `matches` ranking lowest under `draw`, lowest first.
+fn pick(matches: Vec<i64>, count: u32, draw: Draw) -> Vec<i64> {
+    let hasher = BuildHasherDefault::<DefaultHasher>::default();
+    let mut ranked: Vec<(u64, i64)> =
+        matches.into_iter().map(|id| (hasher.hash_one((draw, id)), id)).collect();
+    let count = usize::try_from(count).unwrap_or(usize::MAX);
+    if count < ranked.len() {
+        ranked.select_nth_unstable(count);
+        ranked.truncate(count);
+    }
+    ranked.sort_unstable();
+    ranked.into_iter().map(|(_, id)| id).collect()
 }
 
 /// `FROM tracks` plus the criteria's `WHERE`, order and cap.

@@ -10,8 +10,8 @@ use crate::database::queries::fixtures::{
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::smart_criteria::{
-    FIELDS, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
-    ops_for,
+    Draw, FIELDS, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria,
+    SmartLimit, ops_for,
 };
 use melodia_core::entities::track::TrackListRow;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
@@ -89,7 +89,7 @@ async fn resolve(db: &DbPool, c: &SmartCriteria) -> Result<Vec<TrackListRow>, Ap
     let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
     let ids = queries::track::track_ids(
         db,
-        TrackListScope::Playlist(playlist.id),
+        TrackListScope::Playlist(playlist.id, Draw::default()),
         own_order,
         &Needle::default(),
     )

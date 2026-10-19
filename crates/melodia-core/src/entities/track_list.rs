@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::entities::smart_criteria::Draw;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum SortDir {
@@ -39,8 +41,9 @@ pub enum TrackListScope {
     Artist(i64),
     /// Every track carrying the genre, not only those naming it first.
     Genre(i64),
-    /// A manual playlist's items, or a smart playlist's current membership.
-    Playlist(i64),
+    /// A manual playlist's items, or a smart playlist's current membership, a random cap picking
+    /// under the draw.
+    Playlist(i64, Draw),
 }
 
 /// The column a track list sorts by.

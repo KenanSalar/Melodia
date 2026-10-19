@@ -4,7 +4,7 @@ use chrono::TimeZone;
 
 #[allow(clippy::wildcard_imports)]
 use super::*;
-use melodia_core::entities::smart_criteria::{Rule, RuleField, RuleOp, RuleValue};
+use melodia_core::entities::smart_criteria::{Draw, Rule, RuleField, RuleOp, RuleValue};
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
@@ -442,7 +442,7 @@ async fn an_exported_playlist_imports_back_with_the_same_tracks() -> Result<(), 
     let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
     let restored = queries::track::track_ids(
         &db,
-        TrackListScope::Playlist(result.playlist_id),
+        TrackListScope::Playlist(result.playlist_id, Draw::default()),
         own_order,
         &Needle::default(),
     )

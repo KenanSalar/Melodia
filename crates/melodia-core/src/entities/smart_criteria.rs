@@ -262,6 +262,11 @@ pub enum LimitOrder {
     Random,
 }
 
+/// Which tracks a [`LimitOrder::Random`] cap picks. One draw picks the same tracks out of the
+/// same matches, so a page can sort, filter and add up one pick across separate queries.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Draw(pub u64);
+
 /// The operators valid for a given value category. This is the single source of
 /// truth the evaluator uses to reject an incoherent `(field, op)` pair, and (in
 /// the editor) that the operator dropdown mirrors by index.

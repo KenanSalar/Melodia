@@ -46,8 +46,8 @@ impl TrackDetail for PlaylistsUi {
         &self.cover_thumbs
     }
 
-    fn scope(id: i64) -> TrackListScope {
-        TrackListScope::Playlist(id)
+    fn scope(&self, id: i64) -> TrackListScope {
+        TrackListScope::Playlist(id, self.draw())
     }
 
     /// Abort any in-flight drag-reorder: the row indices it was computed against no longer
@@ -77,13 +77,15 @@ pub(super) fn is_manual_order(field: &str, dir: &str) -> bool {
 
 /// A playlist's header and how far its tracks spread. A smart playlist has no `playlist_items`
 /// rows, so its `track_count` and `total_duration_ms` stay 0 in the junction-maintained columns
-/// and are counted off its current membership instead, the same query its spread comes from.
+/// and are counted off its current membership instead, the same query its spread comes from, under
+/// the draw its list was picked by.
 async fn fetch_playlist_header(
     state: &AppState,
+    playlists_ui: &PlaylistsUi,
     playlist_id: i64,
 ) -> AppResult<(PlaylistStats, HeroFold)> {
     let mut detail = library::playlists::get_playlist_detail(&state.db, playlist_id).await?;
-    let facts = library::keyset::facts(&state.db, TrackListScope::Playlist(playlist_id)).await?;
+    let facts = library::keyset::facts(&state.db, playlists_ui.scope(playlist_id)).await?;
     if detail.is_smart {
         detail.track_count = clamp_i64_to_i32(facts.tracks);
         detail.total_duration_ms = facts.duration_ms;
@@ -124,7 +126,8 @@ pub async fn open_playlist_with<F>(
 where
     F: FnOnce(&AppWindow) + Send + 'static,
 {
-    let (detail, fold) = fetch_playlist_header(state, playlist_id).await?;
+    playlists_ui.redraw();
+    let (detail, fold) = fetch_playlist_header(state, playlists_ui, playlist_id).await?;
 
     // `position` is the fresh-install default; a persisted non-`position` sort is restored across
     // restarts.
@@ -192,7 +195,7 @@ pub async fn refresh_detail(
     playlist_id: i64,
 ) -> AppResult<()> {
     load::reload(state, playlists_ui).await?;
-    let (detail, fold) = fetch_playlist_header(state, playlist_id).await?;
+    let (detail, fold) = fetch_playlist_header(state, playlists_ui, playlist_id).await?;
 
     let pair = decode_detail_pair(
         state,

@@ -43,7 +43,7 @@ pub async fn open<V: TrackDetail>(
     let ticket = cache.tickets.issue_reload();
     let order = TrackOrder::new(sort_field, SortDir::from_token(sort_dir));
     let keyset =
-        track_rows::load(state, V::scope(id), order, &Needle::default(), &cache.scroll).await?;
+        track_rows::load(state, view.scope(id), order, &Needle::default(), &cache.scroll).await?;
     track_rows::prewarm(view.row_covers(), &keyset).await;
     Ok(Opening {
         id,
@@ -127,7 +127,7 @@ async fn reload_under<V: TrackDetail>(
     if id < 0 {
         return Ok(());
     }
-    let keyset = track_rows::load(state, V::scope(id), order, &needle, &cache.scroll).await?;
+    let keyset = track_rows::load(state, view.scope(id), order, &needle, &cache.scroll).await?;
     // Overtaken already, so nothing this warms would be drawn.
     if !cache.tickets.is_latest(ticket) {
         return Ok(());
@@ -155,7 +155,7 @@ async fn requery_now<V: TrackDetail>(
     if id < 0 {
         return Ok(());
     }
-    let keyset = track_rows::load(state, V::scope(id), order, &needle, &cache.scroll).await?;
+    let keyset = track_rows::load(state, view.scope(id), order, &needle, &cache.scroll).await?;
     let global = cache.global().clone();
     let _ = global.upgrade_in_event_loop(move |g| {
         show(&*view, &g, (id, order, needle), ticket, keyset, |_| {});

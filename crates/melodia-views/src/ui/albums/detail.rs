@@ -39,7 +39,7 @@ impl TrackDetail for AlbumsUi {
         &self.cover_thumbs
     }
 
-    fn scope(id: i64) -> TrackListScope {
+    fn scope(&self, id: i64) -> TrackListScope {
         TrackListScope::Album(id)
     }
 }

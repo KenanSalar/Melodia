@@ -268,20 +268,19 @@ impl<R: PagedRow> PagedRows<R> {
     /// One row leaves and one arrives, so every other row keeps its delegate. Answers whether it
     /// moved: `from` past the end, or `to` past the slot after the last row, moves nothing.
     pub fn move_row(&self, from: usize, to: usize) -> bool {
-        let (moved, at) = {
+        let moved = {
             let keyset = self.keyset.borrow();
-            if from >= keyset.len() || to > keyset.len() {
+            if from >= keyset.len() || to >= keyset.len() {
                 return false;
             }
             let mut ids = keyset.to_vec();
             let id = ids.remove(from);
-            let at = to.min(ids.len());
-            ids.insert(at, id);
-            (Arc::<[i64]>::from(ids), at)
+            ids.insert(to, id);
+            Arc::<[i64]>::from(ids)
         };
         *self.keyset.borrow_mut() = moved;
         self.notify.row_removed(from, 1);
-        self.notify.row_added(at, 1);
+        self.notify.row_added(to, 1);
         true
     }
 

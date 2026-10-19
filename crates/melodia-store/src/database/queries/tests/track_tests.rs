@@ -2,6 +2,7 @@ use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
 use crate::database::{DbPool, IDS_PER_SET};
+use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track::TrackMeta;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
@@ -1376,7 +1377,7 @@ async fn a_playlist_keyset_follows_its_positions() -> Result<(), AppError> {
     let playlist =
         queries::playlist::create_playlist_with_tracks(&db, "Mix", None, &[gamma, alpha, beta])
             .await?;
-    let scope = TrackListScope::Playlist(playlist);
+    let scope = TrackListScope::Playlist(playlist, Draw::default());
     let by_position = |dir| TrackOrder { field: TrackSortField::Position, dir };
     let empty = Needle::default();
 
@@ -1411,7 +1412,7 @@ async fn a_smart_playlist_keyset_sorts_its_capped_membership() -> Result<(), App
         r#"{"limit":{"count":2,"order":"play_count_desc"}}"#,
     )
     .await?;
-    let scope = TrackListScope::Playlist(smart.id);
+    let scope = TrackListScope::Playlist(smart.id, Draw::default());
     let empty = Needle::default();
 
     let by_position = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };

@@ -4,8 +4,8 @@
 use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
-use crate::database::queries::smart_playlist::push_positioned_membership;
-use melodia_core::entities::smart_criteria::SmartCriteria;
+use crate::database::queries::smart_playlist::{pick_random, push_positioned_membership};
+use melodia_core::entities::smart_criteria::{Draw, LimitOrder, SmartCriteria};
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
 
@@ -18,6 +18,8 @@ pub(super) enum Membership {
     Genre(i64),
     ManualPlaylist(i64),
     SmartPlaylist(SmartCriteria),
+    /// A smart playlist capped in random order, as the ids its draw picked, in pick order.
+    Drawn(Vec<i64>),
 }
 
 impl Membership {
@@ -31,7 +33,7 @@ impl Membership {
             TrackListScope::Album(id) => Self::Album(id),
             TrackListScope::Artist(id) => Self::Artist(id),
             TrackListScope::Genre(id) => Self::Genre(id),
-            TrackListScope::Playlist(id) => {
+            TrackListScope::Playlist(id, draw) => {
                 let verdict: Option<(bool, Option<String>)> =
                     sqlx::query_as("SELECT is_smart, smart_criteria FROM playlists WHERE id = ?")
                         .bind(id)
@@ -39,7 +41,8 @@ impl Membership {
                         .await?;
                 match verdict {
                     Some((true, criteria)) => {
-                        Self::SmartPlaylist(SmartCriteria::from_json_opt(criteria.as_deref()))
+                        Self::smart(db, SmartCriteria::from_json_opt(criteria.as_deref()), draw)
+                            .await?
                     }
                     _ => Self::ManualPlaylist(id),
                 }
@@ -47,15 +50,28 @@ impl Membership {
         })
     }
 
+    /// A random cap is picked here, the one cut SQL can't repeat from query to query.
+    async fn smart(db: &DbPool, criteria: SmartCriteria, draw: Draw) -> Result<Self, AppError> {
+        let random_cap = criteria
+            .limit
+            .as_ref()
+            .filter(|limit| limit.order == LimitOrder::Random)
+            .map(|limit| limit.count);
+        Ok(match random_cap {
+            Some(count) => Self::Drawn(pick_random(db, &criteria, count, draw).await?),
+            None => Self::SmartPlaylist(criteria),
+        })
+    }
+
     /// Whether [`Self::push_source`] already opened a `WHERE`.
     fn narrows(&self) -> bool {
-        !matches!(self, Self::Library | Self::SmartPlaylist(_))
+        !matches!(self, Self::Library | Self::SmartPlaylist(_) | Self::Drawn(_))
     }
 
     /// The column holding the list's own order, where it has one.
     pub(super) fn position(&self) -> Option<&'static str> {
         match self {
-            Self::ManualPlaylist(_) | Self::SmartPlaylist(_) => Some("m.position"),
+            Self::ManualPlaylist(_) | Self::SmartPlaylist(_) | Self::Drawn(_) => Some("m.position"),
             _ => None,
         }
     }
@@ -103,6 +119,11 @@ impl Membership {
                 push_positioned_membership(qb, criteria);
                 qb.push(") m JOIN tracks t ON t.id = m.id");
             }
+            Self::Drawn(ids) => {
+                qb.push("(SELECT value AS id, key AS position FROM json_each(")
+                    .push_bind(json_array(ids))
+                    .push(")) m JOIN tracks t ON t.id = m.id");
+            }
         }
     }
 
@@ -110,4 +131,10 @@ impl Membership {
     pub(super) fn push_and(&self, qb: &mut QueryBuilder<Sqlite>) {
         qb.push(if self.narrows() { " AND " } else { " WHERE " });
     }
+}
+
+/// `ids` as the JSON array `json_each` reads, so a pick of any size is one bind.
+fn json_array(ids: &[i64]) -> String {
+    let items: Vec<String> = ids.iter().map(i64::to_string).collect();
+    format!("[{}]", items.join(","))
 }

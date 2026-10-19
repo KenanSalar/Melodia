@@ -42,6 +42,7 @@ use crate::ui::view_ctx::ViewCtx;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::playlist::PlaylistStats;
+use melodia_core::entities::smart_criteria::Draw;
 use melodia_ui::{
     AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow,
     Playlists,
@@ -100,6 +101,9 @@ pub struct PlaylistsUi {
     /// Section-visibility + staleness bookkeeping (on-screen shadow, dirty
     /// flag, and the wipe/fetch mutation gate). See [`SectionState`].
     section: SectionState,
+    /// The pick a random-capped smart playlist's detail lists, drawn once per open so its sorts,
+    /// filters, reloads and hero all describe the same tracks.
+    draw: Mutex<Draw>,
 }
 
 impl PlaylistsUi {
@@ -117,6 +121,7 @@ impl PlaylistsUi {
             cover_thumbs,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
+            draw: Mutex::new(Draw::default()),
         }
     }
 
@@ -167,6 +172,15 @@ impl PlaylistsUi {
     /// Playlist id currently open in the detail view (`-1` = grid).
     pub fn detail_playlist_id(&self) -> i64 {
         self.detail.id()
+    }
+
+    fn draw(&self) -> Draw {
+        *self.draw.lock()
+    }
+
+    /// Draws again, for a fresh open.
+    fn redraw(&self) {
+        *self.draw.lock() = Draw(rand::random());
     }
 
     /// Whether the cached grid holds any smart playlist whose criteria depend on
