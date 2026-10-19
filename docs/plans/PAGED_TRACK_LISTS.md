@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 done, Phase 4.1 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 done, Phase 4.1 dropped) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -125,8 +125,7 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `crates/melodia-app/src/library/keyset.rs` (new, Phase 1) | the library API over it, `facts` and `genre_lines` included (Phase 3) |
 | `crates/melodia-app/src/tasks/search_text_backfill.rs` (new, Phase 1) | the per-launch backfill, spawned beside `retroactive_hash` |
 | `crates/melodia-app/src/tasks/queue_window.rs` (new, Phase 4) | the window prefetch, its refresh on a library tick, and running a start a transition owed |
-| `crates/melodia-core/src/utils/heap_slack.rs` (new, Phase 4.1) | the producer half of a trim after a burst: `report` from a pool that just freed its scratch, `install` for `tasks::heap_trim` |
-| `crates/melodia-app/src/tasks/heap_trim.rs` | the two boot trims, and one trim once reported bursts go quiet (Phase 4.1) |
+| `crates/melodia-app/src/tasks/heap_trim.rs` | the two boot trims |
 | `crates/melodia-engine/src/player/engine/queue.rs` (510) | ids and orders, the play order's ids shared until it moves, and `window_slots` |
 | `crates/melodia-engine/src/player/engine/queue_window.rs` (new, Phase 4) | `TrackWindow`. Keeps `handlers.rs` (666) from growing. `backend/mod.rs` (795) is not touched. |
 | `crates/melodia-views/src/ui/paged_rows/queue_rows.rs` (new, Phase 4) | `QueueRows` over `QueueRow`: the placeholder, the fetcher (`track_rows::fetch_by_id` over its own conversion), the open's seed and the row shape Up Next shares |
@@ -370,32 +369,17 @@ Memory, 51k dev library, release, one launch per build on the dev folder with th
 - **Peak RSS is the boot's file pages** (Phase 3.5): 440.6 MB on the census run against before's 336.8. A second launch of after with `MELODIA_RSS_SAMPLE=1` read 447.0 MB at 1.5 s, 389.0 MB of it file pages and 38.1 MiB anonymous, held until the reap at 121 s took RSS to 186.7 MB and the file pages to 132.7 MB with the anonymous part unchanged. VmHWM was 447.8 MB.
 - **RSS after the boot connections close:** 184.1 MB at idle; 201.8 MB at state 5, 144.2 MB of it file pages (before: 299.2).
 
-## Phase 4.1: Hand back the cover decode's scratch once it goes quiet
+## Phase 4.1 (dropped): Hand back the cover decode's scratch once it goes quiet
 
-Status: planned (2026-10-19), next. Kenan implements it.
+Status: dropped (2026-10-19), after a second replay of Phase 4's heaptrack recording. Nothing was implemented.
 
-**What you see today.** Opening Songs on the 51k library leaves 6.24 MiB of freed heap resident (Phase 4's census), and it stays through Play all (5.60) and the open sheet (5.46) until the sheet's close trim takes it. A session that never opens the sheet keeps it. Live data is not the cause: Songs adds 2.36 MiB of live heap.
+**What it was for.** Opening Songs on the 51k library leaves 6.24 MiB of freed heap resident (Phase 4's census) until something trims. The plan was a fourth `event_bridge` producer reporting each cover-decode burst, and one trim in `tasks::heap_trim` once the bursts went quiet.
 
-**Why.** Phase 4's heaptrack recording, replayed around the Songs click: the heap rose from 19.62 to 25.78 MiB in about 60 ms and was back at 21.27 a second later. Of the 6.2 MiB freed, 5.8 is the row-cover decode, `jpeg_decoder`'s scratch (3.48) and `image`'s full decode where JPEG's scaled one doesn't apply (2.32), four decodes at a time on `cover_thumbs`' decode pool on this machine.
-- The blocks that stay resident are the ones under the 128 KiB mmap threshold `allocator` pins. They interleave across glibc's two arenas with blocks that stay live, so glibc's own top-of-heap trim can't reach them.
-- `malloc_trim` can: the sheet's close trim took 5.46 MiB trimmable to 0.76.
-- Play all leaves almost none of its own: its id vectors are mapped and unmapped whole.
-- The amount is bounded by the pool's width, the next burst reusing the holes, not by the library.
-
-**What changes.** Nothing visible: covers paint as they do, the pool keeps its width, and no trim runs while a scroll keeps decoding.
-- `melodia-core`'s `utils/heap_slack.rs` (new) is a fourth `event_bridge` producer: `report()` says a burst of short-lived allocations just ended, `install()` hands the receiver to the trim task. It sits there because the pool lives in `melodia-artwork`, which names only `melodia-core`, and the allocator is `melodia-platform`'s.
-- `cover_thumbs.rs` (691): `prewarm` and `drain_pending` report once their batch is decoded. The proxy shrink doesn't, every caller of it already trimming (`hand_back_covers`, the section leaves).
-- `tasks/heap_trim.rs` (56) installs the bridge and, after a report, trims once no report has come for `QUIET`, a named constant set by watching a fast scroll's drains (about 2 s to start), on the blocking pool as the sheet's close trim does. It is not periodic: it runs only after a burst, the "ad-hoc after a bulk free" case the module doc already allows, which the doc now names.
-- Not in scope: the sheet's 1.33 MiB, which is live while it is open, and the boot peak (Phase 3.5).
-
-**Costs:** one `malloc_trim` per quiet spell after decoding, off the UI thread, and the next burst faulting back the pages it returned.
-
-- [ ] Implementation, as above.
-- [ ] Docs: root `CLAUDE.md`'s `utils/` bullet (the three `event_bridge` producers become four) and `ui-patterns.md`'s cover prewarm entry.
-- [ ] New tests, on Kenan's go: reports inside `QUIET` trim once, a report after it trims again, and shutdown cancels a pending trim (paused tokio time, the trim injected).
-- [ ] Census against `64a073d0` (Appendix B states 1 to 3, one launch per build, Phase 4's setup): trimmable, Anonymous and live heap at idle, Songs and Play all, then a fast scroll down Songs with `RUST_LOG=info` showing no trim until it stops. Expected: near nothing trimmable at Songs and Play all, Songs about 6 MiB lower in Anonymous, live heap unchanged. Re-fill Targets' Songs and Play all cells. **Dropped if covers paint later or a trim lands inside a scroll.**
-
-Memory: unmeasured.
+**Why it went.**
+- The memory left resident is five blocks of 128 KiB or more that the Songs burst freed: 3.39 MiB from `jpeg_decoder` (three progressive coefficient planes), 2.32 MiB from `image`'s full decode and 0.25 MiB from `png`. It is not the blocks under the mmap threshold this phase first named. glibc maps a request over `M_MMAP_THRESHOLD` only when no free chunk fits it (`mallopt(3)`), so these land in free chunks whose pages the boot trims handed back, fault them in, and leave them resident when freed. What a burst leaves is bounded by the free space the arenas already hold.
+- Blocks that size come only from covers over 512 px. `jpeg_decoder` holds a progressive JPEG's coefficients at full resolution whatever the decode scale, and a PNG decodes whole: a 1.13 MiB plane needs a source about 770 px square, the 2.32 MiB decode one about 900 px square. The dev library's store holds 1,099 such covers of 4,943, all synthetic. The 189 covers behind the `~/Music` tracks are 188 baseline JPEGs and one PNG, and the row tier decodes a baseline JPEG at 1/8 scale.
+- So the 6.24 MiB is the dev library's. On real covers a burst is expected to leave under the 2 MiB this plan sets for adding a trim (Checked and left alone), by code reading.
+- To confirm: the 512-track reference (Appendix B step 8) records trimmable at Songs and Play all. Above 2 MiB there, the trim comes back with the mechanism above.
 
 ## Phase 4.5 (to discuss): the card grids and Browse
 
@@ -443,7 +427,7 @@ Status: not started.
 | State | Before (2026-10-18) | Target | After |
 |---|---|---|---|
 | Idle (playlist detail open), Anonymous | 37.0 MiB | within ±1 MiB of before | 32.9 MiB; live heap 15.55 against before's 16.22 on the same run (Phase 4) |
-| Songs open, Anonymous | 61.3 MiB | ≤ idle + 2 MiB + row-tier covers (≤ 3.4 MiB) | 40.6 MiB, idle + 7.7 of which 6.24 trimmable; live heap idle + 2.36, covers 0.44 |
+| Songs open, Anonymous | 61.3 MiB | ≤ idle + 2 MiB + row-tier covers (≤ 3.4 MiB) | 40.6 MiB, idle + 7.7 of which 6.24 trimmable, left by covers over 512 px (Phase 4.1); live heap idle + 2.36, covers 0.44 |
 | Play all, Anonymous | 87.0 MiB | ≤ Songs + 2 MiB | 41.7 MiB, Songs + 1.1 |
 | Queue sheet open, Anonymous | 113.8 MiB | ≤ Play all + 1 MiB | 43.0 MiB, Play all + 1.3, the open sheet's rows on screen and their rendering (Phase 4) |
 | Queue sheet closed, Anonymous | Play all + 10.7 MiB (Phase 0 run: 96.9 against its 86.2) | = Play all | 37.7 MiB after the close trim; live heap Play all + 0.10 |

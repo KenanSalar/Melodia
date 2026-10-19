@@ -259,16 +259,15 @@ fn find_external_cover(file_path: &Path, cover_cache: &CoverCache) -> Option<Pat
     })
 }
 
-/// Longest edge a stored image may have.
+/// Longest edge the normalizer brings a stored image down to.
 ///
 /// The store must hold at least what the largest tier decodes, and since `ui::grid_prewarm`'s
 /// grid tier is *derived* from the card it draws rather than named, this is no longer a floor to
 /// clear but the **clamp that answer runs into** — `cover_size` takes it directly, so it is also
-/// the ceiling on how sharp a single-column panel on a scaled display can get. It doubles as the
-/// ceiling on every transient decode buffer in the app, each tier decoding the stored file whole
-/// before it resizes. A full-resolution artwork view would decode from the user's own file rather
-/// than raise this: the store exists to serve many small frequently-drawn tiles, and at 4K it
-/// would run to gigabytes across a few thousand covers.
+/// the ceiling on how sharp a single-column panel on a scaled display can get. A source its
+/// re-encode can't shrink keeps its own size (`normalized_bytes`). A full-resolution artwork view
+/// would decode from the user's own file rather than raise this: the store exists to serve many
+/// small frequently-drawn tiles, and at 4K it would run to gigabytes across a few thousand covers.
 pub const STORE_MAX_DIM: u32 = 512;
 
 /// Byte ceiling, and a bound of its own rather than a consequence of [`STORE_MAX_DIM`] —
