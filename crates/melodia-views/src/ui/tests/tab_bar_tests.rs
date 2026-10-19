@@ -1,15 +1,7 @@
-use super::{UNFETCHED_COUNT, clamp_tab, grid_signature};
+use super::{UNFETCHED_COUNT, clamp_tab};
 
 /// A fixture for the arithmetic — the real counts live in each host's Slint global.
 const TABS: i32 = 5;
-
-/// Stands in for a host's tab enum. Both functions below are about a tab rather than what
-/// one contains, so a fixture is the honest subject.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-enum TestTab {
-    First,
-    Second,
-}
 
 #[test]
 fn clamp_tab_passes_through_valid_indices() {
@@ -32,17 +24,6 @@ fn clamp_tab_pulls_out_of_range_back_in() {
 fn clamp_tab_survives_a_zero_tab_count() {
     assert_eq!(clamp_tab(0, 0), 0);
     assert_eq!(clamp_tab(7, 0), 0);
-}
-
-/// Both shape what is on screen independently of the data, so leaving either out skips
-/// the apply that most needed to run.
-#[test]
-fn the_signature_folds_in_the_tab_and_the_column_count() {
-    let base = grid_signature(TestTab::First, 4, 7);
-
-    assert_ne!(base, grid_signature(TestTab::Second, 4, 7), "the tab must count");
-    assert_ne!(base, grid_signature(TestTab::First, 5, 7), "the column count must count");
-    assert_ne!(base, grid_signature(TestTab::First, 4, 8), "the contents must count");
 }
 
 const CURATED: &str = include_str!("../../../../melodia-ui/ui/globals/curated.slint");

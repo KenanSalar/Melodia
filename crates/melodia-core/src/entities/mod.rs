@@ -4,6 +4,7 @@ pub mod browse;
 pub mod credits;
 pub mod folder;
 pub mod genre;
+pub mod grid_order;
 pub mod integrations;
 pub mod locale;
 pub mod lyrics;

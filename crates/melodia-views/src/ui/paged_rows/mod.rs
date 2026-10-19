@@ -21,7 +21,11 @@
 //!
 //! UI thread only. Nothing may walk one with `Model::iter`, which reads every row and drags the
 //! window across the whole list.
+//!
+//! A card grid keeps one too, as the store under the chunked rows [`grid::PagedGrid`] hands
+//! Slint; where a store's changes go is its [`RowNotify`].
 
+pub mod grid;
 pub mod queue_rows;
 pub mod track_rows;
 
@@ -38,8 +42,10 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use lru::LruCache;
 use parking_lot::Mutex;
 use slint::{Model, ModelNotify, ModelRc, ModelTracker};
+use tokio::runtime::Handle;
 
 use crate::ui::util::clamp_i64_to_i32;
+use melodia_core::error::{AppResult, describe};
 
 /// The step the window moves by. A list asks for more only when Slint reads onto another page, so
 /// scrolling row by row fetches a page at a time rather than a row.
@@ -87,7 +93,36 @@ pub trait PagedRow: Clone + PartialEq + 'static {
     /// The row shown for `id` until its fetch lands.
     fn placeholder(id: i64) -> Self;
 
-    fn set_selected(&mut self, selected: bool);
+    /// Stamps the list's own pick on the row. A card picks through `CardSelection` instead, so a
+    /// card keeps this default.
+    fn set_selected(&mut self, _selected: bool) {}
+}
+
+/// Where a [`PagedRows`] reports that its rows changed: the `ModelNotify` a flat list hands
+/// Slint, or a grid's chunks.
+pub trait RowNotify: 'static {
+    fn reset(&self);
+    fn row_changed(&self, row: usize);
+    fn row_added(&self, index: usize, count: usize);
+    fn row_removed(&self, index: usize, count: usize);
+}
+
+impl RowNotify for ModelNotify {
+    fn reset(&self) {
+        ModelNotify::reset(self);
+    }
+
+    fn row_changed(&self, row: usize) {
+        ModelNotify::row_changed(self, row);
+    }
+
+    fn row_added(&self, index: usize, count: usize) {
+        ModelNotify::row_added(self, index, count);
+    }
+
+    fn row_removed(&self, index: usize, count: usize) {
+        ModelNotify::row_removed(self, index, count);
+    }
 }
 
 static READS: AtomicU64 = AtomicU64::new(0);
@@ -129,7 +164,7 @@ struct Cached<R> {
     read: ReadStamp,
 }
 
-pub struct PagedRows<R: PagedRow> {
+pub struct PagedRows<R: PagedRow, N: RowNotify = ModelNotify> {
     keyset: RefCell<Arc<[i64]>>,
     rows: RefCell<LruCache<i64, Cached<R>>>,
     /// Whether a fetch is out. Only one ever is, so nothing needs to say which ids it asked for.
@@ -149,27 +184,14 @@ pub struct PagedRows<R: PagedRow> {
     scroll: ScrollPoint,
     fetch: Box<dyn Fn(RowRequest<R>)>,
     this: Weak<Self>,
-    notify: ModelNotify,
+    notify: N,
 }
 
 impl<R: PagedRow> PagedRows<R> {
     /// An empty list whose rows come from `fetch`. A request it drops without landing frees the
     /// list to send another, which it does when it is next read.
     pub fn new(fetch: impl Fn(RowRequest<R>) + 'static) -> Rc<Self> {
-        Rc::new_cyclic(|this| Self {
-            keyset: RefCell::new(Arc::from([])),
-            rows: RefCell::new(LruCache::new(ROW_CAP)),
-            fetching: Cell::new(false),
-            absent: RefCell::default(),
-            selected: RefCell::default(),
-            shown_read: Cell::new(ReadStamp(0)),
-            stale_before: Cell::new(ReadStamp(0)),
-            anchor: Cell::new(None),
-            scroll: ScrollPoint::default(),
-            fetch: Box::new(fetch),
-            this: this.clone(),
-            notify: ModelNotify::default(),
-        })
+        Self::with_notify(fetch, ModelNotify::default())
     }
 
     /// The model behind `rows`, where it is one.
@@ -190,6 +212,26 @@ impl<R: PagedRow> PagedRows<R> {
     /// The ids `rows` shows, in order, for a play or a shuffle. None where it isn't one.
     pub fn ids_of(rows: &ModelRc<R>, label: &str) -> Vec<i64> {
         Self::installed(rows, label).map(|model| model.ids().to_vec()).unwrap_or_default()
+    }
+}
+
+impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
+    /// [`PagedRows::new`] reporting its changes to `notify`.
+    pub fn with_notify(fetch: impl Fn(RowRequest<R>) + 'static, notify: N) -> Rc<Self> {
+        Rc::new_cyclic(|this| Self {
+            keyset: RefCell::new(Arc::from([])),
+            rows: RefCell::new(LruCache::new(ROW_CAP)),
+            fetching: Cell::new(false),
+            absent: RefCell::default(),
+            selected: RefCell::default(),
+            shown_read: Cell::new(ReadStamp(0)),
+            stale_before: Cell::new(ReadStamp(0)),
+            anchor: Cell::new(None),
+            scroll: ScrollPoint::default(),
+            fetch: Box::new(fetch),
+            this: this.clone(),
+            notify,
+        })
     }
 
     /// Where this list was last read, for the loads that seed it.
@@ -299,6 +341,20 @@ impl<R: PagedRow> PagedRows<R> {
         Arc::clone(&self.keyset.borrow())
     }
 
+    /// The cached row for `id`, without fetching or moving the window: what a callback acting on
+    /// a row on screen reads it by.
+    pub fn cached(&self, id: i64) -> Option<R> {
+        self.rows.borrow().peek(&id).map(|cached| cached.row.clone())
+    }
+
+    fn len(&self) -> usize {
+        self.keyset.borrow().len()
+    }
+
+    fn notifier(&self) -> &N {
+        &self.notify
+    }
+
     /// Every id the list shows, in order, as the selection names them.
     pub fn row_ids(&self) -> Vec<i32> {
         self.keyset.borrow().iter().map(|&id| clamp_i64_to_i32(id)).collect()
@@ -347,9 +403,10 @@ impl<R: PagedRow> PagedRows<R> {
             return;
         }
         self.fetching.set(true);
+        let model: Weak<dyn Landing<R>> = self.this.clone();
         // No borrow is held here: a fetcher that drops the request on the spot runs its `Drop`,
         // which comes straight back for `fetching`.
-        (self.fetch)(RowRequest { ids, read: ReadStamp::now(), model: self.this.clone() });
+        (self.fetch)(RowRequest { ids, read: ReadStamp::now(), model });
     }
 
     /// The rows the window lacks or holds stale, nearest the anchor first, and failing those the
@@ -436,16 +493,9 @@ impl<R: PagedRow> PagedRows<R> {
             self.notify.row_changed(pos);
         }
     }
-}
 
-impl<R: PagedRow> Model for PagedRows<R> {
-    type Data = R;
-
-    fn row_count(&self) -> usize {
-        self.keyset.borrow().len()
-    }
-
-    fn row_data(&self, row: usize) -> Option<R> {
+    /// The row at `row` as Slint reads it, which is also what moves the window there.
+    fn read(&self, row: usize) -> Option<R> {
         let id = *self.keyset.borrow().get(row)?;
         let was = self.set_anchor(Some(row));
         let new_page = was.map(|at| at / PAGE_ROWS) != Some(row / PAGE_ROWS);
@@ -461,6 +511,18 @@ impl<R: PagedRow> Model for PagedRows<R> {
         }
         Some(data)
     }
+}
+
+impl<R: PagedRow> Model for PagedRows<R> {
+    type Data = R;
+
+    fn row_count(&self) -> usize {
+        self.len()
+    }
+
+    fn row_data(&self, row: usize) -> Option<R> {
+        self.read(row)
+    }
 
     fn model_tracker(&self) -> &dyn ModelTracker {
         &self.notify
@@ -471,13 +533,29 @@ impl<R: PagedRow> Model for PagedRows<R> {
     }
 }
 
+/// Where a [`RowRequest`] lands, whatever its list reports to.
+trait Landing<R> {
+    fn land(&self, asked: &[i64], read: ReadStamp, rows: Vec<(i64, R)>);
+    fn abandon(&self);
+}
+
+impl<R: PagedRow, N: RowNotify> Landing<R> for PagedRows<R, N> {
+    fn land(&self, asked: &[i64], read: ReadStamp, rows: Vec<(i64, R)>) {
+        PagedRows::land(self, asked, read, rows);
+    }
+
+    fn abandon(&self) {
+        PagedRows::abandon(self);
+    }
+}
+
 /// The rows a list asked for, and where they go when they arrive. It holds the model weakly and
 /// is not `Send`: a fetcher lands it on the UI thread or drops it there, and either frees the list
 /// to send its next.
 pub struct RowRequest<R: PagedRow> {
     ids: Vec<i64>,
     read: ReadStamp,
-    model: Weak<PagedRows<R>>,
+    model: Weak<dyn Landing<R>>,
 }
 
 impl<R: PagedRow> RowRequest<R> {
@@ -493,6 +571,30 @@ impl<R: PagedRow> RowRequest<R> {
         if let Some(model) = self.model.upgrade() {
             model.land(&asked, self.read, rows);
         }
+    }
+}
+
+/// Runs `query` on the runtime and hands its answer to `land` on the UI thread, logging a failure
+/// under `label`. The query is spawned rather than awaited on the event loop, so its connection
+/// goes back to the pool as soon as the rows are read however busy the loop is drawing; only the
+/// landing waits for it. A request a failure drops frees its list to ask again.
+pub fn spawn_fetch<R: PagedRow, T: Send + 'static>(
+    runtime: &Handle,
+    request: RowRequest<R>,
+    query: impl Future<Output = AppResult<T>> + Send + 'static,
+    land: impl FnOnce(RowRequest<R>, T) + 'static,
+    label: &'static str,
+) {
+    let answer = runtime.spawn(query);
+    let spawned = slint::spawn_local(async_compat::Compat::new(async move {
+        match answer.await {
+            Ok(Ok(answer)) => land(request, answer),
+            Ok(Err(e)) => log::warn!("{label}: fetch failed: {}", describe(&e)),
+            Err(e) => log::warn!("{label}: fetch task failed: {}", describe(&e)),
+        }
+    }));
+    if let Err(e) = spawned {
+        log::warn!("{label}: fetch not spawned: {}", describe(&e));
     }
 }
 

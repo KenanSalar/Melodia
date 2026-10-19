@@ -18,7 +18,7 @@ use melodia_core::entities::track::FavoriteStats;
 use melodia_core::error::AppResult;
 use melodia_ui::{AppWindow, Favorites};
 
-impl_curated_hero_helpers!(Favorites, FavoritesUi, crate::ui::hero_chips::publish_favorites);
+impl_curated_hero_helpers!(Favorites, FavoritesUi);
 
 /// Fetch fresh stats, push the count and the band's chips with it, then kick a blocking
 /// compose whose result lands on the UI thread via `invoke_from_event_loop`. `animate`
@@ -39,8 +39,8 @@ pub async fn refresh_hero(
     // A leave that landed while the query was in flight has already wiped `stats` and
     // forgotten the collage guard, so the store and the push below would fill both back
     // in behind a view nobody can see. The leave set `mark_dirty`, so the next enter
-    // re-fetches — the guard `refresh_grids` and `refresh_tracks` carry, in the same
-    // place, after the slow part.
+    // re-fetches — the guard `refresh_tracks` carries, in the same place, after the
+    // slow part.
     if !fav_ui.section_active() {
         return Ok(());
     }

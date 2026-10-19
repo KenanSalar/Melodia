@@ -11,8 +11,7 @@ use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
 use crate::ui::favorites::NAV_FAVORITES;
-use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
-use crate::ui::tab_bar::UNFETCHED_COUNT;
+use crate::ui::favorites::{self as favorites_ui_mod, FavoritesTab, FavoritesUi};
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -26,23 +25,24 @@ pub(super) fn wire(
     fav_ui: &Arc<FavoritesUi>,
     artists_ui: &Arc<ArtistsUi>,
 ) {
-    wire_play_track(ui, state, fav_ui);
+    wire_play_track(ui, state);
     wire_open_artist(ui, state, artists_ui);
     wire_tab_changed(ui, state, fav_ui);
     wire_artist_sort(ui, state, fav_ui);
-    wire_columns_changed(ui, fav_ui);
+    wire_columns_changed(ui);
 }
 
 /// Clicking a Most Played card loads that grid into the queue
 /// and starts on that card — the grid is the context, not the Songs list
 /// on the other tab. The Slint callback carries no row index (these are
 /// cards, not list rows), so the start slot comes from the id.
-fn wire_play_track(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
+fn wire_play_track(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
-    let fu = fav_ui.clone();
+    let weak = ui.as_weak();
     ui.global::<Favorites>().on_play_track(move |id| {
+        let Some(ui) = weak.upgrade() else { return };
         let id = i64::from(id);
-        let ids = fu.most_played_track_ids();
+        let ids = favorites_ui_mod::most_played_ids(&ui);
         if ids.is_empty() {
             return;
         }
@@ -80,8 +80,12 @@ fn wire_open_artist(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi
 
 /// The bar has already moved `tab-idx` and cleared the Slint-side
 /// filter by the time this runs, so this is the catch-up: drop the Rust
-/// filter shadow to match, build the entering tab's model, then off-thread
-/// persist the pick and swap the cover tiers over.
+/// filter shadow to match, reload the entering tab if it missed a tick, then
+/// off-thread persist the pick and warm the entering grid's covers.
+///
+/// Every tab keeps its list across a pick, so the entering one paints what it
+/// showed last on this tick and a reload it owes refreshes behind it. Its count
+/// is still the one that list was shown with, so nothing is rewound.
 fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
     let s = state.clone();
@@ -102,62 +106,25 @@ fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
         crate::ui::view_tag::log_current(&ui);
 
         // Asked before the shadow moves, so it reads the tab being left: the
-        // pick is about to clear the needle Songs was loaded under, and the
-        // pick that brings Songs back has to reload it.
-        if fu.shows_filtered_songs() {
-            fu.mark_songs_dirty();
+        // pick is about to clear the needle that tab was loaded under, and the
+        // pick that brings it back has to reload it.
+        if fu.shows_filtered() {
+            fu.mark_tab_dirty(fu.active_tab());
         }
 
-        // Shadow first: the model build below and every later fetch decide
-        // which model to fill and which tier to warm from it, and both can
-        // run off the UI thread where the global isn't reachable.
+        // Shadow first: every later load decides which list to fill and which
+        // covers to warm from it, and both can run off the UI thread where the
+        // global isn't reachable.
         fu.set_active_tab(entering);
         favorites_ui_mod::set_filter(&fu, "");
+        crate::ui::hero_chips::publish_favorites(&ui, &fu);
 
-        // Asked *before* the applies below, because they are what has to
-        // know: the answer decides whether the counts they write stand for
-        // anything. Each tab's fetch only runs while that tab is mounted, so
-        // entering one is where a tick skipped on another gets paid for; the
-        // flag is what keeps a pick back and forth from re-querying a cache
-        // nothing has invalidated. See `lifecycle::kick_full_refresh`.
-        let songs = entering == favorites_ui_mod::FavoritesTab::Songs;
-        let needs_fetch = if songs { fu.take_songs_dirty() } else { fu.take_grids_dirty() };
-
-        // Fill the entering tab's model on this tick — it mounts on the
-        // next frame, and the `_now` variant is what makes "this tick"
-        // true: the hidden tab's model is empty, and the count that gates
-        // its empty state is not, so a grid that paints before its rows
-        // land shows a bare panel rather than a placeholder.
-        //
-        // Songs needs no equivalent: its model is kept across the switch,
-        // a keyset and a few hundred rows being no second copy of every
-        // favourite, so it mounts on the list it last showed.
-        favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
-
-        // Spawned *after* the synchronous apply above, so whatever the
-        // models already hold paints on this tick and the fetch refreshes
-        // behind it.
-        //
-        // **And a grid pick has to take its count back, because the cache it
-        // just walked is the one this fetch is about to fill.** A `0` there
-        // is the one value meaning "there is nothing here" — it mounts
-        // `GridEmptyState` over a library that has plenty, for the length of
-        // the query plus the cover-decode burst it awaits.
-        // `UNFETCHED_COUNT` matches neither `== 0` nor `> 0`, so the panel
-        // stays quiet until the fetch answers. Songs owes no equivalent:
-        // `Favorites.track-count` is written by `refresh_hero`, which is
-        // never gated, so it is answered on every tab either way.
-        if needs_fetch {
-            match entering {
-                favorites_ui_mod::FavoritesTab::MostPlayed => {
-                    g.set_most_played_count(UNFETCHED_COUNT);
-                }
-                favorites_ui_mod::FavoritesTab::Artists => {
-                    g.set_artist_count(UNFETCHED_COUNT);
-                }
-                favorites_ui_mod::FavoritesTab::Songs => {}
-            }
-            spawn_tab_fetch(&s, &fu, &weak, songs);
+        // Each tab's load only runs while that tab is mounted, so entering one
+        // is where a tick skipped on another gets paid for; the flag is what
+        // keeps a pick back and forth from reloading a list nothing has
+        // invalidated. See `lifecycle::kick_full_refresh`.
+        if fu.take_tab_dirty(entering) {
+            reload_tab(&ui, &s, &fu, entering);
         }
 
         let fu_covers = fu.clone();
@@ -171,41 +138,31 @@ fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
                     log::warn!("favorites::set_favorites_tab: {}", describe(&e));
                 }
             });
-            // A pick can't await a prewarm the way a fetch does — `TabBar` writes
-            // `selected-index` before it emits `selected`, so the rows are already in
-            // by now. Whatever the entering tab painted last visit is still in the
-            // tier as a proxy; this sharpens it, and anything genuinely absent
+            // Whatever the entering grid painted last visit is still in the tier
+            // as a proxy; this sharpens it, and anything genuinely absent
             // schedules itself off the card's own lookup.
-            fu_covers.prewarm_tab_covers(entering);
+            favorites_ui_mod::prewarm_tab_covers(&fu_covers, entering);
         });
     });
 }
 
-/// The entering tab's fetch, behind the synchronous apply that painted what the cache held.
-fn spawn_tab_fetch(
-    state: &AppState,
-    fav_ui: &Arc<FavoritesUi>,
-    weak: &slint::Weak<AppWindow>,
-    songs: bool,
-) {
+/// The entering tab's reload, behind the list it kept from its last visit. UI thread.
+fn reload_tab(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>, tab: FavoritesTab) {
+    if tab != FavoritesTab::Songs {
+        favorites_ui_mod::reload_grid(ui, state, fav_ui, tab);
+        return;
+    }
     let s = state.clone();
     let fu = fav_ui.clone();
-    let weak = weak.clone();
+    let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        if songs {
-            if let Err(e) = favorites_ui_mod::refresh_tracks(&s, &fu, &weak).await {
-                log::warn!("favorites::refresh_tracks: {}", describe(&e));
-            }
-        } else {
-            favorites_ui_mod::refresh_grids(&s, &fu, &weak).await;
+        if let Err(e) = favorites_ui_mod::refresh_tracks(&s, &fu, &weak).await {
+            log::warn!("favorites::refresh_tracks: {}", describe(&e));
         }
     });
 }
 
-/// Re-orders the cached Vec and re-applies, no DB round-trip — the same
-/// in-memory path the filter and the column count take. `set_artist_sort`
-/// moves the cache with the shadow, which is what keeps the cover prewarm
-/// reading the order the cards are actually in.
+/// A sort pill: the ids reload in the new order, every cached card kept.
 fn wire_artist_sort(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let s = state.clone();
     let fu = fav_ui.clone();
@@ -217,19 +174,18 @@ fn wire_artist_sort(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
             next_sort(g.get_artist_sort_field().as_str(), g.get_artist_sort_dir().as_str(), &field);
         g.set_artist_sort_field(SharedString::from(new_field.as_str()));
         g.set_artist_sort_dir(SharedString::from(new_dir.as_str()));
-        favorites_ui_mod::set_artist_sort(&fu, new_field.clone(), new_dir);
-        favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
+        if fu.section_active() {
+            favorites_ui_mod::requery_grid(&ui, &s, &fu);
+        }
         persist_view_sort(&s, view_id::FAVORITE_ARTISTS, new_field, new_dir);
     });
 }
 
-/// A resize only changes how the cached cards are chunked, so this
-/// re-walks the in-memory caches rather than touching the DB.
-fn wire_columns_changed(ui: &AppWindow, fav_ui: &Arc<FavoritesUi>) {
-    let fu = fav_ui.clone();
+/// A resize only changes how the ids are chunked, so the cached cards stay.
+fn wire_columns_changed(ui: &AppWindow) {
     let weak = ui.as_weak();
-    ui.global::<Favorites>().on_columns_changed(move |_cols| {
+    ui.global::<Favorites>().on_columns_changed(move |cols| {
         let Some(ui) = weak.upgrade() else { return };
-        favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
+        favorites_ui_mod::set_columns(&ui, cols);
     });
 }

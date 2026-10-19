@@ -1,6 +1,7 @@
 pub mod album;
 pub mod artist;
 pub mod artwork;
+pub mod entity_keyset;
 pub mod entity_labels;
 #[doc(hidden)]
 pub mod fixtures;
@@ -11,6 +12,7 @@ pub mod playlist;
 pub mod radio;
 pub mod scan;
 pub mod search;
+pub mod search_name;
 pub mod smart_playlist;
 pub mod stats;
 pub mod track;

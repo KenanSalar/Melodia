@@ -49,9 +49,7 @@ fn wire_create(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>
             .await
             {
                 Ok(_) => {
-                    if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                        log::warn!("playlists::create_playlist refetch: {}", describe(&e));
-                    }
+                    playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
                     log::info!("playlists::create_playlist: {name_str:?}");
                 }
                 Err(e) => {
@@ -173,9 +171,7 @@ fn spawn_delete(
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<CardSelection>().invoke_clear();
         });
-        if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-            log::warn!("{label} refetch grid: {}", describe(&e));
-        }
+        playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
     });
 }
 

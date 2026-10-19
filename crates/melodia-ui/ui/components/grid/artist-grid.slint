@@ -3,8 +3,8 @@ import { ArtistGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
 
-// Virtualized artist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
-// into rows of `columns` cards and the inner `ListView` virtualizes by row. The
+// Virtualized artist-card grid, `AlbumGrid`'s shape: Rust hands it rows of
+// `columns` cards and the inner `ListView` virtualizes by row. The
 // cards are circular, and an art-less artist falls back to a silhouette rather
 // than the music-note placeholder.
 export component ArtistGrid inherits Rectangle {

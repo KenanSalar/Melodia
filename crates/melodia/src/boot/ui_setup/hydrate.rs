@@ -148,64 +148,49 @@ pub fn spawn_initial_tracks_fetch(
     ui::tracks::refresh(state, tracks_ui, weak, query);
 }
 
-/// Kick off an entity grid's initial fetch, if the launch shows its My Library tab.
+/// Kick off an entity grid's initial load, if the launch shows its My Library tab.
 ///
-/// A hidden tab is marked dirty instead and fetches on its first enter, as after a leave.
-/// Fetched now, it would be chunked at the column count of this moment, and `GridColumnsSync`
-/// re-chunks only the mounted tab while the window settles.
+/// A hidden tab is marked dirty instead and loads on its first enter, as after a leave, so the
+/// launch spends nothing on a grid no frame draws.
 ///
-/// A macro rather than a generic `fn` because each `fetch_grid` is a free function in
+/// A macro rather than a generic `fn` because each `reload_grid` is a free function in
 /// its own module, and no trait the four `*Ui` types share carries it. Tracks is
 /// deliberately not among them, resolving a persisted sort and calling
 /// `ui::tracks::refresh` instead.
 macro_rules! initial_grid_fetch {
-    ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty, $label:literal) => {
+    ($(#[$doc:meta])* $name:ident, $module:ident, $handle:ty) => {
         $(#[$doc])*
-        pub fn $name(state: &AppState, handle: &Arc<$handle>, weak: slint::Weak<AppWindow>) {
+        pub fn $name(app: &AppWindow, state: &AppState, handle: &Arc<$handle>) {
             if !handle.section_active() {
                 handle.mark_dirty();
                 return;
             }
-            let s = state.clone();
-            let h = handle.clone();
-            state.runtime.spawn(async move {
-                if let Err(e) = ui::$module::fetch_grid(&s, &h, weak).await {
-                    log::warn!(
-                        "initial {} fetch: {}",
-                        $label,
-                        melodia_core::error::describe(&e)
-                    );
-                }
-            });
+            ui::$module::reload_grid(app, state, handle);
         }
     };
 }
 
 initial_grid_fetch!(
-    /// Kick off the initial Albums grid fetch.
+    /// Kick off the initial Albums grid load.
     spawn_initial_albums_fetch,
     albums,
-    ui::albums::AlbumsUi,
-    "albums"
+    ui::albums::AlbumsUi
 );
 initial_grid_fetch!(
-    /// Kick off the initial Artists grid fetch.
+    /// Kick off the initial Artists grid load.
     spawn_initial_artists_fetch,
     artists,
-    ui::artists::ArtistsUi,
-    "artists"
+    ui::artists::ArtistsUi
 );
 initial_grid_fetch!(
-    /// Kick off the initial Genres grid fetch.
+    /// Kick off the initial Genres grid load.
     spawn_initial_genres_fetch,
     genres,
-    ui::genres::GenresUi,
-    "genres"
+    ui::genres::GenresUi
 );
 initial_grid_fetch!(
-    /// Kick off the initial Playlists grid fetch.
+    /// Kick off the initial Playlists grid load.
     spawn_initial_playlists_fetch,
     playlists,
-    ui::playlists::PlaylistsUi,
-    "playlists"
+    ui::playlists::PlaylistsUi
 );

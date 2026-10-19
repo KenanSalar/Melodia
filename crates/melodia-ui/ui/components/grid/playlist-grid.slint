@@ -5,8 +5,8 @@ import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
 import { IconButton } from "../icon-button.slint";
 
-// Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
-// into rows of `columns` cards, covers come lazily off the host's
+// Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust hands it rows of
+// `columns` cards, covers come lazily off the host's
 // `request-cover`, and the host mounts the scrollbar through the `v-*` contract.
 // Only a mounted card evaluates its cover binding, so the model stays pure data.
 export component PlaylistGrid inherits Rectangle {

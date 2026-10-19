@@ -44,7 +44,7 @@ export global GenreDetail {
 
     in-out property <TrackColumns> track-columns;
 
-    // Sorted in memory, as the other details are; by album so rows group naturally.
+    // Sorted in SQL, as the other details are; by album so rows group naturally.
     in-out property <string> sort-field: "album";
     in-out property <string> sort-dir: "asc";
 
@@ -63,6 +63,6 @@ export global GenreDetail {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // Rust re-walks the cached tracks in memory and pushes a filtered model.
+    // Rust reloads the list's ids under the new needle.
     callback filter-changed(string);
 }

@@ -1,9 +1,9 @@
 import { AlbumRow, AlbumGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
-// The Album grid. Rust owns `grid-rows`, installed once and rebuilt in place on every filter /
-// sort / column-count change; the canonical unfiltered list lives there too, so **neither
-// `apply-filter` nor `request-sort` hits the DB**. `columns` is computed by the view from its body
-// width and pushed back, so Rust re-chunks into rows of N cards and the `ListView` virtualizes.
+// The Album grid. Rust installs `grid-rows` once, a paged model over the grid's ids in SQL order
+// holding only the cards near the viewport: `apply-filter` and `request-sort` reload the ids, and
+// `columns`, computed by the view from its body width and pushed back, re-chunks them into rows of
+// N cards for the `ListView` to virtualize.
 export global Albums {
     in-out property <[AlbumGridRow]> grid-rows;
     // `-1` is "not fetched yet" (`ui::tab_bar::UNFETCHED_COUNT`) — the sentinel `curated.slint`
@@ -50,7 +50,7 @@ export global AlbumDetail {
 
     in-out property <TrackColumns> track-columns;
 
-    // Sorted in memory — the query returns a fixed disc/track-number order.
+    // Sorted in SQL, the list holding only its ids.
     in-out property <string> sort-field: "track_number";
     in-out property <string> sort-dir: "asc";
 
@@ -87,6 +87,6 @@ export global AlbumDetail {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // Rust re-walks the cached tracks in memory and pushes a filtered model.
+    // Rust reloads the list's ids under the new needle.
     callback filter-changed(string);
 }

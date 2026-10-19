@@ -102,3 +102,12 @@ pub struct ScopeFacts {
     pub artists: i64,
     pub albums: i64,
 }
+
+/// What a Most Played ranking adds up to, its own totals rather than the Songs tab's: the ranking
+/// holds only played tracks, so borrowing the Songs duration would count every one never played.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct MostPlayedTotals {
+    pub tracks: i32,
+    pub duration_ms: i64,
+    pub plays: i32,
+}

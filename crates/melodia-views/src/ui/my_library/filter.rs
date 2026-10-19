@@ -3,13 +3,13 @@
 //!
 //! **The two halves of the page answer different filter contracts, which is why this
 //! can't be one call.** A grid or list global fires `apply-filter(text)` and Rust ignores
-//! the argument, the rebuild reading `<Global>.filter` back inside its own memoization; a
+//! the argument, the load reading `<Global>.filter` back as its query; a
 //! detail global fires `filter-changed(text)` and Rust *uses* it. So the routing is a
 //! match on (mounted tab, open detail), invoking each view's **existing** callback rather
 //! than reaching for its `*Ui` handle — which keeps the whole input an `&AppWindow`.
 //!
 //! **Every arm still writes `<Global>.filter` first**, for reasons that differ by half. A
-//! grid arm because the rebuild reads it back; a detail arm because it has a live *Slint*
+//! grid arm because the load reads it back; a detail arm because it has a live *Slint*
 //! reader in `playlist-detail.slint`'s `reorder-enabled`, which refuses a drag while the
 //! list is filtered — left unwritten, a filtered playlist stays reorderable and the
 //! index → position mapping the drag depends on is wrong.
@@ -21,7 +21,6 @@
 use slint::{ComponentHandle, SharedString};
 
 use super::{MountedSurface, MyLibraryTab, mounted_surface};
-use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_ui::{
     AlbumDetail, Albums, AppWindow, ArtistDetail, Artists, GenreDetail, Genres, MyLibrary,
     PlaylistDetail, Playlists, Tracks,
@@ -109,40 +108,15 @@ fn mounted_filter(ui: &AppWindow) -> SharedString {
 
 /// Drop the entering tab's own needle, if it has one.
 ///
-/// **The guard is the point, not an optimization.** A tab pick reaches a surface whose
-/// section leave has already wiped its Rust cache, so dispatching into it rebuilds from
-/// nothing — and on the four grid tabs that write is `total-count = 0` plus an empty
-/// model, exactly the pair their `GridEmptyState` mounts on, overwriting the
-/// [`crate::ui::tab_bar::UNFETCHED_COUNT`] the leave set to keep that panel quiet. Songs
-/// pays a second full-library filter walk on the event loop instead, its model surviving.
-///
-/// A tab that is genuinely filtered still has to be cleared — a Songs needle carried into
-/// the Albums grid would silently hide cards — and there the rebuild writes that same `0`,
-/// which is what [`rewind_grid_count`] follows it for.
+/// A tab that is genuinely filtered has to be cleared — a Songs needle carried into the
+/// Albums grid would silently hide cards — and one that isn't is left alone, a dispatch
+/// costing Songs a requery for nothing. A grid tab's own requery waits for its enter's
+/// reload, the pick running ahead of the section gate.
 pub fn clear_mounted(ui: &AppWindow) {
     if mounted_filter(ui).is_empty() {
         return;
     }
     dispatch(ui, "");
-    rewind_grid_count(ui);
-}
-
-/// Put an entering grid tab's `total-count` back to the sentinel after a dispatch, which
-/// rebuilt from the cache that tab's own leave wiped and so wrote `0` — "there is nothing
-/// here" — where the truth is "not fetched yet". The leave already marked the view dirty,
-/// so all that is owed here is not to have overwritten [`UNFETCHED_COUNT`] in between.
-///
-/// **Songs and the four details are excluded, and neither is an omission.** Songs' model
-/// survives the leave and a requery leaves its count alone, so the count is still true; a
-/// detail arm writes no grid count at all, its own `open_*` re-running on the same enter.
-fn rewind_grid_count(ui: &AppWindow) {
-    let surface = mounted_surface(ui);
-    // Songs falls in the grid arm too, so it is excluded here rather than by the
-    // dispatch: its count describes the rows its leave kept.
-    if surface.tab == MyLibraryTab::Songs {
-        return;
-    }
-    on_mounted_surface!(ui, surface, |g| g.set_total_count(UNFETCHED_COUNT), |_d| ());
 }
 
 /// Reseat the page's box from whichever surface is now mounted — [`dispatch`] backwards,

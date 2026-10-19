@@ -134,9 +134,7 @@ fn wire_remove_track(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
             {
                 log::warn!("playlists::remove_track refresh: {}", describe(&e));
             }
-            if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                log::warn!("playlists::remove_track refetch grid: {}", describe(&e));
-            }
+            playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
         });
     });
 }

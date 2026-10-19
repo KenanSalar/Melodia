@@ -477,9 +477,10 @@ this file is what builds, looks right, and is wrong.
 - **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`,
   `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop
   `TouchArea { clicked => { SomeGlobal.blur-search-tick += 1; } }` at view root before content;
-  (3) clear filter + bump blur tick on nav-away. Match in Rust through `Needle` and
-  `crates/melodia-views/src/ui/row_match.rs` (`ui-patterns.md`'s Filtering), never a hand-rolled
-  `to_lowercase().contains(…)`; Settings routes there via `pure callback SettingsPage.matches(...)`.
+  (3) clear filter + bump blur tick on nav-away. Match through `Needle` (`ui-patterns.md`'s
+  Filtering: `crates/melodia-views/src/ui/row_match.rs` for a list held in memory, a folded column
+  in SQL for a library-sized one), never a hand-rolled `to_lowercase().contains(…)`; Settings
+  routes there via `pure callback SettingsPage.matches(...)`.
   **A page whose box describes more than one surface takes the same three steps against one global
   and dispatches in Rust.** My Library's band is the tree's only one: the bar binds
   `MyLibrary.filter` / `.blur-search-tick`, and `ui::my_library::filter::dispatch` routes a
@@ -487,9 +488,9 @@ this file is what builds, looks right, and is wrong.
   belongs to the scope it is written in, making `Tracks.filter: MyLibrary.filter` unspellable.
   Two things follow. A tab pick clears **both sides**, but the entering tab's
   own filter only when there *is* one: `filter::clear_mounted` guards on that needle being
-  non-empty, since the pick runs ahead of the section gate and the surface's Rust cache is already
-  wiped by its own leave — an unconditional rebuild writes `total-count = 0` plus an empty model,
-  the exact pair `GridEmptyState` mounts on. And **anything that changes what the box *means* with
+  non-empty, a dispatch otherwise costing Songs a requery for nothing, and a grid's own load waits
+  for its enter's reload, the pick running ahead of the section gate. And **anything that changes
+  what the box *means* with
   nobody typing** — a detail id crossing zero, a tab move that isn't a pick — *reseats* it via
   `filter::sync_box`, taking the newly-mounted surface's own filter; a reseat, not a clear, since
   clearing on the way out would drop the grid filter the user is returning to. That is five

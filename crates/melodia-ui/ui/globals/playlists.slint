@@ -1,13 +1,13 @@
 import { PlaylistRow, PlaylistGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
-// The Playlist grid view, on the `Albums` / `Artists` ownership contract: Rust owns the flat list
-// and `apply-filter` re-derives `grid-rows` with no DB hit. Sorted by most-recently-updated and
-// staying that way — the view exposes no sort UI.
+// The Playlist grid view, on the `Albums` / `Artists` ownership contract: Rust installs
+// `grid-rows` once and `apply-filter` reloads its ids. Sorted by most-recently-updated and staying
+// that way — the view exposes no sort UI.
 export global Playlists {
     in-out property <[PlaylistGridRow]> grid-rows;
-    // The flat list behind the Add-to-Playlist submenu, kept in step with `grid-rows` so the
-    // submenu always lists every playlist in display order.
-    in-out property <[PlaylistRow]> rows;
+    // How many playlists there are, smart ones included, kept current from launch whatever tab
+    // the session has visited: every row menu gates its Add to Playlist entry on it.
+    in property <int> count: 0;
     // `-1` until fetched; see `Albums.total-count`.
     in-out property <int> total-count: -1;      // pre-filter playlist count
     in-out property <int> columns: 4;           // view-computed; always >= 1
@@ -170,6 +170,6 @@ export global PlaylistDetail {
     // The row context menu passes either the right-clicked row or the whole selection.
     callback remove-track([int] /*track_ids*/);
 
-    // Rust re-walks the cached tracks through the new needle in memory, no DB round-trip.
+    // Rust reloads the list's ids under the new needle.
     callback filter-changed(string);
 }

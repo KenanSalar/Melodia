@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use sqlx::{AssertSqlSafe, SqliteConnection};
 
 use super::columns;
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, in_id_order};
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -111,8 +111,7 @@ pub async fn get_most_played_by_ids(
         .await
 }
 
-/// `cols` of every row in `ids`, put back in the order `ids` asked for. A row the fetch didn't
-/// return, deleted since the ids were read, is skipped, and so is a second ask for one id.
+/// `cols` of every track in `ids`, in the order `ids` asked for ([`in_id_order`]).
 async fn rows_in_id_order<T>(
     db: &DbPool,
     cols: &str,
@@ -126,11 +125,7 @@ where
         format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
     })
     .await?;
-
-    let mut by_id: HashMap<i64, T> = HashMap::with_capacity(rows.len());
-    by_id.extend(rows.into_iter().map(|row| (id_of(&row), row)));
-
-    Ok(ids.iter().filter_map(|id| by_id.remove(id)).collect())
+    Ok(in_id_order(rows, ids, id_of))
 }
 
 /// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information dialog, preserving the

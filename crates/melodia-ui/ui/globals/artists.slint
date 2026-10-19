@@ -1,7 +1,6 @@
 import { ArtistRow, ArtistGridRow, AlbumRow, TrackListRow, TrackColumns } from "../models.slint";
 
-// The Artist grid, on the `Albums` ownership contract — Rust owns the flat list and
-// neither the filter nor the sort hits the DB.
+// The Artist grid, on the `Albums` ownership contract.
 export global Artists {
     in-out property <[ArtistGridRow]> grid-rows;
     // `-1` until fetched; see `Albums.total-count`.
@@ -35,7 +34,7 @@ export global ArtistDetail {
 
     in-out property <TrackColumns> track-columns;
 
-    // Sorted in memory, as Album Detail is.
+    // Sorted in SQL, as Album Detail is.
     in-out property <string> sort-field: "album";
     in-out property <string> sort-dir: "asc";
 
@@ -82,6 +81,6 @@ export global ArtistDetail {
     // Rust negates and persists, so Slint only fires the event.
     callback toggle-albums-collapsed();
 
-    // Rust re-walks the cached tracks *and* albums and pushes both filtered models.
+    // Rust reloads the list's ids under the new needle and re-walks the Albums strip by name.
     callback filter-changed(string);
 }

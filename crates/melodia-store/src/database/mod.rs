@@ -104,6 +104,16 @@ where
     Ok(all_results)
 }
 
+/// `rows`, fetched by an `IN (…)` over `ids`, put back in the order `ids` asked for. A row the
+/// fetch didn't return, deleted since the ids were read, is skipped, and so is a second ask for
+/// one id.
+pub(crate) fn in_id_order<T>(rows: Vec<T>, ids: &[i64], id_of: impl Fn(&T) -> i64) -> Vec<T> {
+    let mut by_id: std::collections::HashMap<i64, T> =
+        std::collections::HashMap::with_capacity(rows.len());
+    by_id.extend(rows.into_iter().map(|row| (id_of(&row), row)));
+    ids.iter().filter_map(|id| by_id.remove(id)).collect()
+}
+
 /// Ids per [`set_where_id_in`] statement, the value it sets taking one bind of the budget.
 pub(crate) const IDS_PER_SET: usize = MAX_BINDS_PER_STATEMENT - 1;
 

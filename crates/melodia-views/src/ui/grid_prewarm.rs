@@ -13,7 +13,8 @@
 //! Beside the tier, the three things every grid needs and none should own: turning an iterator of
 //! optional artwork paths into a deduplicated, display-ordered `Vec<PathBuf>` for
 //! `CoverThumbs::prewarm`, sizing the cache against the display it will be drawn on, and resolving
-//! a card's cover. The per-entity `first_screenful_paths` wrappers still own the projection.
+//! a card's cover. Which paths a grid warms is the grid's own: a library grid's seed
+//! (`ui::card_grid`), Browse's first screenful.
 
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
@@ -33,6 +34,11 @@ pub const GRID_COVER_CAP_FALLBACK: NonZeroUsize = match NonZeroUsize::new(48) {
     Some(n) => n,
     None => panic!("GRID_COVER_CAP_FALLBACK > 0"),
 };
+
+/// How many distinct covers a grid warms before it paints: roughly a screenful at any column
+/// count, everything past it decoding as cards scroll in. Kept under [`cover_cap`]'s floor, so a
+/// prewarm can't evict its own work from the tier it fills.
+pub const GRID_PREWARM_AHEAD: usize = 24;
 
 /// Side length a leaving section shrinks its covers to, in px.
 ///

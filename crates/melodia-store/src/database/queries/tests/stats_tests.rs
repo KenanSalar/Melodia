@@ -156,7 +156,7 @@ async fn listed(db: &DbPool, scope: TrackListScope) -> Result<i32, AppError> {
 }
 
 async fn genre_named(db: &DbPool, name: &str) -> Result<genre::GenreStats, AppError> {
-    let all = queries::genre::get_all_genres(db).await?;
+    let all = listed_genres(db).await?;
     all.into_iter()
         .find(|g| g.name == name)
         .ok_or_else(|| AppError::Validation(format!("no genre named {name}")))
@@ -172,7 +172,7 @@ async fn stored_genre_count(db: &DbPool, name: &str) -> Result<i64, AppError> {
 }
 
 async fn artist_named(db: &DbPool, name: &str) -> Result<artist::ArtistStats, AppError> {
-    let all = queries::artist::get_all_artists(db).await?;
+    let all = listed_artists(db).await?;
     all.into_iter()
         .find(|a| a.name == name)
         .ok_or_else(|| AppError::Validation(format!("no artist named {name}")))

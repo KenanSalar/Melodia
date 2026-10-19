@@ -133,12 +133,12 @@ pub fn release_detail_hero_images(ui: &AppWindow, g: &impl HeroSlots) {
     release_shared_hero(ui);
 }
 
-/// Generate a curated page's banner helpers.
+/// Generate a curated page's banner publish.
 ///
-/// A macro because both bodies reach into the page's own `$Ui` handle (its section shadow and
-/// its mosaic guard) and name its chip publisher, which no trait between the two pages carries.
+/// A macro because the body reaches into the page's own `$Ui` handle (its section shadow and its
+/// mosaic guard), which no trait between the two pages carries.
 macro_rules! impl_curated_hero_helpers {
-    ($Global:ty, $Ui:ty, $publish_chips:path) => {
+    ($Global:ty, $Ui:ty) => {
         /// Publish a composed banner and claim it as the one on screen.
         ///
         /// **Gated whole, where a detail view fills its own slots even while hidden.** A curated
@@ -167,23 +167,6 @@ macro_rules! impl_curated_hero_helpers {
                     animate,
                     true,
                 );
-            });
-        }
-
-        /// Re-publish the band's chips on the UI thread.
-        ///
-        /// **Call this wherever one of the chips' inputs lands.** Both curated pages assemble their
-        /// band from more than one fetch and run those *concurrently*, so no ordering can be
-        /// assumed; the publish reads only finished values, so the worst a mistimed one can be is a
-        /// tick behind, never half-built. The grid path can't stand in for it — it publishes past a
-        /// signature early-return, and `mounted_content` is a constant `0` on the Songs tab.
-        pub fn republish_chips(
-            view: &std::sync::Arc<$Ui>,
-            weak: &slint::Weak<melodia_ui::AppWindow>,
-        ) {
-            let view = view.clone();
-            let _ = weak.upgrade_in_event_loop(move |ui| {
-                $publish_chips(&ui, &view);
             });
         }
     };

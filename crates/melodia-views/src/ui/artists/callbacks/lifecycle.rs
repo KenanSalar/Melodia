@@ -1,13 +1,15 @@
 //! Artists section lifecycle: the `section-active-changed` enter/leave
-//! handler (cache release + re-fetch) and the `library_changed` subscriber
+//! handler (release + reload) and the `library_changed` subscriber
 //! that keeps the grid + open detail fresh on watcher / scan events.
 
 use std::sync::Arc;
 
 use slint::ComponentHandle;
 
+use crate::ui::artists::grid::ArtistsGrid;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::card_grid;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
 use crate::ui::list_selection;
@@ -18,10 +20,7 @@ use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::ui::track_detail::{self, TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{
-    AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, ArtistGridRow as UiArtistGridRow, Artists,
-    CardSelection,
-};
+use melodia_ui::{AlbumRow as UiAlbumRow, AppWindow, ArtistDetail, Artists, CardSelection};
 
 /// Wire the Artists section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
@@ -30,14 +29,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>
     install_library_refresher(ui, state, artists_ui);
 }
 
-/// On leave: synchronously wipe the Slint `grid-rows` model + every
-/// `ArtistDetail.*` property holding heavy refs (cover/blur Images,
-/// tracks + albums + selected-ids `VecModel`s) on the UI thread so the
-/// `SharedPixelBuffer` Arcs + `SharedString` allocations drop. Then
-/// off-thread call `release_section_state` (Rust-side caches + grid
-/// data + detail tracks + the shared grid tier down to proxies +
-/// `malloc_trim`), which covers the detail's Albums strip too — one tier
-/// serves both. On return: [`reenter`].
+/// On leave: synchronously release the grid and every `ArtistDetail.*`
+/// property holding heavy refs (cover/blur Images, tracks + albums +
+/// selected-ids) on the UI thread so the `SharedPixelBuffer` Arcs +
+/// `SharedString` allocations drop. Then off-thread call
+/// `release_section_state` (the detail's Albums strip, the shared grid tier
+/// down to proxies, `malloc_trim`), which covers the strip's covers too — one
+/// tier serves both. On return: [`reenter`].
 fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     let au = artists_ui.clone();
     let s = state.clone();
@@ -50,11 +48,10 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsU
             au.mark_dirty();
         }
         if !active && let Some(ui) = weak.upgrade() {
-            let g = ui.global::<Artists>();
-            // Rewound on the same tick as the model it numbers;
+            // Rewound on the same tick as the grid it numbers;
             // `Albums.total-count`'s declaration argues the sentinel.
-            g.set_total_count(UNFETCHED_COUNT);
-            clear_vec_model::<UiArtistGridRow>(&g.get_grid_rows(), "artists: clear grid");
+            ui.global::<Artists>().set_total_count(UNFETCHED_COUNT);
+            card_grid::release::<ArtistsGrid>(&ui, &au);
 
             let d = ui.global::<ArtistDetail>();
             release_detail_hero_images(&ui, &d);
@@ -67,7 +64,9 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsU
         }
         if active {
             restore::resume_deferred(&weak, &s, &au, artists_ui_mod::restore_detail);
-            s.runtime.spawn(reenter(s.clone(), au.clone(), weak.clone()));
+            if let Some(ui) = weak.upgrade() {
+                reenter(&ui, &s, &au);
+            }
         } else {
             let au = au.clone();
             s.runtime.spawn_blocking(move || au.release_section_state());
@@ -75,29 +74,34 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsU
     });
 }
 
-/// The section came back on screen: a full `fetch_grid` if data was wiped,
-/// else just prewarm (initial enter after boot's pre-fetch). The detail
-/// re-fetch (if `ArtistDetail.artist-id >= 0`) runs after the grid fetch so
-/// the user lands back where they were.
-async fn reenter(s: AppState, au: Arc<ArtistsUi>, weak: slint::Weak<AppWindow>) {
+/// The section came back on screen: a reload if a leave released the grid,
+/// else just a prewarm (initial enter after boot's load). The detail the
+/// release emptied (if `ArtistDetail.artist-id >= 0`) is reopened beside the
+/// reload, so the user lands back where they were.
+fn reenter(ui: &AppWindow, s: &AppState, au: &Arc<ArtistsUi>) {
     if !au.take_dirty() {
-        grid_prewarm::prewarm_off_thread(&au, ArtistsUi::prewarm_visible_covers).await;
+        let au = au.clone();
+        s.runtime.spawn_blocking(move || au.prewarm_visible_covers());
         return;
     }
+    artists_ui_mod::reload_grid(ui, s, au);
     let open_id = au.detail_artist_id();
-    if let Err(e) = artists_ui_mod::fetch_grid(&s, &au, weak.clone()).await {
-        log::warn!("artists::section_enter fetch_grid: {}", describe(&e));
+    if open_id < 0 {
+        return;
     }
-    if open_id >= 0
-        && let Err(e) = artists_ui_mod::open_artist(
+    let s = s.clone();
+    let au = au.clone();
+    let weak = ui.as_weak();
+    s.runtime.clone().spawn(async move {
+        let reopened = artists_ui_mod::open_artist(
             &s,
             &au,
             weak.clone(),
             open_id,
             melodia_ui::NavEnterFrom::Right,
         )
-        .await
-    {
+        .await;
+        let Err(e) = reopened else { return };
         log::warn!("artists::section_enter open_artist({open_id}): {}", describe(&e));
         // Detail re-fetch failed (artist deleted while
         // hidden); drop back to the grid rather than
@@ -111,10 +115,10 @@ async fn reenter(s: AppState, au: Arc<ArtistsUi>, weak: slint::Weak<AppWindow>) 
             g.set_artist_id(-1);
             release_detail_hero_images(&ui, &g);
         });
-    }
+    });
 }
 
-/// Re-fetch the grid + refresh an open detail on `library_changed`.
+/// Reload the grid + refresh an open detail on `library_changed`.
 /// Preserves sort + selection in the detail (uses `refresh_detail`, not
 /// `open_artist`).
 fn install_library_refresher(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
@@ -123,26 +127,17 @@ fn install_library_refresher(ui: &AppWindow, state: &AppState, artists_ui: &Arc<
     let installed =
         on_signal(&state.library_changed, ui.as_weak(), "artists-library-changed", move |ui| {
             // Skip the in-place refresh when the section is hidden, but
-            // mark the cached data dirty so the next section-enter
-            // re-fetches from scratch. Without the `mark_dirty`, a
-            // `library_changed` arriving while the section was never
-            // visited (e.g. the first scan after a fresh-DB launch) would
-            // be lost. Mirrors the same gate in `albums/callbacks/lifecycle.rs`.
+            // mark the grid dirty so the next section-enter reloads.
+            // Without the `mark_dirty`, a `library_changed` arriving while
+            // the section was never visited (e.g. the first scan after a
+            // fresh-DB launch) would be lost. Mirrors the same gate in
+            // `albums/callbacks/lifecycle.rs`.
             if !au.section_active() {
                 au.mark_dirty();
                 return;
             }
+            artists_ui_mod::reload_grid(ui, &s, &au);
             let open_id = au.detail_artist_id();
-            {
-                let s = s.clone();
-                let au = au.clone();
-                let weak = ui.as_weak();
-                spawn_logged!(
-                    s,
-                    "artists::library_changed",
-                    artists_ui_mod::fetch_grid(&s, &au, weak)
-                );
-            }
             if open_id >= 0 {
                 let s = s.clone();
                 let au = au.clone();

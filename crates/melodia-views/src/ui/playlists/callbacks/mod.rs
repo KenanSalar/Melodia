@@ -52,7 +52,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     lifecycle::wire(ui, state, playlists_ui);
 }
 
-/// Re-fetch the grid after an edit, and the open detail too where it is one of `edited`.
+/// Refresh the grid after an edit, and the open detail too where it is one of `edited`.
 async fn refresh_after_edit(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -60,9 +60,7 @@ async fn refresh_after_edit(
     edited: &[i64],
     label: &str,
 ) {
-    if let Err(e) = playlists_ui_mod::fetch_grid(state, playlists_ui, weak.clone()).await {
-        log::warn!("{label} refetch grid: {}", describe(&e));
-    }
+    playlists_ui_mod::refresh_after_write(state, playlists_ui, &weak);
     let open_id = playlists_ui.detail_playlist_id();
     if edited.contains(&open_id)
         && let Err(e) = playlists_ui_mod::refresh_detail(state, playlists_ui, weak, open_id).await

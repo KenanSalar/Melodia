@@ -1,11 +1,10 @@
 //! The Albums page: a virtualized card grid, and the detail view a card drills
 //! into.
 //!
-//! Rust owns the flat `Vec<AlbumStats>` behind `AlbumsUi::grid.data`, fetched
-//! once, and rebuilds the grid model from it on every filter / sort /
-//! column-count change with no DB hit. Chunking into `Albums.columns`-wide rows
-//! is what makes the `ListView` virtualize, and each on-screen card pulls its
-//! cover through `request-cover` rather than carrying a decoded image.
+//! The grid is a `PagedGrid` holding the albums' ids in the current sort and
+//! filter and only the cards near the viewport, its loads `ui::card_grid`'s. Each
+//! on-screen card pulls its cover through `request-cover` rather than carrying a
+//! decoded image.
 //!
 //! The detail lists its album as a keyset in a [`TrackRows`], whose
 //! [`DetailCache`] holds the sort and filter its loads run under.
@@ -13,19 +12,20 @@
 mod callbacks;
 mod detail;
 mod grid;
-mod state;
 
 use std::rc::Rc;
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use slint::{ComponentHandle, Global as _, ModelRc, SharedString, VecModel};
 
 use crate::ui::artwork_cache::BlurSpec;
+use crate::ui::card_grid::{self, GridLoads};
 use crate::ui::detail_artwork::{self, DetailArtwork};
+use crate::ui::paged_rows::PagedRow;
+use crate::ui::paged_rows::grid::GridRow;
 use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
-use crate::ui::track_detail::{DetailCache, TrackDetail};
+use crate::ui::track_detail::DetailCache;
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_app::state::AppState;
@@ -35,24 +35,18 @@ use melodia_ui::{
     AlbumDetail, AlbumGridRow as UiAlbumGridRow, AlbumRow as UiAlbumRow, Albums, AppWindow,
 };
 
-use state::{AlbumGridState, GridData};
-
-#[cfg(test)]
-use grid::compute_indices;
-#[cfg(test)]
-use state::GridIndexCache;
+use grid::AlbumsGrid;
 
 // Reached from outside the slice: `ui::nav_history` replays a walk into a
 // detail, `boot::ui_setup` seeds the persisted one, and its
-// `initial_grid_fetch!` kicks the first fetch after the window is shown
-// — which is why `fetch_grid` can't fold into `install` with the rest.
+// `initial_grid_fetch!` kicks the first load after the window is shown
+// — which is why `reload_grid` can't fold into `install` with the rest.
 pub use detail::{open_album_with, seed_detail_from_settings};
-pub use grid::fetch_grid;
+pub use grid::reload_grid;
 
 // `pub(super)` is `pub(in crate::ui)` here, which is exactly the reach these
 // need: this slice's own `callbacks/` and the drill in `callbacks::cross_tab_nav`.
 pub(super) use detail::{open_album, refresh_detail, restore_detail};
-pub(super) use grid::rebuild_grid;
 
 /// Install the Albums grid + detail models, build the handle, and wire every
 /// `Albums.*` / `AlbumDetail.*` callback to it.
@@ -64,18 +58,21 @@ pub(super) use grid::rebuild_grid;
 /// every wired closure clones its own strong `Arc`, and those closures are
 /// owned by the `AppWindow` for the life of the app.
 pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
-    let detail = install_models(cx.app, cx.state);
-    let albums_ui =
-        Arc::new(AlbumsUi::new(detail, cx.cover_thumbs.clone(), detail_artwork::blur_spec(cx.app)));
+    let (grid, detail) = install_models(cx.app, cx.state);
+    let albums_ui = Arc::new(AlbumsUi::new(
+        grid,
+        detail,
+        cx.cover_thumbs.clone(),
+        detail_artwork::blur_spec(cx.app),
+    ));
     callbacks::wire(cx.app, cx.state, cx.view_state, &albums_ui);
     albums_ui
 }
 
 /// Rust-side state for the Albums grid and detail, shared between the UI
-/// callbacks and the async fetchers. The two concerns are largely independent,
-/// so each lives in its own sub-struct.
+/// callbacks and the async loads. The two concerns are largely independent.
 pub struct AlbumsUi {
-    grid: AlbumGridState,
+    grid: GridLoads,
     detail: DetailCache<AlbumDetail<'static>>,
     /// The shared row tier, for the detail `TrackList`'s artwork column. The grid's cards draw
     /// from `ui::grid_prewarm::tier()`, which no view holds.
@@ -89,15 +86,13 @@ pub struct AlbumsUi {
 
 impl AlbumsUi {
     fn new(
+        grid: GridLoads,
         detail: DetailCache<AlbumDetail<'static>>,
         cover_thumbs: Arc<CoverThumbs>,
         hero_blur: Option<BlurSpec>,
     ) -> Self {
         Self {
-            grid: AlbumGridState {
-                data: Mutex::new(Arc::new(GridData::new(Vec::new()))),
-                index_cache: Mutex::new(None),
-            },
+            grid,
             detail,
             cover_thumbs,
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
@@ -105,35 +100,16 @@ impl AlbumsUi {
         }
     }
 
-    /// Drop *everything* the section keeps resident — the detail's artwork, the
-    /// canonical grid data and the memoized indices, plus the grid tier's pixels
-    /// down to proxies — then hand the freed pages back. Runs off the UI thread
-    /// on section leave; the caller has already cleared the Slint models there,
-    /// the detail's rows with them, which can't be done from here. Re-entry
-    /// re-fetches through [`fetch_grid`], and re-runs `open_album` if a detail
-    /// was open.
-    ///
-    /// Race-correct against an in-flight [`fetch_grid`] two ways: the early
-    /// `section_active()` short-circuits when a fast leave→re-enter beats this
-    /// task to the gate, and the bulk writes happen under the gate with a
-    /// *second* check inside it — so a parallel fetch either writes before we
-    /// acquire, and we abandon, or waits and writes after. Never both.
+    /// Hand back what the section keeps resident off the UI thread, the detail's artwork and the
+    /// grid tier's pixels down to proxies, then the freed pages. Runs on section leave, the caller
+    /// having released the grid and the detail's rows on the UI thread already. Re-entry reloads
+    /// the grid, and re-runs `open_album` if a detail was open.
     pub fn release_section_state(&self) {
         if self.section_active() {
             return;
         }
         crate::ui::grid_prewarm::shrink_covers();
         self.detail_artwork.clear();
-        {
-            let _gate = self.section.gate();
-            // The early check is a cheap pre-filter; this one is what makes the
-            // wipe race-correct against `fetch_grid`'s gated write.
-            if self.section_active() {
-                return;
-            }
-            *self.grid.data.lock() = Arc::new(GridData::new(Vec::new()));
-            *self.grid.index_cache.lock() = None;
-        }
         melodia_platform::services::platform::allocator::trim();
     }
 
@@ -145,19 +121,11 @@ impl AlbumsUi {
         melodia_platform::services::platform::allocator::trim();
     }
 
-    /// Decodes the first screenful of grid covers into the grid tier, so the
-    /// grid's first frame paints covers rather than placeholders. Every prewarm
-    /// of this grid comes through here, and does nothing unless the grid is what
-    /// is drawn ([`SectionState::grid_on_screen`]).
+    /// Decodes the covers the grid's last load opened on, for a grid coming back from under a
+    /// detail. Does nothing unless the grid is what is drawn ([`SectionState::grid_on_screen`]).
+    /// Blocking.
     pub fn prewarm_visible_covers(&self) {
-        if !self.section.grid_on_screen(|| self.detail_open()) {
-            return;
-        }
-        let data = self.grid.data.lock().clone();
-        let unique = grid::first_screenful_paths(&data);
-        if !unique.is_empty() {
-            crate::ui::grid_prewarm::prewarm(&unique);
-        }
+        card_grid::prewarm_seeded::<AlbumsGrid>(self);
     }
 
     /// Album id currently open in the detail view (`-1` = grid).
@@ -168,11 +136,15 @@ impl AlbumsUi {
 
 impl_section_state_helpers!(AlbumsUi);
 
-/// Hand the two globals their empty models, the detail's tracks a [`TrackRows`]
-/// installed once for every album it will show. Later updates find them by
+/// Hand the two globals their empty models, each installed once: the grid a `PagedGrid`, the
+/// detail's tracks a [`TrackRows`] for every album it will show. Later updates find them by
 /// downcasting back.
-fn install_models(ui: &AppWindow, state: &AppState) -> DetailCache<AlbumDetail<'static>> {
-    let grid: Rc<VecModel<UiAlbumGridRow>> = Rc::new(VecModel::default());
+fn install_models(
+    ui: &AppWindow,
+    state: &AppState,
+) -> (GridLoads, DetailCache<AlbumDetail<'static>>) {
+    let grid = card_grid::install::<AlbumsGrid>(state, ui);
+    let loads = GridLoads::new(grid.scroll_point());
     ui.global::<Albums>().set_grid_rows(ModelRc::from(grid));
 
     let g = ui.global::<AlbumDetail>();
@@ -182,12 +154,26 @@ fn install_models(ui: &AppWindow, state: &AppState) -> DetailCache<AlbumDetail<'
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     g.set_selected_ids(ModelRc::from(sel));
-    detail
+    (loads, detail)
+}
+
+impl GridRow for UiAlbumGridRow {
+    type Card = UiAlbumRow;
+
+    fn of(albums: ModelRc<UiAlbumRow>) -> Self {
+        Self { albums }
+    }
+}
+
+impl PagedRow for UiAlbumRow {
+    // Blank but live: a card clicked before its fetch lands still opens, plays and picks by id.
+    fn placeholder(id: i64) -> Self {
+        Self { id: clamp_i64_to_i32(id), ..Self::default() }
+    }
 }
 
 /// An `AlbumStats` as the `AlbumRow` an `EntityCard` and the detail header
-/// render. Pure data — the cover comes through `request-cover` per visible card,
-/// which is what makes this cheap enough to run for every album on every rebuild.
+/// render. Pure data — the cover comes through `request-cover` per visible card.
 pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
     UiAlbumRow {
         id: clamp_i64_to_i32(a.id),
@@ -207,7 +193,3 @@ const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<AlbumsUi>();
 };
-
-#[cfg(test)]
-#[path = "tests/albums_tests.rs"]
-mod tests;

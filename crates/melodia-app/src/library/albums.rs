@@ -1,18 +1,11 @@
 //! Album library API — thin wrappers over the `queries::album` /
 //! `queries::track` layer, mirroring `library/tracks.rs`. Each function
-//! takes the pool and returns `Result<_, AppError>`; the UI bridge
-//! (`melodia-views`' `ui/albums/`) does the in-memory sorting / filtering / chunking.
+//! takes the pool and returns `Result<_, AppError>`. The grid's ids and cards
+//! are `library::keyset`'s.
 
 use melodia_core::entities::album;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
-
-/// Every album, name-sorted (the `album_stats` view's default order). The
-/// Albums grid re-sorts in memory for the Year / Artist sort options, so
-/// this is fetched once and cached UI-side.
-pub async fn get_albums(db: &DbPool) -> Result<Vec<album::AlbumStats>, AppError> {
-    queries::album::get_all_albums(db).await
-}
 
 /// Stats for a single album, or `AppError::NotFound` if the id is gone
 /// (e.g. the album's folder was removed between grid render and click).

@@ -8,13 +8,12 @@ use slint::ComponentHandle;
 
 use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
 use crate::ui::favorites::NAV_FAVORITES;
-use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::ui::favorites::{self as favorites_ui_mod, FavoritesTab, FavoritesUi};
 use crate::ui::list_selection;
-use crate::ui::model_diff::clear_vec_model;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Favorites, Nav};
+use melodia_ui::{AppWindow, CardSelection, Favorites, Nav};
 
 /// Wire the Favorites section-lifecycle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
@@ -51,9 +50,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 // when the user has already come back, so leaving the guard to it can strand the
                 // hero on the bare gradient floor until the next channel tick.
                 fu.forget_mosaic();
-                // Same tick, same reason: the models are emptied below, so a surviving signature
-                // would match the identical data on re-enter and skip the refill.
-                fu.forget_grid_signature();
                 // Six heroes share one colour set and one chip row, so hand both back rather than
                 // leaving this banner's solve for the next hero to paint under.
                 release_shared_hero(&ui);
@@ -66,11 +62,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 g.set_artist_count(UNFETCHED_COUNT);
                 list_selection::clear_row_selection(&g);
                 favorites_ui_mod::release_tracks(&g);
-                clear_vec_model::<UiEntityGridRow>(
-                    &g.get_most_played_rows(),
-                    "favorites: clear most-played",
-                );
-                clear_vec_model::<UiEntityGridRow>(&g.get_artist_rows(), "favorites: clear artist");
+                favorites_ui_mod::release_grids(&ui, &fu);
                 // The card grids' set goes back with the models it describes;
                 // `card-selection.slint` argues why it cannot outlive the leave.
                 ui.global::<CardSelection>().invoke_clear();
@@ -150,43 +142,43 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
 /// Fetch the hero stats plus **whichever tab is mounted**, concurrently.
 ///
 /// `refresh_hero` always runs: it answers the count, running time and mosaic the band states on
-/// all three tabs, and it is self-contained. The other two are gated, the three tabs being
-/// mutually exclusive `if`s that everything downstream already knows about —
-/// `build_filtered_tracks` returns `None` off Songs and `build_filtered_grids` materialises only
-/// the mounted tab.
+/// all three tabs, and it is self-contained. The tabs are gated, being mutually exclusive `if`s
+/// that only the mounted one draws.
 ///
-/// **The fetching branch consumes its flag**, which is what stops a boot onto a tab fetching
-/// twice; the branch that skips *sets* the other, so the pick that mounts it knows a tick went by.
-/// `refresh_grids` is one fetch for two tabs, hence two flags rather than three.
-///
-/// `refresh_grids` logs its own per-tab errors and returns `()`; the other two return
-/// `AppResult<()>` and are logged here.
+/// **The loading tab consumes its flag**, which is what stops a boot onto a tab loading twice;
+/// the tabs that skip *set* theirs, so the pick that mounts one knows a tick went by.
 async fn kick_full_refresh(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,
     weak: &slint::Weak<AppWindow>,
 ) {
+    let mounted = fav_ui.active_tab();
+    for tab in FavoritesTab::ALL {
+        if tab == mounted {
+            fav_ui.take_tab_dirty(tab);
+        } else {
+            fav_ui.mark_tab_dirty(tab);
+        }
+    }
     let hero = favorites_ui_mod::refresh_hero(state, fav_ui, weak, /* animate */ true);
 
-    let tracks = if fav_ui.active_tab() == favorites_ui_mod::FavoritesTab::Songs {
-        fav_ui.take_songs_dirty();
-        fav_ui.mark_grids_dirty();
-        let (h, t) = tokio::join!(hero, favorites_ui_mod::refresh_tracks(state, fav_ui, weak));
-        if let Err(e) = h {
+    if mounted != FavoritesTab::Songs {
+        let s = state.clone();
+        let fu = Arc::clone(fav_ui);
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            favorites_ui_mod::reload_grid(&ui, &s, &fu, mounted);
+        });
+        if let Err(e) = hero.await {
             log::warn!("favorites::refresh_hero: {}", describe(&e));
         }
-        t
-    } else {
-        fav_ui.take_grids_dirty();
-        fav_ui.mark_songs_dirty();
-        let (h, ()) = tokio::join!(hero, favorites_ui_mod::refresh_grids(state, fav_ui, weak));
-        if let Err(e) = h {
-            log::warn!("favorites::refresh_hero: {}", describe(&e));
-        }
-        Ok(())
-    };
+        return;
+    }
 
-    if let Err(e) = tracks {
+    let (h, t) = tokio::join!(hero, favorites_ui_mod::refresh_tracks(state, fav_ui, weak));
+    if let Err(e) = h {
+        log::warn!("favorites::refresh_hero: {}", describe(&e));
+    }
+    if let Err(e) = t {
         log::warn!("favorites::refresh_tracks: {}", describe(&e));
     }
 }

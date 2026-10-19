@@ -18,7 +18,7 @@ use melodia_ui::{AppWindow, Dialog, Playlists};
 const MOSAIC_CAP: usize = 4;
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    wire_request_edit_artwork_for(ui, state, playlists_ui);
+    wire_request_edit_artwork_for(ui, state);
     wire_toggle_mosaic_candidate(ui);
     wire_apply_mosaic(ui, state, playlists_ui);
     wire_clear_artwork(ui, state, playlists_ui);
@@ -26,17 +26,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
 
 /// Grid-card variant of the detail view's `request-edit-artwork`. The detail
 /// view isn't necessarily open for this id, so the dialog preview's "current
-/// artwork" is resolved against the saved `thumbnail_path` via the grid-tier
-/// LRU (same path the card itself uses for `request-cover`, so the decode is
-/// already warm). `slint::Image` isn't `Send`, so only the path crosses the
-/// spawn boundary and the lookup runs inside the opener's UI-thread hop.
-fn wire_request_edit_artwork_for(
-    ui: &AppWindow,
-    state: &AppState,
-    playlists_ui: &Arc<PlaylistsUi>,
-) {
+/// artwork" is the card's own thumbnail, resolved via the grid-tier LRU (the
+/// path the card itself uses for `request-cover`, so the decode is already
+/// warm). `slint::Image` isn't `Send`, so only the path crosses the spawn
+/// boundary and the lookup runs inside the opener's UI-thread hop.
+fn wire_request_edit_artwork_for(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
-    let pu = playlists_ui.clone();
     let weak = ui.as_weak();
     ui.global::<Playlists>().on_request_edit_artwork_for(move |id| {
         let id = i64::from(id);
@@ -44,8 +39,10 @@ fn wire_request_edit_artwork_for(
             return;
         }
         let Some(claim) = DialogClaim::take_from(&weak) else { return };
-        let artwork_path =
-            pu.grid_stats_by_id(id).and_then(|p| p.thumbnail_path).unwrap_or_default();
+        let Some(ui) = weak.upgrade() else { return };
+        let artwork_path = crate::ui::playlists::shown_card(&ui, id)
+            .map(|p| p.artwork_path.to_string())
+            .unwrap_or_default();
         open_edit_artwork(&s, &weak, claim, id, move |_| {
             if artwork_path.is_empty() {
                 Image::default()

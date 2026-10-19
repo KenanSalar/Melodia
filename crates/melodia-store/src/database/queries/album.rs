@@ -64,12 +64,16 @@ pub async fn get_release_tags_for_tracks(
     Ok(ids.iter().map(|id| by_id.get(id).cloned().unwrap_or_default()).collect())
 }
 
-pub async fn get_all_albums(db: &DbPool) -> Result<Vec<album::AlbumStats>, AppError> {
-    let albums =
-        sqlx::query_as::<_, album::AlbumStats>("SELECT * FROM album_stats ORDER BY name ASC")
-            .fetch_all(db.read())
-            .await?;
-    Ok(albums)
+/// The Albums grid's cards for `ids`, in the order asked for.
+pub async fn get_albums_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<album::AlbumStats>, AppError> {
+    let rows = crate::database::chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT * FROM album_stats WHERE id IN ({placeholders})")
+    })
+    .await?;
+    Ok(crate::database::in_id_order(rows, ids, |a: &album::AlbumStats| a.id))
 }
 
 pub async fn get_album_by_id(db: &DbPool, id: i64) -> Result<album::AlbumStats, AppError> {

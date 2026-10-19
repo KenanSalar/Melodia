@@ -7,9 +7,9 @@ use melodia_core::entities::tags::ClearedReleaseTags;
 use melodia_core::error::AppError;
 
 #[tokio::test]
-async fn get_all_albums_from_seeded_db() -> Result<(), AppError> {
+async fn the_albums_grid_lists_every_album_by_name() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let albums = queries::album::get_all_albums(&db).await?;
+    let albums = listed_albums(&db).await?;
     assert_eq!(albums.len(), 2); // "Album One" and "Album Two"
     // Sorted by name — "Album One" before "Album Two"
     assert_eq!(albums[0].name, "Album One");
@@ -20,7 +20,7 @@ async fn get_all_albums_from_seeded_db() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_album_by_id_happy_path() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let albums = queries::album::get_all_albums(&db).await?;
+    let albums = listed_albums(&db).await?;
     let found = queries::album::get_album_by_id(&db, albums[0].id).await?;
     assert_eq!(found.name, albums[0].name);
     Ok(())
@@ -47,9 +47,9 @@ async fn get_albums_by_artist() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn get_all_albums_track_counts() -> Result<(), AppError> {
+async fn an_album_card_counts_its_tracks() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let albums = queries::album::get_all_albums(&db).await?;
+    let albums = listed_albums(&db).await?;
     // "Album One" has 2 tracks (track1 + track3), "Album Two" has 1
     let one = albums
         .iter()
@@ -174,7 +174,7 @@ async fn seed_released_album() -> Result<(DbPool, i64), AppError> {
     queries::folder::insert_folder(&db, "/music", true).await?;
     insert_tagged_track(&db, "/music/1.mp3", &released("One")).await?;
 
-    let albums = queries::album::get_all_albums(&db).await?;
+    let albums = listed_albums(&db).await?;
     let id = albums.first().map(|a| a.id).ok_or_else(|| missing("the seeded album"))?;
     Ok((db, id))
 }

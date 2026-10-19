@@ -1,13 +1,15 @@
 //! `Albums.*` grid callbacks: lazy cover lookup, re-chunk on column count,
-//! client-side filter / sort, and the open-album drill-in.
+//! the filter and the sort, and the open-album drill-in.
 
 use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
+use crate::ui::albums::grid::AlbumsGrid;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
+use crate::ui::card_grid;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
@@ -43,30 +45,31 @@ pub(super) fn wire(
     albums.on_request_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(path.as_str()));
 
     // columns-changed: the view recomputed its integer column count and
-    // already wrote `Albums.columns`. Re-chunk the cached list — no DB hit.
+    // already wrote `Albums.columns`. Re-chunk the ids, keeping every cached card.
     {
-        let au = albums_ui.clone();
         let weak = weak.clone();
-        albums.on_columns_changed(move |_cols| {
+        albums.on_columns_changed(move |cols| {
             let Some(ui) = weak.upgrade() else { return };
-            albums_ui_mod::rebuild_grid(&ui, &au);
+            card_grid::set_columns::<AlbumsGrid>(&ui, cols);
         });
     }
 
-    // apply-filter: client-side; `Albums.filter` is already updated via the
-    // SearchBar's two-way binding, so just rebuild.
+    // apply-filter: `Albums.filter` is already updated via the SearchBar's two-way
+    // binding, so the ids reload under it. A hidden grid reloads on its enter instead.
     {
+        let s = state.clone();
         let au = albums_ui.clone();
         let weak = weak.clone();
         albums.on_apply_filter(move |_text| {
             let Some(ui) = weak.upgrade() else { return };
-            albums_ui_mod::rebuild_grid(&ui, &au);
+            if au.section_active() {
+                card_grid::requery::<AlbumsGrid>(&ui, &s, &au);
+            }
         });
     }
 
     // request-sort: clicking a sort pill. Same field flips dir; a new field
-    // resets to ascending. Albums sort in-memory (the DB query is fixed
-    // name-ASC) — no DB round-trip.
+    // resets to ascending. The ids reload in the new order.
     {
         let s = state.clone();
         let au = albums_ui.clone();
@@ -78,7 +81,9 @@ pub(super) fn wire(
                 next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
-            albums_ui_mod::rebuild_grid(&ui, &au);
+            if au.section_active() {
+                card_grid::requery::<AlbumsGrid>(&ui, &s, &au);
+            }
             persist_view_sort(&s, view_id::ALBUMS, new_field, new_dir);
         });
     }

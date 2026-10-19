@@ -161,7 +161,10 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     **Recently Played's Songs tab retains a list and deliberately stays off it**:
     `get_recently_played` is capped at 200 rows, so a keyset saves nothing there, and it keeps the
     plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped* list belongs on a keyset
-    and `ui::paged_rows`, not on a sixth projection.
+    and `ui::paged_rows`, not on a sixth projection. **The card grids are the same shape over
+    entity ids**: `queries::entity_keyset` sorts and filters each one, the cards near the viewport
+    come back by id (the `get_*_by_ids` beside each kind's queries, `get_most_played_by_ids` for
+    the two Most Played grids), and no whole-table fetch is left for a grid to reach for.
 
   - **`queries::track::keyset` sorts and filters in SQL**, with arms that reproduce
     `ui::track_sort`'s one for one, the Songs tabs' reading of a missing year and of the length
@@ -211,6 +214,15 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `bind_track_columns` writes them, through `DerivedColumns`. An `UPDATE` rewriting a rendered
   artist line on its own leaves every library-sized filter matching the old name, and nothing
   fails: the column is filled, so the backfill never looks at it again.
+
+- **The same holds for a card's name and `search_name`**, the folded copy each of `albums`,
+  `artists`, `genres` and `playlists` keeps for its grid's filter, packed by `queries::search_name`
+  with every field terminated so a filled row is never `''`. What it packs is what the card shows a
+  needle could mean: an album's name **with its displayed artist line**, `artist_credit` over the
+  primary artist, which is why the album is refilled after `replace_album_credits`, the one
+  statement writing that credit, rather than off the join; an artist's name with its sort name,
+  refilled wherever `apply_artist_details` fills one. An insert binds it beside the name, and the
+  per-launch backfill fills whatever a writer missed only while it is still `''`.
 
 - **`UNICODE_LOWER` is a query-side collation and never schema.** `database::collation` registers it
   on every pool so an `ORDER BY` can reproduce `to_lowercase()`; an index, view, trigger or column
@@ -289,8 +301,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `PlaylistRow.is_smart` **gates off every manual-membership edit** — reorder, remove, file-drop,
   Add-to-Playlist, adding being a write of orphan `playlist_items` a smart list never reads.
   `DurationMs` stores **whole seconds**, scaled ×1000 to the ms column. A **`stats_changed`
-  subscriber** gated on `has_stat_dependent_smart_playlists()` recounts only smart lists whose
-  criteria `depends_on_play_stats`. `rating` rules need the **full** `idx_tracks_rating` (a partial
+  subscriber** recounts only the smart lists the grid holds whose criteria
+  `depends_on_play_stats` (`smart_playlists::reading_play_stats`), and does nothing when none does. `rating` rules need the **full** `idx_tracks_rating` (a partial
   `WHERE rating > 0` index is *not* used for `rating >= N`). **Load-bearing index alignment:** the
   editor's inline `@tr` dropdown arrays mirror the const arrays in `entities::smart_criteria`
   (`FIELDS`/`ops_for`/`MATCH_MODES`/`LIMIT_ORDERS`) **by position** — `smart_criteria_tests`

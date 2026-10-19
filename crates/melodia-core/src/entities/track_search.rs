@@ -5,13 +5,14 @@
 //! `tracks.search_text` column. [`SearchFields`] is what both start from, so the two can only
 //! disagree about how a field is folded, never about which fields count.
 
-use crate::entities::track::{MostPlayedFavorite, TrackListRow};
+use crate::entities::track::TrackListRow;
 use crate::utils::fold::push_folded;
 
-/// Between two packed fields. A filter box is one line, and Slint turns a pasted newline into a
-/// space, so no needle carries one and a match cannot span two fields. The in-memory key this
-/// replaced joined on NUL, which `SQLite` leaves undefined inside TEXT.
-const FIELD_SEPARATOR: char = '\n';
+/// Between two packed fields, here and in the card grids' `search_name`. A filter box is one line,
+/// and Slint turns a pasted newline into a space, so no needle carries one and a match cannot span
+/// two fields. The in-memory key this replaced joined on NUL, which `SQLite` leaves undefined
+/// inside TEXT.
+pub const FIELD_SEPARATOR: char = '\n';
 
 /// The searchable text of a track, in the order `tracks_fts` lists its columns. `year` joins
 /// separately, being an integer.
@@ -60,21 +61,6 @@ impl<'a> From<&'a TrackListRow> for SearchFields<'a> {
             album_artist: row.album_artist.as_deref().unwrap_or_default(),
             album: row.album.as_deref().unwrap_or_default(),
             genre: row.genre.as_deref().unwrap_or_default(),
-        }
-    }
-}
-
-/// The card renders only title and artist, but on Recently Played it sits directly above a track
-/// list fed by the same search bar, so a narrower set would let one query show a genre's tracks in
-/// the list and none of its cards above them.
-impl<'a> From<&'a MostPlayedFavorite> for SearchFields<'a> {
-    fn from(card: &'a MostPlayedFavorite) -> Self {
-        Self {
-            title: &card.title,
-            artist: card.artist.as_deref().unwrap_or_default(),
-            album_artist: card.album_artist.as_deref().unwrap_or_default(),
-            album: card.album.as_deref().unwrap_or_default(),
-            genre: card.genre.as_deref().unwrap_or_default(),
         }
     }
 }

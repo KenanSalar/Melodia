@@ -1,9 +1,8 @@
-//! Tests for the shared row matchers. `track_matches` is the folded
-//! substring match over the six fields every filter box searches;
-//! `most_played_matches` is the card sibling running the same rule over a
-//! narrower projection. Needles always arrive from `fold_needle`, so these
-//! tests fold theirs the same way rather than hand-lowercasing. The needle's
-//! own predicates are `melodia-core`'s `needle_tests`.
+//! Tests for the shared row matcher. `track_matches` is the folded
+//! substring match over the six fields every filter box searches. Needles
+//! always arrive from `fold_needle`, so these tests fold theirs the same way
+//! rather than hand-lowercasing. The needle's own predicates are
+//! `melodia-core`'s `needle_tests`.
 
 use super::*;
 use melodia_core::utils::needle::fold_needle;
@@ -182,85 +181,4 @@ fn a_nul_in_a_field_matches_the_way_the_packed_key_does() {
 
     let accented = plain("Track", Some("Queen\0Davíd Bowie"), None);
     assert!(track_matches(&accented, &fold_needle("queen david")));
-}
-
-// --- most_played_matches ---
-//
-// The card predicate is load-bearing twice over on both Most Played tabs: the
-// model build (`favorites::grids::apply::build_filtered_grids`,
-// `recently_played::grid::apply::build_filtered_grid`) and the
-// `most_played_track_ids` walk that resolves the ids `play-track` enqueues. A
-// drift between the two hands `player_play_tracks` a list the cards aren't
-// showing.
-
-/// Build a `MostPlayedFavorite` with only the two rendered fields set.
-fn mk_most_played(title: &str, artist: Option<&str>) -> MostPlayedFavorite {
-    MostPlayedFavorite {
-        id: 1,
-        title: title.to_owned(),
-        artist: artist.map(str::to_owned),
-        album_artist: None,
-        album: None,
-        genre: None,
-        year: None,
-        artwork_path: None,
-        play_count: 0,
-        duration_ms: 0,
-        is_favorite: false,
-    }
-}
-
-#[test]
-fn strip_matches_title_case_insensitively() {
-    let card = mk_most_played("Under Pressure", None);
-    assert!(most_played_matches(&card, &fold_needle("pressure")));
-    assert!(most_played_matches(&card, &fold_needle("under")));
-}
-
-#[test]
-fn strip_matches_artist_substring() {
-    let card = mk_most_played("Track", Some("David Bowie"));
-    assert!(most_played_matches(&card, &fold_needle("bowie")));
-}
-
-#[test]
-fn strip_absent_artist_never_matches() {
-    let card = mk_most_played("Track", None);
-    assert!(!most_played_matches(&card, &fold_needle("bowie")));
-    assert!(most_played_matches(&card, &fold_needle("track")));
-}
-
-#[test]
-fn strip_empty_needle_matches_any_card() {
-    // An unfiltered strip enqueues every card — both callers rely on this
-    // rather than short-circuiting the empty needle themselves.
-    let card = mk_most_played("Track", None);
-    assert!(most_played_matches(&card, &fold_needle("")));
-}
-
-#[test]
-fn a_card_and_a_track_row_answer_a_needle_the_same_way() {
-    // On Recently Played the two surfaces share a scroll and a search bar, so
-    // a narrower card projection is what let one query show a genre's tracks
-    // in the list and none of its cards above them. Every field
-    // `track_matches` reads has to be reachable from the card too.
-    let mut card = mk_most_played("Ghost Town", Some("The Specials"));
-    card.album = Some("More Specials".to_owned());
-    card.album_artist = Some("Various Artists".to_owned());
-    card.genre = Some("Ska".to_owned());
-    card.year = Some(1981);
-
-    let mut row = plain("Ghost Town", Some("The Specials"), Some("More Specials"));
-    row.album_artist = Some("Various Artists".to_owned());
-    row.genre = Some("Ska".to_owned());
-    row.year = Some(1981);
-
-    for needle in ["ghost", "specials", "various", "more", "ska", "1981", "zzz"] {
-        let folded = fold_needle(needle);
-        assert_eq!(
-            most_played_matches(&card, &folded),
-            track_matches(&row, &folded),
-            "card and row disagree on {needle:?}"
-        );
-    }
 }

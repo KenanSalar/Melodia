@@ -270,184 +270,50 @@ fn the_grid_mount_forwards_the_covers_generation() {
     );
 }
 
-/// **The pick that mounts the grid asks whether it owes a fetch *before* it applies,
-/// and says so with the sentinel.**
-///
-/// `kick_full_refresh` runs `get_most_played` only while its tab is mounted, so a page
-/// entered on Songs leaves that cache empty. The pick's own `apply_filtered_grid_now` then
-/// walks it and writes `0` — the one value meaning "there is nothing here" — and
-/// `most-played-tab.slint` mounts "Nothing played yet" over a library that has plenty, for
-/// an uncapped query *plus* the cover prewarm it awaits. `UNFETCHED_COUNT` matches neither
-/// `== 0` nor `> 0`, so the panel and the Shuffle pill both stay quiet until the fetch lands.
-///
-/// Two orderings are pinned because both are load-bearing and neither shows up in a still
-/// frame. `take_grid_dirty` has to be consumed **above** the apply, since its answer is what
-/// decides whether the count that apply writes stands for anything; and the fetch has to be
-/// spawned **below** it, so whatever the cache does hold paints on this tick.
-#[test]
-fn the_grid_pick_rewinds_the_count_it_could_not_answer() {
-    let handler = block_body(SUBVIEWS, "g.on_tab_changed(", "\n    }").unwrap_or_default();
-    assert!(!handler.is_empty(), "`subviews.rs` must still register `on_tab_changed`");
-
-    let (before_apply, after_apply) =
-        handler.split_once("apply_filtered_grid_now(&ui, &ru)").unwrap_or_default();
-    assert!(
-        before_apply.contains("ru.take_grid_dirty()"),
-        "`on_tab_changed` must consume `take_grid_dirty` before the apply — the apply's count \
-         is only honest if it already knows a fetch is coming"
-    );
-    assert!(
-        after_apply.contains("set_most_played_count(UNFETCHED_COUNT)"),
-        "a pick that spawns the grid fetch must rewind the count the apply just wrote — \
-         otherwise the empty state asserts an empty library for the length of the query"
-    );
-    assert!(
-        after_apply.contains("refresh_grid(&s_fetch, &ru_fetch, &weak_fetch)"),
-        "the fetch must be spawned after the apply, so a warm cache still paints on this tick"
-    );
-}
-
-/// And the apply that answers that rewind writes its count **above** the signature guard, or
-/// the sentinel above never comes back.
-///
-/// The pick stamps a signature over the empty cache and only then rewinds; the fetch it
-/// spawned lands on that same signature whenever the content hasn't moved — nothing played
-/// yet, or a `library_changed` tick that doesn't touch this ranking — so a count written past
-/// the guard is one that never arrives. `-1` misses `> 0` as well as `== 0`, so that strands
-/// the Shuffle pill as well as the empty state, and it holds until the next content change or
-/// a tab round-trip.
-///
-/// The mutation to check is moving the write back under the guard, where it reads as belonging
-/// with the model write beside it and compiles.
-#[test]
-fn the_grid_count_is_written_before_the_signature_can_skip_it() {
-    const APPLY: &str = include_str!("../grid/apply.rs");
-
-    let write = block_body(APPLY, "fn write_filtered_grid(", "\n}").unwrap_or_default();
-    assert!(
-        write.contains("last_grid_signature"),
-        "`write_filtered_grid` must still take the signature guard — this pin is about where \
-         the count sits relative to it, not about retiring it"
-    );
-
-    let before_guard = write.split_once("last_grid_signature").map_or("", |(head, _)| head);
-    assert!(
-        before_guard.contains("set_most_played_count("),
-        "the count must be written above the signature guard: the guard is what the pick's own \
-         fetch lands on when the content hasn't moved, and it would leave `UNFETCHED_COUNT` \
-         standing with no answer coming"
-    );
-}
-
-/// The flag is armed wherever the cache it guards is emptied, and disarmed wherever it is
+/// The flag is armed wherever the grid is emptied or skipped, and disarmed wherever it is
 /// filled — both stated locally rather than left to the caller that happens to do it today.
 ///
-/// Three sites, each a bug on the way in: the lifecycle fetch consumes the tick it is
-/// paying (seeded `true`, so a boot onto this tab otherwise fetches twice), the section wipe
-/// re-arms it beside the cache it just cleared, and `refresh_grid` re-arms it on either way
-/// of storing nothing — a failed query, or a leave landing mid-flight — since the pick
-/// consumes it *before* the spawn and would otherwise leave the sentinel with no answer coming.
+/// Each site is a bug on the way in: the lifecycle load consumes the tick it is paying (seeded
+/// `true`, so a boot onto this tab otherwise loads twice) and marks the one it skips, the section
+/// wipe re-arms it beside the grid it just emptied, a load that fails re-arms it since the pick
+/// consumed it *before* asking, and the pick consumes it before the reload it decides.
 #[test]
 fn the_grid_dirty_flag_is_maintained_beside_the_cache_it_guards() {
     const LIFECYCLE: &str = include_str!("../callbacks/lifecycle.rs");
     const HANDLE: &str = include_str!("../mod.rs");
-    const FETCH: &str = include_str!("../grid/fetch.rs");
+    const GRID: &str = include_str!("../grid.rs");
 
     let kick = block_body(LIFECYCLE, "async fn kick_full_refresh(", "\n}").unwrap_or_default();
     assert!(
         kick.contains("rp_ui.take_grid_dirty();"),
-        "`kick_full_refresh`'s fetching branch must consume the flag — it *is* the fetch the \
-         flag schedules, and leaving it set makes the next pick re-query a cache this filled"
+        "`kick_full_refresh`'s loading branch must consume the flag — it *is* the load the flag \
+         schedules, and leaving it set makes the next pick reload a grid this filled"
+    );
+    assert!(
+        kick.contains("rp_ui.mark_grid_dirty();"),
+        "and the branch that skips the grid must mark it, or the pick that mounts it has no \
+         record that a tick went by"
     );
 
     let release =
         block_body(HANDLE, "pub fn release_section_state(", "\n    }").unwrap_or_default();
     assert!(
         release.contains("self.mark_grid_dirty();"),
-        "`release_section_state` must re-arm the flag beside the cache it wipes — leaving it \
+        "`release_section_state` must re-arm the flag beside the grid it empties — leaving it \
          to the leave's own `mark_dirty` is a coupling two files apart"
     );
 
-    assert_eq!(
-        FETCH.matches("mark_grid_dirty()").count(),
-        2,
-        "`refresh_grid` must re-arm on both ways of storing nothing — a failed query and a \
-         leave landing mid-flight"
-    );
-}
-
-/// A keystroke's grid walk is built off the UI thread, and a superseded one may
-/// not write.
-///
-/// The Most Played cache is the output of an uncapped, library-wide query, so
-/// walking it on the event loop cost a fold against every played track plus a
-/// string hash and three `SharedString`s per survivor, every 130 ms while the
-/// user types. Moving it to a worker is what buys that back, and the moment the
-/// walk outlives its keystroke two builds can finish in either order —
-/// `write_filtered_grid`'s signature check reads a *stale* set as a change
-/// rather than as staleness, so it cannot be what stops the loser.
-///
-/// Both halves matter and each fails silently alone. Route the callback back
-/// through `apply_filtered_grid_now` and the walk is on the event loop again
-/// with every test still green; drop either generation check and the grid
-/// intermittently paints a needle the user has already typed past.
-#[test]
-fn a_superseded_filter_build_does_not_reach_the_grid() {
-    const TRACKLIST: &str = include_str!("../callbacks/tracklist.rs");
-    const APPLY: &str = include_str!("../grid/apply.rs");
-
-    let filter = block_body(TRACKLIST, "fn wire_filter(", "\n}").unwrap_or_default();
+    let failed = block_body(GRID, "fn load_failed(", "\n    }").unwrap_or_default();
     assert!(
-        filter.contains("apply_filtered_grid_settled(&ru, &weak, generation)"),
-        "the keystroke must defer the Most Played walk — `apply_filtered_grid_now` puts an \
-         uncapped library-wide filter pass back on the event loop"
+        failed.contains("mark_grid_dirty()"),
+        "a failed load must re-arm the flag, the pick having consumed it before asking"
     );
+
+    let pick = block_body(SUBVIEWS, "g.on_tab_changed(", "\n    }").unwrap_or_default();
+    let (before_reload, _) = pick.split_once("reload_grid(&ui, &s, &ru)").unwrap_or_default();
     assert!(
-        filter.contains("s.runtime.spawn("),
-        "and it must be spawned: calling the deferred form from the UI thread still walks \
-         the cache there, which is the whole cost being moved"
-    );
-    assert!(
-        !filter.contains("apply_filtered_grid_now"),
-        "the synchronous form belongs to the tab pick, whose entering `if` is already true"
-    );
-
-    let settled =
-        block_body(APPLY, "pub fn apply_filtered_grid_settled(", "\n}").unwrap_or_default();
-    assert_eq!(
-        settled.matches("filter_generation() != generation").count(),
-        2,
-        "the token must be checked twice — once on the worker to drop a walk not worth \
-         posting, and again on the UI thread, where a newer keystroke can land while the \
-         post is in flight"
-    );
-
-    // The other two callers stay synchronous, and for reasons that are not this
-    // one: a pick has to land before Slint re-evaluates the mounting `if`.
-    assert!(
-        APPLY.contains("pub fn apply_filtered_grid_now("),
-        "the synchronous form must survive — the tab pick and the column push need it"
-    );
-}
-
-/// The token strictly advances, because the checks above compare it for
-/// equality: a counter that repeated a value would let a stale build match.
-#[test]
-fn every_filter_write_moves_the_token_the_deferred_build_carries() {
-    let rp_ui = super::RecentlyPlayedUi::new(
-        std::sync::Arc::new(melodia_artwork::media::image::cover_thumbs::CoverThumbs::new()),
-        None,
-    );
-
-    let mut seen = vec![rp_ui.filter_generation()];
-    for needle in ["a", "ab", "ab", ""] {
-        seen.push(crate::ui::recently_played::set_filter(&rp_ui, needle));
-    }
-
-    assert_eq!(seen, vec![0, 1, 2, 3, 4], "each write must yield a fresh token");
-    assert_eq!(
-        rp_ui.filter_generation(),
-        4,
-        "and the handle must read back the token the last write handed out"
+        before_reload.contains("ru.take_grid_dirty()"),
+        "the pick must reload the grid only when it missed a tick, the grid keeping its cards \
+         across a pick"
     );
 }

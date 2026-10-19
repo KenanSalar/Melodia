@@ -18,10 +18,7 @@ use crate::ui::recently_played::{
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{
-    AppWindow, CardSelection, EntityGridRow as UiEntityGridRow, Nav, RecentlyPlayed,
-    TrackListRow as UiTrackListRow,
-};
+use melodia_ui::{AppWindow, CardSelection, Nav, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Wire the Recently-Played section-lifecycle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
@@ -57,10 +54,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 // Unconditional, on the same tick as the wipe — see the
                 // matching call in `favorites/lifecycle.rs`.
                 ru.forget_mosaic();
-                // Same tick, same reason: the models are emptied below, so a
-                // surviving signature would match the identical data on re-enter
-                // and skip the refill that fills them back in.
-                ru.forget_grid_signature();
                 // Six heroes share one colour set and one chip row, so hand
                 // both back rather than leaving this banner's solve and this
                 // view's counts for the next hero to paint under.
@@ -74,10 +67,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
-                clear_vec_model::<UiEntityGridRow>(
-                    &g.get_most_played_rows(),
-                    "recently_played: clear most-played",
-                );
+                recently_played_ui_mod::release_grid(&ui, &ru);
                 clear_vec_model::<i32>(
                     &g.get_selected_ids(),
                     "recently_played: clear selected-ids",
@@ -159,42 +149,34 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     }
 }
 
-/// Fetch the recency list, and the Most Played grid only when its tab is the one
-/// mounted. Concurrent when both run — `tokio::join!` runs them in parallel.
-/// `refresh_grid` logs its own error (returns `()`); `refresh_tracks` returns
-/// `AppResult<()>`.
+/// Fetch the recency list, and reload the Most Played grid only when its tab is the one
+/// mounted.
 ///
-/// **The grid's query is the one that has to be asked for.** `get_most_played`
-/// is uncapped and library-wide by design — the tab is a virtualized grid, and a
-/// cap there is a ceiling the user can scroll into — so every call materializes
-/// a row per played track, folds the lot and stores it. This runs on each
-/// `stats_changed` tick, i.e. once per finished track, for the whole time the
-/// page is on screen; on the Songs tab all of it reaches a grid that isn't
-/// mounted. My Library answers this with a `SectionActiveGate` per tab, so the
-/// entering tab's own fetch is what warms it; this page has one gate for both
-/// tabs, so the tick that was skipped is remembered on
-/// [`RecentlyPlayedUi::mark_grid_dirty`] and the pick that mounts the grid
-/// fetches instead.
+/// `refresh_tracks` always runs: it answers the count, running time and collage the band states
+/// on both tabs. The grid reloads on every `stats_changed` tick, i.e. once per finished track, for
+/// as long as it is on screen; on the Songs tab that is a grid nobody can see. My Library answers
+/// this with a `SectionActiveGate` per tab; this page has one gate for both tabs, so the tick that
+/// was skipped is remembered on [`RecentlyPlayedUi::mark_grid_dirty`] and the pick that mounts the
+/// grid reloads instead.
 async fn kick_full_refresh(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &slint::Weak<AppWindow>,
 ) {
-    let t = if rp_ui.active_tab() == RecentlyPlayedTab::MostPlayed {
-        // This *is* the fetch the flag schedules, so it settles it here rather than
-        // leaving the next pick to re-query a cache this tick just filled. Seeded
-        // `true`, so without it a boot onto this tab pays for its own fetch twice.
+    if rp_ui.active_tab() == RecentlyPlayedTab::MostPlayed {
+        // This *is* the load the flag schedules, so it settles it here rather than
+        // leaving the next pick to reload a grid this tick just filled. Seeded
+        // `true`, so without it a boot onto this tab pays for its own load twice.
         rp_ui.take_grid_dirty();
-        let (_grid, t) = tokio::join!(
-            recently_played_ui_mod::refresh_grid(state, rp_ui, weak),
-            recently_played_ui_mod::refresh_tracks(state, rp_ui, weak),
-        );
-        t
+        let s = state.clone();
+        let ru = Arc::clone(rp_ui);
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            recently_played_ui_mod::reload_grid(&ui, &s, &ru);
+        });
     } else {
         rp_ui.mark_grid_dirty();
-        recently_played_ui_mod::refresh_tracks(state, rp_ui, weak).await
-    };
-    if let Err(e) = t {
+    }
+    if let Err(e) = recently_played_ui_mod::refresh_tracks(state, rp_ui, weak).await {
         log::warn!("recently_played::refresh_tracks: {}", describe(&e));
     }
 }

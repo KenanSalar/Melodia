@@ -3,8 +3,8 @@ import { AlbumGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
 
-// Virtualized album-card grid. Rust chunks the flat list into rows of `columns` cards, so the inner
-// `ListView` virtualizes by row and only on-screen rows build their cards. Covers come lazily off
+// Virtualized album-card grid. Rust hands it rows of `columns` cards, so the inner `ListView`
+// virtualizes by row and only on-screen rows build their cards. Covers come lazily off
 // that same virtualization: only a mounted card evaluates its binding, so nothing is decoded for an
 // album the user hasn't scrolled to. Rust prewarms the first screenful or two
 // (`GRID_PREWARM_AHEAD`) and the rest decode on scroll-in, bounded by the `CoverThumbs` LRU.

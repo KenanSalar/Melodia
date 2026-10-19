@@ -152,10 +152,10 @@ fn seed_and_fetch(
     seed_initial_view_model(app, state, &views.cover_thumbs);
 
     spawn_initial_tracks_fetch(state, &views.tracks_ui, view_state, &weak);
-    spawn_initial_albums_fetch(state, &views.albums_ui, weak.clone());
-    spawn_initial_artists_fetch(state, &views.artists_ui, weak.clone());
-    spawn_initial_genres_fetch(state, &views.genres_ui, weak.clone());
-    spawn_initial_playlists_fetch(state, &views.playlists_ui, weak);
+    spawn_initial_albums_fetch(app, state, &views.albums_ui);
+    spawn_initial_artists_fetch(app, state, &views.artists_ui);
+    spawn_initial_genres_fetch(app, state, &views.genres_ui);
+    spawn_initial_playlists_fetch(app, state, &views.playlists_ui);
 }
 
 /// The subscribers that raise a toast or refresh a surface on a backend event.

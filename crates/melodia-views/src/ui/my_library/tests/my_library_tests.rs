@@ -465,7 +465,7 @@ fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
 
     // Every consumer, so a fourth question about the mounted surface can't quietly grow a
     // fourth copy of the table beside them.
-    for caller in ["pub fn dispatch(", "fn mounted_filter(", "fn rewind_grid_count("] {
+    for caller in ["pub fn dispatch(", "fn mounted_filter("] {
         let body = FILTER
             .split_once(caller)
             .and_then(|(_, rest)| rest.split_once("\n}\n"))
@@ -480,23 +480,12 @@ fn the_nine_surfaces_are_enumerated_once_and_every_caller_routes_through_it() {
 
 /// **A tab pick clears the entering tab's needle only if it has one.**
 ///
-/// The pick runs ahead of the section gate, so the surface it dispatches into has
-/// already had its Rust cache wiped by its own leave. Dispatching unconditionally
-/// therefore rebuilds each grid tab from nothing — `total-count = 0` and an empty model,
-/// precisely the pair `GridEmptyState` mounts on, overwriting the `UNFETCHED_COUNT`
-/// sentinel the leave wrote to keep that panel quiet until the fetch answers. Songs pays
-/// the dispatch without the lie: a keyset query for a list nothing narrowed.
-///
-/// **And where it does dispatch, it puts the sentinel back.** The guard removes the
-/// common case and not the rare one — a tab left *filtered* is still cleared through the
-/// rebuild, so the `0` still lands, and `rewind_grid_count` is what makes that honest.
-/// Songs is excluded because its model survives the leave and a requery leaves its count
-/// alone; the four details because a detail arm writes no grid count at all.
+/// The pick runs ahead of the section gate, so dispatching unconditionally asks Songs for
+/// a keyset query over a list nothing narrowed, on every pick onto it.
 ///
 /// The mutation to check is reinstating the bare `dispatch(&ui, "")`, which
 /// [`a_tab_pick_clears_the_filter_on_both_sides`] passes on just as happily: the box
-/// clears, the routing is nine-way, and the surface ends up unfiltered. Only the frames
-/// in between are wrong.
+/// clears, the routing is nine-way, and the surface ends up unfiltered.
 #[test]
 fn a_tab_pick_dispatches_only_into_a_tab_that_is_filtered() {
     let clear = FILTER
@@ -506,33 +495,7 @@ fn a_tab_pick_dispatches_only_into_a_tab_that_is_filtered() {
     assert!(!clear.is_empty(), "`ui::my_library::filter` must expose `clear_mounted`");
     assert!(
         clear.contains("mounted_filter(ui).is_empty()") && clear.contains("return;"),
-        "`clear_mounted` must bail on an already-empty needle before it dispatches — the \
-         dispatch is what writes the empty-state pair into a tab whose cache its leave wiped",
-    );
-    assert!(
-        clear.contains("rewind_grid_count(ui)"),
-        "`clear_mounted` must put the sentinel back after a dispatch it did make — the \
-         rebuild writes `0` over it either way",
-    );
-
-    let rewind = FILTER
-        .split_once("fn rewind_grid_count(")
-        .and_then(|(_, rest)| rest.split_once("\n}\n"))
-        .map_or("", |(body, _)| body);
-    assert!(!rewind.is_empty(), "`ui::my_library::filter` must expose `rewind_grid_count`");
-    assert!(
-        rewind.contains("set_total_count(UNFETCHED_COUNT)"),
-        "`rewind_grid_count`'s grid arm must write the sentinel — every grid tab's cache is \
-         wiped by its own leave, so every one of them takes the same `0` from the rebuild",
-    );
-    // Songs shares the grid arm (it is a list, not a detail), so what excludes it is no
-    // longer an absent match arm but this guard — and `Tracks` really does carry a
-    // `total-count`, so dropping the guard compiles and silently rewinds a count that was
-    // never a lie.
-    assert!(
-        rewind.contains("MyLibraryTab::Songs") && rewind.contains("return;"),
-        "`rewind_grid_count` must bail on Songs before it dispatches — its model survives \
-         the leave and a requery leaves its count alone, so there is nothing to take back",
+        "`clear_mounted` must bail on an already-empty needle before it dispatches",
     );
 
     let handler = CALLBACKS

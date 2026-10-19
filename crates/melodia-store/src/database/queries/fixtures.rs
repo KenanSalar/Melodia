@@ -7,11 +7,15 @@
 
 use crate::database::DbPool;
 use crate::database::queries;
-use melodia_core::entities::artist::ArtistCredit;
+use melodia_core::entities::album::AlbumStats;
+use melodia_core::entities::artist::{ArtistCredit, ArtistStats, FavoriteArtist};
 use melodia_core::entities::credits::RoleCredits;
-use melodia_core::entities::genre::GenreList;
+use melodia_core::entities::genre::{GenreList, GenreStats};
+use melodia_core::entities::grid_order::{AlbumSort, ArtistSort, FavoriteArtistSort, GenreSort};
 use melodia_core::entities::scan::{ExtractedMetadata, ReleaseTags, SortTags};
+use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 
 /// Create a default `ExtractedMetadata` with sensible test values.
 /// Override fields as needed after calling this.
@@ -162,6 +166,42 @@ pub(crate) async fn numbered_library(count: usize) -> Result<(DbPool, Vec<i64>),
         ids.push(insert_test_track(&db, &path, &title, "Artist", "Album", "Rock").await?);
     }
     Ok((db, ids))
+}
+
+/// The cards the Albums grid lists unfiltered, by name.
+pub async fn listed_albums(db: &DbPool) -> Result<Vec<AlbumStats>, AppError> {
+    let ids =
+        queries::entity_keyset::album_ids(db, AlbumSort::Name, SortDir::Asc, &Needle::default())
+            .await?;
+    queries::album::get_albums_by_ids(db, &ids).await
+}
+
+/// The cards the Artists grid lists unfiltered, by name.
+pub async fn listed_artists(db: &DbPool) -> Result<Vec<ArtistStats>, AppError> {
+    let ids =
+        queries::entity_keyset::artist_ids(db, ArtistSort::Name, SortDir::Asc, &Needle::default())
+            .await?;
+    queries::artist::get_artists_by_ids(db, &ids).await
+}
+
+/// The cards the Genres grid lists unfiltered, by name.
+pub async fn listed_genres(db: &DbPool) -> Result<Vec<GenreStats>, AppError> {
+    let ids =
+        queries::entity_keyset::genre_ids(db, GenreSort::Name, SortDir::Asc, &Needle::default())
+            .await?;
+    queries::genre::get_genres_by_ids(db, &ids).await
+}
+
+/// The cards Favorites' Favorite Artists grid lists unfiltered, by name.
+pub async fn listed_favorite_artists(db: &DbPool) -> Result<Vec<FavoriteArtist>, AppError> {
+    let ids = queries::entity_keyset::favorite_artist_ids(
+        db,
+        FavoriteArtistSort::Name,
+        SortDir::Asc,
+        &Needle::default(),
+    )
+    .await?;
+    queries::artist::get_favorite_artists_by_ids(db, &ids).await
 }
 
 /// Create a test pool pre-seeded with a folder and 3 tracks.

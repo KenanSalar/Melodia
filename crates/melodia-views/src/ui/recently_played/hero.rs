@@ -16,11 +16,7 @@ use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::{AppWindow, RecentlyPlayed};
 
-impl_curated_hero_helpers!(
-    RecentlyPlayed,
-    RecentlyPlayedUi,
-    crate::ui::hero_chips::publish_recently_played
-);
+impl_curated_hero_helpers!(RecentlyPlayed, RecentlyPlayedUi);
 
 /// The up-to-`n` most-recently-played *distinct* cover paths, in recency
 /// order — the collage's sources. Skips empty/absent artwork.

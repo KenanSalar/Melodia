@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 done, Phase 4.1 dropped, Phase 4.5 done (decided, built in Phase 5), Phase 5 planned) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 done, Phase 4.1 dropped, Phase 4.5 done (decided, built in Phase 5), Phase 5 built with its docs done, its hand check pending with one finding open, and its tests and census awaiting go) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -102,7 +102,7 @@ All of it grows linearly with the library, and the README's footprint runs (open
    - Hero facts come from SQL aggregates over the same membership, not from folding resident rows: count, running time and dominant genre (`hero_folds`).
    - The detail model is released on close. Today it survives until the tab leave (`callbacks/track_detail.rs:41-61`).
    - Playlist drag-reorder still moves one id in the keyset optimistically (`playlists/detail.rs:289-324`).
-8. **The card grids take a keyset too** (amended 2026-10-19 from Most Played alone, Phase 4.5's outcome, built in Phase 5). Most Played takes `(id, play_count)` pairs in `MOST_PLAYED_ORDER` (`ranking.rs:20`); Albums, Artists, Genres, Playlists and Favorite Artists take entity ids in their sort arm's order, filtered against a folded `search_name` per entity table. One outer grid model, `PagedGrid`, builds each chunk's row from the page cache and memoizes chunk `ModelRc`s per generation in a small LRU, so re-reading a chunk returns the same pointer (`slint-pitfalls.md`, the repeater-by-pointer entry).
+8. **The card grids take a keyset too** (amended 2026-10-19 from Most Played alone, Phase 4.5's outcome, built in Phase 5). Most Played takes `(id, play_count)` pairs in `MOST_PLAYED_ORDER` (`ranking.rs:20`); Albums, Artists, Genres, Playlists and Favorite Artists take entity ids in their sort arm's order, filtered against a folded `search_name` per entity table. One outer grid model, `PagedGrid`, builds each chunk's row from the page cache and memoizes chunk `ModelRc`s per generation in a small LRU, so re-reading a chunk returns the same pointer (`slint-pitfalls.md`, the repeater-by-pointer entry). Phase 5 amended both halves while building: Most Played reads back packed ids, and the memo keeps whatever chunks Slint holds rather than an LRU (its amendments 3 and 11).
 9. **Bounded lists stay in memory as they are:** Search (50 / 20 caps), Recently Played Songs (200) and Browse (one directory, with disk-only rows that have no id). They keep `row_match` and `track_sort`.
 10. **The Songs prewarm stops warming the full row tier.** Today it warms 512 covers on open (measured +3.7 MiB); with paging it warms the first screenful plus the prefetch pages.
 
@@ -137,7 +137,7 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `crates/melodia-views/src/ui/track_detail/load.rs` (new, Phase 3) | the list half of every detail's open (`Opening::seat`), reload and requery |
 | `crates/melodia-views/src/ui/track_detail/{filter,selection}.rs` | deleted (Phase 3); the details select through `wire_row_selection` like the flat lists |
 | `crates/melodia-views/src/ui/queue_sheet/links.rs` (106) | deleted; the album, artist and genre ids arrive with the row fetch |
-| `crates/melodia-views/src/ui/{favorites,recently_played}/rows.rs` | one `to_slint_most_played_row`, not two identical copies (`favorites/rows.rs:37`, `recently_played/rows.rs:34`) |
+| `crates/melodia-views/src/ui/{favorites,recently_played}/rows.rs` | each page's models; the one `to_slint_most_played_row` left for `ui::most_played` (Phase 5) |
 | `migrations/20261019000000_entity_search_name.sql` (new, Phase 5) | `search_name` on `albums`, `artists`, `genres` and `playlists`, with a partial index over each table's unfilled rows |
 | `crates/melodia-core/src/entities/grid_order.rs` (new, Phase 5) | each grid's sort field, as `track_list.rs` holds the tracks' |
 | `crates/melodia-store/src/database/queries/entity_keyset.rs` (new, Phase 5) | the five entity keysets per sort arm and needle, read back packed as `track_ids` is |
@@ -145,10 +145,12 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `crates/melodia-store/src/database/queries/{album,artist,genre,playlist}.rs` | each kind's rows by id, in place of `get_all_*`; `playlist.rs` (570) keeps `get_all_playlists` for the two picker dialogs |
 | `crates/melodia-app/src/library/keyset.rs` | the entity keysets and rows by id beside the tracks', and the Playlists track-count arm merging the smart playlists' live counts |
 | `crates/melodia-app/src/tasks/search_text_backfill.rs` | fills `search_name` after `search_text` |
-| `crates/melodia-views/src/ui/paged_rows/grid.rs` (new, Phase 5) | `PagedGrid<R, G>`: the chunk rows over a `PagedRows<R>` store, the chunk memo and the column count. Kept out of `paged_rows/mod.rs` (586) |
-| `crates/melodia-views/src/ui/{albums,artists,genres,playlists}/{state,grid}.rs` | `GridData`, the sort keys, `GridIndexCache` and the in-memory sort and filter deleted (Phase 5); each `grid.rs` keeps its kind's fetcher and prewarm, and its card type's `PagedRow` sits beside its converter |
-| `crates/melodia-views/src/ui/grid_rows.rs` | `chunk_rows` deleted with its four callers (Phase 5); Browse, Radio and the recent searches keep `chunk_built_rows` |
-| `crates/melodia-views/src/ui/favorites/grids/sort.rs` (49) | deleted (Phase 5) |
+| `crates/melodia-views/src/ui/paged_rows/grid.rs` (new, Phase 5) | `PagedGrid<G>` over its chunk row (`GridRow`): the chunk rows over a `PagedRows` store that reports to them (`RowNotify`), the chunk memo and the column count. Kept out of `paged_rows/mod.rs` |
+| `crates/melodia-views/src/ui/card_grid.rs` (new, Phase 5) | `CardGrid`, which each of the seven library grids implements, and the loads they share: reload, requery, `refresh_cards`, release and the seeded prewarm |
+| `crates/melodia-views/src/ui/most_played.rs` (new, Phase 5) | the Most Played card both curated pages draw, its rows by id and the ids its Play queues |
+| `crates/melodia-views/src/ui/{albums,artists,genres,playlists}/{state,grid}.rs` | `GridData`, the sort keys, `GridIndexCache` and the in-memory sort and filter deleted (Phase 5); each `grid.rs` is its kind's `CardGrid`, and its card type's `PagedRow` sits beside its converter |
+| `crates/melodia-views/src/ui/grid_rows.rs` | `chunk_rows` and `chunk_entity_rows` deleted (Phase 5); Browse and Radio keep `chunk_built_rows` |
+| `crates/melodia-views/src/ui/favorites/grids/{apply,fetch,sort,warm}.rs`, `recently_played/grid/` | deleted (Phase 5); each page keeps its `CardGrid`s and their tab wiring |
 | `crates/melodia-views/src/ui/callbacks/card_selection.rs` | `visible_ids` reads the seven library scopes' keysets; `flatten` stays for Radio's three (Phase 5) |
 | `crates/melodia-ui/ui/globals/playlists.slint` | `count` in place of the flat `rows` (Phase 5) |
 
@@ -420,7 +422,7 @@ Memory: estimated in Phase 5 (2026-10-19), measured there.
 
 ## Phase 5: The card grids and Most Played
 
-Status: planned (2026-10-19), not started. The scope is Phase 4.5's outcome.
+Status: built (2026-10-19), docs done. **The hand check is still pending**, with one finding open from a first look: on a fast scroll the Albums grid's covers arrive visibly later than the Songs list's. The tests and the census wait for Kenan's go. The scope is Phase 4.5's outcome.
 
 **What you see today.** Opening a card grid loads every entity it can show twice: as the stats rows its filter and sort walk in memory, and again as Slint cards. A section leave hands both back, so idle doesn't move, but each grid's peak grows with the library. Estimated on the dev library (2026-10-19), row data only, covers unchanged:
 
@@ -444,21 +446,21 @@ Status: planned (2026-10-19), not started. The scope is Phase 4.5's outcome.
 
 **Stays as it is:** Artist Detail's albums strip (one artist's albums), Search's strips (capped), Radio's station grids (no local id; the kept tabs are the user's own) and Browse (one directory, decision 9 and Phase 4.5).
 
-- [ ] **One migration, `20261019000000_entity_search_name.sql`:** `search_name TEXT NOT NULL DEFAULT ''` on `albums`, `artists`, `genres` and `playlists`, each with a partial index over its unfilled rows. It holds the folded name, packed as `search_text` is (decision 3); an artist's carries its sort name after it. Every statement writing one of those names writes it beside (the scan's upserts, a playlist's create, rename and import), and `search_text_backfill` fills the `''` rows of all four too, decision 3's shape.
-- [ ] **Filters in SQL** over those columns, matching what each grid matches today:
+- [x] **One migration, `20261019000000_entity_search_name.sql`:** `search_name TEXT NOT NULL DEFAULT ''` on `albums`, `artists`, `genres` and `playlists`, each with a partial index over its unfilled rows. It holds the folded name, packed as `search_text` is (decision 3); an artist's carries its sort name after it. Every statement writing one of those names writes it beside (the scan's upserts, a playlist's create, rename and import), and `search_text_backfill` fills the `''` rows of all four too, decision 3's shape.
+- [x] **Filters in SQL** over those columns, matching what each grid matches today:
   - Albums: its own name, its artist's through the join (so a renamed artist reaches its albums with no write), or the year as a number (`albums/grid.rs:120-122`);
   - Artists: the name or the sort name. Genres, Playlists and Favorite Artists: the name.
   - One visible difference, deliberate: Favorite Artists also matches an artist's sort name, the column carrying both, as the Artists grid already does.
-- [ ] **Keysets in SQL**, each arm today's sort with `UNICODE_LOWER` where it lowercases and the id last (decision 2), descending reversing the whole order as today:
+- [x] **Keysets in SQL**, each arm today's sort with `UNICODE_LOWER` where it lowercases and the id last (decision 2), descending reversing the whole order as today:
   - Albums: name; `COALESCE(year, 0)` then name; artist then name.
   - Artists: name; track count then name; album count then name.
   - Genres: name; track count then name; duration then name.
   - Playlists: updated; name; track count then name. **A smart playlist's stored count is 0** (the junction triggers'), so the track-count arm takes the ids and counts SQL holds plus `smart_playlists::recount`'s live counts, sorted over the user's own playlists in the library layer.
   - Favorite Artists: favorite count then name; name.
   - Most Played: Phase 1's `most_played_ids` and `most_played_favorite_ids`.
-- [ ] **Rows by id** for each kind, in the order asked through the in-order helper `lookup.rs` shares; a page's smart playlists are recounted as they land. `get_all_{albums,artists,genres}` and the whole-list `get_favorite_artists` go; `get_all_playlists` stays for the export and add-to-playlist pickers, which read it on open.
-- [ ] **`PagedGrid<R, G>`** (`paged_rows/grid.rs`, decision 8), installed once per grid global: `ceil(n / columns)` chunk rows over a `PagedRows<R>` store, so a column change is index arithmetic and keeps the cache. A chunk's `ModelRc` is memoized per keyset generation in a small LRU and patched in place as its cards land, so the repeater keeps its pointer; an unfetched card is a placeholder carrying its id. Each card type (`AlbumRow`, `ArtistRow`, `GenreRow`, `PlaylistRow`, `EntityStripRow`) implements `PagedRow` beside its converter, as `ui-patterns.md` asks of a list over another row type.
-- [ ] **What reads the whole list today reads the keyset or the first page** (Phase 4.5's list):
+- [x] **Rows by id** for each kind, in the order asked through the in-order helper `lookup.rs` shares; a page's smart playlists are recounted as they land. `get_all_{albums,artists,genres}` and the whole-list `get_favorite_artists` go; `get_all_playlists` stays for the export and add-to-playlist pickers, which read it on open.
+- [x] **`PagedGrid<R, G>`** (`paged_rows/grid.rs`, decision 8), installed once per grid global: `ceil(n / columns)` chunk rows over a `PagedRows<R>` store, so a column change is index arithmetic and keeps the cache. A chunk's `ModelRc` is memoized per keyset generation in a small LRU and patched in place as its cards land, so the repeater keeps its pointer; an unfetched card is a placeholder carrying its id. Each card type (`AlbumRow`, `ArtistRow`, `GenreRow`, `PlaylistRow`, `EntityStripRow`) implements `PagedRow` beside its converter, as `ui-patterns.md` asks of a list over another row type.
+- [x] **What reads the whole list today reads the keyset or the first page** (Phase 4.5's list):
   - each grid's first-screenful cover prewarm takes its paths off the first page as it lands;
   - Favorites' and Recently Played's `grid_signature` compares keysets rather than hashing rows;
   - `card_selection::visible_ids` reads the seven library scopes' keysets rather than flattening their models, which would build every chunk; Radio's three keep `flatten`;
@@ -467,15 +469,29 @@ Status: planned (2026-10-19), not started. The scope is Phase 4.5's outcome.
   - a Most Played card plays the ids its keyset holds (`FavoritesUi::most_played_track_ids` and Recently Played's twin), so `most_played_matches` goes with the in-memory filter;
   - the Playlists stats refresher asks SQL which smart playlists read play stats (`smart_criteria_for_playlists`) and re-reads those it holds, retiring `GridData::stat_dependent` and `row_stats_by_id`;
   - the lone-row card count needs nothing: a chunk holds a placeholder per unfetched card, so `rows[0].<field>.length` still counts what is drawn.
-- [ ] **`Playlists.rows` becomes `Playlists.count`**, an `int` Rust keeps current from boot on (a count at launch, after every playlist write and on a library tick), whatever tab the session has visited. `update_flat_rows` and the flat model go; `visible-playlist-count` reads the count.
-- [ ] **Deleted:** each slice's `GridData`, sort keys, `GridIndexCache`, `compute_indices` and `sort_*_indices`; `grid_rows::chunk_rows`; `favorites/grids/sort.rs`; `FavoritesUiState::{most_played, fav_artists}` and `RecentlyPlayedUiState::most_played`; one of the two `to_slint_most_played_row` copies.
+- [x] **`Playlists.rows` becomes `Playlists.count`**, an `int` Rust keeps current from boot on (a count at launch, after every playlist write and on a library tick), whatever tab the session has visited. `update_flat_rows` and the flat model go; `visible-playlist-count` reads the count.
+- [x] **Deleted:** each slice's `GridData`, sort keys, `GridIndexCache`, `compute_indices` and `sort_*_indices`; `grid_rows::chunk_rows`; `favorites/grids/sort.rs`; `FavoritesUiState::{most_played, fav_artists}` and `RecentlyPlayedUiState::most_played`; one of the two `to_slint_most_played_row` copies.
+**Amended while building (2026-10-19).** Each overrides the bullet above it names.
+1. **The Albums filter matches the artist line the card draws**, `COALESCE(artist_credit, artists.name)`, packed into the album's own `search_name`, not "its artist's through the join": the join reaches only the primary artist, so a needle naming the guest on a shared credit would have stopped matching. The album is refilled right after `replace_album_credits`, the one statement writing `artist_credit`, through the SELECT the backfill pages over.
+2. **Every packed field ends with the separator** (`name\n`, `name\nsort_name\n`), so a one-field kind is never `''` once filled and `''` keeps meaning "not filled yet".
+3. **Most Played reads back packed ids**, not `(id, play_count)` pairs (decision 8): a reload re-reads every card the grid holds, the badge's count with it, and the band's totals are an aggregate (`most_played_totals`, `most_played_favorite_totals`).
+4. **The curated pages keep each grid's model across a tab pick**, as Songs does, and release it on the section leave. Favorites takes one dirty flag per tab, and leaving any tab filtered marks it dirty (`shows_filtered`). No grid tab rewinds its count on a pick any more, there being no synchronous apply to write a wrong one.
+5. **`grid_signature` is retired**, not moved onto keysets: `PagedRows::show` already repaints only the cards that changed. `last_grid_signature`, both `warm.rs` files and Recently Played's `filter_generation` go with it.
+6. **A card converts on the UI thread as it lands**, Favorite Artists' subtitle being a translated plural only a Slint callback resolves. Track rows still convert on the runtime.
+7. **The Playlists stats refresher** reads `smart_criteria_for_playlists` over the keyset plus the open detail and keeps those whose rules read play stats; with none it does nothing, otherwise it reloads the ids with a seed of just those, recounted.
+8. **`Playlists.count` is written at launch and by every playlist write**, all of which already funnel into the slice's refresh, so no tick subscriber is needed.
+9. **`my_library::filter::rewind_grid_count` goes**: a requery writes no count, so a dispatch into a released grid no longer writes the `0` it existed to undo.
+10. **`MostPlayedFavorite` narrows to what the card draws.** The four search-only fields, `duration_ms`, `SearchFields`' conversion from it and `most_played_matches` go.
+11. **`grid_rows::chunk_entity_rows` goes too**, and the six `GRID_PREWARM_AHEAD` copies become `grid_prewarm`'s one. `PagedGrid` takes one parameter, the chunk row (`GridRow`), its card type being the row's, and its memo keeps whatever chunks Slint holds rather than an LRU. The seven grids share one load path, `ui::card_grid`'s `CardGrid`.
+
 - [ ] **Hand check** on each grid: every sort both ways, an accented filter, a click, a range and Select all, the card menu's Play, Play Next, Add to Queue and Go to, the Playlists hover trio, a resize across column counts, a fast scroll to the end, a scan and a playlist write landing while open, a tab leave and return. Also a smart playlist's count after a play, and Add to Playlist in a row menu right after a launch onto Songs.
+  - Pending. A first look on 2026-10-19 found one thing, **open:** scrolled fast, the Albums grid paints its covers with a visible delay where the Songs list's are there at once. A card's rows fetch in well under a millisecond on the dev library (128 albums by id through `album_stats`), so the database is not where the time goes; what is left to trace is the cover path between a card landing and its decode reaching the screen.
 - [ ] **Tests**, after Kenan's go:
   - each SQL arm and filter against today's in-memory sort and `Needle` match, the sorters kept in the test as the oracle (`cross_tier.rs`'s shape), over a fixture of the partitions the two could answer differently: case, accents, ties on every key, a missing year, a smart playlist's live count;
   - each `search_name`'s write-through and backfill;
   - `PagedGrid`: chunk arithmetic where the column count divides the keyset and where it doesn't, the memo handing back the same pointer, a landing patching in place, a column change keeping the cache;
   - `Playlists.count` after a create and a delete with the Playlists tab never opened.
-- [ ] **Doc edits**, after Kenan's go: `ui-patterns.md` (Grids, strips, cards: the paged chunk model and `grid_rows`' remaining callers; Filtering: the entity grids match in SQL; the Favorites delta's in-memory artist sort; the Most Played play path), `library-data.md` (`search_name` under the `search_text` write rule), and the root `CLAUDE.md`'s "Models from background".
+- [x] **Doc edits** (2026-10-19): `ui-patterns.md` (Grids, strips, cards: the paged grids, `card_grid` and `grid_rows`' remaining callers; Filtering: the card grids match `search_name` in SQL; the hero's Most Played totals; the Most Played play path; the tabbed-page contract without the pick rewind or the signature, and both curated deltas), `slint-pitfalls.md` (the filter-box pattern and `clear_mounted`'s guard), `library-data.md` (the card grids' keysets, `search_name` beside the `search_text` write rule, the smart playlists' stats refresh), and the root `CLAUDE.md`'s "Models from background".
 - [ ] **Census**, Appendix B states 1 to 7, the grid states being new:
   - this phase against the branch before it, recorded below;
   - **the release comparison:** `v0.19.0` (`5946f2e9`, 22 commits behind the base the Before column measured) against this phase's commit, every state on both builds, `v0.19.0` run on the pre-migration copy `backups/melodia-v20261014000000.db` as Phase 0 ran its base. Its after column fills [Targets](#targets).

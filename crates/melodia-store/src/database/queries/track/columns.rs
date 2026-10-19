@@ -156,16 +156,5 @@ pub(crate) static SCROBBLE_ROW: Columns = Columns::new(&[
 pub(crate) static TRACK_LINKS: Columns = Columns::new(&["id", "album_id", "artist_id", "genre_id"]);
 
 /// `MostPlayedFavorite`: the Most Played cards.
-pub(crate) static MOST_PLAYED: Columns = Columns::new(&[
-    "id",
-    "title",
-    "artist",
-    "album_artist",
-    "album",
-    "genre",
-    "year",
-    "artwork_path",
-    "play_count",
-    "duration_ms",
-    "is_favorite",
-]);
+pub(crate) static MOST_PLAYED: Columns =
+    Columns::new(&["id", "title", "artist", "artwork_path", "play_count", "is_favorite"]);

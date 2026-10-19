@@ -41,13 +41,25 @@ pub async fn recount(db: &DbPool, playlists: &mut [PlaylistStats], rows: &[usize
     }
 }
 
+/// Which of `ids` are smart playlists whose rules read play stats, the ones a play-count flush
+/// can move. A static rule ("Genre is Rock") can't, so a flush leaves it uncounted.
+pub async fn reading_play_stats(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+    let rows = queries::playlist::smart_criteria_for_playlists(db, ids).await?;
+    Ok(rows
+        .into_iter()
+        .filter(|(_, is_smart, criteria)| {
+            *is_smart && SmartCriteria::from_json_opt(criteria.as_deref()).depends_on_play_stats()
+        })
+        .map(|(id, _, _)| id)
+        .collect())
+}
+
 /// Serialize a rule set to the JSON stored in `playlists.smart_criteria`.
 fn criteria_to_json(criteria: &SmartCriteria) -> Result<String, AppError> {
     criteria.to_json().map_err(|e| AppError::io("serialize smart_criteria", e))
 }
 
-/// Persist a new smart playlist and bump `library_changed` so the grid
-/// refreshes (same signal every playlist CRUD uses).
+/// Persist a new smart playlist and bump `library_changed`.
 pub async fn create_smart_playlist(
     state: &AppState,
     name: String,

@@ -4,17 +4,17 @@ use crate::database::queries::fixtures::*;
 use melodia_core::error::AppError;
 
 #[tokio::test]
-async fn get_all_genres_from_seeded_db() -> Result<(), AppError> {
+async fn the_genres_grid_lists_every_genre_with_tracks() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let genres = queries::genre::get_all_genres(&db).await?;
+    let genres = listed_genres(&db).await?;
     assert_eq!(genres.len(), 2); // "Rock" and "Pop"
     Ok(())
 }
 
 #[tokio::test]
-async fn get_all_genres_sorted_by_name() -> Result<(), AppError> {
+async fn the_genres_grid_lists_by_name() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let genres = queries::genre::get_all_genres(&db).await?;
+    let genres = listed_genres(&db).await?;
     assert_eq!(genres[0].name, "Pop");
     assert_eq!(genres[1].name, "Rock");
     Ok(())
@@ -23,7 +23,7 @@ async fn get_all_genres_sorted_by_name() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_genre_by_id_happy_path() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let genres = queries::genre::get_all_genres(&db).await?;
+    let genres = listed_genres(&db).await?;
     let genre = queries::genre::get_genre_by_id(&db, genres[0].id).await?;
     assert_eq!(genre.name, genres[0].name);
     Ok(())
@@ -40,7 +40,7 @@ async fn get_genre_by_id_not_found() -> Result<(), AppError> {
 #[tokio::test]
 async fn genre_stats_track_count() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let genres = queries::genre::get_all_genres(&db).await?;
+    let genres = listed_genres(&db).await?;
     let rock = genres
         .iter()
         .find(|g| g.name == "Rock")

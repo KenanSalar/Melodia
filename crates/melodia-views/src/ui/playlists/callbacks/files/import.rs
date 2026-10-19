@@ -67,10 +67,8 @@ pub(super) fn wire(
                     ImportFileResult::default()
                 });
 
-            if result.imported > 0
-                && let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await
-            {
-                log::warn!("fetch_grid after playlist import: {}", describe(&e));
+            if result.imported > 0 {
+                playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
             }
 
             let Some(ui) = weak.upgrade() else { return };

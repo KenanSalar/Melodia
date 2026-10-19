@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use sqlx::AssertSqlSafe;
 
 use crate::database::DbPool;
+use crate::database::queries::search_name;
 use crate::database::queries::track::columns;
 use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
@@ -28,14 +29,15 @@ where
     let now = melodia_core::utils::now_rfc3339();
 
     let result = sqlx::query_as::<_, playlist::Playlist>(
-        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at)
-         VALUES (?, ?, NULL, FALSE, NULL, ?, ?)
+        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at, search_name)
+         VALUES (?, ?, NULL, FALSE, NULL, ?, ?, ?)
          RETURNING *"
     )
     .bind(name)
     .bind(description)
     .bind(&now)
     .bind(&now)
+    .bind(search_name::pack(&[name]))
     .fetch_one(executor)
     .await?;
     Ok(result)
@@ -78,8 +80,8 @@ pub async fn create_smart_playlist(
     let now = melodia_core::utils::now_rfc3339();
 
     let result = sqlx::query_as::<_, playlist::Playlist>(
-        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at)
-         VALUES (?, ?, NULL, TRUE, ?, ?, ?)
+        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at, search_name)
+         VALUES (?, ?, NULL, TRUE, ?, ?, ?, ?)
          RETURNING *"
     )
     .bind(name)
@@ -87,6 +89,7 @@ pub async fn create_smart_playlist(
     .bind(criteria_json)
     .bind(&now)
     .bind(&now)
+    .bind(search_name::pack(&[name]))
     .fetch_one(db.write())
     .await?;
     Ok(result)
@@ -120,6 +123,19 @@ pub async fn get_all_playlists(db: &DbPool) -> Result<Vec<playlist::PlaylistStat
     .fetch_all(db.read())
     .await?;
     Ok(playlists)
+}
+
+/// The Playlists grid's cards for `ids`, in the order asked for. A smart playlist's count is the
+/// stored `0`, which the caller replaces with its live one.
+pub async fn get_playlists_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<playlist::PlaylistStats>, AppError> {
+    let rows = crate::database::chunked_in_query(db.read(), ids, |placeholders| {
+        format!("SELECT * FROM playlist_stats WHERE id IN ({placeholders})")
+    })
+    .await?;
+    Ok(crate::database::in_id_order(rows, ids, |p: &playlist::PlaylistStats| p.id))
 }
 
 pub async fn get_playlist_by_id(db: &DbPool, id: i64) -> Result<playlist::PlaylistStats, AppError> {
@@ -164,12 +180,13 @@ pub async fn update_playlist(
         let result = sqlx::query_as::<_, playlist::Playlist>(
             "UPDATE playlists SET name = ?, description = ?,
                 thumbnail_path = NULL,
-                custom_thumbnail = TRUE, updated_at = ?
+                custom_thumbnail = TRUE, updated_at = ?, search_name = ?
             WHERE id = ? RETURNING *",
         )
         .bind(name)
         .bind(description)
         .bind(&now)
+        .bind(search_name::pack(&[name]))
         .bind(id)
         .fetch_optional(db.write())
         .await?
@@ -177,11 +194,13 @@ pub async fn update_playlist(
         Ok(result)
     } else {
         let result = sqlx::query_as::<_, playlist::Playlist>(
-            "UPDATE playlists SET name = ?, description = ?, updated_at = ? WHERE id = ? RETURNING *"
+            "UPDATE playlists SET name = ?, description = ?, updated_at = ?, search_name = ? \
+             WHERE id = ? RETURNING *",
         )
         .bind(name)
         .bind(description)
         .bind(&now)
+        .bind(search_name::pack(&[name]))
         .bind(id)
         .fetch_optional(db.write())
         .await?

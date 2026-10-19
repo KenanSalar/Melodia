@@ -7,7 +7,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use super::{
-    Keyset, KeysetTickets, PagedRow, PagedRows, ReadStamp, RowRequest, ScrollPoint, Ticket, window,
+    Keyset, KeysetTickets, PagedRow, PagedRows, ReadStamp, RowRequest, ScrollPoint, Ticket,
+    spawn_fetch, window,
 };
 use crate::ui::grid_prewarm;
 use crate::ui::list_selection::{self, RowSelectionView};
@@ -40,9 +41,8 @@ pub fn fetcher(state: &AppState) -> impl Fn(RowRequest<UiTrackListRow>) + 'stati
     fetch_by_id(state, convert)
 }
 
-/// Fetches the rows a list asks for through the track-list projection, converted by `convert`. The
-/// query and the conversion run on the runtime, so the connection goes back to the pool as soon as
-/// the rows are read, however busy the event loop is drawing; only the landing waits for it.
+/// Fetches the rows a list asks for through the track-list projection, converted by `convert` on
+/// the runtime beside the query ([`spawn_fetch`]).
 pub fn fetch_by_id<R: PagedRow + Send>(
     state: &AppState,
     convert: fn(&[RsTrackListRow]) -> Vec<(i64, R)>,
@@ -52,19 +52,9 @@ pub fn fetch_by_id<R: PagedRow + Send>(
     move |request| {
         let db = db.clone();
         let ids = request.ids().to_vec();
-        let rows = runtime.spawn(async move {
-            library::keyset::rows_by_ids(&db, &ids).await.map(|rows| convert(&rows))
-        });
-        let spawned = slint::spawn_local(async_compat::Compat::new(async move {
-            match rows.await {
-                Ok(Ok(rows)) => request.land(rows),
-                Ok(Err(e)) => log::warn!("track rows: fetch failed: {}", describe(&e)),
-                Err(e) => log::warn!("track rows: fetch task failed: {}", describe(&e)),
-            }
-        }));
-        if let Err(e) = spawned {
-            log::warn!("track rows: fetch not spawned: {}", describe(&e));
-        }
+        let rows =
+            async move { library::keyset::rows_by_ids(&db, &ids).await.map(|rows| convert(&rows)) };
+        spawn_fetch(&runtime, request, rows, RowRequest::land, "track rows");
     }
 }
 

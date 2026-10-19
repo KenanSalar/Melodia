@@ -71,17 +71,29 @@ pub(super) fn detail_order(field: TrackSortField) -> String {
     order_by(Page::Detail, TrackOrder { field, dir: SortDir::Asc }, None)
 }
 
-/// Pushes the condition `needle` filters by, for a caller that skips an empty needle.
-///
-/// The folded column, plus the year in decimal wherever the needle can name one, which is
-/// `Needle::matches_number`'s substring rule. A row the backfill hasn't reached yet matches every
-/// needle rather than none, so the window after an upgrade can only widen a list.
+/// Pushes the condition `needle` filters a track list by, for a caller that skips an empty needle.
 pub(super) fn push_needle(qb: &mut QueryBuilder<Sqlite>, needle: &Needle) {
-    qb.push("(search_text = '' OR instr(search_text, ")
+    push_folded_match(qb, needle, "search_text", Some("year"));
+}
+
+/// Pushes `needle` against the folded `column`, plus `year` in decimal wherever the needle can
+/// name one, which is `Needle::matches_number`'s substring rule.
+///
+/// A row the backfill hasn't reached yet matches every needle rather than none, so the window
+/// after an upgrade can only widen a list.
+pub(crate) fn push_folded_match(
+    qb: &mut QueryBuilder<Sqlite>,
+    needle: &Needle,
+    column: &str,
+    year: Option<&str>,
+) {
+    qb.push(format!("({column} = '' OR instr({column}, "))
         .push_bind(needle.as_str().to_owned())
         .push(") > 0");
-    if needle.is_number() {
-        qb.push(" OR instr(CAST(year AS TEXT), ")
+    if let Some(year) = year
+        && needle.is_number()
+    {
+        qb.push(format!(" OR instr(CAST({year} AS TEXT), "))
             .push_bind(needle.as_str().to_owned())
             .push(") > 0");
     }

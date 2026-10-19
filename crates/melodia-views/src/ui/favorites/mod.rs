@@ -5,19 +5,17 @@
 //! hand-matched ones, so they can't disagree about a tie — topped up from the favourites that tab
 //! excludes once the played covers run out. Songs binds a `TrackList` over a
 //! [`TrackRows`](crate::ui::paged_rows::track_rows::TrackRows) whose search *and* sort run in SQL;
-//! Most Played and Favorite Artists are virtualized grids over uncapped fetches. There is no
+//! Most Played and Favorite Artists are paged grids whose search and sort do too. There is no
 //! Favorite Albums tab, the Albums page covering that.
 //!
-//! The page's shared contract — counts, dirty flags, signature skips, cover generations — is
+//! The page's shared contract — counts, dirty flags, cover generations — is
 //! `.claude/rules/ui-patterns.md`'s "three tabbed pages" block; the deltas below are this page's.
 //!
 //! The tree is split by the question each file answers rather than by tab. This file is the handle
-//! and its teardown; `tabs.rs` the sub-view enum and its seeding, `covers.rs` the three tiers,
-//! `rows.rs` the Slint models, `hero.rs` the band, `songs.rs` the Songs tab, and `grids/` the two
-//! grid tabs in four parts — `fetch`, `apply`, `warm` and `sort`.
+//! and its teardown; `tabs.rs` the sub-view enum and its seeding, `rows.rs` the Slint models,
+//! `hero.rs` the band, `songs.rs` the Songs tab, and `grids/` the two grid tabs.
 
 mod callbacks;
-mod covers;
 mod grids;
 mod hero;
 mod rows;
@@ -30,14 +28,16 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
 use crate::ui::artists::ArtistsUi;
 use crate::ui::artwork_cache::BlurSpec;
+use crate::ui::card_grid::GridLoads;
 use crate::ui::detail_artwork;
-use crate::ui::hero_folds::MostPlayedTotals;
 use crate::ui::paged_rows::ScrollPoint;
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::FavoriteStats;
+use melodia_core::entities::track_list::MostPlayedTotals;
 
+use rows::Scrolls;
 use state::FavoritesUiState;
 
 /// This page's `Nav.selected-index`. **The single definition**, beside the view it names, the way
@@ -48,9 +48,9 @@ pub const NAV_FAVORITES: i32 = 2;
 
 // `pub(super)` is `pub(in crate::ui)` here, exactly the reach these need: this slice's own
 // `callbacks/`, plus `ui::hero_chips`.
-pub(super) use grids::{apply_filtered_grids_now, refresh_grids, set_artist_sort};
+pub(super) use grids::{prewarm_tab_covers, release_grids, reload_grid, requery_grid, set_columns};
 pub(super) use hero::refresh_hero;
-pub(super) use rows::{to_slint_fav_artist_row, to_slint_most_played_row};
+pub(super) use rows::{most_played_ids, to_slint_fav_artist_row};
 pub(super) use songs::{
     current_filter, displayed_ids, patch_row, refresh_tracks, release_tracks, remove_rows,
     requery_tracks, set_filter, set_sort,
@@ -71,11 +71,11 @@ pub(super) use tabs::{seed_tab, tab_from_index};
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi> {
-    let songs_scroll = rows::install_favorites_models(cx.app, cx.state);
+    let scrolls = rows::install_favorites_models(cx.app, cx.state);
     let favorites_ui = Arc::new(FavoritesUi::new(
         cx.cover_thumbs.clone(),
         detail_artwork::blur_spec(cx.app),
-        songs_scroll,
+        scrolls,
     ));
     callbacks::wire(cx.app, cx.state, cx.view_state, &favorites_ui, artists_ui);
     if let Some(vs) = cx.view_state {
@@ -95,39 +95,40 @@ pub struct FavoritesUi {
     pub(super) hero_blur: Option<BlurSpec>,
     /// Where the Songs list was last read, which every Songs load seeds its rows around.
     pub(super) songs_scroll: ScrollPoint,
+    /// What each grid tab's loads share.
+    pub(super) most_played: GridLoads,
+    pub(super) artists: GridLoads,
     /// Visibility + staleness + the mutation gate, the unit every entity grid carries.
     section: SectionState,
-    /// Synchronous shadow of `Favorites.tab-idx`. The off-thread fetchers pick which cover tier to
-    /// warm from it — only one grid is ever mounted, so warming both is twice the resident buffers
-    /// for nothing.
+    /// Synchronous shadow of `Favorites.tab-idx`. The off-thread loads read which tab is mounted
+    /// from it — only one is, so loading or warming the others is work no frame draws.
     active_tab: AtomicU8,
-    /// [`SectionState`]'s dirty flag one level down, per fetch rather than per tab — the page has
-    /// one `SectionActiveGate` for three mutually exclusive tabs, so without these a refresh tick
-    /// ran all three fetches whatever was mounted. Two flags rather than three because one
-    /// `refresh_grids` feeds both grid tabs.
+    /// [`SectionState`]'s dirty flag one level down, per tab — the page has one
+    /// `SectionActiveGate` for three mutually exclusive tabs, so without these a refresh tick
+    /// ran all three loads whatever was mounted.
     ///
     /// Gating is safe here only because `hero_chips::favorites_chips` is a per-tab match and
     /// `refresh_hero` — which answers the count, running time and mosaic on every tab — is never
-    /// gated. Both seeded `true`, so the first pick onto a tab always fetches.
+    /// gated. All seeded `true`, so the first pick onto a tab always loads.
     songs_dirty: AtomicBool,
-    grids_dirty: AtomicBool,
+    most_played_dirty: AtomicBool,
+    artists_dirty: AtomicBool,
 }
 
 impl FavoritesUi {
-    fn new(
-        cover_thumbs: Arc<CoverThumbs>,
-        hero_blur: Option<BlurSpec>,
-        songs_scroll: ScrollPoint,
-    ) -> Self {
+    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>, scrolls: Scrolls) -> Self {
         Self {
             inner: FavoritesUiState::new(),
             cover_thumbs,
             hero_blur,
-            songs_scroll,
+            songs_scroll: scrolls.songs,
+            most_played: GridLoads::new(scrolls.most_played),
+            artists: GridLoads::new(scrolls.artists),
             section: SectionState::new(),
             active_tab: AtomicU8::new(FavoritesTab::Songs.as_code()),
             songs_dirty: AtomicBool::new(true),
-            grids_dirty: AtomicBool::new(true),
+            most_played_dirty: AtomicBool::new(true),
+            artists_dirty: AtomicBool::new(true),
         }
     }
 
@@ -141,29 +142,33 @@ impl FavoritesUi {
         FavoritesTab::from_code(self.active_tab.load(Ordering::Relaxed))
     }
 
-    /// Whether Songs is mounted showing a filtered list, the ids a tab pick clearing the shared
+    /// Whether the mounted tab shows a filtered list, the ids a tab pick clearing the shared
     /// needle leaves out of date.
-    pub fn shows_filtered_songs(&self) -> bool {
-        self.active_tab() == FavoritesTab::Songs && !current_filter(self).is_empty()
+    pub fn shows_filtered(&self) -> bool {
+        !current_filter(self).is_empty()
+    }
+
+    fn dirty(&self, tab: FavoritesTab) -> &AtomicBool {
+        match tab {
+            FavoritesTab::Songs => &self.songs_dirty,
+            FavoritesTab::MostPlayed => &self.most_played_dirty,
+            FavoritesTab::Artists => &self.artists_dirty,
+        }
+    }
+
+    /// Remember that `tab` missed a tick, or was left showing what a pick undoes.
+    pub fn mark_tab_dirty(&self, tab: FavoritesTab) {
+        self.dirty(tab).store(true, Ordering::Release);
+    }
+
+    /// `true` iff `tab` has missed a tick since its last load.
+    pub fn take_tab_dirty(&self, tab: FavoritesTab) -> bool {
+        self.dirty(tab).swap(false, Ordering::AcqRel)
     }
 
     /// Remember that a refresh tick reached the page with Songs not mounted.
     pub fn mark_songs_dirty(&self) {
-        self.songs_dirty.store(true, Ordering::Release);
-    }
-
-    /// `true` iff the Songs cache has missed a tick since its last fetch.
-    pub fn take_songs_dirty(&self) -> bool {
-        self.songs_dirty.swap(false, Ordering::AcqRel)
-    }
-
-    /// The grid tabs' equivalent — one flag, because one fetch fills both.
-    pub fn mark_grids_dirty(&self) {
-        self.grids_dirty.store(true, Ordering::Release);
-    }
-
-    pub fn take_grids_dirty(&self) -> bool {
-        self.grids_dirty.swap(false, Ordering::AcqRel)
+        self.mark_tab_dirty(FavoritesTab::Songs);
     }
 
     /// Serialize a bulk-state wipe against a data write. Held only around the write; never across
@@ -183,26 +188,15 @@ impl FavoritesUi {
         self.inner.last_mosaic_paths.forget();
     }
 
-    /// Forget what the grids last painted, so the next apply rebuilds instead of recognising its
-    /// own output and skipping.
-    ///
-    /// Sits beside [`Self::forget_mosaic`] at the section-leave call site, and is unconditional for
-    /// the same reason: the models are emptied there, so a signature that survived would match the
-    /// identical data on re-enter and leave the grid blank.
-    pub fn forget_grid_signature(&self) {
-        self.inner.last_grid_signature.lock().take();
-    }
-
-    /// Drop every section-local buffer and clear the Slint models, so a hidden page holds nothing.
-    /// Runs off the UI thread on section leave, which set `mark_dirty()` synchronously.
+    /// Drop every section-local buffer, so a hidden page holds nothing. Runs off the UI thread on
+    /// section leave, which set `mark_dirty()` and released the lists and grids synchronously.
     ///
     /// Release order matches `AlbumsUi::release_section_state`: per-section LRUs first, then
     /// mutated state under the section gate, then an `allocator::trim`.
     ///
     /// The gate serializes those stores but does **not** order them, so it is not what stops a
     /// fetch resolving *after* the leave from repopulating what this emptied. That is each
-    /// fetcher's own `section_active()` bail — one after the query, one after the prewarm's
-    /// `.await` — plus the one inside each apply's event-loop closure.
+    /// fetcher's own `section_active()` bail, and for the grids the revoke on their release.
     pub fn release_section_state(&self) {
         if self.section_active() {
             return;
@@ -211,38 +205,22 @@ impl FavoritesUi {
         {
             let _gate = self.gate();
             *self.inner.stats.lock() = FavoriteStats::default();
-            self.inner.most_played.lock().clear();
-            self.inner.fav_artists.lock().clear();
-            // The folds go with the caches they summarise: a derived value outliving its source is
-            // the one thing the band can state that is *wrong* rather than merely absent.
+            // The totals go with the grids they summarise: a derived value outliving its source
+            // is the one thing the band can state that is *wrong* rather than merely absent.
             *self.inner.most_played_totals.lock() = MostPlayedTotals::default();
+            *self.inner.artist_total.lock() = 0;
         }
-        // Re-armed beside the caches they guard rather than left to the leave's own `mark_dirty`
-        // two files away: every set is empty now, the Songs list included (the leave empties it on
-        // the UI thread), so the next tab entered owes a fetch whatever the flags held on the way
-        // out.
-        self.mark_songs_dirty();
-        self.mark_grids_dirty();
+        // Re-armed beside the state they guard rather than left to the leave's own `mark_dirty`
+        // two files away: every list and grid is empty now (the leave empties them on the UI
+        // thread), so the next tab entered owes a load whatever the flags held on the way out.
+        for tab in FavoritesTab::ALL {
+            self.mark_tab_dirty(tab);
+        }
         melodia_platform::services::platform::allocator::trim();
     }
 
     pub(crate) fn state(&self) -> &FavoritesUiState {
         &self.inner
-    }
-
-    /// Track ids of the Most Played grid, in card order, so a card there loads that grid rather
-    /// than the Songs tab's list. Filtered through the same predicate
-    /// `grids::apply::build_filtered_grids` builds the model with — the grid narrows with the
-    /// search bar, and the raw cache would enqueue cards that aren't on screen.
-    pub fn most_played_track_ids(&self) -> Vec<i64> {
-        let needle = self.inner.filter.lock().clone();
-        self.inner
-            .most_played
-            .lock()
-            .iter()
-            .filter(|t| crate::ui::row_match::most_played_matches(t, &needle))
-            .map(|t| t.id)
-            .collect()
     }
 }
 

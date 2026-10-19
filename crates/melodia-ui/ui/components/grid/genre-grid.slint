@@ -5,7 +5,7 @@ import { CardCell } from "card-cell.slint";
 
 // Virtualized genre-card grid: `AlbumGrid` minus the cover plumbing. A genre has no artwork, so
 // each card falls back to its glyph and nothing here allocates an `Image` or needs an LRU. Rust
-// chunks the flat list into rows of `columns` cards, so the inner `ListView` virtualizes by row.
+// hands it rows of `columns` cards, so the inner `ListView` virtualizes by row.
 // Same host-mounted-scrollbar contract as `TrackList` and `AlbumGrid`.
 export component GenreGrid inherits Rectangle {
     in property <[GenreGridRow]> rows;

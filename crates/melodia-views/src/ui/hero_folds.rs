@@ -15,7 +15,7 @@ use std::collections::HashSet;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
+use melodia_core::entities::track::TrackListRow;
 use melodia_core::entities::track_list::ScopeFacts;
 
 #[cfg(test)]
@@ -30,16 +30,6 @@ mod tests;
 pub struct HeroFold {
     pub artists: i32,
     pub albums: i32,
-}
-
-/// What the Most Played tab sums to — its own totals, never the Songs tab's. The query
-/// behind it is a strict subset, so borrowing the Songs duration would overstate it by
-/// every favourite never played.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
-pub struct MostPlayedTotals {
-    pub tracks: i32,
-    pub duration_ms: i64,
-    pub plays: i32,
 }
 
 impl From<&ScopeFacts> for HeroFold {
@@ -64,17 +54,6 @@ pub fn fold_tracks(rows: &[TrackListRow]) -> HeroFold {
         }
     }
     HeroFold { artists: len_as_i32(artists.len()), albums: len_as_i32(albums.len()) }
-}
-
-/// Sum the Most Played tab's own totals off its cached rows. One walk rather than two:
-/// Recently Played's copy of this list is uncapped and library-wide and a row is mostly
-/// `String`, so a `sum` per field is a second pass over more memory than fits a cache to
-/// reach two `Copy` fields inside it.
-pub fn fold_most_played(rows: &[MostPlayedFavorite]) -> MostPlayedTotals {
-    let (duration_ms, plays) = rows.iter().fold((0i64, 0i32), |(duration_ms, plays), row| {
-        (duration_ms + row.duration_ms, plays + row.play_count)
-    });
-    MostPlayedTotals { tracks: len_as_i32(rows.len()), duration_ms, plays }
 }
 
 /// The genre most of a set of tracks is tagged with, or `None` when it is split evenly

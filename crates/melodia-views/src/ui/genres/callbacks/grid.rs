@@ -1,4 +1,4 @@
-//! `Genres.*` grid callbacks: re-chunk on column count, client-side filter /
+//! `Genres.*` grid callbacks: re-chunk on column count, the filter and the
 //! sort, and the open-genre drill-in. Genres have no covers, so (unlike
 //! `albums/grid.rs`) there's no `request-cover` handler or cover prewarm.
 
@@ -8,6 +8,8 @@ use slint::{ComponentHandle, SharedString};
 
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
+use crate::ui::card_grid;
+use crate::ui::genres::grid::GenresGrid;
 use crate::ui::genres::{self as genres_ui_mod, GenresUi};
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
@@ -33,31 +35,32 @@ pub(super) fn wire(
     }
 
     // columns-changed: the view recomputed its integer column count and
-    // already wrote `Genres.columns`. Re-chunk the cached list — no DB
-    // hit.
+    // already wrote `Genres.columns`. Re-chunk the ids, keeping every cached card.
     {
-        let gu = genres_ui.clone();
         let weak = weak.clone();
-        genres.on_columns_changed(move |_cols| {
+        genres.on_columns_changed(move |cols| {
             let Some(ui) = weak.upgrade() else { return };
-            genres_ui_mod::rebuild_grid(&ui, &gu);
+            card_grid::set_columns::<GenresGrid>(&ui, cols);
         });
     }
 
-    // apply-filter: client-side; `Genres.filter` is already updated
-    // via the SearchBar's two-way binding, so just rebuild.
+    // apply-filter: `Genres.filter` is already updated via the SearchBar's
+    // two-way binding, so the ids reload under it. A hidden grid reloads on
+    // its enter instead.
     {
+        let s = state.clone();
         let gu = genres_ui.clone();
         let weak = weak.clone();
         genres.on_apply_filter(move |_text| {
             let Some(ui) = weak.upgrade() else { return };
-            genres_ui_mod::rebuild_grid(&ui, &gu);
+            if gu.section_active() {
+                card_grid::requery::<GenresGrid>(&ui, &s, &gu);
+            }
         });
     }
 
     // request-sort: clicking a sort pill. Same field flips dir; a new
-    // field resets to ascending. Genres sort in-memory (the DB query
-    // is fixed name-ASC) — no DB round-trip.
+    // field resets to ascending. The ids reload in the new order.
     {
         let s = state.clone();
         let gu = genres_ui.clone();
@@ -69,7 +72,9 @@ pub(super) fn wire(
                 next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
-            genres_ui_mod::rebuild_grid(&ui, &gu);
+            if gu.section_active() {
+                card_grid::requery::<GenresGrid>(&ui, &s, &gu);
+            }
             persist_view_sort(&s, view_id::GENRES, new_field, new_dir);
         });
     }

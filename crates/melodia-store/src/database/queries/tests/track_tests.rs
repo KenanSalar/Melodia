@@ -633,7 +633,8 @@ async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows() -> Re
         .execute(db.write())
         .await?;
 
-    let grid = queries::track::get_most_played_favorites(&db).await?;
+    let ranked = queries::track::most_played_favorite_ids(&db, &Needle::default()).await?;
+    let grid = queries::track::get_most_played_by_ids(&db, &ranked).await?;
     let titles: Vec<&str> = grid.iter().map(|t| t.title.as_str()).collect();
     assert_eq!(
         titles,
@@ -718,7 +719,7 @@ async fn get_recently_played_breaks_a_shared_stamp_toward_the_higher_id() -> Res
 }
 
 #[tokio::test]
-async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
+async fn the_most_played_ranking_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
     let db = seed_db().await?;
     insert_test_track(&db, "/music/delta.mp3", "Delta", "Zeta Artist", "B Album", "Pop").await?;
 
@@ -749,7 +750,9 @@ async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppEr
         .execute(db.write())
         .await?;
 
-    let rows = queries::track::get_most_played(&db).await?;
+    let ranked = queries::track::most_played_ids(&db, &Needle::default()).await?;
+
+    let rows = queries::track::get_most_played_by_ids(&db, &ranked).await?;
     let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
     assert_eq!(
         titles,
@@ -760,13 +763,13 @@ async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppEr
     Ok(())
 }
 
-/// The tab this feeds is a virtualized grid, so it takes the whole set — the
-/// `LIMIT 10` it carried was sized for the ten-card carousel it replaced, and
+/// The tab this feeds is a paged grid, so it takes the whole set — the
+/// `LIMIT 10` it once carried was sized for the ten-card carousel it replaced, and
 /// re-adding one is a ceiling the user can scroll into with nothing saying why
 /// the list stops. Seeded past that old cap so a reintroduced `LIMIT` fails here
 /// rather than only on a library large enough to notice.
 #[tokio::test]
-async fn get_most_played_is_not_capped() -> Result<(), AppError> {
+async fn the_most_played_ranking_is_not_capped() -> Result<(), AppError> {
     const PLAYED: i64 = 12;
 
     let db = seed_db().await?;
@@ -781,9 +784,10 @@ async fn get_most_played_is_not_capped() -> Result<(), AppError> {
             .await?;
     }
 
-    let rows = queries::track::get_most_played(&db).await?;
+    let ranked = queries::track::most_played_ids(&db, &Needle::default()).await?;
+
     assert_eq!(
-        i64::try_from(rows.len()).unwrap_or(-1),
+        i64::try_from(ranked.len()).unwrap_or(-1),
         PLAYED,
         "every played track must come back — the seeded set is `play_count > 0` and the three \
          `seed_db` rows are left at zero"
@@ -791,43 +795,25 @@ async fn get_most_played_is_not_capped() -> Result<(), AppError> {
     Ok(())
 }
 
+/// Both rankings narrow on every field the Songs filter searches, not only the two a card draws:
+/// on Recently Played the grid and the recency list sit under one search bar, so a narrower match
+/// would let one query show a genre's tracks in the list and none of its cards.
 #[tokio::test]
-async fn both_most_played_queries_project_what_the_filter_searches() -> Result<(), AppError> {
-    // The cards render title + artist, so a `SELECT` that drops one of the
-    // other four still compiles and still paints correctly — it only stops
-    // the hero search bar narrowing the card grid the way it narrows the
-    // track list beside it. `FromRow` catches a missing column at run time,
-    // which is why this asserts the values rather than just the row count.
+async fn both_most_played_rankings_filter_on_every_searched_field() -> Result<(), AppError> {
     let db = seed_db().await?;
-    sqlx::query(
-        "UPDATE tracks SET play_count = 5, is_favorite = TRUE, album_artist = 'Various Artists' \
-         WHERE title = 'Alpha'",
-    )
-    .execute(db.write())
-    .await?;
+    let alpha = id_of(&db, "Alpha").await?;
+    queries::track::set_favorite(&db, &[alpha], true).await?;
+    queries::track::add_play_counts(&db, &[(alpha, 5)], "2026-10-18T00:00:00Z").await?;
+    let cases: [(&str, &[i64]); 4] =
+        [("b album", &[alpha]), ("pop", &[alpha]), ("2024", &[alpha]), ("zzz", &[])];
 
-    let favorites = queries::track::get_most_played_favorites(&db).await?;
-    let all = queries::track::get_most_played(&db).await?;
+    for (needle, expected) in cases {
+        let folded = fold_needle(needle);
+        let all = queries::track::most_played_ids(&db, &folded).await?;
+        let favorites = queries::track::most_played_favorite_ids(&db, &folded).await?;
 
-    for (label, rows) in [("favorites", favorites), ("all", all)] {
-        let card = rows.iter().find(|t| t.title == "Alpha");
-        assert_eq!(
-            card.map(|c| (
-                c.artist.as_deref(),
-                c.album_artist.as_deref(),
-                c.album.as_deref(),
-                c.genre.as_deref(),
-                c.year,
-            )),
-            Some((
-                Some("Zeta Artist"),
-                Some("Various Artists"),
-                Some("B Album"),
-                Some("Pop"),
-                Some(2024),
-            )),
-            "{label}: the most-played projection dropped a field the filter searches"
-        );
+        assert_eq!(all, expected, "the whole-library ranking under {needle:?}");
+        assert_eq!(favorites, expected, "the favorites ranking under {needle:?}");
     }
     Ok(())
 }
@@ -844,8 +830,9 @@ async fn the_whole_library_ranking_reports_each_tracks_own_heart() -> Result<(),
         .execute(db.write())
         .await?;
 
-    let rows = queries::track::get_most_played(&db).await?;
+    let ranked = queries::track::most_played_ids(&db, &Needle::default()).await?;
 
+    let rows = queries::track::get_most_played_by_ids(&db, &ranked).await?;
     let hearts: Vec<(&str, bool)> =
         rows.iter().map(|r| (r.title.as_str(), r.is_favorite)).collect();
     assert_eq!(hearts, [("Alpha", true), ("Beta", false)]);
@@ -1342,31 +1329,6 @@ async fn rows_by_id_come_back_in_the_order_asked_and_once_each() -> Result<(), A
     Ok(())
 }
 
-/// The keyset a Most Played grid holds ranks as the cards it replaces did, ties broken the same
-/// way, with the counts beside the ids.
-#[tokio::test]
-async fn the_most_played_ids_rank_as_the_cards_do() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    let (alpha, beta, gamma) =
-        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
-    queries::track::add_play_counts(
-        &db,
-        &[(alpha, 2), (beta, 5), (gamma, 2)],
-        "2026-10-18T00:00:00Z",
-    )
-    .await?;
-
-    let ranked = queries::track::most_played_ids(&db, &Needle::default()).await?;
-
-    let cards: Vec<(i64, i32)> = queries::track::get_most_played(&db)
-        .await?
-        .iter()
-        .map(|card| (card.id, card.play_count))
-        .collect();
-    assert_eq!(ranked, cards);
-    Ok(())
-}
-
 #[tokio::test]
 async fn the_favorite_ranking_holds_only_played_favorites_the_needle_matches()
 -> Result<(), AppError> {
@@ -1383,7 +1345,7 @@ async fn the_favorite_ranking_holds_only_played_favorites_the_needle_matches()
 
     let ranked = queries::track::most_played_favorite_ids(&db, &fold_needle("zeta")).await?;
 
-    assert_eq!(ranked, [(alpha, 2)]);
+    assert_eq!(ranked, [alpha]);
     Ok(())
 }
 

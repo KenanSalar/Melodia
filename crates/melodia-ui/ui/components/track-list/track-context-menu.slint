@@ -141,13 +141,12 @@ export component TrackContextMenu inherits Rectangle {
         // `clicked` handler reads the same list.
         property <[int]> effective-ids:
             root.multi-active ? root.effective-selection : [root.row-id];
-        // Gates the Add-to-Playlist entry. On Playlist Detail the current playlist is filtered
-        // out, adding to itself being a no-op; assumed to be in `Playlists.rows`, and if it
-        // isn't this overcounts by one, harmlessly.
+        // Gates the Add-to-Playlist entry. On Playlist Detail the current playlist is left out,
+        // adding to itself being a no-op.
         property <int> visible-playlist-count:
             root.current-playlist-id > 0
-                ? max(0, Playlists.rows.length - 1)
-                : Playlists.rows.length;
+                ? max(0, Playlists.count - 1)
+                : Playlists.count;
 
         // Single-row mode keeps "Play", matching double-click. Over a selection the verb
         // is ambiguous — queue it, or replace the queue with it — so it's dropped; Play

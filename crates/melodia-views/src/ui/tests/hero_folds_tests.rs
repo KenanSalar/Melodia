@@ -4,9 +4,9 @@
 //! here builds a chip or touches the published record, so the two files split
 //! along the same seam their sources do.
 
-use super::{HeroFold, MostPlayedTotals, dominant_genre, fold_most_played, fold_tracks, year_span};
+use super::{HeroFold, dominant_genre, fold_tracks, year_span};
 use melodia_core::entities::album::AlbumStats;
-use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
+use melodia_core::entities::track::TrackListRow;
 
 /// Only the two fields [`fold_tracks`] reads.
 fn track(artist_id: Option<i64>, album_id: Option<i64>) -> TrackListRow {
@@ -34,22 +34,6 @@ fn track(artist_id: Option<i64>, album_id: Option<i64>) -> TrackListRow {
 /// Genre lines as `genre_lines` answers them: each line with how many tracks carry it.
 fn lines(spelled: &[(&str, i64)]) -> Vec<(String, i64)> {
     spelled.iter().map(|&(line, tracks)| (line.to_owned(), tracks)).collect()
-}
-
-fn played(duration_ms: i64, play_count: i32) -> MostPlayedFavorite {
-    MostPlayedFavorite {
-        id: 0,
-        title: String::new(),
-        artist: None,
-        album_artist: None,
-        album: None,
-        genre: None,
-        year: None,
-        artwork_path: None,
-        play_count,
-        duration_ms,
-        is_favorite: false,
-    }
 }
 
 /// Only the one field [`year_span`] reads.
@@ -89,15 +73,6 @@ fn the_fold_counts_distinct_ids_and_skips_the_untagged() {
     ];
     assert_eq!(fold_tracks(&rows), HeroFold { artists: 2, albums: 2 });
     assert_eq!(fold_tracks(&[]), HeroFold::default());
-}
-
-#[test]
-fn most_played_totals_sum_duration_and_plays() {
-    let rows = [played(180_000, 12), played(240_000, 30)];
-    assert_eq!(
-        fold_most_played(&rows),
-        MostPlayedTotals { tracks: 2, duration_ms: 420_000, plays: 42 }
-    );
 }
 
 #[test]

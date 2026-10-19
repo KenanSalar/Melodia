@@ -73,9 +73,8 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// The filter is shared across the tabs, so a keystroke reloads the Songs
-/// ids when Songs is mounted and re-walks whichever grid is, Most Played
-/// (title+artist) or Favorite Artists (name), from its cached Rust Vec.
+/// The filter is shared across the tabs, so a keystroke reloads the ids of
+/// whichever is mounted, the Songs list or a grid.
 fn wire_filter(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let s = state.clone();
     let fu = fav_ui.clone();
@@ -84,7 +83,9 @@ fn wire_filter(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
         let Some(ui) = weak.upgrade() else { return };
         favorites_ui_mod::set_filter(&fu, &text);
         favorites_ui_mod::requery_tracks(&s, &fu, &weak);
-        favorites_ui_mod::apply_filtered_grids_now(&ui, &fu);
+        if fu.section_active() {
+            favorites_ui_mod::requery_grid(&ui, &s, &fu);
+        }
     });
 }
 

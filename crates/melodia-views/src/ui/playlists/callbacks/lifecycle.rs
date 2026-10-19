@@ -1,26 +1,25 @@
 //! Playlists section lifecycle: the `section-active-changed` enter/leave
-//! handler (cache release + re-fetch) and the `library_changed` subscriber
-//! that keeps the grid + open detail fresh on watcher / scan / CRUD events.
+//! handler (release + reload) and the `library_changed` and `stats_changed`
+//! subscribers that keep the grid + open detail fresh.
 
 use std::sync::Arc;
 
 use slint::ComponentHandle;
 
 use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::card_grid;
 use crate::ui::detail_view::release_detail_hero_images;
 use crate::ui::grid_prewarm;
 use crate::ui::list_selection;
-use crate::ui::model_diff::clear_vec_model;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::playlists::grid::PlaylistsGrid;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use crate::ui::track_detail::{self, TrackDetail, restore};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{
-    AppWindow, CardSelection, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, Playlists,
-};
+use melodia_ui::{AppWindow, CardSelection, PlaylistDetail, Playlists};
 
 /// Wire the Playlists section-lifecycle callbacks. See
 /// [`super::wire`].
@@ -31,9 +30,9 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     install_stats_refresher(ui, state, playlists_ui);
 }
 
-/// Mirrors the Albums implementation — on leave, wipe the Slint models (UI
-/// thread) then release the Rust-side caches off-thread; on return,
-/// [`reenter`].
+/// Mirrors the Albums implementation — on leave, release the grid and the
+/// detail's Slint state (UI thread) then the covers and the detail artwork
+/// off-thread; on return, [`reenter`].
 fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let pu = playlists_ui.clone();
     let s = state.clone();
@@ -44,11 +43,10 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
             pu.mark_dirty();
         }
         if !active && let Some(ui) = weak.upgrade() {
-            let g = ui.global::<Playlists>();
-            // Rewound on the same tick as the model it numbers;
+            // Rewound on the same tick as the grid it numbers;
             // `Albums.total-count`'s declaration argues the sentinel.
-            g.set_total_count(UNFETCHED_COUNT);
-            clear_vec_model::<UiPlaylistGridRow>(&g.get_grid_rows(), "playlists: clear grid");
+            ui.global::<Playlists>().set_total_count(UNFETCHED_COUNT);
+            card_grid::release::<PlaylistsGrid>(&ui, &pu);
 
             let d = ui.global::<PlaylistDetail>();
             release_detail_hero_images(&ui, &d);
@@ -60,7 +58,9 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
         }
         if active {
             restore::resume_deferred(&weak, &s, &pu, playlists_ui_mod::restore_detail);
-            s.runtime.spawn(reenter(s.clone(), pu.clone(), weak.clone()));
+            if let Some(ui) = weak.upgrade() {
+                reenter(&ui, &s, &pu);
+            }
         } else {
             let pu = pu.clone();
             s.runtime.spawn_blocking(move || pu.release_section_state());
@@ -68,27 +68,33 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
     });
 }
 
-/// The section came back on screen: a full re-fetch if dirty, else just
-/// prewarm the visible covers.
-async fn reenter(s: AppState, pu: Arc<PlaylistsUi>, weak: slint::Weak<AppWindow>) {
+/// The section came back on screen: a reload if a leave released the grid,
+/// else just a prewarm of its covers. The detail the release emptied is
+/// reopened beside the reload.
+fn reenter(ui: &AppWindow, s: &AppState, pu: &Arc<PlaylistsUi>) {
     if !pu.take_dirty() {
-        grid_prewarm::prewarm_off_thread(&pu, PlaylistsUi::prewarm_visible_covers).await;
+        let pu = pu.clone();
+        s.runtime.spawn_blocking(move || pu.prewarm_visible_covers());
         return;
     }
+    playlists_ui_mod::reload_grid(ui, s, pu);
     let open_id = pu.detail_playlist_id();
-    if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak.clone()).await {
-        log::warn!("playlists::section_enter fetch_grid: {}", describe(&e));
+    if open_id < 0 {
+        return;
     }
-    if open_id >= 0
-        && let Err(e) = playlists_ui_mod::open_playlist(
+    let s = s.clone();
+    let pu = pu.clone();
+    let weak = ui.as_weak();
+    s.runtime.clone().spawn(async move {
+        let reopened = playlists_ui_mod::open_playlist(
             &s,
             &pu,
             weak.clone(),
             open_id,
             melodia_ui::NavEnterFrom::Right,
         )
-        .await
-    {
+        .await;
+        let Err(e) = reopened else { return };
         log::warn!("playlists::section_enter open_playlist({open_id}): {}", describe(&e));
         pu.clear_detail();
         // Handed back warm, as a failed restore's grid is.
@@ -98,38 +104,29 @@ async fn reenter(s: AppState, pu: Arc<PlaylistsUi>, weak: slint::Weak<AppWindow>
             g.set_playlist_id(-1);
             release_detail_hero_images(&ui, &g);
         });
-    }
+    });
 }
 
-/// Playlist mutations from elsewhere (CRUD, scans, watcher) bump
-/// `library_changed`. Mirror the Albums pattern: re-fetch the grid (so new
-/// playlists appear and removed ones disappear) and refresh an open detail.
+/// Scans, the watcher and a smart playlist's rule edit bump `library_changed`,
+/// every other playlist write refreshing through `refresh_after_write`. Mirror
+/// the Albums pattern: reload the grid and refresh an open detail.
 fn install_library_refresher(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
     let installed =
         on_signal(&state.library_changed, ui.as_weak(), "playlists-library-changed", move |ui| {
             // Skip the in-place refresh when the section is hidden, but
-            // mark the cached data dirty so the next section-enter
-            // re-fetches from scratch. Without the `mark_dirty`, a
-            // `library_changed` arriving while the section was never
-            // visited (e.g. the first scan after a fresh-DB launch) would
-            // be lost. Mirrors the same gate in `albums/callbacks/lifecycle.rs`.
+            // mark the grid dirty so the next section-enter reloads.
+            // Without the `mark_dirty`, a `library_changed` arriving while
+            // the section was never visited (e.g. the first scan after a
+            // fresh-DB launch) would be lost. Mirrors the same gate in
+            // `albums/callbacks/lifecycle.rs`.
             if !pu.section_active() {
                 pu.mark_dirty();
                 return;
             }
+            playlists_ui_mod::reload_grid(ui, &s, &pu);
             let open_id = pu.detail_playlist_id();
-            {
-                let s = s.clone();
-                let pu = pu.clone();
-                let weak = ui.as_weak();
-                spawn_logged!(
-                    s,
-                    "playlists::library_changed",
-                    playlists_ui_mod::fetch_grid(&s, &pu, weak)
-                );
-            }
             if open_id >= 0 {
                 let s = s.clone();
                 let pu = pu.clone();
@@ -149,43 +146,17 @@ fn install_library_refresher(ui: &AppWindow, state: &AppState, playlists_ui: &Ar
 /// Play-count / last-played flushes bump `stats_changed` (NOT
 /// `library_changed`, by design, to avoid churning every view on each played
 /// song). Only smart playlists whose rules depend on play stats ("most
-/// played", "recently played", "never played") can change, so this is gated
-/// on the presence of a *stat-dependent* smart playlist and the refresh
-/// recounts only that subset — a static-rule ("Genre is Rock") smart playlist
-/// is neither woken nor recounted here (it can't have moved).
+/// played", "recently played", "never played") can change, so only those are
+/// recounted — a static-rule ("Genre is Rock") smart playlist is neither woken
+/// nor recounted here (it can't have moved).
 fn install_stats_refresher(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
     let installed =
         on_signal(&state.stats_changed, ui.as_weak(), "playlists-stats-changed", move |ui| {
-            // Hidden section: the library_changed / section-enter path
-            // already re-fetches on return, so nothing to do here. And
-            // nothing to do unless a smart playlist could actually have
-            // moved (stricter than a plain any-smart-playlist check).
-            if !pu.section_active() || !pu.has_stat_dependent_smart_playlists() {
-                return;
-            }
-            let open_id = pu.detail_playlist_id();
-            let open_smart = open_id >= 0 && pu.is_playlist_smart_stat_dependent(open_id);
-            {
-                let s = s.clone();
-                let pu = pu.clone();
-                let weak = ui.as_weak();
-                spawn_logged!(
-                    s,
-                    "playlists::stats_changed",
-                    playlists_ui_mod::fetch_grid_stats(&s, &pu, weak)
-                );
-            }
-            if open_smart {
-                let s = s.clone();
-                let pu = pu.clone();
-                let weak = ui.as_weak();
-                spawn_logged!(
-                    s,
-                    "playlists::stats_changed_detail",
-                    playlists_ui_mod::refresh_detail(&s, &pu, weak, open_id)
-                );
+            // Hidden section: the section-enter path reloads on return.
+            if pu.section_active() {
+                playlists_ui_mod::refresh_play_stats(ui, &s, &pu);
             }
         });
     if let Err(e) = installed {
