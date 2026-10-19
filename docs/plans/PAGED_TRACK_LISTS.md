@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 done, Phase 4.1 dropped, Phase 4.5 done (decided, built in Phase 5), Phase 5 done) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 dropped, Phase 4 done, Phase 4.1 dropped, Phase 4.5 done (decided, built in Phase 5), Phase 5 done) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -301,27 +301,21 @@ Memory, 51k dev library, release, one launch per build on the dev folder with a 
 
   The census just past 165 s read 0.00 MiB trimmable, Anonymous 38.0, live heap 16.12 and 6.77 MiB of sub-page fragments (Phase 3's after run: 2.84 trimmable, 41.0 untrimmed, 16.40 live, 5.07 fragments after the hand trim). Pixels were the Synthwave hero, 22 row covers and one 64² proxy, 0.59 MiB. Peak RSS was 453.3 MB, the boot's file pages (Phase 3.5).
 
-## Phase 3.5 (open to discuss): index the boot's whole-table reads
+## Phase 3.5 (dropped): index the boot's whole-table reads
 
-Status: not decided. Kenan investigates and discusses this before anything here is implemented.
+Status: dropped (2026-10-20), after tracing every read of `tracks` the boot makes. Nothing was implemented.
 
-**What you see today.** For the first two minutes after launch RSS sits around 370 to 430 MB on the 51k library, in both builds (Phase 3's Memory). It is file pages, not heap: every pooled connection that runs one of the boot's full scans of `tracks` (34.3 MiB) maps nearly the whole 66 MiB database, and RSS counts each mapping. They go when the pool closes the boot's connections at the 120 s reap.
+**What it was for.** For the first two minutes after launch RSS sits around 370 to 430 MB on the 51k library, in both builds (Phase 3's Memory). It is file pages, not heap: every pooled connection maps the database (`mmap_size`), the pool hands out its oldest idle connection first so consecutive reads land on different ones, and each connection that reads most of `tracks` (34.3 MiB) faults it into its own mapping, which RSS counts separately. They go when the pool closes the boot's connections at the 120 s reap. The plan was two partial indexes, `tracks(artwork_path)` for the artwork reference set and `tracks(id) WHERE file_hash IS NULL` for `retroactive_hash`'s check, so those reads would scan an index instead of the table.
 
-**What would change.** Two partial indexes, so the per-launch checks read an index instead of the table:
-- `tracks(artwork_path) WHERE artwork_path IS NOT NULL AND artwork_path <> ''` for the artwork reference set (`queries::artwork::REFERENCED_PATHS` and its library arms), which the boot reads four times: the sweep, the renormalize pass, and the scan repair once per folder.
-- `tracks(id) WHERE file_hash IS NULL` for `retroactive_hash`'s per-launch check, the shape `search_text`'s backfill already uses.
+**Why it went.**
+- **The boot reads every row of `tracks` without those two.** With watching on, the default, the reconcile's incremental filter reads each folder's rows by `folder_id` (`visit_folder_tracks`), every row across the pass. Browse's seed fetch scans the table by `LIKE` on every launch with a saved folder, and a restored Songs tab or smart playlist scans it too. Neither index serves any of them.
+- **So the indexes change how many times the same pages are counted, not how many are resident.** PSS counts a page once however many connections map it: when the boot connections closed on 2026-10-15, PSS fell 55 MiB and RSS 168 MiB, with Anonymous and USS level. Fewer mappings lower RSS; PSS, the README's figure and System Monitor's Memory column, stays where the filter leaves it; USS likely rises, since a page only one connection maps counts as private. By reasoning, not measured.
+- **The target already holds.** The pages are clean page cache, gone at the reap, and idle RSS (184 to 189 MB) is under the 200 MB the Targets row asks for.
+- **The cost would stay**: an index over every track with a cover (3.66 MiB on the dev library), written on every cover change.
 
-No query or Rust code changes. On a copy of the dev database (2026-10-18) both plans switched: the reference set to a covering scan of a 3.66 MiB index, the hash check to an empty partial index. What still reads the whole table is the folder rescan (one connection) and a smart playlist's recount where its rule can't use an index.
+**The read counts this phase gave were wrong**, for whoever reopens it: the repair reads the reference set once per reconcile round, not per folder; the renormalize pass is one-shot behind `artwork_store_normalized`; and each completed folder scan starts the sweep and `retroactive_hash` again (`library::scan::finish::after_completed`), so on a default boot each runs once per folder plus once at launch.
 
-**No new migration.** Both indexes go into this branch's own `20261018000000_track_search_text.sql`, which no release has shipped. An existing dev database has already applied it, so sqlx's checksum check refuses the edited file there: reset `Melodia-dev` from `backups/melodia-v20261014000000.db` (or another pre-migration copy) before the first launch, as Phase 1's first run did.
-
-**Estimates, to be replaced by measurement:** boot database mappings from about 250 MiB to about 60 to 120 MiB, so boot RSS around 190 to 300 MB instead of 370 to 430, for those two minutes. Anonymous and live heap unchanged. The four reference-set scans (22 to 24 ms each in the boot log) and the hash check (6.5 ms) become index reads.
-
-**Costs:**
-- Disk: +3.66 MiB for the artwork index, which stays for as long as the index exists and grows with the number of tracks holding a cover. The hash index stays at one page once the library is hashed.
-- Writes: every insert or update of a track's cover also updates the artwork index; it matters mostly on a large first import.
-
-**Measured when implemented**, on the same data before and after: the boot sampling Phase 3's investigation used (database mappings, RSS and PSS at 3, 8, 30 and 125 s), the boot statements' timings from the sqlx log, Anonymous at idle, and the time a full rescan of the 50.5k folder takes. **Dropped if any of those regress.**
+**What would bring it back:** a boot that no longer reads the whole table on its own (watching off is one), judged by startup PSS, not RSS.
 
 ## Phase 4: Queue as ids, plus the queue sheet and Up Next
 
