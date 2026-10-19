@@ -80,3 +80,7 @@ async fn fill_window(
     seat_window_records(player_state, sinks, fresh);
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/queue_window_tests.rs"]
+mod tests;

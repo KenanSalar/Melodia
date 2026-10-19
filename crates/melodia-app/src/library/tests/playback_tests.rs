@@ -117,6 +117,20 @@ async fn a_pick_whose_row_is_gone_starts_at_the_head() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The queue takes a list as the database answers it: each track that still has a row, once, in
+/// the list's order. A track ends up queued twice through Add to Queue or Play Next, never Play.
+#[tokio::test]
+async fn play_queues_each_listed_track_with_a_row_once_in_list_order() -> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    let ids = fx.stage_playable(2).await?;
+    let listed = vec![ids[1], 9_999, ids[0], ids[1]];
+
+    player_play_tracks(&fx.ctx, listed, None).await?;
+
+    assert_eq!(lock_state(&fx.ctx.player_state).queue.play_ids().to_vec(), vec![ids[1], ids[0]]);
+    Ok(())
+}
+
 /// The other warn arm, and a different fault: the caller's own index is past its own list.
 #[tokio::test]
 async fn an_index_past_the_ids_handed_in_starts_at_the_head() -> Result<(), AppError> {

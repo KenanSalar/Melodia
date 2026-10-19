@@ -377,6 +377,47 @@ async fn ids_whose_rows_are_gone_drop_out_of_the_restore() -> Result<(), AppErro
     Ok(())
 }
 
+/// Two tracks with rows, `a` and `b`.
+async fn two_tracks(db: &DbPool) -> Result<(i64, i64), AppError> {
+    queries::folder::insert_folder(db, "/music", true).await?;
+    let a = insert_test_track(db, "/music/a.mp3", "A", "Artist", "Album", "Rock").await?;
+    let b = insert_test_track(db, "/music/b.mp3", "B", "Artist", "Album", "Rock").await?;
+    Ok((a, b))
+}
+
+/// `a`, a row gone since, `b` and `a` again, left on that second `a`.
+fn a_repeat_behind_a_gone_row(a: i64, b: i64) -> PersistedPlayback {
+    persisted(vec![a, 9_999, b, a], 3, None)
+}
+
+/// A track queued twice was queued twice on purpose, so a restart keeps both copies where it
+/// drops the row that has gone.
+#[tokio::test]
+async fn a_restore_keeps_a_track_queued_twice() -> Result<(), AppError> {
+    let (_tmp, paths) = seeded_paths(false)?;
+    let db = DbPool::test_pool().await?;
+    let (a, b) = two_tracks(&db).await?;
+
+    let plan = plan_restore(&db, &paths, Some(a_repeat_behind_a_gone_row(a, b)), None).await?;
+
+    assert_eq!(plan.queue.play_ids().to_vec(), vec![a, b, a]);
+    Ok(())
+}
+
+/// The slot moves with the rows rather than staying a number, so the restart is still on the copy
+/// it was left on, the second, past the row that went.
+#[tokio::test]
+async fn a_restore_past_a_gone_row_stays_on_the_copy_it_was_left_on() -> Result<(), AppError> {
+    let (_tmp, paths) = seeded_paths(false)?;
+    let db = DbPool::test_pool().await?;
+    let (a, b) = two_tracks(&db).await?;
+
+    let plan = plan_restore(&db, &paths, Some(a_repeat_behind_a_gone_row(a, b)), None).await?;
+
+    assert_eq!(plan.queue.current_index, Some(2));
+    Ok(())
+}
+
 /// `original_order` is not persisted, so a restored queue with shuffle still on would leave
 /// "unshuffle" a no-op against a sequence nobody kept. The file is rewritten to match, or the next
 /// launch reads back the value this one just refused.

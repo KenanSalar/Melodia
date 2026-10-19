@@ -375,6 +375,41 @@ impl PlayerState {
         actions
     }
 
+    /// Build actions for the deck handing over to the track the monitor staged behind the current
+    /// one, `staged` being that track's record.
+    ///
+    /// The queue advances unconditionally, so the caller claims the handover first
+    /// (`PlaybackEngine::claim_gapless_handover`): only the backend sees a start or a stop retire it.
+    ///
+    /// Where the queue still follows on with the staged track, only the state moves, the deck
+    /// already playing it. The next stage comes later, from the monitor's `Playing` branch.
+    ///
+    /// Where an edit in the last `PRELOAD_LEAD_MS` moved the queue's next, the queue wins: a Play
+    /// Next asked for that track, and seating the staged one would skip it. The cut lands at most a
+    /// poll into the staged track.
+    pub fn build_gapless_advance_actions(
+        &mut self,
+        staged: Option<Arc<TrackSummary>>,
+    ) -> Vec<PlayerAction> {
+        let mut actions = Vec::with_capacity(2);
+
+        if let Some(track) = self.current_track() {
+            actions.push(PlayerAction::UpdatePlayCount(track.id));
+        }
+
+        match (self.queue.advance(), staged) {
+            (Some(id), Some(track)) if track.id == id => {
+                self.position_ms = 0;
+                self.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
+                self.source = Some(PlaybackSource::Track(track));
+            }
+            (Some(id), _) => actions.extend(self.start_queued(id, false, 0)),
+            (None, _) => actions.extend(stop_end_of_queue(self)),
+        }
+
+        actions
+    }
+
     /// Build actions for set-playback-speed command.
     pub fn build_set_speed_actions(&mut self, speed: f64) -> Vec<PlayerAction> {
         // Speed is a ratio on the deck's converter, so anything but 1.0 consumes a source faster or

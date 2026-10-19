@@ -129,3 +129,7 @@ pub(super) fn picked_positions(rows: &QueueRows, picked: &HashSet<i32>) -> Vec<u
         .map(|(position, _)| position)
         .collect()
 }
+
+#[cfg(test)]
+#[path = "tests/picks_tests.rs"]
+mod tests;

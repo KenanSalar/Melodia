@@ -1920,3 +1920,442 @@ fn a_replay_is_refused_unless_the_track_is_paused() {
         assert_eq!((actions, state.status), (Vec::new(), status), "{status:?}");
     }
 }
+
+// --- A transition onto a track the window lacks ---
+//
+// The transport runs under the state lock, where nothing may wait on the database, so a
+// transition landing on a track whose record the window doesn't hold moves the queue and owes the
+// start. The window task fetches the record and runs it.
+
+use std::collections::HashSet;
+
+/// A transition a row runs, and the actions it builds.
+type Transition = fn(&mut PlayerState) -> Vec<PlayerAction>;
+
+/// What a row lands on the state while a start is owed.
+type StateEdit = fn(&mut PlayerState);
+
+/// What a row does to the queue while a start is owed.
+type QueueEdit = fn(&mut QueueState);
+
+/// [`queued`] playing its first track past half, so a Next counts no skip.
+fn playing_first_of(count: i64) -> PlayerState {
+    let mut state = queued(count);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+    state.position_ms = 120_000;
+    state
+}
+
+/// [`queued`] at its second slot, playing track 2 from the top.
+fn playing_second_of(count: i64) -> PlayerState {
+    let mut state = queued(count);
+    state.queue.advance();
+    play_track_inner(&mut state, make_summary(2, "Track 2", 180_000), None);
+    state
+}
+
+/// `state` with its window holding the records of `held` and no others.
+fn holding(mut state: PlayerState, held: &[i64]) -> PlayerState {
+    state.window.seat(held, std::iter::empty());
+    state
+}
+
+/// The start `actions` owe, where they owe one.
+fn owed_start(actions: &[PlayerAction]) -> Option<AwaitedStart> {
+    actions.iter().find_map(|action| match action {
+        PlayerAction::StartWhenResolved(owed) => Some(*owed),
+        _ => None,
+    })
+}
+
+/// The file `actions` start on the deck, where they start one.
+fn started_path(actions: &[PlayerAction]) -> Option<&str> {
+    actions.iter().find_map(|action| match action {
+        PlayerAction::PlayMedia { file_path, .. } => Some(file_path.as_str()),
+        _ => None,
+    })
+}
+
+/// A queue of `count` after a Next onto track 2, whose record the window lacked, and the start
+/// that Next owes.
+fn awaiting_track_two(count: i64) -> Result<(PlayerState, AwaitedStart), AppError> {
+    let mut state = holding(playing_first_of(count), &[1]);
+    let actions = state.build_next_actions();
+    let owed = owed_start(&actions)
+        .ok_or_else(|| AppError::Validation(format!("the Next owed no start: {actions:?}")))?;
+    Ok((state, owed))
+}
+
+/// The window task landing the records of `ids`, of those the window still wants.
+fn land_records(state: &mut PlayerState, ids: &[i64]) {
+    let wanted = state.queue.window_ids();
+    let records = ids.iter().map(|&id| make_summary(id, &format!("Track {id}"), 180_000));
+    state.window.seat(&wanted, records);
+}
+
+/// The Stop is what takes the outgoing track off the deck. Without it the old track plays on under
+/// a state that says the new one is loading.
+#[test]
+fn a_skip_onto_a_track_the_window_lacks_stops_the_deck_and_owes_its_start() {
+    let mut state = holding(playing_first_of(3), &[1]);
+
+    let actions = state.build_next_actions();
+
+    assert_eq!(
+        actions,
+        vec![
+            PlayerAction::Stop { fade_ms: 0 },
+            PlayerAction::StartWhenResolved(AwaitedStart { id: 2, re_pause: false, skipped: 0 }),
+        ]
+    );
+}
+
+/// `Loading` over an empty deck is what keeps the monitor from ticking while the record is
+/// fetched, and from ending a drained stream a second time. The queue has already moved, so the
+/// sheet and Up Next show where playback is going.
+#[test]
+fn a_deferred_start_leaves_nothing_on_the_deck_under_loading() {
+    let mut state = holding(playing_first_of(3), &[1]);
+
+    state.build_next_actions();
+
+    assert_eq!(
+        (
+            state.status,
+            state.source.is_none(),
+            state.position_ms,
+            state.duration_ms,
+            state.queue.current_index
+        ),
+        (PlaybackStatus::Loading, true, 0, 0, Some(1)),
+    );
+}
+
+/// Every way playback moves along the queue reads the window, so each one has to owe its start
+/// on a miss rather than stopping or starting a record it doesn't hold.
+#[test]
+fn every_transition_onto_a_track_the_window_lacks_owes_that_tracks_start() {
+    let rows: [(&str, PlayerState, Transition, i64); 5] = [
+        ("Next", holding(playing_first_of(3), &[1]), PlayerState::build_next_actions, 2),
+        ("Previous", holding(playing_second_of(3), &[2]), PlayerState::build_previous_actions, 1),
+        (
+            "an end of stream",
+            holding(playing_first_of(3), &[1]),
+            PlayerState::build_end_of_stream_actions,
+            2,
+        ),
+        (
+            "Play with nothing on the deck",
+            holding(queued(3), &[]),
+            PlayerState::build_play_actions,
+            1,
+        ),
+        (
+            "a gapless handover the queue moved after the stage",
+            holding(playing_first_of(3), &[1, 3]),
+            |s| s.build_gapless_advance_actions(Some(make_summary(3, "Track 3", 180_000))),
+            2,
+        ),
+    ];
+    for (what, mut state, transition, id) in rows {
+        let actions = transition(&mut state);
+
+        assert_eq!(
+            owed_start(&actions),
+            Some(AwaitedStart { id, re_pause: false, skipped: 0 }),
+            "{what}"
+        );
+    }
+}
+
+/// A skip made while paused stays paused across the fetch: the start puts the track back on pause
+/// once it runs, unfaded for the reason `restore_paused` gives.
+#[test]
+fn a_skip_made_while_paused_comes_back_paused_once_its_record_lands() -> Result<(), AppError> {
+    let mut state = holding(playing_first_of(3), &[1]);
+    state.status = PlaybackStatus::Paused;
+    let owed = owed_start(&state.build_next_actions())
+        .ok_or_else(|| AppError::Validation("the paused Next owed no start".into()))?;
+    land_records(&mut state, &[2]);
+
+    let actions = state.resume_awaited(owed);
+
+    assert_eq!(
+        (state.status, actions.last()),
+        (PlaybackStatus::Paused, Some(&PlayerAction::Pause { fade_ms: 0 }))
+    );
+    Ok(())
+}
+
+#[test]
+fn a_deferred_start_runs_once_the_window_holds_its_record() -> Result<(), AppError> {
+    let (mut state, owed) = awaiting_track_two(3)?;
+    land_records(&mut state, &[2]);
+
+    let actions = state.resume_awaited(owed);
+
+    assert_eq!(started_path(&actions), Some("/music/2.mp3"));
+    Ok(())
+}
+
+/// A deferred start runs only while nothing has started or stopped since it was owed. Run after a
+/// Stop it plays over the stop, after a Next it cuts off the track that Next started, and over a
+/// station connecting it puts a track on the station's deck, `Loading` though the state still is.
+#[test]
+fn a_deferred_start_is_refused_once_something_else_started_or_stopped() -> Result<(), AppError> {
+    let rows: [(&str, StateEdit, PlaybackStatus); 3] = [
+        (
+            "a Stop",
+            |s| {
+                s.build_stop_actions(0);
+            },
+            PlaybackStatus::Stopped,
+        ),
+        (
+            "a Next that started its track",
+            |s| {
+                land_records(s, &[3]);
+                s.build_next_actions();
+            },
+            PlaybackStatus::Playing,
+        ),
+        (
+            "a station connecting",
+            |s| {
+                s.build_station_connecting_actions(station("Example FM"));
+            },
+            PlaybackStatus::Loading,
+        ),
+    ];
+    for (what, intervene, status) in rows {
+        let (mut state, owed) = awaiting_track_two(3)?;
+        intervene(&mut state);
+        land_records(&mut state, &[2]);
+
+        let actions = state.resume_awaited(owed);
+
+        assert_eq!((actions, state.status), (Vec::new(), status), "{what}");
+    }
+    Ok(())
+}
+
+/// The start runs on the queue's current slot as it stands once the record lands. Requiring the
+/// slot the transition chose left the player under `Loading` with nothing on the deck after any
+/// of these, Play and Pause doing nothing until Next, Previous or Stop.
+#[test]
+fn an_edit_during_the_fetch_moves_what_the_deferred_start_plays() -> Result<(), AppError> {
+    let rows: [(&str, QueueEdit, &str); 4] = [
+        (
+            "a remove above the current row",
+            |q| {
+                q.remove_at(0);
+            },
+            "/music/2.mp3",
+        ),
+        ("a shuffle", |q| q.shuffle_play_order_in_place(&mut rand::rng(), true), "/music/2.mp3"),
+        (
+            "a prune above the current row",
+            |q| {
+                q.prune_missing(&HashSet::from([1]));
+            },
+            "/music/2.mp3",
+        ),
+        (
+            "a prune of the track awaited",
+            |q| {
+                q.prune_missing(&HashSet::from([2]));
+            },
+            "/music/3.mp3",
+        ),
+    ];
+    for (what, edit, expected) in rows {
+        let (mut state, owed) = awaiting_track_two(4)?;
+        edit(&mut state.queue);
+        land_records(&mut state, &[2, 3, 4]);
+
+        let actions = state.resume_awaited(owed);
+
+        assert_eq!(started_path(&actions), Some(expected), "{what}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_queue_cleared_during_the_fetch_stops_rather_than_starting_anything() -> Result<(), AppError> {
+    let (mut state, owed) = awaiting_track_two(3)?;
+    state.queue.clear();
+
+    let actions = state.resume_awaited(owed);
+
+    assert_eq!(
+        (actions, state.status),
+        (vec![PlayerAction::Stop { fade_ms: 0 }], PlaybackStatus::Stopped)
+    );
+    Ok(())
+}
+
+/// The start never defers a second time, so a record that never lands can't have the window task
+/// owe, fetch and owe again in a loop. The queue publish that moved the slot is what has it fetch.
+#[test]
+fn a_deferred_start_whose_record_never_landed_owes_nothing_again() -> Result<(), AppError> {
+    let (mut state, owed) = awaiting_track_two(3)?;
+
+    let actions = state.resume_awaited(owed);
+
+    assert_eq!(actions, Vec::new());
+    Ok(())
+}
+
+/// A fade can't wait on a fetch, so a next the window lacks is no next: the decision drops, and
+/// the track drains to an end of stream that can defer.
+#[test]
+fn a_crossfade_into_a_track_the_window_lacks_is_dropped_without_advancing() {
+    let mut state = holding(playing_first_of(2), &[1]);
+    state.position_ms = 178_200;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert_eq!((actions, state.queue.current_index), (Vec::new(), Some(0)));
+}
+
+// --- A gapless handover ---
+
+/// The deck already plays the staged track, so a start here would cut the gapless join it was
+/// staged for.
+#[test]
+fn a_handover_onto_the_queues_next_starts_nothing() {
+    let mut state = playing_first_of(2);
+
+    let actions = state.build_gapless_advance_actions(Some(make_summary(2, "Track 2", 200_000)));
+
+    assert_eq!(actions, vec![PlayerAction::UpdatePlayCount(1)]);
+}
+
+/// Now Playing describes what the deck plays, which is the staged record from its first sample.
+#[test]
+fn a_handover_onto_the_queues_next_seats_the_staged_record() {
+    let mut state = playing_first_of(2);
+
+    state.build_gapless_advance_actions(Some(make_summary(2, "Track 2", 200_000)));
+
+    assert_eq!(
+        (
+            state.current_track().map(|t| t.id),
+            state.duration_ms,
+            state.position_ms,
+            state.queue.current_index
+        ),
+        (Some(2), 200_000, 0, Some(1)),
+    );
+}
+
+/// An edit inside the last `PRELOAD_LEAD_MS` moved the queue's next after the stage. Seating the
+/// staged track would skip a Play Next or play a track just removed, Now Playing naming one and the
+/// deck playing another.
+#[test]
+fn at_a_handover_the_queue_wins_over_a_stale_stage() {
+    let mut state = playing_first_of(3);
+
+    let actions = state.build_gapless_advance_actions(Some(make_summary(3, "Track 3", 180_000)));
+
+    assert_eq!(started_path(&actions), Some("/music/2.mp3"));
+}
+
+/// A stage whose track was removed, leaving nothing after the current one, ends at the end of the
+/// queue as a drained end of stream does.
+#[test]
+fn a_handover_past_the_end_of_the_queue_stops() {
+    let mut state = playing_first_of(1);
+
+    let actions = state.build_gapless_advance_actions(Some(make_summary(2, "Track 2", 180_000)));
+
+    assert_eq!(
+        (actions, state.status),
+        (
+            vec![PlayerAction::UpdatePlayCount(1), PlayerAction::Stop { fade_ms: 0 }],
+            PlaybackStatus::Stopped
+        )
+    );
+}
+
+// --- What the window task reads and seats ---
+
+/// `state` behind a handle, as the window task reaches it.
+fn handle_on(state: PlayerState) -> PlayerStateHandle {
+    let handle = PlayerStateHandle::default();
+    *lock_state(&handle) = state;
+    handle
+}
+
+/// A queue move fetches only what the window lacks, where a library tick may have rewritten any
+/// record it holds and reads them all again.
+#[test]
+fn only_a_library_tick_asks_again_for_the_records_the_window_holds() {
+    let rows = [(WindowFill::Missing, vec![3, 4]), (WindowFill::All, vec![1, 2, 3, 4])];
+    for (fill, expected) in rows {
+        let handle = handle_on(holding(queued(5), &[1, 2]));
+
+        assert_eq!(window_wanted(&handle, fill), expected, "{fill:?}");
+    }
+}
+
+/// A queue cleared under a playing track leaves it on the deck with no slot, and a retag of it
+/// still has to reach Now Playing.
+#[test]
+fn a_library_tick_asks_for_the_playing_track_a_cleared_queue_no_longer_names() {
+    let mut state = playing_first_of(3);
+    state.queue.clear();
+    let handle = handle_on(state);
+
+    assert_eq!(window_wanted(&handle, WindowFill::All), vec![1]);
+}
+
+/// A handle playing track 1 off a one-track queue, its sinks, and a receiver on its view model.
+fn emitting_track_one() -> (
+    PlayerStateHandle,
+    crate::player::engine::event_sink::PlayerSinks,
+    tokio::sync::watch::Receiver<Option<PlayerViewModelLight>>,
+) {
+    let (view_model, published) = tokio::sync::watch::channel(None);
+    let (queue, _) = tokio::sync::watch::channel(None);
+    let (awaited_start, _) = tokio::sync::watch::channel(None);
+    let sinks = crate::player::engine::event_sink::PlayerSinks {
+        view_model,
+        queue,
+        media_controls: None,
+        awaited_start,
+    };
+    (handle_on(playing_first_of(1)), sinks, published)
+}
+
+/// Track 1's record titled `title`, as the database holds it once the save has written
+/// `position_ms`.
+fn saved_at(position_ms: i64, title: &str) -> TrackSummary {
+    TrackSummary { last_position: position_ms, ..(*make_summary(1, title, 180_000)).clone() }
+}
+
+/// The periodic save rewrites `last_position` as a track plays, so every library tick hands the
+/// playing record back with that alone moved. Taken for an edit, it republished the view model on
+/// every tick once a track had played a while.
+#[test]
+fn a_record_moved_only_in_its_saved_position_is_not_republished() {
+    let (handle, sinks, published) = emitting_track_one();
+
+    seat_window_records(&handle, &sinks, vec![saved_at(60_000, "Track 1")]);
+
+    assert_eq!(published.has_changed().ok(), Some(false));
+}
+
+/// The retag that happens: a track that has played a while comes back with the new tags and the
+/// position the save wrote, and setting the position aside must not set the edit aside with it.
+#[test]
+fn a_retag_of_a_track_that_has_played_a_while_reaches_now_playing() {
+    let (handle, sinks, _published) = emitting_track_one();
+
+    seat_window_records(&handle, &sinks, vec![saved_at(60_000, "Retagged")]);
+
+    assert_eq!(
+        lock_state(&handle).current_track().map(|t| t.title.clone()),
+        Some("Retagged".to_owned())
+    );
+}

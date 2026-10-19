@@ -379,6 +379,21 @@ fn a_next_track_the_output_reopens_for_is_never_crossfaded_into() {
     }
 }
 
+/// A next whose record the window lacks is no next yet: neither the stage nor the fade can wait on
+/// a fetch, and the next poll asks again. Both rows sit inside their window.
+#[test]
+fn a_next_the_window_lacks_is_neither_staged_nor_faded_into() {
+    let rows = [("crossfade off", crossfade_off()), ("crossfade on", crossfade_on(2_000))];
+    for (what, xf) in rows {
+        let mut state = playing_state();
+        state.window.seat(&[1], std::iter::empty());
+
+        let t = tick(&mut state, backend(at_remaining(1_000), xf));
+
+        assert_eq!((fade_ms(t.as_ref()), staged(t.as_ref())), (None, None), "{what}");
+    }
+}
+
 // --- a long pause giving an exclusive device back --------------------------
 
 /// The polls up to and including the first that answers due, or `None` past a hold and a half.

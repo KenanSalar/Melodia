@@ -13,7 +13,7 @@ use super::event_sink::PlayerSinks;
 use super::signal_path::{SignalPath, Transport};
 use super::state::{
     PlayerAction, PlayerState, PlayerStateHandle, PositionTick, ReleaseDecision, lock_state,
-    stop_end_of_queue, with_state_emit,
+    with_state_emit,
 };
 use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
 use melodia_audio::player::source::prebuffer::StreamShared;
@@ -476,30 +476,7 @@ impl Monitor {
             if !engine.claim_gapless_handover() {
                 return Vec::new();
             }
-            let mut actions = Vec::with_capacity(2);
-
-            // Update play count for the track that just finished
-            if let Some(track) = state.current_track() {
-                actions.push(PlayerAction::UpdatePlayCount(track.id));
-            }
-
-            // Where the queue still follows on with the staged track, only the state moves, the
-            // deck already playing it. The next stage comes later, from the `Playing` branch.
-            //
-            // Where an edit in the last `PRELOAD_LEAD_MS` moved the queue's next, the queue wins:
-            // a Play Next asked for that track, and seating the staged one would skip it. The cut
-            // lands at most a poll into the staged track.
-            match (state.queue.advance(), staged) {
-                (Some(id), Some(track)) if track.id == id => {
-                    state.position_ms = 0;
-                    state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
-                    state.source = Some(PlaybackSource::Track(track));
-                }
-                (Some(id), _) => actions.extend(state.start_queued(id, false, 0)),
-                (None, _) => actions.extend(stop_end_of_queue(state)),
-            }
-
-            actions
+            state.build_gapless_advance_actions(staged)
         });
     }
 

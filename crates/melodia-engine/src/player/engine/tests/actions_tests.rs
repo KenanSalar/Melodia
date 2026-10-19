@@ -3,12 +3,13 @@ use std::time::Duration;
 
 use tokio::sync::watch;
 
-use crate::player::engine::actions::execute_actions;
+use crate::player::engine::actions::{emit_and_execute, execute_actions, start_awaited};
 use crate::player::engine::backend::PlayerBackend;
 use crate::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
 use crate::player::engine::fixtures::test_track;
 use crate::player::engine::state::{
-    PlayerAction, PlayerStateHandle, PlayerViewModelLight, lock_state, with_state_emit,
+    AwaitedStart, PlayerAction, PlayerState, PlayerStateHandle, PlayerViewModelLight, lock_state,
+    with_state_emit,
 };
 use crate::player::engine::types::{PlaybackStatus, RepeatMode};
 use melodia_core::entities::track::TrackSummary;
@@ -171,17 +172,22 @@ struct ActionsFixture {
     player_state: PlayerStateHandle,
     sinks: PlayerSinks,
     track_path: String,
+    /// A second real file, for a test that starts two tracks and has to tell them apart.
+    next_path: String,
     _tmp: tempfile::TempDir,
 }
 
 fn fixture() -> Result<ActionsFixture, AppError> {
     let tmp = tempfile::tempdir()?;
     let track_path = tmp.path().join("track.mp3");
+    let next_path = tmp.path().join("next.mp3");
     std::fs::write(&track_path, b"")?;
+    std::fs::write(&next_path, b"")?;
     Ok(ActionsFixture {
         player_state: PlayerStateHandle::default(),
         sinks: make_test_sinks(),
         track_path: track_path.to_string_lossy().into_owned(),
+        next_path: next_path.to_string_lossy().into_owned(),
         _tmp: tmp,
     })
 }
@@ -563,10 +569,9 @@ async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError
     Ok(())
 }
 
-/// Queues `paths` under `mode`, every record in the window, and returns the actions that start the
-/// first of them.
-fn start_queue(fx: &ActionsFixture, paths: &[&str], mode: RepeatMode) -> Vec<PlayerAction> {
-    let tracks: Vec<Arc<TrackSummary>> = paths
+/// The records of `paths`, their ids counting from 1 in order.
+fn records_for(paths: &[&str]) -> Vec<Arc<TrackSummary>> {
+    paths
         .iter()
         .zip(1..)
         .map(|(path, id)| {
@@ -575,17 +580,136 @@ fn start_queue(fx: &ActionsFixture, paths: &[&str], mode: RepeatMode) -> Vec<Pla
             (*path).clone_into(&mut track.file_path);
             Arc::new(track)
         })
-        .collect();
+        .collect()
+}
+
+/// Queues `paths` under `mode`, every record in the window, and returns the actions that start the
+/// first of them.
+fn start_queue(fx: &ActionsFixture, paths: &[&str], mode: RepeatMode) -> Vec<PlayerAction> {
+    start_queue_holding(fx, paths, mode, paths.len())
+}
+
+/// [`start_queue`] with only the first `held` records in the window, the rest yet to be fetched.
+fn start_queue_holding(
+    fx: &ActionsFixture,
+    paths: &[&str],
+    mode: RepeatMode,
+    held: usize,
+) -> Vec<PlayerAction> {
+    let tracks = records_for(paths);
     let ids: Vec<i64> = tracks.iter().map(|track| track.id).collect();
     with_state_emit(&fx.player_state, &fx.sinks, |s| {
         s.queue.add_tracks(&ids);
         s.queue.set_repeat_mode(mode);
-        s.window.seat(&ids, tracks);
+        s.window.seat(&ids, tracks.into_iter().take(held));
         match s.queue.skip_to_index(0) {
             Some(first) => s.start_queued(first, false, 0),
             None => Vec::new(),
         }
     })
+}
+
+/// The window task landing the record of every one of `paths` the window still wants.
+fn land_every_record(fx: &ActionsFixture, paths: &[&str]) {
+    let mut state = lock_state(&fx.player_state);
+    let wanted = state.queue.window_ids();
+    state.window.seat(&wanted, records_for(paths));
+}
+
+/// The start the transition last owed, as the window task finds it.
+fn owed(fx: &ActionsFixture) -> Result<AwaitedStart, AppError> {
+    (*fx.sinks.awaited_start.borrow())
+        .ok_or_else(|| AppError::Validation("no transition owed a start".into()))
+}
+
+/// The fixture's two files queued and the first playing, then a Next onto the second, whose record
+/// the window lacks.
+fn skipped_onto_an_unfetched_track(fx: &ActionsFixture, mock: &MockBackend) {
+    let paths = [fx.track_path.as_str(), fx.next_path.as_str()];
+    let started = start_queue_holding(fx, &paths, RepeatMode::Off, 1);
+    execute_actions(started, mock, &fx.player_state, &fx.sinks);
+    emit_and_execute(mock, &fx.player_state, &fx.sinks, PlayerState::build_next_actions);
+}
+
+/// The window task resolves an owed start off this cell, and nothing may be subscribed the moment
+/// it is owed: a `send` with no receiver keeps nothing, which would leave the start owed for good.
+#[test]
+fn an_owed_start_is_kept_for_the_window_task_with_nobody_subscribed() -> Result<(), AppError> {
+    let fx = fixture()?;
+    let start = AwaitedStart { id: 2, re_pause: false, skipped: 0 };
+
+    execute_actions(
+        vec![PlayerAction::StartWhenResolved(start)],
+        &MockBackend::new(),
+        &fx.player_state,
+        &fx.sinks,
+    );
+
+    assert_eq!(*fx.sinks.awaited_start.borrow(), Some(start));
+    Ok(())
+}
+
+/// Once its record lands, the start a Next owed reaches the backend as the track the queue is on.
+#[test]
+fn a_deferred_start_reaches_the_backend_once_its_record_lands() -> Result<(), AppError> {
+    let fx = fixture()?;
+    let mock = MockBackend::new();
+    skipped_onto_an_unfetched_track(&fx, &mock);
+    let start = owed(&fx)?;
+    land_every_record(&fx, &[fx.track_path.as_str(), fx.next_path.as_str()]);
+
+    start_awaited(&mock, &fx.player_state, &fx.sinks, start);
+
+    let played: Vec<String> =
+        mock.inner().play_media_calls.iter().map(|call| call.0.clone()).collect();
+    assert_eq!(played, [fx.track_path.clone(), fx.next_path.clone()]);
+    Ok(())
+}
+
+/// The window task asks after every fetch, whatever woke it, so a start still waiting on its
+/// record is turned away for the price of a lock. Through the emit it would republish the view
+/// model on every wake.
+#[test]
+fn a_deferred_start_still_waiting_on_its_record_publishes_nothing() -> Result<(), AppError> {
+    let fx = fixture()?;
+    let mock = MockBackend::new();
+    skipped_onto_an_unfetched_track(&fx, &mock);
+    let start = owed(&fx)?;
+    let published = fx.sinks.view_model.subscribe();
+
+    start_awaited(&mock, &fx.player_state, &fx.sinks, start);
+
+    assert_eq!(published.has_changed().ok(), Some(false));
+    Ok(())
+}
+
+/// The lap guard counts what a batch has skipped, and a deferral splits the batch in two. The half
+/// run once the record lands carries the count on, or a queue with nothing playable in it plays a
+/// lap and a half before it stops.
+#[test]
+fn a_skip_count_carries_across_a_deferral() -> Result<(), AppError> {
+    let fx = fixture()?;
+    let paths = [
+        "/nonexistent/a.flac",
+        "/nonexistent/b.flac",
+        "/nonexistent/c.flac",
+        "/nonexistent/d.flac",
+    ];
+    // a and b are skipped from the records in hand, and the skip onto c defers.
+    let started = start_queue_holding(&fx, &paths, RepeatMode::All, 2);
+    execute_actions(started, &MockBackend::new(), &fx.player_state, &fx.sinks);
+    let start = owed(&fx)?;
+    land_every_record(&fx, &paths);
+
+    let (done, finished) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        start_awaited(&MockBackend::new(), &fx.player_state, &fx.sinks, start);
+        let _ = done.send(lock_state(&fx.player_state).queue.current_index);
+    });
+    let stopped_at = finished.recv_timeout(Duration::from_secs(5));
+
+    assert_eq!(stopped_at.ok(), Some(Some(3)), "a lap from a ends on d");
+    Ok(())
 }
 
 /// A repeating queue wraps on a skip, so with nothing playable in it the skip chain has no end of
