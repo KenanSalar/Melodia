@@ -422,7 +422,7 @@ Memory: estimated in Phase 5 (2026-10-19), measured there.
 
 ## Phase 5: The card grids and Most Played
 
-Status: built (2026-10-19), docs done. **The hand check is still pending**, with one finding open from a first look: on a fast scroll the Albums grid's covers arrive visibly later than the Songs list's. The tests and the census wait for Kenan's go. The scope is Phase 4.5's outcome.
+Status: built (2026-10-19), hand check, tests and docs done. The census waits for Kenan's go. The scope is Phase 4.5's outcome.
 
 **What you see today.** Opening a card grid loads every entity it can show twice: as the stats rows its filter and sort walk in memory, and again as Slint cards. A section leave hands both back, so idle doesn't move, but each grid's peak grows with the library. Estimated on the dev library (2026-10-19), row data only, covers unchanged:
 
@@ -485,9 +485,9 @@ Status: built (2026-10-19), docs done. **The hand check is still pending**, with
 11. **`grid_rows::chunk_entity_rows` goes too**, and the six `GRID_PREWARM_AHEAD` copies become `grid_prewarm`'s one. `PagedGrid` takes one parameter, the chunk row (`GridRow`), its card type being the row's, and its memo keeps whatever chunks Slint holds rather than an LRU. The seven grids share one load path, `ui::card_grid`'s `CardGrid`.
 12. **The Playlists grid keys on `updated_at` alone.** Nothing writes `Playlists.sort-field`, the view having no sort row, so the name and track-count arms were unreachable and go, with the live-count sort behind the second. `Playlists.sort-dir` goes too, nothing writing it either, so the grid's query is the needle alone and its order newest change first.
 
-- [ ] **Hand check** on each grid: every sort both ways, an accented filter, a click, a range and Select all, the card menu's Play, Play Next, Add to Queue and Go to, the Playlists hover trio, a resize across column counts, a fast scroll to the end, a scan and a playlist write landing while open, a tab leave and return. Also a smart playlist's count after a play, and Add to Playlist in a row menu right after a launch onto Songs.
-  - Pending. A first look on 2026-10-19 found one thing, **open:** scrolled fast, the Albums grid paints its covers with a visible delay where the Songs list's are there at once. A card's rows fetch in well under a millisecond on the dev library (128 albums by id through `album_stats`), so the database is not where the time goes; what is left to trace is the cover path between a card landing and its decode reaching the screen.
-- [ ] **Tests**, after Kenan's go:
+- [x] **Hand check** on each grid: every sort both ways, an accented filter, a click, a range and Select all, the card menu's Play, Play Next, Add to Queue and Go to, the Playlists hover trio, a resize across column counts, a fast scroll to the end, a scan and a playlist write landing while open, a tab leave and return. Also a smart playlist's count after a play, and Add to Playlist in a row menu right after a launch onto Songs.
+  - Done (2026-10-19), every check passing. A first look the same day found one thing: scrolled fast, the Albums grid paints its covers with a visible delay where the Songs list's are there at once. A card's rows fetch in well under a millisecond on the dev library (128 albums by id through `album_stats`), so the database is not where the time goes; what is left to trace is the cover path between a card landing and its decode reaching the screen.
+- [x] **Tests** (2026-10-19):
   - each SQL arm and filter against today's in-memory sort and `Needle` match, the sorters kept in the test as the oracle (`cross_tier.rs`'s shape), over a fixture of the partitions the two could answer differently: case, accents, ties on every key, a missing year, a smart playlist's live count (a rows-by-id case since amendment 12, no arm sorting on it);
   - each `search_name`'s write-through and backfill;
   - `PagedGrid`: chunk arithmetic where the column count divides the keyset and where it doesn't, the memo handing back the same pointer, a landing patching in place, a column change keeping the cache;
