@@ -1,10 +1,10 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with two fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
-Working doc. Delete when every phase has shipped, passed by hand, and the "after" column of [Targets](#targets) is filled from a census run.
+Working doc. Delete when every phase has shipped, passed by hand, and the "after" column of [Targets](#targets) is filled from a census run, the 512-track row included.
 
 ## Context
 
@@ -115,7 +115,7 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `migrations/20261018000000_track_search_text.sql` (new, Phase 1) | `search_text TEXT NOT NULL DEFAULT ''` and the partial index over unfilled rows |
 | `crates/melodia-store/src/database/collation.rs` (new, Phase 1) | `UNICODE_LOWER`; `register` is called on the write, read and test pool options |
 | `crates/melodia-store/src/database/queries/track/keyset.rs` (new, Phase 1) | `track_ids` per scope with the sort arm and needle, read back as one packed row (Phase 2), the needle clause, and `detail_order` that `entity_ids` now takes its two orders from |
-| `crates/melodia-store/src/database/queries/track/membership.rs` (new, Phase 3) | `Membership`, moved out of `keyset.rs`: which tracks a scope holds, as the `FROM` and `WHERE` both the keysets and the scope facts start from |
+| `crates/melodia-store/src/database/queries/track/membership.rs` (new, Phase 3) | `Membership`, moved out of `keyset.rs`: which tracks a scope holds, a random cap resolved to its draw's pick, as the `FROM` and `WHERE` both the keysets and the scope facts start from |
 | `crates/melodia-store/src/database/queries/track/scope_facts.rs` (new, Phase 3) | `scope_facts` (count, running time, artist and album spread in one aggregate, which `get_favorite_stats` reads too) and `genre_lines` (each genre line with its track count, the album hero's genre chip) |
 | `crates/melodia-store/src/database/queries/track/list.rs` | `get_all_tracks_for_list`, the comparator's input, and Browse's fetches. The three per-entity `for_list` fetches went in Phase 3, with `get_playlist_tracks_for_list` and `get_smart_playlist_tracks` |
 | `crates/melodia-store/src/database/queries/track/ranking.rs` | `most_played_ids` and `most_played_favorite_ids`, beside `MOST_PLAYED_ORDER` |
@@ -146,7 +146,7 @@ All of it grows linearly with the library, and the README's footprint runs (open
 
 ## Phase 0: Measurement tooling and the "before" column
 
-Status: done. The 512-track reference was skipped for time.
+Status: done. The 512-track reference moved to the end: it runs once every phase has shipped, before this doc is deleted.
 
 - [x] Land Appendix A as `scripts/heap-census.py`, so the method outlives a scratchpad. A reboot wiped the session copy once already.
 - [x] Build the branch's merge base in a detached worktree under a `target/` dir, and run Appendix B on the 51k library.
@@ -154,7 +154,7 @@ Status: done. The 512-track reference was skipped for time.
   - The re-run landed within about 2 MiB of every figure the original measured (idle 35.3, Songs 59.1, Play all 86.2, queue sheet open 113.2 MiB), each step's growth within 1.4 MiB of the original's, so the Before column keeps the original run. **Its idle is the Synthwave playlist detail, not Settings**, which the tables and Appendix B now say; Settings idle reads 31.2 MiB.
   - The one new figure is the queue sheet closed: closing gives back 16.5 of the 26.6 MiB the sheet took. The 56 B-per-track `QueueRow` model and the row strings go; the 8,523,760 B table and a 24 B-per-track array stay, which is what Phase 4's "closed = Play all" target has to remove.
   - Run on the dev data folder with the pre-migration copy `backups/melodia-v20261014000000.db` (a Phase 1 build had already migrated the live one, which the base build refuses), into a null sink, everything restored after.
-- Skipped: the same five states on a 512-track data dir, the flatness reference.
+- Moved to the end: the same five states on a 512-track data dir, the flatness reference.
 
 ## Phase 1: SQL side (no UI change)
 
@@ -189,7 +189,7 @@ Status: done (2026-10-18), `3327af38` and `cfc224e2`. Passed by hand in debug an
   - `track_ids` reads its ids back as one `group_concat` row, ordered by a subquery. sqlx hands each row across from its worker thread on its own, and that hand-off was most of a sort's time. Checked by mutation: dropping the subquery's `ORDER BY` fails all five `cross_tier` keyset tests.
 - [x] Tried and dropped: storing lowered `artist`, `album` and `genre` keys, so those sorts compare bytes instead of calling the collation. In release they went from 46–57 ms to 31–41 ms, and in the debug build from 287–353 ms to 73–83 ms. Not worth three permanent columns, their write-through and a backfill, with release already instant.
 - [x] Doc edits: `CLAUDE.md`'s "Models from background", `library-data.md`'s narrowing and keyset paragraphs, and `ui-patterns.md`'s paged-list entry, shared-helpers line, Favorites delta and the Clear selection rule.
-- [x] After the validation, one fix: a sort or keystroke overtaking a library tick's refresh took the newer ticket, and the refresh's re-read, count and selection prune went with it, leaving edited rows on their old text until the next change. `KeysetTickets` now keeps a refresh owed until one shows, and a requery issued meanwhile runs as one, decided under the same lock that issues its ticket. An overtaken refresh also skips its cover prewarm. Hand check pending.
+- [x] After the validation, one fix: a sort or keystroke overtaking a library tick's refresh took the newer ticket, and the refresh's re-read, count and selection prune went with it, leaving edited rows on their old text until the next change. `KeysetTickets` now keeps a refresh owed until one shows, and a requery issued meanwhile runs as one, decided under the same lock that issues its ticket. An overtaken refresh also skips its cover prewarm. Passed by hand.
 - [x] Tests:
   - `paged_rows/tests/paged_rows_tests.rs`: the `window` boundaries; one fetch in flight; a landing asks nearest the row read last; a page scrolled past is never fetched; an absent row is not re-asked until a new keyset; a failed fetch waits for the next read; a landing after `clear` stores nothing; an empty list; the flag on a placeholder; the scroll point; the repaints (a patch, an uncached patch, an unchanged and a one-row-changed show, a late fetch against a patch, one and two removals); and the `KeysetTickets` decision table. Selection surviving a swap and a clear was already pinned in `list_selection_tests.rs`.
   - `melodia-core`'s `track_search_tests.rs`: the packed format, four separators for five empty fields, NUL as a space, no match across two fields, and the packed text agreeing with the fields over six partitions.
@@ -198,7 +198,7 @@ Status: done (2026-10-18), `3327af38` and `cfc224e2`. Passed by hand in debug an
   - `cross_tier`'s parity fixture gains lengths on and either side of both ends of the Songs clamp: moving the bound passed every test before.
   - Checked by mutation, each failing only its own pins: the in-flight guard, the `absent` filter, the read-stamp arm, the owed-reload settle and takeover, the separator, `DISTINCT`, the menu gate, the Favorites tab check, and both ends of the length clamp. A repaint outside the window is deliberately not pinned: Slint ignores a row it doesn't hold, so it costs time, never a wrong row.
 
-Memory, Songs open as the first view on the 51k library, release, settled 3 minutes (2026-10-18). This is not the Appendix B path (playlist idle, then Songs), so [Targets](#targets) waits for that run:
+Memory, Songs open as the first view on the 51k library, release, settled 3 minutes (2026-10-18). This is not the Appendix B path (playlist idle, then Songs); [Targets](#targets) is filled by the full comparison once the plan is done:
 
 | Build | Anonymous | Live heap |
 |---|---|---|
@@ -221,7 +221,7 @@ Sorts, release, the `track_ids` median on the 51k dev database (row-per-id at `3
 
 ## Phase 3: The four details
 
-Status: implemented, hand-checked and measured (2026-10-18), `00bab609`, its new tests landed (2026-10-19). fmt, clippy and the full suite green; two fixes from a validation of that commit await their hand check, so the phase stays open.
+Status: implemented, hand-checked and measured (2026-10-18), `00bab609`, its new tests landed and the retimed boot trims measured (2026-10-19). fmt, clippy and the full suite green; four fixes landed since that commit await their hand check, so the phase stays open.
 
 - [x] Each detail lists its entity as a `TrackRows` installed once per global. `DetailCache` keeps no rows: the entity, the sort and needle its loads run under, its `KeysetTickets` and the scroll point. `seat_unfiltered`, both row `Vec`s, the selection shadow and the `VecModel` went.
 - [x] `open_*_with` fetches the ids under the view's `resolve_view_sort` arm through `track_detail::load::open`, and its closure seats them (`Opening::seat`). `cross_tier`'s `DETAIL_DEFAULTS` still reads those literals in each `detail.rs`.
@@ -247,6 +247,9 @@ Status: implemented, hand-checked and measured (2026-10-18), `00bab609`, its new
 - [x] After the validation of `00bab609`, two fixes. Hand check pending.
   - Removing tracks from a filtered playlist left them in the selection, out of sight, for a Ctrl-click to carry into the next batch action: the reload under a filter prunes nothing. The removal now drops its rows and their picks on the tick the write lands (`track_detail::remove_rows`), through the helper Favorites' unfavourite already used, now shared as `track_rows::remove_rows`. A library tick under a filter still prunes nothing, as above.
   - The drag guard read the sort and filter the page asked for, which a requery shows a query later, so a drag released in between wrote the old list's indices as positions. `DetailCache` now records the entity whose own order is on show, unfiltered, and the guard asks it too (`shows_own_order`), which also covers an overtaken open leaving another playlist's rows up under the new id.
+- [x] Two more fixes (2026-10-19), `29eeaaed` and `1140fb29`, each with its tests. Hand check pending.
+  - A smart playlist capped in Random order drew a new pick on every query its detail ran, so a sort, a keystroke and the hero each described different tracks. The page draws once per open and carries the `Draw` in `TrackListScope::Playlist`, and `Membership` resolves the cap through `pick_random`, so a library tick moves the pick only by a track entering or leaving the rules. `PagedRows::move_row` also refuses a drop at the list's length, as the reorder write already did.
+  - A smart playlist capped inside a run of equal values kept whichever tied tracks the query plan reached first, so a new index or a statistics refresh could change what it held. Every cap order now ends in the id, in the direction its plan already broke ties in, and `get_recently_played` ends in `id DESC`, the order its partial index hands back.
 - [x] New tests (2026-10-19):
   - `paged_rows_tests.rs`: where `move_row` lands a row, that it re-reads only that row, and a source or drop outside the list and an empty list moving nothing; `revoke` refusing the newest load, leaving no reload owed and letting a later load show; and a requery over a stand-in still owed running as the reload, the ticket half of an overtaken open.
   - `track_detail/tests/cache_tests.rs` (new): `shows_own_order` holds only for the open playlist shown by position, ascending and unfiltered, and not for a descending, title or filtered list, a page that asked for its own order before a load showed it, the playlist left on screen under an overtaken open, or a released list.
@@ -272,7 +275,13 @@ Memory, 51k dev library, release, one launch per build on the dev folder with a 
 - **A detail's own cost:** Zydeco added 2.34 MiB of live heap before and 0.71 after; closing it returned after to idle, where before kept 0.99 MiB until the tab leave. Most of the rise to Whole library closed is the Playlists grid's own covers (1.43 MiB of pixels against Genres' 0.33).
 - **After's peak RSS was 452 MB at boot,** file pages, not heap: each pooled connection that runs one of the boot's full scans of `tracks` maps nearly the whole 66 MiB file, and RSS counts every mapping (PSS 61 MiB, the file once). Not a regression: before on the same data mapped 244 MiB across four connections against after's 250 across five. Before's run read less only because its older database copy re-ingested at boot, SQLite serving those pages from the WAL.
 - **The mid-sized chunks after's census listed and before's didn't are in both builds:** two are `notify`'s inotify maps (6,318 path entries each, one per watched directory) and the third (307,184 B, holding only "Invalid context") is most likely the NVIDIA EGL driver's. The census lists mmapped chunks only, and glibc places a block of that size in the arena or in its own mapping by what the heap looks like at the time.
-- **Freed-but-resident at idle was 2.84 MiB trimmable**, past this plan's 2 MiB threshold for adding a trim (Checked and left alone), the one boot trim at 5 s running before the folder rescan and the 120 s pool reap. `tasks::heap_trim` now trims at 10 s and 15 s after the pool's boot connections close (135 s), not yet measured.
+- **Freed-but-resident at idle was 2.84 MiB trimmable**, past this plan's 2 MiB threshold for adding a trim (Checked and left alone), the one boot trim at 5 s running before the folder rescan and the 120 s pool reap. `tasks::heap_trim` now trims at 10 s and 15 s after the pool's boot connections close (135 s).
+- **The retimed trims leave nothing trimmable at idle** (2026-10-19). Release at `a5d201e5` (sha256 `529ded7f…`), launched onto a restored Synthwave detail so its open came before both trims, a 203-track queue, a null sink, state restored after. Sampled once a second from the process's start:
+  - the 10 s trim returned 2.41 MiB of Anonymous (41.21 to 38.80);
+  - the pool's reap at 120 s took RSS from 367.8 to 175.4 MB and Anonymous from 38.99 to 38.87;
+  - the 135 s trim returned 0.84 MiB (38.87 to 38.03).
+
+  The census just past 165 s read 0.00 MiB trimmable, Anonymous 38.0, live heap 16.12 and 6.77 MiB of sub-page fragments (Phase 3's after run: 2.84 trimmable, 41.0 untrimmed, 16.40 live, 5.07 fragments after the hand trim). Pixels were the Synthwave hero, 22 row covers and one 64² proxy, 0.59 MiB. Peak RSS was 453.3 MB, the boot's file pages (Phase 3.5).
 
 ## Phase 3.5 (open to discuss): index the boot's whole-table reads
 
@@ -430,7 +439,7 @@ All figures are MiB except RSS, which is MB.
   - Both are bounded by the display, not the library.
 - **Database connection reaping:** see the attribution above.
 - **The ~12 MiB inside driver mappings.** Mesa's gallium and LLVM load next to NVIDIA's libraries and account for about 3.8 MiB of it. That is environment, not Melodia.
-- **Freed-but-resident heap:** with paging, nothing library-sized is freed any more. Re-check in Phase 0's after-run. Add a trim at a teardown site only if more than 2 MiB is trimmable at idle there.
+- **Freed-but-resident heap:** with paging, nothing library-sized is freed any more. Idle was re-checked in Phase 3 after the boot trims moved: nothing trimmable. Re-check the other states in the final comparison. Add a trim at a teardown site only if more than 2 MiB is trimmable at idle there.
 
 ## Risks / notes
 
