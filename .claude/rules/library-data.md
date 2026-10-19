@@ -302,7 +302,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   Add-to-Playlist, adding being a write of orphan `playlist_items` a smart list never reads.
   `DurationMs` stores **whole seconds**, scaled ×1000 to the ms column. A **`stats_changed`
   subscriber** recounts only the smart lists the grid holds whose criteria
-  `depends_on_play_stats` (`smart_playlists::reading_play_stats`), and does nothing when none does. `rating` rules need the **full** `idx_tracks_rating` (a partial
+  `depends_on_play_stats` (`smart_playlists::reading_play_stats`), and does nothing when none
+  does. `rating` rules need the **full** `idx_tracks_rating` (a partial
   `WHERE rating > 0` index is *not* used for `rating >= N`). **Load-bearing index alignment:** the
   editor's inline `@tr` dropdown arrays mirror the const arrays in `entities::smart_criteria`
   (`FIELDS`/`ops_for`/`MATCH_MODES`/`LIMIT_ORDERS`) **by position** — `smart_criteria_tests`

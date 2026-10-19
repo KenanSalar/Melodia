@@ -5,15 +5,16 @@ use std::sync::Arc;
 use slint::{ComponentHandle, ModelRc, Weak};
 
 use super::{PlaylistsUi, to_slint_playlist_row};
-use crate::ui::card_grid::{self, Card, CardGrid, GridLoads, SortedQuery, unfiltered_total};
+use crate::ui::card_grid::{self, Card, CardGrid, GridLoads, unfiltered_total};
 use crate::ui::paged_rows::grid::PagedGrid;
 use crate::ui::track_detail::TrackDetail;
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::entities::grid_order::PlaylistSort;
 use melodia_core::entities::playlist::PlaylistStats;
+use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::{AppResult, describe};
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
@@ -23,7 +24,8 @@ pub(super) struct PlaylistsGrid;
 impl CardGrid for PlaylistsGrid {
     type Row = UiPlaylistGridRow;
     type Raw = PlaylistStats;
-    type Query = SortedQuery<PlaylistSort>;
+    /// The direction and the needle: the grid has one order, by when each playlist last changed.
+    type Query = (SortDir, Needle);
     type Facts = i32;
     type Handle = PlaylistsUi;
 
@@ -43,19 +45,13 @@ impl CardGrid for PlaylistsGrid {
 
     fn query(ui: &AppWindow, _: &PlaylistsUi) -> Self::Query {
         let g = ui.global::<Playlists>();
-        SortedQuery::new(
-            PlaylistSort::from_token(&g.get_sort_field()),
-            &g.get_sort_dir(),
-            &g.get_filter(),
-        )
+        (SortDir::from_token(&g.get_sort_dir()), fold_needle(&g.get_filter()))
     }
 
-    async fn keyset(state: AppState, query: Self::Query) -> AppResult<(Vec<i64>, i32)> {
-        let ids =
-            library::keyset::playlist_ids(&state.db, query.sort, query.dir, &query.needle).await?;
+    async fn keyset(state: AppState, (dir, needle): Self::Query) -> AppResult<(Vec<i64>, i32)> {
+        let ids = library::keyset::playlist_ids(&state.db, dir, &needle).await?;
         let total =
-            unfiltered_total(&ids, &query.needle, library::keyset::playlist_count(&state.db))
-                .await?;
+            unfiltered_total(&ids, &needle, library::keyset::playlist_count(&state.db)).await?;
         Ok((ids, total))
     }
 

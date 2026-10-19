@@ -16,14 +16,6 @@ use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
 
-/// The playlist orders SQL can answer on its own. By track count is not one: a smart playlist
-/// keeps no count, so the library layer sorts that arm over the counts it takes live.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlaylistKeyOrder {
-    Updated,
-    Name,
-}
-
 /// One grid's rows: where they come from, which of them it lists, and what a needle matches.
 struct Grid {
     id: &'static str,
@@ -131,19 +123,14 @@ pub async fn genre_ids(
     ids(db, &GENRES, needle, &keys, dir).await
 }
 
-/// The Playlists grid's ids in `order`, narrowed by `needle`. `updated_at` is RFC 3339, so its
-/// text order is its time order.
+/// The Playlists grid's ids by when each last changed, narrowed by `needle`. `updated_at` is
+/// RFC 3339, so its text order is its time order.
 pub async fn playlist_ids(
     db: &DbPool,
-    order: PlaylistKeyOrder,
     dir: SortDir,
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
-    let keys = match order {
-        PlaylistKeyOrder::Updated => vec!["p.updated_at".to_owned()],
-        PlaylistKeyOrder::Name => vec![lowered("p.name")],
-    };
-    ids(db, &PLAYLISTS, needle, &keys, dir).await
+    ids(db, &PLAYLISTS, needle, &["p.updated_at".to_owned()], dir).await
 }
 
 /// Favorites' Favorite Artists ids in `sort`, narrowed by `needle` as the Artists grid is.

@@ -5,9 +5,7 @@ use crate::library::smart_playlists;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::{ArtistStats, FavoriteArtist};
 use melodia_core::entities::genre::GenreStats;
-use melodia_core::entities::grid_order::{
-    AlbumSort, ArtistSort, FavoriteArtistSort, GenreSort, PlaylistSort,
-};
+use melodia_core::entities::grid_order::{AlbumSort, ArtistSort, FavoriteArtistSort, GenreSort};
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
 use melodia_core::entities::track_list::{
@@ -15,7 +13,7 @@ use melodia_core::entities::track_list::{
 };
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::Needle;
-use melodia_store::database::queries::entity_keyset::{self, PlaylistKeyOrder};
+use melodia_store::database::queries::entity_keyset;
 use melodia_store::database::{DbPool, queries};
 
 /// Every track in `scope` that `needle` matches, as ids in `order`.
@@ -112,38 +110,13 @@ pub async fn genre_ids(
     entity_keyset::genre_ids(db, sort, dir, needle).await
 }
 
-/// The Playlists grid's ids in `sort`, narrowed by `needle`.
-///
-/// By track count is answered here rather than in SQL: a smart playlist keeps no count, so that
-/// arm sorts the live counts over the user's own playlists, few enough to hold, by the same keys
-/// the store's arms take (the count, the lowercased name, the id) and reversed whole when
-/// descending.
+/// The Playlists grid's ids by when each last changed, narrowed by `needle`.
 pub async fn playlist_ids(
     db: &DbPool,
-    sort: PlaylistSort,
     dir: SortDir,
     needle: &Needle,
 ) -> Result<Vec<i64>, AppError> {
-    let order = match sort {
-        PlaylistSort::Updated => PlaylistKeyOrder::Updated,
-        PlaylistSort::Name => PlaylistKeyOrder::Name,
-        PlaylistSort::TrackCount => return playlist_ids_by_count(db, dir, needle).await,
-    };
-    entity_keyset::playlist_ids(db, order, dir, needle).await
-}
-
-async fn playlist_ids_by_count(
-    db: &DbPool,
-    dir: SortDir,
-    needle: &Needle,
-) -> Result<Vec<i64>, AppError> {
-    let ids = entity_keyset::playlist_ids(db, PlaylistKeyOrder::Name, SortDir::Asc, needle).await?;
-    let mut playlists = playlists_by_ids(db, &ids).await?;
-    playlists.sort_by_cached_key(|p| (p.track_count, p.name.to_lowercase(), p.id));
-    if matches!(dir, SortDir::Desc) {
-        playlists.reverse();
-    }
-    Ok(playlists.iter().map(|p| p.id).collect())
+    entity_keyset::playlist_ids(db, dir, needle).await
 }
 
 /// Favorites' Favorite Artists ids in `sort`, narrowed by `needle`.

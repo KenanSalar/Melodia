@@ -62,27 +62,6 @@ impl GenreSort {
     }
 }
 
-/// The Playlists grid's sort row.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlaylistSort {
-    /// Most recently changed, the grid's default.
-    Updated,
-    Name,
-    /// A smart playlist's count is its live one, which the store doesn't keep.
-    TrackCount,
-}
-
-impl PlaylistSort {
-    #[must_use]
-    pub fn from_token(token: &str) -> Self {
-        match token {
-            "name" => Self::Name,
-            "track_count" => Self::TrackCount,
-            _ => Self::Updated,
-        }
-    }
-}
-
 /// Favorites' Favorite Artists sort row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FavoriteArtistSort {

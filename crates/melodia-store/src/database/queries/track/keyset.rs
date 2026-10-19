@@ -84,8 +84,8 @@ pub(super) fn push_needle(qb: &mut QueryBuilder<Sqlite>, needle: &Needle) {
 pub(crate) fn push_folded_match(
     qb: &mut QueryBuilder<Sqlite>,
     needle: &Needle,
-    column: &str,
-    year: Option<&str>,
+    column: &'static str,
+    year: Option<&'static str>,
 ) {
     qb.push(format!("({column} = '' OR instr({column}, "))
         .push_bind(needle.as_str().to_owned())
