@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 done, Phase 4.1 dropped, Phase 4.5 done (decided, built in Phase 5), Phase 5 built with its docs done, its hand check pending with one finding open, and its tests and census awaiting go) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 done, Phase 4.1 dropped, Phase 4.5 done (decided, built in Phase 5), Phase 5 done) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -422,7 +422,7 @@ Memory: estimated in Phase 5 (2026-10-19), measured there.
 
 ## Phase 5: The card grids and Most Played
 
-Status: built (2026-10-19), hand check, tests and docs done. The census waits for Kenan's go. The scope is Phase 4.5's outcome.
+Status: done (2026-10-19): built, hand-checked, tested, documented and measured. The scope is Phase 4.5's outcome.
 
 **What you see today.** Opening a card grid loads every entity it can show twice: as the stats rows its filter and sort walk in memory, and again as Slint cards. A section leave hands both back, so idle doesn't move, but each grid's peak grows with the library. Estimated on the dev library (2026-10-19), row data only, covers unchanged:
 
@@ -493,11 +493,11 @@ Status: built (2026-10-19), hand check, tests and docs done. The census waits fo
   - `PagedGrid`: chunk arithmetic where the column count divides the keyset and where it doesn't, the memo handing back the same pointer, a landing patching in place, a column change keeping the cache;
   - `Playlists.count` after a create and a delete with the Playlists tab never opened.
 - [x] **Doc edits** (2026-10-19): `ui-patterns.md` (Grids, strips, cards: the paged grids, `card_grid` and `grid_rows`' remaining callers; Filtering: the card grids match `search_name` in SQL; the hero's Most Played totals; the Most Played play path; the tabbed-page contract without the pick rewind or the signature, and both curated deltas), `slint-pitfalls.md` (the filter-box pattern and `clear_mounted`'s guard), `library-data.md` (the card grids' keysets, `search_name` beside the `search_text` write rule, the smart playlists' stats refresh), and the root `CLAUDE.md`'s "Models from background".
-- [ ] **Census**, Appendix B states 1 to 7, the grid states being new:
-  - this phase against the branch before it, recorded below;
-  - **the release comparison:** `v0.19.0` (`5946f2e9`, 22 commits behind the base the Before column measured) against this phase's commit, every state on both builds, `v0.19.0` run on the pre-migration copy `backups/melodia-v20261014000000.db` as Phase 0 ran its base. Its after column fills [Targets](#targets).
+- [x] **Census** (2026-10-19), Appendix B's 18 states on both builds:
+  - against `main` (`065275c4`, the branch's base and Phase 0's binary) rather than `v0.19.0`, Kenan's call, so the Before column and the census share a base;
+  - the table is [Final census](#final-census-2026-10-19), and it fills [Targets](#targets).
 
-Memory: estimated above; the census replaces it.
+Memory, measured (live heap beyond the grid's covers, over state 5): the Albums grid holds 0.70 MiB against 4.11 before (estimated 4.0 to 0.18), and the Artists grid 0.94 against 1.51 (estimated 1.1 to 0.09). Genres, Playlists, Favorite Artists and both Most Played grids read level with before: too small on the dev library to show, as estimated.
 
 ## Phase 6: Docs
 
@@ -513,15 +513,54 @@ Status: not started.
 
 | State | Before (2026-10-18) | Target | After |
 |---|---|---|---|
-| Idle (playlist detail open), Anonymous | 37.0 MiB | within ±1 MiB of before | 32.9 MiB; live heap 15.55 against before's 16.22 on the same run (Phase 4) |
-| Songs open, Anonymous | 61.3 MiB | ≤ idle + 2 MiB + row-tier covers (≤ 3.4 MiB) | 40.6 MiB, idle + 7.7 of which 6.24 trimmable, left by covers over 512 px (Phase 4.1); live heap idle + 2.36, covers 0.44 |
-| Play all, Anonymous | 87.0 MiB | ≤ Songs + 2 MiB | 41.7 MiB, Songs + 1.1 |
-| Queue sheet open, Anonymous | 113.8 MiB | ≤ Play all + 1 MiB | 43.0 MiB, Play all + 1.3, the open sheet's rows on screen and their rendering (Phase 4) |
-| Queue sheet closed, Anonymous | Play all + 10.7 MiB (Phase 0 run: 96.9 against its 86.2) | = Play all | 37.7 MiB after the close trim; live heap Play all + 0.10 |
-| Albums open (state 6), Anonymous | not run | ≤ state 5 + 1 MiB + grid-tier covers | |
-| Artists open (state 7), Anonymous | not run | ≤ state 5 + 1 MiB + grid-tier covers | |
-| Peak RSS over the run | 385 MB | under 200 MB once the DB connections close | 440.6 MB at boot, file pages (Phase 3.5); 184.1 MB at idle |
+| Idle (playlist detail open), Anonymous | 37.0 MiB | within ±1 MiB of before | 38.1 MiB; live heap 15.77 against `main`'s 16.66 on the same evening |
+| Songs open, Anonymous | 61.3 MiB | ≤ idle + 2 MiB + row-tier covers (≤ 3.4 MiB) | 41.2 MiB, idle + 3.1; live heap idle + 2.37, covers 0.44 |
+| Play all, Anonymous | 87.0 MiB | ≤ Songs + 2 MiB | 42.9 MiB, Songs + 1.7; live heap Songs + 1.99 |
+| Queue sheet open, Anonymous | 113.8 MiB | ≤ Play all + 1 MiB | 43.2 MiB, Play all + 0.3; live heap Play all + 1.67 |
+| Queue sheet closed, Anonymous | Play all + 10.7 MiB (Phase 0 run: 96.9 against its 86.2) | = Play all | 39.9 MiB; live heap Play all + 0.14 |
+| Albums open (state 6), Anonymous | not run | ≤ state 5 + 1 MiB + grid-tier covers | 45.8 MiB; live heap state 5 + 3.93, of which covers 3.23 |
+| Artists open (state 8), Anonymous | not run | ≤ state 5 + 1 MiB + grid-tier covers | 46.2 MiB; live heap state 5 + 4.87, of which covers 3.93 |
+| Peak RSS over the run | 385 MB | under 200 MB once the DB connections close | VmHWM 448,904 kB at boot, file pages (Phase 3.5); VmRSS 189,376 kB at idle |
 | 512-track library, every state | not run | equal to the 51k row within ~1 MiB | |
+
+## Final census (2026-10-19)
+
+**Setup.**
+- **Builds:** before is `main` at `065275c4` (sha256 `43d06cbc…`) on the pre-migration copy `backups/melodia-v20261014000000.db`; after is this branch's release built from `d2a49ac6`, whose code is `e1c2cdf8` (sha256 `72b7162e…`).
+- **Data:** the dev data folder, restored from one snapshot before each launch and after the run; a null sink. Kenan drove both builds through the same clicks, and the queue played from state 3 to the end on both.
+- **Settles:** 150 s at idle, then 30 s per view and 10 s for the sheet, shorter than the pool's 120 s close, so a reading can carry open database connections. Those move the live heap by about 1 MiB (after's state 18 fell 1.2 MiB when the pool closed them), so read the steps between neighbouring states, not single figures.
+
+MiB, "excl. covers" being live heap less cover pixels:
+
+| State | Before: Anonymous | After: Anonymous | Before: live heap | After: live heap | Before: excl. covers | After: excl. covers |
+|---|---|---|---|---|---|---|
+| 1 Idle, playlist detail open | 51.2 | 38.1 | 16.66 | 15.77 | 16.08 | 15.19 |
+| 2 Songs | 64.2 | 41.2 | 39.78 | 18.14 | 35.94 | 17.12 |
+| 3 Play all | 87.7 | 42.9 | 71.90 | 20.13 | 68.07 | 19.11 |
+| 4 Queue sheet open | 114.8 | 43.2 | 98.63 | 21.80 | 94.80 | 20.78 |
+| 5 Queue sheet closed | 98.3 | 39.9 | 80.69 | 20.27 | 76.86 | 19.25 |
+| 6 Albums grid | 106.3 | 45.8 | 87.89 | 24.20 | 80.88 | 19.95 |
+| 7 Album detail, 1 track | 106.8 | 41.7 | 85.20 | 21.01 | 80.72 | 19.33 |
+| 8 Artists grid | 107.5 | 46.2 | 86.30 | 25.14 | 78.36 | 20.19 |
+| 9 Artist detail, 221 tracks | 104.4 | 43.8 | 85.13 | 24.31 | 80.13 | 21.65 |
+| 10 Genres grid | 102.4 | 42.3 | 82.93 | 22.72 | 78.35 | 20.48 |
+| 11 Genre detail, 1,076 tracks | 107.2 | 43.1 | 84.40 | 23.33 | 79.82 | 20.97 |
+| 12 Playlists grid | 106.4 | 44.9 | 84.30 | 25.41 | 79.21 | 22.39 |
+| 13 Favorites ▸ Songs | 104.3 | 43.4 | 83.67 | 23.55 | 79.46 | 21.56 |
+| 14 Favorites ▸ Favorite Artists | 107.7 | 45.3 | 85.27 | 24.69 | 78.97 | 20.73 |
+| 15 Favorites ▸ Most Played | 110.0 | 47.8 | 87.58 | 26.98 | 79.19 | 20.90 |
+| 16 Recently Played ▸ Songs | 106.6 | 43.1 | 82.78 | 22.48 | 78.57 | 20.49 |
+| 17 Recently Played ▸ Most Played | 108.4 | 46.0 | 85.49 | 25.45 | 78.80 | 21.09 |
+| 18 Album detail, 114 tracks | 107.5 | 43.2 | 87.29 | 24.49 | 83.40 | 22.82 |
+
+- **From the queue on, after holds about 60 MiB less live heap.** Once the whole library is queued, every after state sits within 15.2 to 22.8 MiB beyond its covers.
+- **Before's idle Anonymous is mostly untrimmed free pages** (16.88 MiB trimmable against after's 0.08); the live heaps are 0.9 MiB apart.
+- **The sheet's close returns everything:** after sits at Play all + 0.14, where before kept 8.8 MiB, the 8,523,760 B table, still resident at state 11.
+- **Grids,** live heap beyond covers over state 5: Albums 4.11 before against 0.70 after, Artists 1.51 against 0.94; Genres, Playlists, Favorite Artists and both Most Played grids level.
+- **Details:** the 1,076-track genre detail adds 1.47 MiB over its grid before and 0.61 after, holding the window around the viewport rather than every row. The 221-track artist detail reads close to level, its tracks fitting inside one window and its album strip unpaged. The album was measured twice: the 1-track one adds next to nothing in either build.
+- **The heap creeps by about 2 MiB over a session, in both builds.** After read 21.6 MiB beyond covers on the 114-track album with the connections closed, against 19.3 on the 1-track one, and 21.8 back on the Albums grid with every detail closed, 1.8 above its own state 6. Before rose 2.7 between states 7 and 18. Not held by the detail views; the census names no call sites (Follow-ups).
+- **Trim:** one `malloc_trim(0)` at state 18 took after's Anonymous from 43.2 to 42.0 MiB.
+- **Peak RSS:** VmHWM 332,348 kB before and 448,904 kB after, the boot's file pages; Phase 3's note on before's older database copy applies.
 
 ## Evidence (measured 2026-10-17 and 2026-10-18)
 
@@ -593,6 +632,7 @@ All figures are MiB except RSS, which is MB.
 
 - **Watcher on macOS and Windows.** `notify-debouncer-full`'s `RecommendedCache` is `FileIdMap` there, a `HashMap<PathBuf, FileId>` of every path under the roots. It is unmeasured, estimated about 11 MB at 51k by code reading. Measure on Windows first. `apply_watch_batch`'s hash fallback already re-points moves that arrive as remove plus create.
 - **Linux inotify maps:** about 1.5 to 1.8 MiB at 6,318 watches, inside notify. Not ours to shrink without a custom watcher.
+- **Session creep:** the final census's live heap rose about 2 MiB across a run of every view in both builds, not held by the detail views. A heaptrack run on a fresh launch would name the call sites.
 
 ## Appendix A: `heap-census.py`
 
@@ -616,6 +656,7 @@ Same method as 2026-10-18, so a later run compares like with like.
 6. **State 4:** open the queue sheet (`Q`). Wait 10 s and census.
 7. **State 5:** close the queue sheet. Wait 10 s (the teardown runs 350 ms after close) and census.
 8. **State 6:** My Library ▸ Albums. Wait 30 s and census, passing `--per-track 4841` to name what is held per album, and read it against state 5.
-9. **State 7:** the Artists tab. Wait 30 s and census with `--per-track 3116`. Genres, Playlists, Favorite Artists and Most Played are too small on the dev library for a census to read (Phase 5's estimate).
-10. **The 512-track reference.** Repeat with a data dir holding only `~/Music` (`MELODIA_DATA_DIR=<dir>`), passing `--per-track 512`.
-11. **Record** each state's Anonymous, live heap, pixels and free figures in [Targets](#targets). Name each per-track structure from the `--per-track` lines (a column array is an mmapped chunk whose bytes-per-track is a whole number; a per-entry object is a size class at about 1.00 per track).
+9. **States 7 to 18**, 30 s each (added 2026-10-19): the first album's detail; the Artists tab (`--per-track 3116`); the largest artist's detail; the Genres tab; the largest genre's detail (`--per-track` its track count); the Playlists tab; Favorites ▸ Songs, Favorite Artists and Most Played; Recently Played ▸ Songs and Most Played; the largest album's detail. The small grids and lists read as noise on the dev library and are there to show nothing grew.
+10. **Database connections.** A 30 s settle can leave pool connections open, which carry about 1 MiB of live heap. `grep -c 'melodia.db$' /proc/$P/maps` reads 0 once the pool has closed them; read a single figure only then.
+11. **The 512-track reference.** Repeat with a data dir holding only `~/Music` (`MELODIA_DATA_DIR=<dir>`), passing `--per-track 512`.
+12. **Record** each state's Anonymous, live heap, pixels and free figures in [Targets](#targets). Name each per-track structure from the `--per-track` lines (a column array is an mmapped chunk whose bytes-per-track is a whole number; a per-entry object is a size class at about 1.00 per track).
