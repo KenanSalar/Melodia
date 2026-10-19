@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 dropped, Phase 4 done, Phase 4.1 dropped, Phase 4.5 done (decided, built in Phase 5), Phase 5 done) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 3 done, Phase 3.5 dropped, Phase 4 done, Phase 4.1 dropped, Phase 4.5 done (decided, built in Phase 5), Phase 5 done, Phase 6 open) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -239,7 +239,7 @@ Sorts, release, the `track_ids` median on the 51k dev database (row-per-id at `3
 
 ## Phase 3: The four details
 
-Status: implemented, hand-checked and measured (2026-10-18), `00bab609`, its new tests landed and the retimed boot trims measured (2026-10-19). fmt, clippy and the full suite green; four fixes landed since that commit await their hand check, so the phase stays open.
+Status: done. Implemented, hand-checked and measured (2026-10-18), `00bab609`, its new tests landed and the retimed boot trims measured (2026-10-19). fmt, clippy and the full suite green; the four fixes landed since that commit passed by hand.
 
 - [x] Each detail lists its entity as a `TrackRows` installed once per global. `DetailCache` keeps no rows: the entity, the sort and needle its loads run under, its `KeysetTickets` and the scroll point. `seat_unfiltered`, both row `Vec`s, the selection shadow and the `VecModel` went.
 - [x] `open_*_with` fetches the ids under the view's `resolve_view_sort` arm through `track_detail::load::open`, and its closure seats them (`Opening::seat`). `cross_tier`'s `DETAIL_DEFAULTS` still reads those literals in each `detail.rs`.
@@ -262,10 +262,10 @@ Status: implemented, hand-checked and measured (2026-10-18), `00bab609`, its new
   - `hero_folds_tests` take weighted lines with the same expectations; `playlists_tests`' reorder-guard pin splits at the new end of the guard.
 - [x] Doc edits: `CLAUDE.md`'s "Models from background", `ui-patterns.md` (the paged-list, details, selection and hero-facts entries and the shared-helpers line) and `library-data.md` (the keyset paragraph, the card-order paragraph that replaced the `for_list` trap, and the ratings line).
 - [x] Hand check, passed by Kenan: every header sort and the playlist's return to its own order, the filter and the artist strip, every selection gesture, Play-row and Shuffle, hearts and stars from a row and the bar, drag-reorder, remove from playlist, a tag edit while open, close and reopen, a tab leave and return, a relaunch onto a persisted detail, a row menu's Go to, and Mouse-4/5, on an album, an artist, a genre and both a manual and a smart playlist. A smart playlist refusing a drag is the `!PlaylistDetail.playlist.is_smart` term `reorder-enabled` has carried since smart playlists landed, not a regression.
-- [x] After the validation of `00bab609`, two fixes. Hand check pending.
+- [x] After the validation of `00bab609`, two fixes. Passed by hand.
   - Removing tracks from a filtered playlist left them in the selection, out of sight, for a Ctrl-click to carry into the next batch action: the reload under a filter prunes nothing. The removal now drops its rows and their picks on the tick the write lands (`track_detail::remove_rows`), through the helper Favorites' unfavourite already used, now shared as `track_rows::remove_rows`. A library tick under a filter still prunes nothing, as above.
   - The drag guard read the sort and filter the page asked for, which a requery shows a query later, so a drag released in between wrote the old list's indices as positions. `DetailCache` now records the entity whose own order is on show, unfiltered, and the guard asks it too (`shows_own_order`), which also covers an overtaken open leaving another playlist's rows up under the new id.
-- [x] Two more fixes (2026-10-19), `29eeaaed` and `1140fb29`, each with its tests. Hand check pending.
+- [x] Two more fixes (2026-10-19), `29eeaaed` and `1140fb29`, each with its tests. Passed by hand.
   - A smart playlist capped in Random order drew a new pick on every query its detail ran, so a sort, a keystroke and the hero each described different tracks. The page draws once per open and carries the `Draw` in `TrackListScope::Playlist`, and `Membership` resolves the cap through `pick_random`, so a library tick moves the pick only by a track entering or leaving the rules. `PagedRows::move_row` also refuses a drop at the list's length, as the reorder write already did.
   - A smart playlist capped inside a run of equal values kept whichever tied tracks the query plan reached first, so a new index or a statistics refresh could change what it held. Every cap order now ends in the id, in the direction its plan already broke ties in, and `get_recently_played` ends in `id DESC`, the order its partial index hands back.
 - [x] New tests (2026-10-19):
@@ -480,7 +480,7 @@ Status: done (2026-10-19): built, hand-checked, tested, documented and measured.
 12. **The Playlists grid keys on `updated_at` alone.** Nothing writes `Playlists.sort-field`, the view having no sort row, so the name and track-count arms were unreachable and go, with the live-count sort behind the second. `Playlists.sort-dir` goes too, nothing writing it either, so the grid's query is the needle alone and its order newest change first.
 
 - [x] **Hand check** on each grid: every sort both ways, an accented filter, a click, a range and Select all, the card menu's Play, Play Next, Add to Queue and Go to, the Playlists hover trio, a resize across column counts, a fast scroll to the end, a scan and a playlist write landing while open, a tab leave and return. Also a smart playlist's count after a play, and Add to Playlist in a row menu right after a launch onto Songs.
-  - Done (2026-10-19), every check passing. A first look the same day found one thing: scrolled fast, the Albums grid paints its covers with a visible delay where the Songs list's are there at once. A card's rows fetch in well under a millisecond on the dev library (128 albums by id through `album_stats`), so the database is not where the time goes; what is left to trace is the cover path between a card landing and its decode reaching the screen.
+  - Done (2026-10-19), every check passing. A first look the same day saw the Albums grid paint its covers late on a fast scroll, where the Songs list's were there at once. That happens in the debug build only; the release build paints them at once, so there is nothing to trace.
 - [x] **Tests** (2026-10-19):
   - each SQL arm and filter against today's in-memory sort and `Needle` match, the sorters kept in the test as the oracle (`cross_tier.rs`'s shape), over a fixture of the partitions the two could answer differently: case, accents, ties on every key, a missing year, a smart playlist's live count (a rows-by-id case since amendment 12, no arm sorting on it);
   - each `search_name`'s write-through and backfill;
@@ -495,7 +495,7 @@ Memory, measured (live heap beyond the grid's covers, over state 5): the Albums 
 
 ## Phase 6: Docs
 
-Status: not started.
+Status: in progress. The two rule docs are done; the README Footprint is left.
 
 - [ ] README Footprint: re-run both tables, and add the Songs / Play all / Queue sheet rows the old protocol never exercised.
 - [x] `.claude/rules/ui-patterns.md`: the "Lists and playback" and "Covers" entries naming `TrackListModel` and the queue sheet's globals (Phases 2 to 4).
