@@ -123,14 +123,10 @@ pub async fn genre_ids(
     ids(db, &GENRES, needle, &keys, dir).await
 }
 
-/// The Playlists grid's ids by when each last changed, narrowed by `needle`. `updated_at` is
+/// The Playlists grid's ids, newest change first, narrowed by `needle`. `updated_at` is
 /// RFC 3339, so its text order is its time order.
-pub async fn playlist_ids(
-    db: &DbPool,
-    dir: SortDir,
-    needle: &Needle,
-) -> Result<Vec<i64>, AppError> {
-    ids(db, &PLAYLISTS, needle, &["p.updated_at".to_owned()], dir).await
+pub async fn playlist_ids(db: &DbPool, needle: &Needle) -> Result<Vec<i64>, AppError> {
+    ids(db, &PLAYLISTS, needle, &["p.updated_at".to_owned()], SortDir::Desc).await
 }
 
 /// Favorites' Favorite Artists ids in `sort`, narrowed by `needle` as the Artists grid is.

@@ -12,8 +12,6 @@ export global Playlists {
     in-out property <int> total-count: -1;      // pre-filter playlist count
     in-out property <int> columns: 4;           // view-computed; always >= 1
     in-out property <string> filter;
-    in-out property <string> sort-field: "updated"; // "name" | "track_count" | "updated"
-    in-out property <string> sort-dir: "desc";
 
     callback columns-changed(int);
     callback apply-filter(string);

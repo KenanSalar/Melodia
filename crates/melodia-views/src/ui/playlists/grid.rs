@@ -12,7 +12,6 @@ use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::playlist::PlaylistStats;
-use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::{AppResult, describe};
 use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{
@@ -24,8 +23,7 @@ pub(super) struct PlaylistsGrid;
 impl CardGrid for PlaylistsGrid {
     type Row = UiPlaylistGridRow;
     type Raw = PlaylistStats;
-    /// The direction and the needle: the grid has one order, by when each playlist last changed.
-    type Query = (SortDir, Needle);
+    type Query = Needle;
     type Facts = i32;
     type Handle = PlaylistsUi;
 
@@ -43,13 +41,12 @@ impl CardGrid for PlaylistsGrid {
         ui.global::<Playlists>().get_columns()
     }
 
-    fn query(ui: &AppWindow, _: &PlaylistsUi) -> Self::Query {
-        let g = ui.global::<Playlists>();
-        (SortDir::from_token(&g.get_sort_dir()), fold_needle(&g.get_filter()))
+    fn query(ui: &AppWindow, _: &PlaylistsUi) -> Needle {
+        fold_needle(&ui.global::<Playlists>().get_filter())
     }
 
-    async fn keyset(state: AppState, (dir, needle): Self::Query) -> AppResult<(Vec<i64>, i32)> {
-        let ids = library::keyset::playlist_ids(&state.db, dir, &needle).await?;
+    async fn keyset(state: AppState, needle: Needle) -> AppResult<(Vec<i64>, i32)> {
+        let ids = library::keyset::playlist_ids(&state.db, &needle).await?;
         let total =
             unfiltered_total(&ids, &needle, library::keyset::playlist_count(&state.db)).await?;
         Ok((ids, total))

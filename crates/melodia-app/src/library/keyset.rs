@@ -110,13 +110,9 @@ pub async fn genre_ids(
     entity_keyset::genre_ids(db, sort, dir, needle).await
 }
 
-/// The Playlists grid's ids by when each last changed, narrowed by `needle`.
-pub async fn playlist_ids(
-    db: &DbPool,
-    dir: SortDir,
-    needle: &Needle,
-) -> Result<Vec<i64>, AppError> {
-    entity_keyset::playlist_ids(db, dir, needle).await
+/// The Playlists grid's ids, newest change first, narrowed by `needle`.
+pub async fn playlist_ids(db: &DbPool, needle: &Needle) -> Result<Vec<i64>, AppError> {
+    entity_keyset::playlist_ids(db, needle).await
 }
 
 /// Favorites' Favorite Artists ids in `sort`, narrowed by `needle`.
