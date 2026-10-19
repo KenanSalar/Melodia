@@ -3,35 +3,35 @@ use std::time::Duration;
 
 use crate::state::PlaybackContext;
 use melodia_audio::player::source::stream_source;
-use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
 use melodia_engine::player::engine::backend::{OutputChoice, PlaybackEngine};
+use melodia_engine::player::engine::queue::window_slots;
 use melodia_engine::player::engine::state::{
-    MAX_VOLUME, PlayerAction, PlayerState, lock_state, play_track_inner, with_state_emit,
+    MAX_VOLUME, PlayerAction, PlayerState, lock_state, with_state_emit,
 };
 use melodia_engine::player::engine::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use melodia_playback::player::playback::output::convert::Resampler;
 use melodia_playback::player::playback::output::{self, OutputDevice};
 use melodia_store::database::queries;
 
-/// Which slot of `summaries` playback should start on.
+/// Which slot of `queued` playback should start on.
 ///
 /// `start_index` names a row in `track_ids` — the list the caller was looking
-/// at — but `get_track_summaries_by_ids` drops ids that no longer exist, so the
-/// two index spaces diverge the moment one row is gone and every slot past the
-/// gap shifts. Resolving through the id keeps the picked track picked. `None`
-/// means there is no slot to start on: the caller picked no row at all, the
-/// index it passed is past the end of its own list, or the row it picked didn't
-/// survive. The caller falls back to the head and warns on the last two — they
-/// are different faults, and the messages say which.
+/// at — but the queue drops ids that no longer exist, so the two index spaces
+/// diverge the moment one row is gone and every slot past the gap shifts.
+/// Resolving through the id keeps the picked track picked. `None` means there
+/// is no slot to start on: the caller picked no row at all, the index it passed
+/// is past the end of its own list, or the row it picked didn't survive. The
+/// caller falls back to the head and warns on the last two — they are
+/// different faults, and the messages say which.
 fn resolve_start_slot(
     track_ids: &[i64],
-    summaries: &[Arc<TrackSummary>],
+    queued: &[i64],
     start_index: Option<usize>,
 ) -> Option<usize> {
     let wanted = start_index.and_then(|i| track_ids.get(i).copied())?;
-    summaries.iter().position(|t| t.id == wanted)
+    queued.iter().position(|&id| id == wanted)
 }
 
 /// Replace the queue with `track_ids` and start at `start_index` (`None` =
@@ -51,18 +51,12 @@ pub async fn player_play_tracks(
     track_ids: Vec<i64>,
     start_index: Option<usize>,
 ) -> Result<(), AppError> {
-    let summaries: Vec<Arc<TrackSummary>> =
-        queries::track::get_track_summaries_by_ids(&ctx.db, &track_ids)
-            .await?
-            .into_iter()
-            .map(Arc::new)
-            .collect();
-
-    if summaries.is_empty() {
+    let queued = crate::library::keyset::existing_in_order(&ctx.db, &track_ids).await?;
+    if queued.is_empty() {
         return Err(AppError::Queue("No valid tracks provided".to_owned()));
     }
 
-    let start = resolve_start_slot(&track_ids, &summaries, start_index).unwrap_or_else(|| {
+    let start = resolve_start_slot(&track_ids, &queued, start_index).unwrap_or_else(|| {
         match start_index {
             None => {}
             Some(i) if i >= track_ids.len() => log::warn!(
@@ -75,19 +69,28 @@ pub async fn player_play_tracks(
         }
         0
     });
+    // The records of the window the start opens, fetched here so neither the start nor a skip
+    // straight after it waits on the window task. A shuffle reorders all but the start, whose
+    // neighbours the task then fetches.
+    let wraps = lock_state(&ctx.player_state).queue.repeat_mode.wraps();
+    let near: Vec<i64> = window_slots(queued.len(), Some(start), wraps)
+        .filter_map(|slot| queued.get(slot).copied())
+        .collect();
+    let records =
+        queries::track::get_track_summaries_by_ids(&ctx.db, &near).await?.into_iter().map(Arc::new);
     ctx.emit_and_execute(|s| {
         s.queue.clear();
-        s.queue.add_tracks(summaries);
+        s.queue.add_tracks(&queued);
         s.queue.current_index = Some(start);
         if s.queue.shuffle_enabled {
             s.queue
                 .shuffle_play_order_in_place(&mut rand::rng(), /* anchor_to_current */ true);
         }
+        s.window.seat(&s.queue.window_ids(), records);
 
-        if let Some(track) = s.queue.get_current().cloned() {
-            play_track_inner(s, track, None)
-        } else {
-            vec![]
+        match s.queue.current_id() {
+            Some(id) => s.start_queued(id, false, 0),
+            None => vec![],
         }
     });
     Ok(())

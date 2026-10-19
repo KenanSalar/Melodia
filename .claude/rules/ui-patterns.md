@@ -603,10 +603,10 @@ three components that answer it, and each argues its geometry at its own file.
   with them, the bar having no set. A remove label handed over by the host would ship
   untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
   rather than a property.
-  **The two hosts with no list row read the "Go to" ids through `ui::track_links`**, `TrackSummary`
-  carrying no foreign keys: the queue sheet per row, the bar onto
-  `Player.track-{album,artist,genre}-id` per track change and again per library tick, a retag
-  keeping the id.
+  **The bar, the one host with no list row, reads the "Go to" ids through `ui::track_links`**,
+  `TrackSummary` carrying no foreign keys: onto `Player.track-{album,artist,genre}-id` per track
+  change and again per library tick, a retag keeping the id. The queue sheet's rows carry theirs
+  from the track-list projection, as a list row does.
   **"Go to" calls `Nav.go-to-*` straight, as Open Containing Folder calls `Nav`**, with no host
   forwarding: the origin a drill records is read off where the user stands, so there was nothing
   per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands, closing
@@ -658,10 +658,18 @@ three components that answer it, and each argues its geometry at its own file.
 - **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and
   its module doc argues the window, the one fetch in flight and the seed a load fetches where the
-  list is scrolled. Both Songs tabs and the four details are the six today, all
-  `track_rows::TrackRows`. A favourite or rating change patches the cached row, where the
-  `VecModel` lists go through `model_patch`; the `list_selection` helpers take either model. A
-  list over another row type implements `PagedRow` for it rather than growing a second model.
+  list is scrolled. Both Songs tabs and the four details are six of them, all
+  `track_rows::TrackRows`. The queue sheet is the seventh, a `queue_rows::QueueRows` over the ids
+  the engine publishes, and its picks are by track as every other list's are, so a track queued
+  twice is picked, counted and removed as both rows. A favourite or rating change patches the
+  cached row, where the `VecModel` lists go through `model_patch`; the `list_selection` helpers
+  take either model. A list over another row type implements `PagedRow` for it rather than growing
+  a second model.
+
+- **A track's title and its marks are `components/track-list/track-title.slint`'s `TrackTitle`**:
+  the heart a favourite keeps up, and the star strip the row reveals on hover. Track rows and queue
+  rows both mount it, so the two can't come to mark a track differently; a third row showing a
+  track's title mounts it too.
 
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle). Each
@@ -951,7 +959,7 @@ three components that answer it, and each argues its geometry at its own file.
     curated pages' fetch-and-apply, the `mark_covers_warm` / `repaint_covers` split, and the `bool`
     every `prewarm_tab_covers` returned.
   - **Two surfaces still gate on the value, and both hold a tier that really is released**: the
-    queue sheet's **synchronous open**, whose private tier is dropped on close, and Radio's leave.
+    queue sheet's **open**, whose private tier is dropped on close, and Radio's leave.
     There `0` still means cold, the lookup still answers cache-only, and the rewind still sits
     beside the clear. `radio::covers::logo_cover` is that branch's one remaining home.
   - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from

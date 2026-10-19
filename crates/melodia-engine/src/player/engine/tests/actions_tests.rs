@@ -8,10 +8,10 @@ use crate::player::engine::backend::PlayerBackend;
 use crate::player::engine::event_sink::{MediaControlsSync, PlayerSinks};
 use crate::player::engine::fixtures::test_track;
 use crate::player::engine::state::{
-    PlayerAction, PlayerStateHandle, PlayerViewModelLight, lock_state, play_track_inner,
-    with_state_emit,
+    PlayerAction, PlayerStateHandle, PlayerViewModelLight, lock_state, with_state_emit,
 };
 use crate::player::engine::types::{PlaybackStatus, RepeatMode};
+use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
@@ -158,7 +158,8 @@ impl PlayerBackend for MockBackend {
 fn make_test_sinks() -> PlayerSinks {
     let (view_model, _) = watch::channel(None);
     let (queue, _) = watch::channel(None);
-    PlayerSinks { view_model, queue, media_controls: None }
+    let (awaited_start, _) = watch::channel(None);
+    PlayerSinks { view_model, queue, media_controls: None, awaited_start }
 }
 
 /// Bundles every fixture the `execute_actions` tests need. The temp dir is
@@ -562,9 +563,10 @@ async fn execute_play_stream_failure_clears_the_station() -> Result<(), AppError
     Ok(())
 }
 
-/// Queues `paths` under `mode` and returns the actions that start the first of them.
+/// Queues `paths` under `mode`, every record in the window, and returns the actions that start the
+/// first of them.
 fn start_queue(fx: &ActionsFixture, paths: &[&str], mode: RepeatMode) -> Vec<PlayerAction> {
-    let tracks = paths
+    let tracks: Vec<Arc<TrackSummary>> = paths
         .iter()
         .zip(1..)
         .map(|(path, id)| {
@@ -574,11 +576,13 @@ fn start_queue(fx: &ActionsFixture, paths: &[&str], mode: RepeatMode) -> Vec<Pla
             Arc::new(track)
         })
         .collect();
+    let ids: Vec<i64> = tracks.iter().map(|track| track.id).collect();
     with_state_emit(&fx.player_state, &fx.sinks, |s| {
-        s.queue.add_tracks(tracks);
+        s.queue.add_tracks(&ids);
         s.queue.set_repeat_mode(mode);
-        match s.queue.skip_to_index(0).cloned() {
-            Some(first) => play_track_inner(s, first, None),
+        s.window.seat(&ids, tracks);
+        match s.queue.skip_to_index(0) {
+            Some(first) => s.start_queued(first, false, 0),
             None => Vec::new(),
         }
     })

@@ -1,37 +1,12 @@
 use std::collections::HashSet;
-use std::sync::Arc;
 
 use super::*;
-use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 
-fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
-    Arc::new(TrackSummary {
-        id,
-        file_path: format!("/music/{id}.mp3"),
-        file_name: format!("{id}.mp3"),
-        title: title.to_owned(),
-        artist: None,
-        album: None,
-        duration_ms,
-        artwork_path: None,
-        track_number: None,
-        disc_number: None,
-        last_position: 0,
-        is_favorite: false,
-        rating: 0,
-        replaygain_track_gain: None,
-        replaygain_track_peak: None,
-        replaygain_album_gain: None,
-        replaygain_album_peak: None,
-    })
-}
-
+/// A queue of the tracks `1..=count`, in that order.
 fn make_queue(count: i64) -> QueueState {
     let mut q = QueueState::default();
-    let tracks: Vec<Arc<TrackSummary>> =
-        (1..=count).map(|i| make_summary(i, &format!("Track {i}"), 180_000)).collect();
-    q.add_tracks(tracks);
+    q.add_tracks(&(1..=count).collect::<Vec<i64>>());
     q
 }
 
@@ -40,8 +15,7 @@ fn make_queue(count: i64) -> QueueState {
 #[test]
 fn add_tracks_to_empty_queue() {
     let mut q = QueueState::default();
-    let tracks = vec![make_summary(1, "A", 100), make_summary(2, "B", 200)];
-    q.add_tracks(tracks);
+    q.add_tracks(&[1, 2]);
 
     assert_eq!(q.tracks.len(), 2);
     assert_eq!(q.play_order, vec![0, 1]);
@@ -51,8 +25,7 @@ fn add_tracks_to_empty_queue() {
 #[test]
 fn add_tracks_appends_to_existing() {
     let mut q = make_queue(2);
-    let more = vec![make_summary(3, "C", 300)];
-    q.add_tracks(more);
+    q.add_tracks(&[3]);
 
     assert_eq!(q.tracks.len(), 3);
     assert_eq!(q.play_order, vec![0, 1, 2]);
@@ -63,7 +36,7 @@ fn add_tracks_appends_to_existing() {
 fn add_tracks_increments_version() {
     let mut q = QueueState::default();
     let v0 = q.version;
-    q.add_tracks(vec![make_summary(1, "A", 100)]);
+    q.add_tracks(&[1]);
     assert!(q.version > v0);
 }
 
@@ -73,18 +46,18 @@ fn add_tracks_increments_version() {
 fn insert_next_after_current() {
     let mut q = make_queue(3);
     q.current_index = Some(1);
-    q.insert_next(make_summary(10, "Inserted", 100));
+    q.insert_next(10);
 
     // Should insert at position 2 in play_order
     assert_eq!(q.play_order[2], 3); // new track index
-    assert_eq!(q.tracks[3].title, "Inserted");
+    assert_eq!(q.tracks[3], 10);
 }
 
 #[test]
 fn insert_next_when_no_current() {
     let mut q = make_queue(2);
     q.current_index = None;
-    q.insert_next(make_summary(10, "Inserted", 100));
+    q.insert_next(10);
 
     // Should insert at position 0
     assert_eq!(q.play_order[0], 2); // new track index
@@ -94,7 +67,7 @@ fn insert_next_when_no_current() {
 fn insert_next_clamps_to_end() -> Result<(), AppError> {
     let mut q = make_queue(2);
     q.current_index = Some(10); // way past end
-    q.insert_next(make_summary(10, "Inserted", 100));
+    q.insert_next(10);
 
     // Should clamp insert position to play_order.len()
     let last =
@@ -415,7 +388,7 @@ fn peek_next_all_at_end_returns_first() -> Result<(), AppError> {
     q.current_index = Some(2);
     q.repeat_mode = RepeatMode::All;
     let track = q.peek_next().ok_or_else(|| AppError::Validation("peek_next None".into()))?;
-    assert_eq!(track.id, 1);
+    assert_eq!(track, 1);
     Ok(())
 }
 
@@ -425,7 +398,7 @@ fn peek_next_one_returns_current() -> Result<(), AppError> {
     q.current_index = Some(1);
     q.repeat_mode = RepeatMode::One;
     let track = q.peek_next().ok_or_else(|| AppError::Validation("peek_next None".into()))?;
-    assert_eq!(track.id, 2); // tracks[play_order[1]] = tracks[1], id=2
+    assert_eq!(track, 2); // tracks[play_order[1]] = tracks[1], id=2
     Ok(())
 }
 
@@ -502,33 +475,29 @@ fn to_persistable_maps_track_ids() {
     assert_eq!(p.current_index, 1);
 }
 
-// ── tracks_in_play_order ────────────────────────────────────────────
+// ── play_ids ────────────────────────────────────────────────────────
 
 #[test]
-fn tracks_in_play_order_returns_correct_sequence() {
+fn play_ids_returns_correct_sequence() {
     let mut q = make_queue(3);
     // Reverse the play order
     q.play_order = vec![2, 0, 1];
-    let tracks = q.tracks_in_play_order();
-    assert_eq!(tracks.len(), 3);
-    assert_eq!(tracks[0].id, 3);
-    assert_eq!(tracks[1].id, 1);
-    assert_eq!(tracks[2].id, 2);
+    assert_eq!(*q.play_ids(), [3, 1, 2]);
 }
 
-// ── get_current ─────────────────────────────────────────────────────
+// ── current_id ──────────────────────────────────────────────────────
 
 #[test]
-fn get_current_returns_none_when_empty() {
+fn current_id_returns_none_when_empty() {
     let q = QueueState::default();
-    assert!(q.get_current().is_none());
+    assert!(q.current_id().is_none());
 }
 
 #[test]
-fn get_current_returns_none_for_negative_index() {
+fn current_id_returns_none_for_negative_index() {
     let q = make_queue(3);
     // current_index is None by default
-    assert!(q.get_current().is_none());
+    assert!(q.current_id().is_none());
 }
 
 // ── prune_missing ───────────────────────────────────────────────────
@@ -570,13 +539,12 @@ fn prune_missing_keeps_current_when_other_removed() -> Result<(), AppError> {
 
     assert_eq!(outcome.removed, 2);
     assert!(!outcome.current_was_removed);
-    assert_eq!(q.tracks.iter().map(|t| t.id).collect::<Vec<_>>(), vec![2, 3, 4]);
+    assert_eq!(q.tracks, vec![2, 3, 4]);
     assert_eq!(q.play_order, vec![0, 1, 2]);
     assert_eq!(q.original_order, vec![0, 1, 2]);
-    let current = q
-        .get_current()
-        .ok_or_else(|| AppError::Validation("get_current None after prune".into()))?;
-    assert_eq!(current.id, 3);
+    let current =
+        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+    assert_eq!(current, 3);
     Ok(())
 }
 
@@ -592,11 +560,10 @@ fn prune_missing_advances_when_current_removed() -> Result<(), AppError> {
 
     assert!(outcome.current_was_removed);
     assert_eq!(outcome.removed, 1);
-    assert_eq!(q.tracks.iter().map(|t| t.id).collect::<Vec<_>>(), vec![1, 3]);
-    let current = q
-        .get_current()
-        .ok_or_else(|| AppError::Validation("get_current None after prune".into()))?;
-    assert_eq!(current.id, 3);
+    assert_eq!(q.tracks, vec![1, 3]);
+    let current =
+        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+    assert_eq!(current, 3);
     Ok(())
 }
 
@@ -613,10 +580,9 @@ fn prune_missing_clamps_to_last_survivor_when_tail_removed() -> Result<(), AppEr
 
     assert!(outcome.current_was_removed);
     assert_eq!(q.current_index, Some(1));
-    let current = q
-        .get_current()
-        .ok_or_else(|| AppError::Validation("get_current None after prune".into()))?;
-    assert_eq!(current.id, 2);
+    let current =
+        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+    assert_eq!(current, 2);
     Ok(())
 }
 
@@ -659,13 +625,13 @@ fn prune_missing_remaps_shuffled_order() {
     assert_eq!(q.original_order, vec![0, 1, 2]);
 }
 
-// ── get_current ─────────────────────────────────────────────────────
+// ── current_id ──────────────────────────────────────────────────────
 
 #[test]
-fn get_current_returns_track() -> Result<(), AppError> {
+fn current_id_returns_track() -> Result<(), AppError> {
     let mut q = make_queue(3);
     q.current_index = Some(1);
-    let track = q.get_current().ok_or_else(|| AppError::Validation("get_current None".into()))?;
-    assert_eq!(track.id, 2);
+    let track = q.current_id().ok_or_else(|| AppError::Validation("current_id None".into()))?;
+    assert_eq!(track, 2);
     Ok(())
 }

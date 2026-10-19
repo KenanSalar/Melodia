@@ -22,6 +22,7 @@
 //! UI thread only. Nothing may walk one with `Model::iter`, which reads every row and drags the
 //! window across the whole list.
 
+pub mod queue_rows;
 pub mod track_rows;
 
 use std::any::Any;

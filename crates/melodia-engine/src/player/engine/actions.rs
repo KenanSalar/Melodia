@@ -7,7 +7,7 @@ use melodia_core::utils::play_counts::{PlayCountEvent, try_send};
 use super::backend::PlayerBackend;
 use super::event_sink::PlayerSinks;
 use super::state::{
-    PlayerAction, PlayerState, PlayerStateHandle, play_track_inner, stop_end_of_queue,
+    AwaitedStart, PlayerAction, PlayerState, PlayerStateHandle, lock_state, stop_end_of_queue,
     with_state_emit,
 };
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
@@ -27,7 +27,16 @@ pub fn execute_actions<B: PlayerBackend>(
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
 ) {
-    let mut pending = Pending { actions: actions.into(), skipped: 0 };
+    run(Pending { actions: actions.into(), skipped: 0 }, engine, player_state, sinks);
+}
+
+/// [`execute_actions`]' loop, for a batch that may carry on a skip count from an earlier one.
+fn run<B: PlayerBackend>(
+    mut pending: Pending,
+    engine: &B,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+) {
     while let Some(action) = pending.actions.pop_front() {
         // Safe per action because nothing periodic reaches here: the position
         // tick decides in `evaluate_playing_tick` and the 30 s queue save writes
@@ -97,8 +106,33 @@ pub fn execute_actions<B: PlayerBackend>(
             PlayerAction::UpdateSkipCount(track_id) => {
                 try_send(PlayCountEvent::Skip(track_id));
             }
+            // Replaced rather than sent: a watch with no subscriber keeps nothing on `send`, and
+            // the window task is what resolves it.
+            PlayerAction::StartWhenResolved(awaited) => {
+                sinks.awaited_start.send_replace(Some(awaited));
+            }
         }
     }
+}
+
+/// Start the track `awaited` names, now that the window task has fetched its record, unless the
+/// state has moved on since the transition that owed it.
+///
+/// Checked before the emit as well as inside it, so the window task asking after every fetch costs
+/// a lock rather than a view-model publish. The batch carries on the deferral's skip count, which
+/// is what still stops a queue with nothing playable in it after one lap.
+pub fn start_awaited<B: PlayerBackend>(
+    engine: &B,
+    player_state: &PlayerStateHandle,
+    sinks: &PlayerSinks,
+    awaited: AwaitedStart,
+) {
+    let _exec = player_state.lock_exec();
+    if !lock_state(player_state).still_awaits(awaited) {
+        return;
+    }
+    let actions = with_state_emit(player_state, sinks, |s| s.resume_awaited(awaited));
+    run(Pending { actions: actions.into(), skipped: awaited.skipped }, engine, player_state, sinks);
 }
 
 /// Mutate state, publish the `ViewModel`, then execute the resulting side
@@ -278,8 +312,8 @@ fn enqueue_auto_skip(
             gave_up = true;
             return stop_end_of_queue(s);
         }
-        match s.queue.advance_skip().cloned() {
-            Some(track) => play_track_inner(s, track, None),
+        match s.queue.advance_skip() {
+            Some(id) => s.start_queued(id, false, skipped),
             None => stop_end_of_queue(s),
         }
     });

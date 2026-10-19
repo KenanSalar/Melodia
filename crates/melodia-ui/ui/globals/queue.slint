@@ -69,10 +69,11 @@ export global Queue {
     callback clear-selection();
     callback select-all();
 
-    // The `Tracks.toggle-row-favorite` contract, batch-shaped like it: Rust persists, flips the
-    // in-memory bit on every matching queue track and on `current_track`, then re-emits. The
-    // hover heart passes one id; the context menu passes the selection.
+    // The track lists' contracts, batch-shaped like them: Rust persists, then patches the rows
+    // holding those ids. The hover heart and the star strip pass one id; the context menu passes
+    // the selection.
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
 
     callback open-changed(bool);
 }

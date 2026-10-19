@@ -23,6 +23,13 @@ pub async fn rows_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<TrackListRow>, 
     queries::track::get_track_list_rows_by_ids(db, ids).await
 }
 
+/// The ids in `ids` that still have a row, in the order asked and each once, which is what a list
+/// handed to the queue becomes: [`rows_by_ids`]'s answer without fetching a row.
+pub async fn existing_in_order(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> {
+    let mut existing = queries::track::existing_ids(db, ids).await?;
+    Ok(ids.iter().copied().filter(|id| existing.remove(id)).collect())
+}
+
 /// How many tracks `scope` holds, how long they run and how many artists and albums they span.
 pub async fn facts(db: &DbPool, scope: TrackListScope) -> Result<ScopeFacts, AppError> {
     queries::track::scope_facts(db, scope).await

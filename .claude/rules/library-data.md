@@ -133,9 +133,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `SqlSafeStr`) — data never rides in the string, only through `.bind()`.
 
 - **Track projections by use case**, each with a column list in `queries::track::columns`:
-  `TrackSummary` (17 cols; queue/NP/playback, incl. 4 ReplayGain + `rating`); `TrackListRow` (17;
-  every list incl. Browse, whose directory fetch selects `file_path` beside it as the key it
-  matches files on disk by; incl. `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36;
+  `TrackSummary` (17 cols; the player's window of records and NP, incl. 4 ReplayGain + `rating`);
+  `TrackListRow` (17; every list incl. the queue sheet and Browse, whose directory fetch selects
+  `file_path` beside it as the key it matches files on disk by; incl. `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36;
   Edit-Tags dialog — the only production by-id multi-fetch, every single-valued tag column + the
   technical Summary cols); `PlaylistExportRow` (5;
   `file_path`/`file_hash`/`title`/`artist`/`duration_ms`, M3U8 export only); `Track` (60; scan
@@ -154,7 +154,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     Songs tabs, and the four details, a broad genre or a smart playlist running as long as one)
     keeps only its ids and fetches the rows near the viewport by id
     (`get_track_list_rows_by_ids`), converted as they land (`ui::paged_rows`), so no list holds a
-    row per track. A detail's hero facts come off the same membership in SQL
+    row per track. **The queue is the same shape one layer down**: the engine holds its ids and
+    only a window of full records around the current slot (`audio-stack.md`), and the queue sheet
+    and Up Next fetch their rows by id. A detail's hero facts come off the same membership in SQL
     (`queries::track::scope_facts`, `genre_lines`), the page holding no rows to fold them from.
     **Recently Played's Songs tab retains a list and deliberately stays off it**:
     `get_recently_played` is capped at 200 rows, so a keyset saves nothing there, and it keeps the
@@ -219,7 +221,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **Star ratings mirror the favorite path.** Inert `tracks.rating` (0–5) surfaced via a
   **hover-revealed** `StarRating` (`crates/melodia-ui/ui/components/star-rating.slint`) inside the
-  track-row Title cell — no rating column, no in-table sort. Rides on `TrackListRow` +
+  title cell track rows and queue rows share (`components/track-list/track-title.slint`) — no
+  rating column, no in-table sort. Rides on `TrackListRow` +
   `TrackSummary`. Writes via `library::ratings::{set_rating, set_current_rating}` (clamped 0–5),
   mirroring `favorites::{set_favorite, toggle_current_favorite}` down to the `sync_current_track_*`
   helper (over `player::state::sync_current_track_if_in`) that flips the playing track's cached

@@ -4,6 +4,7 @@ use std::sync::{MutexGuard, TryLockError};
 
 use super::event_sink::PlayerSinks;
 use super::queue::QueueState;
+use super::queue_window::TrackWindow;
 use super::types::{PlaybackSource, PlaybackStatus, RadioNowPlaying};
 use melodia_core::entities::track::TrackSummary;
 
@@ -14,9 +15,9 @@ mod summary_sync;
 mod transport;
 mod view_model;
 
-pub use action::PlayerAction;
+pub use action::{AwaitedStart, PlayerAction};
 pub use persistence::{restore_queue, restore_station};
-pub use summary_sync::{any_tracked, sync_current_track_if_in, sync_track_summaries};
+pub use summary_sync::{WindowFill, seat_window_records, sync_current_track_if_in, window_wanted};
 pub use transport::{ReleaseDecision, play_track_inner, resume_from_stopped, stop_end_of_queue};
 pub use view_model::{PlayerViewModel, PlayerViewModelLight, PositionTick, QueueViewModel};
 
@@ -82,6 +83,9 @@ pub struct PlayerState {
     /// takes seconds and a click takes none, which is why this is a counter rather than a flag.
     pub radio_generation: u64,
     pub queue: QueueState,
+    /// The records of the tracks around the queue's current slot, which is all of the queue a
+    /// transition reads beyond its ids.
+    pub window: TrackWindow,
 }
 
 impl Default for PlayerState {
@@ -100,6 +104,7 @@ impl Default for PlayerState {
             pause_after_current_track: false,
             radio_generation: 0,
             queue: QueueState::default(),
+            window: TrackWindow::default(),
         }
     }
 }
@@ -167,6 +172,11 @@ impl PlayerState {
     /// The track on the deck, for the two writers that mutate it in place.
     pub fn current_track_mut(&mut self) -> Option<&mut Arc<TrackSummary>> {
         self.source.as_mut().and_then(PlaybackSource::track_mut)
+    }
+
+    /// The record for queued track `id`, from the window or, where it is the one playing, the deck.
+    pub fn record(&self, id: i64) -> Option<Arc<TrackSummary>> {
+        self.window.get(id).or_else(|| self.current_track().filter(|track| track.id == id)).cloned()
     }
 
     /// The station on the deck, including through the stretch where it is still connecting.

@@ -35,10 +35,18 @@ impl PagedRow for UiTrackListRow {
     }
 }
 
-/// Fetches the rows a track list asks for. The query and the conversion run on the runtime, so the
-/// connection goes back to the pool as soon as the rows are read, however busy the event loop is
-/// drawing; only the landing waits for it.
+/// Fetches the rows a track list asks for.
 pub fn fetcher(state: &AppState) -> impl Fn(RowRequest<UiTrackListRow>) + 'static {
+    fetch_by_id(state, convert)
+}
+
+/// Fetches the rows a list asks for through the track-list projection, converted by `convert`. The
+/// query and the conversion run on the runtime, so the connection goes back to the pool as soon as
+/// the rows are read, however busy the event loop is drawing; only the landing waits for it.
+pub fn fetch_by_id<R: PagedRow + Send>(
+    state: &AppState,
+    convert: fn(&[RsTrackListRow]) -> Vec<(i64, R)>,
+) -> impl Fn(RowRequest<R>) + 'static {
     let db = state.db.clone();
     let runtime = state.runtime.clone();
     move |request| {

@@ -39,31 +39,30 @@ fn shuffle_inline_empty_queue_noop() {
 #[test]
 fn shuffle_inline_single_track() {
     let mut state = PlayerState::default();
-    state.queue.add_tracks(vec![make_summary(1)]);
+    state.queue.add_tracks(&[1]);
     state.queue.current_index = Some(0);
 
     shuffle_inline(&mut state);
 
     assert!(state.queue.shuffle_enabled);
-    assert_eq!(state.queue.get_current().map(|t| t.id), Some(1));
+    assert_eq!(state.queue.current_id(), Some(1));
 }
 
 #[test]
 fn shuffle_inline_keeps_current_at_front() {
     let mut state = PlayerState::default();
-    let tracks: Vec<_> = (1..=10).map(make_summary).collect();
-    state.queue.add_tracks(tracks);
+    state.queue.add_tracks(&(1..=10).collect::<Vec<i64>>());
     state.queue.current_index = Some(5); // Track 6 is current
 
     shuffle_inline(&mut state);
 
-    assert_eq!(state.queue.get_current().map(|t| t.id), Some(6));
+    assert_eq!(state.queue.current_id(), Some(6));
 }
 
 #[test]
 fn shuffle_inline_enables_shuffle_flag() {
     let mut state = PlayerState::default();
-    state.queue.add_tracks(vec![make_summary(1), make_summary(2), make_summary(3)]);
+    state.queue.add_tracks(&[1, 2, 3]);
     state.queue.current_index = Some(0);
 
     assert!(!state.queue.shuffle_enabled);
@@ -75,18 +74,17 @@ fn shuffle_inline_enables_shuffle_flag() {
 fn shuffle_inline_all_indices_present() -> Result<(), AppError> {
     let mut state = PlayerState::default();
     let count: i64 = 20;
-    let tracks: Vec<_> = (1..=count).map(make_summary).collect();
-    state.queue.add_tracks(tracks);
+    state.queue.add_tracks(&(1..=count).collect::<Vec<i64>>());
     state.queue.current_index = Some(0);
 
     shuffle_inline(&mut state);
 
-    let play_order = state.queue.tracks_in_play_order();
+    let play_order = state.queue.play_ids();
     let expected_len =
         usize::try_from(count).map_err(|_| AppError::Validation("count negative".into()))?;
     assert_eq!(play_order.len(), expected_len);
 
-    let mut ids: Vec<i64> = play_order.iter().map(|t| t.id).collect();
+    let mut ids: Vec<i64> = play_order.to_vec();
     ids.sort_unstable();
     let expected: Vec<i64> = (1..=count).collect();
     assert_eq!(ids, expected);
@@ -96,9 +94,8 @@ fn shuffle_inline_all_indices_present() -> Result<(), AppError> {
 #[test]
 fn shuffle_unshuffle_roundtrip() {
     let mut state = PlayerState::default();
-    let tracks: Vec<_> = (1..=5).map(make_summary).collect();
-    let original_ids: Vec<i64> = tracks.iter().map(|t| t.id).collect();
-    state.queue.add_tracks(tracks);
+    let original_ids: Vec<i64> = (1..=5).collect();
+    state.queue.add_tracks(&original_ids);
     state.queue.current_index = Some(0);
 
     shuffle_inline(&mut state);
@@ -107,8 +104,7 @@ fn shuffle_unshuffle_roundtrip() {
     state.queue.unshuffle();
     assert!(!state.queue.shuffle_enabled);
 
-    let restored: Vec<i64> = state.queue.tracks_in_play_order().iter().map(|t| t.id).collect();
-    assert_eq!(restored, original_ids);
+    assert_eq!(state.queue.play_ids().to_vec(), original_ids);
 }
 
 // --- The transport doors ---------------------------------------------------
@@ -124,7 +120,7 @@ fn seated_queue(count: i64) -> (PlayerStateHandle, PlayerSinks) {
     let player_state = PlayerStateHandle::default();
     let sinks = test_sinks();
     with_state_emit(&player_state, &sinks, |s| {
-        s.queue.add_tracks((1..=count).map(make_summary).collect());
+        s.queue.add_tracks(&(1..=count).collect::<Vec<i64>>());
         s.queue.current_index = Some(0);
     });
     (player_state, sinks)
@@ -172,17 +168,13 @@ fn shuffling_an_empty_queue_answers_that_nothing_was_shuffled() {
 #[test]
 fn turning_shuffle_off_puts_the_queue_back_in_the_order_it_was_added() {
     let (player_state, sinks) = seated_queue(5);
-    with_state_emit(&player_state, &sinks, |s| {
-        s.queue.play_order.reverse();
-        s.queue.shuffle_enabled = true;
-    });
+    with_state_emit(&player_state, &sinks, |s| s.queue.apply_shuffle_order(&[4, 3, 2, 1, 0]));
 
     set_shuffle(&player_state, &sinks, false);
 
     let state = lock_state(&player_state);
     assert!(!state.queue.shuffle_enabled, "the request was `false`");
-    let restored: Vec<i64> = state.queue.tracks_in_play_order().iter().map(|t| t.id).collect();
-    assert_eq!(restored, (1..=5).collect::<Vec<i64>>());
+    assert_eq!(state.queue.play_ids().to_vec(), (1..=5).collect::<Vec<i64>>());
 }
 
 #[test]
@@ -261,16 +253,13 @@ fn persisted(
 
 fn plan_of(
     persisted: Option<PersistedPlayback>,
-    summaries: Vec<Arc<TrackSummary>>,
+    records: Vec<Arc<TrackSummary>>,
     station: Option<Arc<RadioNowPlaying>>,
 ) -> RestorePlan {
-    RestorePlan {
-        persisted,
-        summaries,
-        station,
-        repeat_mode: RepeatMode::Off,
-        shuffle_enabled: false,
-    }
+    let queue = persisted.map_or_else(QueueState::default, |p| {
+        QueueState::restored(p.queue.track_ids, current_index_from_i32(p.queue.current_index))
+    });
+    RestorePlan { queue, records, station }
 }
 
 /// A data directory with `settings.json` already written, since `mutate_settings_with` reads
@@ -296,7 +285,7 @@ fn a_queue_with_no_station_restores_as_a_queue() {
     );
 
     assert!(actions.is_empty(), "no station means nothing for the deck to do");
-    assert_eq!(state.queue.tracks.len(), 2);
+    assert_eq!(state.queue.len(), 2);
     assert_eq!(state.current_track().map(|t| t.id), Some(1));
     assert!(state.station().is_none());
 }
@@ -310,7 +299,7 @@ fn a_station_with_no_queue_restores_as_a_station() {
         plan_of(Some(persisted(vec![], 0, Some(42))), vec![], Some(test_station("Example FM"))),
     );
 
-    assert!(state.queue.tracks.is_empty());
+    assert!(state.queue.is_empty());
     assert_eq!(state.station().map(|s| s.name.as_str()), Some("Example FM"));
     assert!(state.current_track().is_none());
 }
@@ -331,7 +320,7 @@ fn a_station_over_a_queue_restores_both() {
     );
 
     assert_eq!(state.station().map(|s| s.name.as_str()), Some("Example FM"));
-    assert_eq!(state.queue.tracks.len(), 2, "the queue is seated under the station");
+    assert_eq!(state.queue.len(), 2, "the queue is seated under the station");
     assert_eq!(state.queue.current_index, Some(1), "and at the row it was left on");
     assert!(state.current_track().is_none(), "the station holds the deck");
 }
@@ -343,7 +332,7 @@ fn a_first_launch_with_no_file_restores_nothing() {
     let actions = apply_restore(&mut state, plan_of(None, vec![], None));
 
     assert!(actions.is_empty());
-    assert!(state.queue.tracks.is_empty());
+    assert!(state.queue.is_empty());
     assert!(state.station().is_none());
     assert!(state.current_track().is_none());
 }
@@ -381,7 +370,7 @@ async fn ids_whose_rows_are_gone_drop_out_of_the_restore() -> Result<(), AppErro
     let plan = plan_restore(&db, &paths, Some(persisted(vec![kept, 9_999], 0, None)), None).await?;
 
     assert_eq!(
-        plan.summaries.iter().map(|s| s.id).collect::<Vec<_>>(),
+        plan.queue.play_ids().to_vec(),
         vec![kept],
         "a row that went away is not a restore that fails"
     );
@@ -400,9 +389,9 @@ async fn a_restored_queue_turns_shuffle_off_in_the_state_and_in_the_file() -> Re
 
     let plan = plan_restore(&db, &paths, Some(persisted(vec![id], 0, None)), None).await?;
 
-    assert!(!plan.shuffle_enabled, "a restored queue comes back unshuffled");
+    assert!(!plan.queue.shuffle_enabled, "a restored queue comes back unshuffled");
     assert!(!read_settings(&paths)?.queue.shuffle_enabled, "and the file agrees");
-    assert_eq!(plan.repeat_mode, RepeatMode::All, "repeat is not shuffle's business");
+    assert_eq!(plan.queue.repeat_mode, RepeatMode::All, "repeat is not shuffle's business");
     Ok(())
 }
 
@@ -415,7 +404,7 @@ async fn a_restore_with_no_tracks_leaves_the_shuffle_setting_alone() -> Result<(
 
     let plan = plan_restore(&db, &paths, None, None).await?;
 
-    assert!(plan.shuffle_enabled, "nothing was restored, so nothing was overridden");
+    assert!(plan.queue.shuffle_enabled, "nothing was restored, so nothing was overridden");
     assert!(read_settings(&paths)?.queue.shuffle_enabled);
     Ok(())
 }
@@ -475,7 +464,7 @@ async fn play_next_lands_a_batch_in_input_order_behind_the_current_track() -> Re
     let player_state = PlayerStateHandle::default();
     let sinks = test_sinks();
     with_state_emit(&player_state, &sinks, |s| {
-        s.queue.add_tracks(vec![make_summary(100), make_summary(200)]);
+        s.queue.add_tracks(&[100, 200]);
         s.queue.current_index = Some(0);
     });
 
@@ -486,7 +475,7 @@ async fn play_next_lands_a_batch_in_input_order_behind_the_current_track() -> Re
     expected.extend(picked.iter().copied());
     expected.push(200);
     assert_eq!(
-        state.queue.tracks_in_play_order().iter().map(|t| t.id).collect::<Vec<_>>(),
+        state.queue.play_ids().to_vec(),
         expected,
         "the selection lands behind what is playing, in the order it was picked"
     );
@@ -506,7 +495,7 @@ async fn play_next_with_nothing_picked_does_not_reach_the_queue() -> Result<(), 
     play_next_many(&db, &player_state, &sinks, &[]).await?;
 
     assert!(!published.has_changed().unwrap_or(true), "nothing was picked, so nothing changed");
-    assert!(lock_state(&player_state).queue.tracks.is_empty());
+    assert!(lock_state(&player_state).queue.is_empty());
     Ok(())
 }
 
@@ -516,8 +505,8 @@ async fn play_next_with_nothing_picked_does_not_reach_the_queue() -> Result<(), 
 // the four `.desktop` sources, `wix/main.wxs`'s `FileAssociations`, the single-instance claim and
 // `boot::tasks::serve_file_opens`' backlog are all held somewhere; what they hand to was not.
 //
-// The queue order survives the round trip because `get_track_summaries_by_ids` re-orders its rows
-// to match the ids it was given, so what `open_as_queue` sorts is what ends up on screen.
+// The queue order survives the round trip because `existing_in_order` keeps the ids in the order it
+// was given, so what `open_as_queue` sorts is what ends up on screen.
 
 use melodia_artwork::media::image::artwork::new_cover_cache;
 use melodia_core::entities::tags::{FieldEdit, TagEdit};
@@ -538,13 +527,11 @@ fn opened_file(dir: &std::path::Path, file_name: &str, title: &str) -> Result<St
     Ok(dest.to_string_lossy().into_owned())
 }
 
-fn queued_titles(player_state: &PlayerStateHandle) -> Vec<String> {
-    lock_state(player_state)
-        .queue
-        .tracks_in_play_order()
-        .iter()
-        .map(|track| track.title.clone())
-        .collect()
+/// The queue's titles in play order, read back by id as everything showing the queue reads them.
+async fn queued_titles(ctx: &PlaybackContext) -> Result<Vec<String>, AppError> {
+    let ids = lock_state(&ctx.player_state).queue.play_ids();
+    let rows = queries::track::get_track_summaries_by_ids(&ctx.db, &ids).await?;
+    Ok(rows.into_iter().map(|track| track.title).collect())
 }
 
 /// The order the user sees is the sorted one, not the order the file manager handed over and not
@@ -562,7 +549,7 @@ async fn opened_files_reach_the_queue_in_natural_title_order() -> Result<(), App
 
     open_as_queue(&fx.ctx, &new_cover_cache(), &opened).await?;
 
-    assert_eq!(queued_titles(&fx.ctx.player_state), ["Track 1", "Track 2", "Track 10"]);
+    assert_eq!(queued_titles(&fx.ctx).await?, ["Track 1", "Track 2", "Track 10"]);
     Ok(())
 }
 
@@ -579,7 +566,7 @@ async fn opening_a_batch_starts_at_the_first_track_in_order() -> Result<(), AppE
     open_as_queue(&fx.ctx, &new_cover_cache(), &opened).await?;
 
     assert_eq!(
-        lock_state(&fx.ctx.player_state).queue.get_current().map(|track| track.title.clone()),
+        lock_state(&fx.ctx.player_state).current_track().map(|track| track.title.clone()),
         Some("First".to_owned())
     );
     Ok(())
@@ -596,12 +583,12 @@ async fn opening_replaces_the_queue_where_importing_appends_to_it() -> Result<()
 
     append_imported(&fx.ctx, &new_cover_cache(), &seated).await?;
     append_imported(&fx.ctx, &new_cover_cache(), &arriving).await?;
-    let appended = queued_titles(&fx.ctx.player_state);
+    let appended = queued_titles(&fx.ctx).await?;
 
     open_as_queue(&fx.ctx, &new_cover_cache(), &arriving).await?;
 
     assert_eq!(appended, ["Already Playing", "Just Opened"], "the import kept what was there");
-    assert_eq!(queued_titles(&fx.ctx.player_state), ["Just Opened"], "the open did not");
+    assert_eq!(queued_titles(&fx.ctx).await?, ["Just Opened"], "the open did not");
     Ok(())
 }
 
@@ -617,6 +604,6 @@ async fn opening_files_that_cannot_be_read_is_an_error_rather_than_an_empty_queu
     let refused = open_as_queue(&fx.ctx, &new_cover_cache(), &[missing]).await;
 
     assert!(matches!(refused, Err(AppError::Queue(_))), "got {refused:?}");
-    assert!(lock_state(&fx.ctx.player_state).queue.tracks.is_empty());
+    assert!(lock_state(&fx.ctx.player_state).queue.is_empty());
     Ok(())
 }

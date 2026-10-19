@@ -41,7 +41,7 @@ use async_compat::Compat;
 
 pub(crate) use source_change::republish_for_palette;
 use source_change::{apply_source_change, spawn_source_change_subscriber};
-use up_next::{rebuild_up_next, spawn_up_next_subscriber, wire_now_playing_open};
+use up_next::{spawn_seed, spawn_up_next_subscriber, wire_now_playing_open};
 
 /// Re-fill a `NowPlayingState`-shadowed surface (the Up Next list, the high-res cover slot or the
 /// lyrics panel's sheet), or hand the cover back.
@@ -134,6 +134,8 @@ pub struct NowPlayingState {
     /// Track ids the Up Next model currently holds. A queue mutation that doesn't
     /// change this slice — a reorder *below* the window — skips the rebuild.
     pub(super) rendered_ids: RefCell<Vec<i64>>,
+    /// The newest Up Next fetch, so one overtaken by a later publish or seed lands nothing.
+    pub(super) up_next_ticket: Cell<u64>,
     /// Current-track id at the last Up Next rebuild; a change drives the slide.
     pub(super) last_current_id: Cell<Option<i64>>,
     /// Queue play-order index at the last rebuild; a forward step (wrap included) slides
@@ -302,15 +304,14 @@ pub fn install(
     spawn_up_next_subscriber(ui, state, up_next_model.clone(), np_state.clone())?;
     wire_now_playing_open(ui, state, np_artwork.clone(), up_next_model.clone(), np_state.clone());
 
-    // Synchronously, the queue-restore broadcast having fired before the subscriber
-    // subscribed; the snapshot then goes to `latest_qvm` for a later open.
-    let seeded_ids = rebuild_up_next(ui, &up_next_model, &qvm);
-    *np_state.rendered_ids.borrow_mut() = seeded_ids;
+    // Seeded here, the queue-restore broadcast having fired before the subscriber subscribed; the
+    // snapshot also stays in `latest_qvm` for a later open. The rows land once the loop runs.
     *np_state.latest_qvm.borrow_mut() = Some(qvm);
+    spawn_seed(ui.as_weak(), state.clone(), up_next_model.clone(), np_state.clone());
 
     // Each hook takes a `Weak<NowPlayingState>` to avoid the `Rc → closure → Rc` cycle;
     // everything else is cheap to clone.
-    install_up_next_seeder(ui, &up_next_model, &np_state);
+    install_up_next_seeder(ui, state, &up_next_model, &np_state);
     install_artwork_seeder(ui, state, np_artwork, &np_state);
     install_artwork_releaser(ui, state, np_artwork, &np_state);
 
@@ -347,6 +348,7 @@ impl NowPlayingState {
             mini_backdrop: Cell::new(ui.global::<MiniPlayer>().get_backdrop_shown()),
             latest_qvm: RefCell::new(None),
             rendered_ids: RefCell::new(Vec::new()),
+            up_next_ticket: Cell::new(0),
             last_current_id: Cell::new(current_track_id(qvm)),
             last_queue_index: Cell::new(qvm.queue_index),
             current_source: RefCell::new(current_source),
@@ -372,18 +374,19 @@ fn wire_request_cover(ui: &AppWindow, cover_thumbs: &Arc<CoverThumbs>) {
 
 fn install_up_next_seeder(
     ui: &AppWindow,
+    state: &AppState,
     up_next_model: &Rc<VecModel<QueueRow>>,
     np_state: &Rc<NowPlayingState>,
 ) {
     let weak_ui = ui.as_weak();
+    let state = state.clone();
     let up_next_model = up_next_model.clone();
     let weak_np = Rc::downgrade(np_state);
     *np_state.up_next_seeder.borrow_mut() = Some(Box::new(move || {
-        let Some(ui) = weak_ui.upgrade() else { return };
         let Some(np_state) = weak_np.upgrade() else {
             return;
         };
-        up_next::seed_from_stash(&ui, &up_next_model, &np_state);
+        spawn_seed(weak_ui.clone(), state.clone(), up_next_model.clone(), np_state);
     }));
 }
 
@@ -534,7 +537,7 @@ fn clear_unshown_slot(
 /// The id of the currently-playing track in a queue snapshot, if any.
 pub(super) fn current_track_id(qvm: &QueueViewModel) -> Option<i64> {
     let idx = usize::try_from(qvm.queue_index).ok()?;
-    qvm.queue_tracks.get(idx).map(|t| t.id)
+    qvm.ids.get(idx).copied()
 }
 
 #[cfg(test)]

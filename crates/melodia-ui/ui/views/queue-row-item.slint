@@ -8,8 +8,10 @@ import { Checkbox } from "../components/checkbox.slint";
 import { TrackContextMenu } from "../components/track-list/track-context-menu.slint";
 import { ContextClick } from "../components/context-menu.slint";
 import { SelectionPill } from "../components/track-list/selection-pill.slint";
+import { TrackTitle } from "../components/track-list/track-title.slint";
 
-// One fixed-height queue row: number-or-checkbox, artwork, title, duration, delete.
+// One fixed-height queue row: number-or-checkbox, artwork, title with its favourite and rating
+// marks, duration, delete.
 //
 // **The checkbox starts a selection and the row body extends one** — a body click is a no-op
 // until the sheet holds a pick, the whole-row TouchArea otherwise being drag-to-reorder past a
@@ -289,24 +291,21 @@ export component QueueRowItem inherits Rectangle {
                     }
                 }
 
-                // The `track-list-row.slint` title-cell pattern: `horizontal-stretch: 1`
-                // on the wrapping layout is what makes `overflow: elide` fire at all,
-                // since without it the inner layout falls back to the Text's intrinsic
-                // width — the full title — and elide never triggers. The right padding
-                // is breathing room between the ellipsis and the duration, which
-                // otherwise butt against each other across the layout's spacing.
+                // The track lists' title cell. `horizontal-stretch: 1` here is half of what lets
+                // the title elide (`TrackTitle` argues the other). The right padding is breathing
+                // room between the last mark and the duration, which otherwise butt against
+                // each other across the layout's spacing.
                 VerticalLayout {
                     horizontal-stretch: 1;
                     alignment: center;
                     padding-right: Theme.pad-md;
-                    Text {
-                        // The LRM forces an LTR base direction, so the ellipsis anchors
-                        // right whatever the script — as in `track-list-row.slint`.
-                        text: "‎" + root.row-data.title;
-                        color: root.playing ? Theme.accent : Theme.text;
-                        font-size: Theme.font-size-row;
-                        horizontal-alignment: left;
-                        overflow: elide;
+                    TrackTitle {
+                        title: root.row-data.title;
+                        ink: root.playing ? Theme.accent : Theme.text;
+                        is-favorite: root.row-data.is_favorite;
+                        rating: root.row-data.rating;
+                        rating-shown: touch.has-hover;
+                        rated(n) => { Queue.set-row-rating([root.row-data.id], n); }
                     }
                 }
 
@@ -391,9 +390,9 @@ export component QueueRowItem inherits Rectangle {
             toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
             select-all => { Queue.select-all(); }
             clear-selection => { Queue.clear-selection(); }
-            // The one action that stays index-shaped: `remove-selected` reads the Rust shadow, so
-            // a queue holding one track twice removes the rows the user ticked rather than every
-            // row sharing their ids. The payload is ignored for exactly that reason.
+            // Index-shaped rather than by the payload's ids: a single remove takes this row and
+            // not another copy of its track, and `remove-selected` takes every row Rust has
+            // picked, which for a track queued twice is both.
             request-remove(ids) => {
                 if (ctx-menu.multi-active) {
                     Queue.remove-selected();

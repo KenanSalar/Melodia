@@ -2,8 +2,8 @@ import { Theme } from "../../theme.slint";
 import { TrackListRow, TrackColumns, TrackColumnLayout } from "../../models.slint";
 import { RowCovers } from "../../globals/tracks.slint";
 import { MaterialIcon } from "../material-icon.slint";
-import { StarRating } from "../star-rating.slint";
 import { ArtworkImage } from "../artwork-image.slint";
+import { TrackTitle } from "track-title.slint";
 import { TrackContextMenu } from "track-context-menu.slint";
 import { ContextClick } from "../context-menu.slint";
 import { DataCell } from "track-list-cell.slint";
@@ -346,11 +346,7 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // Title cell: artwork, title, favourite, rating strip. `horizontal-stretch: 1` on the
-            // title is what makes `overflow: elide` fire at all — without it, under
-            // `alignment: start` the Text takes its intrinsic width (the full string) and never
-            // learns it should elide, which RTL scripts make visible by overflowing left into the
-            // # column. The cell's `clip` guards whatever still escapes.
+            // Title cell: artwork, then the title with its favourite and rating marks.
             Rectangle {
                 x: root.layout.title_x;
                 y: 0;
@@ -372,34 +368,14 @@ export component TrackListRowItem inherits Rectangle {
                         tile-radius: Theme.radius-sm;
                         fade: root.fade;
                     }
-                    Text {
-                        horizontal-stretch: 1;
-                        // The leading U+200E forces the string's BiDi base
-                        // direction to LTR. Without it a title starting in Arabic
-                        // or Hebrew takes an RTL base and Slint's elide drops the
-                        // `…` entirely, leaving a gap at the cell's left edge with
-                        // no truncation marker. Arabic substrings still render RTL
-                        // inline — only the base direction moves, so the indicator
-                        // anchors right for every row whatever the script.
-                        text: "‎" + root.row-data.title;
-                        color: root.ink;
-                        font-size: Theme.font-size-row;
-                        overflow: elide;
-                    }
-                    if root.row-data.is_favorite: MaterialIcon {
-                        name: "favorite";
-                        icon-size: 18px;
-                        icon-color: Theme.red;
-                        filled: true;
-                        fade: root.fade;
-                    }
-                    // Revealed on hover to the right of the title, which elides to make room rather
-                    // than being swapped out the way the Length cell's duration is. Gated on
-                    // `enabled` so disk-only Browse rows can't be rated. The strip's TouchArea
-                    // descends from `touch`, so hovering a star keeps this strip mounted.
-                    if touch.has-hover && root.enabled: StarRating {
+                    TrackTitle {
+                        title: root.row-data.title;
+                        ink: root.ink;
+                        is-favorite: root.row-data.is_favorite;
                         rating: root.row-data.rating;
-                        star-size: 16px;
+                        // Disk-only Browse rows can't be rated.
+                        rating-shown: touch.has-hover && root.enabled;
+                        fade: root.fade;
                         rated(n) => { root.set-row-rating([root.row-data.id], n); }
                     }
                 }

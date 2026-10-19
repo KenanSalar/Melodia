@@ -13,28 +13,6 @@ use crate::state::fixtures::TestPlayback;
 use melodia_engine::player::engine::fixtures::test_station;
 use melodia_engine::player::engine::state::{MAX_SPEED, MIN_SPEED, PlayerState};
 
-fn make_summary(id: i64, duration_ms: i64) -> Arc<TrackSummary> {
-    Arc::new(TrackSummary {
-        id,
-        file_path: format!("/music/{id}.mp3"),
-        file_name: format!("{id}.mp3"),
-        title: format!("Track {id}"),
-        artist: None,
-        album: None,
-        duration_ms,
-        artwork_path: None,
-        track_number: None,
-        disc_number: None,
-        last_position: 0,
-        is_favorite: false,
-        rating: 0,
-        replaygain_track_gain: None,
-        replaygain_track_peak: None,
-        replaygain_album_gain: None,
-        replaygain_album_peak: None,
-    })
-}
-
 /// Mutate the fixture's state through the shipped emit, so a test starts from a state the machine
 /// built rather than from fields poked into it.
 fn seat<R>(fx: &TestPlayback, f: impl FnOnce(&mut PlayerState) -> R) -> R {
@@ -63,45 +41,45 @@ fn tune_in(fx: &TestPlayback, name: &str) {
 #[test]
 fn start_slot_follows_the_picked_track() {
     let ids = vec![1, 2, 3];
-    let summaries: Vec<_> = (1..=3).map(|i| make_summary(i, 180_000)).collect();
-    assert_eq!(resolve_start_slot(&ids, &summaries, Some(2)), Some(2));
+    let queued = vec![1, 2, 3];
+    assert_eq!(resolve_start_slot(&ids, &queued, Some(2)), Some(2));
 }
 
 /// The regression this exists for: a row deleted between the view's fetch and
-/// the click drops out of `summaries`, shifting every slot behind it. Resolving
+/// the click drops out of the queue, shifting every slot behind it. Resolving
 /// by index would start on the neighbour.
 #[test]
 fn start_slot_survives_a_track_missing_from_the_fetch() {
     let ids = vec![1, 2, 3, 4, 5];
-    let summaries: Vec<_> = [1, 3, 4, 5].into_iter().map(|i| make_summary(i, 180_000)).collect();
+    let queued = vec![1, 3, 4, 5];
 
     // The user clicked track 4, which the displayed list holds at index 3.
     // Track 2 vanished before the fetch, so slot 3 is now track 5 — taking
     // the index at face value would start playback one track late.
-    let start = resolve_start_slot(&ids, &summaries, Some(3));
+    let start = resolve_start_slot(&ids, &queued, Some(3));
     assert_eq!(start, Some(2));
-    assert_eq!(start.and_then(|i| summaries.get(i)).map(|t| t.id), Some(4));
+    assert_eq!(start.and_then(|i| queued.get(i)).copied(), Some(4));
 }
 
 #[test]
 fn start_slot_is_none_when_the_picked_track_is_gone() {
     let ids = vec![1, 2, 3];
-    let summaries: Vec<_> = [1, 3].into_iter().map(|i| make_summary(i, 180_000)).collect();
-    assert_eq!(resolve_start_slot(&ids, &summaries, Some(1)), None);
+    let queued = vec![1, 3];
+    assert_eq!(resolve_start_slot(&ids, &queued, Some(1)), None);
 }
 
 #[test]
 fn start_slot_is_none_for_an_out_of_range_index() {
     let ids = vec![1, 2, 3];
-    let summaries: Vec<_> = (1..=3).map(|i| make_summary(i, 180_000)).collect();
-    assert_eq!(resolve_start_slot(&ids, &summaries, Some(100)), None);
+    let queued = vec![1, 2, 3];
+    assert_eq!(resolve_start_slot(&ids, &queued, Some(100)), None);
 }
 
 #[test]
 fn start_slot_is_none_without_an_index() {
     let ids = vec![1, 2, 3];
-    let summaries: Vec<_> = (1..=3).map(|i| make_summary(i, 180_000)).collect();
-    assert_eq!(resolve_start_slot(&ids, &summaries, None), None);
+    let queued = vec![1, 2, 3];
+    assert_eq!(resolve_start_slot(&ids, &queued, None), None);
 }
 
 // --- player_play_tracks ---
@@ -113,7 +91,7 @@ async fn the_queue_becomes_the_list_the_user_picked_from() -> Result<(), AppErro
 
     let state = lock_state(&fx.ctx.player_state);
     assert_eq!(
-        state.queue.tracks.iter().map(|t| t.id).collect::<Vec<_>>(),
+        state.queue.play_ids().to_vec(),
         ids,
         "the queue is the list that was on screen, in the order it was on screen"
     );
@@ -134,7 +112,7 @@ async fn a_pick_whose_row_is_gone_starts_at_the_head() -> Result<(), AppError> {
     player_play_tracks(&fx.ctx, with_a_hole, Some(1)).await?;
 
     let state = lock_state(&fx.ctx.player_state);
-    assert_eq!(state.queue.tracks.len(), 2, "the id with no row drops out");
+    assert_eq!(state.queue.len(), 2, "the id with no row drops out");
     assert_eq!(state.current_track().map(|t| t.id), ids.first().copied());
     Ok(())
 }
@@ -162,7 +140,7 @@ async fn no_valid_ids_is_refused_without_touching_the_queue() -> Result<(), AppE
 
     assert!(matches!(refused, Err(AppError::Queue(_))));
     let state = lock_state(&fx.ctx.player_state);
-    assert_eq!(state.queue.tracks.iter().map(|t| t.id).collect::<Vec<_>>(), ids);
+    assert_eq!(state.queue.play_ids().to_vec(), ids);
     assert_eq!(state.status, PlaybackStatus::Playing, "and it is still playing");
     Ok(())
 }
@@ -180,7 +158,7 @@ async fn shuffle_already_on_anchors_the_picked_track() -> Result<(), AppError> {
 
     let state = lock_state(&fx.ctx.player_state);
     assert_eq!(state.current_track().map(|t| t.id), ids.get(5).copied());
-    let mut queued: Vec<i64> = state.queue.tracks_in_play_order().iter().map(|t| t.id).collect();
+    let mut queued: Vec<i64> = state.queue.play_ids().to_vec();
     queued.sort_unstable();
     let mut expected = ids;
     expected.sort_unstable();
@@ -564,7 +542,7 @@ async fn stopping_the_station_forgets_it_and_hands_the_queue_back() -> Result<()
     assert!(state.station().is_none());
     assert_eq!(state.status, PlaybackStatus::Stopped);
     assert_eq!(
-        state.queue.tracks.iter().map(|t| t.id).collect::<Vec<_>>(),
+        state.queue.play_ids().to_vec(),
         ids,
         "the queue was left untouched underneath, which is what the transport falls back to"
     );

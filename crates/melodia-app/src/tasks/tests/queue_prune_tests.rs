@@ -29,7 +29,7 @@ async fn delete_row(fx: &TestPlayback, id: i64) -> Result<(), AppError> {
 }
 
 fn queued_ids(fx: &TestPlayback) -> Vec<i64> {
-    lock_state(&fx.ctx.player_state).queue.tracks.iter().map(|t| t.id).collect()
+    lock_state(&fx.ctx.player_state).queue.play_ids().to_vec()
 }
 
 /// Seat a station over the queue the way a tune does, connecting and then connected.
@@ -82,7 +82,7 @@ async fn the_last_surviving_entry_going_missing_clears_the_deck() -> Result<(), 
     reconcile_once(&fx.ctx.db, &fx.ctx.player_state, &fx.ctx.sinks, &fx.ctx.engine).await?;
 
     let state = lock_state(&fx.ctx.player_state);
-    assert!(state.queue.tracks.is_empty());
+    assert!(state.queue.is_empty());
     assert!(state.source.is_none(), "a cleared queue has to clear what the bar is drawing");
     assert_eq!(state.status, PlaybackStatus::Stopped);
     Ok(())

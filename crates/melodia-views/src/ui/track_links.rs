@@ -1,10 +1,8 @@
-//! The album/artist/genre ids behind a row menu's "Go to …" entries, as the
-//! Slint side spells them, and the subscriber keeping the playing track's on
-//! `Player` for the now-playing bar's menu.
+//! The album/artist/genre ids behind the now-playing bar's "Go to …" entries,
+//! kept on `Player` for the playing track.
 //!
-//! `TrackSummary` carries none of the three (`queue_sheet::links` argues why),
-//! so both hosts without a list row read them beside what they show: the queue
-//! sheet per row, the bar for the playing track.
+//! `TrackSummary` carries none of the three, and the bar is the one row menu
+//! host with no list row behind it, so it reads them beside the track it shows.
 
 use async_compat::Compat;
 use slint::{ComponentHandle, Weak};
@@ -15,32 +13,16 @@ use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackLinks;
 use melodia_core::error::describe;
 use melodia_engine::player::engine::state::PlayerViewModelLight;
-use melodia_ui::{AppWindow, Player, QueueRow};
+use melodia_ui::{AppWindow, Player};
 
 /// The FK trio as the Slint row spells it: 0 for absent, so the menu's
 /// `album-id != 0` gate reads a missing linkage and a not-yet-fetched one the
 /// same way. That is the honest reading — until the fetch lands, we don't know.
 #[derive(Clone, Copy, Default)]
-pub(in crate::ui) struct RowLinks {
-    pub album: i32,
-    pub artist: i32,
-    pub genre: i32,
-}
-
-impl RowLinks {
-    /// Write the trio onto a row, and say whether anything moved — which is what
-    /// lets the patch skip a `set_row_data` that would invalidate the
-    /// `ListView`'s delegate cache for nothing.
-    pub(in crate::ui) fn stamp(self, row: &mut QueueRow) -> bool {
-        if row.album_id == self.album && row.artist_id == self.artist && row.genre_id == self.genre
-        {
-            return false;
-        }
-        row.album_id = self.album;
-        row.artist_id = self.artist;
-        row.genre_id = self.genre;
-        true
-    }
+struct RowLinks {
+    album: i32,
+    artist: i32,
+    genre: i32,
 }
 
 impl From<TrackLinks> for RowLinks {

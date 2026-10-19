@@ -53,11 +53,12 @@ const CALLBACK_IDLE: Duration = Duration::from_millis(1);
 
 /// The publish half `with_state_emit` takes, for a body narrowed far enough not to need an engine
 /// under it. Nothing subscribes unless the caller does; a `watch` send with no receivers is a
-/// no-op, which is what these two channels are here to be until one asks.
+/// no-op, which is what these channels are here to be until one asks.
 pub(crate) fn test_sinks() -> PlayerSinks {
     let (view_model, _) = watch::channel(None);
     let (queue, _) = watch::channel(None);
-    PlayerSinks { view_model, queue, media_controls: None }
+    let (awaited_start, _) = watch::channel(None);
+    PlayerSinks { view_model, queue, media_controls: None, awaited_start }
 }
 
 /// A data root nothing else writes to, with `settings.json` already on disk.

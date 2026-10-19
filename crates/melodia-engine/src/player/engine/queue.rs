@@ -1,9 +1,15 @@
 use std::collections::HashSet;
-use std::sync::Arc;
-
-use melodia_core::entities::track::TrackSummary;
+use std::sync::{Arc, OnceLock};
 
 use super::types::{PersistableQueue, RepeatMode};
+
+/// Slots before the current one whose records the window holds: the one Previous lands on.
+const WINDOW_BEHIND: i64 = 1;
+
+/// Slots after the current one whose records the window holds. The first is next under any repeat
+/// mode and under a manual skip; the two beyond carry an auto-skip past unplayable files without a
+/// fetch.
+const WINDOW_AHEAD: i64 = 3;
 
 /// Result of [`QueueState::prune_missing`].
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -16,12 +22,16 @@ pub struct PruneOutcome {
     pub current_was_removed: bool,
 }
 
+/// The queue as track ids. The records a transition needs live in the player's `TrackWindow`.
+///
+/// The three vectors are crate-private because [`Self::play_ids`] caches what they spell, and a
+/// write that went round the mutators below would leave it describing an order nobody holds.
 #[derive(Debug, Clone)]
 pub struct QueueState {
-    /// Canonical track data — each track stored exactly once.
-    pub tracks: Vec<Arc<TrackSummary>>,
+    /// Every entry's track id, each queued entry once, so a track queued twice is two entries.
+    pub(crate) tracks: Vec<i64>,
     /// Current playback order — indices into `tracks`.
-    pub play_order: Vec<usize>,
+    pub(crate) play_order: Vec<usize>,
     /// Original insertion order — indices into `tracks`. Used to restore on unshuffle.
     pub(crate) original_order: Vec<usize>,
     /// Index into `play_order` of the currently-playing track, or `None`
@@ -34,6 +44,9 @@ pub struct QueueState {
     /// Monotonic counter incremented on every queue mutation.
     /// Used by `with_state_emit` to detect whether the queue changed.
     pub version: u64,
+    /// `play_order` resolved to ids, built on first ask after the order moves. An advance moves
+    /// only the index, so it republishes the queue without rebuilding a library-sized array.
+    play_ids: OnceLock<Arc<[i64]>>,
 }
 
 impl Default for QueueState {
@@ -46,6 +59,7 @@ impl Default for QueueState {
             shuffle_enabled: false,
             repeat_mode: RepeatMode::Off,
             version: 0,
+            play_ids: OnceLock::new(),
         }
     }
 }
@@ -62,7 +76,40 @@ pub fn current_index_from_i32(idx: i32) -> Option<usize> {
     usize::try_from(idx).ok()
 }
 
+/// The play-order slots of a queue of `len` whose records the window holds around `current`: the
+/// one before it, it and the three after, wrapping where `wraps` as `previous` and `advance_skip`
+/// do. With nothing current the next slot is the first.
+pub fn window_slots(
+    len: usize,
+    current: Option<usize>,
+    wraps: bool,
+) -> impl Iterator<Item = usize> {
+    let span = i64::try_from(len).unwrap_or(0);
+    let current = current.and_then(|ci| i64::try_from(ci).ok()).unwrap_or(-1);
+    (-WINDOW_BEHIND..=WINDOW_AHEAD).filter_map(move |offset| {
+        if span == 0 {
+            return None;
+        }
+        let slot = current + offset;
+        let slot = if wraps { slot.rem_euclid(span) } else { slot };
+        usize::try_from(slot).ok().filter(|&slot| slot < len)
+    })
+}
+
 impl QueueState {
+    /// A queue of `ids` in their own order, as `queue.json` saved it. An index past the end names
+    /// no track, so it seats none.
+    pub fn restored(ids: Vec<i64>, current_index: Option<usize>) -> Self {
+        let len = ids.len();
+        Self {
+            tracks: ids,
+            play_order: (0..len).collect(),
+            original_order: (0..len).collect(),
+            current_index: current_index.filter(|&ci| ci < len),
+            ..Self::default()
+        }
+    }
+
     /// Number of tracks in the current play order.
     pub fn len(&self) -> usize {
         self.play_order.len()
@@ -72,29 +119,57 @@ impl QueueState {
         self.play_order.is_empty()
     }
 
-    /// Resolve an index in `play_order` to the actual track.
-    fn track_at(&self, play_index: usize) -> Option<&Arc<TrackSummary>> {
-        self.play_order.get(play_index).and_then(|&ti| self.tracks.get(ti))
+    /// The track at an index in `play_order`.
+    pub fn id_at(&self, play_index: usize) -> Option<i64> {
+        self.play_order.get(play_index).and_then(|&ti| self.tracks.get(ti).copied())
     }
 
-    pub fn add_tracks(&mut self, new_tracks: Vec<Arc<TrackSummary>>) {
-        let start = self.tracks.len();
-        let count = new_tracks.len();
-        self.tracks.extend(new_tracks);
-        let range = start..start + count;
-        self.play_order.extend(range.clone());
-        self.original_order.extend(range);
+    /// Every track in play order, shared with whoever holds the last copy until the order moves.
+    pub fn play_ids(&self) -> Arc<[i64]> {
+        let ids = self.play_ids.get_or_init(|| {
+            self.play_order.iter().filter_map(|&ti| self.tracks.get(ti).copied()).collect()
+        });
+        Arc::clone(ids)
+    }
+
+    /// The tracks a transition can move onto without a fetch, those at [`window_slots`], each id
+    /// once.
+    pub fn window_ids(&self) -> Vec<i64> {
+        let mut ids = Vec::new();
+        for slot in window_slots(self.len(), self.current_index, self.repeat_mode.wraps()) {
+            if let Some(id) = self.id_at(slot)
+                && !ids.contains(&id)
+            {
+                ids.push(id);
+            }
+        }
+        ids
+    }
+
+    /// Forget the cached ids and count a mutation, for every change that moves the order rather
+    /// than just the index.
+    fn order_changed(&mut self) {
+        self.play_ids = OnceLock::new();
         self.version += 1;
     }
 
-    pub fn insert_next(&mut self, track: Arc<TrackSummary>) {
+    pub fn add_tracks(&mut self, ids: &[i64]) {
+        let start = self.tracks.len();
+        self.tracks.extend_from_slice(ids);
+        let range = start..start + ids.len();
+        self.play_order.extend(range.clone());
+        self.original_order.extend(range);
+        self.order_changed();
+    }
+
+    pub fn insert_next(&mut self, id: i64) {
         let track_idx = self.tracks.len();
-        self.tracks.push(track);
+        self.tracks.push(id);
         self.original_order.push(track_idx);
 
         let insert_pos = self.current_index.map_or(0, |ci| ci + 1).min(self.play_order.len());
         self.play_order.insert(insert_pos, track_idx);
-        self.version += 1;
+        self.order_changed();
     }
 
     pub fn remove_at(&mut self, index: usize) -> bool {
@@ -124,7 +199,7 @@ impl QueueState {
 
         // Note: we don't remove from self.tracks to avoid invalidating all indices.
         // Orphaned track data is cleaned up on queue clear.
-        self.version += 1;
+        self.order_changed();
         true
     }
 
@@ -168,7 +243,7 @@ impl QueueState {
             self.current_index = Some(next);
         }
 
-        self.version += 1;
+        self.order_changed();
     }
 
     pub fn move_track(&mut self, from: usize, to: usize) -> bool {
@@ -190,7 +265,7 @@ impl QueueState {
                 ci
             });
         }
-        self.version += 1;
+        self.order_changed();
         true
     }
 
@@ -199,28 +274,24 @@ impl QueueState {
         self.play_order.clear();
         self.original_order.clear();
         self.current_index = None;
-        self.version += 1;
+        self.order_changed();
     }
 
     /// Jump to a specific index in the play order.
-    pub fn skip_to_index(&mut self, index: usize) -> Option<&Arc<TrackSummary>> {
+    pub fn skip_to_index(&mut self, index: usize) -> Option<i64> {
         if index >= self.len() {
             return None;
         }
         self.current_index = Some(index);
         self.version += 1;
-        self.track_at(index)
+        self.id_at(index)
     }
 
-    pub fn get_current(&self) -> Option<&Arc<TrackSummary>> {
-        let ci = self.current_index?;
-        if ci >= self.len() {
-            return None;
-        }
-        self.track_at(ci)
+    pub fn current_id(&self) -> Option<i64> {
+        self.id_at(self.current_index?)
     }
 
-    pub fn advance(&mut self) -> Option<&Arc<TrackSummary>> {
+    pub fn advance(&mut self) -> Option<i64> {
         if self.play_order.is_empty() {
             return None;
         }
@@ -229,11 +300,11 @@ impl QueueState {
         let len = self.len();
         let next_from = |ci: Option<usize>| ci.map_or(0, |i| i + 1);
         match self.repeat_mode {
-            RepeatMode::One => self.get_current(),
+            RepeatMode::One => self.current_id(),
             RepeatMode::All => {
                 let next = next_from(self.current_index) % len;
                 self.current_index = Some(next);
-                self.get_current()
+                self.current_id()
             }
             RepeatMode::Off => {
                 let next_index = next_from(self.current_index);
@@ -241,7 +312,7 @@ impl QueueState {
                     return None;
                 }
                 self.current_index = Some(next_index);
-                self.get_current()
+                self.current_id()
             }
         }
     }
@@ -249,7 +320,7 @@ impl QueueState {
     /// User-initiated skip — advances to next track.
     /// `RepeatMode::One` wraps like `RepeatMode::All`: manual navigation
     /// walks the queue in a loop. Only `Off` stops at the end.
-    pub fn advance_skip(&mut self) -> Option<&Arc<TrackSummary>> {
+    pub fn advance_skip(&mut self) -> Option<i64> {
         if self.play_order.is_empty() {
             return None;
         }
@@ -261,7 +332,7 @@ impl QueueState {
             RepeatMode::All | RepeatMode::One => {
                 let next = next_from(self.current_index) % len;
                 self.current_index = Some(next);
-                self.get_current()
+                self.current_id()
             }
             RepeatMode::Off => {
                 let next_index = next_from(self.current_index);
@@ -269,12 +340,12 @@ impl QueueState {
                     return None;
                 }
                 self.current_index = Some(next_index);
-                self.get_current()
+                self.current_id()
             }
         }
     }
 
-    pub fn previous(&mut self) -> Option<&Arc<TrackSummary>> {
+    pub fn previous(&mut self) -> Option<i64> {
         if self.play_order.is_empty() {
             return None;
         }
@@ -290,10 +361,10 @@ impl QueueState {
             self.current_index = Some(ci - 1);
         }
         // Off with None or Some(0): no change.
-        self.get_current()
+        self.current_id()
     }
 
-    pub fn peek_next(&self) -> Option<&Arc<TrackSummary>> {
+    pub fn peek_next(&self) -> Option<i64> {
         if self.play_order.is_empty() {
             return None;
         }
@@ -301,11 +372,11 @@ impl QueueState {
         let len = self.len();
         let next_from = |ci: Option<usize>| ci.map_or(0, |i| i + 1);
         match self.repeat_mode {
-            RepeatMode::One => self.get_current(),
-            RepeatMode::All => self.track_at(next_from(self.current_index) % len),
+            RepeatMode::One => self.current_id(),
+            RepeatMode::All => self.id_at(next_from(self.current_index) % len),
             RepeatMode::Off => {
                 let next = next_from(self.current_index);
-                if next >= len { None } else { self.track_at(next) }
+                if next >= len { None } else { self.id_at(next) }
             }
         }
     }
@@ -325,7 +396,7 @@ impl QueueState {
         self.play_order = new_play_order;
         self.current_index = Some(0);
         self.shuffle_enabled = true;
-        self.version += 1;
+        self.order_changed();
     }
 
     /// In-place version of [`Self::apply_shuffle_order`] that shuffles
@@ -357,25 +428,22 @@ impl QueueState {
         }
         self.current_index = Some(0);
         self.shuffle_enabled = true;
-        self.version += 1;
+        self.order_changed();
     }
 
     /// Restore original track order (unshuffle).
-    /// Only clones `Vec<usize>` instead of `Vec<TrackSummary>`.
     pub fn unshuffle(&mut self) {
-        let current_track_id = self.get_current().map(|t| t.id);
+        let current_track_id = self.current_id();
         self.play_order.clone_from(&self.original_order);
 
         if let Some(track_id) = current_track_id
-            && let Some(pos) = self
-                .play_order
-                .iter()
-                .position(|&ti| self.tracks.get(ti).is_some_and(|t| t.id == track_id))
+            && let Some(pos) =
+                self.play_order.iter().position(|&ti| self.tracks.get(ti) == Some(&track_id))
         {
             self.current_index = Some(pos);
         }
         self.shuffle_enabled = false;
-        self.version += 1;
+        self.order_changed();
     }
 
     pub fn cycle_repeat_mode(&mut self) {
@@ -414,15 +482,15 @@ impl QueueState {
         let old_len = self.tracks.len();
         let mut keep_mask: Vec<bool> = Vec::with_capacity(old_len);
         let mut remap: Vec<Option<usize>> = Vec::with_capacity(old_len);
-        let mut new_tracks: Vec<Arc<TrackSummary>> = Vec::with_capacity(old_len);
-        for t in &self.tracks {
-            if ids_to_remove.contains(&t.id) {
+        let mut new_tracks: Vec<i64> = Vec::with_capacity(old_len);
+        for &id in &self.tracks {
+            if ids_to_remove.contains(&id) {
                 keep_mask.push(false);
                 remap.push(None);
             } else {
                 keep_mask.push(true);
                 remap.push(Some(new_tracks.len()));
-                new_tracks.push(Arc::clone(t));
+                new_tracks.push(id);
             }
         }
 
@@ -480,28 +548,16 @@ impl QueueState {
         });
 
         self.tracks = new_tracks;
-        self.version += 1;
+        self.order_changed();
 
         PruneOutcome { removed, current_was_removed }
     }
 
     pub fn to_persistable(&self) -> PersistableQueue {
-        let mut track_ids: Vec<i64> = Vec::with_capacity(self.play_order.len());
-        track_ids
-            .extend(self.play_order.iter().filter_map(|&ti| self.tracks.get(ti).map(|t| t.id)));
-        PersistableQueue { track_ids, current_index: current_index_to_i32(self.current_index) }
-    }
-
-    /// Return tracks in current play order for `ViewModel` emission.
-    /// With Arc, each clone is a ref-count increment (no deep String copies).
-    pub fn tracks_in_play_order(&self) -> Vec<Arc<TrackSummary>> {
-        let mut result = Vec::with_capacity(self.play_order.len());
-        for &ti in &self.play_order {
-            if let Some(track) = self.tracks.get(ti) {
-                result.push(Arc::clone(track));
-            }
+        PersistableQueue {
+            track_ids: self.play_ids().to_vec(),
+            current_index: current_index_to_i32(self.current_index),
         }
-        result
     }
 }
 

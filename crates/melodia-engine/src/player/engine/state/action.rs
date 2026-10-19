@@ -60,6 +60,25 @@ pub enum PlayerAction {
     },
     UpdatePlayCount(i64),
     UpdateSkipCount(i64),
+    /// Start a queued track once its record is fetched, the window not holding one yet. Carries no
+    /// fetch of its own: the engine can't name the database, so the app's window task does it.
+    StartWhenResolved(AwaitedStart),
+}
+
+/// A track start a transition owes, left waiting on the record the window lacked.
+///
+/// What the start was decided against rides along, so the one that finally runs can tell whether
+/// anything moved in the meantime (`PlayerState::resume_awaited`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AwaitedStart {
+    pub id: i64,
+    /// The play-order slot the queue moved onto for it.
+    pub slot: usize,
+    /// Put the track back on pause once it starts, for a skip made while paused.
+    pub re_pause: bool,
+    /// Unplayable tracks the batch had already skipped, so a queue with nothing playable in it
+    /// still stops after one lap however many fetches the lap took.
+    pub skipped: usize,
 }
 
 /// The verbose log's playback narrative, one action per line.
@@ -91,6 +110,9 @@ impl std::fmt::Display for PlayerAction {
             Self::PlayStream { generation, .. } => write!(f, "play radio stream #{generation}"),
             Self::UpdatePlayCount(id) => write!(f, "play count +1 for track {id}"),
             Self::UpdateSkipCount(id) => write!(f, "skip count +1 for track {id}"),
+            Self::StartWhenResolved(awaited) => {
+                write!(f, "start track {} once its record is fetched", awaited.id)
+            }
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Subscriber on `state.library_changed` that reconciles the playback
 //! queue against the live `tracks` table. When the file watcher (or any
 //! other library mutation) removes a row, this task drops the matching
-//! `Arc<TrackSummary>` out of the queue. If the currently-playing track
+//! id out of the queue. If the currently-playing track
 //! was among the casualties, playback auto-skips to the next surviving
 //! entry — or stops if the queue is now empty.
 //!
@@ -19,7 +19,7 @@ use melodia_engine::player::engine::actions::emit_and_execute;
 use melodia_engine::player::engine::backend::PlaybackEngine;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
 use melodia_engine::player::engine::state::{
-    PlayerAction, PlayerStateHandle, lock_state, play_track_inner, stop_end_of_queue,
+    PlayerAction, PlayerStateHandle, lock_state, stop_end_of_queue,
 };
 use melodia_engine::player::engine::types::PlaybackSource;
 use melodia_store::database::{DbPool, queries};
@@ -65,10 +65,7 @@ async fn reconcile_once(
     // Step 1: snapshot every track id currently referenced by the queue.
     // Brief read-only lock — no with_state_emit because we're not mutating;
     // observers should not see a spurious ViewModel re-emit.
-    let queued_ids: Vec<i64> = {
-        let s = lock_state(player_state);
-        s.queue.tracks.iter().map(|t| t.id).collect()
-    };
+    let queued_ids = lock_state(player_state).queue.play_ids();
 
     if queued_ids.is_empty() {
         return Ok(());
@@ -89,20 +86,28 @@ async fn reconcile_once(
 
     log::info!("Pruning {} missing tracks from queue", to_remove.len());
 
-    // Step 4: prune + (optionally) auto-skip in a single critical section.
+    // Step 4: where the playing entry goes, the record of the one playback moves on to, so the
+    // start below needn't wait on the window task.
+    let successor = match unheld_successor(player_state, &to_remove) {
+        Some(id) => queries::track::get_track_summaries_by_ids(db, &[id]).await?,
+        None => Vec::new(),
+    };
+
+    // Step 5: prune + (optionally) auto-skip in a single critical section.
     // `with_state_emit` publishes the new queue VM on `sinks.queue` and the
     // light VM on `sinks.view_model`, so the queue sheet's subscriber
     // rebuilds rows automatically.
     emit_and_execute(&**engine, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);
+        s.window.seat(&s.queue.window_ids(), successor.into_iter().map(Arc::new));
         // A station leaves the queue seated underneath rather than playing from it, so a row
         // going missing out of it is not a playback event at all: reacting would stop the
         // station and take it off screen over a track it was never playing.
         if !outcome.current_was_removed || !s.source_allows(PlaybackSource::advances_queue) {
             return Vec::new();
         }
-        if let Some(track) = s.queue.get_current().cloned() {
-            return play_track_inner(s, track, None);
+        if let Some(id) = s.queue.current_id() {
+            return s.start_queued(id, false, 0);
         }
         let mut acts = stop_end_of_queue(s);
         // Clear the deck so the now-playing bar stops showing a track the queue no longer
@@ -112,6 +117,19 @@ async fn reconcile_once(
         acts
     });
     Ok(())
+}
+
+/// The track the queue lands on once `gone` is pruned, where the playing entry is among `gone` and
+/// the window holds no record for what follows it. Asked of a copy, so the answer is
+/// `prune_missing`'s own; a playing entry going missing is rare enough to pay for one.
+fn unheld_successor(player_state: &PlayerStateHandle, gone: &HashSet<i64>) -> Option<i64> {
+    let s = lock_state(player_state);
+    if !s.queue.current_id().is_some_and(|id| gone.contains(&id)) {
+        return None;
+    }
+    let mut after = s.queue.clone();
+    after.prune_missing(gone);
+    after.current_id().filter(|&id| s.record(id).is_none())
 }
 
 #[cfg(test)]

@@ -1,6 +1,6 @@
 # Plan: Paged track lists (every library-sized list holds ids, not rows)
 
-Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 next) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
+Status: **in progress** (Phases 0 to 2 done, Phase 3 hand-checked, measured and tested with four fixes awaiting their hand check, Phase 3.5 open to discuss, Phase 4 implemented, hand-checked and documented, its census and new tests pending) · Owner: Kenan · Created: 2026-10-18 · Issue #133, branch `perf/paged-track-lists`
 
 > **Validated 2026-10-18** against `6d7e7648` (`feat/settings-sidebar`), three read-only code traces of the list views, the queue and the index/boot/measurement side, and live heap walks of the release build on the 51,012-track dev library (method in Appendix A, protocol in Appendix B).
 
@@ -89,8 +89,8 @@ All of it grows linearly with the library, and the README's footprint runs (open
    - **The `ModelRc` is installed once per list.** A new keyset swaps inside it and calls `reset`, because `Repeater` compares models by pointer.
 5. **The queue holds ids. The engine reads a prefetched window, and a miss defers rather than blocks.**
    - **Shape:** `QueueState.tracks` becomes `Vec<i64>`. A new `TrackWindow` holds at most six `Arc<TrackSummary>` keyed by id: previous, current, next under the repeat mode, next under manual Next (they differ under repeat-one, `queue.rs:261` vs `:304`), and the two after that for the auto-skip chain (`actions.rs:276-285`).
-   - **Filling it:** an app task, `tasks::queue_window`, watches the queue version and fetches missing ids with `get_track_summaries_by_ids`.
-   - **A miss:** every synchronous transition reads the window. On a miss it returns one new action, `PlayerAction::StartWhenResolved { id, mode }`, which `execute_actions` turns into a fetch followed by `emit_and_execute` if that id is still the slot it was. The gapless and crossfade gates treat a missing next as "no next yet" and re-ask every 500 ms tick, so a transition loses gapless only if the window is still empty in its final `PRELOAD_LEAD_MS`.
+   - **Filling it:** an app task, `tasks::queue_window`, watches the queue version and fetches missing ids with `get_track_summaries_by_ids`. It also reads every record again on a library tick (amended 2026-10-19), which keeps an upcoming track's heart, stars and path current and is now how a retag reaches Now Playing: `apply_tag_edit`'s own resync went. The four start sites that are already async (Play, a queue row's double-click, the restore and the prune's reseat) fetch the records they start from ahead of the emit.
+   - **A miss:** every synchronous transition reads the window. On a miss it moves the queue, leaves the deck empty under `Loading` so the monitor neither ticks nor ends the drained stream a second time, and returns `PlayerAction::StartWhenResolved(AwaitedStart)` (amended 2026-10-19 from `{ id, mode }`: a crossfade never defers, it bails as it does with no next, and the start carries its slot, a re-pause and the auto-skip count, so the whole-lap guard holds across a deferral). The engine can't name the database, so `execute_actions` publishes it on `sinks.awaited_start`; the window task fetches the record and calls `actions::start_awaited`, which starts the track only if the state is still `Loading` with no source and the current slot still holds that id. The gapless and crossfade gates treat a missing next as "no next yet" and re-ask every 500 ms tick, so a transition loses gapless only if the window is still empty in its final `PRELOAD_LEAD_MS`.
    - **Publishing:** `QueueViewModel` carries the ids as an `Arc<[i64]>` shared copy-on-write with `QueueState`. Publishing on every advance becomes O(1), where `state/mod.rs:240-244` rebuilds a whole `Vec<Arc<_>>` under the lock today.
    - **Duplicates and missing rows** keep today's answer: `get_track_summaries_by_ids` drops both (`lookup.rs:98-101`), so `player_play_tracks` dedups and drops through `existing_ids`.
 6. **Lists refetch their keyset, never their rows.** A `library_changed` tick refetches ids (one indexed query) and re-reads the rows the list holds, those around the viewport first (amended 2026-10-18 from dropping the cache, which would put every row on screen back on placeholders at each tick). A heart or star click patches the cached row and refetches only the keysets whose membership it moves (Favorites, smart playlists). The write still bumps `library_changed`, so a visible Songs tab follows a click with one keyset query and that re-read.
@@ -124,9 +124,10 @@ All of it grows linearly with the library, and the README's footprint runs (open
 | `crates/melodia-store/src/database/queries/scan/mutations.rs` | writes `search_text` through `DerivedColumns`, which also took over the sort key all three writers computed |
 | `crates/melodia-app/src/library/keyset.rs` (new, Phase 1) | the library API over it, `facts` and `genre_lines` included (Phase 3) |
 | `crates/melodia-app/src/tasks/search_text_backfill.rs` (new, Phase 1) | the per-launch backfill, spawned beside `retroactive_hash` |
-| `crates/melodia-app/src/tasks/queue_window.rs` (new) | the window prefetch |
-| `crates/melodia-engine/src/player/engine/queue.rs` (510) | ids and orders |
-| `crates/melodia-engine/src/player/engine/queue_window.rs` (new) | `TrackWindow`. Keeps `handlers.rs` (666) from growing. `backend/mod.rs` (795) is not touched. |
+| `crates/melodia-app/src/tasks/queue_window.rs` (new, Phase 4) | the window prefetch, its refresh on a library tick, and running a start a transition owed |
+| `crates/melodia-engine/src/player/engine/queue.rs` (510) | ids and orders, the play order's ids shared until it moves, and `window_slots` |
+| `crates/melodia-engine/src/player/engine/queue_window.rs` (new, Phase 4) | `TrackWindow`. Keeps `handlers.rs` (666) from growing. `backend/mod.rs` (795) is not touched. |
+| `crates/melodia-views/src/ui/paged_rows/queue_rows.rs` (new, Phase 4) | `QueueRows` over `QueueRow`: the placeholder, the fetcher (`track_rows::fetch_by_id` over its own conversion), the open's seed and the row shape Up Next shares |
 | `crates/melodia-views/src/ui/paged_rows/mod.rs` (new, Phase 2) | `PagedRows<R>`: the model, the row cache, the window and its one fetch, `ScrollPoint`, the selection, `move_row` for a drag (Phase 3), and the `KeysetTickets` that order a list's loads, keep a library change's re-read owed until one shows, and `revoke` every load out when a list is released (Phase 3) |
 | `crates/melodia-views/src/ui/paged_rows/track_rows.rs` (new, Phase 2) | `TrackRows` over `TrackListRow`: the placeholder, the fetcher, the seeded `load`, the cover prewarm, and `settle_reload`, the reload tail Songs, Favorites and the details share (Phase 3) |
 | `crates/melodia-views/src/ui/track_list_cache.rs` (498), `track_list_model.rs` (127) | deleted (Phase 2) |
@@ -309,27 +310,55 @@ No query or Rust code changes. On a copy of the dev database (2026-10-18) both p
 
 One commit, because the engine, the app and the two consumers only validate together.
 
-Status: not started.
+Status: implemented, hand-checked, documented and measured (2026-10-19), uncommitted. fmt, clippy and the full suite green (4,129 tests). New tests pending.
 
-- [ ] Engine changes:
-  - `QueueState` holds ids;
-  - add `TrackWindow` and `StartWhenResolved`;
-  - every transition reads the window: `begin_track` and the next, previous, end-of-stream, crossfade, auto-skip, `resume_from_stopped` and prune-reseat builders;
-  - `evaluate_playing_tick` and `next_needs_reopen` read the window's next;
-  - `advance_gapless` seats the id that was actually staged.
-- [ ] App changes:
-  - `player_play_tracks`, `queue_add_tracks`, `play_next_many`, `open_as_queue` and `queue_skip_to_index` pass ids;
-  - `plan_restore` fetches the window only, and remaps `current_index` when ids dropped out. Today the index survives unremapped (`persistence.rs:43`), a pre-existing bug;
-  - `sync_track_summaries` patches the window.
-- [ ] Views:
-  - the sheet becomes `PagedRows<QueueRow>` over the queue keyset; `ShadowEntry` keeps selection only (ids, no records);
-  - delete `LinkCache`;
-  - the favourite toggle patches the page and the window, not `st.queue.tracks` from a worker (`callbacks.rs:174-186`);
-  - Up Next fetches its 20 rows by id;
-  - `latest_qvm` holds ids.
-- [ ] Keep the 350 ms close teardown and its `malloc_trim`.
+Decided with Kenan on 2026-10-19, before the work:
+1. **Picks are by track.** The sheet selects through `PagedRows`' own id set and the track lists' `compute_click_selection`, so a track queued twice is picked, counted and removed as both rows. A rebuild already re-mapped the old per-row bits by id, so this was the behaviour after any queue change.
+2. **At a gapless handover the queue wins.** Where the queue's next moved after the stage (the last `PRELOAD_LEAD_MS`), the handover starts the queue's track, a cut at most a poll into the staged one, instead of seating the staged one. This resolves the staged-gapless risk below.
+3. **A restart keeps repeats.** The restore drops only ids whose rows are gone, through `prune_missing`, which also remaps `current_index`, and an index past the end now seats nothing.
 
-Memory: Play all and queue sheet open both within the [Targets](#targets), and closing the sheet returns to the Play-all reading.
+- [x] Engine changes:
+  - `QueueState` holds ids, its vectors crate-private; the play order's ids are an `Arc<[i64]>` built on first ask after the order moves, so an advance republishes the same allocation;
+  - `TrackWindow` on `PlayerState`, filled against `QueueState::window_ids`, the slots `window_slots` names (one before the current, it, three after, wrapping where repeat wraps);
+  - every transition starts a queued track through `PlayerState::start_queued`, which defers on a miss (decision 5); the crossfade builder reads its next's record before it advances and bails without one;
+  - `evaluate_playing_tick` and `next_needs_reopen` read the next's record from the window, and `PlayingTick.late_preload` carries the record the monitor keeps as `staged`;
+  - `advance_gapless` seats `staged` where the advanced slot holds it and starts the queue's track otherwise;
+  - `any_tracked` and `sync_track_summaries` gave way to `window_wanted` and `seat_window_records`.
+- [x] App changes:
+  - `player_play_tracks`, `queue_add_tracks` and `play_next_many` validate ids through `library::keyset::existing_in_order` instead of fetching whole records; `open_as_queue` and the import append pass ids;
+  - `player_play_tracks` fetches the window its start opens, `queue_skip_to_index` (now `async`) the target's record, and the prune its successor's, each ahead of the emit;
+  - `plan_restore` builds the `QueueState`, prunes the gone ids and fetches its window's records;
+  - `tasks::queue_window` (decision 5) is spawned beside `queue_prune`.
+- [x] Views:
+  - the sheet is a `QueueRows` over the queue's ids. `ShadowEntry`, the index anchor, `links.rs`'s `LinkCache` and `RowLinks::stamp` went; the rows carry their album, artist and genre ids from the projection;
+  - a drag moves the row in the model first, so the publish that follows repaints nothing;
+  - the favourite toggle patches the cached rows on the UI thread; the worker-side write into `st.queue.tracks` went;
+  - Up Next stays a 20-row `VecModel` (decision 9) and fetches its slice by id, showing it and playing the slide in the tick the fetch lands, with a ticket dropping an overtaken fetch; it reads again on a library tick;
+  - `latest_qvm` and `bridge::to_slint_queue_vm` read the ids.
+- [x] The 350 ms close teardown and its `malloc_trim` stay; the close clears the rows and keeps the picks.
+- [x] Tests the phase broke, fixed in it: the engine's queue, state, actions and handlers suites queue ids and seat their records (`queue_up`); `sync_track_summaries`' test went to `seat_window_records`; the restore tests go through `QueueState::restored`, and the out-of-range index test now expects no current slot; the app's queue, playback and prune suites read `play_ids`; `RestorePlan` carries the queue; the sheet's `same_sources` tests went with it, and its row-shape tests moved to `paged_rows/tests/queue_rows_tests.rs`; Up Next's `outgoing_row` tests read the rows on show.
+- [x] Hand check, passed by Kenan in the dev data folder: Play all at 51k; Next and Previous at both ends under each repeat mode; shuffle on and off; Play Next and Add to Queue from a row and a card, a track queued twice; in the sheet, remove one, remove the picks (both copies together), drag, clear and a far double-click; an Up Next click; an album gapless and a crossfade; Play Next in the last 1.5 s (the queue's track plays); the end-of-track sleep timer; an upcoming track favourited or rated from Songs showing it once playing; a retag of the playing track and of one in Up Next; deleting the playing file; a station over the queue, then stop; a restart with a repeat queued and a missing row before the current one; five unplayable files in a row, and everything unplayable under repeat-all; the sheet's first frames, covers, Go to and Copy; the miniplayer's Up Next; MPRIS Next and Previous.
+- [x] After the hand check, asked by Kenan: a queue row marks its track as a track row does, the heart up for as long as it is a favourite and the star strip on hover. The title, heart and strip moved out of `track-list-row.slint` into `components/track-list/track-title.slint`'s `TrackTitle`, which both rows mount; `QueueRow` gained `rating` and `Queue` a `set-row-rating`, and the queue's heart and stars write through `wire_row_flag!`, the track lists' path, in place of its hand-rolled favourite. Passed by hand.
+- [x] Census (Appendix B, states 1 to 5), below. By code reading the queue costs 32 B per track, three vectors and the shared ids, about 1.6 MiB at 51k; Play all measured 1.73.
+- [ ] New tests, on Kenan's go: `window_slots` and `window_ids` at both ends under each repeat mode; the ids cache reset by every order mutator; each transition's hit and miss, and `resume_awaited` refusing after a Stop, a Next or a station; the crossfade bailing without advancing; the gapless "queue wins" branch; the skip count across a deferral; a tick with a missing next; the restore's remap with repeats kept; `play_tracks` dropping missing ids and repeats; the window task filling and resolving; the sheet's picks over a duplicated id.
+- [x] Doc edits: root `CLAUDE.md`'s "Models from background"; `ui-patterns.md` (the paged-list entry and the sheet's picks, a `TrackTitle` entry, the row menu's "Go to" hosts, the sheet's open under `covers-generation`); `audio-stack.md` (the queue as ids and its window, the miss, the queue winning a stale handover, `Loading`'s second use, the gapless stage and the crossfade builder reading the window); `library-data.md` (the `TrackSummary` and `TrackListRow` projections, the queue beside the keyset paragraph, the rating strip's shared cell).
+
+Memory, 51k dev library, release, one launch per build on the dev folder with the 25-track queue and a null sink, everything restored after (2026-10-19). Claude launched both builds at Kenan's ask and Kenan clicked. Before is `main` at `065275c4` (the Phase 0 binary, sha256 `43d06cbc…`, on the pre-migration copy of the database); after is this branch's working tree (sha256 `b579b15b…`). MiB:
+
+| State | Before: Anonymous | Before: live heap | After: Anonymous | After: live heap |
+|---|---|---|---|---|
+| 1 Idle, Synthwave playlist open, 170 s | 55.9 | 16.22 | 32.9 | 15.55 |
+| 2 Songs open | 77.5 | 38.63 | 40.6 | 17.91 |
+| 3 Play all | 91.3 | 70.96 | 41.7 | 19.64 |
+| 4 Queue sheet open | 114.1 | 97.67 | 43.0 | 21.20 |
+| 5 Queue sheet closed | 97.6 | 80.33 | 37.7 | 19.74 |
+
+- **Compare on live heap.** Each step's cost, before against after: Songs 22.41 against 2.36, Play all 32.33 against 1.73, opening the sheet 26.71 against 1.56. The closed sheet keeps 9.37 over Play all before and 0.10 after.
+- **Anonymous follows the trims, not the data.** Trimmable pages per state, before / after: idle 17.09 / 0.00, Songs 14.44 / 6.24, Play all 4.48 / 5.60, sheet open 0.46 / 5.46, sheet closed 0.54 / 0.76. Before's one boot trim at 5 s runs ahead of the rescan and the pool reap; after's retimed trims leave idle clean and the sheet's close trim takes the rest. Before's sheet open (114.1) is within 0.3 of Session B's.
+- **Songs' row covers:** before 513 at 48² (3.40 MiB), the prewarm filling its cap; after 87 (0.58 MiB). The sheet decoded none, its first rows being Songs' first rows.
+- **One per-track structure is left, alive only while the sheet is open:** 49,839 live 48 B chunks in the main arena (2.28 MiB, 0.98 per track), gone after the close. Not attributed yet; heaptrack names it. It is why the sheet misses its target by 0.3 MiB.
+- **Peak RSS is the boot's file pages** (Phase 3.5): 440.6 MB on the census run against before's 336.8. A second launch of after with `MELODIA_RSS_SAMPLE=1` read 447.0 MB at 1.5 s, 389.0 MB of it file pages and 38.1 MiB anonymous, held until the reap at 121 s took RSS to 186.7 MB and the file pages to 132.7 MB with the anonymous part unchanged. VmHWM was 447.8 MB.
+- **RSS after the boot connections close:** 184.1 MB at idle; 201.8 MB at state 5, 144.2 MB of it file pages (before: 299.2).
 
 ## Phase 4.5 (to discuss): the card grids and Browse
 
@@ -367,8 +396,8 @@ Memory: Most Played on a library with many played tracks costs the keyset.
 Status: not started.
 
 - [ ] README Footprint: re-run both tables, and add the Songs / Play all / Queue sheet rows the old protocol never exercised.
-- [ ] `.claude/rules/ui-patterns.md`: the "Lists and playback" and "Covers" entries naming `TrackListModel` and the queue sheet's globals.
-- [ ] `.claude/rules/audio-stack.md`: the queue holds ids and the window.
+- [x] `.claude/rules/ui-patterns.md`: the "Lists and playback" and "Covers" entries naming `TrackListModel` and the queue sheet's globals (Phases 2 to 4).
+- [x] `.claude/rules/audio-stack.md`: the queue holds ids and the window (Phase 4).
 
 ## Targets
 
@@ -376,12 +405,12 @@ Status: not started.
 
 | State | Before (2026-10-18) | Target | After |
 |---|---|---|---|
-| Idle (playlist detail open), Anonymous | 37.0 MiB | within ±1 MiB of before | |
-| Songs open, Anonymous | 61.3 MiB | ≤ idle + 2 MiB + row-tier covers (≤ 3.4 MiB) | |
-| Play all, Anonymous | 87.0 MiB | ≤ Songs + 2 MiB | |
-| Queue sheet open, Anonymous | 113.8 MiB | ≤ Play all + 1 MiB | |
-| Queue sheet closed, Anonymous | Play all + 10.7 MiB (Phase 0 run: 96.9 against its 86.2) | = Play all | |
-| Peak RSS over the run | 385 MB | under 200 MB once the DB connections close | |
+| Idle (playlist detail open), Anonymous | 37.0 MiB | within ±1 MiB of before | 32.9 MiB; live heap 15.55 against before's 16.22 on the same run (Phase 4) |
+| Songs open, Anonymous | 61.3 MiB | ≤ idle + 2 MiB + row-tier covers (≤ 3.4 MiB) | 40.6 MiB, idle + 7.7 of which 6.24 trimmable; live heap idle + 2.36, covers 0.44 |
+| Play all, Anonymous | 87.0 MiB | ≤ Songs + 2 MiB | 41.7 MiB, Songs + 1.1 |
+| Queue sheet open, Anonymous | 113.8 MiB | ≤ Play all + 1 MiB | 43.0 MiB, Play all + 1.3 (Phase 4's 48 B chunks) |
+| Queue sheet closed, Anonymous | Play all + 10.7 MiB (Phase 0 run: 96.9 against its 86.2) | = Play all | 37.7 MiB after the close trim; live heap Play all + 0.10 |
+| Peak RSS over the run | 385 MB | under 200 MB once the DB connections close | 440.6 MB at boot, file pages (Phase 3.5); 184.1 MB at idle |
 | 512-track library, every state | not run | equal to the 51k row within ~1 MiB | |
 
 ## Evidence (measured 2026-10-17 and 2026-10-18)
@@ -446,7 +475,8 @@ All figures are MiB except RSS, which is MB.
 - **Placeholder rows.** A fast scrollbar drag into pages not yet fetched shows placeholder rows until they land, typically one database read of 64 rows by id. Prefetch hides it for ordinary scrolling. Kenan judges it by hand in Phase 2, and if it reads as lag the page size and prefetch are the knobs, not a resident cache.
 - **Backfill window.** Right after the upgrade, a filter typed before `search_text_backfill` finishes sees rows whose column is still empty. They match every needle rather than none (decision 3), so the window widens a list and never hides a row.
 - **Snapshot staleness.** The keyset is a snapshot (the SQLite thread's own caveat): a row deleted after the fetch comes back as missing from rows-by-ids. `PagedRows` drops it from the visible page as a placeholder until the `library_changed` refetch lands. Never panic on a short page.
-- **Staged gapless.** `advance_gapless` (`handlers.rs:484`) seats whatever `queue.advance()` returns, so an edit inside the last `PRELOAD_LEAD_MS` may seat a track other than the staged one. Found by code reading, not reproduced. Phase 4 seats the staged id; verify by hand.
+- **Staged gapless.** `advance_gapless` (`handlers.rs:484`) seated whatever `queue.advance()` returned, so an edit inside the last `PRELOAD_LEAD_MS` could seat a track other than the staged one. Found by code reading, not reproduced. Phase 4 compares the two and lets the queue win (its decision 2); verify by hand.
+- **A deferred start shows `Loading`.** A transition whose record the window lacks leaves the deck empty under `Loading` until the fetch lands, which an OS media panel reads as stopped. It needs a transition racing a queue edit, the async start sites fetching ahead; judge by hand whether a slow read pool makes it visible.
 - **Collation contract.** The collation must be a total order (sqlx's documented contract: symmetric and transitive), and every connection that runs a keyset query must have it registered, writer included.
 
 ## Follow-ups (not in this plan)

@@ -1,0 +1,57 @@
+import { Theme } from "../../theme.slint";
+import { MaterialIcon } from "../material-icon.slint";
+import { StarRating } from "../star-rating.slint";
+
+// A track row's title and the marks after it: the heart, up for as long as the track is a
+// favourite, and the rating strip the row reveals on hover. The track lists and the queue sheet
+// both mount it, so the two rows can't come to mark a track differently.
+//
+// The title's `horizontal-stretch: 1`, and this layout's in the host, are what make
+// `overflow: elide` fire at all: without them the Text takes its intrinsic width, the full string,
+// and never learns it should elide, which RTL scripts make visible by overflowing into the cell
+// before it. The host's cell clips whatever still escapes.
+export component TrackTitle inherits HorizontalLayout {
+    in property <string> title;
+    in property <brush> ink;
+    in property <bool> is-favorite;
+    in property <int> rating;
+    // The row's hover, which mounts the strip. Mounted under the row's own `TouchArea`, so hovering
+    // a star keeps the row hovered and the strip up (`StarRating`'s header).
+    in property <bool> rating-shown;
+    // A disk-only Browse row's dimming, carried into the heart's brush.
+    in property <float> fade: 1.0;
+
+    callback rated(int /*new_rating*/);
+
+    horizontal-stretch: 1;
+    spacing: Theme.pad-sm;
+    alignment: start;
+    cross-axis-alignment: center;
+
+    Text {
+        horizontal-stretch: 1;
+        // The leading U+200E forces the string's BiDi base direction to LTR. Without it a title
+        // starting in Arabic or Hebrew takes an RTL base and Slint's elide drops the `…` entirely,
+        // leaving a gap at the cell's left edge with no truncation marker. Arabic substrings still
+        // render RTL inline, only the base direction moving, so the indicator anchors right for
+        // every row whatever the script.
+        text: "‎" + root.title;
+        color: root.ink;
+        font-size: Theme.font-size-row;
+        overflow: elide;
+    }
+    if root.is-favorite: MaterialIcon {
+        name: "favorite";
+        icon-size: 18px;
+        icon-color: Theme.red;
+        filled: true;
+        fade: root.fade;
+    }
+    // Beside the title, which elides to make room, rather than swapped for something the way the
+    // duration is.
+    if root.rating-shown: StarRating {
+        rating: root.rating;
+        star-size: 16px;
+        rated(n) => { root.rated(n); }
+    }
+}

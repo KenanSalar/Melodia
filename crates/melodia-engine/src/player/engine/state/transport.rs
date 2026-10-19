@@ -4,7 +4,9 @@
 use std::sync::Arc;
 
 use super::volume_to_amplitude;
-use super::{MAX_SPEED, MAX_VOLUME, MIN_SPEED, PlayerAction, PlayerState, RESTART_THRESHOLD_MS};
+use super::{
+    AwaitedStart, MAX_SPEED, MAX_VOLUME, MIN_SPEED, PlayerAction, PlayerState, RESTART_THRESHOLD_MS,
+};
 use crate::player::engine::types::{PlaybackSource, PlaybackStatus};
 use melodia_core::entities::track::TrackSummary;
 use melodia_playback::player::playback::crossfade::CrossfadeDecision;
@@ -153,14 +155,62 @@ impl PlayerState {
             actions.push(PlayerAction::UpdateSkipCount(track.id));
         }
 
-        if let Some(track) = self.queue.advance_skip().cloned() {
-            actions.extend(play_track_inner(self, track, None));
-            self.restore_paused(was_paused, &mut actions);
-        } else {
-            actions.extend(stop_end_of_queue(self));
+        match self.queue.advance_skip() {
+            Some(id) => actions.extend(self.start_queued(id, was_paused, 0)),
+            None => actions.extend(stop_end_of_queue(self)),
         }
 
         actions
+    }
+
+    /// Start `id`, the queue's track at the slot it has just moved onto: from its record where the
+    /// window holds one, and otherwise once the window task has fetched it.
+    ///
+    /// `re_pause` puts a track started while paused back on pause. `skipped` is how many unplayable
+    /// tracks the batch asking has already passed, carried through a deferral for the lap guard in
+    /// `execute_actions`.
+    pub fn start_queued(&mut self, id: i64, re_pause: bool, skipped: usize) -> Vec<PlayerAction> {
+        let Some(track) = self.record(id) else {
+            return self.await_record(id, re_pause, skipped);
+        };
+        let mut actions = play_track_inner(self, track, None);
+        self.restore_paused(re_pause, &mut actions);
+        actions
+    }
+
+    /// Owe the start of `id` to the window task. `Loading` on an empty deck is what keeps the
+    /// monitor from ticking, or from ending a drained stream a second time, while it is fetched.
+    fn await_record(&mut self, id: i64, re_pause: bool, skipped: usize) -> Vec<PlayerAction> {
+        let Some(slot) = self.queue.current_index else {
+            return stop_end_of_queue(self);
+        };
+        end_evicted_session(self);
+        self.status = PlaybackStatus::Loading;
+        self.source = None;
+        self.duration_ms = 0;
+        self.position_ms = 0;
+        vec![
+            PlayerAction::Stop { fade_ms: 0 },
+            PlayerAction::StartWhenResolved(AwaitedStart { id, slot, re_pause, skipped }),
+        ]
+    }
+
+    /// Whether `awaited` is still the start this state owes: nothing has started, stopped or moved
+    /// the queue since, and the window now holds its record.
+    pub fn still_awaits(&self, awaited: AwaitedStart) -> bool {
+        self.status == PlaybackStatus::Loading
+            && self.source.is_none()
+            && self.queue.current_index == Some(awaited.slot)
+            && self.queue.current_id() == Some(awaited.id)
+            && self.window.get(awaited.id).is_some()
+    }
+
+    /// Run the start `awaited` was owed, unless [`Self::still_awaits`] says it went stale.
+    pub fn resume_awaited(&mut self, awaited: AwaitedStart) -> Vec<PlayerAction> {
+        if !self.still_awaits(awaited) {
+            return vec![];
+        }
+        self.start_queued(awaited.id, awaited.re_pause, awaited.skipped)
     }
 
     /// Re-pause after a track change that was made while paused.
@@ -188,12 +238,9 @@ impl PlayerState {
             return self.build_move_to_actions(0);
         }
 
-        if let Some(track) = self.queue.previous().cloned() {
-            let mut actions = play_track_inner(self, track, None);
-            self.restore_paused(was_paused, &mut actions);
-            actions
-        } else {
-            self.build_move_to_actions(0)
+        match self.queue.previous() {
+            Some(id) => self.start_queued(id, was_paused, 0),
+            None => self.build_move_to_actions(0),
         }
     }
 
@@ -240,10 +287,9 @@ impl PlayerState {
             return actions;
         }
 
-        if let Some(track) = self.queue.advance().cloned() {
-            actions.extend(play_track_inner(self, track, None));
-        } else {
-            actions.extend(stop_end_of_queue(self));
+        match self.queue.advance() {
+            Some(id) => actions.extend(self.start_queued(id, false, 0)),
+            None => actions.extend(stop_end_of_queue(self)),
         }
 
         actions
@@ -298,9 +344,12 @@ impl PlayerState {
 
         // Re-read the queue under the emit lock rather than trusting the
         // monitor's earlier `peek_next` — a skip could have landed in between.
-        let Some(track) = self.queue.advance().cloned() else {
+        // No record means no crossfade, as no next does: a fade can't wait on a
+        // fetch, and the track drains to an end-of-stream that can.
+        let Some(track) = self.queue.peek_next().and_then(|id| self.record(id)) else {
             return actions;
         };
+        self.queue.advance();
 
         // The outgoing track counts as played the moment it starts fading. Same
         // accounting as `build_end_of_stream_actions`, just a few seconds early —
@@ -371,12 +420,7 @@ fn begin_track(
     track: Arc<TrackSummary>,
     start_position_ms: Option<u64>,
 ) -> TrackStart {
-    // Seating the track below evicts a station on its own, the two being one field now. What
-    // still has to be said out loud is the session: a connect in flight would otherwise pass its
-    // generation check and start the station over the track that replaced it.
-    if state.is_radio() {
-        state.end_stream_session();
-    }
+    end_evicted_session(state);
 
     state.status = PlaybackStatus::Playing;
     state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
@@ -394,6 +438,17 @@ fn begin_track(
     };
     state.source = Some(PlaybackSource::Track(track));
     start
+}
+
+/// End the session of a station a track is about to replace on the deck.
+///
+/// Replacing the source evicts the station on its own, the two being one field. What still has to
+/// be said out loud is the session: a connect in flight would otherwise pass its generation check
+/// and start the station over the track that replaced it.
+fn end_evicted_session(state: &mut PlayerState) {
+    if state.is_radio() {
+        state.end_stream_session();
+    }
 }
 
 /// Core playback logic — reused by commands, bus handler, position poller.
@@ -439,8 +494,8 @@ pub fn resume_from_stopped(state: &mut PlayerState) -> Vec<PlayerAction> {
     if let Some(actions) = replay_current_track(state) {
         return actions;
     }
-    match state.queue.get_current().cloned() {
-        Some(track) => play_track_inner(state, track, None),
+    match state.queue.current_id() {
+        Some(id) => state.start_queued(id, false, 0),
         None => vec![],
     }
 }
