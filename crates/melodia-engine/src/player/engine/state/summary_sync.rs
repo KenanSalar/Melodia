@@ -87,7 +87,10 @@ pub fn seat_window_records(
         let wanted = s.queue.window_ids();
         s.window.seat(&wanted, fresh.iter().cloned());
         s.current_track().and_then(|track| {
-            fresh.iter().find(|&record| record.id == track.id && record != track).cloned()
+            fresh
+                .iter()
+                .find(|&record| record.id == track.id && differs_beyond_position(record, track))
+                .cloned()
         })
     };
     let Some(record) = playing_moved else {
@@ -102,4 +105,10 @@ pub fn seat_window_records(
         }
         Vec::<PlayerAction>::new()
     });
+}
+
+/// Whether `fresh` reads differently from `held` in anything but `last_position`, which the
+/// periodic save rewrites as the track plays and so says nothing about an edit.
+fn differs_beyond_position(fresh: &TrackSummary, held: &TrackSummary) -> bool {
+    TrackSummary { last_position: held.last_position, ..fresh.clone() } != *held
 }

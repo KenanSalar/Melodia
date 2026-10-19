@@ -67,13 +67,13 @@ pub enum PlayerAction {
 
 /// A track start a transition owes, left waiting on the record the window lacked.
 ///
-/// What the start was decided against rides along, so the one that finally runs can tell whether
-/// anything moved in the meantime (`PlayerState::resume_awaited`).
+/// The start runs on whatever the queue's current slot holds once its record lands, not on the
+/// slot the transition chose: an edit landing during the fetch moves what starts rather than
+/// stranding the player under `Loading` (`PlayerState::resume_awaited`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AwaitedStart {
+    /// The track the transition moved onto, which is what the log names.
     pub id: i64,
-    /// The play-order slot the queue moved onto for it.
-    pub slot: usize,
     /// Put the track back on pause once it starts, for a skip made while paused.
     pub re_pause: bool,
     /// Unplayable tracks the batch had already skipped, so a queue with nothing playable in it

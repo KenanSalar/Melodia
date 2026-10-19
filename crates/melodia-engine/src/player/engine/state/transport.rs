@@ -181,9 +181,9 @@ impl PlayerState {
     /// Owe the start of `id` to the window task. `Loading` on an empty deck is what keeps the
     /// monitor from ticking, or from ending a drained stream a second time, while it is fetched.
     fn await_record(&mut self, id: i64, re_pause: bool, skipped: usize) -> Vec<PlayerAction> {
-        let Some(slot) = self.queue.current_index else {
+        if self.queue.current_index.is_none() {
             return stop_end_of_queue(self);
-        };
+        }
         end_evicted_session(self);
         self.status = PlaybackStatus::Loading;
         self.source = None;
@@ -191,26 +191,30 @@ impl PlayerState {
         self.position_ms = 0;
         vec![
             PlayerAction::Stop { fade_ms: 0 },
-            PlayerAction::StartWhenResolved(AwaitedStart { id, slot, re_pause, skipped }),
+            PlayerAction::StartWhenResolved(AwaitedStart { id, re_pause, skipped }),
         ]
     }
 
-    /// Whether `awaited` is still the start this state owes: nothing has started, stopped or moved
-    /// the queue since, and the window now holds its record.
-    pub fn still_awaits(&self, awaited: AwaitedStart) -> bool {
+    /// Whether a deferred start can run now: nothing has started or stopped since, and the queue's
+    /// current track has its record in the window, or the queue has emptied under it.
+    pub fn still_awaits(&self) -> bool {
         self.status == PlaybackStatus::Loading
             && self.source.is_none()
-            && self.queue.current_index == Some(awaited.slot)
-            && self.queue.current_id() == Some(awaited.id)
-            && self.window.get(awaited.id).is_some()
+            && self.queue.current_id().is_none_or(|id| self.window.get(id).is_some())
     }
 
-    /// Run the start `awaited` was owed, unless [`Self::still_awaits`] says it went stale.
+    /// Run the start `awaited` was owed, on the track the queue's current slot holds by now.
+    ///
+    /// Never defers again, so a record that never lands can't loop the window task; the queue
+    /// publish that moved the slot is what has it fetch the new one.
     pub fn resume_awaited(&mut self, awaited: AwaitedStart) -> Vec<PlayerAction> {
-        if !self.still_awaits(awaited) {
+        if !self.still_awaits() {
             return vec![];
         }
-        self.start_queued(awaited.id, awaited.re_pause, awaited.skipped)
+        match self.queue.current_id() {
+            Some(id) => self.start_queued(id, awaited.re_pause, awaited.skipped),
+            None => stop_end_of_queue(self),
+        }
     }
 
     /// Re-pause after a track change that was made while paused.

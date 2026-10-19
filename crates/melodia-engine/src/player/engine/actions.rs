@@ -115,8 +115,8 @@ fn run<B: PlayerBackend>(
     }
 }
 
-/// Start the track `awaited` names, now that the window task has fetched its record, unless the
-/// state has moved on since the transition that owed it.
+/// Run the start `awaited` owes, now that the window task has fetched a record, unless something
+/// has started or stopped since the transition that owed it.
 ///
 /// Checked before the emit as well as inside it, so the window task asking after every fetch costs
 /// a lock rather than a view-model publish. The batch carries on the deferral's skip count, which
@@ -128,7 +128,7 @@ pub fn start_awaited<B: PlayerBackend>(
     awaited: AwaitedStart,
 ) {
     let _exec = player_state.lock_exec();
-    if !lock_state(player_state).still_awaits(awaited) {
+    if !lock_state(player_state).still_awaits() {
         return;
     }
     let actions = with_state_emit(player_state, sinks, |s| s.resume_awaited(awaited));
