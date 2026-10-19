@@ -1,4 +1,4 @@
-//! Pins the translation catalogues to the Slint tree `scripts/update-translations.sh` generates
+//! Pins the translation catalogues to the Slint tree `scripts/update-translations.py` generates
 //! them from, and to the bundled faces that draw them.
 //!
 //! It walks the sources rather than pinning a list, so a new locale extends
@@ -44,7 +44,7 @@ const MIN_NOTES: usize = 20;
 /// no edit here, and tight so one dropping out of the walk is not missed.
 const MIN_TEXT_FACES: usize = 3;
 
-const RUN_THE_SCRIPT: &str = "run scripts/update-translations.sh";
+const RUN_THE_SCRIPT: &str = "run scripts/update-translations.py";
 
 /// msgid → `msgid_plural`, the plural being there for the `@tr("one" | "many" % n)` form.
 type Msgids = BTreeMap<String, Option<String>>;

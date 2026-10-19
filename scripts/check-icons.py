@@ -2,7 +2,7 @@
 """Drift guard for the subsetted Material Symbols faces.
 
 The bundled icon TTFs under `crates/melodia-ui/ui/assets/fonts/` are trimmed to exactly the icons in
-`scripts/icons.txt` (see `subset-icon-fonts.sh`). An icon used in code but absent
+`scripts/icons.txt` (see `subset-icon-fonts.py`). An icon used in code but absent
 from that list renders as a blank box. This script catches that drift:
 
   1. COVERAGE — every Material Symbols icon referenced in an icon context in the
@@ -23,7 +23,7 @@ import os
 import re
 import sys
 
-from fontTools.ttLib import TTFont
+from material_symbols import TTFont, ligature_resolver
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ICONS_TXT = os.path.join(ROOT, "scripts", "icons.txt")
@@ -44,41 +44,13 @@ SINK = re.compile(
 )
 
 
-def ligature_resolver(path):
-    """Return f(name)->output-glyph-or-None for a Material Symbols face."""
-    font = TTFont(path)
-    cmap = {}
-    for t in font["cmap"].tables:
-        cmap.update(t.cmap)
-    char2g = {chr(cp): gn for cp, gn in cmap.items()}
-    idx = {}
-    for lk in font["GSUB"].table.LookupList.Lookup:
-        for st in lk.SubTable:
-            if lk.LookupType == 7:
-                st = st.ExtSubTable
-            for first, ligs in (getattr(st, "ligatures", None) or {}).items():
-                for lig in ligs:
-                    idx.setdefault(first, []).append((tuple(lig.Component), lig.LigGlyph))
-
-    def resolve(name):
-        if any(c not in char2g for c in name):
-            return None
-        gs = [char2g[c] for c in name]
-        for comps, out in idx.get(gs[0], []):
-            if comps == tuple(gs[1:]):
-                return out
-        return None
-
-    return resolve
-
-
 def main():
     if not os.path.isfile(SRC):
         sys.exit(
             "ERROR: %s missing.\nThis check needs the full catalogue. Populate "
-            "scripts/fonts-src/ (see subset-icon-fonts.sh header)." % SRC
+            "scripts/fonts-src/ (see subset-icon-fonts.py's docstring)." % SRC
         )
-    is_icon = ligature_resolver(SRC)
+    is_icon = ligature_resolver(TTFont(SRC))
     listed = {l.strip() for l in open(ICONS_TXT) if l.strip()}
 
     # Gather every string literal, split by icon-context vs. anywhere.
@@ -107,7 +79,7 @@ def main():
 
     # 2. INTEGRITY
     for label, path in (("outlined", OUT_OUTLINED), ("filled", OUT_FILLED)):
-        resolve = ligature_resolver(path)
+        resolve = ligature_resolver(TTFont(path))
         broken = sorted(n for n in listed if not resolve(n))
         if broken:
             failures.append(
@@ -125,7 +97,7 @@ def main():
               "excluded by design: " + ", ".join(sorted(coincidental)))
 
     if failures:
-        print("\nICON DRIFT — re-run scripts/subset-icon-fonts.sh after fixing:")
+        print("\nICON DRIFT — re-run scripts/subset-icon-fonts.py after fixing:")
         for f in failures:
             print("  - " + f)
         sys.exit(1)

@@ -53,7 +53,7 @@ slint = { version = "1.18.1", default-features = false, features = [
     "renderer-femtovg",
 ] }
 # Must match the `slint` version above; the pair is declared adjacently for that.
-# So must `slint-tr-extractor`: `scripts/update-translations.sh` reads the version off the
+# So must `slint-tr-extractor`: `scripts/update-translations.py` reads the version off the
 # `slint = { version = … }` line and refuses an extractor that doesn't match it. The default
 # `renderer-software` feature only embeds resources for a renderer we don't build.
 slint-build = { version = "1.18.1", default-features = false, features = ["compat-1-18"] }

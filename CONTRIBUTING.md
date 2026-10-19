@@ -27,16 +27,18 @@ is the string extractor, at the `slint` version in the root `Cargo.toml`:
 cargo install slint-tr-extractor --version <slint version> --locked
 ```
 
-It moves with `slint`, and `scripts/update-translations.sh` prints the exact line to run
+It moves with `slint`, and `scripts/update-translations.py` prints the exact line to run
 when it is missing or out of step. The second is GNU gettext:
 
 - Fedora: `sudo dnf install gettext`
 - Debian and Ubuntu: `sudo apt install gettext`, since the default `gettext-base` has no
   `msgmerge`
 - macOS: `brew install gettext`
-- Windows: `winget install mlocati.GetText`, then run the script from Git Bash, which comes
-  with Git for Windows. Open a new terminal first, since one already running doesn't see
-  the PATH the installer sets
+- Windows: `winget install mlocati.GetText`, then run the script as
+  `py scripts\update-translations.py`. Open a new terminal first, since one already running
+  doesn't see the PATH the installer sets
+
+The script itself is Python 3, standard library only.
 
 ## Reporting a bug
 
@@ -81,7 +83,7 @@ tests included. Reach for `?`, for `expect()` with the invariant in the message,
 for `let ... else`.
 
 If you add, change or remove a user-facing string, wrap it in `@tr(...)` and run
-`scripts/update-translations.sh`. It rebuilds the template,
+`scripts/update-translations.py`. It rebuilds the template,
 `crates/melodia-ui/translations/melodia-ui.pot`, which nobody edits by hand. In every
 catalogue beside it, each new or changed string comes back as an empty `msgstr`, or as a
 `#, fuzzy` guess where gettext found a near match, for you to finish. A note for
