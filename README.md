@@ -195,25 +195,31 @@ Linux keeps no commit charge per process, so **Anonymous** is the figure to comp
 
 ### Windows
 
-Measured with [`scripts/measure-footprint.py`](scripts/measure-footprint.py), on an output device Windows mixes at 192 kHz, so every track passes through the sample-rate conversion. Startup is sampled from the moment Melodia launches, and the other scenarios start 150 s after it, once the database connections opened while loading the library have closed.
+Measured with [`scripts/measure-footprint.py`](scripts/measure-footprint.py), on an output device Windows mixes at 192 kHz, so every track passes through the sample-rate conversion. Startup is sampled from the moment Melodia launches, and the other scenarios start 150 s after it, once the database connections opened while loading the library have closed. The Songs tab is My Library ▸ Songs, opened with the playlist still playing; double-clicking its first track queues the whole library, and the queue sheet opens over that queue.
 
 #### Native titlebar
 
 | Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Startup | 113.20 MiB | 63.09 MiB | 120.83 MiB | 27.95 MiB | 23.60 MiB | 1.46% | 0.09% | 0.07% |
-| Idle | 109.66 MiB | 62.09 MiB | 118.38 MiB | 24.63 MiB | 23.60 MiB | 0.21% | 0.01% | 0.02% |
-| Playing, list view | 111.03 MiB | 62.75 MiB | 119.64 MiB | 24.63 MiB | 23.61 MiB | 0.78% | 0.05% | 0.04% |
-| Playing, visualizer live | 115.18 MiB | 65.93 MiB | 123.69 MiB | 25.56 MiB | 25.61 MiB | 7.08% | 0.44% | 1.03% |
+| Startup | 114.26 MiB | 63.62 MiB | 121.84 MiB | 27.95 MiB | 23.60 MiB | 1.30% | 0.08% | 0.11% |
+| Idle | 109.03 MiB | 61.53 MiB | 118.08 MiB | 24.63 MiB | 23.60 MiB | 0.10% | 0.01% | 0.00% |
+| Playing, list view | 110.96 MiB | 62.84 MiB | 119.94 MiB | 24.63 MiB | 23.60 MiB | 0.68% | 0.04% | 0.05% |
+| Playing, visualizer live | 117.93 MiB | 66.80 MiB | 124.81 MiB | 27.44 MiB | 25.60 MiB | 7.81% | 0.49% | 1.50% |
+| Playing, Songs tab open | 119.07 MiB | 70.66 MiB | 129.33 MiB | 24.87 MiB | 25.60 MiB | 1.15% | 0.07% | 0.04% |
+| Playing, whole library queued | 119.52 MiB | 70.71 MiB | 129.07 MiB | 25.01 MiB | 25.60 MiB | 0.94% | 0.06% | 0.04% |
+| Playing, queue sheet open | 124.06 MiB | 71.84 MiB | 130.93 MiB | 27.68 MiB | 25.60 MiB | 0.89% | 0.06% | 0.05% |
 
-With both libraries, 51,012 tracks. The higher commit and working set at startup are the library's database: every connection that read it holds a page cache of its own, which commit counts, and maps the file, which the working set counts, until it closes.
+With both libraries, 51,012 tracks. The higher commit and working set at startup are the library's database: every connection that read it holds a page cache of its own, which commit counts, and maps the file, which the working set counts, until it closes. The working set with the whole library queued is the same, queueing it reading the database through connections of their own.
 
 | Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Startup | 151.14 MiB | 98.89 MiB | 299.16 MiB | 27.95 MiB | 23.60 MiB | 6.48% | 0.41% | 0.05% |
-| Idle | 128.27 MiB | 79.36 MiB | 135.66 MiB | 24.63 MiB | 23.60 MiB | 0.08% | 0.00% | 0.00% |
-| Playing, list view | 131.38 MiB | 81.04 MiB | 138.01 MiB | 24.63 MiB | 23.60 MiB | 0.83% | 0.05% | 0.04% |
-| Playing, visualizer live | 139.70 MiB | 87.04 MiB | 144.91 MiB | 25.56 MiB | 25.61 MiB | 6.72% | 0.42% | 1.83% |
+| Startup | 153.65 MiB | 99.64 MiB | 332.30 MiB | 27.95 MiB | 23.60 MiB | 8.36% | 0.52% | 0.09% |
+| Idle | 128.69 MiB | 79.09 MiB | 135.59 MiB | 24.63 MiB | 23.60 MiB | 0.23% | 0.01% | 0.00% |
+| Playing, list view | 131.93 MiB | 80.66 MiB | 137.76 MiB | 24.63 MiB | 23.61 MiB | 1.22% | 0.08% | 0.05% |
+| Playing, visualizer live | 141.19 MiB | 86.66 MiB | 144.68 MiB | 27.44 MiB | 25.61 MiB | 7.71% | 0.48% | 1.85% |
+| Playing, Songs tab open | 146.51 MiB | 90.59 MiB | 150.55 MiB | 28.57 MiB | 25.61 MiB | 0.73% | 0.05% | 0.04% |
+| Playing, whole library queued | 144.79 MiB | 92.86 MiB | 244.95 MiB | 25.02 MiB | 25.61 MiB | 0.91% | 0.06% | 0.04% |
+| Playing, queue sheet open | 148.79 MiB | 93.61 MiB | 153.02 MiB | 27.69 MiB | 25.61 MiB | 0.99% | 0.06% | 0.05% |
 
 Both tables use the default Linear sample-rate conversion. Band-Limited costs more CPU while playing: with the 512-track library, about 1.9% of one core in the list view and about 7.9% with the visualizer live.
 
@@ -223,19 +229,25 @@ Both tables use the default Linear sample-rate conversion. Band-Limited costs mo
 
 | Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Startup | 117.05 MiB | 64.64 MiB | 122.35 MiB | 33.64 MiB | 23.73 MiB | 0.21% | 0.01% | 0.00% |
-| Idle | 110.19 MiB | 63.34 MiB | 119.68 MiB | 27.94 MiB | 23.73 MiB | 0.57% | 0.04% | 0.06% |
-| Playing, list view | 112.29 MiB | 64.17 MiB | 121.40 MiB | 27.94 MiB | 23.73 MiB | 0.86% | 0.05% | 0.07% |
-| Playing, visualizer live | 120.08 MiB | 68.23 MiB | 126.04 MiB | 30.75 MiB | 25.73 MiB | 6.33% | 0.40% | 2.33% |
+| Startup | 115.28 MiB | 63.16 MiB | 120.87 MiB | 33.64 MiB | 23.72 MiB | 1.61% | 0.10% | 0.08% |
+| Idle | 108.47 MiB | 61.73 MiB | 118.20 MiB | 27.94 MiB | 23.72 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 110.96 MiB | 63.52 MiB | 120.67 MiB | 27.94 MiB | 23.72 MiB | 0.78% | 0.05% | 0.06% |
+| Playing, visualizer live | 117.29 MiB | 67.53 MiB | 125.60 MiB | 29.36 MiB | 25.72 MiB | 6.59% | 0.41% | 2.43% |
+| Playing, Songs tab open | 118.95 MiB | 70.58 MiB | 129.33 MiB | 28.68 MiB | 25.72 MiB | 1.09% | 0.07% | 0.06% |
+| Playing, whole library queued | 119.55 MiB | 70.90 MiB | 129.32 MiB | 28.82 MiB | 25.73 MiB | 0.94% | 0.06% | 0.04% |
+| Playing, queue sheet open | 124.58 MiB | 72.20 MiB | 131.33 MiB | 31.50 MiB | 25.73 MiB | 0.94% | 0.06% | 0.06% |
 
 With both libraries, 51,012 tracks:
 
 | Scenario | Commit | Private WS | Working set | GPU dedicated | GPU shared | CPU (1 core) | CPU (all cores) | GPU |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Startup | 155.99 MiB | 101.66 MiB | 301.97 MiB | 33.64 MiB | 23.72 MiB | 6.01% | 0.38% | 0.06% |
-| Idle | 131.93 MiB | 82.12 MiB | 138.78 MiB | 27.95 MiB | 23.73 MiB | 0.36% | 0.02% | 0.02% |
-| Playing, list view | 133.88 MiB | 83.73 MiB | 141.07 MiB | 27.95 MiB | 23.73 MiB | 0.62% | 0.04% | 0.06% |
-| Playing, visualizer live | 141.16 MiB | 88.91 MiB | 146.86 MiB | 29.36 MiB | 25.73 MiB | 5.49% | 0.34% | 2.21% |
+| Startup | 158.74 MiB | 101.88 MiB | 334.71 MiB | 33.64 MiB | 23.72 MiB | 8.23% | 0.51% | 0.18% |
+| Idle | 131.84 MiB | 81.49 MiB | 138.09 MiB | 27.94 MiB | 23.72 MiB | 0.05% | 0.00% | 0.00% |
+| Playing, list view | 134.34 MiB | 83.42 MiB | 140.57 MiB | 27.94 MiB | 23.72 MiB | 0.81% | 0.05% | 0.06% |
+| Playing, visualizer live | 142.67 MiB | 88.35 MiB | 146.43 MiB | 30.75 MiB | 25.73 MiB | 6.30% | 0.39% | 2.31% |
+| Playing, Songs tab open | 147.20 MiB | 91.82 MiB | 151.89 MiB | 32.37 MiB | 25.73 MiB | 0.99% | 0.06% | 0.06% |
+| Playing, whole library queued | 145.60 MiB | 94.32 MiB | 220.74 MiB | 28.82 MiB | 25.73 MiB | 0.68% | 0.04% | 0.06% |
+| Playing, queue sheet open | 150.03 MiB | 95.09 MiB | 154.25 MiB | 31.50 MiB | 25.73 MiB | 0.62% | 0.04% | 0.07% |
 
 Both tables use the default Linear sample-rate conversion. Band-Limited costs more CPU while playing: with the 512-track library, about 2.1% of one core in the list view and about 6.2% with the visualizer live.
 
