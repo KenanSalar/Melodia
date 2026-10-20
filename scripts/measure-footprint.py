@@ -113,9 +113,8 @@ SCENARIO_SETUP = {
         "Keep the playlist playing and open Now Playing with the visualizer showing, in the "
         "Mirrored style."
     ),
-    # The library-sized scenarios run last: the Songs tab keeps its list after you leave it, its
-    # database connections stay open a while, and a queued library stays queued, all of which any
-    # scenario after them would carry.
+    # The library-sized scenarios run last: the Songs tab keeps its list after you leave it and a
+    # queued library stays queued, both of which any scenario after them would carry.
     "Playing, Songs tab open": (
         "Keep the playlist playing, without stopping it or starting anything else, close Now "
         "Playing and switch to My Library > Songs."
@@ -127,11 +126,12 @@ SCENARIO_SETUP = {
     "Playing, queue sheet open": "Keep it playing and open the queue sheet with Q.",
 }
 DEFAULT_SCENARIOS = list(SCENARIO_SETUP)
-# Counted from the launch, past the database pool's reap. Every connection maps melodia.db, and the
-# reaper, looking once a minute for ones idle over a minute, closes those startup opened about two
-# minutes in (IDLE_TIMEOUT in crates/melodia-store/src/database/mod.rs).
+# Both past the database pool's reap, the first counted from the launch and the second from each
+# prompt, so neither startup's reads nor a switch's reach a window. Every connection maps
+# melodia.db, and the reaper, looking once a minute for ones idle over a minute, closes one up to
+# two minutes after its last query (IDLE_TIMEOUT in crates/melodia-store/src/database/mod.rs).
 DEFAULT_SETTLE_SECONDS = "150"
-DEFAULT_SWITCH_SETTLE_SECONDS = "10"
+DEFAULT_SWITCH_SETTLE_SECONDS = DEFAULT_SETTLE_SECONDS
 DEFAULT_DURATION_SECONDS = "60"
 DEFAULT_INTERVAL_SECONDS = "1"
 MAX_WAIT_SECONDS = 3600
@@ -220,8 +220,8 @@ def parse_settings(argv: list[str] | None) -> Settings:
         "--switch-settle-seconds",
         default=DEFAULT_SWITCH_SETTLE_SECONDS,
         metavar="N",
-        help="Wait after each prompt, so the switch itself (a view being built, covers decoding) "
-        "stays out of the window. Default %(default)s.",
+        help="Wait after each prompt, so the switch itself (a view being built, covers decoding, "
+        "the database connections it opens) stays out of the window. Default %(default)s.",
     )
     parser.add_argument(
         "--duration-seconds",

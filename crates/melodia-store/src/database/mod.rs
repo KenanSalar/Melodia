@@ -243,7 +243,7 @@ const MMAP_SIZE: &str = "268435456";
 
 /// How long a pooled connection sits idle before it may close, taking its page cache with it.
 /// sqlx's reaper checks once per this period, so one can stay open up to twice as long, which
-/// both footprint scripts in `scripts/` size their settle past.
+/// `scripts/measure-footprint.py` sizes both its settles past.
 const IDLE_TIMEOUT: Duration = Duration::from_mins(1);
 
 /// By when the pool has closed a connection left idle since launch: [`IDLE_TIMEOUT`] twice, the
