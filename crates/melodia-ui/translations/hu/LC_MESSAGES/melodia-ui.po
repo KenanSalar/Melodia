@@ -2535,11 +2535,6 @@ msgstr "A Melodia ingyenes és nyílt forráskódú. A támogatás segít, hogy 
 msgid "License"
 msgstr "Licenc"
 
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr "Támogass a Ko-fin"
-
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"
 msgstr "Üdvözlő útmutató"

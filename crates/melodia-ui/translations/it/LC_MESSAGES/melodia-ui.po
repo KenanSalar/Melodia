@@ -2533,11 +2533,6 @@ msgstr "Melodia è gratuito e open source. Il sostegno aiuta a mandarlo avanti."
 msgid "License"
 msgstr "Licenza"
 
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr "Sostienimi su Ko-fi"
-
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"
 msgstr "Guida di benvenuto"

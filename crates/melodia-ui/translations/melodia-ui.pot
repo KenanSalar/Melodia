@@ -2533,11 +2533,6 @@ msgstr ""
 msgid "License"
 msgstr ""
 
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr ""
-
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"
 msgstr ""

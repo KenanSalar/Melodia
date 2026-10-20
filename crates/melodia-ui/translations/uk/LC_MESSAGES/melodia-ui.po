@@ -2559,11 +2559,6 @@ msgstr "Melodia — безкоштовна програма з відкрити�
 msgid "License"
 msgstr "Ліцензія"
 
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr "Підтримати мене на Ko-fi"
-
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"
 msgstr "Вітальний посібник"

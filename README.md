@@ -410,8 +410,8 @@ Contributions are welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) has the setup, t
 before pushing, and how pull requests are handled.
 
 Melodia is free, open source, and built in my spare time, with nothing gated behind payment. If it's
-useful to you, you can support me at [ko-fi.com/kenansalar](https://ko-fi.com/kenansalar), the same
-link the app carries at **Settings → About**.
+useful to you, you can support me on [GitHub Sponsors](https://github.com/sponsors/KenanSalar) or
+[Ko-fi](https://ko-fi.com/kenansalar), the same two links the app carries at **Settings → About**.
 
 ## License
 

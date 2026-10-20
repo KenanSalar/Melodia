@@ -2507,11 +2507,6 @@ msgstr "Melodia miễn phí và mã nguồn mở. Sự ủng hộ của bạn gi
 msgid "License"
 msgstr "Giấy phép"
 
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr "Ủng hộ tôi trên Ko-fi"
-
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"
 msgstr "Hướng dẫn chào mừng"

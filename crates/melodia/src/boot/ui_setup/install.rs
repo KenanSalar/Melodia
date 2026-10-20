@@ -171,7 +171,7 @@ fn install_notices(
     install_audio_device_lost_subscriber(state, weak.clone(), notifications.clone())?;
     install_artwork_restore_subscriber(state, weak.clone(), notifications.clone())?;
 
-    // The Ko-fi link, plus the one-time support toast a few minutes into
+    // The support links, plus the one-time support toast a few minutes into
     // whichever early launch is the fifth. Counts this launch either way.
     ui::support::install(app, state, notifications.clone())?;
 

@@ -2534,11 +2534,6 @@ msgstr "Melodia ist kostenlos und quelloffen. Unterstützung hilft, es am Laufen
 msgid "License"
 msgstr "Lizenz"
 
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr "Unterstütze mich auf Ko-fi"
-
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"
 msgstr "Willkommensguide"
