@@ -4,7 +4,9 @@ use crate::database::queries::fixtures::*;
 use crate::database::{DbPool, IDS_PER_SET};
 use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track::TrackMeta;
-use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
+use melodia_core::entities::track_list::{
+    MostPlayedTotals, SortDir, TrackListScope, TrackOrder, TrackSortField,
+};
 use melodia_core::error::AppError;
 use melodia_core::utils::needle::{Needle, fold_needle};
 
@@ -791,6 +793,36 @@ async fn the_most_played_ranking_is_not_capped() -> Result<(), AppError> {
         PLAYED,
         "every played track must come back — the seeded set is `play_count > 0` and the three \
          `seed_db` rows are left at zero"
+    );
+    Ok(())
+}
+
+/// The band states what its tab ranks, so an unplayed favourite counts toward neither total, and
+/// a played track that is no favourite counts toward the library's alone.
+#[tokio::test]
+async fn each_most_played_total_adds_up_the_tracks_its_tab_ranks() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET play_count = 2 WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET play_count = 5, duration_ms = 60000 WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET is_favorite = TRUE WHERE title IN ('Beta', 'Gamma')")
+        .execute(db.write())
+        .await?;
+
+    let totals = (
+        queries::track::most_played_totals(&db).await?,
+        queries::track::most_played_favorite_totals(&db).await?,
+    );
+
+    assert_eq!(
+        totals,
+        (
+            MostPlayedTotals { tracks: 2, duration_ms: 240_000, plays: 7 },
+            MostPlayedTotals { tracks: 1, duration_ms: 60_000, plays: 5 },
+        )
     );
     Ok(())
 }

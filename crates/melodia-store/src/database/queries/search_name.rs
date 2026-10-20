@@ -151,3 +151,7 @@ async fn fill_page(db: &DbPool, kind: Named, page: &[Inputs]) -> Result<u64, App
     }
     Ok(query.persistent(false).execute(db.write()).await?.rows_affected())
 }
+
+#[cfg(test)]
+#[path = "tests/search_name_tests.rs"]
+mod tests;

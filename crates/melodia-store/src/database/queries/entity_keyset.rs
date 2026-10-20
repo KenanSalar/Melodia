@@ -223,3 +223,7 @@ fn order_by(keys: &[String], id: &str, dir: SortDir) -> String {
 fn lowered(column: &str) -> String {
     format!("{column} COLLATE {UNICODE_LOWER}")
 }
+
+#[cfg(test)]
+#[path = "tests/entity_keyset_tests.rs"]
+mod tests;

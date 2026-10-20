@@ -205,3 +205,7 @@ impl<G: GridRow> Model for PagedGrid<G> {
         self
     }
 }
+
+#[cfg(test)]
+#[path = "tests/grid_tests.rs"]
+mod tests;
