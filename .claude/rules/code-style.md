@@ -63,6 +63,10 @@ tests, holds no duplication, says what it means, and has no more parts than that
 - **Meaning belongs in the type, not the primitive** - a bare `bool`, `u32` or `String` at a
   boundary lets the wrong one through in silence. An enum or newtype makes that a compile
   error and retires the comment explaining the unit.
+- **Take what you keep, borrow what you read** - a parameter the function stores or consumes is
+  taken owned (`String`, `Vec<T>`, `PathBuf`): a caller done with its value moves it in, one
+  that isn't clones at the call site. A `&str` the body `.to_owned()`s copies on every call.
+  Clippy's `needless_pass_by_value` catches an owned parameter that is only read, not this.
 - **Command or query, never both** - a function either changes state or answers a question.
   One that does both leaves every call site working out whether calling it twice is safe.
 - **Don't reach through** - `a.b().c().d()` couples the caller to the shape of everything in

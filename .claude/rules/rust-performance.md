@@ -18,7 +18,7 @@ paths:
 
 - Prefer `&str` in function parameters over `String` or `&String`
 - Use `Cow<'_, str>` for functions that usually return input unchanged but sometimes modify
-- Avoid `format!()` for simple conversions — use `.to_string()`, `.into()`, or string concatenation
+- Avoid `format!()` for simple conversions — use `.to_owned()` for a `&str`, `.to_string()` otherwise, `.into()`, or string concatenation
 - `push_str()` is faster than `format!` for building strings incrementally
 - `std::fmt::from_fn` (1.93) builds an ad-hoc `Display` from a closure — formatted output without a newtype or an intermediate `String`
 
@@ -77,7 +77,7 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
 
 ## Miscellaneous
 
-- Prefer `to_owned()` over `to_string()` when converting `&str` — avoids `Display` trait overhead
+- `to_owned()` and `to_string()` on a `&str` are the same copy: std specializes `ToString` for `str` to `String::from`, which is `to_owned()`, so neither is faster. Spell it `to_owned()`, the tree's convention
 - Use `std::mem::take()` or `std::mem::replace()` instead of clone-then-clear patterns
 - Global-allocator swaps (`mimalloc`/`jemalloc`) trade RSS for speed — measure peak RSS before adopting. **Melodia caveat:** mimalloc's per-thread segments across the app's many long-lived threads caused a large idle-RSS regression and was reverted; don't propose allocator swaps here
 - Avoid unnecessary `Arc` — single-threaded code doesn't need atomic reference counting
