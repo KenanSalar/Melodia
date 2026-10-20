@@ -232,13 +232,13 @@ def write_lines(path: Path, lines: list[str]) -> None:
 def run(command: list[str], cwd: Path | None = None) -> None:
     """Runs `command`, its own messages going straight to the terminal."""
     if subprocess.run(command, cwd=cwd, stdin=subprocess.DEVNULL).returncode != 0:
-        raise Failure(f"{Path(command[0]).name} failed: {' '.join(command[1:])}")
+        raise Failure(f"{Path(command[0]).stem} failed: {' '.join(command[1:])}")
 
 
 def run_captured(command: list[str]) -> str:
     answer = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace")
     if answer.returncode != 0:
-        raise Failure(f"{Path(command[0]).name} failed: {answer.stderr.strip()}")
+        raise Failure(f"{Path(command[0]).stem} failed: {answer.stderr.strip()}")
     return answer.stdout
 
 

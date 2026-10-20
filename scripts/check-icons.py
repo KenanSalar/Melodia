@@ -51,7 +51,7 @@ def main():
             "scripts/fonts-src/ (see subset-icon-fonts.py's docstring)." % SRC
         )
     is_icon = ligature_resolver(TTFont(SRC))
-    listed = {l.strip() for l in open(ICONS_TXT) if l.strip()}
+    listed = {l.strip() for l in open(ICONS_TXT, encoding="utf-8") if l.strip()}
 
     # Gather every string literal, split by icon-context vs. anywhere.
     sources = glob.glob(os.path.join(UI_DIR, "**", "*.slint"), recursive=True)
@@ -59,7 +59,7 @@ def main():
         sys.exit(f"ERROR: no .slint sources under {UI_DIR} — coverage would pass vacuously")
     in_sink, anywhere = set(), set()
     for fp in sources:
-        txt = open(fp).read()
+        txt = open(fp, encoding="utf-8").read()
         anywhere.update(TOKEN.findall(txt))
         for m in SINK.finditer(txt):
             in_sink.update(TOKEN.findall(m.group(1)))

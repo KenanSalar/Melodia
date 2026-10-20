@@ -405,9 +405,6 @@ def launch(settings: Settings) -> Target:
     if not exe.is_file() or not os.access(exe, os.X_OK):
         raise Failure(f"No Melodia binary at {exe}. Build one with: cargo build --release -p melodia")
 
-    environment = dict(os.environ)
-    if settings.data_dir:
-        environment["MELODIA_DATA_DIR"] = str(Path(settings.data_dir).resolve())
     # A session of its own, so Ctrl-C here or closing the terminal leaves Melodia running. On
     # Windows that means no console at all, since a console build would otherwise share this one.
     # Its log is mirrored to stderr, which would scroll the progress bar away.
@@ -416,7 +413,7 @@ def launch(settings: Settings) -> Target:
     )
     popen = subprocess.Popen(
         [str(exe)],
-        env=environment,
+        env=melodia_environment(settings),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
@@ -428,6 +425,24 @@ def launch(settings: Settings) -> Target:
         else "launched against its default data root"
     )
     return Target(popen.pid, time.monotonic(), origin, popen)
+
+
+def melodia_environment(settings: Settings) -> dict[str, str]:
+    environment = dict(os.environ)
+    if settings.data_dir:
+        environment["MELODIA_DATA_DIR"] = str(Path(settings.data_dir).resolve())
+    return environment
+
+
+def logs_dir(settings: Settings) -> str | None:
+    """Where the launched Melodia logs, as its --logs answers.
+
+    Asked here rather than left to the user, since a Windows release build prints nothing to a
+    console.
+    """
+    answer = run_quietly([str(settings.exe), "--logs"], env=melodia_environment(settings))
+    lines = (answer or "").splitlines()
+    return lines[0] if lines else None
 
 
 def attach(pid: int) -> Target:
@@ -516,11 +531,16 @@ class Run:
         code = popen.poll()
         if code is None:
             return
-        raise Failure(
-            f"Melodia exited with code {code}. Straight after a launch that means another instance "
-            "holds this data root and the launch was forwarded to it: close that one, or measure "
-            f"it with --pid.{self.backend.log_hint(self.settings.exe)}"
-        )
+        # A forwarded launch exits cleanly, so a crash or a kill must not be blamed on one.
+        if code == 0:
+            raise Failure(
+                "Melodia exited with code 0. Straight after a launch that means another instance "
+                "holds this data root and the launch was forwarded to it: close that one, or "
+                "measure it with --pid."
+            )
+        logs = logs_dir(self.settings)
+        hint = f" Its log is in {logs}." if logs else ""
+        raise Failure(f"Melodia exited with code {exit_status(code)}.{hint}")
 
     def measure_scenario(self, index: int, title: str) -> None:
         interval = to_microseconds(self.settings.interval_seconds)
@@ -722,6 +742,13 @@ def format_count(value: int | None) -> str:
     return "n/a" if value is None else str(value)
 
 
+def exit_status(code: int) -> str:
+    # A Windows exit code past the signed range is an NTSTATUS, spelled 0xC0000005 everywhere else.
+    if WINDOWS and code > 0x7FFFFFFF:
+        return f"0x{code:08X}"
+    return str(code)
+
+
 def csv_value(value: Any) -> str:
     if value is None:
         return ""
@@ -736,11 +763,13 @@ def markdown_table(header: list[str], rows: list[list[str]]) -> list[str]:
     return lines
 
 
-def run_quietly(command: list[str], timeout: float = 10) -> str | None:
+def run_quietly(
+    command: list[str], timeout: float = 10, env: dict[str, str] | None = None
+) -> str | None:
     """`command`'s stdout, or None where it is missing, fails or hangs."""
     try:
         answer = subprocess.run(
-            command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout
+            command, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=timeout, env=env
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
@@ -815,9 +844,6 @@ class LinuxBackend:
             return False
         state = stat.rpartition(") ")[2].split(" ", 1)[0]
         return state not in ("Z", "X")
-
-    def log_hint(self, exe: Path) -> str:
-        return f" Otherwise, '{exe} --logs' prints where its log is."
 
     def executable(self) -> tuple[str, str]:
         # /proc/<pid>/exe still opens the binary that is running after a rebuild has replaced it on
@@ -1242,6 +1268,7 @@ WCHAR = ctypes.c_wchar
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 PROCESS_VM_READ = 0x0010
 SYNCHRONIZE = 0x00100000
+ERROR_ACCESS_DENIED = 5
 WAIT_OBJECT_0 = 0
 TH32CS_SNAPTHREAD = 0x00000004
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
@@ -1546,6 +1573,11 @@ class WindowsBackend:
             PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ | SYNCHRONIZE, False, pid
         )
         if not self.handle:
+            if ctypes.get_last_error() == ERROR_ACCESS_DENIED:
+                raise Failure(
+                    f"Access to pid {pid} was denied. If Melodia runs as administrator, run the "
+                    "script as administrator too."
+                )
             raise Failure(f"No process with pid {pid}.")
         self.gpu = GpuCounters.open(self.api, pid)
         self.engines_at_start: dict[str, int] = {}
@@ -1557,9 +1589,6 @@ class WindowsBackend:
 
     def running(self) -> bool:
         return self.api.WaitForSingleObject(self.handle, 0) != WAIT_OBJECT_0
-
-    def log_hint(self, exe: Path) -> str:
-        return ""
 
     def executable(self) -> tuple[str, str]:
         size = DWORD(32768)
