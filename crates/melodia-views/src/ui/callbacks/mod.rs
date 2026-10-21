@@ -227,6 +227,7 @@ pub fn wire_all(ui: &AppWindow, state: &AppState) {
     wire_transport(&player, state);
     wire_seek(ui, state);
     wire_set_volume(&player, state);
+    wire_step_volume(&player, state);
     wire_set_playback_speed(&player, state);
     // Player.toggle-favorite is wired in `wire_now_playing_favorite` (called
     // after every per-view wire fn) so it can fan the change into all three
@@ -294,6 +295,18 @@ fn wire_set_volume(player: &Player<'_>, state: &AppState) {
             s,
             "set_volume",
             library::playback::player_set_volume(&s.playback_ctx(), vol)
+        );
+    });
+}
+
+fn wire_step_volume(player: &Player<'_>, state: &AppState) {
+    let s = state.clone();
+    player.on_step_volume(move |delta| {
+        let s = s.clone();
+        spawn_logged_sync!(
+            s,
+            "step_volume",
+            library::playback::player_step_volume(&s.playback_ctx(), delta)
         );
     });
 }

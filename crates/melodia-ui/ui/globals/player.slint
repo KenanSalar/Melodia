@@ -308,6 +308,9 @@ export global Player {
 
     callback set-volume(int);    // 0..100, fires continuously during drag
     callback commit-volume();    // fires on slider release; persists to settings.json
+    // Relative, so Rust applies it to the level it holds: `vm.volume` comes back a round trip
+    // later, and a fast wheel would read the same stale level for several notches.
+    callback step-volume(int /*delta*/);
     // Applies to the live player immediately *and* persists; reads back through `vm.playback_speed`.
     callback set-playback-speed(float);
     callback toggle-mute();
@@ -336,7 +339,47 @@ export global Player {
     // only invalidates the row reading it — the `position-ms` rule.
     in-out property <string> sleep-timer-remaining: "";
 
-    // Bumped by the keyboard volume shortcuts; `VolumeTrigger` force-shows its tooltip. **Slider
-    // drags don't bump it** — they already raise the popup chrome.
-    in-out property <int> volume-hud-tick: 0;
+    // Bumped by every volume step, key or wheel: `VolumeTrigger` force-shows its readout off it and
+    // `ShortcutScope` debounces the persist. **Slider drags don't bump it** — they raise the popup
+    // chrome and commit on release.
+    in-out property <int> volume-step-tick: 0;
+
+    // Ctrl (Cmd on macOS) is the fine step, for the arrow keys and the wheel alike. A wheel over an
+    // unfocused window always takes the coarse one on Linux: Wayland sends modifiers only to the
+    // focused window, and winit's X11 backend forwards them only there.
+    public pure function volume-step(modifiers: KeyboardModifiers) -> int {
+        return modifiers.control ? 1 : 5;
+    }
+
+    public function bump-volume(delta: int) {
+        root.step-volume(delta);
+        root.volume-step-tick += 1;
+    }
+
+    // What Slint's winit backend turns one wheel line into.
+    property <length> wheel-notch: 60px;
+    // Travel short of a notch. A touchpad sends a stream of small deltas, which add up to steps
+    // here rather than each being one.
+    property <length> wheel-carry: 0px;
+
+    // **Accepts every event, an empty one included**: a `TouchArea` that rejects the wheel drops
+    // its `has-hover` until the pointer moves (`slint-pitfalls.md`).
+    public function wheel-volume(event: PointerScrollEvent) -> EventResult {
+        if (event.delta-y == 0px) {
+            return accept;
+        }
+        // A reversal answers at once rather than first paying back travel the other way.
+        if ((event.delta-y > 0px) != (root.wheel-carry > 0px)) {
+            root.wheel-carry = 0px;
+        }
+        root.wheel-carry += event.delta-y;
+        let notches = floor(abs(root.wheel-carry) / root.wheel-notch);
+        if (notches == 0) {
+            return accept;
+        }
+        let direction = root.wheel-carry > 0px ? 1 : -1;
+        root.wheel-carry -= direction * notches * root.wheel-notch;
+        root.bump-volume(direction * notches * root.volume-step(event.modifiers));
+        return accept;
+    }
 }

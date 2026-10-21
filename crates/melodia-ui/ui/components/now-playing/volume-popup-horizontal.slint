@@ -112,6 +112,9 @@ export component VolumePopupHorizontal inherits Rectangle {
                     chrome.last-emitted = -1;
                     Player.commit-volume();
                 }
+                scroll-event(event) => {
+                    return Player.wheel-volume(event);
+                }
             }
         }
 

@@ -72,6 +72,8 @@ export component IconButton inherits Rectangle {
 
     callback clicked();
     callback held(int /*step*/);
+    // `HoldTouchArea`'s: only this button's own area can take the wheel and keep its hover.
+    callback scroll-event(PointerScrollEvent) -> EventResult;
 
     width: diameter;
     height: diameter;
@@ -166,5 +168,6 @@ export component IconButton inherits Rectangle {
             if (root.button-enabled) { root.clicked(); }
         }
         held(step) => { root.held(step); }
+        scroll-event(event) => { return root.scroll-event(event); }
     }
 }

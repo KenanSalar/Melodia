@@ -311,7 +311,7 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
     // duplicate slider emits at the boundary.
     {
         let s = lock_state(&ctx.player_state);
-        if s.volume == level && !s.is_muted {
+        if s.holds_volume(level) {
             return Ok(());
         }
     }
@@ -319,6 +319,20 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
     // Persistence is intentionally NOT triggered here. The slider fires
     // `set_volume` continuously during drag for live audio; settings.json
     // is flushed once via `commit_player_settings` on slider release.
+    Ok(())
+}
+
+/// Steps the volume by `delta` from the engine's own level. The volume keys and the wheel come
+/// through here, persisting through `commit_player_settings` once a burst settles.
+pub fn player_step_volume(ctx: &PlaybackContext, delta: i32) -> Result<(), AppError> {
+    // A wheel spun against either end would otherwise emit a view model per notch.
+    {
+        let s = lock_state(&ctx.player_state);
+        if s.holds_volume(s.stepped_volume(delta)) {
+            return Ok(());
+        }
+    }
+    ctx.emit_and_execute(|s| s.build_step_volume_actions(delta));
     Ok(())
 }
 
@@ -341,7 +355,8 @@ pub async fn player_toggle_mute(ctx: &PlaybackContext) -> Result<(), AppError> {
 
 /// Persist the current `PlayerState`'s volume + `is_muted` into settings.json.
 /// Called once from the volume slider's `pointer-event Up` (after a drag or
-/// click), and inline from the mute mutators and [`player_set_volume_committed`].
+/// click), once a run of key or wheel steps settles (`ShortcutScope`'s
+/// debounce), and inline from the mute mutators and [`player_set_volume_committed`].
 ///
 /// Writes on a `spawn_blocking` thread so the async runtime worker isn't
 /// blocked, under the settings lock so a concurrent `mutate_settings` isn't

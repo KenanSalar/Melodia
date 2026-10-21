@@ -1308,6 +1308,81 @@ fn set_volume_clamps_and_unmutes() {
     assert_eq!(state.volume, 75, "a level inside the band passes through untouched");
 }
 
+/// The coarse and fine steps the keys and wheel send, on each end of the band and either side of
+/// it, plus the delta's own extremes: a fast spin arrives as one summed delta, so nothing bounds it
+/// to a single notch.
+#[test]
+fn a_step_lands_inside_the_volume_band() {
+    let rows = [
+        (50, 5, 55),
+        (50, -5, 45),
+        (50, 0, 50),
+        (6, -5, 1),
+        (5, -5, 0),
+        (4, -5, 0),
+        (0, -1, 0),
+        (0, 1, 1),
+        (MAX_VOLUME - 6, 5, MAX_VOLUME - 1),
+        (MAX_VOLUME - 5, 5, MAX_VOLUME),
+        (MAX_VOLUME - 4, 5, MAX_VOLUME),
+        (MAX_VOLUME, 1, MAX_VOLUME),
+        (MAX_VOLUME, -1, MAX_VOLUME - 1),
+        (50, i32::MIN, 0),
+        (50, i32::MAX, MAX_VOLUME),
+    ];
+    for (volume, delta, expected) in rows {
+        let state = PlayerState { volume, ..Default::default() };
+
+        let landed = state.stepped_volume(delta);
+
+        assert_eq!(landed, expected, "{volume} stepped by {delta}");
+    }
+}
+
+/// A muted player steps from the level it holds, not from the silence it plays.
+#[test]
+fn a_muted_step_starts_from_the_held_level_and_unmutes() {
+    let mut state = PlayerState { volume: 40, is_muted: true, ..Default::default() };
+
+    state.build_step_volume_actions(5);
+
+    assert_eq!((state.volume, state.is_muted), (45, false));
+}
+
+#[test]
+fn a_muted_step_sends_the_device_the_landed_level() {
+    let mut state = PlayerState { volume: 40, is_muted: true, ..Default::default() };
+
+    let actions = state.build_step_volume_actions(5);
+
+    assert!(
+        matches!(
+            actions.as_slice(),
+            [PlayerAction::SetVolume(amplitude)] if (*amplitude - 0.45).abs() < f64::EPSILON
+        ),
+        "the device must hear the level the step landed on, not the silence before it: {actions:?}"
+    );
+}
+
+/// The row that bites is the held level while muted: setting it is how the user unmutes, so it
+/// cannot count as held.
+#[test]
+fn a_volume_is_held_only_at_its_own_level_unmuted() {
+    let rows = [
+        (50, false, 50, true),
+        (50, true, 50, false),
+        (50, false, 55, false),
+        (50, true, 55, false),
+    ];
+    for (volume, is_muted, level, expected) in rows {
+        let state = PlayerState { volume, is_muted, ..Default::default() };
+
+        let held = state.holds_volume(level);
+
+        assert_eq!(held, expected, "{level} against {volume}, muted: {is_muted}");
+    }
+}
+
 /// souvlaki states that a host may send a value outside `[0, 1]`, so the clamp is the whole of
 /// what stands between an OS panel and a volume of 200. Half a percent is the other half:
 /// rounding is what makes the quietest step reachable, where a truncating cast needs a full

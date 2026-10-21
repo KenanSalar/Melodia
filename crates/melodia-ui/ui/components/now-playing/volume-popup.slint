@@ -190,6 +190,7 @@ export component VolumePopup inherits Rectangle {
                         slider.last-emitted = -1;
                         Player.commit-volume();
                     }
+                    scroll-event(event) => { return Player.wheel-volume(event); }
                 }
             }
         }
