@@ -212,6 +212,10 @@ msgid "Clear"
 msgstr "Очистити"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "None of the tracks these rules match have artwork."
+msgstr "Жоден із треків, що відповідають цим правилам, не має обкладинки."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "Add tracks to this playlist to pick artwork."
 msgstr "Додайте треки до цього плейлиста, щоб вибрати обкладинку."
 

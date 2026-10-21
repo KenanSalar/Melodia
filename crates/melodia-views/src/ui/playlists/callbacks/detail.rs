@@ -92,12 +92,15 @@ fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
     let pu = playlists_ui.clone();
     let weak = ui.as_weak();
     ui.global::<PlaylistDetail>().on_request_edit_artwork(move || {
-        let id = pu.detail_playlist_id();
-        if id < 0 {
+        if pu.detail_playlist_id() < 0 {
             return;
         }
         let Some(claim) = DialogClaim::take_from(&weak) else { return };
-        open_edit_artwork(&s, &weak, claim, id, |ui| ui.global::<PlaylistDetail>().get_cover());
+        let Some(ui) = weak.upgrade() else { return };
+        let playlist = ui.global::<PlaylistDetail>().get_playlist();
+        open_edit_artwork(&s, &pu, &weak, claim, &playlist, |ui| {
+            ui.global::<PlaylistDetail>().get_cover()
+        });
     });
 }
 

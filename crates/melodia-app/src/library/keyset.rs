@@ -165,12 +165,11 @@ pub async fn genres_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<GenreStats>, 
     queries::genre::get_genres_by_ids(db, ids).await
 }
 
-/// The playlist cards behind `ids`, in the order asked, each smart one carrying its live count.
+/// The playlist cards behind `ids`, in the order asked, each smart one carrying its live count and
+/// cover.
 pub async fn playlists_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<PlaylistStats>, AppError> {
     let mut playlists = queries::playlist::get_playlists_by_ids(db, ids).await?;
-    let smart: Vec<usize> =
-        playlists.iter().enumerate().filter(|(_, p)| p.is_smart).map(|(i, _)| i).collect();
-    smart_playlists::recount(db, &mut playlists, &smart).await;
+    smart_playlists::fill_from_rules(db, &mut playlists).await;
     Ok(playlists)
 }
 

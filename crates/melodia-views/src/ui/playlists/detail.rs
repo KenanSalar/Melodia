@@ -78,7 +78,7 @@ pub(super) fn is_manual_order(field: &str, dir: &str) -> bool {
 /// A playlist's header and how far its tracks spread. A smart playlist has no `playlist_items`
 /// rows, so its `track_count` and `total_duration_ms` stay 0 in the junction-maintained columns
 /// and are counted off its current membership instead, the same query its spread comes from, under
-/// the draw its list was picked by.
+/// the draw its list was picked by. Its automatic cover comes off its rules too, as on its card.
 async fn fetch_playlist_header(
     state: &AppState,
     playlists_ui: &PlaylistsUi,
@@ -90,6 +90,7 @@ async fn fetch_playlist_header(
         detail.track_count = clamp_i64_to_i32(facts.tracks);
         detail.total_duration_ms = facts.duration_ms;
     }
+    library::smart_playlists::fill_automatic_thumbnail(&state.db, &mut detail).await;
     Ok((detail, HeroFold::from(&facts)))
 }
 

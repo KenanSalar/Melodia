@@ -5,6 +5,7 @@ use super::import::import_and_summarize;
 use crate::state::AppState;
 use melodia_artwork::media::image::artwork::CoverCache;
 use melodia_core::entities::playlist;
+use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
@@ -98,11 +99,12 @@ pub async fn reorder_playlist(
 /// more scrolling than the choice needs.
 const MOSAIC_CANDIDATE_LIMIT: i64 = 60;
 
-pub async fn get_playlist_artwork_paths(
+/// The covers the Edit-Artwork picker offers for the playlist `scope` lists.
+pub async fn mosaic_candidates(
     db: &DbPool,
-    playlist_id: i64,
+    scope: TrackListScope,
 ) -> Result<Vec<String>, AppError> {
-    queries::playlist::get_playlist_artwork_paths(db, playlist_id, MOSAIC_CANDIDATE_LIMIT).await
+    queries::track::cover_paths(db, scope, MOSAIC_CANDIDATE_LIMIT).await
 }
 
 pub async fn set_playlist_thumbnail(

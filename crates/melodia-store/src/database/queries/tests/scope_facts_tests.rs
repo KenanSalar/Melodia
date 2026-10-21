@@ -1,15 +1,18 @@
 //! What a hero states about a scope it holds only the ids of, counted over the membership its
-//! keyset lists, and the genre lines an album's chip is tallied from.
+//! keyset lists, the genre lines an album's chip is tallied from, and the covers the artwork
+//! picker offers.
 //!
-//! Every fixture holds tracks outside the scope asked about, so a membership that lost its
-//! narrowing counts them and fails.
+//! Every facts and genre-line fixture holds tracks outside the scope asked about, so a membership
+//! that lost its narrowing counts them and fails.
 
 use std::collections::HashSet;
 use std::path::Path;
 
 use crate::database::DbPool;
 use crate::database::queries;
-use crate::database::queries::fixtures::{insert_tagged_track, make_test_metadata};
+use crate::database::queries::fixtures::{
+    insert_tagged_track, make_test_metadata, set_test_artwork, setup_seeded_db,
+};
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -208,5 +211,68 @@ async fn genre_lines_come_commonest_first_and_tied_in_the_order_first_seen() -> 
 
     let order: Vec<&str> = lines.iter().map(|(line, _)| line.as_str()).collect();
     assert_eq!(order, ["Rock, Metal", "Jazz", "Metal, Rock", "Blues"]);
+    Ok(())
+}
+
+// === Covers ===
+
+/// The mosaic's candidate list: distinct covers, in the order the playlist first reaches them, so
+/// a cover an early and a late track share sorts with the early one.
+#[tokio::test]
+async fn the_mosaic_candidates_are_distinct_and_in_playlist_order() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let track_ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    // The first and last track share a cover; the middle one has its own.
+    set_test_artwork(&db, track_ids[0], "/artwork/shared.jpg").await?;
+    set_test_artwork(&db, track_ids[1], "/artwork/middle.jpg").await?;
+    set_test_artwork(&db, track_ids[2], "/artwork/shared.jpg").await?;
+    let pl = queries::playlist::create_playlist(&db, "Mosaic", None).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+
+    let scope = TrackListScope::Playlist(pl.id, Draw::default());
+    let candidates = queries::track::cover_paths(&db, scope, 4).await?;
+
+    assert_eq!(candidates, ["/artwork/shared.jpg", "/artwork/middle.jpg"]);
+    Ok(())
+}
+
+/// A track with no cover contributes nothing, and the blank string is the second spelling of
+/// that — the column carries both. Without the `!= ''` half an empty path takes a mosaic tile
+/// and paints a hole.
+#[tokio::test]
+async fn a_track_with_no_cover_offers_no_mosaic_candidate() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let track_ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    set_test_artwork(&db, track_ids[0], "").await?;
+    set_test_artwork(&db, track_ids[1], "/artwork/real.jpg").await?;
+    let pl = queries::playlist::create_playlist(&db, "Sparse", None).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+
+    let scope = TrackListScope::Playlist(pl.id, Draw::default());
+    let candidates = queries::track::cover_paths(&db, scope, 4).await?;
+
+    assert_eq!(candidates, ["/artwork/real.jpg"], "the blank and the null both contribute nothing");
+    Ok(())
+}
+
+/// The cap the mosaic asks with, which is what stops a thousand-track playlist reading a
+/// thousand rows to draw four tiles.
+#[tokio::test]
+async fn the_mosaic_candidate_list_stops_at_the_limit_it_was_given() -> Result<(), AppError> {
+    let db = setup_seeded_db().await?;
+    let track_ids: Vec<i64> =
+        queries::track::get_all_tracks(&db).await?.into_iter().map(|t| t.id).collect();
+    for (index, id) in track_ids.iter().enumerate() {
+        set_test_artwork(&db, *id, &format!("/artwork/{index}.jpg")).await?;
+    }
+    let pl = queries::playlist::create_playlist(&db, "Capped", None).await?;
+    queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
+
+    let scope = TrackListScope::Playlist(pl.id, Draw::default());
+    let candidates = queries::track::cover_paths(&db, scope, 2).await?;
+
+    assert_eq!(candidates.len(), 2);
     Ok(())
 }

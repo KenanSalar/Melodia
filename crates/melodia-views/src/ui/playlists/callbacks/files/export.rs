@@ -44,10 +44,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
                     );
                     Vec::new()
                 });
-                // A smart playlist exports what its rules match, which its stored count isn't.
-                let smart: Vec<usize> =
-                    stats.iter().enumerate().filter(|(_, p)| p.is_smart).map(|(i, _)| i).collect();
-                library::smart_playlists::recount(&s.db, &mut stats, &smart).await;
+                // A smart row's count and cover come from its rules, not its stored row.
+                library::smart_playlists::fill_from_rules(&s.db, &mut stats).await;
                 let _ = weak.upgrade_in_event_loop(move |ui| {
                     if !claim.holds(&ui) {
                         return;

@@ -300,6 +300,12 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   the same grid + detail** (My Library's Playlists tab, where the retired nav 7 folds):
   `PlaylistRow.is_smart` **gates off every manual-membership edit** — reorder, remove, file-drop,
   Add-to-Playlist, adding being a write of orphan `playlist_items` a smart list never reads.
+  Remove drops out through the detail's `view-context`, a smart one passing
+  `smart-playlist-detail`, which has no remove arm. **What a playlist holds is asked through
+  `queries::track`'s `Membership`, never a join on `playlist_items`**, which answers nothing for a
+  smart list and fails quietly: the artwork picker's pool sat empty that way. Covers included: the
+  picker reads `cover_paths`, and the automatic thumbnail is filled on every read
+  (`smart_playlists::fill_from_rules`) and never written, so the artwork sweep holds nothing for it.
   `DurationMs` stores **whole seconds**, scaled ×1000 to the ms column. A **`stats_changed`
   subscriber** recounts only the smart lists the grid holds whose criteria
   `depends_on_play_stats` (`smart_playlists::reading_play_stats`), and does nothing when none

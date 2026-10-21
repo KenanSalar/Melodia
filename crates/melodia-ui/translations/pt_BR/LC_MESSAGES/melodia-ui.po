@@ -211,6 +211,10 @@ msgid "Clear"
 msgstr "Limpar"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "None of the tracks these rules match have artwork."
+msgstr "Nenhuma das faixas que atendem a estas regras tem capa."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "Add tracks to this playlist to pick artwork."
 msgstr "Adicione faixas a esta playlist para escolher uma capa."
 

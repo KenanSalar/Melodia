@@ -1,5 +1,6 @@
-//! What a hero states about a scope's tracks beyond its own stats row, answered in SQL over the
-//! same membership its keyset lists, so a page holding only ids still has its facts.
+//! What a hero states about a scope's tracks beyond its own stats row, and the covers they carry,
+//! answered in SQL over the same membership its keyset lists, so a page holding only ids still has
+//! its facts.
 
 use sqlx::{QueryBuilder, Sqlite};
 
@@ -43,6 +44,31 @@ pub async fn genre_lines(
     qb.push("t.genre IS NOT NULL GROUP BY t.genre ORDER BY COUNT(*) DESC, MIN(t.id)");
     let lines = qb.build_query_as().persistent(false).fetch_all(db.read()).await?;
     Ok(lines)
+}
+
+/// Up to `limit` distinct covers `scope`'s tracks carry, in the order the scope first reaches
+/// each, so a smart playlist offers the covers of what its rules match and its cap keeps.
+///
+/// Ordered by `MIN(position)` rather than by the position of whichever row the grouping kept, or a
+/// cover an early and a late track share could sort last. A scope with no order of its own falls
+/// back to the id.
+pub async fn cover_paths(
+    db: &DbPool,
+    scope: TrackListScope,
+    limit: i64,
+) -> Result<Vec<String>, AppError> {
+    let membership = Membership::resolve(db, scope).await?;
+    let mut qb = QueryBuilder::<Sqlite>::new("SELECT t.artwork_path FROM ");
+    membership.push_source(&mut qb);
+    membership.push_and(&mut qb);
+    qb.push(
+        "t.artwork_path IS NOT NULL AND t.artwork_path != '' GROUP BY t.artwork_path ORDER BY MIN(",
+    )
+    .push(membership.position().unwrap_or("t.id"))
+    .push(") LIMIT ")
+    .push_bind(limit);
+    let paths = qb.build_query_scalar().persistent(false).fetch_all(db.read()).await?;
+    Ok(paths)
 }
 
 #[cfg(test)]

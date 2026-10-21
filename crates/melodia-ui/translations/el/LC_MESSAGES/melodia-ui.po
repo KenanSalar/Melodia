@@ -212,6 +212,10 @@ msgid "Clear"
 msgstr "Εκκαθάριση"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "None of the tracks these rules match have artwork."
+msgstr "Κανένα από τα κομμάτια που ταιριάζουν με αυτούς τους κανόνες δεν έχει εικόνα."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "Add tracks to this playlist to pick artwork."
 msgstr "Προσθέστε κομμάτια στη λίστα για να επιλέξετε εικόνα."
 

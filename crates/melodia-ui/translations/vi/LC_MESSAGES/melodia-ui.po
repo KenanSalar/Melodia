@@ -210,6 +210,10 @@ msgid "Clear"
 msgstr "Xóa"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "None of the tracks these rules match have artwork."
+msgstr "Không bản nhạc nào khớp với các quy tắc này có ảnh bìa."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "Add tracks to this playlist to pick artwork."
 msgstr "Thêm bản nhạc vào danh sách phát này để chọn ảnh bìa."
 

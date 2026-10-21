@@ -213,6 +213,10 @@ msgid "Clear"
 msgstr "Törlés"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "None of the tracks these rules match have artwork."
+msgstr "Az ezeknek a szabályoknak megfelelő számok egyikének sincs borítója."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "Add tracks to this playlist to pick artwork."
 msgstr "Borító választásához adj számokat ehhez a lejátszási listához."
 

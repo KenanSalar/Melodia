@@ -5,7 +5,8 @@
 
 use crate::state::AppState;
 use melodia_core::entities::playlist::{Playlist, PlaylistStats};
-use melodia_core::entities::smart_criteria::SmartCriteria;
+use melodia_core::entities::smart_criteria::{Draw, SmartCriteria};
+use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::{AppError, describe};
 use melodia_store::database::{DbPool, queries};
 
@@ -15,29 +16,47 @@ pub async fn count(db: &DbPool, criteria: &SmartCriteria) -> Result<(i64, i64), 
     queries::smart_playlist::count_smart_playlist(db, criteria).await
 }
 
-/// Replaces the stats of the smart playlists at `rows` with what their rules match now, the
-/// stored ones being the junction triggers' and so always 0. A row whose count fails keeps its
-/// stats and is logged.
-pub async fn recount(db: &DbPool, playlists: &mut [PlaylistStats], rows: &[usize]) {
+/// Fills in what the smart rows among `playlists` take from their rules: the stats, which the
+/// junction triggers leave at 0, and the automatic thumbnail, which the stored row never holds.
+/// Manual rows are left as read.
+pub async fn fill_from_rules(db: &DbPool, playlists: &mut [PlaylistStats]) {
     // WAL lets these run side by side across the read pool.
-    let parsed: Vec<(usize, SmartCriteria)> = rows
-        .iter()
-        .map(|&i| (i, SmartCriteria::from_json_opt(playlists[i].smart_criteria.as_deref())))
-        .collect();
-    let counts = futures_util::future::join_all(
-        parsed.iter().map(|(i, criteria)| async move { (*i, count(db, criteria).await) }),
-    )
+    futures_util::future::join_all(playlists.iter_mut().filter(|p| p.is_smart).map(
+        |playlist| async move {
+            recount(db, playlist).await;
+            fill_automatic_thumbnail(db, playlist).await;
+        },
+    ))
     .await;
-    for (i, result) in counts {
-        match result {
-            Ok((track_count, duration_ms)) => {
-                playlists[i].track_count = i32::try_from(track_count).unwrap_or(i32::MAX);
-                playlists[i].total_duration_ms = duration_ms;
-            }
-            Err(e) => {
-                log::warn!("smart playlist {} count failed: {}", playlists[i].id, describe(&e));
-            }
+}
+
+/// A row whose count fails keeps its stats and is logged.
+async fn recount(db: &DbPool, playlist: &mut PlaylistStats) {
+    let criteria = SmartCriteria::from_json_opt(playlist.smart_criteria.as_deref());
+    match count(db, &criteria).await {
+        Ok((track_count, duration_ms)) => {
+            playlist.track_count = i32::try_from(track_count).unwrap_or(i32::MAX);
+            playlist.total_duration_ms = duration_ms;
         }
+        Err(e) => log::warn!("smart playlist {} count failed: {}", playlist.id, describe(&e)),
+    }
+}
+
+/// Points a smart playlist's thumbnail at the first cover its rules reach, as a manual playlist's
+/// automatic one is its first track's. Worked out on every read rather than stored, the membership
+/// it follows being live. A custom pick is left alone, and so is a Clear, which pins the
+/// placeholder.
+///
+/// Under the default draw, so a random cap's card and hero agree on one cover across opens. A
+/// failed lookup keeps the stored one and is logged.
+pub async fn fill_automatic_thumbnail(db: &DbPool, playlist: &mut PlaylistStats) {
+    if !playlist.is_smart || playlist.custom_thumbnail {
+        return;
+    }
+    let scope = TrackListScope::Playlist(playlist.id, Draw::default());
+    match queries::track::cover_paths(db, scope, 1).await {
+        Ok(covers) => playlist.thumbnail_path = covers.into_iter().next(),
+        Err(e) => log::warn!("smart playlist {} cover failed: {}", playlist.id, describe(&e)),
     }
 }
 

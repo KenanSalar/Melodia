@@ -9,16 +9,17 @@ use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel, Weak
 use super::refresh_after_edit;
 use crate::ui::callbacks::DialogClaim;
 use crate::ui::playlists::PlaylistsUi;
+use crate::ui::track_detail::TrackDetail;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, Dialog, Playlists};
+use melodia_ui::{AppWindow, Dialog, PlaylistRow as UiPlaylistRow, Playlists};
 
 /// How many covers a mosaic takes.
 const MOSAIC_CAP: usize = 4;
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    wire_request_edit_artwork_for(ui, state);
+    wire_request_edit_artwork_for(ui, state, playlists_ui);
     wire_toggle_mosaic_candidate(ui);
     wire_apply_mosaic(ui, state, playlists_ui);
     wire_clear_artwork(ui, state, playlists_ui);
@@ -30,8 +31,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
 /// path the card itself uses for `request-cover`, so the decode is already
 /// warm). `slint::Image` isn't `Send`, so only the path crosses the spawn
 /// boundary and the lookup runs inside the opener's UI-thread hop.
-fn wire_request_edit_artwork_for(ui: &AppWindow, state: &AppState) {
+fn wire_request_edit_artwork_for(
+    ui: &AppWindow,
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+) {
     let s = state.clone();
+    let pu = playlists_ui.clone();
     let weak = ui.as_weak();
     ui.global::<Playlists>().on_request_edit_artwork_for(move |id| {
         let id = i64::from(id);
@@ -40,10 +46,11 @@ fn wire_request_edit_artwork_for(ui: &AppWindow, state: &AppState) {
         }
         let Some(claim) = DialogClaim::take_from(&weak) else { return };
         let Some(ui) = weak.upgrade() else { return };
-        let artwork_path = crate::ui::playlists::shown_card(&ui, id)
-            .map(|p| p.artwork_path.to_string())
-            .unwrap_or_default();
-        open_edit_artwork(&s, &weak, claim, id, move |_| {
+        // The card raising this is on screen, so its row is cached; a miss is a grid that moved
+        // under the click.
+        let Some(card) = crate::ui::playlists::shown_card(&ui, id) else { return };
+        let artwork_path = card.artwork_path.to_string();
+        open_edit_artwork(&s, &pu, &weak, claim, &card, move |_| {
             if artwork_path.is_empty() {
                 Image::default()
             } else {
@@ -53,21 +60,24 @@ fn wire_request_edit_artwork_for(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Populate the mosaic candidates from playlist `id`'s own track artworks and open
-/// the picker on `cover`, a preview of the saved state. The rest of the chrome is
-/// `Dialog.prepare-edit-artwork`'s. `claim` is taken by the caller at its click.
+/// Populate the mosaic candidates from the covers `playlist`'s page lists, under the draw that
+/// page shows, and open the picker on `cover`, a preview of the saved state. The rest of the
+/// chrome is `Dialog.prepare-edit-artwork`'s. `claim` is taken by the caller at its click.
 pub(super) fn open_edit_artwork(
     state: &AppState,
+    playlists_ui: &PlaylistsUi,
     weak: &Weak<AppWindow>,
     claim: DialogClaim,
-    id: i64,
+    playlist: &UiPlaylistRow,
     cover: impl FnOnce(&AppWindow) -> Image + Send + 'static,
 ) {
+    let (id, is_smart) = (playlist.id, playlist.is_smart);
+    let scope = playlists_ui.scope(i64::from(id));
     let s = state.clone();
     let weak = weak.clone();
     state.runtime.spawn(async move {
         let candidates =
-            library::playlists::get_playlist_artwork_paths(&s.db, id).await.unwrap_or_default();
+            library::playlists::mosaic_candidates(&s.db, scope).await.unwrap_or_default();
         let _ = weak.upgrade_in_event_loop(move |ui| {
             if !claim.holds(&ui) {
                 return;
@@ -76,7 +86,7 @@ pub(super) fn open_edit_artwork(
             let cand_rows: Vec<SharedString> =
                 candidates.into_iter().map(SharedString::from).collect();
             let dlg = ui.global::<Dialog>();
-            dlg.invoke_prepare_edit_artwork(i32::try_from(id).unwrap_or(-1));
+            dlg.invoke_prepare_edit_artwork(id, is_smart);
             dlg.set_current_artwork(current_cover);
             dlg.set_mosaic_candidates(ModelRc::new(VecModel::from(cand_rows)));
             dlg.set_open(true);
@@ -136,9 +146,8 @@ fn wire_apply_mosaic(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
     });
 }
 
-/// An empty mosaic selection means "revert to auto" (clear the custom
-/// thumbnail). Reuse `update_playlist` with `clear_thumbnail = true`;
-/// description preserved.
+/// An empty mosaic selection leaves the playlist with no artwork, an automatic cover included.
+/// Reuse `update_playlist` with `clear_thumbnail = true`; description preserved.
 fn wire_clear_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();

@@ -30,8 +30,8 @@ export component TrackContextMenu inherits Rectangle {
     in property <int> genre-id;
     // Suppresses the entry naming the surface you are already looking at, and picks the remove
     // arm. One of "tracks", "album-detail", "artist-detail", "genre-detail", "playlist-detail",
-    // "browse", "favorites", "recently_played", "search", "queue", "now-playing"; empty means no
-    // suppression.
+    // "smart-playlist-detail", "browse", "favorites", "recently_played", "search", "queue",
+    // "now-playing"; empty means no suppression.
     in property <string> view-context;
     // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list filters it
     // out so "add to the playlist you're looking at" never appears. 0 = none.
