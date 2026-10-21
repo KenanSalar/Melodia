@@ -229,11 +229,12 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
 
 /// Gives the queue Escape and Ctrl+A when a press lands on its panel, and takes them back when one
 /// lands anywhere else. Read here because no element sees a press a child took first, and the
-/// panel is all children.
+/// panel is all children. Only a shown panel claims: `pointer-in` moves with the pointer, not the
+/// panel, so one that eased away under a still pointer would take the next press.
 fn claim_queue_keys(weak: &slint::Weak<AppWindow>) {
     let Some(ui) = weak.upgrade() else { return };
     let queue = ui.global::<Queue>();
-    queue.set_keys_owned(queue.get_pointer_in());
+    queue.set_keys_owned(queue.get_shown() && queue.get_pointer_in());
 }
 
 /// A left press over a drag region: a window move, or the titlebar's double press.

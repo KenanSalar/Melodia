@@ -209,6 +209,9 @@ Status: implemented and passed by hand 2026-10-21, with small follow-ups still o
 - **The tooltip audit changed nothing.** The content panel's clip already sat inside the window's fit rect, so every host within half a pill of that edge was already end-aligned.
 - **The `queue-sheet-up` literal** lived in `crates/melodia/tests/card_selection.rs`, not the views file.
 - **The README's footprint rows keep the sheet's label**, as does `scripts/measure-footprint.py`, until they are measured again with the panel.
+- **A row's menu hands the keys back as it closes.** Its popup takes the panel's hover, so the press on an entry dropped them, and Esc after the menu's Select all cleared the page's selection instead of the queue's.
+- **Only a shown panel claims the keys.** `pointer-in` follows the pointer, so a panel closed under a still one claimed the next press on the content.
+- **The edge drag starts from `root.width`**, not `open-w`, which a window too narrow for both squeezes the panel under.
 
 ### Phase 3: Remembered, and the narrow window
 1. **Persistence.** `QueuePanelLayout` is written in `save_state_on_exit` beside the sidebar and hydrated beside `apply_sidebar_*` (`hydrate.rs:94-114`) before `app.show()`. A seeded open runs the lifecycle's open explicitly, since no `changed` fires on a seeded value. Older files load closed at the default width.

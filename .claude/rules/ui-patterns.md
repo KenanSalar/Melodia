@@ -1068,9 +1068,9 @@ three components that answer it, and each argues its geometry at its own file.
     merely close, and the step is what collapses the column counts a desktop passes through into
     a handful of sizes. What a crossing does not cost is the covers themselves; that half is the
     release/retune asymmetry above.
-  - **The window is not the body, and `BODY_CHROME_W` is the gap.** The sidebar between them is
-    the user's to drag from `sidebar-collapsed-w` to `sidebar-max-w`, a range no window
-    measurement sees, so the estimate assumes the *widest* one: over-subtracting costs a tier one
+  - **The window is not the body, and `BODY_CHROME_W` is the gap.** The sidebar and the queue
+    panel either side of the body are the user's to drag, and the panel to open, a range no window
+    measurement sees, so the estimate assumes both at their *widest*: over-subtracting costs a tier one
     step too large, under-subtracting puts every card on an upscale, and `FemtoVG` minifies
     bilinear with no mipmaps.
   - `GRID_COVER_FALLBACK` is what a tier is *built* at, before any geometry exists. A fallback,
@@ -1180,9 +1180,11 @@ three components that answer it, and each argues its geometry at its own file.
     panel sits beside the page, so its keys are live only while it was the last thing pressed. A
     hover sentinel round its content publishes `Queue.pointer-in`, and
     `winit_filter::claim_queue_keys` copies that into `Queue.keys-owned` on every press, ahead of
-    Slint's dispatch. Slint alone can't answer it: a `TouchArea` never sees a press a child took,
-    and a nested `FocusScope` is the bullet above. With the keys, Esc clears the queue's picks and
-    never closes the panel; without picks it falls through to the arms below.
+    Slint's dispatch, and only a shown panel can claim them. Slint alone can't answer it: a `TouchArea` never
+    sees a press a child took, and a nested `FocusScope` is the bullet above. **A row's menu hands
+    the keys back as it closes**, its popup having taken the sentinel's hover, so the press on an
+    entry read as one elsewhere. With the keys, Esc clears the queue's picks and never closes the
+    panel; without picks it falls through to the arms below.
 
 - **Animated view transitions** — content branches mount via `ViewTransition`: enter-only fade +
   32 px axis slide, no exit anim, Slint `if` destroying the outgoing branch instantly. Direction on

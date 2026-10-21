@@ -35,7 +35,8 @@ export global Queue {
     // Whether the pointer is over the panel, for the winit filter to read at a press.
     in-out property <bool> pointer-in;
     // The panel was the last thing pressed, so Escape and Ctrl+A are its. Written by the winit
-    // filter, which sees a press before any element can take it.
+    // filter, which sees a press before any element can take it, and handed back by a row's menu
+    // as it closes, its popup having hidden that press from `pointer-in`.
     in-out property <bool> keys-owned;
     // -1 when idle, else the play-order index being dragged.
     in-out property <int> drag-source: -1;

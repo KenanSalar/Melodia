@@ -364,7 +364,8 @@ export component QueuePanel inherits Rectangle {
             y: 0;
             height: parent.height;
             grows: GrowEdge.left;
-            drawn-width: root.open-w;
+            // Not `open-w`: a window too narrow for both squeezes the panel under it.
+            drawn-width: root.width;
             min-w: Theme.queue-panel-min-w;
             max-w: Theme.queue-panel-max-w;
             resized(width) => {

@@ -41,6 +41,14 @@ export component QueueRowItem inherits Rectangle {
     property <bool> selected: root.row-data.selected;
     // What every hover-driven binding reads, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
+    // An open menu takes the panel's hover, so the winit filter reads the press on an entry as a
+    // press elsewhere and drops the queue's keys. The menu hands them back as it closes.
+    property <bool> menu-open: ctx-menu.is-open;
+    changed menu-open => {
+        if (!self.menu-open) {
+            Queue.keys-owned = true;
+        }
+    }
     property <bool> show-checkbox: root.hovered || root.selected;
     // Once the panel holds a selection the row body picks instead of doing nothing; the first
     // pick stays the checkbox's. The track lists' rule, spelled against the queue's own count.
