@@ -155,6 +155,8 @@ async fn reopen<V: GridTab>(s: AppState, view: Arc<V>, weak: Weak<AppWindow>, id
         let Some(g) = view.cache().global().upgrade() else { return };
         g.set_detail_id(-1);
         V::release_hero(&ui, &g);
+        // A change landing during the reopen saw the id and owed the grid its reload.
+        reload_owed_grid(&ui, &s, &view);
     });
 }
 
@@ -192,9 +194,10 @@ fn install_library_refresher<V: GridTab>(ui: &AppWindow, state: &AppState, view:
     }
 }
 
-/// Reloads the grid a same-page close lands on, where a library change under the detail owed it
-/// one, returning whether it did. The reload warms the covers it opens on, so a close that gets
-/// `true` skips its own prewarm. Call it after `forget_closed`, which the cover check reads.
+/// Reloads the grid a detail hands back to on the same page, where a library change under the
+/// detail owed it one, returning whether it did. The reload warms the covers it opens on, so a
+/// close that gets `true` skips its own prewarm. Call it once the detail's id is cleared, which
+/// the cover check reads.
 pub(in crate::ui) fn reload_owed_grid<V: GridTab>(
     ui: &AppWindow,
     state: &AppState,

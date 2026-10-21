@@ -78,7 +78,8 @@ pub(crate) fn push_member_ids(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCri
 }
 
 /// The first cover an uncapped playlist's rules reach in its natural order, the one its automatic
-/// thumbnail shows. A walk down `idx_tracks_sort_key` that stops at the first match carrying one.
+/// thumbnail shows. Ordered as `idx_tracks_sort_key` is, so a plan can walk it and stop at the
+/// first match carrying one, where numbering the set sorts every match.
 pub(crate) async fn first_cover(
     db: &DbPool,
     criteria: &SmartCriteria,

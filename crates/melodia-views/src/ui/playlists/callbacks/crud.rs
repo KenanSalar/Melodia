@@ -185,6 +185,8 @@ fn close_detail_if_among(weak: &Weak<AppWindow>, playlists_ui: &PlaylistsUi, ids
         d.set_playlist_id(-1);
         release_detail_hero_images(&ui, &d);
         playlists_ui.clear_detail();
+        // The grid reload after the delete pays whatever the detail left owed.
+        playlists_ui.section().take_grid_owed();
     }
     true
 }
