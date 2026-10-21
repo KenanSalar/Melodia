@@ -53,8 +53,8 @@ export component EntityCard inherits Rectangle {
     // buttons is the only thing that can answer, and without the answer the fill and the zoom
     // drop out while the pointer is on one of them.
     in property <bool> overlay-hovered: false;
-    // Bound by the host to its menu's `is-open`, and OR'd in beside it. The open popup takes every
-    // pointer event, so hover alone would leave the card dark under its own menu.
+    // Whether the host's menu for this card is up, which `card-hovered` counts: the open popup
+    // takes the pointer, and hover alone would leave the card dark under its own menu.
     in property <bool> menu-open: false;
 
     // Browse's card view draws disk-only files — present inside a library folder but

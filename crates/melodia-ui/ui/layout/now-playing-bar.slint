@@ -78,10 +78,6 @@ export component NowPlayingBar inherits Rectangle {
             horizontal-stretch: 0;
             clip: true;
 
-            // The `IconButton` press wobble, driving **both** the hover fill and the content
-            // wrapper so the two contract together toward the cell's centre rather than both
-            // anchoring left. **Only the factor is animated** — the cell re-clamps as `bar-w`
-            // changes, so easing the derived sizes would wobble on every resize tick.
             // A station is a source like any other here: the cell opens the full view for it too,
             // so the affordance follows whichever half of the view model is filled.
             property <bool> has-source: Player.vm.has_track || Player.vm.has_station;
@@ -89,6 +85,10 @@ export component NowPlayingBar inherits Rectangle {
             property <bool> hovered: (track-info-touch.has-hover || track-menu.is-open)
                 && track-info-cell.has-source;
 
+            // The `IconButton` press wobble, driving **both** the hover fill and the content
+            // wrapper so the two contract together toward the cell's centre rather than both
+            // anchoring left. **Only the factor is animated** — the cell re-clamps as `bar-w`
+            // changes, so easing the derived sizes would wobble on every resize tick.
             property <float> press-scale: track-info-touch.pressed && track-info-cell.has-source
                 ? 0.99
                 : 1.0;
