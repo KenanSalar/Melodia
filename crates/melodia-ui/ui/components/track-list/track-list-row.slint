@@ -47,6 +47,8 @@ export component TrackListRowItem inherits Rectangle {
     // Derived state.
     property <bool> playing: root.row-data.id == root.playing-track-id;
     property <bool> selected: root.row-data.selected;
+    // What every hover-driven binding reads, so the row stays lit under its own menu.
+    property <bool> hovered: touch.has-hover || ctx-menu.is-open;
     // Once the view holds a selection the row body picks too. The first pick stays the box's,
     // which is what keeps an idle list from selecting by accident.
     property <bool> selecting: root.view-selected-ids.length > 0;
@@ -177,13 +179,13 @@ export component TrackListRowItem inherits Rectangle {
         // row into a texture. Nothing reaches the corners, so a plain clip cuts the same overflow.
         clip: true;
 
-        if root.selected || touch.has-hover: SelectionPill {
+        if root.selected || root.hovered: SelectionPill {
             x: 0;
             y: 0;
             width: 100%;
             height: 100%;
             selected: root.selected;
-            hovered: touch.has-hover;
+            hovered: root.hovered;
             prev-selected: root.prev-selected;
             next-selected: root.next-selected;
         }
@@ -308,7 +310,7 @@ export component TrackListRowItem inherits Rectangle {
                 clip: true;
                 VerticalLayout {
                     alignment: center;
-                    if !touch.has-hover && !root.selected: Text {
+                    if !root.hovered && !root.selected: Text {
                         // `track_number` falls back to the row position when the tag
                         // is missing; `index` counts down N..1 under a descending
                         // sort so the column itself reads as sorted.
@@ -325,7 +327,7 @@ export component TrackListRowItem inherits Rectangle {
                     }
                     // Hollow on hover, filled accent when selected. Owns its own
                     // TouchArea so the box drives selection independently of the row.
-                    if touch.has-hover || root.selected: Checkbox {
+                    if root.hovered || root.selected: Checkbox {
                         checked: root.selected;
                         // The rim stands in for the number it replaced, so it takes
                         // that cell's ink rather than the quieter default.
@@ -374,7 +376,7 @@ export component TrackListRowItem inherits Rectangle {
                         is-favorite: root.row-data.is_favorite;
                         rating: root.row-data.rating;
                         // Disk-only Browse rows can't be rated.
-                        rating-shown: touch.has-hover && root.enabled;
+                        rating-shown: root.hovered && root.enabled;
                         fade: root.fade;
                         rated(n) => { root.set-row-rating([root.row-data.id], n); }
                     }
@@ -445,7 +447,7 @@ export component TrackListRowItem inherits Rectangle {
                     spacing: Theme.pad-xs;
                     alignment: start;
                     cross-axis-alignment: center;
-                    if !touch.has-hover: Text {
+                    if !root.hovered: Text {
                         // Precomputed in Rust at row build, so this binding doesn't
                         // re-run a Slint pure function on every invalidation.
                         text: root.row-data.display_duration;
@@ -453,7 +455,7 @@ export component TrackListRowItem inherits Rectangle {
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
                     }
-                    if touch.has-hover: Rectangle {
+                    if root.hovered: Rectangle {
                         width: 26px;
                         height: 26px;
                         border-radius: self.height / 2;

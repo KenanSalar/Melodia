@@ -260,8 +260,8 @@ three components that answer it, and each argues its geometry at its own file.
   its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame, so
   it can't live on the `EntityCard` mount; the card itself arrives through `@children` because
   Slint has no generics and each grid iterates its own row struct. **A mount states its scope and
-  nothing else** — `selected`, `selection-live`, the menu's `effective-selection` and its count are
-  all derived there once, and a mount reaching past them for a `CardSelection` call is re-spelling
+  nothing else** — `selected`, `selection-live`, `menu-open`, the menu's `effective-selection` and
+  its count are all derived there once, and a mount reaching past them for a `CardSelection` call is re-spelling
   what the cell already answers.
   Per-kind menu arms (the playlist four, `play-single`) are callbacks the grid forwards, inert on
   a kind that never raises them. "Go to Artist" is not one: it calls the row menu's `Nav` trio.
@@ -637,6 +637,12 @@ three components that answer it, and each argues its geometry at its own file.
     `menu-x`/`menu-y`. None binds its anchor to a live `mouse-x`, which an open popup would follow
     for as long as the button is held (`slint-pitfalls.md`). `crates/melodia/tests/context_click.rs`
     holds the first half: only the predicate may name the right button.
+  - **The item a menu was raised on stays lit while it is up**, an open popup taking its hover
+    (`slint-pitfalls.md`). The three item menus publish their popup's `is-open`. A row reads it
+    into the one `hovered` its hover bindings share, and a card is told through
+    `EntityCard.menu-open`, which `CardCell` answers for both its menus, Browse's grid for its own
+    and `StationCard` passes through. `context_click.rs` holds both halves: every menu mount's
+    `is-open` read by its host, and every mount raising a card's menu binding `menu-open`.
   - **Copy opens a flyout inside the menu's own popup** where the surface has more than one field
     to offer, and is a flat entry where it has one. The flyout opens on whichever side
     `ContextMenuMetrics.opens-left` finds room, so the column stays under the pointer: rightward

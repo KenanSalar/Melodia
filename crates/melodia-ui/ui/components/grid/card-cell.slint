@@ -43,10 +43,11 @@ export component CardCell inherits Rectangle {
     in property <RadioStationRow> station;
     in property <int> station-list;
 
-    // What the mounted card binds its own selection state to.
+    // What the mounted card binds its own selection and menu state to.
     out property <bool> selected:
         CardSelection.selected(root.scope, root.card-id, CardSelection.generation);
     out property <bool> selection-live: CardSelection.any-in(root.scope);
+    out property <bool> menu-open: ctx-menu.is-open || station-menu.is-open;
 
     // What either menu acts on in multi mode: this scope's set, and nothing when another scope
     // holds the live one.

@@ -85,6 +85,9 @@ export component NowPlayingBar inherits Rectangle {
             // A station is a source like any other here: the cell opens the full view for it too,
             // so the affordance follows whichever half of the view model is filled.
             property <bool> has-source: Player.vm.has_track || Player.vm.has_station;
+            // What the fill and the zoom read, so the cell stays lit under its own menu.
+            property <bool> hovered: (track-info-touch.has-hover || track-menu.is-open)
+                && track-info-cell.has-source;
 
             property <float> press-scale: track-info-touch.pressed && track-info-cell.has-source
                 ? 0.99
@@ -104,9 +107,7 @@ export component NowPlayingBar inherits Rectangle {
                 x: (parent.width - self.width) / 2;
                 y: (parent.height - self.height) / 2;
                 border-radius: Theme.radius-md;
-                background: track-info-touch.has-hover && track-info-cell.has-source
-                    ? Theme.accent.with-alpha(0.12)
-                    : transparent;
+                background: track-info-cell.hovered ? Theme.accent.with-alpha(0.12) : transparent;
                 animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
 
@@ -131,9 +132,7 @@ export component NowPlayingBar inherits Rectangle {
                     SourceArtwork {
                         tile-size: clamp(root.bar-w * 0.07, 36px, 46px);
                         // The frame stays fixed; the cover scales within it.
-                        cover-scale: track-info-touch.has-hover && track-info-cell.has-source
-                            ? 1.15
-                            : 1.0;
+                        cover-scale: track-info-cell.hovered ? 1.15 : 1.0;
                     }
 
                     VerticalLayout {

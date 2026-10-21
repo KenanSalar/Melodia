@@ -48,6 +48,9 @@ export component TrackContextMenu inherits Rectangle {
     // Multi mode needs this row selected *and* more than one selected — right-clicking an
     // unselected row falls back to that row alone and leaves the selection untouched.
     out property <bool> multi-active: root.row-selected && root.selection-count > 1;
+    // For the host's hover: an open popup takes every pointer event, so the row it was raised on
+    // would otherwise read as unhovered under its own menu.
+    out property <bool> is-open: pop.is-open;
 
     property <int> multi-count: root.selection-count;
     // The bar's card is the track already playing, out of a queue already holding it, and it has

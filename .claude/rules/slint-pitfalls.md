@@ -537,6 +537,15 @@ this file is what builds, looks right, and is wrong.
   same way, the grab going with the popup (the grab-invalidation entry): `PopupDismissCatcher`
   leans on it.
 
+- **An open `PopupWindow` takes the hover, and the keyboard, from everything outside it.** The
+  same dispatch hands a pointer event to the popup or to nothing and sends every item outside an
+  exit, so the `has-hover` of whatever raised it reads false for exactly as long as it is up, and
+  the popup takes focus on `show()` and hands it back on close. A row or a field goes dark under
+  its own menu, and nothing marks what the menu is for. Cure: read the popup's `is-open` beside
+  the flag, which the runtime sets on show and clears on every close. `IconButton.force-bg` is the
+  trigger's spelling and `SingleLineInput.has-focus` the field's; `ui-patterns.md` has the item
+  menus.
+
 - **A `TouchArea` grabs on a press of any button, and only `pressed` is left-only.** So its
   `mouse-x`/`mouse-y` keep tracking the pointer until that button comes up, wherever it goes, and
   an open popup follows its `x`/`y` (the entry above). A menu anchored to a host's live
