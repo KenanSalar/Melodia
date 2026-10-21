@@ -692,15 +692,16 @@ three components that answer it, and each argues its geometry at its own file.
   writes beside the rows, and the four details do it through one impl over `TrackDetail`. A track
   list over another scope implements `PagedTrackList` rather than growing a second load path.
 
-- **The queue panel sits after the content panel in the shell's row**, and three things about it
-  reach across the two trees.
-  - **`Queue.shown` is `open` less what covers the panel**: Now Playing, and the miniplayer, which
-    unmounts it. It is computed and written on the `AppWindow` root alone, a global being unable to
-    watch its own properties and a mirror inside the panel missing the miniplayer swap. Rust's rows,
-    the private cover tier and the file-drop route all follow it through `shown-changed`, so a
-    hidden panel holds nothing past `lifecycle::TEARDOWN_DELAY`, whatever hid it. The root writes
-    `shown` before it fires `shown-changed`, which is what lets the panel's seat read the playing
-    index Rust has just written.
+- **The queue panel sits after the content panel in the shell's row**, and four things about it
+  reach across files.
+  - **`Queue.shown` is `open` less what covers the panel**: Now Playing, the miniplayer, which
+    unmounts it, and a window with no room for it. It is computed and written on the `AppWindow`
+    root alone, a global being unable to watch its own properties and a mirror inside the panel
+    missing the miniplayer swap. Rust's rows, the private cover tier and the file-drop route all
+    follow it through `shown-changed`, so a hidden panel holds nothing past
+    `lifecycle::TEARDOWN_DELAY`, whatever hid it. The root writes `shown` before it fires
+    `shown-changed`, which is what lets the panel's seat read the playing index Rust has just
+    written.
   - **`Queue.toggle()` is Rust's** (`ui::queue_panel::lifecycle`), the one path the bar, its
     overflow entry and Q share. Under Now Playing the panel is open but stepped aside, so a press
     closes Now Playing to bring it back, and `globals/queue.slint` importing `Nav` would break the
@@ -709,6 +710,19 @@ three components that answer it, and each argues its geometry at its own file.
   - **Its inner edge is `components/edge-resize-handle.slint`'s `EdgeResizeHandle`, and so is the
     sidebar's.** A third resizable side mounts it with its own `grows` rather than copying the
     absolute-coordinate drag.
+  - **A narrow window takes room back in a fixed order, so the content keeps
+    `Theme.content-min-w`**: the sidebar draws its rail, the panel narrows to its minimum, and then
+    it steps aside through `shown`. The `AppWindow` root works the steps out, being the one element
+    that sees the row, and argues them there. Two flags carry them out of that file, each written
+    from a `changed` mirror rather than bound, since a binding over the window's width restarts the
+    sidebar's width ease on every resize move (`slint-pitfalls.md`'s structural-dirt entry).
+    **`Nav.sidebar-yields` feeds `Nav.sidebar-rail`, and every part of the sidebar draws from the
+    rail.** `sidebar-collapsed` is the user's own fold and the only one persisted, so a renderer
+    reading it draws an expanded sidebar over a forced rail. **`Queue.fits` is what every control
+    that opens the panel stands down on**, as the fold toggle and Ctrl+B stand down on
+    `sidebar-yields`. The fold is keyed on `shown` rather than `open`, so the sidebar comes back once
+    the panel has stepped aside: keyed on `open`, a panel too wide to show would hold the sidebar
+    folded with both sets of controls standing down.
 
 - **A track's title and its marks are `components/track-list/track-title.slint`'s `TrackTitle`**:
   the heart a favourite keeps up, and the star strip the row reveals on hover. Track rows and queue
@@ -1168,8 +1182,9 @@ three components that answer it, and each argues its geometry at its own file.
     `SearchBar` keeps the keyboard and eats the `a`. **It grabs on the rising edge only**: the
     press that takes the keys away is one Slint is about to hand a field, and a grab there lands
     after it.
-  - Non-Esc gates on `!Dialog.open`; typed keys in TextInputs never reach root. Q is mini-gated,
-    the miniplayer having no queue to show.
+  - Non-Esc gates on `!Dialog.open`; typed keys in TextInputs never reach root. Q is gated on
+    `Queue.fits`, neither the miniplayer nor a narrow window having room for the panel, and Ctrl+B
+    on `!Nav.sidebar-yields`, a forced rail having nothing to expand into.
   - **`ShortcutScope` is the only `FocusScope` in the tree, and the queue is why that's worth
     stating.** A `FocusScope` takes focus on **mouse press**, never on mount, so the old sheet's
     nested scope left Esc and Ctrl+A dead on a sheet opened with `Q`. Both sit at the root, gated

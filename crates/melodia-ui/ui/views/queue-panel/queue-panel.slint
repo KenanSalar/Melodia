@@ -23,10 +23,11 @@ export component QueuePanel inherits Rectangle {
         root.arm-seat();
     }
 
-    private property <length> open-w: clamp(
-        Queue.panel-width > 0px ? Queue.panel-width : Theme.queue-panel-default-w,
-        Theme.queue-panel-min-w,
-        Theme.queue-panel-max-w);
+    // The width shown, which a narrow window holds below the one chosen. The host's to work out,
+    // being the only one that sees the row the panel shares.
+    in property <length> open-w;
+    // What the row leaves the panel beside the sidebar as it is drawn, the furthest its edge drags.
+    in property <length> room;
     // The ease rides a float rather than the width, so dragging the edge moves `open-w` straight
     // through instead of restarting an animation on every move.
     private property <float> shown-t: Queue.shown ? 1.0 : 0.0;
@@ -364,10 +365,12 @@ export component QueuePanel inherits Rectangle {
             y: 0;
             height: parent.height;
             grows: GrowEdge.left;
-            // Not `open-w`: a window too narrow for both squeezes the panel under it.
+            // Not `open-w`: the ease, or a row still giving way, can draw the box narrower.
             drawn-width: root.width;
             min-w: Theme.queue-panel-min-w;
-            max-w: Theme.queue-panel-max-w;
+            // Capped at the room, so a drag can't store a width the window won't draw or fold the
+            // sidebar to make it.
+            max-w: clamp(root.room, Theme.queue-panel-min-w, Theme.queue-panel-max-w);
             resized(width) => {
                 Queue.panel-width = width;
             }

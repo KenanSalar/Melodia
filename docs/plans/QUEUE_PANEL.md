@@ -1,6 +1,6 @@
 # Plan: Queue panel (the queue docks on the right and takes drops)
 
-Status: **in progress**, Phases 1 and 2 done · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
+Status: **in progress**, Phases 1 and 2 done, Phase 3 implemented · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
 
 > **Validated 2026-10-21** against `72a0e74f` (`feat/queue-panel`). Three read-only traces went into it: the queue sheet, the left sidebar's resize and fold, and drag and drop with Add to Queue. They were checked against:
 > - the Slint 1.18.1 sources for `DragArea`, `DropArea` and the in-window drag (`i-slint-core/items/drag_n_drop.rs`, `window.rs`);
@@ -135,7 +135,8 @@ Working doc. Delete when every phase has shipped and passed by hand.
 | `crates/melodia-views/src/ui/callbacks/card_actions.rs` (208) | `spawn_with_track_ids` becomes `pub(crate)` (Phase 6) |
 | `crates/melodia-engine/src/player/engine/queue.rs` (566) | `insert_at`, with `insert_next` written over it (Phase 6) |
 | `crates/melodia-app/src/library/queue.rs` (421) | `queue_insert_at`; `queue_play_next_many` becomes one call (Phase 6) |
-| `crates/melodia-app/src/services/settings/{interface,data}.rs` | `QueuePanelLayout { open, width: Option<f64> }`, flattened with `#[serde(default)]`. `LayoutFlags` sits at clippy's bool cap (`interface.rs:166-170`) (Phase 3) |
+| `crates/melodia-ui/ui/globals/nav.slint` | `sidebar-expanded-w` (the one clamp of the stored width), `sidebar-yields` (written by `AppWindow`) and `sidebar-rail`, which every part of the sidebar draws from (Phase 3) |
+| `crates/melodia-app/src/services/settings/{interface,data}.rs` | `QueuePanelLayout { queue_panel_open, queue_panel_width: Option<f64> }`, flattened with `#[serde(default)]`. `LayoutFlags` sits at clippy's bool cap (`interface.rs:166-170`) (Phase 3) |
 | `crates/melodia/src/shutdown.rs`, `crates/melodia/src/boot/ui_setup/hydrate.rs` | Written at exit and hydrated before show, beside the sidebar (Phase 3) |
 | `winit/src/platform_impl/{linux/wayland,linux/x11,windows}/…` | The positioned drag events (Phase 7) |
 
@@ -214,6 +215,8 @@ Status: implemented and passed by hand 2026-10-21, with small follow-ups still o
 - **The edge drag starts from `root.width`**, not `open-w`, which a window too narrow for both squeezes the panel under.
 
 ### Phase 3: Remembered, and the narrow window
+Status: implemented 2026-10-21, waiting on the hand pass. Its tests wait for Phase 8.
+
 1. **Persistence.** `QueuePanelLayout` is written in `save_state_on_exit` beside the sidebar and hydrated beside `apply_sidebar_*` (`hydrate.rs:94-114`) before `app.show()`. A seeded open runs the lifecycle's open explicitly, since no `changed` fires on a seeded value. Older files load closed at the default width.
 2. **Narrow windows** (decision 10). `Theme.content-min-w` and the three derived steps live in `app-window.slint`, and the sidebar's width binding adds the "yields" term.
 
@@ -221,6 +224,17 @@ Status: implemented and passed by hand 2026-10-21, with small follow-ups still o
 - restart with the panel open, closed and resized; a first launch;
 - the launch must not ease the panel in from 0. That is the same concern as the sidebar's, unverified today;
 - shrink and widen the window through every step, with the sidebar expanded and folded.
+
+**Amended while implementing:**
+- **Under a forced rail the sidebar's fold toggle and Ctrl+B stand down** (Kenan). This settles open question 1.
+- **While the panel can't fit, the queue button, its overflow row and Q stand down** (Kenan). `AppWindow` publishes `Queue.fits` beside `shown`. It covers the miniplayer too, so Q's own `!MiniPlayer.active` gate went into it.
+- **The sidebar comes back once the panel has stepped aside.** The fold is keyed on `shown`, not `open`, which is where this departs from the prior art. With both sets of controls standing down, a panel too wide to show would otherwise hold the sidebar folded with nothing left to press.
+- **A seeded open needs no explicit call into the lifecycle.** `queue-shown`'s tracker takes its baseline inside `AppWindow::new()`, before hydration, so the first change-handler pass reads the seeded open as an edge.
+- **`Nav.sidebar-yields` and `Queue.fits` are written from `changed` mirrors, not bound.** Bound to the window's width, they would restart the sidebar's width ease and `IconButton`'s colour ease on every resize move (`slint-pitfalls.md`, the structural-dirt entry).
+- **The panel's room doesn't depend on `shown`.** So it keeps its width while it eases out from under Now Playing, rather than narrowing as the sidebar comes back.
+- **The edge drag stops at the room.** It can't store a width the window won't draw, or fold the sidebar to make one.
+- **`Theme.content-min-w` starts at 452 px**: the narrowest body that still packs two grid columns, plus the page's insets. At the default widths the sidebar folds below a 996 px window, the panel narrows from 862 px to its minimum at 802 px, and it steps aside below that.
+- **The settings keys carry the prefix their flattened siblings do**: `queue_panel_open`, `queue_panel_width`.
 
 ### Phase 4: Prove the drag primitives (a spike; nothing lands)
 On a throwaway build, confirm each fact the next two phases stand on:
@@ -304,7 +318,13 @@ Lands as one commit: a row cannot host both mechanisms.
   - the filter's press arm;
   - `QueuePanelLayout` defaults and an older `settings.json`;
   - drop routing by position.
-- **Docs.** Phases 1 and 2's half landed on 2026-10-21: the panel's three cross-tree facts and the keys in `ui-patterns.md`, the sheet's mentions across the rules, the root `CLAUDE.md` and `README.md`. Still open:
+- **Docs.** Phases 1 to 3's half landed on 2026-10-21:
+  - the panel's cross-file facts and the keys in `ui-patterns.md`, the narrow window's order and its two flags among them;
+  - the sheet's mentions across the rules;
+  - `settings.json`'s contents in the root `CLAUDE.md`;
+  - the queue's feature line in `README.md`.
+
+  Still open:
   - `ui-patterns.md` and `slint-pitfalls.md` for the drag (Phase 5), including the stale `DragArea` claim that goes with `queue-row.slint:20-24`;
   - `desktop-shell.md`'s drop flow, routed by position (Phase 7);
   - `README.md`'s footprint rows, relabelled with `scripts/measure-footprint.py` when they are measured again;
@@ -316,10 +336,10 @@ Lands as one commit: a row cannot host both mechanisms.
 - **Commits.** One per phase, with Phase 1's rename as its own commit so the move reads as a move.
 
 ## Open questions
-1. **The sidebar's fold toggle and Ctrl+B while a narrow window forces the rail** (Phase 3): disable them, or let Expand make room by stepping the panel aside.
+1. ~~**The sidebar's fold toggle and Ctrl+B while a narrow window forces the rail**~~: settled in Phase 3, both stand down.
 2. **The ghost's shape** waits on Phase 4.
 3. **Browse's card mode and folder cards** aren't in the issue's list. They can join later through the same `DragSource`, with folders resolved as `folder_actions` does.
-4. **The panel widths and the content floor** are settled in the Phase 2 and Phase 3 hand passes.
+4. **The panel widths and the content floor** (300 / 360 / 560 and 452 px) are settled in the Phase 2 and Phase 3 hand passes.
 
 ## Verification
 - **Every phase:**

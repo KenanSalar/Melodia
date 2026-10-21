@@ -1,3 +1,5 @@
+import { Theme } from "../theme.slint";
+
 // Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav drops in from
 // `above`, a drill comes from the `right`, the back button from the `left`. **The mount it steers
 // is a *page***, so a drill that doesn't move `Nav.selected-index` steers nothing.
@@ -34,8 +36,20 @@ export global Nav {
     // settled; `view-transition.slint` says why Rust can't. Declared rather than written by Rust
     // because `AppWindow::new()` already builds the default page, which a later raise would fade in.
     in-out property <bool> suppress-enter-animation: true;
+    // The user's fold, and the only one persisted.
     in-out property <bool> sidebar-collapsed: false;
     in-out property <length> sidebar-width: 180px;
+    // The width drawn when expanded. Clamped here rather than on hydrate, so a stored width from
+    // outside the range is drawn inside it wherever it came from.
+    out property <length> sidebar-expanded-w:
+        clamp(self.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
+    // The rail a narrow window forces while the queue panel takes the room. Written only by
+    // `AppWindow`, which alone sees the window's width, and written rather than bound so a resize
+    // can't restart the sidebar's width ease on every move.
+    in-out property <bool> sidebar-yields: false;
+    // What the sidebar draws, which every part of it reads. The fold toggle writes
+    // `sidebar-collapsed` and stands down while the rail is forced.
+    out property <bool> sidebar-rail: self.sidebar-collapsed || self.sidebar-yields;
     // Switches off the rail's width ease and the rows' padding ease for a handle drag, which
     // every mouse move would otherwise restart, leaving the edge and the icons lagging the pointer.
     in-out property <bool> sidebar-dragging: false;

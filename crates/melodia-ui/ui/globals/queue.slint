@@ -29,6 +29,10 @@ export global Queue {
     // Written only by `AppWindow`, a global being unable to watch its own properties; the rows,
     // the covers and the file drop follow it through `shown-changed`.
     in-out property <bool> shown;
+    // Whether the window has room for the panel at all, which the miniplayer and a narrow window
+    // don't. The controls that open it stand down without it, having nowhere to put it. Written
+    // only by `AppWindow`.
+    in-out property <bool> fits;
     // 0 is the default width, so changing `Theme.queue-panel-default-w` reaches everyone who never
     // dragged the edge.
     in-out property <length> panel-width: 0px;

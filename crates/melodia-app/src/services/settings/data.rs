@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::about::{DiagnosticsFlags, OnboardingFlags, SupportFlags, UpdateFlags};
-use super::interface::{BackdropFlags, LayoutFlags, TrayFlags, WindowFlags};
+use super::interface::{BackdropFlags, LayoutFlags, QueuePanelLayout, TrayFlags, WindowFlags};
 use super::library::LibraryFlags;
 use super::playback::{
     CrossfadeFlags, EqualizerFlags, OutputFlags, PlaybackFlags, QueueFlags, ReplayGainFlags,
@@ -157,6 +157,8 @@ pub struct SettingsData {
     #[serde(flatten)]
     pub layout: LayoutFlags,
     #[serde(flatten)]
+    pub queue_panel: QueuePanelLayout,
+    #[serde(flatten)]
     pub backdrop: BackdropFlags,
     #[serde(flatten)]
     pub updates: UpdateFlags,
@@ -213,6 +215,7 @@ impl Default for SettingsData {
             lyrics: LyricsFlags::default(),
             library: LibraryFlags::default(),
             layout: LayoutFlags::first_launch(desktop),
+            queue_panel: QueuePanelLayout::default(),
             backdrop: BackdropFlags::default(),
             updates: UpdateFlags::default(),
             diagnostics: DiagnosticsFlags::default(),

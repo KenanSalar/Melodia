@@ -366,6 +366,7 @@ export component NowPlayingBar inherits Rectangle {
                     diameter: root.btn-d;
                     icon-size: root.btn-icon-d;
                     active: Queue.shown;
+                    button-enabled: Queue.fits;
                     tooltip-text: @tr("Queue");
                     clicked => { Queue.toggle(); }
                 }

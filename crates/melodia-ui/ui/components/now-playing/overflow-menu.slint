@@ -328,6 +328,7 @@ export component OverflowMenu inherits Rectangle {
                     icon: "queue_music";
                     label: @tr("Queue");
                     active: Queue.shown;
+                    button-enabled: Queue.fits;
                     clicked => { Queue.toggle(); root.dismiss(); }
                 }
                 // The chip's words without its dot, which a menu row has no slot for.

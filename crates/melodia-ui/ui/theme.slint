@@ -106,6 +106,10 @@ export global Theme {
     out property <length> queue-panel-min-w: 300px;
     out property <length> queue-panel-default-w: 360px;
     out property <length> queue-panel-max-w: 560px;
+    // What a narrow window keeps for the content while the queue panel is up: the sidebar folds
+    // to its rail and the panel narrows and then steps aside before the content goes below it.
+    // Two grid columns and the page's insets.
+    out property <length> content-min-w: 452px;
     out property <length> now-playing-h: 72px;
     // Track-row content height.
     out property <length> row-h: 46px;

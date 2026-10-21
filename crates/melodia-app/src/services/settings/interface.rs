@@ -163,6 +163,18 @@ fn default_match_unfocused_to_system_bg() -> bool {
     is_kde_desktop()
 }
 
+/// The queue panel as the window closed, so a launch reopens it. Its own struct rather than more
+/// fields on [`LayoutFlags`], which is already at clippy's `struct_excessive_bools` budget.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct QueuePanelLayout {
+    /// What the user asked for, not whether it was on screen: a panel stepped aside under Now
+    /// Playing or a narrow window comes back with the room.
+    pub queue_panel_open: bool,
+    /// `None` until the edge is dragged, so a panel never resized follows `Theme`'s default.
+    pub queue_panel_width: Option<f64>,
+}
+
 /// Which backdrop the artwork-derived surfaces paint.
 ///
 /// Its own struct rather than a fourth bool on [`LayoutFlags`], which is already at clippy's

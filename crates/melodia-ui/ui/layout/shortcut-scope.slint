@@ -4,7 +4,7 @@ import { Onboarding } from "../globals/onboarding.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { Selection } from "../globals/selection.slint";
-import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
+import { WindowChrome } from "../globals/shell.slint";
 
 // The app's global keyboard shortcuts, and the focus scope catching them. It takes the whole main
 // layout as its children, so it sits between any nested scope and the Window's key dispatch. **It
@@ -185,7 +185,8 @@ export component ShortcutScope inherits FocusScope {
                 Queue.select-all();
                 return accept;
             }
-            if (ev.text == "b") {
+            // Not under a forced rail, where the sidebar's own toggle stands down too.
+            if (ev.text == "b" && !Nav.sidebar-yields) {
                 Nav.sidebar-collapsed = !Nav.sidebar-collapsed;
                 return accept;
             }
@@ -216,8 +217,9 @@ export component ShortcutScope inherits FocusScope {
         if (ev.text == "s") { Player.toggle-shuffle();  return accept; }
         if (ev.text == "r") { Player.cycle-repeat();    return accept; }
 
-        // The miniplayer has no queue to show, so Q there would flip a panel nobody sees.
-        if (ev.text == "q" && !MiniPlayer.active) {
+        // Neither the miniplayer nor a narrow window has room for the panel, so Q there would flip
+        // one nobody sees.
+        if (ev.text == "q" && Queue.fits) {
             Queue.toggle();
             return accept;
         }
