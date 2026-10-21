@@ -118,15 +118,20 @@ fn run<B: PlayerBackend>(
 /// Run the start `awaited` owes, now that the window task has fetched a record, unless something
 /// has started or stopped since the transition that owed it.
 ///
-/// Checked before the emit as well as inside it, so the window task asking after every fetch costs
-/// a lock rather than a view-model publish. The batch carries on the deferral's skip count, which
-/// is what still stops a queue with nothing playable in it after one lap.
+/// Probed before the exec lock and asked again under it. The window task asks after every fetch
+/// for the rest of the session once anything has deferred, so the probe is what keeps that a state
+/// read rather than a wait on whichever transport op holds exec. The batch carries on the
+/// deferral's skip count, which is what still stops a queue with nothing playable in it after one
+/// lap.
 pub fn start_awaited<B: PlayerBackend>(
     engine: &B,
     player_state: &PlayerStateHandle,
     sinks: &PlayerSinks,
     awaited: AwaitedStart,
 ) {
+    if !lock_state(player_state).still_awaits() {
+        return;
+    }
     let _exec = player_state.lock_exec();
     if !lock_state(player_state).still_awaits() {
         return;

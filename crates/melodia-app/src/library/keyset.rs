@@ -1,6 +1,8 @@
 //! What a list or a card grid holding only ids reads: its ordered ids, the rows behind a page of
 //! them, and what its hero states about the whole set.
 
+use std::collections::HashSet;
+
 use crate::library::smart_playlists;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::{ArtistStats, FavoriteArtist};
@@ -35,8 +37,9 @@ pub async fn rows_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<TrackListRow>, 
 /// The ids in `ids` that still have a row, in the order asked and each once, which is what a list
 /// handed to the queue becomes: [`rows_by_ids`]'s answer without fetching a row.
 pub async fn existing_in_order(db: &DbPool, ids: &[i64]) -> Result<Vec<i64>, AppError> {
-    let mut existing = queries::track::existing_ids(db, ids).await?;
-    Ok(ids.iter().copied().filter(|id| existing.remove(id)).collect())
+    let missing = queries::track::missing_ids(db, ids).await?;
+    let mut seen = HashSet::with_capacity(ids.len());
+    Ok(ids.iter().copied().filter(|id| !missing.contains(id) && seen.insert(*id)).collect())
 }
 
 /// How many tracks `scope` holds, how long they run and how many artists and albums they span.

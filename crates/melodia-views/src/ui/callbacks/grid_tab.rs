@@ -1,7 +1,8 @@
 //! The section lifecycle the four My Library grid tabs (Albums, Artists, Genres and Playlists)
 //! share, wired once over [`GridTab`]: a leave hands back the grid and the detail, an enter
 //! reloads what the leave released and reopens the detail it emptied, and a library change
-//! reloads the tab on screen. Each tab's `callbacks/lifecycle.rs` states what it differs in.
+//! reloads the tab on screen, its grid on the detail's close where one covers it. Each tab's
+//! `callbacks/lifecycle.rs` states what it differs in.
 
 use std::sync::Arc;
 
@@ -157,8 +158,9 @@ async fn reopen<V: GridTab>(s: AppState, view: Arc<V>, weak: Weak<AppWindow>, id
     });
 }
 
-/// Watcher ticks, scans and folder changes bump `library_changed`: the grid reloads and an open
-/// detail refreshes, which keeps the user's sort and selection where a reopen would reset them.
+/// Watcher ticks, scans, folder changes and every star or heart bump `library_changed`: an open
+/// detail refreshes, which keeps the user's sort and selection where a reopen would reset them,
+/// and the grid reloads, or is owed a reload while a detail covers it ([`reload_owed_grid`]).
 fn install_library_refresher<V: GridTab>(ui: &AppWindow, state: &AppState, view: &Arc<V>) {
     let s = state.clone();
     let view = Arc::clone(view);
@@ -170,20 +172,37 @@ fn install_library_refresher<V: GridTab>(ui: &AppWindow, state: &AppState, view:
             view.section().mark_dirty();
             return;
         }
-        card_grid::reload::<V::Grid>(ui, &s, &view);
         let open_id = view.cache().id();
-        if open_id >= 0 {
-            let s = s.clone();
-            let view = Arc::clone(&view);
-            let weak = ui.as_weak();
-            spawn_logged!(
-                s,
-                format_args!("{}::library_changed refresh", V::VIEW_ID),
-                V::refresh(&s, &view, weak, open_id)
-            );
+        if open_id < 0 {
+            card_grid::reload::<V::Grid>(ui, &s, &view);
+            return;
         }
+        view.section().owe_grid();
+        let s = s.clone();
+        let view = Arc::clone(&view);
+        let weak = ui.as_weak();
+        spawn_logged!(
+            s,
+            format_args!("{}::library_changed refresh", V::VIEW_ID),
+            V::refresh(&s, &view, weak, open_id)
+        );
     });
     if let Err(e) = installed {
         log::warn!("{} won't follow library changes: {}", V::Grid::LABEL, describe(&e));
     }
+}
+
+/// Reloads the grid a same-page close lands on, where a library change under the detail owed it
+/// one, returning whether it did. The reload warms the covers it opens on, so a close that gets
+/// `true` skips its own prewarm. Call it after `forget_closed`, which the cover check reads.
+pub(in crate::ui) fn reload_owed_grid<V: GridTab>(
+    ui: &AppWindow,
+    state: &AppState,
+    view: &Arc<V>,
+) -> bool {
+    if !view.section().take_grid_owed() {
+        return false;
+    }
+    card_grid::reload::<V::Grid>(ui, state, view);
+    true
 }

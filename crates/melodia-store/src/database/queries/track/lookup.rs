@@ -3,9 +3,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use sqlx::{AssertSqlSafe, SqliteConnection};
+use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, SqliteConnection};
 
-use super::columns;
+use super::{columns, fetch_packed_ids, json_array};
 use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, select_in_id_order};
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
@@ -160,13 +160,16 @@ pub async fn get_track_links_by_ids(
     rows_in_id_order(db, columns::TRACK_LINKS.joined(), ids, |l: &track::TrackLinks| l.id).await
 }
 
-/// The subset of `ids` that still has a row.
-pub async fn existing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
-    let rows: Vec<(i64,)> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(rows.into_iter().map(|(id,)| id).collect())
+/// The ids in `ids` that no longer have a row. Asked this way round because the answer is almost
+/// always none: asking which survive hands a queue the size of the library back a row per track.
+pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
+    qb.push_bind(json_array(ids))
+        .push(") j WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = j.value)");
+    Ok(fetch_packed_ids(db, qb).await?.into_iter().collect())
 }
 
 /// Look up track IDs by file paths. Returns a map from `file_path` → track ID.

@@ -75,7 +75,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                 let runtime = s.runtime.clone();
                 runtime.spawn(async move {
                     if fu.take_dirty() {
-                        kick_full_refresh(&s, &fu, &weak).await;
+                        kick_full_refresh(&s, &fu, &weak, Stale::Everything).await;
                     }
                 });
             } else {
@@ -102,23 +102,25 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
             loop {
                 // Both senders live in `AppState` for the process lifetime, so an `Err` only
                 // happens during teardown — exit the loop.
-                tokio::select! {
+                let stale = tokio::select! {
                     changed = library_rx.changed() => {
                         if changed.is_err() {
                             break;
                         }
+                        Stale::Everything
                     }
                     changed = stats_rx.changed() => {
                         if changed.is_err() {
                             break;
                         }
+                        Stale::PlayStats
                     }
-                }
+                };
                 if !fu.section_active() {
                     fu.mark_dirty();
                     continue;
                 }
-                kick_full_refresh(&s, &fu, &weak).await;
+                kick_full_refresh(&s, &fu, &weak, stale).await;
             }
         }));
     }
@@ -134,27 +136,44 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         let weak = weak.clone();
         state.runtime.clone().spawn(async move {
             if fu.take_dirty() {
-                kick_full_refresh(&s, &fu, &weak).await;
+                kick_full_refresh(&s, &fu, &weak, Stale::Everything).await;
             }
         });
     }
 }
 
-/// Fetch the hero stats plus **whichever tab is mounted**, concurrently.
+/// What a refresh is for: an enter or a `library_changed` tick, or a play-count flush.
+#[derive(Clone, Copy)]
+enum Stale {
+    Everything,
+    PlayStats,
+}
+
+impl Stale {
+    /// Whether `tab` can show something different. No Songs column or sort reads a play count,
+    /// and a flush lands about once a track.
+    fn reaches(self, tab: FavoritesTab) -> bool {
+        matches!(self, Self::Everything) || tab != FavoritesTab::Songs
+    }
+}
+
+/// Fetch the hero stats plus **whichever tab is mounted**, concurrently, where `stale` reaches it.
 ///
 /// `refresh_hero` always runs: it answers the count, running time and mosaic the band states on
 /// all three tabs, and it is self-contained. The tabs are gated, being mutually exclusive `if`s
 /// that only the mounted one draws.
 ///
 /// **The loading tab consumes its flag**, which is what stops a boot onto a tab loading twice;
-/// the tabs that skip *set* theirs, so the pick that mounts one knows a tick went by.
+/// the tabs that skip *set* theirs, so the pick that mounts one knows a tick went by. A tab
+/// `stale` doesn't reach is left as it was.
 async fn kick_full_refresh(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,
     weak: &slint::Weak<AppWindow>,
+    stale: Stale,
 ) {
     let mounted = fav_ui.active_tab();
-    for tab in FavoritesTab::ALL {
+    for tab in FavoritesTab::ALL.into_iter().filter(|&tab| stale.reaches(tab)) {
         if tab == mounted {
             fav_ui.take_tab_dirty(tab);
         } else {
@@ -163,6 +182,12 @@ async fn kick_full_refresh(
     }
     let hero = favorites_ui_mod::refresh_hero(state, fav_ui, weak, /* animate */ true);
 
+    if !stale.reaches(mounted) {
+        if let Err(e) = hero.await {
+            log::warn!("favorites::refresh_hero: {}", describe(&e));
+        }
+        return;
+    }
     if mounted != FavoritesTab::Songs {
         let s = state.clone();
         let fu = Arc::clone(fav_ui);

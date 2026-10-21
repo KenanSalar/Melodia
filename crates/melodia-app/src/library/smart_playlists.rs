@@ -54,8 +54,8 @@ pub async fn fill_automatic_thumbnail(db: &DbPool, playlist: &mut PlaylistStats)
         return;
     }
     let scope = TrackListScope::Playlist(playlist.id, Draw::default());
-    match queries::track::cover_paths(db, scope, 1).await {
-        Ok(covers) => playlist.thumbnail_path = covers.into_iter().next(),
+    match queries::track::first_cover(db, scope).await {
+        Ok(cover) => playlist.thumbnail_path = cover,
         Err(e) => log::warn!("smart playlist {} cover failed: {}", playlist.id, describe(&e)),
     }
 }

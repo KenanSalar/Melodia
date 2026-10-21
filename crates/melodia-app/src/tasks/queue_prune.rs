@@ -71,14 +71,10 @@ async fn reconcile_once(
         return Ok(());
     }
 
-    // Step 2: ask the DB which of those ids still exist.
-    let surviving = queries::track::existing_ids(db, &queued_ids).await?;
-
-    // Step 3: compute the casualties. The snapshot can hold the same id
-    // more than once (a track queued twice) — the set is the right shape
-    // for the prune call regardless.
-    let to_remove: HashSet<i64> =
-        queued_ids.iter().copied().filter(|id| !surviving.contains(id)).collect();
+    // Step 2: ask the DB which of those ids have no row any more. The snapshot can hold the same
+    // id more than once (a track queued twice), and a set is the right shape for the prune
+    // regardless.
+    let to_remove = queries::track::missing_ids(db, &queued_ids).await?;
 
     if to_remove.is_empty() {
         return Ok(());
@@ -86,14 +82,14 @@ async fn reconcile_once(
 
     log::info!("Pruning {} missing tracks from queue", to_remove.len());
 
-    // Step 4: where the playing entry goes, the record of the one playback moves on to, so the
+    // Step 3: where the playing entry goes, the record of the one playback moves on to, so the
     // start below needn't wait on the window task.
     let successor = match unheld_successor(player_state, &to_remove) {
         Some(id) => queries::track::get_track_summaries_by_ids(db, &[id]).await?,
         None => Vec::new(),
     };
 
-    // Step 5: prune + (optionally) auto-skip in a single critical section.
+    // Step 4: prune + (optionally) auto-skip in a single critical section.
     // `with_state_emit` publishes the new queue VM on `sinks.queue` and the
     // light VM on `sinks.view_model`, so the queue sheet's subscriber
     // rebuilds rows automatically.

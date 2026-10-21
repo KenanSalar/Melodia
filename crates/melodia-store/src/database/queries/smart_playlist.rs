@@ -67,6 +67,31 @@ pub(crate) fn push_positioned_membership(qb: &mut QueryBuilder<Sqlite>, criteria
     push_membership(qb, criteria);
 }
 
+/// The membership's ids in no order, for a query that only counts or groups them: numbering an
+/// uncapped set sorts every match. A cap keeps its order, that being what picks the ids it keeps.
+pub(crate) fn push_member_ids(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+    qb.push("SELECT id FROM tracks");
+    push_where(qb, criteria);
+    if let Some(limit) = &criteria.limit {
+        push_order_and_limit(qb, limit);
+    }
+}
+
+/// The first cover an uncapped playlist's rules reach in its natural order, the one its automatic
+/// thumbnail shows. A walk down `idx_tracks_sort_key` that stops at the first match carrying one.
+pub(crate) async fn first_cover(
+    db: &DbPool,
+    criteria: &SmartCriteria,
+) -> Result<Option<String>, AppError> {
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
+        "SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path != ''",
+    );
+    push_and_rules(&mut qb, criteria);
+    qb.push(order_by_fragment(None)).push(" LIMIT 1");
+    let cover = qb.build_query_scalar().persistent(false).fetch_optional(db.read()).await?;
+    Ok(cover)
+}
+
 /// The `count` tracks `draw` picks from everything the rules match, in pick order: a
 /// [`LimitOrder::Random`] cap a page reads more than once.
 ///
@@ -152,12 +177,32 @@ pub async fn count_smart_playlist(
 /// are silently skipped; an all-skipped rule set yields no `WHERE` (matches the
 /// whole library).
 fn push_where(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
-    let rules: Vec<&Rule> = criteria.rules.iter().filter(|r| rule_is_renderable(r)).collect();
+    let rules = renderable_rules(criteria);
     if rules.is_empty() {
         return;
     }
     qb.push(" WHERE ");
-    let sep = match criteria.match_mode {
+    push_rules(qb, &rules, criteria.match_mode);
+}
+
+/// [`push_where`]'s rules as ` AND (…)`, after a `WHERE` holding a condition of its own. Grouped
+/// whole, or an `Any` set's `OR` would bind that condition to its first rule alone.
+fn push_and_rules(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+    let rules = renderable_rules(criteria);
+    if rules.is_empty() {
+        return;
+    }
+    qb.push(" AND (");
+    push_rules(qb, &rules, criteria.match_mode);
+    qb.push(")");
+}
+
+fn renderable_rules(criteria: &SmartCriteria) -> Vec<&Rule> {
+    criteria.rules.iter().filter(|r| rule_is_renderable(r)).collect()
+}
+
+fn push_rules(qb: &mut QueryBuilder<Sqlite>, rules: &[&Rule], match_mode: MatchMode) {
+    let sep = match match_mode {
         MatchMode::All => " AND ",
         MatchMode::Any => " OR ",
     };
@@ -469,10 +514,9 @@ fn field_source(field: RuleField) -> FieldSource {
     }
 }
 
-/// Append `ORDER BY … LIMIT ?` for a capped smart playlist. Shared by the row
-/// query and the count subquery (which then closes its own `)`); an *unlimited*
-/// query handles ordering itself — the row query needs a display order, the
-/// count query needs none.
+/// Append `ORDER BY … LIMIT ?` for a capped smart playlist, shared by the row query and the
+/// member ids. An uncapped query handles ordering itself, and the count subquery spells its own so
+/// it can leave a random order out.
 fn push_order_and_limit(qb: &mut QueryBuilder<Sqlite>, limit: &SmartLimit) {
     qb.push(order_by_fragment(Some(limit)));
     qb.push(" LIMIT ").push_bind(i64::from(limit.count));

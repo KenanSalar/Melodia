@@ -707,6 +707,11 @@ three components that answer it, and each argues its geometry at its own file.
   detail's open, refresh and restore. The ordering a leave and an enter depend on is the shared
   file's alone. A fifth grid tab implements `GridTab` rather than copying a
   `callbacks/lifecycle.rs`.
+  **A library change under an open detail reloads the detail and leaves the grid owed**, every
+  star and heart inside a detail being one, so the reload lands once on the close. That close is
+  each tab's own `wire_close` in `callbacks/detail.rs`, outside the shared file, and it calls
+  `grid_tab::reload_owed_grid` after `forget_closed`. A fifth tab's close owes the same call, or
+  its grid comes back showing what it held before the change.
 
 - **All nine track lists share Play Next, Add to Queue and the column toggle**, written once in
   `callbacks::track_list` over `track_list_view::TrackListActions`, which `track_list_views!`

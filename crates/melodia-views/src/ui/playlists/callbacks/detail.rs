@@ -6,8 +6,8 @@ use std::sync::Arc;
 use slint::ComponentHandle;
 
 use super::artwork::open_edit_artwork;
-use crate::ui::callbacks::track_detail;
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
+use crate::ui::callbacks::{grid_tab, track_detail};
 use crate::ui::paged_rows::track_rows;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
@@ -36,11 +36,14 @@ fn wire_close(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>)
     ui.global::<PlaylistDetail>().on_close_detail(move || {
         let Some(ui) = weak.upgrade() else { return };
         track_detail::forget_closed(&ui, &s, &*pu, &ui.global::<PlaylistDetail>());
+        let reloaded = grid_tab::reload_owed_grid(&ui, &s, &pu);
 
         let pu = pu.clone();
         s.runtime.spawn_blocking(move || {
             pu.release_detail_artwork();
-            pu.prewarm_visible_covers();
+            if !reloaded {
+                pu.prewarm_visible_covers();
+            }
         });
     });
 }

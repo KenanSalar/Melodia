@@ -3,8 +3,11 @@
 
 use sqlx::{QueryBuilder, Sqlite};
 
+use super::json_array;
 use crate::database::DbPool;
-use crate::database::queries::smart_playlist::{pick_random, push_positioned_membership};
+use crate::database::queries::smart_playlist::{
+    pick_random, push_member_ids, push_positioned_membership,
+};
 use melodia_core::entities::smart_criteria::{Draw, LimitOrder, SmartCriteria};
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::AppError;
@@ -127,14 +130,21 @@ impl Membership {
         }
     }
 
+    /// [`Self::push_source`] for a query that reads no order. Only a smart playlist differs,
+    /// leaving out the numbering its position needs, which sorts every match.
+    pub(super) fn push_members(&self, qb: &mut QueryBuilder<Sqlite>) {
+        match self {
+            Self::SmartPlaylist(criteria) => {
+                qb.push("(");
+                push_member_ids(qb, criteria);
+                qb.push(") m JOIN tracks t ON t.id = m.id");
+            }
+            _ => self.push_source(qb),
+        }
+    }
+
     /// Pushes ` AND ` or ` WHERE `, whichever the next condition after [`Self::push_source`] needs.
     pub(super) fn push_and(&self, qb: &mut QueryBuilder<Sqlite>) {
         qb.push(if self.narrows() { " AND " } else { " WHERE " });
     }
-}
-
-/// `ids` as the JSON array `json_each` reads, so a pick of any size is one bind.
-fn json_array(ids: &[i64]) -> String {
-    let items: Vec<String> = ids.iter().map(i64::to_string).collect();
-    format!("[{}]", items.join(","))
 }

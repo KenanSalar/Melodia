@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use slint::ComponentHandle;
 
-use crate::ui::callbacks::track_detail;
+use crate::ui::callbacks::{grid_tab, track_detail};
 use crate::ui::genres::GenresUi;
 use crate::ui::my_library::return_to_section;
 use melodia_app::state::AppState;
@@ -31,12 +31,16 @@ fn wire_close(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>) {
         // for why a drill from a sibling tab records no origin.
         crate::ui::nav_transition::mark_drill_back(&ui);
         let origin = g.get_origin_nav_index();
-        if origin >= 0 {
+        let origin_was_cross_section = origin >= 0;
+        if origin_was_cross_section {
             return_to_section(&ui, origin);
             g.set_origin_nav_index(-1);
         }
 
         track_detail::forget_closed(&ui, &s, &*gu, &g);
+        if !origin_was_cross_section {
+            grid_tab::reload_owed_grid(&ui, &s, &gu);
+        }
 
         let gu = gu.clone();
         s.runtime.spawn_blocking(move || gu.release_caches());

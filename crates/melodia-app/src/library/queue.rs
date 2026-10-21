@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use crate::services::settings::{mutate_settings, mutate_settings_with};
@@ -367,8 +366,7 @@ async fn plan_restore(
     let (ids, current_index) = persisted.map_or((Vec::new(), None), |p| {
         (p.queue.track_ids, current_index_from_i32(p.queue.current_index))
     });
-    let existing = queries::track::existing_ids(db, &ids).await?;
-    let gone: HashSet<i64> = ids.iter().copied().filter(|id| !existing.contains(id)).collect();
+    let gone = queries::track::missing_ids(db, &ids).await?;
     let mut queue = QueueState::restored(ids, current_index);
     queue.prune_missing(&gone);
 

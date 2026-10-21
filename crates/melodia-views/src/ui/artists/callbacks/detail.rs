@@ -7,7 +7,7 @@ use slint::ComponentHandle;
 
 use crate::ui::artists::ArtistsUi;
 use crate::ui::callbacks::macros::spawn_blocking_logged;
-use crate::ui::callbacks::track_detail;
+use crate::ui::callbacks::{grid_tab, track_detail};
 use crate::ui::my_library::return_to_section;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -39,6 +39,7 @@ fn wire_close(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
         }
 
         track_detail::forget_closed(&ui, &s, &*au, &g);
+        let reloaded = !origin_was_cross_section && grid_tab::reload_owed_grid(&ui, &s, &au);
 
         let au = au.clone();
         s.runtime.spawn_blocking(move || {
@@ -47,10 +48,10 @@ fn wire_close(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
             // so a hand-back beside the prewarm would shrink the screenful it just decoded and
             // leave the grid soft on the frame it mounts. Routing to another section, the grid
             // isn't going to mount and the strip is gone, so the pixels are dead weight; coming
-            // back to the grid, warming it is the point.
+            // back to the grid, warming it is the point, and an owed reload warms it itself.
             if origin_was_cross_section {
                 crate::ui::grid_prewarm::hand_back_covers();
-            } else {
+            } else if !reloaded {
                 au.prewarm_visible_covers();
             }
         });
