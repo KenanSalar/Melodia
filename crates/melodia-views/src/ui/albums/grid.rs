@@ -15,7 +15,8 @@ use melodia_core::entities::grid_order::AlbumSort;
 use melodia_core::error::AppResult;
 use melodia_ui::{AlbumGridRow as UiAlbumGridRow, Albums, AppWindow};
 
-pub(super) struct AlbumsGrid;
+// As visible as `GridTab`, whose `Grid` it is; the private `grid` module keeps it in the slice.
+pub(in crate::ui) struct AlbumsGrid;
 
 impl CardGrid for AlbumsGrid {
     type Row = UiAlbumGridRow;

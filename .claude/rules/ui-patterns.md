@@ -126,15 +126,17 @@ silently miss the other.
   the rows in their teardown; each of those two is guarded on there being a selection, the unstamp
   otherwise walking a model held precisely because it survives. **`CardSelection` goes back on the
   same leaves**, its scope guard answering a different question: that guard stops one grid reading
-  another's set, and says nothing about a set no grid is showing. One `clear()` in each of the seven
-  `on_section_active_changed` bodies covers all ten scopes, since the state is one global keyed
-  by one scope string. **Radio is the seventh, and the one that clears without dropping its rows**:
+  another's set, and says nothing about a set no grid is showing. One `clear()` in each of the four
+  section-gate closures covers all ten scopes, since the state is one global keyed by one scope
+  string; the four My Library grid tabs share one closure, `callbacks::grid_tab`'s.
+  **Radio is the one that clears without dropping its rows**:
   its leave keeps every list, but its station cards pick in `CardSelection`. A card grid is the
   surface that needs it most, having no pill and no second activation: a set left live turns every
   click into a pick. Held by `crates/melodia/tests/card_selection.rs`'s
-  `every_section_leave_hands_its_card_selection_back`, an **equality** over the seven because a
-  floor cannot see one slice stop clearing; the walk reads the `on_section_active_changed` block
-  itself, so the clear goes in that closure and not in a `leave()` it calls. The same file holds
+  `every_section_leave_hands_its_card_selection_back`, an **equality** over the four because a
+  floor cannot see one stop clearing; the walk reads the closure itself, opened by
+  `on_section_active_changed(` or by `GridTab`'s `::bind_section_active_changed(`, so the clear
+  goes in that closure and not in a function it calls. The same file holds
   the dispatcher's ten surfaces and the Escape arm's place at the bottom of the chain.
 
 - **A card menu offers both directions only where it hasn't got the state.** An album, artist,
@@ -698,6 +700,13 @@ three components that answer it, and each argues its geometry at its own file.
   section leave releases the list and revokes every load still on its way to it
   (`track_detail::release_rows`). A fifth detail implements both traits rather than copying a
   `callbacks/detail.rs`.
+
+- **The four grid tabs share one section lifecycle, `callbacks::grid_tab`**, driven through
+  `GridTab`, which extends `TrackDetail` with the tab's `CardGrid` and what its leave and enter
+  differ in: the globals they write, the hero release, what the tab keeps resident, and its
+  detail's open, refresh and restore. The ordering a leave and an enter depend on is the shared
+  file's alone. A fifth grid tab implements `GridTab` rather than copying a
+  `callbacks/lifecycle.rs`.
 
 - **All nine track lists share Play Next, Add to Queue and the column toggle**, written once in
   `callbacks::track_list` over `track_list_view::TrackListActions`, which `track_list_views!`

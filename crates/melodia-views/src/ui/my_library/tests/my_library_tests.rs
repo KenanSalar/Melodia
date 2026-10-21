@@ -245,12 +245,19 @@ fn every_grid_open_zeroes_a_stale_origin() {
     }
 }
 
-const SECTION_SEEDS: [(&str, &str, &str); 5] = [
-    ("Songs", "tracks", include_str!("../../tracks/callbacks/lifecycle.rs")),
-    ("Albums", "albums", include_str!("../../albums/callbacks/lifecycle.rs")),
-    ("Artists", "artists", include_str!("../../artists/callbacks/lifecycle.rs")),
-    ("Genres", "genres", include_str!("../../genres/callbacks/lifecycle.rs")),
-    ("Playlists", "playlists", include_str!("../../playlists/callbacks/lifecycle.rs")),
+/// Songs seeds its own shadow; the four grid tabs seed through the gate they share, each under the
+/// `TrackDetail::TAB` its `detail.rs` names.
+const SECTION_SEEDS: [(&str, &str, &str); 2] = [
+    (
+        "tab_is_mounted(ui, MyLibraryTab::Songs)",
+        "tracks/callbacks/lifecycle.rs",
+        include_str!("../../tracks/callbacks/lifecycle.rs"),
+    ),
+    (
+        "tab_is_mounted(ui, V::TAB)",
+        "callbacks/grid_tab.rs",
+        include_str!("../../callbacks/grid_tab.rs"),
+    ),
 ];
 
 /// `SectionActiveGate` fires on transitions only, and its `ChangeTracker` baselines
@@ -261,12 +268,11 @@ const SECTION_SEEDS: [(&str, &str, &str); 5] = [
 /// looking at.
 #[test]
 fn every_section_seed_reads_the_mounted_tab() {
-    for (variant, name, source) in SECTION_SEEDS {
-        let seed = format!("tab_is_mounted(ui, MyLibraryTab::{variant})");
+    for (seed, path, source) in SECTION_SEEDS {
         assert!(
-            source.contains(&seed),
-            "`callbacks/{name}` must seed `section_active` from `{seed}`, not from the nav \
-             index — all five sections share index {NAV_MY_LIBRARY}",
+            source.contains(seed),
+            "`{path}` must seed `section_active` from `{seed}`, not from the nav index — all \
+             five sections share index {NAV_MY_LIBRARY}",
         );
     }
 }

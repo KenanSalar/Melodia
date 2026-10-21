@@ -100,22 +100,8 @@ impl AlbumsUi {
         }
     }
 
-    /// Hand back what the section keeps resident off the UI thread, the detail's artwork and the
-    /// grid tier's pixels down to proxies, then the freed pages. Runs on section leave, the caller
-    /// having released the grid and the detail's rows on the UI thread already. Re-entry reloads
-    /// the grid, and re-runs `open_album` if a detail was open.
-    pub fn release_section_state(&self) {
-        if self.section_active() {
-            return;
-        }
-        crate::ui::grid_prewarm::shrink_covers();
-        self.detail_artwork.clear();
-        melodia_platform::services::platform::allocator::trim();
-    }
-
-    /// The mirror image, on closing one: the detail's slots aren't queried again
-    /// until the next `open_album`, and the grid the user is now looking at
-    /// stays warm.
+    /// Drop the detail's `(cover, blur)` pair on closing it: its slots aren't queried again until
+    /// the next `open_album`, and the grid the user is now looking at stays warm.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
         melodia_platform::services::platform::allocator::trim();
@@ -126,11 +112,6 @@ impl AlbumsUi {
     /// Blocking.
     pub fn prewarm_visible_covers(&self) {
         card_grid::prewarm_seeded::<AlbumsGrid>(self);
-    }
-
-    /// Album id currently open in the detail view (`-1` = grid).
-    pub fn detail_album_id(&self) -> i64 {
-        self.detail.id()
     }
 }
 

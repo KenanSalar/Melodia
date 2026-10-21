@@ -123,18 +123,6 @@ impl PlaylistsUi {
         }
     }
 
-    /// Drop what the Playlists section keeps resident off the UI thread — the grid tier's pixels
-    /// down to proxies and the detail artwork pair, the caller having released the grid and the
-    /// detail's rows on the UI thread — then return the freed pages to the OS.
-    pub fn release_section_state(&self) {
-        if self.section_active() {
-            return;
-        }
-        crate::ui::grid_prewarm::shrink_covers();
-        self.detail_artwork.clear();
-        melodia_platform::services::platform::allocator::trim();
-    }
-
     /// Drop just the detail-tier `(cover, blur)` pair cache — called
     /// when the user closes a playlist detail.
     pub fn release_detail_artwork(&self) {

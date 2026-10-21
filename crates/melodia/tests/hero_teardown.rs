@@ -18,10 +18,10 @@ use melodia_testkit::{callback_sources, rust_sources};
 /// `CALLBACK_HOMES` equality stops a renamed subtree shrinking this walk in silence.
 #[test]
 fn no_leave_clears_the_chips_behind_the_shared_teardown() {
-    /// Two per detail lifecycle, plus the playlist dialog's, plus one per curated page. A
-    /// floor rather than an equality so a sixth teardown needs no edit here; the *corpus*
-    /// is held exact by `CALLBACK_HOMES` instead.
-    const MIN_TEARDOWNS: usize = 11;
+    /// One per grid tab's `GridTab::release_hero`, plus the playlist dialog's, Radio's two and
+    /// one per curated page. A floor rather than an equality so another teardown needs no edit
+    /// here; the *corpus* is held exact by `CALLBACK_HOMES` instead.
+    const MIN_TEARDOWNS: usize = 9;
 
     let mut total = 0;
     for (rel, code) in callback_sources() {

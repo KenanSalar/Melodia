@@ -19,7 +19,8 @@ use melodia_ui::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
 
-pub(super) struct PlaylistsGrid;
+// As visible as `GridTab`, whose `Grid` it is; the private `grid` module keeps it in the slice.
+pub(in crate::ui) struct PlaylistsGrid;
 
 impl CardGrid for PlaylistsGrid {
     type Row = UiPlaylistGridRow;

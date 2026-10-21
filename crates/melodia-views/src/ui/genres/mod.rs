@@ -89,24 +89,9 @@ impl GenresUi {
 
     /// Hand retained glibc arena slack back, with no LRU to drop first. The
     /// close-detail trim, where wiping the grid would be wrong — the user is now
-    /// looking at it. A section leave takes [`Self::release_section_state`].
+    /// looking at it. A section leave takes `GridTab::release_section_state`.
     pub fn release_caches(&self) {
         melodia_platform::services::platform::allocator::trim();
-    }
-
-    /// Hand the freed pages back on section leave, off the UI thread, the caller having released
-    /// the grid and the detail's rows there already. Re-entry reloads the grid, and re-runs
-    /// `open_genre` if a detail was open.
-    pub fn release_section_state(&self) {
-        if self.section_active() {
-            return;
-        }
-        melodia_platform::services::platform::allocator::trim();
-    }
-
-    /// Genre id currently open in the detail view (`-1` = grid).
-    pub fn detail_genre_id(&self) -> i64 {
-        self.detail.id()
     }
 }
 

@@ -9,8 +9,8 @@
 //!   shares, the mosaic-candidate toggle and the apply / clear commits.
 //! * [`row_cover`] — the row-tier cover lookup every picker dialog draws through.
 //! * [`smart`] — the smart-playlist rule editor.
-//! * [`lifecycle`] — section enter/leave cache management + the
-//!   `library_changed` re-fetch subscriber.
+//! * [`lifecycle`] — what the tab hands the shared section lifecycle,
+//!   `callbacks::grid_tab`, plus the `stats_changed` subscriber.
 //!
 //! The Add-to-Playlist picker, opener included, is [`files`]'s.
 

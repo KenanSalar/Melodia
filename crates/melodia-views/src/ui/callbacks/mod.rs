@@ -15,6 +15,7 @@ pub(in crate::ui) mod card_selection;
 mod clipboard;
 pub(in crate::ui) mod cross_tab_nav;
 mod dialog_closed;
+pub(in crate::ui) mod grid_tab;
 pub(in crate::ui) mod index_persist;
 mod library_settings;
 mod now_playing;

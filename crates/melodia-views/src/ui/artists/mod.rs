@@ -110,21 +110,6 @@ impl ArtistsUi {
         }
     }
 
-    /// Drop what the Artists section keeps resident off the UI thread — the detail artwork, the
-    /// detail's Albums strip and the grid tier's pixels down to proxies — then hand the freed
-    /// pages back to the OS. Called on section leave, **the caller having released the grid and
-    /// the Slint-side detail properties on the UI thread already**. Re-entry reloads the grid; an
-    /// open detail is repopulated by the caller re-running `open_artist`.
-    pub fn release_section_state(&self) {
-        if self.section_active() {
-            return;
-        }
-        crate::ui::grid_prewarm::shrink_covers();
-        self.detail_artwork.clear();
-        self.detail.albums.lock().clear();
-        melodia_platform::services::platform::allocator::trim();
-    }
-
     /// Drop just the detail-tier `(cover, blur)` pair cache. Called when the user closes a detail.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
@@ -136,11 +121,6 @@ impl ArtistsUi {
     /// Blocking.
     pub fn prewarm_visible_covers(&self) {
         card_grid::prewarm_seeded::<ArtistsGrid>(self);
-    }
-
-    /// Artist id currently open in the detail view (`-1` = grid).
-    pub fn detail_artist_id(&self) -> i64 {
-        self.detail.cache.id()
     }
 }
 
