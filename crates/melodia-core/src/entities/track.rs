@@ -19,9 +19,9 @@
 //! | [`TrackLinks`] | the three FK ids a "Go to …" menu entry navigates by |
 //!
 //! A new caller takes the closest existing projection rather than adding a
-//! near-duplicate of one. Where the problem is instead a list held *resident*
-//! carrying columns it never draws, the answer is `ui::track_list_cache`, which
-//! converts at fetch and frees the rest.
+//! near-duplicate of one. A list that can be library-sized holds no projection
+//! per track at all: it keeps ids and fetches the rows near its viewport
+//! (`ui::paged_rows`).
 
 use sqlx::FromRow;
 
@@ -348,40 +348,26 @@ pub struct Track {
 }
 
 /// Aggregate stats for the Favorites hero header.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct FavoriteStats {
     pub count: i64,
     pub total_duration_ms: i64,
+    /// Distinct primary artists (`tracks.artist_id`), the spread the Songs tab's band states.
+    pub artists: i64,
+    /// Distinct albums (`tracks.album_id`).
+    pub albums: i64,
     pub artwork_paths: Vec<String>,
 }
 
-/// Lightweight struct for "Most Played Favorites" cards.
-///
-/// `Hash` is what the Favorites grid compares against its last applied set —
-/// derived rather than hand-listed so a new field can't silently drop out of
-/// the comparison and leave a card stale.
-///
-/// The card renders title + artist; the four fields below them are carried
-/// only so `ui::row_match::most_played_matches` searches the same set as
-/// `track_matches`. On Recently Played that is load-bearing — the strip and
-/// the recency list share one scroll under one search bar, so the narrower
-/// projection let a single query show a genre's tracks in the list and none
-/// of its cards above them. Favorites mounts the same cards in a *tab*,
-/// mutually exclusive with its track list and cleared on every switch, so
-/// there the reason is only the general one: a query means the same thing on
-/// every page that offers a filter box.
-#[derive(Clone, Debug, PartialEq, Hash, FromRow)]
+/// A Most Played card, on both curated pages: what the card draws and nothing else, the filter
+/// matching `tracks.search_text` in SQL.
+#[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct MostPlayedFavorite {
     pub id: i64,
     pub title: String,
     pub artist: Option<String>,
-    pub album_artist: Option<String>,
-    pub album: Option<String>,
-    pub genre: Option<String>,
-    pub year: Option<i32>,
     pub artwork_path: Option<String>,
     pub play_count: i32,
-    pub duration_ms: i64,
     /// What the card's heart draws. Always set on Favorites' ranking, which is filtered on it;
     /// Recently Played's spans the whole library.
     pub is_favorite: bool,

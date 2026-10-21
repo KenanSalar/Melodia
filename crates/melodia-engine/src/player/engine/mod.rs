@@ -13,6 +13,7 @@ pub mod fixtures;
 pub mod handlers;
 pub mod now_playing;
 pub mod queue;
+pub mod queue_window;
 pub mod signal_path;
 pub mod state;
 pub mod types;

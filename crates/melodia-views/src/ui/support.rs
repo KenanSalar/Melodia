@@ -1,11 +1,11 @@
-//! The Ko-fi link, and the one prompt that makes it findable.
+//! The support links, and the one prompt that makes them findable.
 //!
-//! A row in Settings → About is invisible to anyone who never opens that tab, so the link
-//! on its own is the same as no link. Hence a single toast, once ever, on an early launch
+//! A row in Settings → About is invisible to anyone who never opens that tab, so the links
+//! on their own are the same as none. Hence a single toast, once ever, on an early launch
 //! that isn't the first — and hence this module rather than [`super::settings::about`]:
-//! the About row and the toast's action button fire the same `Settings.open-kofi`, so
-//! neither owns it. Nothing here is modal or recurring; dismissing is free, the flag
-//! having been spent by the time the toast is on screen.
+//! the About row's Ko-fi button and the toast's action button fire the same
+//! `Settings.open-kofi`, so neither owns it. Nothing here is modal or recurring; dismissing
+//! is free, the flag having been spent by the time the toast is on screen.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -18,9 +18,10 @@ use melodia_app::state::AppState;
 use melodia_core::error::{AppError, describe};
 use melodia_ui::{AppWindow, NotificationKind, NotificationVariant, Settings};
 
-/// A literal rather than a manifest field — Cargo has no `funding` key to read it out
-/// of, unlike `about.rs`'s `CARGO_PKG_REPOSITORY`.
+/// Literals rather than manifest fields: Cargo has no `funding` key to read them out of,
+/// unlike `about.rs`'s `CARGO_PKG_REPOSITORY`.
 const KOFI_URL: &str = "https://ko-fi.com/kenansalar";
+const GITHUB_SPONSORS_URL: &str = "https://github.com/sponsors/KenanSalar";
 
 /// How long into the qualifying launch the toast waits. Long enough that it lands on
 /// someone using the app rather than on someone who just opened it.
@@ -31,16 +32,23 @@ pub fn install(
     state: &AppState,
     notifications: Rc<NotificationsUi>,
 ) -> Result<(), AppError> {
-    wire_open_kofi(ui, state);
+    wire_support_links(ui, state);
     schedule_prompt(ui, state, notifications)
 }
 
-/// Open the Ko-fi page in the system browser. [`launcher::open_target`] owns the hop off
-/// the UI thread — `open::that_detached` still forks and execs a child launcher.
-fn wire_open_kofi(ui: &AppWindow, state: &AppState) {
+/// Open each support page in the system browser. [`launcher::open_target`] owns the hop
+/// off the UI thread — `open::that_detached` still forks and execs a child launcher.
+fn wire_support_links(ui: &AppWindow, state: &AppState) {
+    let settings = ui.global::<Settings>();
+
     let runtime = state.runtime.clone();
-    ui.global::<Settings>().on_open_kofi(move || {
+    settings.on_open_kofi(move || {
         runtime.spawn(launcher::open_target(KOFI_URL, "open-kofi"));
+    });
+
+    let runtime = state.runtime.clone();
+    settings.on_open_github_sponsors(move || {
+        runtime.spawn(launcher::open_target(GITHUB_SPONSORS_URL, "open-github-sponsors"));
     });
 }
 

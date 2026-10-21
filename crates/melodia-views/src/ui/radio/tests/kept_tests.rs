@@ -306,13 +306,13 @@ fn the_needle_reaches_every_field_the_card_draws() {
 
     for needle in ["jazz", "lounge", "germany", "mp3", "FM"] {
         assert!(
-            station_matches(&station, &row_match::fold_needle(needle)),
+            station_matches(&station, &fold_needle(needle)),
             "{needle:?} names something the card draws and must match"
         );
     }
-    assert!(!station_matches(&station, &row_match::fold_needle("classical")));
+    assert!(!station_matches(&station, &fold_needle("classical")));
     assert!(
-        !station_matches(&station, &row_match::fold_needle("https")),
+        !station_matches(&station, &fold_needle("https")),
         "the stream URL is not on the card and must not be searchable — every station would match"
     );
 }
@@ -331,12 +331,12 @@ fn the_needle_reaches_the_format_a_play_measured() {
 
     for needle in ["ogg", "opus"] {
         assert!(
-            station_matches(&station, &row_match::fold_needle(needle)),
+            station_matches(&station, &fold_needle(needle)),
             "{needle:?} is half of what the card draws and must match"
         );
     }
     assert!(
-        !station_matches(&station, &row_match::fold_needle("ogg/opus")),
+        !station_matches(&station, &fold_needle("ogg/opus")),
         "the columns are matched apart, so a needle spanning the separator cannot land"
     );
 }
@@ -348,10 +348,10 @@ fn the_needle_ignores_case_and_accents() {
     let mut station = station("Radio Días", "2026-01-01T00:00:00.000+00:00", 0, None);
     station.country = "España".to_owned();
 
-    assert!(station_matches(&station, &row_match::fold_needle("dias")));
-    assert!(station_matches(&station, &row_match::fold_needle("ESPANA")));
+    assert!(station_matches(&station, &fold_needle("dias")));
+    assert!(station_matches(&station, &fold_needle("ESPANA")));
     assert!(
-        station_matches(&station, &row_match::fold_needle("")),
+        station_matches(&station, &fold_needle("")),
         "an empty needle matches everything, which is what lets the walk run unconditionally"
     );
 }

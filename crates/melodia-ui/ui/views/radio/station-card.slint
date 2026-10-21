@@ -36,9 +36,10 @@ export component StationCard inherits Rectangle {
     // Recently Played only, where it is what tells a station listened to daily from one played
     // once by accident. `0` everywhere else draws nothing.
     in property <int> play-count: 0;
-    // `EntityCard`'s selection, passed through.
+    // `EntityCard`'s selection and menu state, passed through.
     in property <bool> selected;
     in property <bool> selection-live;
+    in property <bool> menu-open;
 
     in property <length> card-width: 180px;
     // The square tile plus three text lines, where an entity card of the same width carries two.
@@ -105,6 +106,7 @@ export component StationCard inherits Rectangle {
         selection-live: root.selection-live;
         select-clicked(shift, ctrl) => { root.select-clicked(shift, ctrl); }
         context-requested(x, y) => { root.context-requested(x, y); }
+        menu-open: root.menu-open;
 
         // The four below are hover affordances and ride the card's own single overlay fade; the
         // star is not one of them and sits outside, below.

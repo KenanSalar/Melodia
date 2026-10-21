@@ -134,6 +134,7 @@ export component BrowseCardGrid inherits Rectangle {
                             root.select-card(card.row_index, card.id, shift, ctrl);
                         }
                         context-requested(x, y) => { ctx-menu.show-at(x, y); }
+                        menu-open: ctx-menu.is-open;
                         overlay-hovered: fav.has-hover;
                     }
 

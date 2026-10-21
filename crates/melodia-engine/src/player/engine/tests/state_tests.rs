@@ -1,10 +1,24 @@
 use std::sync::Arc;
 
 use super::*;
+use crate::player::engine::queue::current_index_from_i32;
 use crate::player::engine::types::{PersistableQueue, PersistedPlayback, RepeatMode};
 use melodia_core::error::AppError;
 use melodia_playback::player::playback::crossfade::CrossfadeDecision;
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
+
+/// Queue `tracks` with every record in the window, as the window task leaves a short queue.
+fn queue_up(state: &mut PlayerState, tracks: Vec<Arc<TrackSummary>>) {
+    let ids: Vec<i64> = tracks.iter().map(|track| track.id).collect();
+    state.queue.add_tracks(&ids);
+    state.window.seat(&ids, tracks);
+}
+
+/// Seat `persisted` as a launch does, `records` being its window's.
+fn restore(state: &mut PlayerState, records: Vec<Arc<TrackSummary>>, persisted: &PersistableQueue) {
+    let current = current_index_from_i32(persisted.current_index);
+    restore_queue(state, QueueState::restored(persisted.track_ids.clone(), current), records);
+}
 
 fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {
@@ -149,7 +163,7 @@ fn test_play_track_with_resume_does_not_eager_preload() {
 
     let track1 = make_summary(1, "Song 1", 180_000);
     let track2 = make_summary(2, "Song 2", 180_000);
-    state.queue.add_tracks(vec![track1.clone(), track2]);
+    queue_up(&mut state, vec![track1.clone(), track2]);
     state.queue.current_index = Some(0);
 
     let actions = play_track_inner(&mut state, track1, Some(60_000));
@@ -257,20 +271,12 @@ fn test_stop_at_end_of_queue_preserves_track() -> Result<(), AppError> {
     let track1 = make_summary(1, "Song 1", 100_000);
     let track2 = make_summary(2, "Song 2", 100_000);
 
-    state.queue.add_tracks(vec![track1, track2]);
+    queue_up(&mut state, vec![track1, track2]);
 
-    let t = state
-        .queue
-        .advance()
-        .cloned()
-        .ok_or_else(|| AppError::Validation("advance None #1".into()))?;
-    play_track_inner(&mut state, t, None);
-    let t = state
-        .queue
-        .advance()
-        .cloned()
-        .ok_or_else(|| AppError::Validation("advance None #2".into()))?;
-    play_track_inner(&mut state, t, None);
+    let t = state.queue.advance().ok_or_else(|| AppError::Validation("advance None #1".into()))?;
+    state.start_queued(t, false, 0);
+    let t = state.queue.advance().ok_or_else(|| AppError::Validation("advance None #2".into()))?;
+    state.start_queued(t, false, 0);
 
     // End of queue — no more tracks to advance to
     assert!(state.queue.advance().is_none());
@@ -295,14 +301,13 @@ fn test_queue_add_and_remove() {
         make_summary(3, "Song 3", 100_000),
     ];
 
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     assert_eq!(state.queue.play_order.len(), 3);
 
     state.queue.remove_at(1);
     assert_eq!(state.queue.play_order.len(), 2);
     // After removing index 1 (Song 2), play order should be [Song 1, Song 3]
-    let remaining: Vec<i64> = state.queue.tracks_in_play_order().iter().map(|t| t.id).collect();
-    assert_eq!(remaining, vec![1, 3]);
+    assert_eq!(*state.queue.play_ids(), [1, 3]);
 }
 
 #[test]
@@ -325,12 +330,12 @@ fn test_queue_loaded_restores_state() {
 
     let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 200_000)];
 
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(1);
     state.queue.shuffle_enabled = false;
     state.queue.repeat_mode = RepeatMode::Off;
 
-    if let Some(track) = state.queue.get_current().cloned() {
+    if let Some(track) = state.queue.current_id().and_then(|id| state.record(id)) {
         state.duration_ms = u64::try_from(track.duration_ms).unwrap_or(0);
         state.source = Some(PlaybackSource::Track(track));
     }
@@ -377,7 +382,7 @@ fn test_shuffle_unshuffle() {
         make_summary(2, "Song 2", 100_000),
         make_summary(3, "Song 3", 100_000),
     ];
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(1);
 
     // Apply shuffle
@@ -430,7 +435,7 @@ fn test_to_view_model_empty_queue() {
 
     assert_eq!(vm.status, "stopped");
     assert!(vm.current_track.is_none());
-    assert_eq!(vm.queue_tracks.len(), 0);
+    assert_eq!(vm.queue_ids.len(), 0);
     assert_eq!(vm.queue_index, -1);
     assert!(!vm.has_next);
     assert!(!vm.has_previous);
@@ -441,7 +446,7 @@ fn test_to_view_model_empty_queue() {
 fn test_to_view_model_has_previous_with_repeat_all() {
     let mut state = PlayerState::default();
     let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 100_000)];
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(0);
     state.queue.repeat_mode = RepeatMode::All;
 
@@ -453,7 +458,7 @@ fn test_to_view_model_has_previous_with_repeat_all() {
 fn test_to_view_model_has_previous_false_at_start() {
     let mut state = PlayerState::default();
     let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 100_000)];
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(0);
     state.queue.repeat_mode = RepeatMode::Off;
 
@@ -480,7 +485,7 @@ fn test_to_view_model_light_mirrors_full() {
     };
 
     let tracks = vec![make_summary(1, "Song 1", 200_000), make_summary(2, "Song 2", 100_000)];
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(0);
     state.source = Some(PlaybackSource::Track(make_summary(1, "Song 1", 200_000)));
 
@@ -537,11 +542,11 @@ fn test_to_queue_view_model_correct_tracks() {
         make_summary(2, "Song 2", 100_000),
         make_summary(3, "Song 3", 100_000),
     ];
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(1);
 
     let qvm = state.to_queue_view_model();
-    assert_eq!(qvm.queue_tracks.len(), 3);
+    assert_eq!(qvm.ids.len(), 3);
     assert_eq!(qvm.queue_index, 1);
     assert!(!qvm.shuffle_enabled);
     assert_eq!(qvm.repeat_mode, RepeatMode::Off);
@@ -555,23 +560,21 @@ fn test_to_queue_view_model_shuffled() {
         make_summary(2, "Song 2", 100_000),
         make_summary(3, "Song 3", 100_000),
     ];
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(1);
     state.queue.apply_shuffle_order(&[1, 2, 0]);
 
     let qvm = state.to_queue_view_model();
     assert!(qvm.shuffle_enabled);
     // Shuffled order: original indices [1, 2, 0] → tracks [2, 3, 1]
-    assert_eq!(qvm.queue_tracks[0].id, 2);
-    assert_eq!(qvm.queue_tracks[1].id, 3);
-    assert_eq!(qvm.queue_tracks[2].id, 1);
+    assert_eq!(*qvm.ids, [2, 3, 1]);
 }
 
 #[test]
 fn test_to_queue_view_model_has_next_at_end() {
     let mut state = PlayerState::default();
     let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 100_000)];
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(1); // last track
 
     // RepeatMode::Off — no next
@@ -593,7 +596,7 @@ fn test_restore_queue_basic() {
     let tracks = vec![make_summary(1, "Song 1", 100_000), make_summary(2, "Song 2", 200_000)];
     let persistable = PersistableQueue { track_ids: vec![1, 2], current_index: 1 };
 
-    restore_queue(&mut state, tracks, &persistable);
+    restore(&mut state, tracks, &persistable);
 
     assert_eq!(state.queue.tracks.len(), 2);
     assert_eq!(state.queue.current_index, Some(1));
@@ -606,7 +609,7 @@ fn test_restore_queue_empty() {
     let mut state = PlayerState::default();
     let persistable = PersistableQueue { track_ids: vec![], current_index: 0 };
 
-    restore_queue(&mut state, vec![], &persistable);
+    restore(&mut state, vec![], &persistable);
 
     assert!(state.current_track().is_none());
     assert_eq!(state.position_ms, 0);
@@ -638,7 +641,7 @@ fn test_restore_queue_with_last_position() {
 
     let persistable = PersistableQueue { track_ids: vec![1], current_index: 0 };
 
-    restore_queue(&mut state, vec![track], &persistable);
+    restore(&mut state, vec![track], &persistable);
 
     assert_eq!(state.position_ms, 45_000);
     assert_eq!(state.duration_ms, 180_000);
@@ -653,11 +656,11 @@ fn test_restore_queue_index_out_of_bounds() {
         current_index: 99, // way out of bounds
     };
 
-    restore_queue(&mut state, tracks, &persistable);
+    restore(&mut state, tracks, &persistable);
 
-    // get_current() returns None for out-of-range index, so no track loaded
+    // An index past the end names no track, so none is loaded and none is current.
     assert!(state.current_track().is_none());
-    assert_eq!(state.queue.current_index, Some(99));
+    assert_eq!(state.queue.current_index, None);
 }
 
 #[test]
@@ -666,7 +669,7 @@ fn end_of_stream_advances_when_next_track_present() {
     let track1 = make_summary(1, "Song 1", 100_000);
     let track2 = make_summary(2, "Song 2", 100_000);
     state.source = Some(PlaybackSource::Track(track1.clone()));
-    state.queue.add_tracks(vec![track1, track2]);
+    queue_up(&mut state, vec![track1, track2]);
     state.queue.current_index = Some(0);
     state.status = PlaybackStatus::Playing;
 
@@ -686,7 +689,7 @@ fn end_of_stream_stops_at_end_of_queue() {
     let mut state = PlayerState::default();
     let track = make_summary(1, "Only Song", 100_000);
     state.source = Some(PlaybackSource::Track(track.clone()));
-    state.queue.add_tracks(vec![track]);
+    queue_up(&mut state, vec![track]);
     state.queue.current_index = Some(0);
     state.status = PlaybackStatus::Playing;
 
@@ -706,7 +709,7 @@ fn end_of_stream_pauses_when_sleep_at_track_end_armed() {
     let track1 = make_summary(1, "Song 1", 100_000);
     let track2 = make_summary(2, "Song 2", 100_000);
     state.source = Some(PlaybackSource::Track(track1.clone()));
-    state.queue.add_tracks(vec![track1, track2]);
+    queue_up(&mut state, vec![track1, track2]);
     state.queue.current_index = Some(0);
     state.status = PlaybackStatus::Playing;
     state.pause_after_current_track = true;
@@ -748,7 +751,7 @@ fn crossfade_advances_the_queue_and_starts_the_next_track() {
     let mut state = PlayerState::default();
     let track1 = make_summary(1, "One", 180_000);
     let track2 = make_summary(2, "Two", 200_000);
-    state.queue.add_tracks(vec![track1.clone(), track2]);
+    queue_up(&mut state, vec![track1.clone(), track2]);
     state.queue.current_index = Some(0);
     state.source = Some(PlaybackSource::Track(track1));
     state.status = PlaybackStatus::Playing;
@@ -780,7 +783,7 @@ fn crossfade_emits_nothing_when_the_queue_has_no_next_track() {
     // land in between. `advance()` returning None must leave state untouched.
     let mut state = PlayerState::default();
     let track1 = make_summary(1, "One", 180_000);
-    state.queue.add_tracks(vec![track1.clone()]);
+    queue_up(&mut state, vec![track1.clone()]);
     state.queue.current_index = Some(0);
     state.source = Some(PlaybackSource::Track(track1));
     state.status = PlaybackStatus::Playing;
@@ -804,7 +807,7 @@ fn crossfade_does_not_count_a_play_when_it_cannot_advance() {
     // only pushed once `advance()` has confirmed there is somewhere to go.
     let mut state = PlayerState::default();
     let track1 = make_summary(1, "One", 180_000);
-    state.queue.add_tracks(vec![track1.clone()]);
+    queue_up(&mut state, vec![track1.clone()]);
     state.queue.current_index = Some(0);
     state.source = Some(PlaybackSource::Track(track1));
     state.status = PlaybackStatus::Playing;
@@ -825,7 +828,7 @@ fn crossfade_is_dropped_when_a_pause_landed_since_the_decision() {
     let mut state = PlayerState::default();
     let track1 = make_summary(1, "One", 180_000);
     let track2 = make_summary(2, "Two", 200_000);
-    state.queue.add_tracks(vec![track1.clone(), track2]);
+    queue_up(&mut state, vec![track1.clone(), track2]);
     state.queue.current_index = Some(0);
     state.source = Some(PlaybackSource::Track(track1));
     state.duration_ms = 180_000;
@@ -849,7 +852,7 @@ fn crossfade_is_dropped_when_the_track_changed_since_the_decision() {
     let track1 = make_summary(1, "One", 180_000);
     let track2 = make_summary(2, "Two", 200_000);
     let track3 = make_summary(3, "Three", 220_000);
-    state.queue.add_tracks(vec![track1, track2.clone(), track3]);
+    queue_up(&mut state, vec![track1, track2.clone(), track3]);
     // A manual jump to track 2 landed after the monitor decided on track 1.
     state.queue.current_index = Some(1);
     state.source = Some(PlaybackSource::Track(track2));
@@ -876,7 +879,7 @@ fn crossfade_is_dropped_when_the_same_track_restarted_since_the_decision() {
     let mut state = PlayerState::default();
     let track1 = make_summary(1, "One", 180_000);
     let track2 = make_summary(2, "Two", 200_000);
-    state.queue.add_tracks(vec![track1.clone(), track2]);
+    queue_up(&mut state, vec![track1.clone(), track2]);
     state.queue.current_index = Some(0);
     state.source = Some(PlaybackSource::Track(track1));
     state.status = PlaybackStatus::Playing;
@@ -897,7 +900,7 @@ fn crossfade_is_dropped_when_a_seek_landed_since_the_decision() {
     let mut state = PlayerState::default();
     let track1 = make_summary(1, "One", 180_000);
     let track2 = make_summary(2, "Two", 200_000);
-    state.queue.add_tracks(vec![track1.clone(), track2]);
+    queue_up(&mut state, vec![track1.clone(), track2]);
     state.queue.current_index = Some(0);
     state.source = Some(PlaybackSource::Track(track1));
     state.status = PlaybackStatus::Playing;
@@ -916,38 +919,36 @@ fn crossfade_is_dropped_when_a_seek_landed_since_the_decision() {
     assert_eq!(state.position_ms, 60_000, "the seek must stick");
 }
 
-// ── sync_track_summaries ──
+// ── seat_window_records ──
 
 #[test]
-fn sync_track_summaries_patches_current_queue_and_republishes() {
-    use std::collections::HashMap;
-
+fn seated_records_refresh_the_playing_track_and_the_window_and_republish() {
     use tokio::sync::watch;
 
     use crate::player::engine::event_sink::PlayerSinks;
 
     let handle = PlayerStateHandle::default();
-    let (vm_tx, _vm_rx) = watch::channel(None);
-    let (q_tx, mut q_rx) = watch::channel(None);
-    let sinks = PlayerSinks { view_model: vm_tx, queue: q_tx, media_controls: None };
+    let (vm_tx, mut vm_rx) = watch::channel(None);
+    let (q_tx, _q_rx) = watch::channel(None);
+    let (awaited_start, _) = watch::channel(None);
+    let sinks = PlayerSinks { view_model: vm_tx, queue: q_tx, media_controls: None, awaited_start };
 
     // Seed a current track + a coherent two-entry queue.
     with_state_emit(&handle, &sinks, |s| {
         let t1 = make_summary(1, "Old One", 1000);
         let t2 = make_summary(2, "Old Two", 2000);
         s.source = Some(PlaybackSource::Track(Arc::clone(&t1)));
-        s.queue.tracks = vec![t1, t2];
-        s.queue.play_order = vec![0, 1];
+        queue_up(s, vec![t1, t2]);
         s.queue.current_index = Some(0);
         Vec::<PlayerAction>::new()
     });
-    drop(q_rx.borrow_and_update());
-    let version_before = lock_state(&handle).queue.version;
+    drop(vm_rx.borrow_and_update());
 
-    let mut fresh = HashMap::new();
-    fresh.insert(1, (*make_summary(1, "New One", 1000)).clone());
-    fresh.insert(2, (*make_summary(2, "New Two", 2000)).clone());
-    sync_track_summaries(&handle, &sinks, &fresh);
+    let fresh = vec![
+        (*make_summary(1, "New One", 1000)).clone(),
+        (*make_summary(2, "New Two", 2000)).clone(),
+    ];
+    seat_window_records(&handle, &sinks, fresh);
 
     {
         let g = lock_state(&handle);
@@ -956,25 +957,19 @@ fn sync_track_summaries_patches_current_queue_and_republishes() {
             Some("New One"),
             "the currently-playing summary must be refreshed"
         );
-        assert_eq!(g.queue.tracks[0].title, "New One");
-        assert_eq!(g.queue.tracks[1].title, "New Two");
-        assert!(
-            g.queue.version > version_before,
-            "a queue patch must bump the version so the queue VM republishes"
-        );
+        assert_eq!(g.window.get(2).map(|t| t.title.as_str()), Some("New Two"));
     }
-    assert!(matches!(q_rx.has_changed(), Ok(true)), "the queue view-model must be republished");
-
-    // An edit touching nothing queued/playing is a no-op: no version bump, no publish.
-    drop(q_rx.borrow_and_update());
-    let version_after = lock_state(&handle).queue.version;
-    let mut absent = HashMap::new();
-    absent.insert(99, (*make_summary(99, "Nope", 1)).clone());
-    sync_track_summaries(&handle, &sinks, &absent);
-    assert_eq!(lock_state(&handle).queue.version, version_after, "no-op must not bump version");
     assert!(
-        matches!(q_rx.has_changed(), Ok(false)),
-        "an edit touching nothing queued must not republish"
+        matches!(vm_rx.has_changed(), Ok(true)),
+        "the playing track's new tags must be published"
+    );
+
+    // An edit touching nothing queued/playing is a no-op: no publish.
+    drop(vm_rx.borrow_and_update());
+    seat_window_records(&handle, &sinks, vec![(*make_summary(99, "Nope", 1)).clone()]);
+    assert!(
+        matches!(vm_rx.has_changed(), Ok(false)),
+        "an edit touching nothing playing must not republish"
     );
 }
 
@@ -992,7 +987,8 @@ fn every_emit_publishes_a_newer_position_stamp() {
     let handle = PlayerStateHandle::default();
     let (vm_tx, vm_rx) = watch::channel(None);
     let (q_tx, _q_rx) = watch::channel(None);
-    let sinks = PlayerSinks { view_model: vm_tx, queue: q_tx, media_controls: None };
+    let (awaited_start, _) = watch::channel(None);
+    let sinks = PlayerSinks { view_model: vm_tx, queue: q_tx, media_controls: None, awaited_start };
     let published = || vm_rx.borrow().as_ref().map(|vm| vm.position_stamp);
 
     with_state_emit(&handle, &sinks, |_| ());
@@ -1087,7 +1083,7 @@ fn queued(count: i64) -> PlayerState {
     let mut state = PlayerState::default();
     let tracks: Vec<_> =
         (1..=count).map(|i| make_summary(i, &format!("Track {i}"), 180_000)).collect();
-    state.queue.add_tracks(tracks);
+    queue_up(&mut state, tracks);
     state.queue.current_index = Some(0);
     state
 }
@@ -1374,7 +1370,7 @@ fn next_at_end_with_repeat_all_wraps() {
     state.queue.advance_skip();
     state.queue.advance_skip();
 
-    assert_eq!(state.queue.advance_skip().map(|t| t.id), Some(1));
+    assert_eq!(state.queue.advance_skip(), Some(1));
 }
 
 // --- The radio arm ---------------------------------------------------------
@@ -1388,7 +1384,7 @@ use crate::player::engine::fixtures::test_station as station;
 /// A player mid-album, so every "the queue is untouched" assertion has something to be about.
 fn playing_a_queue() -> PlayerState {
     let mut state = PlayerState::default();
-    state.queue.add_tracks(vec![make_summary(1, "One", 180_000), make_summary(2, "Two", 180_000)]);
+    queue_up(&mut state, vec![make_summary(1, "One", 180_000), make_summary(2, "Two", 180_000)]);
     state.queue.current_index = Some(0);
     let track = make_summary(1, "One", 180_000);
     let _actions = play_track_inner(&mut state, track, Some(30_000));
@@ -1653,7 +1649,7 @@ fn a_station_reports_no_next_or_previous() {
 #[test]
 fn an_empty_deck_rules_nothing_out() {
     let mut state = PlayerState::default();
-    state.queue.add_tracks(vec![make_summary(1, "One", 100_000), make_summary(2, "Two", 100_000)]);
+    queue_up(&mut state, vec![make_summary(1, "One", 100_000), make_summary(2, "Two", 100_000)]);
     state.queue.current_index = Some(0);
     assert!(state.current_track().is_none(), "nothing has reached the deck yet");
 
@@ -1788,7 +1784,7 @@ fn a_station_with_no_row_of_its_own_is_not_written_down() {
 fn the_station_replaces_the_restored_track_and_not_the_queue_under_it() {
     let mut state = PlayerState::default();
     let persistable = PersistableQueue { track_ids: vec![1, 2], current_index: 0 };
-    restore_queue(
+    restore(
         &mut state,
         vec![make_summary(1, "One", 180_000), make_summary(2, "Two", 180_000)],
         &persistable,
@@ -1816,7 +1812,7 @@ fn a_restart_puts_the_queue_back_under_the_station() -> Result<(), AppError> {
     let read: PersistedPlayback = serde_json::from_str(&written)
         .map_err(|e| AppError::Validation(format!("parse queue.json: {e}")))?;
     let mut after = PlayerState::default();
-    restore_queue(
+    restore(
         &mut after,
         vec![make_summary(1, "One", 180_000), make_summary(2, "Two", 180_000)],
         &read.queue,
@@ -1923,4 +1919,443 @@ fn a_replay_is_refused_unless_the_track_is_paused() {
 
         assert_eq!((actions, state.status), (Vec::new(), status), "{status:?}");
     }
+}
+
+// --- A transition onto a track the window lacks ---
+//
+// The transport runs under the state lock, where nothing may wait on the database, so a
+// transition landing on a track whose record the window doesn't hold moves the queue and owes the
+// start. The window task fetches the record and runs it.
+
+use std::collections::HashSet;
+
+/// A transition a row runs, and the actions it builds.
+type Transition = fn(&mut PlayerState) -> Vec<PlayerAction>;
+
+/// What a row lands on the state while a start is owed.
+type StateEdit = fn(&mut PlayerState);
+
+/// What a row does to the queue while a start is owed.
+type QueueEdit = fn(&mut QueueState);
+
+/// [`queued`] playing its first track past half, so a Next counts no skip.
+fn playing_first_of(count: i64) -> PlayerState {
+    let mut state = queued(count);
+    play_track_inner(&mut state, make_summary(1, "Track 1", 180_000), None);
+    state.position_ms = 120_000;
+    state
+}
+
+/// [`queued`] at its second slot, playing track 2 from the top.
+fn playing_second_of(count: i64) -> PlayerState {
+    let mut state = queued(count);
+    state.queue.advance();
+    play_track_inner(&mut state, make_summary(2, "Track 2", 180_000), None);
+    state
+}
+
+/// `state` with its window holding the records of `held` and no others.
+fn holding(mut state: PlayerState, held: &[i64]) -> PlayerState {
+    state.window.seat(held, std::iter::empty());
+    state
+}
+
+/// The start `actions` owe, where they owe one.
+fn owed_start(actions: &[PlayerAction]) -> Option<AwaitedStart> {
+    actions.iter().find_map(|action| match action {
+        PlayerAction::StartWhenResolved(owed) => Some(*owed),
+        _ => None,
+    })
+}
+
+/// The file `actions` start on the deck, where they start one.
+fn started_path(actions: &[PlayerAction]) -> Option<&str> {
+    actions.iter().find_map(|action| match action {
+        PlayerAction::PlayMedia { file_path, .. } => Some(file_path.as_str()),
+        _ => None,
+    })
+}
+
+/// A queue of `count` after a Next onto track 2, whose record the window lacked, and the start
+/// that Next owes.
+fn awaiting_track_two(count: i64) -> Result<(PlayerState, AwaitedStart), AppError> {
+    let mut state = holding(playing_first_of(count), &[1]);
+    let actions = state.build_next_actions();
+    let owed = owed_start(&actions)
+        .ok_or_else(|| AppError::Validation(format!("the Next owed no start: {actions:?}")))?;
+    Ok((state, owed))
+}
+
+/// The window task landing the records of `ids`, of those the window still wants.
+fn land_records(state: &mut PlayerState, ids: &[i64]) {
+    let wanted = state.queue.window_ids();
+    let records = ids.iter().map(|&id| make_summary(id, &format!("Track {id}"), 180_000));
+    state.window.seat(&wanted, records);
+}
+
+/// The Stop is what takes the outgoing track off the deck. Without it the old track plays on under
+/// a state that says the new one is loading.
+#[test]
+fn a_skip_onto_a_track_the_window_lacks_stops_the_deck_and_owes_its_start() {
+    let mut state = holding(playing_first_of(3), &[1]);
+
+    let actions = state.build_next_actions();
+
+    assert_eq!(
+        actions,
+        vec![
+            PlayerAction::Stop { fade_ms: 0 },
+            PlayerAction::StartWhenResolved(AwaitedStart { id: 2, re_pause: false, skipped: 0 }),
+        ]
+    );
+}
+
+/// `Loading` over an empty deck is what keeps the monitor from ticking while the record is
+/// fetched, and from ending a drained stream a second time. The queue has already moved, so the
+/// sheet and Up Next show where playback is going.
+#[test]
+fn a_deferred_start_leaves_nothing_on_the_deck_under_loading() {
+    let mut state = holding(playing_first_of(3), &[1]);
+
+    state.build_next_actions();
+
+    assert_eq!(
+        (
+            state.status,
+            state.source.is_none(),
+            state.position_ms,
+            state.duration_ms,
+            state.queue.current_index
+        ),
+        (PlaybackStatus::Loading, true, 0, 0, Some(1)),
+    );
+}
+
+/// Every way playback moves along the queue reads the window, so each one has to owe its start
+/// on a miss rather than stopping or starting a record it doesn't hold.
+#[test]
+fn every_transition_onto_a_track_the_window_lacks_owes_that_tracks_start() {
+    let rows: [(&str, PlayerState, Transition, i64); 5] = [
+        ("Next", holding(playing_first_of(3), &[1]), PlayerState::build_next_actions, 2),
+        ("Previous", holding(playing_second_of(3), &[2]), PlayerState::build_previous_actions, 1),
+        (
+            "an end of stream",
+            holding(playing_first_of(3), &[1]),
+            PlayerState::build_end_of_stream_actions,
+            2,
+        ),
+        (
+            "Play with nothing on the deck",
+            holding(queued(3), &[]),
+            PlayerState::build_play_actions,
+            1,
+        ),
+        (
+            "a gapless handover the queue moved after the stage",
+            holding(playing_first_of(3), &[1, 3]),
+            |s| s.build_gapless_advance_actions(Some(make_summary(3, "Track 3", 180_000))),
+            2,
+        ),
+    ];
+    for (what, mut state, transition, id) in rows {
+        let actions = transition(&mut state);
+
+        assert_eq!(
+            owed_start(&actions),
+            Some(AwaitedStart { id, re_pause: false, skipped: 0 }),
+            "{what}"
+        );
+    }
+}
+
+/// A skip made while paused stays paused across the fetch: the start puts the track back on pause
+/// once it runs, unfaded for the reason `restore_paused` gives.
+#[test]
+fn a_skip_made_while_paused_comes_back_paused_once_its_record_lands() -> Result<(), AppError> {
+    let mut state = holding(playing_first_of(3), &[1]);
+    state.status = PlaybackStatus::Paused;
+    let owed = owed_start(&state.build_next_actions())
+        .ok_or_else(|| AppError::Validation("the paused Next owed no start".into()))?;
+    land_records(&mut state, &[2]);
+
+    let actions = state.resume_awaited(owed);
+
+    assert_eq!(
+        (state.status, actions.last()),
+        (PlaybackStatus::Paused, Some(&PlayerAction::Pause { fade_ms: 0 }))
+    );
+    Ok(())
+}
+
+#[test]
+fn a_deferred_start_runs_once_the_window_holds_its_record() -> Result<(), AppError> {
+    let (mut state, owed) = awaiting_track_two(3)?;
+    land_records(&mut state, &[2]);
+
+    let actions = state.resume_awaited(owed);
+
+    assert_eq!(started_path(&actions), Some("/music/2.mp3"));
+    Ok(())
+}
+
+/// A deferred start runs only while nothing has started or stopped since it was owed. Run after a
+/// Stop it plays over the stop, after a Next it cuts off the track that Next started, and over a
+/// station connecting it puts a track on the station's deck, `Loading` though the state still is.
+#[test]
+fn a_deferred_start_is_refused_once_something_else_started_or_stopped() -> Result<(), AppError> {
+    let rows: [(&str, StateEdit, PlaybackStatus); 3] = [
+        (
+            "a Stop",
+            |s| {
+                s.build_stop_actions(0);
+            },
+            PlaybackStatus::Stopped,
+        ),
+        (
+            "a Next that started its track",
+            |s| {
+                land_records(s, &[3]);
+                s.build_next_actions();
+            },
+            PlaybackStatus::Playing,
+        ),
+        (
+            "a station connecting",
+            |s| {
+                s.build_station_connecting_actions(station("Example FM"));
+            },
+            PlaybackStatus::Loading,
+        ),
+    ];
+    for (what, intervene, status) in rows {
+        let (mut state, owed) = awaiting_track_two(3)?;
+        intervene(&mut state);
+        land_records(&mut state, &[2]);
+
+        let actions = state.resume_awaited(owed);
+
+        assert_eq!((actions, state.status), (Vec::new(), status), "{what}");
+    }
+    Ok(())
+}
+
+/// The start runs on the queue's current slot as it stands once the record lands. Requiring the
+/// slot the transition chose left the player under `Loading` with nothing on the deck after any
+/// of these, Play and Pause doing nothing until Next, Previous or Stop.
+#[test]
+fn an_edit_during_the_fetch_moves_what_the_deferred_start_plays() -> Result<(), AppError> {
+    let rows: [(&str, QueueEdit, &str); 4] = [
+        (
+            "a remove above the current row",
+            |q| {
+                q.remove_at(0);
+            },
+            "/music/2.mp3",
+        ),
+        ("a shuffle", |q| q.shuffle_play_order_in_place(&mut rand::rng(), true), "/music/2.mp3"),
+        (
+            "a prune above the current row",
+            |q| {
+                q.prune_missing(&HashSet::from([1]));
+            },
+            "/music/2.mp3",
+        ),
+        (
+            "a prune of the track awaited",
+            |q| {
+                q.prune_missing(&HashSet::from([2]));
+            },
+            "/music/3.mp3",
+        ),
+    ];
+    for (what, edit, expected) in rows {
+        let (mut state, owed) = awaiting_track_two(4)?;
+        edit(&mut state.queue);
+        land_records(&mut state, &[2, 3, 4]);
+
+        let actions = state.resume_awaited(owed);
+
+        assert_eq!(started_path(&actions), Some(expected), "{what}");
+    }
+    Ok(())
+}
+
+#[test]
+fn a_queue_cleared_during_the_fetch_stops_rather_than_starting_anything() -> Result<(), AppError> {
+    let (mut state, owed) = awaiting_track_two(3)?;
+    state.queue.clear();
+
+    let actions = state.resume_awaited(owed);
+
+    assert_eq!(
+        (actions, state.status),
+        (vec![PlayerAction::Stop { fade_ms: 0 }], PlaybackStatus::Stopped)
+    );
+    Ok(())
+}
+
+/// The start never defers a second time, so a record that never lands can't have the window task
+/// owe, fetch and owe again in a loop. The queue publish that moved the slot is what has it fetch.
+#[test]
+fn a_deferred_start_whose_record_never_landed_owes_nothing_again() -> Result<(), AppError> {
+    let (mut state, owed) = awaiting_track_two(3)?;
+
+    let actions = state.resume_awaited(owed);
+
+    assert_eq!(actions, Vec::new());
+    Ok(())
+}
+
+/// A fade can't wait on a fetch, so a next the window lacks is no next: the decision drops, and
+/// the track drains to an end of stream that can defer.
+#[test]
+fn a_crossfade_into_a_track_the_window_lacks_is_dropped_without_advancing() {
+    let mut state = holding(playing_first_of(2), &[1]);
+    state.position_ms = 178_200;
+
+    let actions = state.build_crossfade_actions(decision(1_800, 1, 178_200));
+
+    assert_eq!((actions, state.queue.current_index), (Vec::new(), Some(0)));
+}
+
+// --- A gapless handover ---
+
+/// The deck already plays the staged track, so a start here would cut the gapless join it was
+/// staged for.
+#[test]
+fn a_handover_onto_the_queues_next_starts_nothing() {
+    let mut state = playing_first_of(2);
+
+    let actions = state.build_gapless_advance_actions(Some(make_summary(2, "Track 2", 200_000)));
+
+    assert_eq!(actions, vec![PlayerAction::UpdatePlayCount(1)]);
+}
+
+/// Now Playing describes what the deck plays, which is the staged record from its first sample.
+#[test]
+fn a_handover_onto_the_queues_next_seats_the_staged_record() {
+    let mut state = playing_first_of(2);
+
+    state.build_gapless_advance_actions(Some(make_summary(2, "Track 2", 200_000)));
+
+    assert_eq!(
+        (
+            state.current_track().map(|t| t.id),
+            state.duration_ms,
+            state.position_ms,
+            state.queue.current_index
+        ),
+        (Some(2), 200_000, 0, Some(1)),
+    );
+}
+
+/// An edit inside the last `PRELOAD_LEAD_MS` moved the queue's next after the stage. Seating the
+/// staged track would skip a Play Next or play a track just removed, Now Playing naming one and the
+/// deck playing another.
+#[test]
+fn at_a_handover_the_queue_wins_over_a_stale_stage() {
+    let mut state = playing_first_of(3);
+
+    let actions = state.build_gapless_advance_actions(Some(make_summary(3, "Track 3", 180_000)));
+
+    assert_eq!(started_path(&actions), Some("/music/2.mp3"));
+}
+
+/// A stage whose track was removed, leaving nothing after the current one, ends at the end of the
+/// queue as a drained end of stream does.
+#[test]
+fn a_handover_past_the_end_of_the_queue_stops() {
+    let mut state = playing_first_of(1);
+
+    let actions = state.build_gapless_advance_actions(Some(make_summary(2, "Track 2", 180_000)));
+
+    assert_eq!(
+        (actions, state.status),
+        (
+            vec![PlayerAction::UpdatePlayCount(1), PlayerAction::Stop { fade_ms: 0 }],
+            PlaybackStatus::Stopped
+        )
+    );
+}
+
+// --- What the window task reads and seats ---
+
+/// `state` behind a handle, as the window task reaches it.
+fn handle_on(state: PlayerState) -> PlayerStateHandle {
+    let handle = PlayerStateHandle::default();
+    *lock_state(&handle) = state;
+    handle
+}
+
+/// A queue move fetches only what the window lacks, where a library tick may have rewritten any
+/// record it holds and reads them all again.
+#[test]
+fn only_a_library_tick_asks_again_for_the_records_the_window_holds() {
+    let rows = [(WindowFill::Missing, vec![3, 4]), (WindowFill::All, vec![1, 2, 3, 4])];
+    for (fill, expected) in rows {
+        let handle = handle_on(holding(queued(5), &[1, 2]));
+
+        assert_eq!(window_wanted(&handle, fill), expected, "{fill:?}");
+    }
+}
+
+/// A queue cleared under a playing track leaves it on the deck with no slot, and a retag of it
+/// still has to reach Now Playing.
+#[test]
+fn a_library_tick_asks_for_the_playing_track_a_cleared_queue_no_longer_names() {
+    let mut state = playing_first_of(3);
+    state.queue.clear();
+    let handle = handle_on(state);
+
+    assert_eq!(window_wanted(&handle, WindowFill::All), vec![1]);
+}
+
+/// A handle playing track 1 off a one-track queue, its sinks, and a receiver on its view model.
+fn emitting_track_one() -> (
+    PlayerStateHandle,
+    crate::player::engine::event_sink::PlayerSinks,
+    tokio::sync::watch::Receiver<Option<PlayerViewModelLight>>,
+) {
+    let (view_model, published) = tokio::sync::watch::channel(None);
+    let (queue, _) = tokio::sync::watch::channel(None);
+    let (awaited_start, _) = tokio::sync::watch::channel(None);
+    let sinks = crate::player::engine::event_sink::PlayerSinks {
+        view_model,
+        queue,
+        media_controls: None,
+        awaited_start,
+    };
+    (handle_on(playing_first_of(1)), sinks, published)
+}
+
+/// Track 1's record titled `title`, as the database holds it once the save has written
+/// `position_ms`.
+fn saved_at(position_ms: i64, title: &str) -> TrackSummary {
+    TrackSummary { last_position: position_ms, ..(*make_summary(1, title, 180_000)).clone() }
+}
+
+/// The periodic save rewrites `last_position` as a track plays, so every library tick hands the
+/// playing record back with that alone moved. Taken for an edit, it republished the view model on
+/// every tick once a track had played a while.
+#[test]
+fn a_record_moved_only_in_its_saved_position_is_not_republished() {
+    let (handle, sinks, published) = emitting_track_one();
+
+    seat_window_records(&handle, &sinks, vec![saved_at(60_000, "Track 1")]);
+
+    assert_eq!(published.has_changed().ok(), Some(false));
+}
+
+/// The retag that happens: a track that has played a while comes back with the new tags and the
+/// position the save wrote, and setting the position aside must not set the edit aside with it.
+#[test]
+fn a_retag_of_a_track_that_has_played_a_while_reaches_now_playing() {
+    let (handle, sinks, _published) = emitting_track_one();
+
+    seat_window_records(&handle, &sinks, vec![saved_at(60_000, "Retagged")]);
+
+    assert_eq!(
+        lock_state(&handle).current_track().map(|t| t.title.clone()),
+        Some("Retagged".to_owned())
+    );
 }

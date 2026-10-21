@@ -6,7 +6,7 @@
 //! `queue.json` and `search_history.json`. The shared boundary types stay
 //! defined in [`super::settings`] and are imported here.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -17,14 +17,17 @@ use melodia_core::error::AppResult;
 /// Per-view UI state persisted between launches. Every field is
 /// `#[serde(default)]` through the struct attribute, so a missing key — or a
 /// missing file — falls back to first-launch behaviour.
+///
+/// The maps are `BTreeMap`s so the same state always saves as the same file: each `HashMap`
+/// iterates in an order of its own, and every save reads into a new one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ViewStateData {
     /// Keyed by view-id (`melodia-views`' `ui/track_list_view.rs::view_id`); one map each
     /// covers every list or grid view.
-    pub view_columns: HashMap<String, Vec<String>>,
-    pub view_column_widths: HashMap<String, ColumnWidths>,
-    pub view_sort: HashMap<String, ViewSort>,
+    pub view_columns: BTreeMap<String, Vec<String>>,
+    pub view_column_widths: BTreeMap<String, ColumnWidths>,
+    pub view_sort: BTreeMap<String, ViewSort>,
     /// Browse's folder at last shutdown. `None` lands at the library root.
     pub browse_path: Option<String>,
     /// Browse's presentation. Clamped on read through `ui::tab_bar::clamp_tab`,
@@ -37,7 +40,7 @@ pub struct ViewStateData {
     pub last_nav_index: i32,
     /// Detail ids open at last shutdown, keyed by view-id. An absent entry lands
     /// that view on its root.
-    pub last_detail_ids: HashMap<String, i64>,
+    pub last_detail_ids: BTreeMap<String, i64>,
     /// Artist Detail's Albums header toggle. `true` hides the scroller so the
     /// all-tracks list claims that space.
     pub artist_albums_collapsed: bool,
@@ -64,13 +67,13 @@ pub struct ViewStateData {
 impl Default for ViewStateData {
     fn default() -> Self {
         Self {
-            view_columns: HashMap::new(),
-            view_column_widths: HashMap::new(),
-            view_sort: HashMap::new(),
+            view_columns: BTreeMap::new(),
+            view_column_widths: BTreeMap::new(),
+            view_sort: BTreeMap::new(),
             browse_path: None,
             browse_view_mode: 0,
             last_nav_index: default_last_nav_index(),
-            last_detail_ids: HashMap::new(),
+            last_detail_ids: BTreeMap::new(),
             artist_albums_collapsed: false,
             settings_category: 0,
             favorites_tab: 0,

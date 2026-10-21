@@ -4,8 +4,8 @@
 //! * [`detail`] — the open-artist detail view: close-detail and the Albums
 //!   sub-section collapse, plus the set every detail shares.
 //! * [`cross_tab`] — the Artist Detail → Albums tab hand-off.
-//! * [`lifecycle`] — section enter/leave cache management + the
-//!   `library_changed` re-fetch subscriber.
+//! * [`lifecycle`] — what the tab hands the shared section lifecycle,
+//!   `callbacks::grid_tab`.
 
 mod cross_tab;
 mod detail;

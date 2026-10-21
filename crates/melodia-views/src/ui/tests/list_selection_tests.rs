@@ -8,13 +8,15 @@ use super::{
     NO_ANCHOR, RowSelectionView, clear_row_selection, compute_click_selection, displayed_ids,
     handle_row_click, keep_selection_within, restamp_selected, select_all_ids, select_all_rows,
 };
-use crate::ui::fixtures::{four_tracks, visible_rows};
-use crate::ui::track_list_cache::TrackListCache;
-use crate::ui::track_list_model::TrackListModel;
+use crate::ui::fixtures::track_keyset;
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use melodia_ui::TrackListRow as UiTrackListRow;
 
 /// Displayed order used by every shift-range case below.
 const VISIBLE: [i32; 6] = [10, 20, 30, 40, 50, 60];
+
+const ROW_MENU: &str =
+    include_str!("../../../../melodia-ui/ui/components/track-list/track-context-menu.slint");
 
 fn visible() -> Vec<i32> {
     VISIBLE.to_vec()
@@ -202,33 +204,29 @@ fn a_model_that_is_not_a_vec_model_still_answers_with_its_ids() {
 
 // --- a list view's whole selection, over the Songs lists' model ---
 
-/// What a list view's global holds of its selection, showing [`four_tracks`] as the two Songs
-/// lists show their rows.
+/// What a list view's global holds of its selection, showing `fixtures::four_tracks` as the two
+/// Songs lists show their rows.
 struct FakeView {
     anchor: Cell<i32>,
     selected: Rc<VecModel<i32>>,
-    rows: Rc<TrackListModel>,
-    cache: TrackListCache,
+    rows: Rc<TrackRows>,
 }
 
 impl FakeView {
     /// Showing the tracks in title order, 2 4 3 1, under `needle`.
     fn showing(needle: &str) -> Self {
-        let cache = TrackListCache::new();
-        cache.store(four_tracks(), "title", "asc");
-        let rows = Rc::new(TrackListModel::default());
-        rows.show(visible_rows(&cache, needle));
-        Self { anchor: Cell::new(NO_ANCHOR), selected: Rc::new(VecModel::default()), rows, cache }
+        let rows = TrackRows::new(|_request| {});
+        rows.show(track_keyset(needle, "asc"));
+        Self { anchor: Cell::new(NO_ANCHOR), selected: Rc::new(VecModel::default()), rows }
     }
 
     fn refilter(&self, needle: &str) {
-        self.rows.show(visible_rows(&self.cache, needle));
+        self.rows.show(track_keyset(needle, "asc"));
     }
 
     /// Unfiltered, in reverse title order: 1 3 4 2.
     fn resort_descending(&self) {
-        self.cache.resort("title", "desc");
-        self.refilter("");
+        self.rows.show(track_keyset("", "desc"));
     }
 
     /// `(selected-ids, the anchor, each row's flag)`, the three things a click writes.
@@ -252,7 +250,6 @@ impl RowSelectionView for FakeView {
     fn track_rows(&self) -> ModelRc<UiTrackListRow> {
         ModelRc::from(Rc::clone(&self.rows))
     }
-    fn replace_track_rows(&self, _rows: ModelRc<UiTrackListRow>) {}
     fn bind_select_row(&self, _f: impl FnMut(i32, i32, bool, bool) + 'static) {}
     fn bind_select_all(&self, _f: impl FnMut() + 'static) {}
     fn bind_clear_selection(&self, _f: impl FnMut() + 'static) {}
@@ -373,9 +370,33 @@ fn a_refilter_keeps_a_hidden_selection() {
     handle_row_click(&view, 3, 1, false, false);
     view.refilter("ha");
 
-    keep_selection_within(&view, || visible_rows(&view.cache, "ha").held_ids());
+    keep_selection_within(&view, || HashSet::from([1, 2, 3, 4]));
 
     assert_eq!(view.state(), (vec![1], 1, vec![false, false]));
+}
+
+/// The reload a removal brings prunes nothing under a filter, and a pick left behind out of sight
+/// is one a Ctrl-click carries into the next batch action.
+#[test]
+fn a_removal_under_a_filter_drops_the_removed_rows_from_the_selection() {
+    let view = FakeView::showing("ha");
+    handle_row_click(&view, 0, 2, false, false);
+    handle_row_click(&view, 1, 3, false, true);
+
+    track_rows::remove_rows_from(&view, &view.rows, &[3]);
+
+    assert_eq!(view.state(), (vec![2], NO_ANCHOR, vec![true]));
+}
+
+#[test]
+fn a_removal_keeps_a_pick_the_filter_hides() {
+    let view = FakeView::showing("");
+    handle_row_click(&view, 3, 1, false, false);
+    view.refilter("ha");
+
+    track_rows::remove_rows_from(&view, &view.rows, &[3]);
+
+    assert_eq!(view.state(), (vec![1], 1, vec![false]));
 }
 
 #[test]
@@ -385,4 +406,19 @@ fn nothing_to_keep_builds_no_set() {
     keep_selection_within(&view, || unreachable!("an empty selection has nothing to prune"));
 
     assert_eq!(view.state(), (Vec::new(), NO_ANCHOR, vec![false; 4]));
+}
+
+/// On a library-sized list the picks can sit thousands of rows from the row right-clicked, and
+/// with Clear gated on that row being picked the user scrolled back to find one first.
+#[test]
+fn the_row_menu_offers_clear_selection_wherever_the_list_holds_a_set() {
+    let gate = ROW_MENU
+        .split_once("label: @tr(\"Clear selection\");")
+        .and_then(|(head, _)| head.trim_end().lines().last())
+        .map(str::trim);
+
+    assert_eq!(
+        gate,
+        Some("if root.show-selection-actions && root.selection-count > 0: MenuItem {")
+    );
 }

@@ -53,6 +53,9 @@ export component EntityCard inherits Rectangle {
     // buttons is the only thing that can answer, and without the answer the fill and the zoom
     // drop out while the pointer is on one of them.
     in property <bool> overlay-hovered: false;
+    // Whether the host's menu for this card is up, which `card-hovered` counts: the open popup
+    // takes the pointer, and hover alone would leave the card dark under its own menu.
+    in property <bool> menu-open: false;
 
     // Browse's card view draws disk-only files — present inside a library folder but
     // not in the DB — and dims them inert, as the disabled `TrackListRowItem` is. Defaulted
@@ -94,7 +97,7 @@ export component EntityCard inherits Rectangle {
     // The box is this card's own child rather than the host's, so it folds itself in here
     // instead of going back out through `overlay-hovered`.
     out property <bool> card-hovered:
-        touch.has-hover || box-touch.has-hover || root.overlay-hovered;
+        touch.has-hover || box-touch.has-hover || root.overlay-hovered || root.menu-open;
 
     // The box takes the badge corner while it is up, which is the grid's reading of the track
     // row swapping its number for a checkbox. Idle and unselected it is gone and the badge is

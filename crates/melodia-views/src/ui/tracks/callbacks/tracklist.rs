@@ -4,13 +4,14 @@ use std::sync::Arc;
 
 use slint::{ComponentHandle, Global as _, SharedString};
 
-use crate::ui::callbacks::macros::{spawn_logged, wire_row_flag};
+use crate::ui::callbacks::macros::wire_row_flag;
 use crate::ui::callbacks::track_list::{
     play_displayed, wire_queue_actions, wire_row_selection, wire_toggle_column,
 };
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, persisted_sort};
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::track_list_view::view_id;
-use crate::ui::tracks::{self as tracks_ui_mod, TracksUi};
+use crate::ui::tracks::{self as tracks_ui_mod, SongsQuery, TracksUi};
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
@@ -26,8 +27,8 @@ pub(super) fn wire(
     let tracks = ui.global::<Tracks>();
     seed_sort(&tracks, view_state);
     wire_sort(ui, state, tracks_ui);
-    wire_filter(ui, tracks_ui);
-    wire_play_row(ui, state, tracks_ui);
+    wire_filter(ui, state, tracks_ui);
+    wire_play_row(ui, state);
     wire_queue_actions(&tracks, state, collect_track_ids);
     wire_row_flags(ui, state, tracks_ui);
     wire_row_selection(&tracks.as_weak());
@@ -44,10 +45,9 @@ fn seed_sort(tracks: &Tracks<'_>, view_state: Option<&ViewStateData>) {
     }
 }
 
-/// Clicking a header column. Same field flips dir; new field
-/// resets to ascending. Re-sort is done entirely in memory — no DB
-/// re-fetch and no `RowSearchKey` rebuild (`resort_and_apply`); the new
-/// sort is persisted so it survives a restart.
+/// Clicking a header column. Same field flips dir; new field resets to
+/// ascending. The ids reload in the new order and every cached row is kept;
+/// the sort is persisted so it survives a restart.
 fn wire_sort(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let s = state.clone();
     let tu = tracks_ui.clone();
@@ -59,69 +59,63 @@ fn wire_sort(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
             next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
         g.set_sort_field(SharedString::from(new_field.as_str()));
         g.set_sort_dir(SharedString::from(new_dir.as_str()));
-        let filter = g.get_filter();
 
-        tracks_ui_mod::resort_and_apply(&weak, &tu, &new_field, new_dir.as_str(), &filter);
+        let query = SongsQuery::new(&new_field, new_dir.as_str(), &g.get_filter());
+        tracks_ui_mod::requery(&s, &tu, query);
         persist_view_sort(&s, view_id::TRACKS, new_field, new_dir);
     });
 }
 
-/// Client-side; no DB hit.
-fn wire_filter(ui: &AppWindow, tracks_ui: &Arc<TracksUi>) {
+fn wire_filter(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
+    let s = state.clone();
     let tu = tracks_ui.clone();
     let weak = ui.as_weak();
     ui.global::<Tracks>().on_apply_filter(move |text| {
-        tracks_ui_mod::refilter(&weak, &tu, &text);
+        let Some(ui) = weak.upgrade() else { return };
+        let g = ui.global::<Tracks>();
+        let query = SongsQuery::new(&g.get_sort_field(), &g.get_sort_dir(), &text);
+        tracks_ui_mod::requery(&s, &tu, query);
     });
 }
 
 /// Double-click loads the current view into the queue and starts
 /// on the clicked track — the standard music-player contract.
-fn wire_play_row(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
+fn wire_play_row(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
-    let tu = tracks_ui.clone();
     let weak = ui.as_weak();
     ui.global::<Tracks>().on_play_row(move |track_id, idx| {
         let Some(ui) = weak.upgrade() else { return };
-        let filter = ui.global::<Tracks>().get_filter().to_string();
-        play_displayed(&s, view_id::TRACKS, tu.current_ids_filtered(&filter), track_id, idx);
+        let ids = TrackRows::ids_of(&ui.global::<Tracks>().get_rows(), "Tracks.rows");
+        play_displayed(&s, view_id::TRACKS, ids, track_id, idx);
     });
 }
 
-/// Write through, then surgically update each affected row (no list
-/// re-fetch, so scroll position holds and there's no flash). Rating never
-/// changes list membership.
+/// Write through, then patch each affected row (no list re-fetch, so
+/// scroll position holds and there's no flash). Rating never changes list
+/// membership.
 fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let tracks = ui.global::<Tracks>();
-    let weak = ui.as_weak();
-    {
-        let tu = tracks_ui.clone();
-        wire_row_flag!(tracks, on_toggle_row_favorite, state, "tracks::set_favorite",
-        library::favorites::set_favorite, collect_track_ids,
-        captures: [weak, tu],
-        after: |id_vec, fav| {
-            for id in &id_vec {
-                tu.flip_favorite(*id, fav);
-                tracks_ui_mod::repaint_row(&weak, *id);
-            }
-        });
-    }
-    {
-        let tu = tracks_ui.clone();
-        wire_row_flag!(tracks, on_set_row_rating, state, "tracks::set_rating",
-        library::ratings::set_rating, collect_track_ids,
-        captures: [weak, tu],
-        after: |id_vec, rating| {
-            for id in &id_vec {
-                tu.flip_rating(*id, rating);
-                tracks_ui_mod::repaint_row(&weak, *id);
-            }
-        });
-    }
+    let tu = tracks_ui.clone();
+    wire_row_flag!(tracks, on_toggle_row_favorite, state, "tracks::set_favorite",
+    library::favorites::set_favorite, collect_track_ids,
+    captures: [tu],
+    after: |id_vec, fav| {
+        for id in id_vec {
+            track_rows::patch_row(&*tu, id, move |row| row.is_favorite = fav);
+        }
+    });
+    wire_row_flag!(tracks, on_set_row_rating, state, "tracks::set_rating",
+    library::ratings::set_rating, collect_track_ids,
+    captures: [tu],
+    after: |id_vec, rating| {
+        for id in id_vec {
+            track_rows::patch_row(&*tu, id, move |row| row.rating = rating);
+        }
+    });
 }
 
-/// Re-fetch with current sort + filter (e.g. after a scan
-/// completes — wired up later when scan-complete events surface).
+/// Reload with the current sort and filter: a library tick while the tab is
+/// up, or a re-enter after one landed while it wasn't.
 fn wire_refresh(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let s = state.clone();
     let tu = tracks_ui.clone();
@@ -129,16 +123,7 @@ fn wire_refresh(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     ui.global::<Tracks>().on_request_refresh(move || {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Tracks>();
-        let field = g.get_sort_field().to_string();
-        let dir = g.get_sort_dir().to_string();
-        let filter = g.get_filter().to_string();
-        let s = s.clone();
-        let tu = tu.clone();
-        let weak = weak.clone();
-        spawn_logged!(
-            s,
-            "tracks::refresh",
-            tracks_ui_mod::fetch_and_apply(&s, &tu, weak, field, dir, filter)
-        );
+        let query = SongsQuery::new(&g.get_sort_field(), &g.get_sort_dir(), &g.get_filter());
+        tracks_ui_mod::refresh(&s, &tu, query);
     });
 }

@@ -2,8 +2,9 @@ use melodia_core::entities::track;
 use melodia_core::error::AppError;
 use melodia_store::database::{DbPool, queries};
 
-pub async fn get_tracks(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_all_tracks_for_list(db).await
+/// How many tracks the library holds, which a filtered Songs list states beside its matches.
+pub async fn count(db: &DbPool) -> Result<i64, AppError> {
+    queries::track::count_tracks(db).await
 }
 
 /// Fetch the [`track::TrackMeta`] projection for a single id — the 8

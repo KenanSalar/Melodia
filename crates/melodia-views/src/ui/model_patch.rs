@@ -1,12 +1,11 @@
 //! Surgical in-place patches on a Slint row `VecModel`.
 //!
-//! Every `VecModel` list surface (Browse, the four detail views, Recently Played,
-//! Search) patches a favorite/rating change into its visible rows the same way, and
-//! the queue sheet patches two of its own: walk the model, mutate the rows that
-//! matter, write back only those. This module owns that walk; the per-view
-//! `apply_row_*` wrappers keep only their `upgrade_in_event_loop` hop and the global
-//! they read. The two Songs lists patch their cache instead and ask its
-//! [`TrackListModel`](crate::ui::track_list_model::TrackListModel) to repaint.
+//! Every `VecModel` list surface (Browse, Recently Played, Search) patches a
+//! favorite/rating change into its visible rows the same way: walk the model, mutate
+//! the row that matters, write back only that one. This module owns that walk; the
+//! per-view `apply_row_*` wrappers keep only their `upgrade_in_event_loop` hop and
+//! the global they read. The two Songs lists, the four details and the queue sheet
+//! patch the row their [`PagedRows`](crate::ui::paged_rows::PagedRows) holds instead.
 
 use slint::{Model, ModelRc, VecModel};
 
@@ -24,29 +23,6 @@ fn vec_model<'a, T: Clone + 'static>(rows: &'a ModelRc<T>, label: &str) -> Optio
         log::warn!("{label}: VecModel downcast failed, rows left as they were");
     }
     found
-}
-
-/// Hand every row to `patch` as a clone, writing back the ones it reports as changed.
-///
-/// **The `bool` is what the walk is for.** `set_row_data` on an instantiated row re-runs that
-/// delegate's bindings, so writing back a row nothing moved repaints it for no change; rows
-/// outside the `ListView`'s window cost only the clone. UI-thread only.
-pub fn patch_rows_where<T: Clone + 'static>(
-    rows: &ModelRc<T>,
-    label: &str,
-    mut patch: impl FnMut(&mut T) -> bool,
-) {
-    let Some(vm) = vec_model(rows, label) else {
-        return;
-    };
-    for i in 0..vm.row_count() {
-        let Some(mut row) = vm.row_data(i) else {
-            continue;
-        };
-        if patch(&mut row) {
-            vm.set_row_data(i, row);
-        }
-    }
 }
 
 /// Find the row with `id` and apply `patch` to it. No-ops when the id isn't

@@ -228,9 +228,7 @@ async fn create_smart(
         .await
     {
         Ok(_) => {
-            if let Err(e) = playlists_ui_mod::fetch_grid(s, pu, weak).await {
-                log::warn!("smart create refetch: {}", describe(&e));
-            }
+            playlists_ui_mod::refresh_after_write(s, pu, &weak);
             log::info!("smart playlist created: {name:?}");
         }
         Err(e) => {

@@ -299,12 +299,11 @@ export struct QueueVm {
     has_previous: bool,
 }
 
-// Rebuilt by `spawn_queue_rows_subscriber` on every queue mutation. **`is_current` is deliberately
+// Fetched by id as the sheet scrolls (`ui::paged_rows::queue_rows`). **`is_current` is deliberately
 // not a field** — the highlight comes off `Queue.current-index`, so one integer write repaints the
 // two affected rows instead of rewriting the whole model. `selected` rides on the row for the
-// `TrackListRow` reason: `ui/queue_sheet/` mutates it through a shadow `Vec<QueueRow>` so
-// `remove_selected` can read the selection without round-tripping Slint, then pushes the row into
-// the live `VecModel` so the UI flips synchronously.
+// `TrackListRow` reason: the model stamps it on every row it hands out, placeholders included, so
+// a row can read its neighbours' to join a run of picks.
 export struct QueueRow {
     id: int,
     title: string,
@@ -317,9 +316,9 @@ export struct QueueRow {
     display_duration: string,
     selected: bool,
     is_favorite: bool,
+    rating: int,   // 0–5, 0 = unrated
     // FK targets for the context menu's "Go to …" entries; 0 means no linkage and hides the
-    // entry. `TrackSummary` carries no foreign keys, so unlike `TrackListRow`'s these arrive a
-    // beat after the row does — `ui::queue_sheet::links` fetches and patches them in.
+    // entry.
     album_id: int,
     artist_id: int,
     genre_id: int,

@@ -507,6 +507,32 @@ fn a_settings_write_leaves_the_retired_key_behind() -> Result<(), AppError> {
     Ok(())
 }
 
+/// Every quit rewrites `settings.json` too, and the per-theme preferences are its one map: one
+/// entry for each theme the registry holds.
+#[test]
+fn a_save_that_changes_nothing_leaves_settings_json_as_it_was() -> Result<(), AppError> {
+    let preference = ThemePreference {
+        variant: "dark".to_owned(),
+        accent: "blue".to_owned(),
+        last_static_accent: None,
+    };
+    let themes =
+        ["catppuccin", "gnome-adwaita", "kde-breeze", "macos", "material3", "windows-fluent"];
+    let (_tmp, paths) = crate::state::fixtures::seeded_root_with(|s| {
+        s.theme_preferences = themes.map(|id| (id.to_owned(), preference.clone())).into();
+    })?;
+    let before = std::fs::read_to_string(&paths.settings_path)?;
+
+    crate::services::settings::mutate_settings(&paths, |_| {})?;
+
+    assert_eq!(
+        std::fs::read_to_string(&paths.settings_path)?,
+        before,
+        "a save with nothing changed reordered the file"
+    );
+    Ok(())
+}
+
 #[test]
 fn test_view_sort_roundtrip() -> Result<(), AppError> {
     let sort = ViewSort { field: "title".to_owned(), dir: SortDir::Desc };

@@ -160,7 +160,9 @@ export component PlaylistMosaicPicker inherits Rectangle {
             VerticalLayout {
                 alignment: center;
                 Text {
-                    text: @tr("Add tracks to this playlist to pick artwork.");
+                    text: Dialog.mosaic-smart
+                        ? @tr("None of the tracks these rules match have artwork.")
+                        : @tr("Add tracks to this playlist to pick artwork.");
                     color: Theme.subtext0;
                     font-size: Theme.font-size-sm;
                     horizontal-alignment: center;

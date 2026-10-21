@@ -23,7 +23,7 @@ Part of #
 - [ ] `cargo test --locked --workspace` passes
 - [ ] Docs updated where behaviour or conventions changed (`CLAUDE.md`, the relevant `.claude/rules/*.md`, `README.md`)
 - [ ] A change that moves an architectural seam names the ADR it follows, or adds one under `docs/adr/`
-- [ ] New or changed user-facing strings are wrapped in `@tr(...)`, `scripts/update-translations.sh` was run, and every catalogue's new `msgstr`s are filled in
+- [ ] New or changed user-facing strings are wrapped in `@tr(...)`, `scripts/update-translations.py` was run, and every catalogue's new `msgstr`s are filled in
 
 ## Notes for review
 

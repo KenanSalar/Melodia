@@ -374,7 +374,7 @@ fn speed_to_f32(speed: f64) -> f32 {
 
 pub fn to_slint_queue_vm(qvm: &QueueViewModel) -> QueueVm {
     QueueVm {
-        length: len_as_i32(qvm.queue_tracks.len()),
+        length: len_as_i32(qvm.ids.len()),
         current_index: qvm.queue_index,
         shuffle: qvm.shuffle_enabled,
         repeat_mode: SharedString::from(qvm.repeat_mode.as_str()),

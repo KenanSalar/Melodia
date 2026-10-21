@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use super::upserts;
 use crate::database::DbPool;
 use crate::database::queries;
@@ -757,6 +759,59 @@ async fn re_ingesting_a_track_leaves_none_of_its_old_join_rows() -> Result<(), A
     .fetch_one(db.read())
     .await?;
     assert_eq!(counts, (1, 1, 0));
+    Ok(())
+}
+
+async fn search_text_of(db: &DbPool, id: i64) -> Result<String, AppError> {
+    let text = sqlx::query_scalar("SELECT search_text FROM tracks WHERE id = ?")
+        .bind(id)
+        .fetch_one(db.read())
+        .await?;
+    Ok(text)
+}
+
+/// **A new row is searchable the moment it lands**, its five fields folded into the column the
+/// library-sized lists filter on, with no backfill involved.
+#[tokio::test]
+async fn an_inserted_track_carries_its_folded_search_text() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let mut meta = make_test_metadata("Jóga");
+    meta.artist = ArtistCredit::from_name("Björk");
+    meta.album_artist = ArtistCredit::from_name("Björk");
+    meta.album = Some("Homogenic".to_owned());
+    meta.genres = GenreList::from_name("Electronic");
+    let path = Path::new("/music").join("joga.flac");
+
+    let id = insert_tagged_track(&db, &path.to_string_lossy(), &meta).await?;
+
+    assert_eq!(search_text_of(&db, id).await?, "joga\nbjork\nbjork\nhomogenic\nelectronic");
+    Ok(())
+}
+
+/// **A re-ingest refolds the row**, which is what keeps a tag edit findable under its new title:
+/// the column is already filled, so the backfill would never look at it again.
+#[tokio::test]
+async fn a_re_ingest_refolds_the_search_text() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let path = Path::new("/music").join("1.mp3").to_string_lossy().into_owned();
+    let id = insert_tagged_track(&db, &path, &make_test_metadata("Before")).await?;
+
+    let mut after = make_test_metadata("Après");
+    after.artist = ArtistCredit::from_name("Alice");
+    let mut tx = db.write().begin().await?;
+    let mut names = queries::scan::NameCache::default();
+    let ids = queries::ResolvedIds {
+        artist_id: names.artist(&mut tx, "Alice", 1).await?,
+        album_id: None,
+        genre_id: names.genre(&mut tx, "Rock").await?,
+        folder_id: 1,
+    };
+    queries::scan::update_track_metadata(&mut tx, &path, &after, &ids, &mut names).await?;
+    tx.commit().await?;
+
+    assert_eq!(search_text_of(&db, id).await?, "apres\nalice\n\ntest album\nrock");
     Ok(())
 }
 

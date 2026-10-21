@@ -1,66 +1,59 @@
-//! Album Detail's own half: fetch, artwork pair decode, open, refresh and the
-//! startup seed. What the four details share is [`crate::ui::track_detail`].
+//! Album Detail's own half: the header and hero fetch, the artwork pair decode, open, refresh and
+//! the startup seed. What the four details share is [`crate::ui::track_detail`].
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, SharedString, Weak};
+use slint::{ComponentHandle, Weak};
 
 use super::{AlbumsUi, to_slint_album_row};
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
+use crate::ui::hero_folds::dominant_genre;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::paged_rows::track_rows;
 use crate::ui::section_state::SectionState;
-use crate::ui::track_detail::{DetailCache, TrackDetail, filter, restore, selection};
+use crate::ui::track_detail::{DetailCache, TrackDetail, load, restore};
 use crate::ui::track_list_view::view_id;
-use crate::ui::track_sort::sort_track_list_rows;
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::album::AlbumStats;
-use melodia_core::entities::track::TrackListRow as RsTrackListRow;
+use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::{AppResult, describe};
-use melodia_ui::{AlbumDetail, AppWindow, NavEnterFrom, TrackListRow as UiTrackListRow};
+use melodia_ui::{AlbumDetail, AppWindow, NavEnterFrom};
 
 impl TrackDetail for AlbumsUi {
     type Global = AlbumDetail<'static>;
 
     const TAB: MyLibraryTab = MyLibraryTab::Albums;
 
-    fn cache(&self) -> &DetailCache {
+    fn cache(&self) -> &DetailCache<Self::Global> {
         &self.detail
     }
 
     fn section(&self) -> &SectionState {
         &self.section
     }
+
+    fn row_covers(&self) -> &Arc<CoverThumbs> {
+        &self.cover_thumbs
+    }
+
+    fn scope(&self, id: i64) -> TrackListScope {
+        TrackListScope::Album(id)
+    }
 }
 
-/// Fetch an album's header + track list and prewarm their cover
-/// thumbnails. Shared by [`open_album`] (fresh user open) and
-/// [`refresh_detail`] (watcher-driven refresh).
-async fn fetch_album_detail(
+/// An album's header and the genre its hero names, if most of its tracks share one. Shared by
+/// [`open_album`] (fresh user open) and [`refresh_detail`] (watcher-driven refresh).
+async fn fetch_album_header(
     state: &AppState,
-    albums_ui: &AlbumsUi,
     album_id: i64,
-) -> AppResult<(AlbumStats, Vec<RsTrackListRow>)> {
+) -> AppResult<(AlbumStats, Option<String>)> {
     let detail = library::albums::get_album_detail(&state.db, album_id).await?;
-    let tracks = library::albums::get_album_tracks(&state.db, album_id).await?;
-
-    // The `TrackList`'s artwork column, against the shared row tier. The header
-    // tile and hero blur go through `decode_detail_pair` instead.
-    let track_covers: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
-        tracks.iter().map(|t| t.artwork_path.as_deref()),
-        albums_ui.cover_thumbs.capacity(),
-    );
-    if !track_covers.is_empty() {
-        let row_thumbs = albums_ui.cover_thumbs.clone();
-        let _ = tokio::task::spawn_blocking(move || {
-            row_thumbs.prewarm(&track_covers);
-        })
-        .await;
-    }
-    Ok((detail, tracks))
+    let lines = library::keyset::genre_lines(&state.db, TrackListScope::Album(album_id)).await?;
+    Ok((detail, dominant_genre(&lines)))
 }
 
 /// Fetch an album's header and track list and populate the `AlbumDetail` global,
@@ -100,11 +93,11 @@ pub async fn open_album_with<F>(
 where
     F: FnOnce(&AppWindow) + Send + 'static,
 {
-    let (detail, mut tracks) = fetch_album_detail(state, albums_ui, album_id).await?;
+    let (detail, genre) = fetch_album_header(state, album_id).await?;
 
     // One shared sort for every album, restored across opens and restarts.
     let (sort_field, sort_dir) = resolve_view_sort(state, view_id::ALBUM_DETAIL, "track_number");
-    sort_track_list_rows(&mut tracks, &sort_field, &sort_dir);
+    let tracks = load::open(state, &**albums_ui, album_id, &sort_field, &sort_dir).await?;
 
     // Both halves come off one source decode. The buffers stay raw RGB8 so they
     // can cross the `upgrade_in_event_loop` boundary below.
@@ -112,35 +105,22 @@ where
         decode_detail_pair(state, albums_ui.detail_artwork.clone(), detail.artwork_path.clone())
             .await;
 
-    // The `Send` half of every row, built on the worker so only the `!Send`
-    // cover lookup is left for the UI thread — otherwise the click→detail
-    // transition hitches on a long album.
-    let ui_tracks: Vec<UiTrackListRow> = crate::ui::tracks::to_slint_track_list_rows(&tracks);
-
-    // Folded here rather than in the closure below: this is the worker that
-    // already holds the rows.
-    let genre = crate::ui::hero_folds::dominant_genre(&tracks);
-
     albums_ui.detail.set_id(album_id);
 
+    let state = state.clone();
     let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
-        filter::install_tracks(&g, ui_tracks);
-        selection::reset(&g, &albums_ui.detail);
-        // A fresh open lands on the full track set, not the previous detail's
-        // needle; `seat_unfiltered` below clears the Rust half.
-        g.set_filter(SharedString::default());
-        g.set_sort_field(SharedString::from(sort_field.as_str()));
-        g.set_sort_dir(SharedString::from(sort_dir.as_str()));
+        // The sort, an empty needle, no selection and the album's rows. The page's one filter box
+        // is reseated at the end of this closure.
+        tracks.seat(&state, &albums_ui);
         // Marked before the hook can flip `Nav.selected-index`, so a
         // cross-section drill's new page samples it on first paint. Inert on a
         // same-page drill, whose body reads a fixed `below`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_album_id(clamp_i64_to_i32(album_id));
-        albums_ui.detail.seat_unfiltered(tracks);
         // After `album-id`, so whatever globals the hook writes land in the same
         // UI-thread tick as the detail flip.
         on_applied(&ui);
@@ -169,18 +149,19 @@ where
     Ok(())
 }
 
-/// Re-fetch an open album after a library change, **preserving** the sort column, the filter
-/// and the selection: the library-changed subscriber fires on every watcher and scan tick, so
-/// it must not silently reset any of them. The shared filter pass diffs, so a scan that touched
-/// unrelated files writes back only the rows whose content moved and leaves the delegate cache
-/// standing. Bails if the detail was closed or navigated away while the fetch was in flight.
+/// Re-read an open album after a library change, **preserving** the sort, the filter and the
+/// selection: the library-changed subscriber fires on every watcher and scan tick, so it must not
+/// silently reset any of them. The list reloads its ids and re-reads the rows it holds, repainting
+/// only those whose content moved. The header half bails if the detail was closed or navigated
+/// away while the fetch was in flight.
 pub async fn refresh_detail(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
     weak: Weak<AppWindow>,
     album_id: i64,
 ) -> AppResult<()> {
-    let (detail, mut tracks) = fetch_album_detail(state, albums_ui, album_id).await?;
+    track_rows::reload(state, albums_ui).await?;
+    let (detail, genre) = fetch_album_header(state, album_id).await?;
 
     // Re-decode the `(cover, blur)` pair — the artwork may have changed
     // (cover swap, replace-on-disk). `get_or_decode` is a cache hit when
@@ -189,9 +170,6 @@ pub async fn refresh_detail(
         decode_detail_pair(state, albums_ui.detail_artwork.clone(), detail.artwork_path.clone())
             .await;
 
-    let genre = crate::ui::hero_folds::dominant_genre(&tracks);
-
-    let albums_ui = albums_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
         // The detail view was closed (or switched to another album) while
@@ -199,11 +177,6 @@ pub async fn refresh_detail(
         if i64::from(g.get_album_id()) != album_id {
             return;
         }
-
-        // Apply the user's *current* sort to the freshly-fetched rows.
-        let field = g.get_sort_field().to_string();
-        let dir = g.get_sort_dir().to_string();
-        sort_track_list_rows(&mut tracks, &field, &dir);
 
         // Header is one row — always refresh it (artwork / counts may
         // have changed).
@@ -214,13 +187,6 @@ pub async fn refresh_detail(
         // user did not navigate. Either it's a cache hit (no change) or
         // the cover/blur is being replaced in place.
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
-
-        // The shared filter pass re-derives the displayed cache and the model from the canonical
-        // set, and drops from the selection whatever left it. It diffs, so a refresh that leaves
-        // the id order alone patches only the rows whose content moved — a tag edit, a favourite
-        // toggled elsewhere.
-        albums_ui.detail.set_all_tracks(tracks);
-        filter::apply_filtered_detail(&g, &albums_ui.detail);
     });
     Ok(())
 }

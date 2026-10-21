@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::watch;
 
-use super::state::{PlayerViewModelLight, QueueViewModel};
+use super::state::{AwaitedStart, PlayerViewModelLight, QueueViewModel};
 use super::types::{PlaybackStatus, RepeatMode};
 
 /// Events that come *from* OS media controls (MPRIS, SMTC, `MediaPlayer`) into the player.
@@ -55,4 +55,7 @@ pub struct PlayerSinks {
     pub view_model: watch::Sender<Option<PlayerViewModelLight>>,
     pub queue: watch::Sender<Option<QueueViewModel>>,
     pub media_controls: Option<Arc<dyn MediaControlsSync>>,
+    /// The newest track start owed to a record the window lacked, for the app's window task to
+    /// fetch and run. Only the newest matters: a later transition supersedes an earlier one.
+    pub awaited_start: watch::Sender<Option<AwaitedStart>>,
 }

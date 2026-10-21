@@ -12,11 +12,12 @@ use slint::{ComponentHandle, Model, VecModel, Weak};
 use super::state::SongsTotals;
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::list_selection;
-use crate::ui::row_match::{self, Needle};
+use crate::ui::row_match;
 use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
 /// Read-and-return the active filter needle, folded by [`set_filter`] and ready to hand to a
@@ -27,13 +28,8 @@ pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> Needle {
 
 /// Update the cached filter needle. Folded on the way in, so the list and the Most Played grid
 /// beside it share one needle.
-///
-/// Returns the token that names this needle. The Songs walk is bounded by the 200-row recency set
-/// and stays on the UI thread; the Most Played walk is not, so it is built on a worker and carries
-/// this back to prove it is still the answer being asked for.
-pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: &str) -> u64 {
-    *rp_ui.state().filter.lock() = row_match::fold_needle(filter);
-    rp_ui.bump_filter_generation()
+pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: &str) {
+    *rp_ui.state().filter.lock() = fold_needle(filter);
 }
 
 /// Fetch the 200 most-recently-played tracks, cache them, push the hero stats, then apply the
@@ -140,9 +136,9 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
 /// Apply from the UI thread, with no event-loop hop — the rows land in the model before Slint
 /// re-evaluates the `if` that mounts the entering tab.
 ///
-/// The twin of `grid::apply::apply_filtered_grid_now`: `slint::invoke_from_event_loop` posts even
-/// when called *from* the UI thread, so a redraw can win the race. The tab-leave empties this
-/// model, so what a lost race paints is a `TrackList` of headers over nothing.
+/// `slint::invoke_from_event_loop` posts even when called *from* the UI thread, so a redraw can
+/// win the race. The tab-leave empties this model, so what a lost race paints is a `TrackList` of
+/// headers over nothing.
 pub fn apply_filtered_tracks_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     if let Some(rows) = build_filtered_tracks(rp_ui) {
         write_filtered_tracks(ui, rp_ui, rows);

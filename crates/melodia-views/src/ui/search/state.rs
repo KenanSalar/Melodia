@@ -6,8 +6,9 @@ use std::num::NonZeroUsize;
 
 use parking_lot::Mutex;
 
-use melodia_app::services::settings::{SortDir, ViewSort};
+use melodia_app::services::settings::ViewSort;
 use melodia_core::entities::search::SearchResults;
+use melodia_core::entities::track_list::SortDir;
 
 /// Per-fetch cached snapshots. Every successful FTS+LIKE round-trip lands here so the
 /// compact↔full track toggle, the in-memory sort and the re-stamp paths can recover

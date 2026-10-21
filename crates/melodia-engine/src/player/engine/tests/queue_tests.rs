@@ -2,36 +2,12 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 use super::*;
-use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::AppError;
 
-fn make_summary(id: i64, title: &str, duration_ms: i64) -> Arc<TrackSummary> {
-    Arc::new(TrackSummary {
-        id,
-        file_path: format!("/music/{id}.mp3"),
-        file_name: format!("{id}.mp3"),
-        title: title.to_owned(),
-        artist: None,
-        album: None,
-        duration_ms,
-        artwork_path: None,
-        track_number: None,
-        disc_number: None,
-        last_position: 0,
-        is_favorite: false,
-        rating: 0,
-        replaygain_track_gain: None,
-        replaygain_track_peak: None,
-        replaygain_album_gain: None,
-        replaygain_album_peak: None,
-    })
-}
-
+/// A queue of the tracks `1..=count`, in that order.
 fn make_queue(count: i64) -> QueueState {
     let mut q = QueueState::default();
-    let tracks: Vec<Arc<TrackSummary>> =
-        (1..=count).map(|i| make_summary(i, &format!("Track {i}"), 180_000)).collect();
-    q.add_tracks(tracks);
+    q.add_tracks(&(1..=count).collect::<Vec<i64>>());
     q
 }
 
@@ -40,8 +16,7 @@ fn make_queue(count: i64) -> QueueState {
 #[test]
 fn add_tracks_to_empty_queue() {
     let mut q = QueueState::default();
-    let tracks = vec![make_summary(1, "A", 100), make_summary(2, "B", 200)];
-    q.add_tracks(tracks);
+    q.add_tracks(&[1, 2]);
 
     assert_eq!(q.tracks.len(), 2);
     assert_eq!(q.play_order, vec![0, 1]);
@@ -51,8 +26,7 @@ fn add_tracks_to_empty_queue() {
 #[test]
 fn add_tracks_appends_to_existing() {
     let mut q = make_queue(2);
-    let more = vec![make_summary(3, "C", 300)];
-    q.add_tracks(more);
+    q.add_tracks(&[3]);
 
     assert_eq!(q.tracks.len(), 3);
     assert_eq!(q.play_order, vec![0, 1, 2]);
@@ -63,7 +37,7 @@ fn add_tracks_appends_to_existing() {
 fn add_tracks_increments_version() {
     let mut q = QueueState::default();
     let v0 = q.version;
-    q.add_tracks(vec![make_summary(1, "A", 100)]);
+    q.add_tracks(&[1]);
     assert!(q.version > v0);
 }
 
@@ -73,18 +47,18 @@ fn add_tracks_increments_version() {
 fn insert_next_after_current() {
     let mut q = make_queue(3);
     q.current_index = Some(1);
-    q.insert_next(make_summary(10, "Inserted", 100));
+    q.insert_next(10);
 
     // Should insert at position 2 in play_order
     assert_eq!(q.play_order[2], 3); // new track index
-    assert_eq!(q.tracks[3].title, "Inserted");
+    assert_eq!(q.tracks[3], 10);
 }
 
 #[test]
 fn insert_next_when_no_current() {
     let mut q = make_queue(2);
     q.current_index = None;
-    q.insert_next(make_summary(10, "Inserted", 100));
+    q.insert_next(10);
 
     // Should insert at position 0
     assert_eq!(q.play_order[0], 2); // new track index
@@ -94,7 +68,7 @@ fn insert_next_when_no_current() {
 fn insert_next_clamps_to_end() -> Result<(), AppError> {
     let mut q = make_queue(2);
     q.current_index = Some(10); // way past end
-    q.insert_next(make_summary(10, "Inserted", 100));
+    q.insert_next(10);
 
     // Should clamp insert position to play_order.len()
     let last =
@@ -415,7 +389,7 @@ fn peek_next_all_at_end_returns_first() -> Result<(), AppError> {
     q.current_index = Some(2);
     q.repeat_mode = RepeatMode::All;
     let track = q.peek_next().ok_or_else(|| AppError::Validation("peek_next None".into()))?;
-    assert_eq!(track.id, 1);
+    assert_eq!(track, 1);
     Ok(())
 }
 
@@ -425,7 +399,7 @@ fn peek_next_one_returns_current() -> Result<(), AppError> {
     q.current_index = Some(1);
     q.repeat_mode = RepeatMode::One;
     let track = q.peek_next().ok_or_else(|| AppError::Validation("peek_next None".into()))?;
-    assert_eq!(track.id, 2); // tracks[play_order[1]] = tracks[1], id=2
+    assert_eq!(track, 2); // tracks[play_order[1]] = tracks[1], id=2
     Ok(())
 }
 
@@ -502,33 +476,131 @@ fn to_persistable_maps_track_ids() {
     assert_eq!(p.current_index, 1);
 }
 
-// ── tracks_in_play_order ────────────────────────────────────────────
+// ── play_ids ────────────────────────────────────────────────────────
 
 #[test]
-fn tracks_in_play_order_returns_correct_sequence() {
+fn play_ids_returns_correct_sequence() {
     let mut q = make_queue(3);
     // Reverse the play order
     q.play_order = vec![2, 0, 1];
-    let tracks = q.tracks_in_play_order();
-    assert_eq!(tracks.len(), 3);
-    assert_eq!(tracks[0].id, 3);
-    assert_eq!(tracks[1].id, 1);
-    assert_eq!(tracks[2].id, 2);
+    assert_eq!(*q.play_ids(), [3, 1, 2]);
 }
 
-// ── get_current ─────────────────────────────────────────────────────
+/// What a row does to the queue.
+type Edit = fn(&mut QueueState);
+
+/// The ids `q` publishes once `act` has run, asked for first so a cache is held across it.
+fn published_after(mut q: QueueState, act: Edit) -> Vec<i64> {
+    let _held = q.play_ids();
+    act(&mut q);
+    q.play_ids().to_vec()
+}
+
+/// [`make_queue`]'s three tracks played in the order 3, 1, 2.
+fn shuffled_three() -> QueueState {
+    let mut q = make_queue(3);
+    q.apply_shuffle_order(&[2, 0, 1]);
+    q
+}
+
+/// Two tracks playing the second, which an anchored shuffle can only put first, whatever the draw.
+fn on_the_second_of_two() -> QueueState {
+    let mut q = make_queue(2);
+    q.current_index = Some(1);
+    q
+}
+
+/// The ids are cached until the order moves, so a mutator that kept them would publish an order
+/// the queue no longer holds, to the sheet, Up Next and `queue.json` alike.
+#[test]
+fn every_change_to_the_order_publishes_the_new_order() {
+    let rows: [(&str, QueueState, Edit, &[i64]); 10] = [
+        ("add_tracks", make_queue(3), |q| q.add_tracks(&[4]), &[1, 2, 3, 4]),
+        ("insert_next", make_queue(3), |q| q.insert_next(4), &[4, 1, 2, 3]),
+        (
+            "remove_at",
+            make_queue(3),
+            |q| {
+                q.remove_at(0);
+            },
+            &[2, 3],
+        ),
+        ("remove_batch", make_queue(3), |q| q.remove_batch(&[0, 2]), &[2]),
+        (
+            "move_track",
+            make_queue(3),
+            |q| {
+                q.move_track(0, 2);
+            },
+            &[2, 3, 1],
+        ),
+        ("clear", make_queue(3), QueueState::clear, &[]),
+        ("apply_shuffle_order", make_queue(3), |q| q.apply_shuffle_order(&[2, 0, 1]), &[3, 1, 2]),
+        (
+            "shuffle_play_order_in_place",
+            on_the_second_of_two(),
+            |q| q.shuffle_play_order_in_place(&mut rand::rng(), true),
+            &[2, 1],
+        ),
+        ("unshuffle", shuffled_three(), QueueState::unshuffle, &[1, 2, 3]),
+        (
+            "prune_missing",
+            make_queue(3),
+            |q| {
+                q.prune_missing(&HashSet::from([2]));
+            },
+            &[1, 3],
+        ),
+    ];
+    for (what, q, act, expected) in rows {
+        assert_eq!(published_after(q, act), expected, "{what}");
+    }
+}
+
+/// An advance moves only the index, so it republishes the allocation already shared rather than
+/// building a library-sized array under the state lock on every track change.
+#[test]
+fn moving_the_index_alone_republishes_the_ids_already_shared() {
+    let rows: [(&str, Edit); 6] = [
+        ("advance", |q| {
+            q.advance();
+        }),
+        ("advance_skip", |q| {
+            q.advance_skip();
+        }),
+        ("previous", |q| {
+            q.previous();
+        }),
+        ("skip_to_index", |q| {
+            q.skip_to_index(2);
+        }),
+        ("set_repeat_mode", |q| q.set_repeat_mode(RepeatMode::All)),
+        ("cycle_repeat_mode", QueueState::cycle_repeat_mode),
+    ];
+    for (what, act) in rows {
+        let mut q = make_queue(3);
+        q.current_index = Some(1);
+        let before = q.play_ids();
+
+        act(&mut q);
+
+        assert!(Arc::ptr_eq(&before, &q.play_ids()), "{what} built the ids again");
+    }
+}
+
+// ── current_id ──────────────────────────────────────────────────────
 
 #[test]
-fn get_current_returns_none_when_empty() {
+fn current_id_returns_none_when_empty() {
     let q = QueueState::default();
-    assert!(q.get_current().is_none());
+    assert!(q.current_id().is_none());
 }
 
 #[test]
-fn get_current_returns_none_for_negative_index() {
+fn current_id_returns_none_for_negative_index() {
     let q = make_queue(3);
     // current_index is None by default
-    assert!(q.get_current().is_none());
+    assert!(q.current_id().is_none());
 }
 
 // ── prune_missing ───────────────────────────────────────────────────
@@ -570,13 +642,12 @@ fn prune_missing_keeps_current_when_other_removed() -> Result<(), AppError> {
 
     assert_eq!(outcome.removed, 2);
     assert!(!outcome.current_was_removed);
-    assert_eq!(q.tracks.iter().map(|t| t.id).collect::<Vec<_>>(), vec![2, 3, 4]);
+    assert_eq!(q.tracks, vec![2, 3, 4]);
     assert_eq!(q.play_order, vec![0, 1, 2]);
     assert_eq!(q.original_order, vec![0, 1, 2]);
-    let current = q
-        .get_current()
-        .ok_or_else(|| AppError::Validation("get_current None after prune".into()))?;
-    assert_eq!(current.id, 3);
+    let current =
+        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+    assert_eq!(current, 3);
     Ok(())
 }
 
@@ -592,11 +663,10 @@ fn prune_missing_advances_when_current_removed() -> Result<(), AppError> {
 
     assert!(outcome.current_was_removed);
     assert_eq!(outcome.removed, 1);
-    assert_eq!(q.tracks.iter().map(|t| t.id).collect::<Vec<_>>(), vec![1, 3]);
-    let current = q
-        .get_current()
-        .ok_or_else(|| AppError::Validation("get_current None after prune".into()))?;
-    assert_eq!(current.id, 3);
+    assert_eq!(q.tracks, vec![1, 3]);
+    let current =
+        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+    assert_eq!(current, 3);
     Ok(())
 }
 
@@ -613,10 +683,9 @@ fn prune_missing_clamps_to_last_survivor_when_tail_removed() -> Result<(), AppEr
 
     assert!(outcome.current_was_removed);
     assert_eq!(q.current_index, Some(1));
-    let current = q
-        .get_current()
-        .ok_or_else(|| AppError::Validation("get_current None after prune".into()))?;
-    assert_eq!(current.id, 2);
+    let current =
+        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+    assert_eq!(current, 2);
     Ok(())
 }
 
@@ -659,13 +728,98 @@ fn prune_missing_remaps_shuffled_order() {
     assert_eq!(q.original_order, vec![0, 1, 2]);
 }
 
-// ── get_current ─────────────────────────────────────────────────────
+// ── current_id ──────────────────────────────────────────────────────
 
 #[test]
-fn get_current_returns_track() -> Result<(), AppError> {
+fn current_id_returns_track() -> Result<(), AppError> {
     let mut q = make_queue(3);
     q.current_index = Some(1);
-    let track = q.get_current().ok_or_else(|| AppError::Validation("get_current None".into()))?;
-    assert_eq!(track.id, 2);
+    let track = q.current_id().ok_or_else(|| AppError::Validation("current_id None".into()))?;
+    assert_eq!(track, 2);
     Ok(())
+}
+
+// ── window_slots ────────────────────────────────────────────────────
+
+/// The slot Previous lands on, the current one and the three a Next and an auto-skip run through,
+/// cut at the ends of a queue that doesn't wrap. Ten slots, so only the edges under test cut it.
+#[test]
+fn the_window_runs_from_the_slot_before_the_current_one_to_three_after_it() {
+    let rows: [(&str, usize, Option<usize>, &[usize]); 8] = [
+        ("at the first slot", 10, Some(0), &[0, 1, 2, 3]),
+        ("one slot in", 10, Some(1), &[0, 1, 2, 3, 4]),
+        ("ending on the last slot", 10, Some(6), &[5, 6, 7, 8, 9]),
+        ("one slot past the end", 10, Some(7), &[6, 7, 8, 9]),
+        ("at the last slot", 10, Some(9), &[8, 9]),
+        ("with nothing current", 10, None, &[0, 1, 2]),
+        ("over a single track", 1, Some(0), &[0]),
+        ("over an empty queue", 0, None, &[]),
+    ];
+    for (what, len, current, expected) in rows {
+        let slots: Vec<usize> = window_slots(len, current, false).collect();
+
+        assert_eq!(slots, expected, "{what}");
+    }
+}
+
+/// Wrapping, the window carries on past either end as Previous and a manual Next do. A queue
+/// shorter than the window names a slot twice, which `window_ids` folds.
+#[test]
+fn a_wrapping_window_carries_on_past_either_end_of_the_queue() {
+    let rows: [(&str, usize, Option<usize>, &[usize]); 6] = [
+        ("at the first slot", 10, Some(0), &[9, 0, 1, 2, 3]),
+        ("at the last slot", 10, Some(9), &[8, 9, 0, 1, 2]),
+        ("with nothing current", 10, None, &[8, 9, 0, 1, 2]),
+        ("over a queue shorter than the window", 3, Some(0), &[2, 0, 1, 2, 0]),
+        ("over a single track", 1, Some(0), &[0, 0, 0, 0, 0]),
+        ("over an empty queue", 0, None, &[]),
+    ];
+    for (what, len, current, expected) in rows {
+        let slots: Vec<usize> = window_slots(len, current, true).collect();
+
+        assert_eq!(slots, expected, "{what}");
+    }
+}
+
+// ── window_ids ──────────────────────────────────────────────────────
+
+/// Repeat decides whether the window reaches past the last track and back past the first, as it
+/// decides for Next and Previous. Repeat-one wraps too: its manual Next does.
+#[test]
+fn the_window_reaches_past_either_end_only_under_a_repeat() {
+    let rows = [
+        (RepeatMode::Off, Some(4), vec![4, 5]),
+        (RepeatMode::All, Some(4), vec![4, 5, 1, 2, 3]),
+        (RepeatMode::One, Some(4), vec![4, 5, 1, 2, 3]),
+        (RepeatMode::Off, Some(0), vec![1, 2, 3, 4]),
+        (RepeatMode::All, Some(0), vec![5, 1, 2, 3, 4]),
+        (RepeatMode::One, Some(0), vec![5, 1, 2, 3, 4]),
+    ];
+    for (mode, current, expected) in rows {
+        let mut q = make_queue(5);
+        q.current_index = current;
+        q.repeat_mode = mode;
+
+        assert_eq!(q.window_ids(), expected, "{mode:?} at slot {current:?}");
+    }
+}
+
+/// The window holds one record per track, so a track queued twice inside it is fetched once.
+#[test]
+fn a_track_queued_twice_inside_the_window_is_named_once() {
+    let mut q = QueueState::default();
+    q.add_tracks(&[1, 2, 1, 3]);
+    q.current_index = Some(0);
+
+    assert_eq!(q.window_ids(), vec![1, 2, 3]);
+}
+
+/// A transition moves through the play order, so a shuffled queue's window is the tracks around
+/// the current one as they will play, not as they were added.
+#[test]
+fn the_window_follows_the_play_order() {
+    let mut q = make_queue(5);
+    q.apply_shuffle_order(&[4, 3, 2, 1, 0]);
+
+    assert_eq!(q.window_ids(), vec![5, 4, 3, 2]);
 }

@@ -38,7 +38,7 @@ pub struct PlayerViewModel {
     pub gapless_enabled: bool,
     pub sleep_at_track_end: bool,
     pub radio: Option<Arc<RadioNowPlaying>>,
-    pub queue_tracks: Vec<Arc<TrackSummary>>,
+    pub queue_ids: Arc<[i64]>,
     pub queue_index: i32,
     pub shuffle_enabled: bool,
     pub repeat_mode: RepeatMode,
@@ -80,7 +80,9 @@ pub struct PlayerViewModelLight {
 /// Queue-specific `ViewModel` emitted only when the queue changes.
 #[derive(Debug, Clone)]
 pub struct QueueViewModel {
-    pub queue_tracks: Vec<Arc<TrackSummary>>,
+    /// The queue in play order, shared with the state until the order moves: an advance publishes
+    /// the same allocation it published last.
+    pub ids: Arc<[i64]>,
     pub queue_index: i32,
     pub shuffle_enabled: bool,
     pub repeat_mode: RepeatMode,
@@ -103,7 +105,7 @@ impl PlayerState {
 
     fn has_previous(&self) -> bool {
         self.source_allows(PlaybackSource::advances_queue)
-            && !self.queue.play_order.is_empty()
+            && !self.queue.is_empty()
             && (self.queue.current_index.is_some_and(|ci| ci > 0) || self.queue.repeat_mode.wraps())
     }
 
@@ -125,7 +127,7 @@ impl PlayerState {
             gapless_enabled: self.gapless_enabled,
             sleep_at_track_end: self.pause_after_current_track,
             radio: self.station().cloned(),
-            queue_tracks: self.queue.tracks_in_play_order(),
+            queue_ids: self.queue.play_ids(),
             queue_index: current_index_to_i32(self.queue.current_index),
             shuffle_enabled: self.queue.shuffle_enabled,
             repeat_mode: self.queue.repeat_mode,
@@ -159,7 +161,7 @@ impl PlayerState {
     /// Queue-only `ViewModel` — emitted only when the queue changes.
     pub fn to_queue_view_model(&self) -> QueueViewModel {
         QueueViewModel {
-            queue_tracks: self.queue.tracks_in_play_order(),
+            ids: self.queue.play_ids(),
             queue_index: current_index_to_i32(self.queue.current_index),
             shuffle_enabled: self.queue.shuffle_enabled,
             repeat_mode: self.queue.repeat_mode,

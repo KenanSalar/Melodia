@@ -212,6 +212,10 @@ msgid "Clear"
 msgstr "Εκκαθάριση"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "None of the tracks these rules match have artwork."
+msgstr "Κανένα από τα κομμάτια που ταιριάζουν με αυτούς τους κανόνες δεν έχει εικόνα."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "Add tracks to this playlist to pick artwork."
 msgstr "Προσθέστε κομμάτια στη λίστα για να επιλέξετε εικόνα."
 
@@ -2535,11 +2539,6 @@ msgstr "Το Melodia είναι δωρεάν και ανοιχτού κώδικ�
 #: ui/views/settings/about-section.slint
 msgid "License"
 msgstr "Άδεια"
-
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr "Στηρίξτε με στο Ko-fi"
 
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"

@@ -1,141 +1,83 @@
-//! Artists grid: DB fetch + filter / sort / chunk / prewarm logic. Mirrors
-//! `src/ui/albums/grid.rs`.
+//! The Artists grid as a [`CardGrid`]: its keyset, its cards, and the count its header states.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
+use slint::{ComponentHandle, ModelRc};
 
-use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{ArtistsUi, to_slint_artist_row};
-use crate::ui::grid_prewarm;
-use crate::ui::grid_rows::chunk_rows;
-use crate::ui::row_match;
-use crate::ui::util::len_as_i32;
+use crate::ui::card_grid::{self, Card, CardGrid, GridLoads, SortedQuery};
+use crate::ui::paged_rows::unfiltered_total;
+use crate::ui::track_detail::TrackDetail;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::entities::artist::ArtistStats;
+use melodia_core::entities::grid_order::ArtistSort;
 use melodia_core::error::AppResult;
 use melodia_ui::{AppWindow, ArtistGridRow as UiArtistGridRow, Artists};
 
-/// Fetch the artist list from the DB into `artists_ui.grid.data`, prewarm
-/// cover thumbnails, then rebuild the grid model on the UI thread.
-pub async fn fetch_grid(
-    state: &AppState,
-    artists_ui: &Arc<ArtistsUi>,
-    weak: Weak<AppWindow>,
-) -> AppResult<()> {
-    let artists = library::artists::get_artists(&state.db).await?;
-    let data = Arc::new(GridData::new(artists));
-    // See `ui::albums::grid::fetch_grid` for the gate rationale.
-    {
-        let _gate = artists_ui.section.gate();
-        *artists_ui.grid.data.lock() = data;
-        *artists_ui.grid.index_cache.lock() = None;
+// As visible as `GridTab`, whose `Grid` it is; the private `grid` module keeps it in the slice.
+pub(in crate::ui) struct ArtistsGrid;
+
+impl CardGrid for ArtistsGrid {
+    type Row = UiArtistGridRow;
+    type Raw = ArtistStats;
+    type Query = SortedQuery<ArtistSort>;
+    type Facts = i32;
+    type Handle = ArtistsUi;
+
+    const LABEL: &'static str = "Artists.grid-rows";
+
+    fn loads(handle: &ArtistsUi) -> &GridLoads {
+        &handle.grid
     }
 
-    grid_prewarm::prewarm_off_thread(artists_ui, ArtistsUi::prewarm_visible_covers).await;
-
-    let artists_ui = artists_ui.clone();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        rebuild_grid(&ui, &artists_ui);
-    });
-    Ok(())
-}
-
-/// Rebuild the grid model from the cached grid data — no DB hit. Runs on
-/// the UI thread.
-pub fn rebuild_grid(ui: &AppWindow, artists_ui: &ArtistsUi) {
-    let g = ui.global::<Artists>();
-    let sort_field = g.get_sort_field().to_string();
-    let sort_dir = g.get_sort_dir().to_string();
-    let filter = g.get_filter().to_string();
-    let columns = g.get_columns().max(1);
-
-    let data = artists_ui.grid.data.lock().clone();
-
-    let rows = {
-        let mut cache = artists_ui.grid.index_cache.lock();
-        let stale =
-            !matches!(cache.as_ref(), Some(c) if c.matches(&filter, &sort_field, &sort_dir));
-        if stale {
-            let indices = compute_indices(&data, &sort_field, &sort_dir, &filter);
-            *cache = Some(GridIndexCache { filter, sort_field, sort_dir, indices });
-        }
-        let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
-        chunk_indices(&data, indices, columns)
-    };
-    let total = len_as_i32(data.artists.len());
-
-    g.set_total_count(total);
-    let model = g.get_grid_rows();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiArtistGridRow>>() {
-        vm.set_vec(rows);
-    } else {
-        g.set_grid_rows(ModelRc::new(VecModel::from(rows)));
+    fn model(ui: &AppWindow) -> ModelRc<UiArtistGridRow> {
+        ui.global::<Artists>().get_grid_rows()
     }
-}
 
-/// Filter + sort the grid data into a display-order list of artist
-/// indices. Pure / no UI state.
-pub(super) fn compute_indices(
-    data: &GridData,
-    sort_field: &str,
-    sort_dir: &str,
-    filter: &str,
-) -> Vec<usize> {
-    let needle = row_match::fold_needle(filter);
-    let mut indices: Vec<usize> = if needle.is_empty() {
-        (0..data.artists.len()).collect()
-    } else {
-        data.artists
-            .iter()
-            .enumerate()
-            .filter(|(_, a)| {
-                needle.contains(&a.name)
-                    || a.sort_name.as_deref().is_some_and(|s| needle.contains(s))
-            })
-            .map(|(i, _)| i)
-            .collect()
-    };
-    sort_artist_indices(&mut indices, data, sort_field, sort_dir);
-    indices
-}
-
-/// Chunk a display-order index list into rows of `columns` `ArtistRow`
-/// cards. Pure; only step a `columns-changed` rebuild has to redo.
-fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiArtistGridRow> {
-    chunk_rows(
-        indices,
-        columns,
-        |&i| to_slint_artist_row(&data.artists[i]),
-        |artists| UiArtistGridRow { artists },
-    )
-}
-
-/// Sort `indices` into the grid data by the chosen field. Numeric sorts
-/// read directly from `data.artists`; the name sort reads the pre-
-/// lowercased `data.keys`.
-fn sort_artist_indices(indices: &mut [usize], data: &GridData, field: &str, dir: &str) {
-    match field {
-        "track_count" => indices
-            .sort_by_cached_key(|&i| (data.artists[i].track_count, data.keys[i].name_lc.as_str())),
-        "album_count" => indices
-            .sort_by_cached_key(|&i| (data.artists[i].album_count, data.keys[i].name_lc.as_str())),
-        _ => indices.sort_by_cached_key(|&i| data.keys[i].name_lc.as_str()),
+    fn columns(ui: &AppWindow) -> i32 {
+        ui.global::<Artists>().get_columns()
     }
-    if dir == "desc" {
-        indices.reverse();
+
+    fn query(ui: &AppWindow, _: &ArtistsUi) -> Self::Query {
+        let g = ui.global::<Artists>();
+        SortedQuery::new(
+            ArtistSort::from_token(&g.get_sort_field()),
+            &g.get_sort_dir(),
+            &g.get_filter(),
+        )
+    }
+
+    async fn keyset(state: AppState, query: Self::Query) -> AppResult<(Vec<i64>, i32)> {
+        let ids =
+            library::keyset::artist_ids(&state.db, query.sort, query.dir, &query.needle).await?;
+        let total =
+            unfiltered_total(&ids, &query.needle, library::keyset::artist_count(&state.db)).await?;
+        Ok((ids, total))
+    }
+
+    async fn rows(state: AppState, ids: Vec<i64>) -> AppResult<Vec<ArtistStats>> {
+        library::keyset::artists_by_ids(&state.db, &ids).await
+    }
+
+    fn card(_: &AppWindow, artist: &ArtistStats) -> (i64, Card<Self>) {
+        (artist.id, to_slint_artist_row(artist))
+    }
+
+    fn artwork(artist: &ArtistStats) -> Option<&str> {
+        artist.image_path.as_deref()
+    }
+
+    fn show_facts(ui: &AppWindow, _: &ArtistsUi, total: i32, _: usize) {
+        ui.global::<Artists>().set_total_count(total);
+    }
+
+    fn covers_on_screen(handle: &ArtistsUi) -> bool {
+        handle.section.grid_on_screen(|| handle.detail_open())
     }
 }
 
-/// The first `GRID_PREWARM_AHEAD` distinct artist images in display
-/// (name-sorted) order. The cap counts kept *paths*, which matters more
-/// here than on the album grid: most artists have no image, so this walks
-/// well past the first screenful to find that many rather than prewarming
-/// the two or three the opening rows happen to carry.
-pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
-    grid_prewarm::unique_artwork_paths(
-        data.artists.iter().map(|a| a.image_path.as_deref()),
-        GRID_PREWARM_AHEAD,
-    )
+/// Reload the grid: what a launch, a re-entry and a library change ask for. UI thread.
+pub fn reload_grid(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
+    card_grid::reload::<ArtistsGrid>(ui, state, artists_ui);
 }

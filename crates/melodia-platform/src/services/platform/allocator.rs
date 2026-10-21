@@ -41,7 +41,7 @@ pub fn pin_arenas_and_thresholds() {
 /// nothing to release. Cheap enough to call after any bulk free, but keep it off the UI thread
 /// — it walks the arena free lists.
 ///
-/// `tasks::heap_trim` owns the one-shot startup schedule and argues why it stays one-shot.
+/// `tasks::heap_trim` owns the startup schedule and argues why it is never periodic.
 pub fn trim() {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[allow(

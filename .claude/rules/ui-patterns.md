@@ -106,10 +106,11 @@ silently miss the other.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
   the right-click menu's, on rows and cards alike: "Select all" ungated wherever the host has a set,
-  "Clear selection" gated on the clicked *row* being in the set, so a menu raised beside one still
-  acts on that row alone.
-  **A card gates it on the scope holding a set instead**, a card having no second activation with
-  which to reach a set it can no longer see; `card-context-menu.slint` argues it. The other exits
+  "Clear selection" wherever it holds one, the clicked item in it or not, while the batch entries
+  still need the clicked item in the set, so a menu raised beside one acts on that item alone.
+  **Clear is gated on the set rather than the item because a set can sit out of reach**: a card has
+  no second activation to get back to one, and a library-sized list can hold its picks thousands of
+  rows away. `card-context-menu.slint` and `track-context-menu.slint` argue it. The other exits
   are Escape (`Selection.clear-live()`), a section leave, and unpicking the last item. A surface
   that grows a "{n} selected" chip is putting a second affordance in front of the menu that
   already carries all of them. **A body click that picks fires on `clicked`**, for the
@@ -125,15 +126,17 @@ silently miss the other.
   the rows in their teardown; each of those two is guarded on there being a selection, the unstamp
   otherwise walking a model held precisely because it survives. **`CardSelection` goes back on the
   same leaves**, its scope guard answering a different question: that guard stops one grid reading
-  another's set, and says nothing about a set no grid is showing. One `clear()` in each of the seven
-  `on_section_active_changed` bodies covers all ten scopes, since the state is one global keyed
-  by one scope string. **Radio is the seventh, and the one that clears without dropping its rows**:
+  another's set, and says nothing about a set no grid is showing. One `clear()` in each of the four
+  section-gate closures covers all ten scopes, since the state is one global keyed by one scope
+  string; the four My Library grid tabs share one closure, `callbacks::grid_tab`'s.
+  **Radio is the one that clears without dropping its rows**:
   its leave keeps every list, but its station cards pick in `CardSelection`. A card grid is the
   surface that needs it most, having no pill and no second activation: a set left live turns every
   click into a pick. Held by `crates/melodia/tests/card_selection.rs`'s
-  `every_section_leave_hands_its_card_selection_back`, an **equality** over the seven because a
-  floor cannot see one slice stop clearing; the walk reads the `on_section_active_changed` block
-  itself, so the clear goes in that closure and not in a `leave()` it calls. The same file holds
+  `every_section_leave_hands_its_card_selection_back`, an **equality** over the four because a
+  floor cannot see one stop clearing; the walk reads the closure itself, opened by
+  `on_section_active_changed(` or by `GridTab`'s `::bind_section_active_changed(`, so the clear
+  goes in that closure and not in a function it calls. The same file holds
   the dispatcher's ten surfaces and the Escape arm's place at the bottom of the chain.
 
 - **A card menu offers both directions only where it hasn't got the state.** An album, artist,
@@ -237,21 +240,31 @@ three components that answer it, and each argues its geometry at its own file.
 
 ### Grids, strips, cards
 
-- **Every grid is `EntityCard` in a virtualized chunked-row `ListView`**: Rust chunks the flat
-  list into grid-row structs of N, **`GridColumnsSync`** computes N from the width and fires
-  `columns-changed` so a resize rebuilds the model without touching the database. Detail views own
+- **Every grid is `EntityCard` in a virtualized chunked-row `ListView`**: Rust hands it grid-row
+  structs of N cards, and **`GridColumnsSync`** computes N from the width and fires
+  `columns-changed`, so a resize re-chunks without touching the database. Detail views own
   no header — the four under My Library are bodies, the banner being the page's own band.
-  My Library's mount re-chunks only the mounted tab, so a grid chunked while hidden enters at a
-  stale N. The launch therefore fetches only the shown tab's grid (`spawn_initial_*_fetch`), and
-  every other tab fetches on its first enter.
+
+- **The seven library grids are paged, and `ui::card_grid` is their one load path.** My Library's
+  four, Favorites' Most Played and Favorite Artists, and Recently Played's Most Played each install
+  a `paged_rows::grid::PagedGrid` once: the ids in SQL order, the cards near the viewport fetched
+  by id, and chunk rows reading them through. Each is a `CardGrid` on a marker type, stating its
+  query, its store calls and the facts it writes beside the cards, and `card_grid`'s
+  `reload` / `requery` / `refresh_cards` / `release` are how any of them loads. **A chunk keeps its
+  `ModelRc` for as long as Slint holds it**, the repeater comparing by pointer
+  (`slint-pitfalls.md`), so a card that lands repaints its own cell. A column change keeps every
+  cached card, and a load re-reads the column count as it lands, so a grid released while hidden
+  never enters at a stale N. The launch loads only the shown tab's grid (`spawn_initial_*_fetch`),
+  every other tab loading on its first enter. A grid over another card type implements `CardGrid`
+  rather than growing a second load path.
 
 - **`EntityCard` goes inside `grid/card-cell.slint`'s `CardCell`, which owns everything a card owes
   its selection.** The menu has to be the card's *sibling* in the card's own coordinate frame, so
   it can't live on the `EntityCard` mount; the card itself arrives through `@children` because
   Slint has no generics and each grid iterates its own row struct. **A mount states its scope and
-  nothing else** — `selected`, `selection-live`, the menu's `effective-selection` and its count are
-  all derived there once, and a mount reaching past them for a `CardSelection` call is re-spelling
-  what the cell already answers.
+  nothing else** — `selected`, `selection-live`, `menu-open`, the menu's `effective-selection` and
+  its count are all derived there once, and a mount reaching past them for a `CardSelection` call
+  is re-spelling what the cell already answers.
   Per-kind menu arms (the playlist four, `play-single`) are callbacks the grid forwards, inert on
   a kind that never raises them. "Go to Artist" is not one: it calls the row menu's `Nav` trio.
   **It mounts two menus and opens one by kind**: `card-kind: "station"` raises
@@ -282,8 +295,8 @@ three components that answer it, and each argues its geometry at its own file.
   - **The count comes off the row model, not a count property written beside it** —
     `rows.length == 1 ? rows[0].<field>.length : -1`, spelled at each of the five mounts against
     whichever model the mounted tab drew. `.length` lowers to `track_row_count_changes()` and an
-    index to `row_data_tracked(…)`, so the binding re-runs when Rust swaps the model in; a
-    published count would be a second thing to write, in order, at all ten chunk sites. Pinned by
+    index to `row_data_tracked(…)`, so the binding re-runs whenever the rows under it change; a
+    published count would be a second thing to write, in order, beside every chunking. Pinned by
     `card_selection.rs`'s `a_lone_row_grid_asks_its_model_how_many_cards_it_drew`, which reads each
     mount's binding value rather than listing the shapes the five spell it in.
   - **`max-card-w` is where an under-filled row stops growing**, and `grid_prewarm::MAX_CARD_W`
@@ -296,15 +309,12 @@ three components that answer it, and each argues its geometry at its own file.
   `action-*` properties are for. Properties rather than an `@children` slot: an empty `@children`
   still claims a `pad-md` gap and shifts the vertical centring.
 
-- **Chunk through `ui::grid_rows`**, the row chunking *being* the virtualization boundary.
-  **`chunk_rows` borrows** (the entity grids project cards out of a `GridData` they keep),
-  **`chunk_built_rows` moves** (the grid tabs and Browse build a flat `Vec` and drop it). Reaching
-  for the borrowing form with `Clone::clone` as the projection is the trap the split closes — a
-  second full pass cloning every card into the chunk about to replace it. `columns` is floored at
-  one in both: a grid mid-layout can report zero, and one card per row is a visible wrong where a
-  zero-width `chunks` is a panic. Grid tabs take `chunk_entity_rows` + `model_diff::replace_rows`
-  (generic over the row type, so Browse, Radio's grids and the recent searches use it too). Don't
-  re-roll either.
+- **A grid that builds its cards chunks them through `ui::grid_rows::chunk_built_rows`**: Browse
+  and Radio's three, which build a flat `Vec` in the walk that filters it and move it into the
+  rows, then hand those to `model_diff::replace_rows` (generic over the row type, so the recent
+  searches use it too). `columns` is floored at one there and in `PagedGrid::set_columns` alike: a
+  grid mid-layout can report zero, and one card per row is a visible wrong where a zero-width chunk
+  is a panic. Don't re-roll either.
 
 - **The play-count badge is its own leaf** (`grid/play-count-badge.slint`) with **one** mount,
   `EntityCard` — Radio's `StationCard` hosts one now, so what a station card owes is the count and
@@ -528,13 +538,16 @@ three components that answer it, and each argues its geometry at its own file.
     **My Library's band** can still reach these globals, not whether anything is painted.
   - **The hold costs up to three details' `(cover, blur-a, blur-b)` triples** for a page visit,
     handed back by the page teardown and per-detail by any genuine close. Rust-side caches are
-    untouched — `release_section_state` still drops the LRU, grid data and row models every leave.
+    untouched — every leave still drops the LRU, the grids and the row models.
 
 - **`HeroChips` publishers take their facts as arguments or off their own section handle, and read
   back no Slint property** — lifting a count off the global the caller just wrote makes write order
-  part of the contract. **Facts a stats row doesn't carry are folded on the worker, never in the
-  closure** (`ui::hero_folds`), their `Copy` results riding into `upgrade_in_event_loop`; **Most
-  Played sums itself**, its query being a strict subset of the Songs tab. **Moving a fold onto the
+  part of the contract. **Facts a stats row doesn't carry are answered on the worker, never in the
+  closure**: in SQL where the page holds only ids (`queries::track::scope_facts` and
+  `genre_lines`, folded by `ui::hero_folds`), off the rows themselves where it holds them, their
+  `Copy` results riding into `upgrade_in_event_loop`; **Most Played's totals are an aggregate
+  beside its ranking** (`queries::track::most_played_totals`), answered with each load's ids, the
+  grid holding no rows to sum. **Moving a fold onto the
   worker moves its teardown with it** — `release_section_state` resets the folds beside the caches
   they summarise, a derived value outliving its source being the one thing the band can state that
   is *wrong* rather than merely absent.
@@ -600,10 +613,10 @@ three components that answer it, and each argues its geometry at its own file.
   with them, the bar having no set. A remove label handed over by the host would ship
   untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
   rather than a property.
-  **The two hosts with no list row read the "Go to" ids through `ui::track_links`**, `TrackSummary`
-  carrying no foreign keys: the queue sheet per row, the bar onto
-  `Player.track-{album,artist,genre}-id` per track change and again per library tick, a retag
-  keeping the id.
+  **The bar, the one host with no list row, reads the "Go to" ids through `ui::track_links`**,
+  `TrackSummary` carrying no foreign keys: onto `Player.track-{album,artist,genre}-id` per track
+  change and again per library tick, a retag keeping the id. The queue sheet's rows carry theirs
+  from the track-list projection, as a list row does.
   **"Go to" calls `Nav.go-to-*` straight, as Open Containing Folder calls `Nav`**, with no host
   forwarding: the origin a drill records is read off where the user stands, so there was nothing
   per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands, closing
@@ -626,6 +639,13 @@ three components that answer it, and each argues its geometry at its own file.
     `menu-x`/`menu-y`. None binds its anchor to a live `mouse-x`, which an open popup would follow
     for as long as the button is held (`slint-pitfalls.md`). `crates/melodia/tests/context_click.rs`
     holds the first half: only the predicate may name the right button.
+  - **The item a menu was raised on stays lit while it is up**, an open popup taking its hover
+    (`slint-pitfalls.md`). The three item menus publish their popup's `is-open`. A row reads it
+    into the one `hovered` its hover bindings share, and a card is told through
+    `EntityCard.menu-open`, which `CardCell` answers for both its menus, Browse's grid for its own
+    and `StationCard` passes through. `context_click.rs` holds both halves: a row reads its raw
+    hover in that one binding and nowhere else, and every mount raising a card's menu binds
+    `menu-open`, which `card-hovered` counts.
   - **Copy opens a flyout inside the menu's own popup** where the surface has more than one field
     to offer, and is a flat entry where it has one. The flyout opens on whichever side
     `ContextMenuMetrics.opens-left` finds room, so the column stays under the pointer: rightward
@@ -652,25 +672,55 @@ three components that answer it, and each argues its geometry at its own file.
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
-- **A list holding its whole set in a `TrackListCache` shows it through
-  `ui::track_list_model::TrackListModel`, never a `VecModel` copy.** My Library's Songs tab and
-  Favorites' are the two today. A favourite or rating change writes the cache and asks the model to
-  `repaint` the row, where the `VecModel` lists go through `model_patch`; the `list_selection`
-  helpers take either model.
+- **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
+  `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and
+  its module doc argues the window, the one fetch in flight and the seed a load fetches where the
+  list is scrolled. Both Songs tabs and the four details are six of them, all
+  `track_rows::TrackRows`. The queue sheet is the seventh, a `queue_rows::QueueRows` over the ids
+  the engine publishes, and its picks are by track as every other list's are, so a track queued
+  twice is picked, counted and removed as both rows. A favourite or rating change patches the
+  cached row, where the `VecModel` lists go through `model_patch`; the `list_selection` helpers
+  take either model. A list over another row type implements `PagedRow` for it rather than growing
+  a second model.
+  **The six track lists load through one path, `track_rows`' over `PagedTrackList`**, the twin of
+  `card_grid`: each states only where its query comes from, when a load may still land and what it
+  writes beside the rows, and the four details do it through one impl over `TrackDetail`. A track
+  list over another scope implements `PagedTrackList` rather than growing a second load path.
+
+- **A track's title and its marks are `components/track-list/track-title.slint`'s `TrackTitle`**:
+  the heart a favourite keeps up, and the star strip the row reveals on hover. Track rows and queue
+  rows both mount it, so the two can't come to mark a track differently; a third row showing a
+  track's title mounts it too.
 
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
-  `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle), with the
-  rows in a `DetailCache`. A fifth detail implements both traits rather than copying a
+  `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle). Each
+  lists its entity as a `TrackRows`, its `DetailCache` holding the sort and filter the loads run
+  under. `track_detail::load` is the fresh open, the one load running under a query of its own
+  rather than the page's; every other load is the shared track-list path. A close or a
+  section leave releases the list and revokes every load still on its way to it
+  (`track_detail::release_rows`). A fifth detail implements both traits rather than copying a
   `callbacks/detail.rs`.
+
+- **The four grid tabs share one section lifecycle, `callbacks::grid_tab`**, driven through
+  `GridTab`, which extends `TrackDetail` with the tab's `CardGrid` and what its leave and enter
+  differ in: the globals they write, the hero release, what the tab keeps resident, and its
+  detail's open, refresh and restore. The ordering a leave and an enter depend on is the shared
+  file's alone. A fifth grid tab implements `GridTab` rather than copying a
+  `callbacks/lifecycle.rs`.
+  **A library change under an open detail reloads the detail and leaves the grid owed**, every
+  star and heart inside a detail being one, so the reload lands once on the close. That close is
+  each tab's own `wire_close` in `callbacks/detail.rs`, outside the shared file, and it calls
+  `grid_tab::reload_owed_grid` after `forget_closed`. A fifth tab's close owes the same call, or
+  its grid comes back showing what it held before the change.
 
 - **All nine track lists share Play Next, Add to Queue and the column toggle**, written once in
   `callbacks::track_list` over `track_list_view::TrackListActions`, which `track_list_views!`
   implements beside the column state, plus the `play-row` tail as `play_displayed`. A list
   supplies only what differs: its id source, and Browse its non-zero id filter. **Selection is
-  shared there too, by the four flat list views**: `wire_row_selection` over
+  shared there too, by the four flat list views and the four details**: `wire_row_selection` over
   `list_selection::RowSelectionView`, ranging over the rows on screen. Browse keeps its own
-  wiring for its disk-only rows and the details select through `track_detail::selection`, both
-  over the same `compute_click_selection`, whose anchor is the id of the row last clicked.
+  wiring for its disk-only rows, over the same `compute_click_selection`, whose anchor is the id
+  of the row last clicked.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
@@ -688,9 +738,9 @@ three components that answer it, and each argues its geometry at its own file.
   lines up, otherwise look up by id, Browse's disk-only rows making its two index spaces differ.
   `player_play_tracks` re-resolves by **track id** against what the DB returned, the fetch dropping
   ids that no longer exist. A new list view wires `play-row` to its own `*_track_ids()` helper; the
-  two Most Played grid tabs have no row index and resolve by id, **filter-aware** through
-  `most_played_matches`, the same predicate the model build uses, so the cards and the queue can't
-  disagree about what's on screen.
+  two Most Played grid tabs have no row index and resolve by id against the grid's own keyset
+  (`card_grid::shown_ids`), so the cards and the queue can't disagree about what's on screen,
+  the filter included.
 
 - **Track-list insets belong to the list, not the page.** `TrackList` and `DraggableTrackList`
   take `inset-left` and `inset-right`, defaulting to `Theme.track-list-inset` and
@@ -787,11 +837,15 @@ three components that answer it, and each argues its geometry at its own file.
 
 ### Filtering
 
-- **Every filter box answers "does this row match" through `crates/melodia-views/src/ui/row_match.rs`, and none of them
-  spells `to_lowercase().contains(…)`.** It owns `search_fields` (ordered like the `tracks_fts`
-  column list it mirrors), the `fold_needle` pair folding case **and accents**, and the predicates
-  over them. Sixteen surfaces route through it; on all three tabbed pages the needle is **one
-  shadow shared across the tabs**, cleared on both sides by a tab pick.
+- **Every filter box narrows through `Needle`, and none of them spells
+  `to_lowercase().contains(…)`.** `melodia_core`'s `utils::needle` owns the `fold_needle` pair
+  folding case **and accents**, and its `entities::track_search::SearchFields` what a track is
+  searchable by (ordered like the `tracks_fts` column list it mirrors). A list held in memory
+  matches through `crates/melodia-views/src/ui/row_match.rs`; a library-sized one asks the store,
+  which matches the same `Needle` against a folded column: `tracks.search_text`, which is
+  `SearchFields::pack()`, for the track lists, and each entity table's `search_name` for the card
+  grids (`library-data.md` owns that side). Sixteen surfaces take one; on all three tabbed pages
+  the needle is **one shadow shared across the tabs**, cleared on both sides by a tab pick.
 
 - **Radio's Browse box narrows nothing, and is the one box with no row predicate to find.** The
   directory searches one field per request, so the needle *is* the query, and what else it could
@@ -806,16 +860,16 @@ three components that answer it, and each argues its geometry at its own file.
   unspellable** — `fold_needle` is the only constructor and the predicates take nothing else. The
   filter box's fold deliberately doesn't match the FTS side's: it is looser everywhere (which only
   ever *widens* a substring filter) except years, which are a substring here against a prefix
-  search there (`library-data.md` owns that side). **The entity grids match raw fields, not their
-  `*_lc` sort keys** — folding can't be baked into a lowercased string without changing the sort
-  those keys drive.
+  search there (`library-data.md` owns that side). **A card grid sorts on its name and matches on
+  its `search_name`**, two columns rather than one: folding the sort key would change the order it
+  drives.
 
 - **Nine of the sixteen are fed by one box, dispatched in Rust rather than bound.** My Library's
   band owns the only `SearchBar`; `my_library/filter.rs::dispatch` routes a settled keystroke to
   whichever surface is up. It must be a *write*: an element can't declare a binding on another
   global's property, and the only form that would work puts `MyLibrary` in five globals' imports.
   - **The two contracts stay different underneath** — the five grid/list globals fire
-    `apply-filter(text)` and Rust reads the property back inside a memoized rebuild; the four
+    `apply-filter(text)` and Rust reads the property back as the load's query; the four
     detail globals fire `filter-changed(text)` and Rust uses it. All nine arms `set_filter` before
     invoking, which also keeps `reorder-enabled` honest, that being the one live *Slint* reader of
     a detail's filter.
@@ -940,7 +994,7 @@ three components that answer it, and each argues its geometry at its own file.
     curated pages' fetch-and-apply, the `mark_covers_warm` / `repaint_covers` split, and the `bool`
     every `prewarm_tab_covers` returned.
   - **Two surfaces still gate on the value, and both hold a tier that really is released**: the
-    queue sheet's **synchronous open**, whose private tier is dropped on close, and Radio's leave.
+    queue sheet's **open**, whose private tier is dropped on close, and Radio's leave.
     There `0` still means cold, the lookup still answers cache-only, and the rewind still sits
     beside the clear. `radio::covers::logo_cover` is that branch's one remaining home.
   - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from
@@ -1012,8 +1066,8 @@ three components that answer it, and each argues its geometry at its own file.
   wired a second time.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
-  and non-empty. **Every prewarm site goes through it**, the per-entity wrapper owning only the
-  projection; don't lean on `prewarm`'s internal dedup as a reason to skip it, the two sites that
+  and non-empty. **Every prewarm site goes through it**, the grid owning only the projection
+  (`CardGrid::artwork`, Browse's `first_screenful_paths`); don't lean on `prewarm`'s internal dedup as a reason to skip it, the two sites that
   did each grew a divergent copy. **`cap` bounds kept *paths*, not input items** — capping the
   input is what stops a detail over a 20 000-track genre allocating a `PathBuf` per unique cover to
   keep 512, and `prewarm`'s own `.take(cap)` sits **after** its already-cached filter, so over a
@@ -1243,7 +1297,8 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
 - **It publishes `previous-index` because a cell writes `selected-index` before it emits
   `selected`** — it has to, the `<=>` being what carries the pick out. So a host's handler runs
   already reading the tab just picked, and the outgoing one is recoverable nowhere else. Same
-  ordering is why the Rust side needs the non-hopping `apply_*_now` twins. A host wanting the old
+  ordering is why a pick writes rows through a non-hopping apply (`apply_filtered_tracks_now`). A
+  host wanting the old
   index reaches for `previous-index`, never a mirror seeded at mount.
 
 - **Every brush it paints with is a defaulted `in property`**, which is what lets it sit on a hero.
@@ -1339,10 +1394,9 @@ block first; each page's section below is deltas only.** The nav-index map is in
   index through `clamp_tab`, never its own const, and a per-page test `include_str!`s the `.slint`
   to pin the number against the `tab-*` constants, the body branches and both inline `@tr` arrays.
 
-- **Build only the mounted tab's rows.** Sub-views are mutually exclusive `if`s, so anything
-  prepared for an unmounted tab reaches nothing; the write side then drops a prepared result whose
-  tab moved. Content hashes still come off the **source** entities, so one walk answers the
-  signature for the tab it didn't build.
+- **Load only the mounted tab.** Sub-views are mutually exclusive `if`s, so anything loaded for an
+  unmounted tab reaches nothing. A tick that reaches the page with another tab up marks that tab
+  dirty, and the pick that mounts it reloads.
 
 - **Counts hold `UNFETCHED_COUNT` (`-1`) until fetched**, and the section leave puts them back
   beside the model clears. A count outliving its model suppresses an empty state over an emptied
@@ -1355,47 +1409,46 @@ block first; each page's section below is deltas only.** The nav-index map is in
   rewind is the leave dropping the rows, and its leave doesn't. **Rewind if and only if you clear,
   and if you clear, mark dirty.**
 
-- **A tab *pick* rewinds too.** A pick runs a synchronous apply against whatever cache is there,
-  which a leave or skipped tick can have emptied, so it would write `0` over the sentinel and
-  assert an empty library for the length of the fetch already on its way. Three sites do it,
-  excluding Songs (whose model survives the leave) and the four details (which write no grid
-  count).
+- **A pick writes no count.** The entering tab paints from what it already holds: the curated
+  grids and Favorites' Songs keep their lists across a pick, and Recently Played's capped Songs
+  list rebuilds from its cache on the pick's own tick. A reload the tab owes refreshes behind it,
+  under the count its list was shown with. **The one pick a kept list can't answer is leaving it
+  filtered**: the pick clears the shared needle, so the tab being left is marked dirty on the way
+  out. My Library reads around this, its tab leave being a section leave.
 
-- **Counts are written *above* the signature guard.** A pick stamps a signature against the cache
-  it just walked, so a fetch returning identical content lands on the guard and a count written
-  past it never arrives — stranding the Shuffle pill and sort row as well as the empty state. Safe
-  because when the guard fires the model already holds exactly the rows the count describes, and
-  `Property::set` is value-compared.
+- **A gated load owes three things**, each a bug on the way in: the loading branch **consumes**
+  its dirty flag (seeded `true`, else a boot onto that tab loads twice); `release_section_state`
+  **re-arms** it beside the wipe rather than leaving it to the leave's `mark_dirty` two files
+  away; and a load that stores nothing re-arms it, the pick having consumed the flag *before*
+  asking. Songs re-arms on a failed query or a leave landing mid-flight (Favorites' through
+  `PagedTrackList::load_dropped`), a grid through `CardGrid::load_failed`, the leave's revoke
+  covering its other half.
 
-- **A gated fetch owes three things**, each a bug on the way in: the fetching branch **consumes**
-  its dirty flag (seeded `true`, else a boot onto that tab fetches twice); `release_section_state`
-  **re-arms** it beside the cache wipe rather than leaving it to the leave's `mark_dirty` two files
-  away; and the fetch re-arms on either way of storing nothing (failed query, or a leave landing
-  mid-flight), the pick having consumed the flag *before* spawning.
+- **Section guards sit *after* the slow part** — before it the leave hasn't happened yet, so a
+  Songs load that `.await`s a cover prewarm asks twice. A grid's load asks its ticket instead,
+  which the leave revokes. Every store `release_section_state` wipes goes under the gate.
 
-- **Section guards sit *after* the slow part** — before it the leave hasn't happened yet, so the
-  two fetchers that `.await` a cover prewarm ask twice. Every store `release_section_state` wipes
-  goes under the gate.
-
-- **A tab pick can't await a prewarm the way a fetch does**, `TabBar` writing `selected-index`
-  before it emits `selected`. Rows go in through the **non-hopping** `apply_*_now` twin —
-  `invoke_from_event_loop` posts even from the UI thread, and a redraw winning that race paints a
-  bare panel or a `TrackList` of headers over an emptied model.
+- **A tab pick can't await a prewarm the way a load does**, `TabBar` writing `selected-index`
+  before it emits `selected`. Rows a pick builds go in through the **non-hopping**
+  `apply_filtered_tracks_now`: `invoke_from_event_loop` posts even from the UI thread, and a redraw
+  winning that race paints a `TrackList` of headers over an emptied model.
 
 - **Covers ride one tier that no leave clears**, so a pick paints whatever the tab painted last
   visit and the prewarm sharpens it. `covers-generation` is the repaint token and nothing else
   here — see Covers.
 
-- **Signature skips** are keyed on the tab *and* the column count beside the mounted tab's
-  contents. Hashing both tabs together, or dropping either of the first two, silently skips exactly
-  the apply that had to run.
+- **A reload repaints only what moved.** `PagedRows::show` keeps every cached row the new keyset
+  still holds and a re-read repaints only the cards whose data changed, so a `stats_changed` tick
+  over an unchanged ranking costs a query and no rebuild. That is the job a content hash per tab
+  used to do; nothing here should hash a tab's contents again.
 
 - **A leave owes `mark_dirty()` for exactly what it hands back** — a tier, a model, a count.
   Tracks' leave releases nothing, so it owes none.
 
-- Shared helpers: `ui::tab_bar::{clamp_tab, grid_signature, UNFETCHED_COUNT}`,
-  `ui::grid_rows::chunk_entity_rows`, `ui::model_diff::replace_rows`, `ui::track_list_cache`
-  with the `ui::track_list_model` that shows it,
+- Shared helpers: `ui::tab_bar::{clamp_tab, UNFETCHED_COUNT}`, `ui::card_grid` over
+  `ui::paged_rows::grid::PagedGrid`, `ui::most_played` (the card and rows both Most Played grids
+  draw), `ui::paged_rows` with the `track_rows::TrackRows` both Songs tabs and the four details
+  show and the `PagedTrackList` path that loads them,
   `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
@@ -1405,12 +1458,11 @@ Each page's own tree is the reference for how it fills; what follows is only the
 edit would otherwise reverse.
 
 - **Favorites** (three tabs) — `refresh_hero` stays **ungated**, answering the count, running time
-  and collage the band states on all three tabs, which is why Songs owes no count rewind. Both sorts
-  resolve **in memory**, the fetch having lost its sort parameters entirely. **The artist sort
-  applies to the cached `Vec`, not the filtered copy** — `first_screenful_paths` picks prewarm
-  targets off that cache, so sorting downstream warms the covers of whichever artists SQL returned
-  first while the grid paints a different prefix. **A tab pick prewarms `GRID_PREWARM_AHEAD`, not
-  the tier capacity**, the grids being uncapped, so warming everything evicts its own work.
+  and collage the band states on all three tabs. **All three tabs sort and filter in SQL and keep
+  their lists across a pick**, a keyset and a few hundred cached rows being nothing to hand back,
+  so each carries a dirty flag of its own (`FavoritesUi::mark_tab_dirty`). **A tab pick warms
+  `GRID_PREWARM_AHEAD` covers, not the tier's capacity**: the ones the entering grid's last load
+  opened on, warming everything evicting its own work.
 
 - **Recently Played** (two tabs) — **neither has a sort, and that is a decision rather than an
   omission**: the order **is** the page, so the synthetic-field cycle above is deliberately *not*
@@ -1419,10 +1471,9 @@ edit would otherwise reverse.
   `HeaderCell` and defaults `true`, so the other eight mounts opt in by omission — **the middle
   links are the ones worth pinning**, since dropping a forward leaves the mount still reading `sortable: false`
   while the page sorts again. **The band states the recency set, not the mounted tab's**, a
-  play-count ranking under this banner naming the wrong page. Its filter walk is **the one apply
-  path that may not run on the UI thread**, and what deferring costs is ordering — the signature
-  check reads a stale set as a change rather than as staleness, so `filter_generation` is checked
-  twice, on the worker and again on the UI thread.
+  play-count ranking under this banner naming the wrong page. **One needle over two lists bounded
+  differently**: the capped Songs list re-walks its cache in memory, and the Most Played grid
+  filters in SQL, only while it is the tab on screen, the pick onto it clearing the needle anyway.
 
 - **My Library** (five tabs, drilling into a detail *morphing the band* rather than routing) — a
   tab switch being a section switch is what buys it out of the cover machinery, at the cost of a
@@ -1455,7 +1506,7 @@ edit would otherwise reverse.
 - **The search box takes two properties**: `search-input` for the `SearchBar`s, `search-query` for
   the sections, joined by a `FilterThrottle`. Mounting every page is what makes a keystroke
   expensive here with no model in sight. Both are cleared together on nav-away and on a category
-  pick. `on_matches` memoizes the fold against the raw needle, this being the one `row_match`
+  pick. `on_matches` memoizes the fold against the raw needle, this being the one `Needle`
   caller that can't hold a folded shadow: it is invoked per *field*, not per pass.
   **Two boxes write `search-input`**, the panel's own and the field the rail's button opens. Both
   stay mounted, each carrying a `changed blur-trigger` tracker an `if` would strand, and

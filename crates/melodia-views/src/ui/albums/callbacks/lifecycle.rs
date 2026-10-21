@@ -1,200 +1,65 @@
-//! Albums section lifecycle: the `section-active-changed` enter/leave
-//! handler (cache release + re-fetch) and the `library_changed` subscriber
-//! that keeps the grid + open detail fresh on watcher / scan events.
+//! The Albums tab as [`grid_tab`] drives it through a section enter, a leave and a library
+//! change.
 
 use std::sync::Arc;
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, Weak};
 
+use crate::ui::albums::grid::AlbumsGrid;
 use crate::ui::albums::{self as albums_ui_mod, AlbumsUi};
-use crate::ui::callbacks::macros::spawn_logged;
+use crate::ui::callbacks::grid_tab::{self, GridTab};
 use crate::ui::detail_view::release_detail_hero_images;
-use crate::ui::grid_prewarm;
-use crate::ui::list_selection::NO_ANCHOR;
-use crate::ui::model_diff::clear_vec_model;
-use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::signal::on_signal;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
-use crate::ui::track_detail::{TrackDetail, restore};
 use melodia_app::state::AppState;
-use melodia_core::error::describe;
-use melodia_ui::{
-    AlbumDetail, AlbumGridRow as UiAlbumGridRow, Albums, AppWindow, CardSelection,
-    TrackListRow as UiTrackListRow,
-};
+use melodia_core::error::AppResult;
+use melodia_ui::{AlbumDetail, Albums, AppWindow, NavEnterFrom};
 
 /// Wire the Albums section-lifecycle callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
-    // section-active-changed: the Albums section entered / left the screen
-    // (sidebar nav, or Now Playing opened over it). Seed the synchronous
-    // shadow from the current nav state: the gate's `ChangeTracker` baselines
-    // inside `AppWindow::new()` and fires only on a later difference, so a
-    // section the boot doesn't land on gets no edge at all, and the one it
-    // does land on gets its edge a frame late — after boot has already read
-    // this shadow. See the `SectionActiveGate` bullet in
-    // `.claude/rules/ui-patterns.md`.
-    albums_ui.set_section_active(tab_is_mounted(ui, MyLibraryTab::Albums));
-    wire_section_gate(ui, state, albums_ui);
-    install_library_refresher(ui, state, albums_ui);
+    grid_tab::wire(ui, state, albums_ui);
 }
 
-/// On leave: synchronously wipe the Slint `grid-rows` model (UI thread,
-/// so its `AlbumGridRow` `SharedString`s drop), then off-thread call
-/// `release_section_state` to drop the Rust-side caches + grid data +
-/// detail state + `malloc_trim`. On return: [`reenter`].
-fn wire_section_gate(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
-    let au = albums_ui.clone();
-    let s = state.clone();
-    let weak = ui.as_weak();
-    ui.global::<Albums>().on_section_active_changed(move |active| {
-        au.set_section_active(active);
-        if !active {
-            // Land synchronously on the UI thread *before* the release
-            // task is even spawned — the re-enter handler reads this
-            // via `take_dirty()` and must never observe a still-warm
-            // grid because release hadn't run yet. See
-            // `AlbumsUi::data_dirty` for the race details.
-            au.mark_dirty();
-        }
-        if !active && let Some(ui) = weak.upgrade() {
-            // (UI thread) Slint-side drops. The Rust-side LRU clear in
-            // `release_section_state` only drops the LRU's ref; the
-            // detail's `slint::Image` properties hold their own refs to
-            // the `SharedPixelBuffer` Arcs and the `tracks` /
-            // `grid-rows` `VecModel`s carry `SharedString` allocations
-            // — neither releases until we explicitly drop the
-            // properties / clear the models here. `AlbumDetail.album-id`
-            // is left untouched so the section-enter handler can
-            // re-run `open_album` and the user lands back where they
-            // were. Mirrors the per-property teardown in
-            // `on_close_detail`.
-            let g = ui.global::<Albums>();
-            // Rewound on the same tick as the model it numbers;
-            // `Albums.total-count`'s declaration argues the sentinel.
-            g.set_total_count(UNFETCHED_COUNT);
-            clear_vec_model::<UiAlbumGridRow>(&g.get_grid_rows(), "albums: clear grid");
+impl GridTab for AlbumsUi {
+    type Grid = AlbumsGrid;
 
-            let d = ui.global::<AlbumDetail>();
-            release_detail_hero_images(&ui, &d);
-            clear_vec_model::<UiTrackListRow>(&d.get_tracks(), "albums: clear detail tracks");
-            clear_vec_model::<i32>(&d.get_selected_ids(), "albums: clear detail selection");
-            d.set_selection_anchor(NO_ANCHOR);
-            // The card grid's set goes back with the models it describes;
-            // `card-selection.slint` argues why it cannot outlive the leave.
-            ui.global::<CardSelection>().invoke_clear();
-        }
-        if active {
-            restore::resume_deferred(&weak, &s, &au, albums_ui_mod::restore_detail);
-            s.runtime.spawn(reenter(s.clone(), au.clone(), weak.clone()));
-        } else {
-            let au = au.clone();
-            s.runtime.spawn_blocking(move || au.release_section_state());
-        }
-    });
-}
+    fn bind_section_active_changed(ui: &AppWindow, f: impl FnMut(bool) + 'static) {
+        ui.global::<Albums>().on_section_active_changed(f);
+    }
 
-/// The section came back on screen: a full `fetch_grid` if data was wiped,
-/// else just prewarm the visible covers (initial enter after boot's
-/// pre-fetch). The detail re-fetch (if `AlbumDetail.album-id >= 0`) runs
-/// after the grid fetch so the user lands back where they were.
-async fn reenter(s: AppState, au: Arc<AlbumsUi>, weak: slint::Weak<AppWindow>) {
-    // `take_dirty()` returns true iff a prior leave set the
-    // flag — i.e. our cached state was wiped (or scheduled
-    // for wipe). Race-free because `mark_dirty` is set on
-    // the UI thread before the release task is spawned, so
-    // any subsequent enter sees `true`.
-    if !au.take_dirty() {
-        grid_prewarm::prewarm_off_thread(&au, AlbumsUi::prewarm_visible_covers).await;
-        return;
+    fn rewind_count(ui: &AppWindow) {
+        ui.global::<Albums>().set_total_count(UNFETCHED_COUNT);
     }
-    // Snapshot the open-detail id from the Rust mirror
-    // *before* the wipe lands — `release_section_state`
-    // leaves `detail.album_id` untouched precisely so
-    // we can re-open it here.
-    let open_id = au.detail_album_id();
-    if let Err(e) = albums_ui_mod::fetch_grid(&s, &au, weak.clone()).await {
-        log::warn!("albums::section_enter fetch_grid: {}", describe(&e));
-    }
-    // The preserved `AlbumDetail.album-id` points at a
-    // detail the wipe just emptied — re-run `open_album`
-    // so the detail view paints with real data instead
-    // of the cleared `Vec<TrackListRow>`.
-    if open_id >= 0
-        && let Err(e) = albums_ui_mod::open_album(
-            &s,
-            &au,
-            weak.clone(),
-            open_id,
-            melodia_ui::NavEnterFrom::Right,
-        )
-        .await
-    {
-        log::warn!("albums::section_enter open_album({open_id}): {}", describe(&e));
-        // The detail re-fetch failed — most likely the
-        // album was deleted on disk while the section
-        // was hidden (the `library_changed` subscriber
-        // is gated on `section_active()`, so the
-        // detail's `album_id` mirror wasn't pruned).
-        // Drop the user back on the grid instead of
-        // stranding them on an empty detail page they
-        // can only escape via the back button.
-        au.clear_detail();
-        // Handed back warm, as a failed restore's grid is.
-        grid_prewarm::prewarm_off_thread(&au, AlbumsUi::prewarm_visible_covers).await;
-        let _ = weak.upgrade_in_event_loop(|ui| {
-            let g = ui.global::<AlbumDetail>();
-            g.set_album_id(-1);
-            release_detail_hero_images(&ui, &g);
-        });
-    }
-}
 
-/// Watcher / scan completion / folder add+remove all bump `library_changed`.
-/// Re-fetch the grid so new albums appear and removed ones disappear; refresh
-/// an open detail too.
-fn install_library_refresher(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
-    let s = state.clone();
-    let au = albums_ui.clone();
-    let installed =
-        on_signal(&state.library_changed, ui.as_weak(), "albums-library-changed", move |ui| {
-            // Skip the in-place refresh when the section is hidden, but
-            // mark the cached data dirty so the next section-enter
-            // re-fetches from scratch. `release_section_state` already
-            // wiped (or is about to wipe) the grid + detail caches, and
-            // re-fetching now would just repopulate state the user can't
-            // see. Without the `mark_dirty`, a `library_changed` arriving
-            // while the section was never visited (e.g. the first scan
-            // after a fresh-DB launch) would be lost — `take_dirty()` on
-            // the first enter would be false and only prewarm would run.
-            if !au.section_active() {
-                au.mark_dirty();
-                return;
-            }
-            let open_id = au.detail_album_id();
-            {
-                let s = s.clone();
-                let au = au.clone();
-                let weak = ui.as_weak();
-                spawn_logged!(
-                    s,
-                    "albums::library_changed",
-                    albums_ui_mod::fetch_grid(&s, &au, weak)
-                );
-            }
-            if open_id >= 0 {
-                let s = s.clone();
-                let au = au.clone();
-                let weak = ui.as_weak();
-                // `refresh_detail`, not `open_album` — a watcher tick
-                // must preserve the user's sort + selection.
-                spawn_logged!(
-                    s,
-                    "albums::library_changed_detail",
-                    albums_ui_mod::refresh_detail(&s, &au, weak, open_id)
-                );
-            }
-        });
-    if let Err(e) = installed {
-        log::warn!("Albums won't follow library changes: {}", describe(&e));
+    fn release_hero(ui: &AppWindow, g: &AlbumDetail<'static>) {
+        release_detail_hero_images(ui, g);
+    }
+
+    /// The detail's artwork, and the grid tier's pixels down to proxies.
+    fn release_section_state(&self) {
+        crate::ui::grid_prewarm::shrink_covers();
+        self.detail_artwork.clear();
+    }
+
+    async fn open(
+        state: &AppState,
+        view: &Arc<Self>,
+        weak: Weak<AppWindow>,
+        id: i64,
+        enter_from: NavEnterFrom,
+    ) -> AppResult<()> {
+        albums_ui_mod::open_album(state, view, weak, id, enter_from).await
+    }
+
+    async fn refresh(
+        state: &AppState,
+        view: &Arc<Self>,
+        weak: Weak<AppWindow>,
+        id: i64,
+    ) -> AppResult<()> {
+        albums_ui_mod::refresh_detail(state, view, weak, id).await
+    }
+
+    fn restore(ui: &AppWindow, state: &AppState, view: &Arc<Self>, id: i64) {
+        albums_ui_mod::restore_detail(ui, state, view, id);
     }
 }

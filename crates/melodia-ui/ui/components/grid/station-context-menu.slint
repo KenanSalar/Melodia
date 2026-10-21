@@ -25,6 +25,7 @@ export component StationContextMenu inherits Rectangle {
     // Multi mode needs this card selected *and* more than one selected, so a right-click on an
     // unselected card acts on that card alone.
     out property <bool> multi-active: root.card-selected && root.selection-count > 1;
+    out property <bool> is-open: pop.is-open;
 
     property <int> multi-count: root.selection-count;
     property <bool> kept: root.list != Radio.tab-browse;

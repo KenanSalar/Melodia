@@ -2,11 +2,7 @@
 //!
 //! Every page that mounts a `TabBar` persists which tab was showing, so each needs the
 //! same read-side clamp; the component's source-level invariants are pinned here too, no
-//! host owning the file. The grid-bearing pages also share the count sentinel and the
-//! signature below — both are about a *tab* rather than what one contains, which is what
-//! makes them generic over each host's own tab enum.
-
-use std::hash::{DefaultHasher, Hash, Hasher};
+//! host owning the file. The grid-bearing pages also share the count sentinel below.
 
 /// What a curated page's card / track counts hold before anything is fetched, and again
 /// after a section leave empties the models they number.
@@ -32,18 +28,6 @@ const _: () = assert!(
 /// nothing.
 pub(crate) fn clamp_tab(tab: i32, tab_count: i32) -> i32 {
     tab.clamp(0, (tab_count - 1).max(0))
-}
-
-/// Fold the mounted tab and the column count into a grid's content hash. Both shape what
-/// is on screen independently of the data — a tab switch fills one model and empties the
-/// other, a column change re-chunks the same cards — so leaving either out skips the apply
-/// that most needed to run. `content` is the caller's own per-tab hash.
-pub(crate) fn grid_signature<T: Hash>(tab: T, columns: i32, content: u64) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    tab.hash(&mut hasher);
-    columns.hash(&mut hasher);
-    content.hash(&mut hasher);
-    hasher.finish()
 }
 
 #[cfg(test)]

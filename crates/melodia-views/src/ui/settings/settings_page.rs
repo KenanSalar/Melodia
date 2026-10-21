@@ -10,11 +10,11 @@ use slint::ComponentHandle;
 
 use crate::ui::callbacks::index_persist::IndexPersist;
 use crate::ui::nav_transition;
-use crate::ui::row_match::{self, Needle};
 use crate::ui::tab_bar::clamp_tab;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{AppWindow, Nav, NavEnterFrom, SettingsPage};
 
 /// This page's `Nav.selected-index`, spelled once in Rust. The map itself is `globals/nav.slint`'s.
@@ -122,14 +122,14 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     // expression routes its substring test through here — the same predicate the library
     // filter boxes run, so an ASCII query reaches the accented catalogue labels.
     //
-    // The fold is memoized against the raw needle because this is the one `row_match`
+    // The fold is memoized against the raw needle because this is the one `Needle`
     // caller that can't hold a folded shadow: `matches` is invoked per *field*, not per
     // pass, and the page has dozens of call sites live at once while searching.
     let folded: RefCell<(String, Needle)> = RefCell::new((String::new(), Needle::default()));
     page.on_matches(move |haystack, needle| {
         let mut memo = folded.borrow_mut();
         if memo.0 != needle.as_str() {
-            memo.1 = row_match::fold_needle(&needle);
+            memo.1 = fold_needle(&needle);
             memo.0 = needle.into();
         }
         memo.1.contains(&haystack)

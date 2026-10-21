@@ -1,12 +1,7 @@
-//! The Playlists grid's filter + sort pass — the last of the four entity
-//! grids to get one. Same three cases its siblings pin, since all four run
-//! the identical `row_match::Needle::contains` walk over a single name.
-//!
-//! Plus the four things drag-to-reorder needs to stay alive, none of which any
-//! other pin can see go missing.
+//! What drag-to-reorder and the row menu's removal need to stay alive, none of
+//! which any other pin can see go missing.
 
 use super::detail::{POSITION_FIELD, is_manual_order};
-use super::*;
 use melodia_testkit::code_tokens;
 
 const DRAGGABLE_LIST: &str =
@@ -16,76 +11,7 @@ const DETAIL_VIEW: &str =
     include_str!("../../../../../melodia-ui/ui/views/my-library/playlist-detail.slint");
 const SHARED_DETAIL_WIRING: &str = include_str!("../../callbacks/track_detail.rs");
 const DETAIL: &str = include_str!("../detail.rs");
-
-/// Minimal `PlaylistStats` builder — only the fields the grid filter / sort
-/// read matter. Regular playlist, so `smart_criteria` never parses.
-fn playlist(id: i64, name: &str, track_count: i32, updated_at: &str) -> PlaylistStats {
-    PlaylistStats {
-        id,
-        name: name.to_owned(),
-        description: None,
-        thumbnail_path: None,
-        is_smart: false,
-        smart_criteria: None,
-        created_at: "2026-01-01T00:00:00Z".to_owned(),
-        updated_at: updated_at.to_owned(),
-        custom_thumbnail: false,
-        track_count,
-        total_duration_ms: 0,
-    }
-}
-
-fn names(data: &GridData, indices: &[usize]) -> Vec<String> {
-    indices.iter().map(|&i| data.playlists[i].name.clone()).collect()
-}
-
-#[test]
-fn compute_indices_with_empty_filter_keeps_all_playlists() {
-    let data = GridData::new(vec![
-        playlist(1, "Alpha", 1, "2026-01-02T00:00:00Z"),
-        playlist(2, "Bravo", 1, "2026-01-01T00:00:00Z"),
-    ]);
-    let idx = compute_indices(&data, "name", "asc", "");
-    assert_eq!(names(&data, &idx), ["Alpha", "Bravo"]);
-}
-
-#[test]
-fn compute_indices_filter_matches_name_case_insensitively() {
-    let data = GridData::new(vec![
-        playlist(1, "Late Night Drive", 1, "2026-01-03T00:00:00Z"),
-        playlist(2, "Night Shift", 1, "2026-01-02T00:00:00Z"),
-        playlist(3, "Morning Coffee", 1, "2026-01-01T00:00:00Z"),
-    ]);
-    let by_name = compute_indices(&data, "name", "asc", "NIGHT");
-    assert_eq!(names(&data, &by_name), ["Late Night Drive", "Night Shift"]);
-}
-
-#[test]
-fn compute_indices_filter_ignores_accents_the_way_the_search_view_does() {
-    // A playlist name is whatever the user typed, so it carries whatever
-    // their keyboard makes easy — and the query later may not.
-    let data = GridData::new(vec![
-        playlist(1, "Café Sessions", 1, "2026-01-02T00:00:00Z"),
-        playlist(2, "Morning Coffee", 1, "2026-01-01T00:00:00Z"),
-    ]);
-    let by_name = compute_indices(&data, "name", "asc", "cafe");
-    assert_eq!(names(&data, &by_name), ["Café Sessions"]);
-}
-
-#[test]
-fn compute_indices_default_sort_is_most_recently_updated_first() {
-    // `playlist_stats` already returns `updated_at DESC`, so the default arm
-    // re-derives that order rather than leaving whatever the filter produced.
-    let data = GridData::new(vec![
-        playlist(1, "Oldest", 1, "2026-01-01T00:00:00Z"),
-        playlist(2, "Newest", 1, "2026-03-01T00:00:00Z"),
-        playlist(3, "Middle", 1, "2026-02-01T00:00:00Z"),
-    ]);
-    let desc = compute_indices(&data, "updated", "desc", "");
-    assert_eq!(names(&data, &desc), ["Newest", "Middle", "Oldest"]);
-    let asc = compute_indices(&data, "updated", "asc", "");
-    assert_eq!(names(&data, &asc), ["Oldest", "Middle", "Newest"]);
-}
+const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
 
 /// A row drag and the list's own drag-pan are one gesture, and whichever element
 /// owns it the other gets nothing: a pan intercepts the row's grab mid-drag, so
@@ -114,8 +40,8 @@ fn every_draggable_list_opts_out_of_drag_panning() {
 }
 
 /// All four terms, since each fails differently and only the first is obvious.
-/// `sort_playlist_tracks` reverses on `"desc"`, and the drag writes display
-/// indices straight into `position_order`, so a reversed position sort lands
+/// A descending position sort shows the playlist reversed, and the drag moves
+/// display indices straight in the keyset, so a reversed position sort lands
 /// every drop at the mirrored slot; a filter makes those indices name a
 /// different track entirely; and a smart playlist has no curated order to
 /// reorder into. Dropping one of the last three costs no wrong write —
@@ -159,9 +85,9 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 }
 
 /// `is_manual_order` answers two of `reorder-enabled`'s terms; the filter is the
-/// third the drag depends on, and the one that fails silently — filtered,
-/// `tracks` is a subset of `position_order`, so a display index is still in
-/// range and the DB write lands on a different track than the one dragged.
+/// third the drag depends on, and the one that fails silently — filtered, the
+/// list is a subset of the playlist, so a display index is still in range and
+/// the DB write lands on a different track than the one dragged.
 ///
 /// Scoped to the guard rather than searched for over the file, so a later site
 /// reading the same field elsewhere in `detail.rs` can't satisfy the assertion
@@ -172,15 +98,47 @@ fn the_sort_cycle_still_offers_a_way_back_to_the_curated_order() {
 #[test]
 fn the_optimistic_reorder_refuses_a_filtered_list() {
     let src = code_tokens(DETAIL);
-    let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
-    let guard = body.split_once("let saved =").map_or("", |(head, _)| head);
+    let guard = reorder_guard(&src);
     assert!(
         guard.contains("!is_manual_order(&field, &dir)"),
-        "the order half must be asked before the display indices reach `position_order`"
+        "the order half must be asked before the display indices reach the keyset"
     );
     assert!(
-        guard.contains("|| playlists_ui.detail.cache.is_filtered()"),
+        guard.contains("|| playlists_ui.detail.is_filtered()"),
         "so must the filter half — a filtered index is in range, so the write lands"
+    );
+}
+
+/// The two terms above read what the page asked for, which a list shows a load later, and an
+/// overtaken open leaves another playlist's rows up under this one's id. Only the list on show
+/// can say its indices are positions.
+#[test]
+fn the_optimistic_reorder_refuses_a_list_not_shown_in_the_playlists_own_order() {
+    let src = code_tokens(DETAIL);
+    assert!(
+        reorder_guard(&src).contains("|| !playlists_ui.detail.shows_own_order()"),
+        "the guard must ask the list on show, not only the sort and filter the page asked for"
+    );
+}
+
+/// `apply_optimistic_reorder` up to where the display indices reach the keyset.
+fn reorder_guard(src: &str) -> &str {
+    let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
+    body.split_once("let rows =").map_or("", |(head, _)| head)
+}
+
+/// The reload a removal brings prunes nothing under a filter, so the removal drops its own rows
+/// and their picks, past the write's early return so a failed write leaves both alone.
+#[test]
+fn a_removal_drops_its_rows_and_their_picks_once_the_write_lands() {
+    let src = code_tokens(DETAIL_CALLBACKS);
+    let after_write = src
+        .split_once("fn wire_remove_track(")
+        .and_then(|(_, body)| body.split_once("remove_tracks_from_playlist_batch("))
+        .map_or("", |(_, rest)| rest);
+    assert!(
+        after_write.contains("remove_rows(&*pu, id_vec);"),
+        "left to the reload, a filtered removal keeps its picks out of sight"
     );
 }
 

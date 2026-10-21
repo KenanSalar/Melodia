@@ -59,7 +59,10 @@ const SEEDS: [(&str, &str, &str, &str); 5] = [
 /// The launch's seed and the first enter's resume, shared by the four My Library details.
 const RESTORE: &str = include_str!("../track_detail/restore.rs");
 
-/// The four My Library tabs' section gates.
+/// The one section gate the four My Library grid tabs share.
+const GRID_TAB: &str = include_str!("../callbacks/grid_tab.rs");
+
+/// The four tabs' own halves of it.
 const LIFECYCLES: [(&str, &str); 4] = [
     ("albums", include_str!("../albums/callbacks/lifecycle.rs")),
     ("artists", include_str!("../artists/callbacks/lifecycle.rs")),
@@ -213,13 +216,23 @@ fn the_first_enter_reopens_what_the_launch_parked() {
 /// A gate's enter arm is the tab's first enter; in the leave arm the parked reopen would land on a
 /// tab the user just left.
 #[test]
-fn every_gate_resumes_on_its_enter_arm() {
+fn the_shared_gate_resumes_on_its_enter_arm() {
+    let gate = strip_line_comments(GRID_TAB);
+
+    let enter = block_after(&gate, "if active {");
+
+    assert!(enter.contains("restore::resume_deferred("), "the shared enter arm: {enter}");
+}
+
+/// A tab wired around the shared gate has no enter arm to resume on, so its parked detail never
+/// comes back.
+#[test]
+fn every_grid_tab_wires_through_the_shared_gate() {
     for (view, lifecycle) in LIFECYCLES {
-        let lifecycle = strip_line_comments(lifecycle);
-
-        let enter = block_after(&lifecycle, "if active {");
-
-        assert!(enter.contains("restore::resume_deferred("), "{view}'s enter arm: {enter}");
+        assert!(
+            strip_line_comments(lifecycle).contains("grid_tab::wire("),
+            "{view} must wire its section gate through `grid_tab`"
+        );
     }
 }
 

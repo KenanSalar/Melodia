@@ -10,11 +10,13 @@ use crate::database::queries::fixtures::{
 use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::smart_criteria::{
-    FIELDS, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
-    ops_for,
+    Draw, FIELDS, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria,
+    SmartLimit, ops_for,
 };
 use melodia_core::entities::track::TrackListRow;
+use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder, TrackSortField};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 
 /// RFC-3339 timestamp `n` days before now — for staging `last_played`.
 fn days_ago(n: i64) -> String {
@@ -78,8 +80,21 @@ fn ids(rows: &[TrackListRow]) -> HashSet<i64> {
     rows.iter().map(|r| r.id).collect()
 }
 
+/// What a smart playlist's page lists under `c`, in its own order: the criteria stored as a
+/// playlist, its keyset, then the rows behind it.
 async fn resolve(db: &DbPool, c: &SmartCriteria) -> Result<Vec<TrackListRow>, AppError> {
-    queries::smart_playlist::get_smart_playlist_tracks(db, c).await
+    let criteria = c.to_json().map_err(|e| AppError::io("serialize smart_criteria", e))?;
+    let playlist =
+        queries::playlist::create_smart_playlist(db, "Resolved", None, &criteria).await?;
+    let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
+    let ids = queries::track::track_ids(
+        db,
+        TrackListScope::Playlist(playlist.id, Draw::default()),
+        own_order,
+        &Needle::default(),
+    )
+    .await?;
+    queries::track::get_track_list_rows_by_ids(db, &ids).await
 }
 
 #[tokio::test]
@@ -738,12 +753,12 @@ async fn an_exported_row_carries_what_its_entry_is_written_from() -> Result<(), 
     Ok(())
 }
 
-/// The card menu's batch actions resolve a smart playlist through the id projection rather than
-/// the row one, so the two have to answer identically. Order and cap are the halves a narrowed
-/// projection can lose in silence, and a different order means the same playlist queues one way
-/// from its page and another from the card beside it.
+/// The card menu's batch actions resolve a smart playlist through the id projection and its page
+/// through the keyset, so the two have to answer identically. Order and cap are the halves either
+/// can lose in silence, and a different order means the same playlist queues one way from its page
+/// and another from the card beside it.
 #[tokio::test]
-async fn the_id_projection_answers_in_the_row_projection_s_order() -> Result<(), AppError> {
+async fn the_id_projection_answers_in_the_page_s_order() -> Result<(), AppError> {
     let s = seed().await?;
     let c = SmartCriteria {
         rules: vec![Rule {
@@ -759,7 +774,7 @@ async fn the_id_projection_answers_in_the_row_projection_s_order() -> Result<(),
     let ids = queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?;
 
     assert_eq!(ids, rows.iter().map(|r| r.id).collect::<Vec<i64>>());
-    assert_eq!(ids, [s.t1, s.t3], "the cap and the order are both the row query's");
+    assert_eq!(ids, [s.t1, s.t3], "the cap and the order are both the page's");
     Ok(())
 }
 
@@ -771,5 +786,92 @@ async fn an_unmatched_rule_set_resolves_to_no_ids() -> Result<(), AppError> {
     let c = one(RuleField::Title, RuleOp::Is, Some(RuleValue::Text("Nothing".to_owned())));
 
     assert!(queries::smart_playlist::get_smart_playlist_track_ids(&s.db, &c).await?.is_empty());
+    Ok(())
+}
+
+// --- ties under a cap ---
+
+/// Four tracks equal on every column a cap orders by, in insertion order, so which of them a cap
+/// keeps is the tie-break's answer alone.
+async fn tied_seed() -> Result<(DbPool, [i64; 4]), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let ids = [
+        insert_test_track(&db, "/music/1.mp3", "One", "Artist", "Album", "Rock").await?,
+        insert_test_track(&db, "/music/2.mp3", "Two", "Artist", "Album", "Rock").await?,
+        insert_test_track(&db, "/music/3.mp3", "Three", "Artist", "Album", "Rock").await?,
+        insert_test_track(&db, "/music/4.mp3", "Four", "Artist", "Album", "Rock").await?,
+    ];
+    sqlx::query("UPDATE tracks SET date_added = ?, play_count = 3, last_played = ?, rating = 4")
+        .bind("2026-01-01T00:00:00+00:00")
+        .bind(days_ago(1))
+        .execute(db.write())
+        .await?;
+    Ok((db, ids))
+}
+
+fn capped(order: LimitOrder, rules: Vec<Rule>) -> SmartCriteria {
+    SmartCriteria { rules, limit: Some(SmartLimit { count: 2, order }), ..SmartCriteria::default() }
+}
+
+async fn listed_ids(db: &DbPool, c: &SmartCriteria) -> Result<Vec<i64>, AppError> {
+    Ok(resolve(db, c).await?.iter().map(|r| r.id).collect())
+}
+
+/// A cap falling inside a run of equal values keeps the tracks the id picks. Each direction is the
+/// one the order's unfiltered plan reaches tied rows in on its own, so a playlist with no rules
+/// keeps the tracks it held.
+#[tokio::test]
+async fn a_cap_inside_a_tie_keeps_the_tracks_the_id_picks() -> Result<(), AppError> {
+    let (db, [first, second, third, fourth]) = tied_seed().await?;
+    let cases = [
+        (LimitOrder::DateAddedDesc, [fourth, third]),
+        (LimitOrder::DateAddedAsc, [first, second]),
+        (LimitOrder::PlayCountDesc, [first, second]),
+        (LimitOrder::PlayCountAsc, [first, second]),
+        (LimitOrder::LastPlayedDesc, [first, second]),
+        (LimitOrder::LastPlayedAsc, [first, second]),
+        (LimitOrder::RatingDesc, [fourth, third]),
+    ];
+
+    for (order, expected) in cases {
+        assert_eq!(listed_ids(&db, &capped(order, Vec::new())).await?, expected, "{order:?}");
+    }
+    Ok(())
+}
+
+/// A rule a partial index can answer changes the plan, and with it the order `SQLite` reaches tied
+/// rows in: walking `idx_tracks_play_count` or `idx_tracks_last_played` backwards hands back the
+/// highest ids first, where the unfiltered sort hands back the lowest. The cap keeps the same
+/// tracks either way.
+#[tokio::test]
+async fn a_rule_that_changes_the_plan_leaves_a_tied_cap_on_the_same_tracks() -> Result<(), AppError>
+{
+    let (db, [first, second, ..]) = tied_seed().await?;
+    let played =
+        Rule { field: RuleField::PlayCount, op: RuleOp::Gt, value: Some(RuleValue::Number(0.0)) };
+    let recent =
+        Rule { field: RuleField::LastPlayed, op: RuleOp::InLast, value: Some(RuleValue::Days(30)) };
+    let cases = [(LimitOrder::PlayCountDesc, played), (LimitOrder::LastPlayedDesc, recent)];
+
+    for (order, rule) in cases {
+        assert_eq!(
+            listed_ids(&db, &capped(order, vec![rule])).await?,
+            [first, second],
+            "{order:?}"
+        );
+    }
+    Ok(())
+}
+
+/// Tracks sharing a title share a sort key, so the uncapped list's order between them is the id's.
+#[tokio::test]
+async fn an_uncapped_list_orders_a_shared_sort_key_by_id() -> Result<(), AppError> {
+    let db = DbPool::test_pool().await?;
+    queries::folder::insert_folder(&db, "/music", true).await?;
+    let first = insert_test_track(&db, "/music/a.mp3", "Same", "Artist", "Album", "Rock").await?;
+    let second = insert_test_track(&db, "/music/b.mp3", "Same", "Artist", "Album", "Rock").await?;
+
+    assert_eq!(listed_ids(&db, &SmartCriteria::default()).await?, [first, second]);
     Ok(())
 }

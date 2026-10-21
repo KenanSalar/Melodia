@@ -1,13 +1,15 @@
 //! `Artists.*` grid callbacks: lazy cover lookup, re-chunk on column
-//! count, client-side filter / sort, and the open-artist drill-in.
+//! count, the filter and the sort, and the open-artist drill-in.
 
 use std::sync::Arc;
 
 use slint::{ComponentHandle, SharedString};
 
+use crate::ui::artists::grid::ArtistsGrid;
 use crate::ui::artists::{self as artists_ui_mod, ArtistsUi};
 use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{next_sort, persist_view_sort, persisted_sort};
+use crate::ui::card_grid;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::services::view_state::ViewStateData;
@@ -37,20 +39,23 @@ pub(super) fn wire(
         .on_request_cover(|path, _generation| crate::ui::grid_prewarm::grid_cover(path.as_str()));
 
     {
-        let au = artists_ui.clone();
         let weak = weak.clone();
-        artists.on_columns_changed(move |_cols| {
+        artists.on_columns_changed(move |cols| {
             let Some(ui) = weak.upgrade() else { return };
-            artists_ui_mod::rebuild_grid(&ui, &au);
+            card_grid::set_columns::<ArtistsGrid>(&ui, cols);
         });
     }
 
+    // A hidden grid reloads under the filter on its enter instead.
     {
+        let s = state.clone();
         let au = artists_ui.clone();
         let weak = weak.clone();
         artists.on_apply_filter(move |_text| {
             let Some(ui) = weak.upgrade() else { return };
-            artists_ui_mod::rebuild_grid(&ui, &au);
+            if au.section_active() {
+                card_grid::requery::<ArtistsGrid>(&ui, &s, &au);
+            }
         });
     }
 
@@ -65,7 +70,9 @@ pub(super) fn wire(
                 next_sort(g.get_sort_field().as_str(), g.get_sort_dir().as_str(), &field);
             g.set_sort_field(SharedString::from(new_field.as_str()));
             g.set_sort_dir(SharedString::from(new_dir.as_str()));
-            artists_ui_mod::rebuild_grid(&ui, &au);
+            if au.section_active() {
+                card_grid::requery::<ArtistsGrid>(&ui, &s, &au);
+            }
             persist_view_sort(&s, view_id::ARTISTS, new_field, new_dir);
         });
     }

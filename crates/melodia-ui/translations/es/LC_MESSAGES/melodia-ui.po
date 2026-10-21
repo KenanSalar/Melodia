@@ -211,6 +211,10 @@ msgid "Clear"
 msgstr "Limpiar"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "None of the tracks these rules match have artwork."
+msgstr "Ninguna de las pistas que coinciden con estas reglas tiene imagen."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "Add tracks to this playlist to pick artwork."
 msgstr "Añade pistas a esta lista para elegir una imagen."
 
@@ -2532,11 +2536,6 @@ msgstr "Melodia es gratuito y de código abierto. El apoyo ayuda a que siga adel
 #: ui/views/settings/about-section.slint
 msgid "License"
 msgstr "Licencia"
-
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr "Apóyame en Ko-fi"
 
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"

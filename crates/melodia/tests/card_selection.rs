@@ -11,20 +11,22 @@ use melodia_testkit::{
     globals_declaring, stripped_sources,
 };
 
-/// The seven section leaves that hand the shared card selection back. **An equality, not a
-/// floor**: one slice quietly dropping its `clear()` is the regression, and a floor cannot see it.
-/// Browse and Tracks are deliberately absent, each keeping its row model across the leave and
-/// clearing its own `selected-ids` instead. Radio keeps its rows too, but its station cards pick
-/// in `CardSelection`, so its leave owes the clear.
-const CARD_SELECTION_LEAVES: [&str; 7] = [
-    "albums/callbacks/lifecycle.rs",
-    "artists/callbacks/lifecycle.rs",
+/// The section leaves that hand the shared card selection back, the four My Library grid tabs
+/// through the one closure `grid_tab` binds for them. **An equality, not a floor**: one leave
+/// quietly dropping its `clear()` is the regression, and a floor cannot see it. Browse and Tracks
+/// are deliberately absent, each keeping its row model across the leave and clearing its own
+/// `selected-ids` instead. Radio keeps its rows too, but its station cards pick in
+/// `CardSelection`, so its leave owes the clear.
+const CARD_SELECTION_LEAVES: [&str; 4] = [
+    "callbacks/grid_tab.rs",
     "favorites/callbacks/lifecycle.rs",
-    "genres/callbacks/lifecycle.rs",
-    "playlists/callbacks/lifecycle.rs",
     "radio/callbacks/lifecycle.rs",
     "recently_played/callbacks/lifecycle.rs",
 ];
+
+/// What opens a section gate's closure: the generated accessor, or `GridTab`'s, which a grid tab
+/// forwards to the accessor. The `::` is what skips the trait's own declaration.
+const GATE_OPENERS: [&str; 2] = ["on_section_active_changed(", "::bind_section_active_changed("];
 
 /// Every `.slint` file that may name `CardSelection` at all: the global, the one cell that derives
 /// a scope's answers, the Escape dispatcher, and the root's import plus export list.
@@ -119,12 +121,11 @@ fn every_section_leave_hands_its_card_selection_back() {
     let mut clearing: BTreeSet<&str> = BTreeSet::new();
 
     for (path, src) in &sources {
-        if !src.contains("on_section_active_changed(") {
+        let Some(opener) = GATE_OPENERS.into_iter().find(|opener| src.contains(opener)) else {
             continue;
-        }
+        };
         gates += 1;
-        if inside_block_after(src, "on_section_active_changed(", "CardSelection>().invoke_clear()")
-        {
+        if inside_block_after(src, opener, "CardSelection>().invoke_clear()") {
             clearing.insert(path.as_str());
         }
     }

@@ -6,8 +6,8 @@ import { CardCell } from "card-cell.slint";
 import { CardFavoriteButton } from "card-favorite-button.slint";
 
 // Virtualized card grid over `EntityStripRow`, the vertical counterpart to
-// `HorizontalCardStrip`. Rust chunks the flat list into rows of `columns` cards, so the inner
-// `ListView` virtualizes by row.
+// `HorizontalCardStrip`. Rust hands it rows of `columns` cards, so the inner `ListView`
+// virtualizes by row.
 //
 // That is why a strip and a grid aren't one component: a strip walks its rows in a plain `for`,
 // affordable for a capped carousel and not for an uncapped page, where every card would be built
@@ -114,6 +114,7 @@ export component EntityCardGrid inherits Rectangle {
                         selection-live: cell.selection-live;
                         select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
                         context-requested(x, y) => { cell.open-menu(x, y); }
+                        menu-open: cell.menu-open;
                         overlay-hovered: fav.has-hover;
                     }
 

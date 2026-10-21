@@ -22,7 +22,7 @@ export global Queue {
     in property <int> selected-count: 0;
     // The same selection as a batch payload for the row context menu, **deduped by track id and
     // in display order**. Deliberately not `selected-count`'s length: a queue may hold one track
-    // twice and the shadow keys selection by id, so selecting either instance marks both — an
+    // twice and picks are by track, so selecting either instance marks both — an
     // undeduped list would add that track to a playlist twice. The menu counts rows and acts on
     // ids, which is why both properties exist.
     in property <[int]> selected-ids;
@@ -42,15 +42,15 @@ export global Queue {
     // borrows what the row tier already holds, so a cover the track lists draw is one buffer.
     // **`generation` does two jobs**: reading it makes the binding depend on the counter, a `pure`
     // callback's result being cached until a dependency is dirtied; its *value* is whether the tier
-    // is warm. The sheet can't prewarm-then-set, its rows having to land synchronously for the
-    // slide-up to have text on frame one — so at 0 the lookup is cache-only. Closing rewinds to 0.
+    // is warm. The sheet can't prewarm-then-set, its rows landing before the prewarm does, so at 0
+    // the lookup is cache-only. Closing rewinds to 0.
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 
     // Fires on pointer-up only once the drag passed the 4 px click threshold.
     callback reorder(int /*from*/, int /*to*/);
     callback remove(int /*play_order_index*/);
-    // Reads the `selected` bit off the Rust-side shadow for the batch indices.
+    // Removes every row Rust holds picked, both copies of a track queued twice.
     callback remove-selected();
     callback skip-to(int /*play_order_index*/);
     callback clear-queue();
@@ -69,10 +69,11 @@ export global Queue {
     callback clear-selection();
     callback select-all();
 
-    // The `Tracks.toggle-row-favorite` contract, batch-shaped like it: Rust persists, flips the
-    // in-memory bit on every matching queue track and on `current_track`, then re-emits. The
-    // hover heart passes one id; the context menu passes the selection.
+    // The track lists' contracts, batch-shaped like them: Rust persists, then patches the rows
+    // holding those ids. The hover heart and the star strip pass one id; the context menu passes
+    // the selection.
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
+    callback set-row-rating([int] /*track_ids*/, int /*rating*/);
 
     callback open-changed(bool);
 }

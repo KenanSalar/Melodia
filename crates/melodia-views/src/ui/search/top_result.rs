@@ -7,11 +7,11 @@
 //! `.slint`, so the text is resolved on the UI thread by
 //! `apply::write_top_result`.
 
-use crate::ui::row_match::fold_needle;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::genre::GenreStats;
 use melodia_core::entities::search::SearchResults;
+use melodia_core::utils::needle::fold_needle;
 
 /// Top Result discriminator. Matches the `top-kind` string slot in the
 /// Slint `Search` global ("album" / "artist" / "genre" / ""). A genre
@@ -73,7 +73,7 @@ pub struct TopResult {
 /// original bands already encode.
 ///
 /// **Both comparisons fold case *and accents*, through
-/// [`crate::ui::row_match`].** Every other surface on this page reaches the
+/// `Needle`.** Every other surface on this page reaches the
 /// results through FTS, whose `remove_diacritics 2` tokenizer folds both — so
 /// a plain `to_lowercase` here meant `bjork` filled the Songs list and both
 /// strips while the card silently fell through to rule 7.

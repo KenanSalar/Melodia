@@ -3,10 +3,10 @@
 
 use std::collections::{HashMap, HashSet};
 
-use sqlx::{AssertSqlSafe, SqliteConnection};
+use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite, SqliteConnection};
 
-use super::columns;
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query};
+use super::{columns, fetch_packed_ids, json_array};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, select_in_id_order};
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -76,7 +76,7 @@ pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>,
 }
 
 /// How many tracks the library holds. The diagnostics bundle reports it as library shape — a bug
-/// that only shows up at scale is a different bug.
+/// that only shows up at scale is a different bug — and a filtered Songs list as its total.
 pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     Ok(count)
@@ -89,16 +89,39 @@ pub async fn get_track_summaries_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TrackSummary>, AppError> {
-    let cols = columns::TRACK_SUMMARY.joined();
-    let summaries: Vec<track::TrackSummary> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
+    rows_in_id_order(db, columns::TRACK_SUMMARY.joined(), ids, |t: &track::TrackSummary| t.id).await
+}
 
-    let mut map: HashMap<i64, track::TrackSummary> = HashMap::with_capacity(summaries.len());
-    map.extend(summaries.into_iter().map(|t| (t.id, t)));
+/// Fetch `TrackListRow` projections by IDs, preserving the input order: the page of rows a list
+/// holding only its ids draws.
+pub async fn get_track_list_rows_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<track::TrackListRow>, AppError> {
+    rows_in_id_order(db, columns::TRACK_LIST.joined(), ids, |t: &track::TrackListRow| t.id).await
+}
 
-    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+/// Fetch `MostPlayedFavorite` cards by IDs, preserving the input order, for a Most Played grid
+/// holding only its ranked ids.
+pub async fn get_most_played_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
+    rows_in_id_order(db, columns::MOST_PLAYED.joined(), ids, |t: &track::MostPlayedFavorite| t.id)
+        .await
+}
+
+/// `cols` of every track in `ids`, in the order `ids` asked for.
+async fn rows_in_id_order<T>(
+    db: &DbPool,
+    cols: &str,
+    ids: &[i64],
+    id_of: impl Fn(&T) -> i64,
+) -> Result<Vec<T>, AppError>
+where
+    T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
+{
+    select_in_id_order(db, &format!("SELECT {cols} FROM tracks"), ids, id_of).await
 }
 
 /// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information dialog, preserving the
@@ -114,16 +137,7 @@ pub async fn get_tag_edit_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TagEditRow>, AppError> {
-    let cols = columns::TRACK_TAG_EDIT.joined();
-    let rows: Vec<track::TagEditRow> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-
-    let mut map: HashMap<i64, track::TagEditRow> = HashMap::with_capacity(rows.len());
-    map.extend(rows.into_iter().map(|t| (t.id, t)));
-
-    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+    rows_in_id_order(db, columns::TRACK_TAG_EDIT.joined(), ids, |t: &track::TagEditRow| t.id).await
 }
 
 /// Fetch `(id, file_path)` pairs by IDs, preserving the input order. The tag writer marks each
@@ -133,15 +147,7 @@ pub async fn get_track_paths_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<(i64, String)>, AppError> {
-    let rows: Vec<(i64, String)> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT id, file_path FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-
-    let mut map: HashMap<i64, String> = HashMap::with_capacity(rows.len());
-    map.extend(rows);
-
-    Ok(ids.iter().filter_map(|id| map.remove(id).map(|path| (*id, path))).collect())
+    rows_in_id_order(db, "id, file_path", ids, |&(id, _): &(i64, String)| id).await
 }
 
 /// Fetch `TrackLinks` projections by IDs, preserving the input order. The queue sheet renders from
@@ -151,25 +157,19 @@ pub async fn get_track_links_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<track::TrackLinks>, AppError> {
-    let cols = columns::TRACK_LINKS.joined();
-    let links: Vec<track::TrackLinks> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-
-    let mut map: HashMap<i64, track::TrackLinks> = HashMap::with_capacity(links.len());
-    map.extend(links.into_iter().map(|l| (l.id, l)));
-
-    Ok(ids.iter().filter_map(|id| map.remove(id)).collect())
+    rows_in_id_order(db, columns::TRACK_LINKS.joined(), ids, |l: &track::TrackLinks| l.id).await
 }
 
-/// The subset of `ids` that still has a row.
-pub async fn existing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
-    let rows: Vec<(i64,)> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT id FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(rows.into_iter().map(|(id,)| id).collect())
+/// The ids in `ids` that no longer have a row. Asked this way round because the answer is almost
+/// always none: asking which survive hands a queue the size of the library back a row per track.
+pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppError> {
+    if ids.is_empty() {
+        return Ok(HashSet::new());
+    }
+    let mut qb = QueryBuilder::<Sqlite>::new("SELECT group_concat(j.value, ',') FROM json_each(");
+    qb.push_bind(json_array(ids))
+        .push(") j WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id = j.value)");
+    Ok(fetch_packed_ids(db, qb).await?.into_iter().collect())
 }
 
 /// Look up track IDs by file paths. Returns a map from `file_path` → track ID.

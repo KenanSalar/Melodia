@@ -50,7 +50,7 @@ pub(super) fn wire(
     hydrate_sort_from_settings(view_state, fav_ui, &ui.global::<Favorites>());
 
     covers::wire(ui);
-    hero::wire(ui, state, fav_ui);
+    hero::wire(ui, state);
     subviews::wire(ui, state, fav_ui, artists_ui);
     tracklist::wire(ui, state, fav_ui);
     lifecycle::wire(ui, state, fav_ui);
@@ -74,11 +74,9 @@ fn hydrate_sort_from_settings(
         favorites_ui_mod::set_sort(fav_ui, sort.field.clone(), sort.dir);
     }
 
-    // Sorts an empty cache — the fetch hasn't run yet — but going through the
-    // one setter is what keeps "shadow and rows move together" unconditional.
+    // The global is the grid's whole sort state, its loads reading it back.
     if let Some(sort) = persisted_sort(view_state, view_id::FAVORITE_ARTISTS) {
         g.set_artist_sort_field(SharedString::from(sort.field.as_str()));
         g.set_artist_sort_dir(SharedString::from(sort.dir.as_str()));
-        favorites_ui_mod::set_artist_sort(fav_ui, sort.field.clone(), sort.dir);
     }
 }

@@ -1,7 +1,9 @@
-//! Library edits reaching the track summaries the live state caches, so a retag or a star lands on
-//! Now Playing and in the queue without a restart.
+//! Library edits reaching the track records the live state holds, so a retag or a star lands on
+//! Now Playing and on the next track without a restart.
+//!
+//! Two paths: a list-row edit patches the playing track at once, and the app's window task
+//! re-reads every record the state holds after each queue move and library change.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::{PlayerAction, PlayerStateHandle, lock_state, with_state_emit};
@@ -38,55 +40,75 @@ pub fn sync_current_track_if_in(
     });
 }
 
-/// True when `current_track` or any `queue.tracks` entry has an id the
-/// predicate accepts. Takes the state lock briefly and reads nothing else, so a
-/// caller can cheaply decide whether a resync (and the DB refetch that feeds
-/// it) is worth doing before paying for it — the membership gate
-/// [`sync_track_summaries`] uses internally, hoisted so the fetch itself can be
-/// skipped on the common "edited tracks aren't playing/queued" path.
-pub fn any_tracked(state: &PlayerStateHandle, pred: impl Fn(i64) -> bool) -> bool {
-    let g = lock_state(state);
-    g.current_track().is_some_and(|t| pred(t.id)) || g.queue.tracks.iter().any(|t| pred(t.id))
+/// Which records [`window_wanted`] asks for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowFill {
+    /// The ones the window lacks, after the queue moved.
+    Missing,
+    /// Every one the state holds, after a library change that may have rewritten any of them.
+    All,
 }
 
-/// Overwrite every queued / currently-playing [`TrackSummary`] whose id appears
-/// in `fresh` with its fresh copy. Sibling of [`sync_current_track_if_in`], but
-/// also walks `queue.tracks` — a tag edit changes exactly the title/artist/album
-/// fields the Queue Sheet and Up Next render, not just the Now-Playing bar.
+/// The ids whose records the window task should fetch for the queue as it stands.
 ///
-/// Pre-checks membership outside the emit lock so an edit touching nothing
-/// queued/playing skips the publish entirely (the common case).
-pub fn sync_track_summaries<S: std::hash::BuildHasher>(
+/// `All` adds the playing track where the window doesn't name it, a queue cleared under a playing
+/// track leaving it on the deck with no slot.
+pub fn window_wanted(state: &PlayerStateHandle, fill: WindowFill) -> Vec<i64> {
+    let s = lock_state(state);
+    let wanted = s.queue.window_ids();
+    match fill {
+        WindowFill::Missing => s.window.missing(&wanted),
+        WindowFill::All => {
+            let mut ids = wanted;
+            if let Some(playing) = s.current_track().map(|track| track.id)
+                && !ids.contains(&playing)
+            {
+                ids.push(playing);
+            }
+            ids
+        }
+    }
+}
+
+/// Seat what the window task fetched: the records the window still wants, against the queue as it
+/// stands now rather than when the fetch was asked for, and the playing track's own where it
+/// changed.
+///
+/// The window is no view model's, so filling it publishes nothing. Only a changed playing track
+/// emits, which is how a retag reaches Now Playing.
+pub fn seat_window_records(
     state: &PlayerStateHandle,
     sinks: &PlayerSinks,
-    fresh: &HashMap<i64, TrackSummary, S>,
+    fresh: Vec<TrackSummary>,
 ) {
-    if !any_tracked(state, |id| fresh.contains_key(&id)) {
+    let fresh: Vec<Arc<TrackSummary>> = fresh.into_iter().map(Arc::new).collect();
+    let playing_moved = {
+        let mut s = lock_state(state);
+        let wanted = s.queue.window_ids();
+        s.window.seat(&wanted, fresh.iter().cloned());
+        s.current_track().and_then(|track| {
+            fresh
+                .iter()
+                .find(|&record| record.id == track.id && differs_beyond_position(record, track))
+                .cloned()
+        })
+    };
+    let Some(record) = playing_moved else {
         return;
-    }
-
+    };
     with_state_emit(state, sinks, |s| {
+        // Re-checked under the emit lock: the track may have changed since the read above.
         if let Some(track) = s.current_track_mut()
-            && let Some(f) = fresh.get(&track.id)
+            && track.id == record.id
         {
-            *Arc::make_mut(track) = f.clone();
+            *track = record;
         }
-
-        let mut queue_touched = false;
-        for track in &mut s.queue.tracks {
-            if let Some(f) = fresh.get(&track.id) {
-                *Arc::make_mut(track) = f.clone();
-                queue_touched = true;
-            }
-        }
-        // A field-level `Arc::make_mut` doesn't advance the queue version on its
-        // own, but `with_state_emit` only republishes the queue view-model when
-        // the version changed — so bump it whenever a queued entry was patched,
-        // or the Queue Sheet / Up Next would keep the stale summary.
-        if queue_touched {
-            s.queue.version += 1;
-        }
-
         Vec::<PlayerAction>::new()
     });
+}
+
+/// Whether `fresh` reads differently from `held` in anything but `last_position`, which the
+/// periodic save rewrites as the track plays and so says nothing about an edit.
+fn differs_beyond_position(fresh: &TrackSummary, held: &TrackSummary) -> bool {
+    TrackSummary { last_position: held.last_position, ..fresh.clone() } != *held
 }

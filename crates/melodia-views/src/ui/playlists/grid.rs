@@ -1,231 +1,168 @@
-//! Playlists grid: DB fetch + filter / sort / chunk / prewarm logic. Mirrors
-//! `albums::grid`.
+//! The Playlists grid as a [`CardGrid`], and what every playlist write refreshes.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, ModelRc, VecModel, Weak};
+use slint::{ComponentHandle, ModelRc, Weak};
 
-use super::state::{GRID_PREWARM_AHEAD, GridData, GridIndexCache};
 use super::{PlaylistsUi, to_slint_playlist_row};
-use crate::ui::grid_prewarm;
-use crate::ui::grid_rows::chunk_rows;
-use crate::ui::row_match;
-use crate::ui::util::len_as_i32;
+use crate::ui::card_grid::{self, Card, CardGrid, GridLoads};
+use crate::ui::paged_rows::grid::PagedGrid;
+use crate::ui::paged_rows::unfiltered_total;
+use crate::ui::track_detail::TrackDetail;
+use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
-use melodia_core::error::AppResult;
+use melodia_core::entities::playlist::PlaylistStats;
+use melodia_core::error::{AppResult, describe};
+use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{
     AppWindow, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow, Playlists,
 };
 
-/// How much smart-playlist counting a grid refresh pays for.
-#[derive(Clone, Copy)]
-enum RefreshKind {
-    /// Recount every smart playlist — structure may have changed (scan,
-    /// watcher, CRUD, criteria edit).
-    Full,
-    /// A play-count-flush-driven refresh: recount only smart playlists whose
-    /// criteria depend on play stats; carry the rest forward from the previous
-    /// grid data (a criteria edit bumps `library_changed`, forcing a `Full`
-    /// refresh, so the prior stat-dependence flags stay valid here).
-    StatsOnly,
-}
+// As visible as `GridTab`, whose `Grid` it is; the private `grid` module keeps it in the slice.
+pub(in crate::ui) struct PlaylistsGrid;
 
-/// Fetch the playlist list from the DB, prewarm cover thumbnails, then
-/// rebuild the grid model on the UI thread. The flat `Playlists.rows`
-/// model (used by the Add-to-Playlist submenu) is repopulated in the same
-/// UI hop so the submenu stays in sync with the grid.
-pub async fn fetch_grid(
-    state: &AppState,
-    playlists_ui: &Arc<PlaylistsUi>,
-    weak: Weak<AppWindow>,
-) -> AppResult<()> {
-    fetch_grid_inner(state, playlists_ui, weak, RefreshKind::Full).await
-}
+impl CardGrid for PlaylistsGrid {
+    type Row = UiPlaylistGridRow;
+    type Raw = PlaylistStats;
+    type Query = Needle;
+    type Facts = i32;
+    type Handle = PlaylistsUi;
 
-/// `stats_changed`-driven grid refresh: recount only the stat-dependent smart
-/// playlists (others keep their previous counts, which a play stat change can't
-/// move). Gated upstream by `has_stat_dependent_smart_playlists`.
-pub async fn fetch_grid_stats(
-    state: &AppState,
-    playlists_ui: &Arc<PlaylistsUi>,
-    weak: Weak<AppWindow>,
-) -> AppResult<()> {
-    fetch_grid_inner(state, playlists_ui, weak, RefreshKind::StatsOnly).await
-}
+    const LABEL: &'static str = "Playlists.grid-rows";
 
-async fn fetch_grid_inner(
-    state: &AppState,
-    playlists_ui: &Arc<PlaylistsUi>,
-    weak: Weak<AppWindow>,
-    kind: RefreshKind,
-) -> AppResult<()> {
-    let mut playlists = library::playlists::get_playlists(&state.db).await?;
-
-    // On a `StatsOnly` refresh only the stat-dependent smart rows can have moved, so the rest
-    // carry their previous counts forward from the prior grid data (one `Arc` clone up front).
-    //
-    // Transient-staleness note: `prev` is snapshotted and the counts computed
-    // before `section.gate()` is acquired, so the gate serializes only the final
-    // write (against the wipe and sibling writes), not the snapshot→compute→write
-    // as a whole — the final write is therefore last-writer-wins. If a
-    // `library_changed`-driven `Full` refresh (e.g. a scan that changed a
-    // stat-*independent* smart playlist's membership) commits while this
-    // `StatsOnly` pass is mid-flight, the count carried forward for that row can
-    // be briefly stale. Display-only, and it self-heals on the next `Full`
-    // refresh (next `library_changed` / section re-enter).
-    let prev = playlists_ui.grid.data.lock().clone();
-    let mut to_count: Vec<usize> = Vec::new();
-    for (i, p) in playlists.iter_mut().enumerate() {
-        if !p.is_smart {
-            continue;
-        }
-        let recount = match kind {
-            RefreshKind::Full => true,
-            RefreshKind::StatsOnly => match prev.row_stats_by_id(p.id) {
-                Some((count, duration, stat_dependent)) if !stat_dependent => {
-                    // A play stat change can't move this row — carry forward.
-                    p.track_count = count;
-                    p.total_duration_ms = duration;
-                    false
-                }
-                // Stat-dependent, or absent from the previous data → recount.
-                _ => true,
-            },
-        };
-        if recount {
-            to_count.push(i);
-        }
+    fn loads(handle: &PlaylistsUi) -> &GridLoads {
+        &handle.grid
     }
 
-    library::smart_playlists::recount(&state.db, &mut playlists, &to_count).await;
-
-    let data = Arc::new(GridData::new(playlists));
-    {
-        let _gate = playlists_ui.section.gate();
-        *playlists_ui.grid.data.lock() = data;
-        *playlists_ui.grid.index_cache.lock() = None;
+    fn model(ui: &AppWindow) -> ModelRc<UiPlaylistGridRow> {
+        ui.global::<Playlists>().get_grid_rows()
     }
 
-    grid_prewarm::prewarm_off_thread(playlists_ui, PlaylistsUi::prewarm_visible_covers).await;
+    fn columns(ui: &AppWindow) -> i32 {
+        ui.global::<Playlists>().get_columns()
+    }
 
-    let playlists_ui = playlists_ui.clone();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        rebuild_grid(&ui, &playlists_ui);
-        update_flat_rows(&ui, &playlists_ui);
+    fn query(ui: &AppWindow, _: &PlaylistsUi) -> Needle {
+        fold_needle(&ui.global::<Playlists>().get_filter())
+    }
+
+    async fn keyset(state: AppState, needle: Needle) -> AppResult<(Vec<i64>, i32)> {
+        let ids = library::keyset::playlist_ids(&state.db, &needle).await?;
+        let total =
+            unfiltered_total(&ids, &needle, library::keyset::playlist_count(&state.db)).await?;
+        Ok((ids, total))
+    }
+
+    async fn rows(state: AppState, ids: Vec<i64>) -> AppResult<Vec<PlaylistStats>> {
+        library::keyset::playlists_by_ids(&state.db, &ids).await
+    }
+
+    fn card(_: &AppWindow, playlist: &PlaylistStats) -> (i64, Card<Self>) {
+        (playlist.id, to_slint_playlist_row(playlist))
+    }
+
+    fn artwork(playlist: &PlaylistStats) -> Option<&str> {
+        playlist.thumbnail_path.as_deref()
+    }
+
+    // The unfiltered total is the count the row menus read too, free here.
+    fn show_facts(ui: &AppWindow, _: &PlaylistsUi, total: i32, _: usize) {
+        let g = ui.global::<Playlists>();
+        g.set_total_count(total);
+        g.set_count(total);
+    }
+
+    fn covers_on_screen(handle: &PlaylistsUi) -> bool {
+        handle.section.grid_on_screen(|| handle.detail_open())
+    }
+}
+
+/// Reload the grid: what a launch, a re-entry and a library change ask for. UI thread.
+pub fn reload_grid(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
+    card_grid::reload::<PlaylistsGrid>(ui, state, playlists_ui);
+}
+
+/// Refresh what a playlist write moves: the count every row menu's Add to Playlist reads, whatever
+/// tab is up, and the grid where it is on screen. Every write, the smart ones included, comes
+/// through here. Any thread.
+pub fn refresh_after_write(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: &Weak<AppWindow>,
+) {
+    refresh_count(state, weak);
+    if !playlists_ui.section_active() {
+        playlists_ui.mark_dirty();
+        return;
+    }
+    let s = state.clone();
+    let pu = Arc::clone(playlists_ui);
+    let _ = weak.upgrade_in_event_loop(move |ui| reload_grid(&ui, &s, &pu));
+}
+
+/// Write how many playlists there are into `Playlists.count`. Any thread.
+pub fn refresh_count(state: &AppState, weak: &Weak<AppWindow>) {
+    let db = state.db.clone();
+    let weak = weak.clone();
+    state.runtime.spawn(async move {
+        match library::keyset::playlist_count(&db).await {
+            Ok(count) => {
+                let count = clamp_i64_to_i32(count);
+                let _ = weak.upgrade_in_event_loop(move |ui| {
+                    ui.global::<Playlists>().set_count(count);
+                });
+            }
+            Err(e) => log::warn!("playlists: count failed: {}", describe(&e)),
+        }
     });
-    Ok(())
 }
 
-/// Rebuild the grid model from the cached grid data — no DB hit. Same
-/// memoization contract as `albums::grid::rebuild_grid`.
-pub fn rebuild_grid(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
-    let g = ui.global::<Playlists>();
-    let sort_field = g.get_sort_field().to_string();
-    let sort_dir = g.get_sort_dir().to_string();
-    let filter = g.get_filter().to_string();
-    let columns = g.get_columns().max(1);
+/// The card on screen for playlist `id`, for a callback acting on one. None where it hasn't
+/// landed yet.
+pub(in crate::ui) fn shown_card(ui: &AppWindow, id: i64) -> Option<UiPlaylistRow> {
+    let model = PlaylistsGrid::model(ui);
+    PagedGrid::installed(&model, PlaylistsGrid::LABEL)?.cached(id)
+}
 
-    let data = playlists_ui.grid.data.lock().clone();
-
-    let rows = {
-        let mut cache = playlists_ui.grid.index_cache.lock();
-        let stale =
-            !matches!(cache.as_ref(), Some(c) if c.matches(&filter, &sort_field, &sort_dir));
-        if stale {
-            let indices = compute_indices(&data, &sort_field, &sort_dir, &filter);
-            *cache = Some(GridIndexCache { filter, sort_field, sort_dir, indices });
+/// The play-count flush's refresh: only a smart playlist whose rules read play stats can have
+/// moved, so its card alone is read again, and the open detail where it is one. With none held,
+/// nothing is. UI thread.
+pub(in crate::ui) fn refresh_play_stats(
+    ui: &AppWindow,
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+) {
+    let model = PlaylistsGrid::model(ui);
+    let Some(grid) = PagedGrid::installed(&model, PlaylistsGrid::LABEL) else {
+        return;
+    };
+    let open_id = playlists_ui.detail_playlist_id();
+    let mut held = grid.ids().to_vec();
+    if open_id >= 0 {
+        held.push(open_id);
+    }
+    let s = state.clone();
+    let pu = Arc::clone(playlists_ui);
+    let weak = ui.as_weak();
+    state.runtime.spawn(async move {
+        let moved = match library::smart_playlists::reading_play_stats(&s.db, &held).await {
+            Ok(moved) => moved,
+            Err(e) => {
+                log::warn!("playlists::stats_changed: {}", describe(&e));
+                return;
+            }
+        };
+        if moved.is_empty() {
+            return;
         }
-        let indices = cache.as_ref().map_or(&[][..], |c| c.indices.as_slice());
-        chunk_indices(&data, indices, columns)
-    };
-    let total = len_as_i32(data.playlists.len());
-
-    g.set_total_count(total);
-    let model = g.get_grid_rows();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiPlaylistGridRow>>() {
-        vm.set_vec(rows);
-    } else {
-        g.set_grid_rows(ModelRc::new(VecModel::from(rows)));
-    }
-}
-
-/// Rebuild the flat `Playlists.rows` model (used by the per-track
-/// Add-to-Playlist submenu). Always in `updated_at DESC` order so the
-/// submenu lists most-recently-touched playlists first, regardless of
-/// the grid's current sort selection.
-pub fn update_flat_rows(ui: &AppWindow, playlists_ui: &PlaylistsUi) {
-    let g = ui.global::<Playlists>();
-    let data = playlists_ui.grid.data.lock().clone();
-    let rows: Vec<UiPlaylistRow> = data.playlists.iter().map(to_slint_playlist_row).collect();
-    let model = g.get_rows();
-    if let Some(vm) = model.as_any().downcast_ref::<VecModel<UiPlaylistRow>>() {
-        vm.set_vec(rows);
-    } else {
-        g.set_rows(ModelRc::new(VecModel::from(rows)));
-    }
-}
-
-pub(super) fn compute_indices(
-    data: &GridData,
-    sort_field: &str,
-    sort_dir: &str,
-    filter: &str,
-) -> Vec<usize> {
-    let needle = row_match::fold_needle(filter);
-    let mut indices: Vec<usize> = if needle.is_empty() {
-        (0..data.playlists.len()).collect()
-    } else {
-        data.playlists
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| needle.contains(&p.name))
-            .map(|(i, _)| i)
-            .collect()
-    };
-    sort_playlist_indices(&mut indices, data, sort_field, sort_dir);
-    indices
-}
-
-fn chunk_indices(data: &GridData, indices: &[usize], columns: i32) -> Vec<UiPlaylistGridRow> {
-    chunk_rows(
-        indices,
-        columns,
-        |&i| to_slint_playlist_row(&data.playlists[i]),
-        |playlists| UiPlaylistGridRow { playlists },
-    )
-}
-
-/// Sort `indices` into the grid data by the chosen field. `playlist_stats`
-/// is fetched in `updated_at DESC` order, so any other sort must be done
-/// in memory.
-///
-/// Supported fields:
-/// * `"name"` — case-insensitive, with name as the deterministic tiebreaker.
-/// * `"track_count"` — primary key; name (asc) as a stable tiebreaker.
-/// * `"updated"` (default) — `updated_at` RFC3339 string (lex = chrono).
-fn sort_playlist_indices(indices: &mut [usize], data: &GridData, field: &str, dir: &str) {
-    match field {
-        "track_count" => indices
-            .sort_by_cached_key(|&i| (data.playlists[i].track_count, data.keys[i].name_lc.clone())),
-        "name" => indices.sort_by_cached_key(|&i| data.keys[i].name_lc.clone()),
-        // "updated" and anything unrecognised fall through to the default
-        // (most-recently-updated first).
-        _ => indices.sort_by_cached_key(|&i| data.playlists[i].updated_at.clone()),
-    }
-    if dir == "desc" {
-        indices.reverse();
-    }
-}
-
-/// The first `GRID_PREWARM_AHEAD` distinct thumbnail paths in display order —
-/// the covers first on screen, which `PlaylistsUi::prewarm_visible_covers`
-/// warms. The cap counts kept *paths*, so a run of thumbnail-less playlists is
-/// walked past rather than spending the budget on them.
-pub(super) fn first_screenful_paths(data: &GridData) -> Vec<PathBuf> {
-    grid_prewarm::unique_artwork_paths(
-        data.playlists.iter().map(|p| p.thumbnail_path.as_deref()),
-        GRID_PREWARM_AHEAD,
-    )
+        if moved.contains(&open_id)
+            && let Err(e) = super::refresh_detail(&s, &pu, weak.clone(), open_id).await
+        {
+            log::warn!("playlists::stats_changed_detail: {}", describe(&e));
+        }
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            card_grid::refresh_cards::<PlaylistsGrid>(&ui, &s, &pu, moved);
+        });
+    });
 }

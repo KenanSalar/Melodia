@@ -67,11 +67,11 @@ pub async fn track_ids_for(
 /// and is resolved from its stored criteria, one query each. Only that last part is per-entity,
 /// a stored rule set being a query the database cannot union across playlists.
 ///
-/// **Those go out together**, `library::smart_playlists::recount`'s shape: WAL lets them run side
-/// by side across the read pool, where awaiting each in turn put a grid's worth of them in series
-/// on the click path. **Each asks for ids rather than rows**, since running concurrently means
-/// the peak is every set at once: through the list projection that peak is every matched row of
-/// every playlist in the selection, for an answer that is one column of it.
+/// **Those go out together**, `library::smart_playlists::fill_from_rules`'s shape: WAL lets them
+/// run side by side across the read pool, where awaiting each in turn put a grid's worth of them
+/// in series on the click path. **Each asks for ids rather than rows**, since running
+/// concurrently means the peak is every set at once: through the list projection that peak is
+/// every matched row of every playlist in the selection, for an answer that is one column of it.
 ///
 /// An id the split read didn't return was deleted between the grid painting and the click, and a
 /// rule set the evaluator can't answer is logged where it fails. Either way the rest of the

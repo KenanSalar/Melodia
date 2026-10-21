@@ -73,13 +73,17 @@ export global Dialog {
     in-out property <string> input-text;
     in-out property <string> input-text-2;
 
-    // The mosaic picker's 1–4 picked paths. **Empty means "clear artwork"** — revert to
-    // the auto first-track thumbnail — which is why `mosaic-touched` exists below.
+    // The mosaic picker's 1–4 picked paths. **Empty means "clear artwork"**, leaving the
+    // playlist with no artwork at all, which is why `mosaic-touched` exists below.
     in-out property <[string]> mosaic-selection;
 
-    // The candidate pool: the playlist's own track artwork, deduplicated in playlist
-    // order. Rust fills it before opening; the picker iterates it for the tile grid.
+    // The candidate pool: the covers of the tracks the playlist's page lists, deduplicated in
+    // that order. Rust fills it before opening; the picker iterates it for the tile grid.
     in-out property <[string]> mosaic-candidates;
+
+    // Picks the empty pool's hint: a smart playlist's tracks come from its rules, so telling the
+    // user to add some is advice they can't take.
+    in-out property <bool> mosaic-smart;
 
     // The playlist's currently saved artwork, so the picker opens on what it looks like *now*
     // rather than an empty placeholder. From `PlaylistDetail.cover` when that view is open, else a
@@ -162,7 +166,7 @@ export global Dialog {
         } else if (root.kind == DialogKind.delete-playlists) {
             Playlists.delete-playlists(root.pending-card-ids);
         } else if (root.kind == DialogKind.edit-playlist-artwork) {
-            // Empty and touched reverts to auto; empty and untouched is a no-op.
+            // Empty and touched clears the artwork; empty and untouched is a no-op.
             if (root.mosaic-selection.length == 0) {
                 if (root.mosaic-touched) {
                     Playlists.clear-artwork(root.target-id);
@@ -225,6 +229,7 @@ export global Dialog {
         root.mosaic-selection = [];
         root.mosaic-candidates = [];
         root.mosaic-touched = false;
+        root.mosaic-smart = false;
         root.pending-track-ids = [];
         root.pending-card-ids = [];
         // Clearing the rows unmounts the picker's `for` loop, dropping every row's cover binding
@@ -451,7 +456,7 @@ export global Dialog {
     // otherwise be spelled in Rust, where `@tr` can't reach them.
     //
     // Doesn't set `open`: Rust fills the pool and the preview before it raises the card.
-    public function prepare-edit-artwork(id: int) {
+    public function prepare-edit-artwork(id: int, is-smart: bool) {
         root.claim-request();
         root.title = @tr("Edit Artwork");
         root.message = "";
@@ -463,6 +468,7 @@ export global Dialog {
         root.input-text = "";
         root.mosaic-selection = [];
         root.mosaic-touched = false;
+        root.mosaic-smart = is-smart;
     }
 
     // The export picker's chrome, for the Playlists tab's overflow. One caller, so it is here

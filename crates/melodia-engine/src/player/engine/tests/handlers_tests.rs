@@ -18,6 +18,7 @@ use melodia_core::error::AppError;
 use melodia_playback::player::playback::crossfade::CrossfadeSettings;
 use melodia_playback::player::playback::decks::DECK_COUNT;
 use melodia_playback::player::playback::output::mixer;
+use melodia_playback::player::playback::replaygain::TrackReplayGain;
 use melodia_testkit::ASSETS_DIR;
 
 fn track(id: i64, album: Option<&str>) -> Arc<TrackSummary> {
@@ -42,10 +43,17 @@ fn track(id: i64, album: Option<&str>) -> Arc<TrackSummary> {
     })
 }
 
+/// Queue `tracks` with their records in the window, as the window task leaves them.
+fn queue_up(state: &mut PlayerState, tracks: Vec<Arc<TrackSummary>>) {
+    let ids: Vec<i64> = tracks.iter().map(|track| track.id).collect();
+    state.queue.add_tracks(&ids);
+    state.window.seat(&ids, tracks);
+}
+
 /// Two queued tracks on different albums, playing the first, gapless on.
 fn playing_state() -> PlayerState {
     let mut state = PlayerState::default();
-    state.queue.add_tracks(vec![track(1, Some("A")), track(2, Some("B"))]);
+    queue_up(&mut state, vec![track(1, Some("A")), track(2, Some("B"))]);
     state.queue.current_index = Some(0);
     state.status = PlaybackStatus::Playing;
     state.source = Some(PlaybackSource::Track(track(1, Some("A"))));
@@ -99,7 +107,7 @@ fn tick(state: &mut PlayerState, backend: BackendSnapshot) -> Option<PlayingTick
 
 /// The path of the track this tick staged behind the current one, if any.
 fn staged(t: Option<&PlayingTick>) -> Option<&str> {
-    t.and_then(|t| t.late_preload.as_ref()).map(|(path, _rg)| path.as_str())
+    t.and_then(|t| t.late_preload.as_ref()).map(|track| track.file_path.as_str())
 }
 
 /// The fade length this tick decided on, if it decided to crossfade.
@@ -294,7 +302,7 @@ fn a_same_album_transition_stays_gapless() {
     // Both tracks on album "A": the default `skip_same_album` keeps
     // continuous-mix albums seamless.
     state.queue.clear();
-    state.queue.add_tracks(vec![track(1, Some("A")), track(2, Some("A"))]);
+    queue_up(&mut state, vec![track(1, Some("A")), track(2, Some("A"))]);
     state.queue.current_index = Some(0);
 
     let t = tick(&mut state, backend(at_remaining(1_000), crossfade_on(2_000)));
@@ -337,7 +345,7 @@ fn a_staged_gapless_source_blocks_the_crossfade() {
 fn the_last_track_neither_crossfades_nor_preloads() {
     let mut state = playing_state();
     state.queue.clear();
-    state.queue.add_tracks(vec![track(1, Some("A"))]);
+    queue_up(&mut state, vec![track(1, Some("A"))]);
     state.queue.current_index = Some(0);
 
     let t = tick(&mut state, backend(at_remaining(1_000), crossfade_on(2_000)));
@@ -368,6 +376,21 @@ fn a_next_track_the_output_reopens_for_is_never_crossfaded_into() {
             (expected_fade, expected_staged),
             "{what}"
         );
+    }
+}
+
+/// A next whose record the window lacks is no next yet: neither the stage nor the fade can wait on
+/// a fetch, and the next poll asks again. Both rows sit inside their window.
+#[test]
+fn a_next_the_window_lacks_is_neither_staged_nor_faded_into() {
+    let rows = [("crossfade off", crossfade_off()), ("crossfade on", crossfade_on(2_000))];
+    for (what, xf) in rows {
+        let mut state = playing_state();
+        state.window.seat(&[1], std::iter::empty());
+
+        let t = tick(&mut state, backend(at_remaining(1_000), xf));
+
+        assert_eq!((fade_ms(t.as_ref()), staged(t.as_ref())), (None, None), "{what}");
     }
 }
 
@@ -500,7 +523,8 @@ fn seated(
     *lock_state(&handle) = state;
     let (view_model, published) = watch::channel(None);
     let (queue, _) = watch::channel(None);
-    let sinks = PlayerSinks { view_model, queue, media_controls: None };
+    let (awaited_start, _) = watch::channel(None);
+    let sinks = PlayerSinks { view_model, queue, media_controls: None, awaited_start };
     (handle, sinks, published)
 }
 

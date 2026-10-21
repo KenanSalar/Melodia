@@ -15,6 +15,7 @@ pub(in crate::ui) mod card_selection;
 mod clipboard;
 pub(in crate::ui) mod cross_tab_nav;
 mod dialog_closed;
+pub(in crate::ui) mod grid_tab;
 pub(in crate::ui) mod index_persist;
 mod library_settings;
 mod now_playing;
@@ -29,9 +30,10 @@ use rand::RngExt;
 use slint::{ComponentHandle, Model, ModelRc};
 
 use melodia_app::library;
-use melodia_app::services::settings::{SortDir, ViewSort};
+use melodia_app::services::settings::ViewSort;
 use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
+use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, Nav, Player};
 
@@ -175,9 +177,9 @@ pub(super) fn next_sort_with_natural(
     (natural.unwrap_or(clicked).to_owned(), SortDir::Asc)
 }
 
-/// Persist `view_id`'s sort into `views.json`, fire-and-forget: the in-memory re-sort
-/// already applied, so the only loss is across a restart. Shared by every
-/// `on_request_sort`.
+/// Persist `view_id`'s sort into `views.json`, fire-and-forget: the view has already
+/// asked for its rows in the new order, so the only loss is across a restart. Shared by
+/// every `on_request_sort`.
 pub(super) fn persist_view_sort(
     state: &AppState,
     view_id: &'static str,

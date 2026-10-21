@@ -9,7 +9,7 @@
 use std::sync::Arc;
 
 use crate::state::{AppState, Signal};
-use melodia_core::entities::{artist, track};
+use melodia_core::entities::track;
 use melodia_core::error::{AppError, describe};
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_engine::player::engine::event_sink::PlayerSinks;
@@ -194,24 +194,8 @@ fn provider_name(target: LoveTarget) -> &'static str {
     }
 }
 
-pub async fn get_favorite_tracks(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
-    queries::track::get_favorite_tracks_for_list(db).await
-}
-
 pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
     queries::track::get_favorite_stats(db).await
-}
-
-pub async fn get_favorite_artists(db: &DbPool) -> Result<Vec<artist::FavoriteArtist>, AppError> {
-    queries::artist::get_favorite_artists(db).await
-}
-
-/// Favorite tracks ranked by play count — the whole set, since the Most Played
-/// tab is a virtualized grid and has no reason to truncate.
-pub async fn get_most_played_favorites(
-    db: &DbPool,
-) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    queries::track::get_most_played_favorites(db).await
 }
 
 #[cfg(test)]

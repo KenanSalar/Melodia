@@ -8,35 +8,26 @@
 //! bound" guarantee the rest of the query layer gets from `AssertSqlSafe(sql) +
 //! .bind()`. No user string can reach the SQL text.
 
+use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
+
 use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
-use crate::database::queries::track::columns;
+use crate::database::queries::track::{columns, fetch_packed_ids};
 use melodia_core::entities::smart_criteria::{
-    LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
+    Draw, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
     ValueType, ops_for,
 };
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
-/// Resolve a smart playlist's current membership as list-view rows, in the
-/// criteria's order (and capped by its optional limit).
-pub async fn get_smart_playlist_tracks(
-    db: &DbPool,
-    criteria: &SmartCriteria,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let mut qb = membership_query(columns::TRACK_LIST.joined(), criteria);
-    let rows =
-        qb.build_query_as::<track::TrackListRow>().persistent(false).fetch_all(db.read()).await?;
-    Ok(rows)
-}
-
-/// [`get_smart_playlist_tracks`] as ids alone, for a caller that only needs the membership.
+/// A smart playlist's current membership as ids, in the criteria's order and under its optional
+/// cap.
 ///
 /// **Backs the card menu's batch actions**, which resolve a selection to track ids and act on
-/// those: going through the list projection there materialises every `TrackListRow` column only
-/// to read `id` off it. Same criteria, same order, same cap, so the ids arrive in the order the
-/// rows would have.
+/// those. The detail page lists the same membership through its keyset, which reads it off
+/// [`push_positioned_membership`], except under a random cap, where the page keeps its own
+/// [`pick_random`] and the two draw separately.
 pub async fn get_smart_playlist_track_ids(
     db: &DbPool,
     criteria: &SmartCriteria,
@@ -46,7 +37,7 @@ pub async fn get_smart_playlist_track_ids(
     Ok(ids)
 }
 
-/// [`get_smart_playlist_tracks`] as M3U export rows, in the same order and under the same cap.
+/// [`get_smart_playlist_track_ids`] as M3U export rows, in the same order and under the same cap.
 pub async fn get_smart_playlist_tracks_for_export(
     db: &DbPool,
     criteria: &SmartCriteria,
@@ -62,21 +53,95 @@ pub async fn get_smart_playlist_tracks_for_export(
 
 /// `SELECT columns FROM tracks` over the criteria's membership, ordered and capped.
 fn membership_query(columns: &str, criteria: &SmartCriteria) -> QueryBuilder<Sqlite> {
-    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {columns} FROM tracks"));
-    push_where(&mut qb, criteria);
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(format!("SELECT {columns}"));
+    push_membership(&mut qb, criteria);
+    qb
+}
+
+/// The membership as `(id, position)` rows, `position` numbering the criteria's own order, for a
+/// query that sorts or filters the set further and still needs that order to fall back on.
+pub(crate) fn push_positioned_membership(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+    qb.push("SELECT id, ROW_NUMBER() OVER (")
+        .push(order_by_fragment(criteria.limit.as_ref()))
+        .push(") AS position");
+    push_membership(qb, criteria);
+}
+
+/// The membership's ids in no order, for a query that only counts or groups them: numbering an
+/// uncapped set sorts every match. A cap keeps its order, that being what picks the ids it keeps.
+pub(crate) fn push_member_ids(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+    qb.push("SELECT id FROM tracks");
+    push_where(qb, criteria);
     if let Some(limit) = &criteria.limit {
-        push_order_and_limit(&mut qb, limit);
+        push_order_and_limit(qb, limit);
+    }
+}
+
+/// The first cover an uncapped playlist's rules reach in its natural order, the one its automatic
+/// thumbnail shows. Ordered as `idx_tracks_sort_key` is, so a plan can walk it and stop at the
+/// first match carrying one, where numbering the set sorts every match.
+pub(crate) async fn first_cover(
+    db: &DbPool,
+    criteria: &SmartCriteria,
+) -> Result<Option<String>, AppError> {
+    let mut qb: QueryBuilder<Sqlite> = QueryBuilder::new(
+        "SELECT artwork_path FROM tracks WHERE artwork_path IS NOT NULL AND artwork_path != ''",
+    );
+    push_and_rules(&mut qb, criteria);
+    qb.push(order_by_fragment(None)).push(" LIMIT 1");
+    let cover = qb.build_query_scalar().persistent(false).fetch_optional(db.read()).await?;
+    Ok(cover)
+}
+
+/// The `count` tracks `draw` picks from everything the rules match, in pick order: a
+/// [`LimitOrder::Random`] cap a page reads more than once.
+///
+/// In Rust because `RANDOM()` takes no seed, so every query a page runs would draw again. Ranked
+/// by a hash of the draw and the id rather than shuffled, so a track entering or leaving the
+/// matches moves only itself and the rest of the pick holds across a reload.
+pub(crate) async fn pick_random(
+    db: &DbPool,
+    criteria: &SmartCriteria,
+    count: u32,
+    draw: Draw,
+) -> Result<Vec<i64>, AppError> {
+    let mut qb: QueryBuilder<Sqlite> =
+        QueryBuilder::new("SELECT group_concat(id, ',') FROM tracks");
+    push_where(&mut qb, criteria);
+    let matches = fetch_packed_ids(db, qb).await?;
+    Ok(pick(matches, count, draw))
+}
+
+/// The `count` of `matches` ranking lowest under `draw`, lowest first.
+fn pick(matches: Vec<i64>, count: u32, draw: Draw) -> Vec<i64> {
+    let hasher = BuildHasherDefault::<DefaultHasher>::default();
+    let mut ranked: Vec<(u64, i64)> =
+        matches.into_iter().map(|id| (hasher.hash_one((draw, id)), id)).collect();
+    let count = usize::try_from(count).unwrap_or(usize::MAX);
+    if count < ranked.len() {
+        ranked.select_nth_unstable(count);
+        ranked.truncate(count);
+    }
+    ranked.sort_unstable();
+    ranked.into_iter().map(|(_, id)| id).collect()
+}
+
+/// `FROM tracks` plus the criteria's `WHERE`, order and cap.
+fn push_membership(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+    qb.push(" FROM tracks");
+    push_where(qb, criteria);
+    if let Some(limit) = &criteria.limit {
+        push_order_and_limit(qb, limit);
     } else {
         // Unlimited: fall back to the natural display order.
         qb.push(order_by_fragment(None));
     }
-    qb
 }
 
 /// `(track_count, total_duration_ms)` for a smart playlist without projecting
-/// any track rows — backs the grid card and the hero's chips, which can't
-/// rely on the `playlist_items` triggers (a smart playlist has no junction
-/// rows). Respects the limit so a "top 25" playlist reports 25, not the full
+/// any track rows — backs the grid card and the rule editor's live count,
+/// which can't rely on the `playlist_items` triggers (a smart playlist has no
+/// junction rows). Respects the limit so a "top 25" playlist reports 25, not the full
 /// match count.
 pub async fn count_smart_playlist(
     db: &DbPool,
@@ -113,12 +178,32 @@ pub async fn count_smart_playlist(
 /// are silently skipped; an all-skipped rule set yields no `WHERE` (matches the
 /// whole library).
 fn push_where(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
-    let rules: Vec<&Rule> = criteria.rules.iter().filter(|r| rule_is_renderable(r)).collect();
+    let rules = renderable_rules(criteria);
     if rules.is_empty() {
         return;
     }
     qb.push(" WHERE ");
-    let sep = match criteria.match_mode {
+    push_rules(qb, &rules, criteria.match_mode);
+}
+
+/// [`push_where`]'s rules as ` AND (…)`, after a `WHERE` holding a condition of its own. Grouped
+/// whole, or an `Any` set's `OR` would bind that condition to its first rule alone.
+fn push_and_rules(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
+    let rules = renderable_rules(criteria);
+    if rules.is_empty() {
+        return;
+    }
+    qb.push(" AND (");
+    push_rules(qb, &rules, criteria.match_mode);
+    qb.push(")");
+}
+
+fn renderable_rules(criteria: &SmartCriteria) -> Vec<&Rule> {
+    criteria.rules.iter().filter(|r| rule_is_renderable(r)).collect()
+}
+
+fn push_rules(qb: &mut QueryBuilder<Sqlite>, rules: &[&Rule], match_mode: MatchMode) {
+    let sep = match match_mode {
         MatchMode::All => " AND ",
         MatchMode::Any => " OR ",
     };
@@ -430,10 +515,9 @@ fn field_source(field: RuleField) -> FieldSource {
     }
 }
 
-/// Append `ORDER BY … LIMIT ?` for a capped smart playlist. Shared by the row
-/// query and the count subquery (which then closes its own `)`); an *unlimited*
-/// query handles ordering itself — the row query needs a display order, the
-/// count query needs none.
+/// Append `ORDER BY … LIMIT ?` for a capped smart playlist, shared by the row query and the
+/// member ids. An uncapped query handles ordering itself, and the count subquery spells its own so
+/// it can leave a random order out.
 fn push_order_and_limit(qb: &mut QueryBuilder<Sqlite>, limit: &SmartLimit) {
     qb.push(order_by_fragment(Some(limit)));
     qb.push(" LIMIT ").push_bind(i64::from(limit.count));
@@ -443,17 +527,26 @@ fn push_order_and_limit(qb: &mut QueryBuilder<Sqlite>, limit: &SmartLimit) {
 /// A `&'static str` from an enum match — the selection order can't inject SQL.
 /// Lexical `TEXT` order over RFC-3339 `last_played`/`date_added` == chronological
 /// order (same invariant `get_recently_played` documents).
+///
+/// **Every arm ends in the id.** A cap falling inside a run of equal values (a scan stamps one
+/// `date_added` on its whole batch, and every unplayed track ties on play count) would otherwise
+/// keep whichever tied tracks the plan reaches first, and a rule bringing in a partial index, or
+/// the statistics `PRAGMA optimize` refreshes at close, can change the plan. Each direction is the
+/// one the arm's unfiltered plan already breaks ties in (an index walk carries the rowid with the
+/// column, a sort hands back the lowest ids first), so it is not a free choice: flipping one
+/// re-picks every playlist capped in that order, as borrowing `MOST_PLAYED_ORDER`'s extra keys for
+/// `PlayCountDesc` would.
 fn order_by_fragment(limit: Option<&SmartLimit>) -> &'static str {
     match limit.map(|l| l.order) {
-        Some(LimitOrder::DateAddedDesc) => " ORDER BY date_added DESC",
-        Some(LimitOrder::DateAddedAsc) => " ORDER BY date_added ASC",
-        Some(LimitOrder::PlayCountDesc) => " ORDER BY play_count DESC",
-        Some(LimitOrder::PlayCountAsc) => " ORDER BY play_count ASC",
-        Some(LimitOrder::LastPlayedDesc) => " ORDER BY last_played DESC",
-        Some(LimitOrder::LastPlayedAsc) => " ORDER BY last_played ASC",
-        Some(LimitOrder::RatingDesc) => " ORDER BY rating DESC",
+        Some(LimitOrder::DateAddedDesc) => " ORDER BY date_added DESC, id DESC",
+        Some(LimitOrder::DateAddedAsc) => " ORDER BY date_added ASC, id ASC",
+        Some(LimitOrder::PlayCountDesc) => " ORDER BY play_count DESC, id ASC",
+        Some(LimitOrder::PlayCountAsc) => " ORDER BY play_count ASC, id ASC",
+        Some(LimitOrder::LastPlayedDesc) => " ORDER BY last_played DESC, id ASC",
+        Some(LimitOrder::LastPlayedAsc) => " ORDER BY last_played ASC, id ASC",
+        Some(LimitOrder::RatingDesc) => " ORDER BY rating DESC, id DESC",
         Some(LimitOrder::Random) => " ORDER BY RANDOM()",
-        None => " ORDER BY sort_key COLLATE NOCASE ASC",
+        None => " ORDER BY sort_key COLLATE NOCASE ASC, id ASC",
     }
 }
 

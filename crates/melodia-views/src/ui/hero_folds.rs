@@ -1,20 +1,22 @@
 //! The pure folds a hero band's chips are built from.
 //!
 //! Split out of [`crate::ui::hero_chips`], which is the *channel*. Nothing here touches
-//! Slint or that record: each takes a slice and returns a `Copy` or a `String`, so the
-//! two halves share no state and the folds are testable without an `AppWindow`.
+//! Slint or that record: each takes what a query answered and returns a `Copy` or a
+//! `String`, so the two halves share no state and the folds are testable without an
+//! `AppWindow`.
 //!
-//! **These run on the worker that fetched the rows, never inside an
-//! `upgrade_in_event_loop`.** A broad genre's track list is the longest in the app and
-//! has no business being hashed on the UI thread — which is why the results are `Copy`
-//! and narrow, riding into the closure as finished values.
+//! **These run on the worker that fetched their input, never inside an
+//! `upgrade_in_event_loop`**, which is why the results are narrow and ride into the
+//! closure as finished values. A detail's spread is SQL's to count (`ScopeFacts`), its
+//! page holding no rows to fold.
 
 use std::collections::HashSet;
 
-use crate::ui::util::len_as_i32;
+use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::genre::GenreList;
-use melodia_core::entities::track::{MostPlayedFavorite, TrackListRow};
+use melodia_core::entities::track::TrackListRow;
+use melodia_core::entities::track_list::ScopeFacts;
 
 #[cfg(test)]
 #[path = "tests/hero_folds_tests.rs"]
@@ -30,20 +32,16 @@ pub struct HeroFold {
     pub albums: i32,
 }
 
-/// What the Most Played tab sums to — its own totals, never the Songs tab's. The query
-/// behind it is a strict subset, so borrowing the Songs duration would overstate it by
-/// every favourite never played.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
-pub struct MostPlayedTotals {
-    pub tracks: i32,
-    pub duration_ms: i64,
-    pub plays: i32,
+impl From<&ScopeFacts> for HeroFold {
+    fn from(facts: &ScopeFacts) -> Self {
+        Self { artists: clamp_i64_to_i32(facts.artists), albums: clamp_i64_to_i32(facts.albums) }
+    }
 }
 
-/// Count the distinct artists and albums a track list spans, keyed on ids rather than
-/// names: an `i64` hashes far cheaper over a list this size, and a track with no album
-/// belongs to none — so `None` is skipped rather than pooled into an "unknown" bucket
-/// that would read as one more album.
+/// Count the distinct artists and albums a held track list spans, the fold `ScopeFacts` answers in
+/// SQL for a list that holds only ids. Keyed on ids rather than names: an `i64` hashes far cheaper,
+/// and a track with no album belongs to none — so `None` is skipped rather than pooled into an
+/// "unknown" bucket that would read as one more album.
 pub fn fold_tracks(rows: &[TrackListRow]) -> HeroFold {
     let mut artists: HashSet<i64> = HashSet::new();
     let mut albums: HashSet<i64> = HashSet::new();
@@ -58,52 +56,44 @@ pub fn fold_tracks(rows: &[TrackListRow]) -> HeroFold {
     HeroFold { artists: len_as_i32(artists.len()), albums: len_as_i32(albums.len()) }
 }
 
-/// Sum the Most Played tab's own totals off its cached rows. One walk rather than two:
-/// Recently Played's copy of this list is uncapped and library-wide and a row is mostly
-/// `String`, so a `sum` per field is a second pass over more memory than fits a cache to
-/// reach two `Copy` fields inside it.
-pub fn fold_most_played(rows: &[MostPlayedFavorite]) -> MostPlayedTotals {
-    let (duration_ms, plays) = rows.iter().fold((0i64, 0i32), |(duration_ms, plays), row| {
-        (duration_ms + row.duration_ms, plays + row.play_count)
-    });
-    MostPlayedTotals { tracks: len_as_i32(rows.len()), duration_ms, plays }
-}
-
-/// The genre most of a track list is tagged with, or `None` when it is split evenly
+/// The genre most of a set of tracks is tagged with, or `None` when it is split evenly
 /// enough that naming one would misrepresent the rest. An album is usually
 /// single-genre, so this reads as "the album's genre" there; a compilation that
 /// genuinely spans several gets no chip rather than whichever won by a track.
+///
+/// `lines` is each rendered genre line with how many tracks carry it, commonest first, which is
+/// `queries::track::genre_lines`.
 ///
 /// **Tallied per genre, not per rendered line.** A row carries every genre it is tagged with in
 /// one string, so an album whose tracks are all `Rock` and half also `Metal` holds two distinct
 /// lines and no majority, where what every track shares is `Rock`. The denominator stays *tracks*,
 /// each contributing at most once to any one name, so the winner is a genre more than half the
-/// tagged tracks carry — several can be, and the first in tag order takes it.
-pub fn dominant_genre(rows: &[TrackListRow]) -> Option<String> {
+/// tagged tracks carry. Several can be, and the first in the commonest line's tag order takes it.
+pub fn dominant_genre(lines: &[(String, i64)]) -> Option<String> {
     /// Share of the tracks the winner has to hold to be worth stating.
-    const MAJORITY: usize = 2;
+    const MAJORITY: i64 = 2;
 
-    let mut tally: Vec<(&str, usize)> = Vec::new();
-    // Reused across rows, so the whole fold allocates once however long the list is.
-    let mut in_row: Vec<&str> = Vec::new();
-    let mut tagged = 0usize;
-    for line in rows.iter().filter_map(|r| r.genre.as_deref()) {
+    let mut tally: Vec<(&str, i64)> = Vec::new();
+    // Reused across lines, so the whole fold allocates once however many there are.
+    let mut in_line: Vec<&str> = Vec::new();
+    let mut tagged = 0i64;
+    for (line, tracks) in lines {
         // A line can spell one name twice: `names_in_line` splits a rendered column, and a genre
         // whose own name holds the separator comes back as two. The denominator is tracks.
-        in_row.clear();
+        in_line.clear();
         for name in GenreList::names_in_line(line) {
-            if !in_row.iter().any(|seen| seen.eq_ignore_ascii_case(name)) {
-                in_row.push(name);
+            if !in_line.iter().any(|seen| seen.eq_ignore_ascii_case(name)) {
+                in_line.push(name);
             }
         }
-        if in_row.is_empty() {
+        if in_line.is_empty() {
             continue;
         }
-        tagged += 1;
-        for &name in &in_row {
+        tagged += tracks;
+        for &name in &in_line {
             match tally.iter_mut().find(|(seen, _)| seen.eq_ignore_ascii_case(name)) {
-                Some((_, count)) => *count += 1,
-                None => tally.push((name, 1)),
+                Some((_, count)) => *count += tracks,
+                None => tally.push((name, *tracks)),
             }
         }
     }

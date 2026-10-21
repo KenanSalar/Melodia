@@ -5,8 +5,7 @@
 //! the list's own display order, so flipping the mode re-presents exactly what the
 //! `TrackList` was showing. `Browse.folders` and `Browse.rows` stay populated in
 //! both modes — the view's three empty states count them — and only `card-rows` is
-//! mode-gated: rows built for the surface that isn't mounted reach nothing (the
-//! `favorites::grids::apply::build_filtered_grids` precedent).
+//! mode-gated: rows built for the surface that isn't mounted reach nothing.
 //!
 //! Cards draw from `ui::grid_prewarm::tier()`, the one every card grid shares, never
 //! the row tier `BrowseUi::cover_thumbs` points at: the two hold buffers an order of
@@ -26,11 +25,6 @@ use melodia_core::entities::browse::{BrowseFile, BrowseFolder};
 use melodia_ui::{
     AppWindow, Browse, BrowseCardGridRow as UiBrowseCardGridRow, BrowseCardRow as UiBrowseCardRow,
 };
-
-/// How many leading cards' covers a fetch or a mode toggle prewarms before the
-/// grid paints. Roughly one screenful at any reasonable column count; everything
-/// past it decodes lazily on scroll-in through `request-card-cover`.
-pub(super) const GRID_PREWARM_AHEAD: usize = 24;
 
 /// Which presentation the Browse view is drawing.
 ///
@@ -132,7 +126,7 @@ pub fn rebuild_cards(ui: &AppWindow, browse_ui: &BrowseUi) {
 pub fn first_screenful_paths(files: &[BrowseFile]) -> Vec<PathBuf> {
     grid_prewarm::unique_artwork_paths(
         files.iter().map(|f| f.row.artwork_path.as_deref()),
-        GRID_PREWARM_AHEAD,
+        grid_prewarm::GRID_PREWARM_AHEAD,
     )
 }
 

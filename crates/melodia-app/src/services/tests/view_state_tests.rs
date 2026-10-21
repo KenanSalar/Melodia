@@ -1,12 +1,29 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
-use crate::services::settings::SortDir;
+use melodia_core::entities::track_list::SortDir;
 use melodia_core::error::AppError;
 
 use super::*;
 
 fn json_err(e: &serde_json::Error) -> AppError {
     AppError::Validation(format!("json error: {e}"))
+}
+
+/// Enough keys that a map saving in an order of its own rarely lands back on the same one.
+const SIX_VIEW_IDS: [&str; 6] =
+    ["tracks", "album_detail", "artist_detail", "genre_detail", "playlist_detail", "favorites"];
+
+/// Every map filled from [`SIX_VIEW_IDS`]. Converted from arrays rather than spelled as a
+/// `BTreeMap`, so the fixture builds whatever map type the fields hold.
+fn views_across_six_lists() -> ViewStateData {
+    let sort = ViewSort { field: "title".to_owned(), dir: SortDir::Desc };
+    ViewStateData {
+        view_columns: SIX_VIEW_IDS.map(|id| (id.to_owned(), vec!["title".to_owned()])).into(),
+        view_column_widths: SIX_VIEW_IDS.map(|id| (id.to_owned(), ColumnWidths::default())).into(),
+        view_sort: SIX_VIEW_IDS.map(|id| (id.to_owned(), sort.clone())).into(),
+        last_detail_ids: SIX_VIEW_IDS.map(|id| (id.to_owned(), 42)).into(),
+        ..ViewStateData::default()
+    }
 }
 
 #[test]
@@ -81,7 +98,7 @@ fn test_view_state_roundtrip() -> Result<(), AppError> {
         browse_view_mode: 1,
         last_nav_index: 5,
         artist_albums_collapsed: true,
-        last_detail_ids: HashMap::from([("album_detail".to_owned(), 42)]),
+        last_detail_ids: BTreeMap::from([("album_detail".to_owned(), 42)]),
         settings_category: 3,
         recently_played_tab: 1,
         my_library_tab: 2,
@@ -97,6 +114,25 @@ fn test_view_state_roundtrip() -> Result<(), AppError> {
     assert_eq!(back.settings_category, 3);
     assert_eq!(back.recently_played_tab, 1);
     assert_eq!(back.my_library_tab, 2);
+    Ok(())
+}
+
+/// Every quit rewrites `views.json`, so a quit that changed nothing has to leave it as it was.
+#[test]
+fn a_save_that_changes_nothing_leaves_views_json_as_it_was() -> Result<(), AppError> {
+    let tmp = tempfile::tempdir()?;
+    let paths = Paths::rooted_at(tmp.path().to_path_buf());
+    paths.create_dirs()?;
+    write_view_state(&paths, &views_across_six_lists())?;
+    let before = std::fs::read_to_string(&paths.view_state_path)?;
+
+    mutate_view_state(&paths, |_| {})?;
+
+    assert_eq!(
+        std::fs::read_to_string(&paths.view_state_path)?,
+        before,
+        "a save with nothing changed reordered the file"
+    );
     Ok(())
 }
 

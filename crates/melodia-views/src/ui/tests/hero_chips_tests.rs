@@ -3,12 +3,13 @@ use super::{
     favorites_chips, genre_chips, playlist_chips, recently_played_chips, should_clear,
 };
 use crate::ui::favorites::FavoritesTab;
-use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
+use crate::ui::hero_folds::HeroFold;
 use crate::ui::recently_played::RecentlyPlayedTab;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::genre::GenreStats;
 use melodia_core::entities::playlist::PlaylistStats;
+use melodia_core::entities::track_list::MostPlayedTotals;
 use melodia_testkit::{binding_value, block_body, code_tokens};
 use slint::SharedString;
 
@@ -620,62 +621,31 @@ fn no_hero_view_sizes_its_own_artwork_tile() {
     }
 }
 
-/// Favorites is assembled from three fetches and `kick_full_refresh` runs them
-/// concurrently, so no ordering can be assumed: each folds its own answer and
-/// republishes, which puts the fold and the republish in the same function as the fill.
-///
-/// The grid path alone doesn't cover it — `write_filtered_grids` publishes past a
-/// signature early-return, and `mounted_content` is a constant `0` on the Songs tab, so
-/// there that publish fires only on a column change.
+/// Favorites is assembled from three loads that land in no fixed order, so a load answering a
+/// fact the band states publishes it beside the store: a sibling that published first did so
+/// against the previous answer, and nothing else corrects it. The Songs tab's spread is
+/// `refresh_hero`'s, counted in SQL and published with its count.
 #[test]
-fn each_favorites_fetch_folds_and_republishes_what_it_feeds() {
-    // The fold call and the store are checked apart, not as one glued
-    // statement: the walk belongs on this worker but *outside* the section
-    // gate, so the two are deliberately separate statements and a pin that
-    // demanded them joined would fail the correct code. Nothing is lost by
-    // splitting them — a fold whose result never reaches the store is an unused
-    // binding, which `-D warnings` already refuses to compile.
-    const FILLS: [(&str, &str, &str, &str, &str); 2] = [
-        (
-            include_str!("../favorites/songs.rs"),
-            "favorites/songs.rs",
-            "pub async fn refresh_tracks(",
-            "crate::ui::hero_folds::fold_tracks(&rows)",
-            "songs_fold.lock() =",
-        ),
-        (
-            include_str!("../favorites/grids/fetch.rs"),
-            "favorites/grids/fetch.rs",
-            "pub async fn refresh_grids(",
-            "crate::ui::hero_folds::fold_most_played(&rows)",
-            "most_played_totals.lock() =",
-        ),
-    ];
+fn each_favorites_grid_publishes_the_facts_it_stores() {
+    const GRIDS: &str = include_str!("../favorites/grids/mod.rs");
 
-    for (src, name, func, fold, store) in FILLS {
-        let body = src
-            .split_once(func)
-            .and_then(|(_, rest)| rest.split_once("\n}"))
+    for (grid, store) in [
+        ("impl CardGrid for FavoriteMostPlayed", "most_played_totals.lock() = totals"),
+        ("impl CardGrid for FavoriteArtistsGrid", "artist_total.lock() = total"),
+    ] {
+        let facts = GRIDS
+            .split_once(grid)
+            .and_then(|(_, rest)| rest.split_once("fn show_facts("))
+            .and_then(|(_, rest)| rest.split_once("\n    }"))
             .map_or("", |(body, _)| body);
-        // Whitespace-normalised, so the pin holds a *statement* rather than the
-        // line breaks it happens to be wrapped at — a fold long enough to wrap
-        // is exactly the one this has to keep catching.
-        let body: String = body.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(
-            body.contains(fold),
-            "{name}: `{func}` must fold `&rows` — the local it just awaited. Folding at publish \
-             time instead puts the walk on the UI thread and makes the answer depend on which \
-             sibling fetch landed first"
+            facts.contains(store),
+            "`{grid}`'s `show_facts` must store what its load answered where the band reads it"
         );
         assert!(
-            body.contains(store),
-            "{name}: `{func}` folds `&rows` but stores the result nowhere the band can read it"
-        );
-        assert!(
-            body.contains("republish_chips("),
-            "{name}: `{func}` moves a number the Favorites band states but never republishes \
-             it — the sibling fetch that did publish ran against the previous fold, and nothing \
-             corrects it"
+            facts.contains("publish_favorites("),
+            "`{grid}`'s `show_facts` stores a number the Favorites band states but never \
+             publishes it"
         );
     }
 }
@@ -683,8 +653,8 @@ fn each_favorites_fetch_folds_and_republishes_what_it_feeds() {
 /// The teardown half of the same contract: a fold may not outlive the cache it
 /// was folded from.
 ///
-/// `release_section_state` empties the three caches and zeroes `stats`, and the folds
-/// have to go with them. Leaving them isn't the harmless failure it looks like: the band
+/// `release_section_state` empties the caches, and `stats`, which carries the Songs tab's
+/// spread beside its count, and the Most Played fold have to go with them. Leaving them isn't the harmless failure it looks like: the band
 /// doesn't come back empty, it comes back **wrong**. `kick_full_refresh` joins three
 /// fetches and `refresh_hero` is the shortest, so the first publish after a re-enter
 /// pairs a fresh count with a pre-leave spread until the rest land.
@@ -705,14 +675,13 @@ fn the_section_leave_drops_the_folds_with_the_caches_they_summarise() {
          empty window"
     );
     for (field, reset) in [
-        ("songs_fold", "HeroFold::default()"),
+        ("stats", "FavoriteStats::default()"),
         ("most_played_totals", "MostPlayedTotals::default()"),
     ] {
         assert!(
             body.contains(&format!("{field}.lock() = {reset}")),
-            "`release_section_state` clears the caches `{field}` was folded from but leaves \
-             `{field}` itself — the next publish then states a spread the count beside it no \
-             longer matches"
+            "`release_section_state` empties the caches but leaves `{field}` standing — the \
+             next publish then states a spread the count beside it no longer matches"
         );
     }
 }
@@ -725,18 +694,17 @@ fn the_section_leave_drops_the_folds_with_the_caches_they_summarise() {
 /// `FavoritesUi` handle with every cache one `.lock()` away.
 #[test]
 fn no_hero_folds_out_of_a_shared_cache() {
-    const FOLDERS: [(&str, &str); 7] = [
+    const FOLDERS: [(&str, &str); 6] = [
         (include_str!("../albums/detail.rs"), "albums/detail.rs"),
         (include_str!("../artists/detail.rs"), "artists/detail.rs"),
         (include_str!("../genres/detail.rs"), "genres/detail.rs"),
         (include_str!("../playlists/detail.rs"), "playlists/detail.rs"),
         (include_str!("../recently_played/songs.rs"), "recently_played/songs.rs"),
-        (include_str!("../recently_played/grid/fetch.rs"), "recently_played/grid/fetch.rs"),
         (HERO_CHIPS, "hero_chips.rs"),
     ];
 
     for (src, name) in FOLDERS {
-        for fold in ["fold_tracks(", "fold_most_played(", "dominant_genre(", "year_span("] {
+        for fold in ["fold_tracks(", "dominant_genre(", "year_span("] {
             for (i, m) in src.match_indices(fold) {
                 let tail = &src[i + m.len()..];
                 // Scan to the first `)`, which a `.lock()` argument reaches

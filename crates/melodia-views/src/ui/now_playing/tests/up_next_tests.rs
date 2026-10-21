@@ -4,39 +4,15 @@
 //! slice under repeat-off, and every interesting case is a boundary: a queue of one, the last
 //! index, and nothing playing at all.
 
-use std::sync::Arc;
-
 use super::super::UP_NEXT_N;
 use super::{SlideKind, classify_step, outgoing_row, upcoming_indices};
-use melodia_core::entities::track::TrackSummary;
 use melodia_engine::player::engine::state::QueueViewModel;
 use melodia_engine::player::engine::types::RepeatMode;
-
-fn summary(id: i64) -> Arc<TrackSummary> {
-    Arc::new(TrackSummary {
-        id,
-        file_path: String::new(),
-        file_name: String::new(),
-        title: format!("Track {id}"),
-        artist: None,
-        album: None,
-        duration_ms: 180_000,
-        artwork_path: None,
-        track_number: None,
-        disc_number: None,
-        last_position: 0,
-        is_favorite: false,
-        rating: 0,
-        replaygain_track_gain: None,
-        replaygain_track_peak: None,
-        replaygain_album_gain: None,
-        replaygain_album_peak: None,
-    })
-}
+use melodia_ui::QueueRow;
 
 fn queue(len: i64, index: i32, repeat_mode: RepeatMode) -> QueueViewModel {
     QueueViewModel {
-        queue_tracks: (1..=len).map(summary).collect(),
+        ids: (1..=len).collect(),
         queue_index: index,
         shuffle_enabled: false,
         repeat_mode,
@@ -130,39 +106,44 @@ fn a_queue_of_one_stepping_to_itself_reads_as_forward() {
     assert_eq!(step(1, 0, 0), 1);
 }
 
+/// The rows a list showing `ids` holds, which is where the slide reads its outgoing row from.
+fn shown(ids: &[i32]) -> Vec<QueueRow> {
+    ids.iter().map(|&id| QueueRow { id, ..QueueRow::default() }).collect()
+}
+
 #[test]
 fn only_a_forward_step_carries_the_promoted_track_off_the_top() {
-    let qvm = queue(5, 1, RepeatMode::All);
+    let before = shown(&[2, 3, 4, 5]);
 
-    let promoted = outgoing_row(SlideKind::Forward, &qvm, Some(2), None);
+    let promoted = outgoing_row(SlideKind::Forward, &before, Some(2), None);
     assert_eq!(promoted.map(|row| row.id), Some(2));
 
     // Nothing to carry: the caller passed no id for this direction.
-    assert!(outgoing_row(SlideKind::Forward, &qvm, None, Some(3)).is_none());
+    assert!(outgoing_row(SlideKind::Forward, &before, None, Some(3)).is_none());
 }
 
 /// Backward carries the row that fell off the bottom, and only when it really fell off — the
 /// caller answers that, so `None` there is not a step with nothing to show.
 #[test]
 fn a_backward_step_carries_the_row_that_fell_off_the_bottom() {
-    let qvm = queue(5, 1, RepeatMode::All);
+    let before = shown(&[3, 4]);
 
-    assert_eq!(outgoing_row(SlideKind::Backward, &qvm, Some(2), Some(4)).map(|r| r.id), Some(4));
-    assert!(outgoing_row(SlideKind::Backward, &qvm, Some(2), None).is_none());
+    assert_eq!(outgoing_row(SlideKind::Backward, &before, Some(2), Some(4)).map(|r| r.id), Some(4));
+    assert!(outgoing_row(SlideKind::Backward, &before, Some(2), None).is_none());
 }
 
 #[test]
 fn a_skip_carries_nothing_off_in_either_direction() {
-    let qvm = queue(5, 1, RepeatMode::All);
+    let before = shown(&[2, 3, 4]);
 
-    assert!(outgoing_row(SlideKind::Other, &qvm, Some(2), Some(4)).is_none());
+    assert!(outgoing_row(SlideKind::Other, &before, Some(2), Some(4)).is_none());
 }
 
-/// An id the queue no longer holds is nothing to render, which is what a rebuild that dropped the
+/// An id the list wasn't showing is nothing to render, which is what a rebuild that dropped the
 /// track mid-transition leaves behind.
 #[test]
-fn an_id_the_queue_has_dropped_carries_nothing_off() {
-    let qvm = queue(5, 1, RepeatMode::All);
+fn an_id_the_list_was_not_showing_carries_nothing_off() {
+    let before = shown(&[2, 3]);
 
-    assert!(outgoing_row(SlideKind::Forward, &qvm, Some(99), None).is_none());
+    assert!(outgoing_row(SlideKind::Forward, &before, Some(99), None).is_none());
 }

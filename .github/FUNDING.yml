@@ -1,3 +1,4 @@
-# The Sponsor button on the repository page. The same link is in the app, at
+# The Sponsor button on the repository page. The same links are in the app, at
 # Settings → About; both are wired in crates/melodia-views/src/ui/support.rs.
+github: KenanSalar
 ko_fi: kenansalar

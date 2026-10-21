@@ -3,19 +3,16 @@
 //! math, the diff-aware per-row `selected` stamper, and the persistent `selected-ids` model writer.
 //!
 //! Every list implements the same click semantics (plain click = single, Ctrl = toggle, Shift =
-//! range over the displayed order). The four list views get the whole of it from
-//! [`handle_row_click`], [`select_all_rows`] and [`clear_row_selection`], wired once by
+//! range over the displayed order). The four list views and the four details get the whole of it
+//! from [`handle_row_click`], [`select_all_rows`] and [`clear_row_selection`], wired once by
 //! `callbacks::track_list::wire_row_selection`.
-//!
-//! [`crate::ui::track_detail::selection`] is the other consumer of the trait: same accessors,
-//! cache-indexed selection with different complexity trade-offs.
 
 use std::collections::HashSet;
 use std::hash::BuildHasher;
 
 use slint::{Model, ModelRc, VecModel};
 
-use crate::ui::track_list_model::TrackListModel;
+use crate::ui::paged_rows::track_rows::TrackRows;
 use melodia_ui::{
     AlbumDetail, ArtistDetail, Favorites, GenreDetail, PlaylistDetail, RecentlyPlayed, Search,
     TrackListRow as UiTrackListRow, Tracks,
@@ -75,13 +72,13 @@ pub fn compute_click_selection(
 /// Re-stamp `selected: bool` on every visible row to match `desired`. Rows
 /// whose flag already matches are skipped — `set_row_data` invalidates the
 /// `ListView` delegate cache for that row, so a full rewrite would re-build
-/// every row component on every click. A [`TrackListModel`] keeps the set
-/// itself and makes the same skip without cloning a row. UI-thread only.
+/// every row component on every click. A [`TrackRows`] keeps the set
+/// itself and makes the same skip without fetching a row. UI-thread only.
 pub fn stamp_rows_selected<S: BuildHasher>(
     rows: &ModelRc<UiTrackListRow>,
     desired: &HashSet<i32, S>,
 ) {
-    if let Some(model) = TrackListModel::of(rows) {
+    if let Some(model) = TrackRows::of(rows) {
         model.select(desired);
         return;
     }
@@ -104,8 +101,7 @@ pub fn stamp_rows_selected<S: BuildHasher>(
 ///
 /// Read off the Slint model rather than any view's cache, so one projection answers for every
 /// flat list: the model *is* the display order, post-filter and post-sort, whatever each view
-/// rebuilt it from. A detail reads its own cache instead, kept in lockstep with its model.
-/// Disk-only Browse rows are dropped here rather than at that view — they arrive
+/// rebuilt it from. Disk-only Browse rows are dropped here rather than at that view — they arrive
 /// `enabled == false` and all share `id == 0`, which an id-keyed selection cannot hold.
 pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
     (0..rows.row_count())
@@ -123,11 +119,11 @@ pub fn displayed_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
 /// accessor to make either clone free. Keeps that function's skip-if-unchanged guard for the
 /// same reason it has one.
 ///
-/// A [`TrackListModel`] answers from its snapshot, every row it holds being a library row.
-/// Falls back to [`displayed_ids`] where the model is neither, which is [`stamp_rows_selected`]'s
-/// own early return: there is nothing to stamp either way.
+/// A [`TrackRows`] answers from its keyset, every id in it being a library row, and walking it
+/// would fetch every page. Falls back to [`displayed_ids`] where the model is neither, which is
+/// [`stamp_rows_selected`]'s own early return: there is nothing to stamp either way.
 pub fn select_all_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
-    if let Some(model) = TrackListModel::of(rows) {
+    if let Some(model) = TrackRows::of(rows) {
         return model.select_all();
     }
     let Some(vm) = rows.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
@@ -179,11 +175,9 @@ pub fn restamp_selected<S: BuildHasher>(rows: &mut [UiTrackListRow], selected: &
     }
 }
 
-/// The per-view Slint surface both selection layers drive. Each global implements it by routing
+/// The per-view Slint surface the selection helpers drive. Each global implements it by routing
 /// through its auto-generated `get_*` / `set_*` accessors; the trait method names are deliberately
-/// distinct from those so the bodies are unambiguous. Here rather than in
-/// [`crate::ui::track_detail::selection`] because the *logic* differs between the two layers and
-/// the accessors don't.
+/// distinct from those so the bodies are unambiguous.
 pub trait RowSelectionView {
     /// The id of the row a shift-range runs from, or [`NO_ANCHOR`].
     fn anchor(&self) -> i32;
@@ -193,9 +187,6 @@ pub trait RowSelectionView {
     fn replace_selected_ids(&self, ids: ModelRc<i32>);
     /// The displayed track-row model.
     fn track_rows(&self) -> ModelRc<UiTrackListRow>;
-    /// Replace the displayed track-row model wholesale (downcast-miss fallback only — the model
-    /// is normally mutated in place).
-    fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>);
 
     fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static);
     fn bind_select_all(&self, f: impl FnMut() + 'static);
@@ -206,9 +197,9 @@ pub trait RowSelectionView {
 /// where every other list says `tracks`.
 macro_rules! impl_row_selection_view {
     ($global:ident) => {
-        impl_row_selection_view!($global, get_tracks, set_tracks);
+        impl_row_selection_view!($global, get_tracks);
     };
-    ($global:ident, $get_rows:ident, $set_rows:ident) => {
+    ($global:ident, $get_rows:ident) => {
         impl RowSelectionView for $global<'_> {
             fn anchor(&self) -> i32 {
                 self.get_selection_anchor()
@@ -224,9 +215,6 @@ macro_rules! impl_row_selection_view {
             }
             fn track_rows(&self) -> ModelRc<UiTrackListRow> {
                 self.$get_rows()
-            }
-            fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>) {
-                self.$set_rows(rows);
             }
             fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static) {
                 self.on_select_row(f);
@@ -248,7 +236,7 @@ impl_row_selection_view!(GenreDetail);
 impl_row_selection_view!(PlaylistDetail);
 impl_row_selection_view!(RecentlyPlayed);
 impl_row_selection_view!(Search);
-impl_row_selection_view!(Tracks, get_rows, set_rows);
+impl_row_selection_view!(Tracks, get_rows);
 
 /// Compute the new selection set for a list view's row click and apply it, on the UI thread.
 pub fn handle_row_click<V: RowSelectionView>(view: &V, idx: i32, id: i32, shift: bool, ctrl: bool) {
@@ -324,10 +312,19 @@ pub fn keep_selection_within<V: RowSelectionView>(view: &V, held: impl FnOnce() 
     stamp_rows_selected(&view.track_rows(), &kept_set);
 }
 
+/// Drops `removed` from a view's selection, the anchor with it, when rows leave a list ahead of
+/// its refetch. Every other pick stays, the ones a filter hides included. UI-thread only.
+pub fn forget_rows<V: RowSelectionView, S: BuildHasher>(view: &V, removed: &HashSet<i32, S>) {
+    let anchor = view.anchor();
+    keep_selection_within(view, || {
+        view.selected_ids().iter().chain([anchor]).filter(|id| !removed.contains(id)).collect()
+    });
+}
+
 /// Every row's id in display order, one per row so a click's index still names its row.
 fn row_ids(rows: &ModelRc<UiTrackListRow>) -> Vec<i32> {
-    match TrackListModel::of(rows) {
-        Some(model) => model.ids(),
+    match TrackRows::of(rows) {
+        Some(model) => model.row_ids(),
         None => (0..rows.row_count()).filter_map(|i| rows.row_data(i).map(|r| r.id)).collect(),
     }
 }

@@ -14,7 +14,7 @@
 //! `scanner::track_is_current` reads as current forever. The re-extract is what
 //! keeps those three honest.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
@@ -29,7 +29,7 @@ use melodia_core::entities::credits::RoleCredits;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::tags::{ArtworkEdit, TagEdit, TagField};
-use melodia_core::entities::track::{TagEditRow, TrackSummary};
+use melodia_core::entities::track::TagEditRow;
 use melodia_core::error::AppError;
 use melodia_core::error::describe;
 use melodia_core::utils::self_writes::SelfWrites;
@@ -237,32 +237,12 @@ pub async fn apply_tag_edit(
     .await?;
 
     if !updated_ids.is_empty() {
-        // Ahead of the resync, which is the one step here that can still fail: the files are
-        // written and the batch is committed, so a read error below would otherwise leave the
-        // stale answer standing over something that had nothing to do with it.
         if edit.renames_recording() {
             forget_stored_lyrics(state, &updated_ids).await;
         }
 
-        // Overwrite any queued / currently-playing summary with its fresh copy
-        // so the Now-Playing bar, Queue Sheet and Up Next stop showing old tags.
-        // Only pay for the refetch + resync when the player actually references
-        // an edited track — the uncommon case. `sync_track_summaries` no-ops
-        // otherwise, but the fetch + `HashMap` build run before its own check,
-        // so gate them on the same cheap membership probe.
-        let touched: HashSet<i64> = updated_ids.iter().copied().collect();
-        if melodia_engine::player::engine::state::any_tracked(&state.player_state, |id| {
-            touched.contains(&id)
-        }) {
-            let fresh = queries::track::get_track_summaries_by_ids(&state.db, &updated_ids).await?;
-            let map: HashMap<i64, TrackSummary> = fresh.into_iter().map(|t| (t.id, t)).collect();
-            melodia_engine::player::engine::state::sync_track_summaries(
-                &state.player_state,
-                &state.sinks,
-                &map,
-            );
-        }
-
+        // Also what brings the new tags to Now Playing and the tracks queued next to it: the
+        // window task re-reads every record the player holds on this tick.
         state.library_changed.bump();
     }
 

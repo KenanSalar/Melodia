@@ -233,6 +233,7 @@ impl AppState {
             view_model: vm_tx,
             queue: q_tx,
             media_controls: Some(media_controls_sync),
+            awaited_start: watch::channel(None).0,
         });
 
         let (file_tx, file_rx) = mpsc::channel::<FileEvent>(256);

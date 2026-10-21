@@ -1,5 +1,3 @@
-use super::KOFI_URL;
-
 const ROUTER: &str = include_str!("../shell/notifications.rs");
 const SECTION: &str = include_str!("../../../../melodia-ui/ui/views/settings/about-section.slint");
 
@@ -36,11 +34,4 @@ fn the_kofi_mark_is_an_unrecoloured_image() {
         "the About card's support button no longer mounts the Ko-fi mark"
     );
     assert!(!SECTION.contains("colorize"), "the Ko-fi mark must keep its own colours");
-}
-
-/// A typo here is a support link that quietly goes nowhere, and nothing else in the
-/// tree names this page.
-#[test]
-fn the_kofi_url_is_the_project_page() {
-    assert_eq!(KOFI_URL, "https://ko-fi.com/kenansalar");
 }

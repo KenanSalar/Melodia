@@ -8,108 +8,28 @@ use melodia_core::entities::browse::DirectoryTrack;
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
-/// The `ORDER BY` body every track fetch with no order of its own shares: the natural-ordering key
-/// built at scan time from title/artist/album.
+/// The `ORDER BY` body a whole-table fetch shares: the natural-ordering key built at scan time from
+/// title/artist/album.
 ///
-/// **Fixed**, because every view that reads one re-sorts what it gets, over rows it retains
-/// (`ui::track_list_cache`) or through `ui::track_sort` directly, so a per-column order here would
-/// be a second spelling of sort semantics that nothing consults.
+/// **Not a page's order**, which is its keyset's, and copying it into a batch-action query is the
+/// trap: `queries::track::entity_ids` owes agreement to the default of the page beside the card,
+/// and Artist and Genre Detail default to `"album"`, so `sort_key` taken from here queues a
+/// catalogue by title under a page that shows it by album.
 ///
-/// **Which makes the clause dead on a detail page, and copying it into a batch-action query the
-/// trap.** `queries::track::entity_ids` decides the order a card's right-click Play queues in and
-/// has no re-sort behind it, so it owes agreement to `ui::track_sort`'s default for that page and
-/// not to this: Artist and Genre Detail default to `"album"`, and `sort_key` taken from here
-/// queues a catalogue by title under a page that shows it by album.
-///
-/// What the clause is still for is **determinism**: the in-memory comparator appends `sort_key` as
-/// its tie-breaker and `sort_by_cached_key` is stable, so rows tied on it fall back to the order
-/// `SQLite` handed over. Dropping the clause would leave that to the query plan — and it is close
-/// to free, `idx_tracks_sort_key` being the same expression under the same collation, so this
-/// reads as an index scan rather than a sort.
+/// What the clause is for is **determinism**: the in-memory comparator these rows are handed to
+/// appends `sort_key` as its tie-breaker and `sort_by_cached_key` is stable, so rows tied on it
+/// fall back to the order `SQLite` handed over. Dropping the clause would leave that to the query
+/// plan, and it is close to free, `idx_tracks_sort_key` being the same expression under the same
+/// collation, so this reads as an index scan rather than a sort.
 pub(super) const TRACK_LIST_ORDER: &str = "sort_key COLLATE NOCASE ASC";
 
-/// Every track, as the Songs list retains it.
+/// Every track as a list row, in [`TRACK_LIST_ORDER`].
 ///
-/// The display order is the caller's: this hands back [`TRACK_LIST_ORDER`] and
-/// `ui::track_list_cache` permutes it.
+/// No list reads the whole table: a library-sized one holds a `keyset` and fetches its rows by
+/// id. What still wants every row at once is a check that holds an id query against them.
 pub async fn get_all_tracks_for_list(db: &DbPool) -> Result<Vec<track::TrackListRow>, AppError> {
     let cols = columns::TRACK_LIST.joined();
     let sql = format!("SELECT {cols} FROM tracks ORDER BY {TRACK_LIST_ORDER}");
-    let tracks =
-        sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
-    Ok(tracks)
-}
-
-/// Lightweight version of `get_tracks_by_album` for list views.
-pub async fn get_tracks_by_album_for_list(
-    db: &DbPool,
-    album_id: i64,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
-        "SELECT {cols} FROM tracks WHERE album_id = ? ORDER BY disc_number ASC, track_number ASC"
-    )))
-    .bind(album_id)
-    .fetch_all(db.read())
-    .await?;
-    Ok(tracks)
-}
-
-/// Lightweight version of `get_tracks_by_artist` for list views.
-///
-/// Every track this artist is *credited* on, which is the join table rather than the
-/// `tracks.artist_id` FK — that one names only the first credit. `IN` rather than a join for two
-/// reasons: `artist_id` is a column of both tables, and a credit that names one artist twice
-/// ("X feat. X") would join the row in twice.
-pub async fn get_tracks_by_artist_for_list(
-    db: &DbPool,
-    artist_id: i64,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
-        "SELECT {cols} FROM tracks \
-         WHERE id IN (SELECT track_id FROM track_artists WHERE artist_id = ?) \
-         ORDER BY {TRACK_LIST_ORDER}"
-    )))
-    .bind(artist_id)
-    .fetch_all(db.read())
-    .await?;
-    Ok(tracks)
-}
-
-/// Lightweight version of `get_tracks_by_genre` for list views.
-///
-/// Every track tagged with this genre, through the join table for
-/// [`get_tracks_by_artist_for_list`]'s reason. What makes it load-bearing here rather than merely
-/// consistent: `genres.track_count` is maintained off `track_genres`, so reading `tracks.genre_id`
-/// left the grid card stating a count over a page that listed a subset of it, and nothing at all
-/// for a genre no track happens to carry first.
-pub async fn get_tracks_by_genre_for_list(
-    db: &DbPool,
-    genre_id: i64,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(format!(
-        "SELECT {cols} FROM tracks \
-         WHERE id IN (SELECT track_id FROM track_genres WHERE genre_id = ?) \
-         ORDER BY {TRACK_LIST_ORDER}"
-    )))
-    .bind(genre_id)
-    .fetch_all(db.read())
-    .await?;
-    Ok(tracks)
-}
-
-/// Every favorite track, as Favorites' Songs tab retains it.
-///
-/// Ordered like [`get_all_tracks_for_list`] and for the same reason — the tab's own sort is
-/// resolved over the retained rows, not here.
-pub async fn get_favorite_tracks_for_list(
-    db: &DbPool,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.joined();
-    let sql =
-        format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE ORDER BY {TRACK_LIST_ORDER}");
     let tracks =
         sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql)).fetch_all(db.read()).await?;
     Ok(tracks)
@@ -172,7 +92,9 @@ pub async fn get_tracks_in_directory(
 /// `update_play_count`), whose lexical order is chronological even though `chrono`'s `AutoSi`
 /// fractional seconds vary in width: the offset's `'+'` sorts below every digit, and `AutoSi` only
 /// drops trailing-zero groups. Rows without a `last_played` (never played) are excluded —
-/// index-backed by the partial `idx_tracks_last_played`.
+/// index-backed by the partial `idx_tracks_last_played`. `id DESC` settles the plays one flush
+/// stamped together, and is the order that index's walk already hands them back in, so it costs
+/// no sort.
 ///
 /// Returns the `TrackListRow` projection so the Recently-Played view can render
 /// through the shared `TrackList`; `last_played` itself is not selected (it is
@@ -186,7 +108,7 @@ pub async fn get_recently_played(
     let sql = format!(
         "SELECT {cols} FROM tracks \
          WHERE last_played IS NOT NULL \
-         ORDER BY last_played DESC \
+         ORDER BY last_played DESC, id DESC \
          LIMIT ?"
     );
     let rows = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))

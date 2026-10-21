@@ -43,6 +43,7 @@ export component CardContextMenu inherits Rectangle {
     // than one selected — a right-click on an unselected card falls back to that card alone and
     // leaves the selection untouched.
     out property <bool> multi-active: root.card-selected && root.selection-count > 1;
+    out property <bool> is-open: pop.is-open;
 
     property <int> multi-count: root.selection-count;
     property <bool> is-playlist: root.card-kind == "playlist";

@@ -2,8 +2,9 @@ use std::collections::HashMap;
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::DbPool;
+use crate::database::queries::search_name;
 use crate::database::queries::track::columns;
+use crate::database::{DbPool, select_in_id_order};
 use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
 
@@ -28,14 +29,15 @@ where
     let now = melodia_core::utils::now_rfc3339();
 
     let result = sqlx::query_as::<_, playlist::Playlist>(
-        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at)
-         VALUES (?, ?, NULL, FALSE, NULL, ?, ?)
+        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at, search_name)
+         VALUES (?, ?, NULL, FALSE, NULL, ?, ?, ?)
          RETURNING *"
     )
     .bind(name)
     .bind(description)
     .bind(&now)
     .bind(&now)
+    .bind(search_name::pack(&[name]))
     .fetch_one(executor)
     .await?;
     Ok(result)
@@ -78,8 +80,8 @@ pub async fn create_smart_playlist(
     let now = melodia_core::utils::now_rfc3339();
 
     let result = sqlx::query_as::<_, playlist::Playlist>(
-        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at)
-         VALUES (?, ?, NULL, TRUE, ?, ?, ?)
+        "INSERT INTO playlists (name, description, thumbnail_path, is_smart, smart_criteria, created_at, updated_at, search_name)
+         VALUES (?, ?, NULL, TRUE, ?, ?, ?, ?)
          RETURNING *"
     )
     .bind(name)
@@ -87,6 +89,7 @@ pub async fn create_smart_playlist(
     .bind(criteria_json)
     .bind(&now)
     .bind(&now)
+    .bind(search_name::pack(&[name]))
     .fetch_one(db.write())
     .await?;
     Ok(result)
@@ -120,6 +123,16 @@ pub async fn get_all_playlists(db: &DbPool) -> Result<Vec<playlist::PlaylistStat
     .fetch_all(db.read())
     .await?;
     Ok(playlists)
+}
+
+/// The Playlists grid's cards for `ids`, in the order asked for. A smart playlist's count is the
+/// stored `0`, which the caller replaces with its live one.
+pub async fn get_playlists_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<playlist::PlaylistStats>, AppError> {
+    select_in_id_order(db, "SELECT * FROM playlist_stats", ids, |p: &playlist::PlaylistStats| p.id)
+        .await
 }
 
 pub async fn get_playlist_by_id(db: &DbPool, id: i64) -> Result<playlist::PlaylistStats, AppError> {
@@ -164,12 +177,13 @@ pub async fn update_playlist(
         let result = sqlx::query_as::<_, playlist::Playlist>(
             "UPDATE playlists SET name = ?, description = ?,
                 thumbnail_path = NULL,
-                custom_thumbnail = TRUE, updated_at = ?
+                custom_thumbnail = TRUE, updated_at = ?, search_name = ?
             WHERE id = ? RETURNING *",
         )
         .bind(name)
         .bind(description)
         .bind(&now)
+        .bind(search_name::pack(&[name]))
         .bind(id)
         .fetch_optional(db.write())
         .await?
@@ -177,11 +191,13 @@ pub async fn update_playlist(
         Ok(result)
     } else {
         let result = sqlx::query_as::<_, playlist::Playlist>(
-            "UPDATE playlists SET name = ?, description = ?, updated_at = ? WHERE id = ? RETURNING *"
+            "UPDATE playlists SET name = ?, description = ?, updated_at = ?, search_name = ? \
+             WHERE id = ? RETURNING *",
         )
         .bind(name)
         .bind(description)
         .bind(&now)
+        .bind(search_name::pack(&[name]))
         .bind(id)
         .fetch_optional(db.write())
         .await?
@@ -225,25 +241,6 @@ pub async fn get_playlist_tracks(
     .bind(playlist_id)
     .fetch_all(db.read())
     .await?;
-    Ok(tracks)
-}
-
-/// Lightweight version of `get_playlist_tracks` for list views.
-pub async fn get_playlist_tracks_for_list(
-    db: &DbPool,
-    playlist_id: i64,
-) -> Result<Vec<track::TrackListRow>, AppError> {
-    let cols = columns::TRACK_LIST.prefixed("t");
-    let sql = format!(
-        "SELECT {cols} FROM tracks t \
-         JOIN playlist_items pi ON pi.track_id = t.id \
-         WHERE pi.playlist_id = ? \
-         ORDER BY pi.position ASC"
-    );
-    let tracks = sqlx::query_as::<_, track::TrackListRow>(AssertSqlSafe(sql))
-        .bind(playlist_id)
-        .fetch_all(db.read())
-        .await?;
     Ok(tracks)
 }
 
@@ -492,28 +489,6 @@ pub async fn count_tracks_in_playlists_for_selection(
         *map.entry(pl_id).or_insert(0) += count;
     }
     Ok(map)
-}
-
-/// Returns up to `limit` distinct artwork paths from tracks in the given
-/// playlist, in playlist order.
-pub async fn get_playlist_artwork_paths(
-    db: &DbPool,
-    playlist_id: i64,
-    limit: i64,
-) -> Result<Vec<String>, AppError> {
-    let paths: Vec<(String,)> = sqlx::query_as(
-        "SELECT t.artwork_path FROM tracks t
-         JOIN playlist_items pi ON pi.track_id = t.id
-         WHERE pi.playlist_id = ? AND t.artwork_path IS NOT NULL AND t.artwork_path != ''
-         GROUP BY t.artwork_path
-         ORDER BY MIN(pi.position) ASC
-         LIMIT ?",
-    )
-    .bind(playlist_id)
-    .bind(limit)
-    .fetch_all(db.read())
-    .await?;
-    Ok(paths.into_iter().map(|(p,)| p).collect())
 }
 
 /// Sets a custom thumbnail path on the playlist.

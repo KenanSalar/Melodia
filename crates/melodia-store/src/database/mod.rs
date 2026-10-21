@@ -1,4 +1,5 @@
 mod backup;
+mod collation;
 pub mod queries;
 
 use sqlx::AssertSqlSafe;
@@ -68,6 +69,82 @@ pub(crate) fn case_by_id(rows: usize) -> String {
     s
 }
 
+/// A folded copy of other columns, filled at write time, that a per-launch pass fills on the rows
+/// written before it existed.
+pub(crate) struct FoldedColumn {
+    pub table: &'static str,
+    pub column: &'static str,
+    /// The SELECT reading what each row packs, its source aliased `x`.
+    pub inputs: &'static str,
+}
+
+/// A row [`backfill_folded`] reads, and the value it packs from it.
+pub(crate) trait FoldedInputs:
+    for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin
+{
+    fn id(&self) -> i64;
+    fn packed(&self) -> String;
+}
+
+/// Rows per backfill page, so that one page is one `UPDATE` inside the bind budget.
+const BACKFILL_PAGE_ROWS: usize = MAX_BINDS_PER_STATEMENT / CASE_BINDS_PER_ROW;
+
+/// Fills `target` on every row still holding `''`, a page at a time, and returns how many rows it
+/// wrote.
+///
+/// Cheap to run on every launch: a filled table answers the first page from an empty partial
+/// index. Each page is its own statement rather than one transaction around the pass, so a writer
+/// waiting on the single connection waits for a page rather than the table. And the `UPDATE` asks
+/// again that the column is empty, so a row a writer filled between the read and the write keeps
+/// the writer's value instead of one packed from the inputs it replaced.
+pub(crate) async fn backfill_folded<R: FoldedInputs>(
+    db: &DbPool,
+    target: &FoldedColumn,
+) -> Result<u64, AppError> {
+    let page_limit = i64::try_from(BACKFILL_PAGE_ROWS).unwrap_or(i64::MAX);
+    let sql = format!(
+        "{} WHERE x.{column} = '' AND x.id > ? ORDER BY x.id LIMIT ?",
+        target.inputs,
+        column = target.column,
+    );
+    let mut after_id = 0_i64;
+    let mut written = 0;
+    loop {
+        let page: Vec<R> = sqlx::query_as(AssertSqlSafe(sql.as_str()))
+            .bind(after_id)
+            .bind(page_limit)
+            .fetch_all(db.read())
+            .await?;
+        let Some(last) = page.last() else {
+            return Ok(written);
+        };
+        after_id = last.id();
+        written += fill_folded_page(db, target, &page).await?;
+    }
+}
+
+async fn fill_folded_page<R: FoldedInputs>(
+    db: &DbPool,
+    target: &FoldedColumn,
+    page: &[R],
+) -> Result<u64, AppError> {
+    let sql = format!(
+        "UPDATE {table} SET {column} = {case} WHERE id IN ({ids}) AND {column} = ''",
+        table = target.table,
+        column = target.column,
+        case = case_by_id(page.len()),
+        ids = placeholders(page.len()),
+    );
+    let mut query = sqlx::query(AssertSqlSafe(sql));
+    for row in page {
+        query = query.bind(row.id()).bind(row.packed());
+    }
+    for row in page {
+        query = query.bind(row.id());
+    }
+    Ok(query.persistent(false).execute(db.write()).await?.rows_affected())
+}
+
 /// Execute a chunked single-column IN-clause query inside [`MAX_BINDS_PER_STATEMENT`],
 /// concatenating the results.
 ///
@@ -101,6 +178,34 @@ where
     }
 
     Ok(all_results)
+}
+
+/// `rows`, fetched by an `IN (…)` over `ids`, put back in the order `ids` asked for. A row the
+/// fetch didn't return, deleted since the ids were read, is skipped, and so is a second ask for
+/// one id.
+pub(crate) fn in_id_order<T>(rows: Vec<T>, ids: &[i64], id_of: impl Fn(&T) -> i64) -> Vec<T> {
+    let mut by_id: std::collections::HashMap<i64, T> =
+        std::collections::HashMap::with_capacity(rows.len());
+    by_id.extend(rows.into_iter().map(|row| (id_of(&row), row)));
+    ids.iter().filter_map(|id| by_id.remove(id)).collect()
+}
+
+/// The rows `select` reads for `ids`, in the order `ids` asked for ([`in_id_order`]). `select` is
+/// the statement up to its `WHERE`, over a source with an `id` column.
+pub(crate) async fn select_in_id_order<T>(
+    db: &DbPool,
+    select: &str,
+    ids: &[i64],
+    id_of: impl Fn(&T) -> i64,
+) -> Result<Vec<T>, AppError>
+where
+    T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
+{
+    let rows = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("{select} WHERE id IN ({placeholders})")
+    })
+    .await?;
+    Ok(in_id_order(rows, ids, id_of))
 }
 
 /// Ids per [`set_where_id_in`] statement, the value it sets taking one bind of the budget.
@@ -232,8 +337,13 @@ const MMAP_SIZE: &str = "268435456";
 
 /// How long a pooled connection sits idle before it may close, taking its page cache with it.
 /// sqlx's reaper checks once per this period, so one can stay open up to twice as long, which
-/// both footprint scripts in `scripts/` size their settle past.
+/// `scripts/measure-footprint.py` sizes both its settles past.
 const IDLE_TIMEOUT: Duration = Duration::from_mins(1);
+
+/// By when the pool has closed a connection left idle since launch: [`IDLE_TIMEOUT`] twice, the
+/// reaper's first check finding it not yet idle long enough.
+pub const IDLE_CONNECTIONS_CLOSED_WITHIN: Duration =
+    Duration::from_secs(IDLE_TIMEOUT.as_secs() * 2);
 
 pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     let db_path = paths.db_path.clone();
@@ -254,7 +364,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
     // connection, WAL readers that don't block writers, and no second process
     // opening the file. DEFERRED stays — revisit if a sidecar tool or a
     // multi-window mode ever adds a second writer.
-    let write_opts = SqliteConnectOptions::from_str(&db_url)?
+    let write_opts = collation::register(SqliteConnectOptions::from_str(&db_url)?)
         .journal_mode(SqliteJournalMode::Wal)
         .create_if_missing(true)
         .busy_timeout(Duration::from_secs(5))
@@ -334,7 +444,7 @@ pub async fn init_database(paths: &Paths) -> Result<DbPool, AppError> {
         .map_or(4, |n| u32::try_from(n.get()).unwrap_or(u32::MAX))
         .clamp(2, 4);
 
-    let read_opts = SqliteConnectOptions::from_str(&db_url)?
+    let read_opts = collation::register(SqliteConnectOptions::from_str(&db_url)?)
         .journal_mode(SqliteJournalMode::Wal)
         .read_only(true)
         .busy_timeout(Duration::from_secs(5))
@@ -365,7 +475,7 @@ impl DbPool {
     /// An in-memory `DbPool` for tests. Read and write share one connection,
     /// in-memory `SQLite` being per-connection.
     pub async fn test_pool() -> Result<Self, AppError> {
-        let opts = SqliteConnectOptions::from_str("sqlite::memory:")?
+        let opts = collation::register(SqliteConnectOptions::from_str("sqlite::memory:")?)
             .pragma("foreign_keys", "ON")
             .pragma("synchronous", "NORMAL")
             .pragma("temp_store", "MEMORY");

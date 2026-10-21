@@ -7,8 +7,8 @@
 //! different question `card-selection.slint` argues: a set no grid is showing.
 //!
 //! The click itself is [`compute_click_selection`]'s, anchored on an id as the track lists are.
-//! What a grid adds is the scope, and a card order read by flattening its chunked rows, a card
-//! having no flat position to offer.
+//! What a grid adds is the scope, and a card order read off its model (a library grid's ids, or
+//! Radio's chunked rows flattened), a card having no flat position to offer.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -17,6 +17,7 @@ use std::rc::Rc;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::ui::list_selection::{NO_ANCHOR, compute_click_selection};
+use crate::ui::paged_rows::grid::{GridRow, PagedGrid};
 use melodia_ui::{
     Albums, AppWindow, Artists, CardSelection, Favorites, Genres, Playlists, Radio, RecentlyPlayed,
 };
@@ -206,23 +207,22 @@ fn publish(ui: &AppWindow, selection: &RefCell<Selection>, next: Selection) {
 /// The ids a scope's grid is currently drawing, in card order.
 ///
 /// Read off the Slint model rather than any slice's own cache. The model *is* what is on screen,
-/// so a range can't disagree with it mid-debounce, and this names no view's internals.
+/// so a range can't disagree with it mid-debounce, and this names no view's internals. A library
+/// grid's model holds its ids, where flattening it would read every card; Radio's are flattened.
 fn visible_ids(ui: &AppWindow, asking_scope: &str) -> Vec<i32> {
     match asking_scope {
-        scope::ALBUMS => flatten(&ui.global::<Albums>().get_grid_rows(), |r| r.albums, |c| c.id),
-        scope::ARTISTS => flatten(&ui.global::<Artists>().get_grid_rows(), |r| r.artists, |c| c.id),
-        scope::GENRES => flatten(&ui.global::<Genres>().get_grid_rows(), |r| r.genres, |c| c.id),
-        scope::PLAYLISTS => {
-            flatten(&ui.global::<Playlists>().get_grid_rows(), |r| r.playlists, |c| c.id)
-        }
+        scope::ALBUMS => card_ids(&ui.global::<Albums>().get_grid_rows(), asking_scope),
+        scope::ARTISTS => card_ids(&ui.global::<Artists>().get_grid_rows(), asking_scope),
+        scope::GENRES => card_ids(&ui.global::<Genres>().get_grid_rows(), asking_scope),
+        scope::PLAYLISTS => card_ids(&ui.global::<Playlists>().get_grid_rows(), asking_scope),
         scope::FAVORITE_MOST_PLAYED => {
-            flatten(&ui.global::<Favorites>().get_most_played_rows(), |r| r.entities, |c| c.id)
+            card_ids(&ui.global::<Favorites>().get_most_played_rows(), asking_scope)
         }
         scope::FAVORITE_ARTISTS => {
-            flatten(&ui.global::<Favorites>().get_artist_rows(), |r| r.entities, |c| c.id)
+            card_ids(&ui.global::<Favorites>().get_artist_rows(), asking_scope)
         }
         scope::RECENT_MOST_PLAYED => {
-            flatten(&ui.global::<RecentlyPlayed>().get_most_played_rows(), |r| r.entities, |c| c.id)
+            card_ids(&ui.global::<RecentlyPlayed>().get_most_played_rows(), asking_scope)
         }
         scope::RADIO_BROWSE => {
             flatten(&ui.global::<Radio>().get_browse_rows(), |r| r.stations, |c| c.select_key)
@@ -235,6 +235,11 @@ fn visible_ids(ui: &AppWindow, asking_scope: &str) -> Vec<i32> {
         }
         _ => Vec::new(),
     }
+}
+
+/// A paged grid's ids, as the selection names them.
+fn card_ids<G: GridRow>(grid_rows: &ModelRc<G>, label: &str) -> Vec<i32> {
+    PagedGrid::installed(grid_rows, label).map(PagedGrid::card_ids).unwrap_or_default()
 }
 
 /// Flatten a chunked grid model back into card order. Only the shift branch pays for it.

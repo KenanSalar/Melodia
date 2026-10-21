@@ -7,7 +7,7 @@
 //! re-ordering them.
 //!
 //! The filter is the one thing here that isn't the Songs tab's alone — it is
-//! shared with the Most Played grid, so a keystroke re-walks both caches.
+//! shared with the Most Played grid, so a keystroke reaches both.
 
 use std::sync::Arc;
 
@@ -18,7 +18,9 @@ use crate::ui::callbacks::track_list::{
     play_displayed, wire_queue_actions, wire_row_selection, wire_toggle_column,
 };
 use crate::ui::callbacks::{collect_track_ids, spawn_play_then_shuffle};
-use crate::ui::recently_played::{self as recently_played_ui_mod, RecentlyPlayedUi};
+use crate::ui::recently_played::{
+    self as recently_played_ui_mod, RecentlyPlayedTab, RecentlyPlayedUi,
+};
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -88,24 +90,21 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi
     }
 }
 
-/// One needle, two caches — and they are walked on different threads because
-/// they are bounded by different things. Songs is the 200-row recency set, so
-/// its walk stays here. Most Played is whatever `get_most_played` returned,
-/// uncapped and library-wide, so its walk goes to a worker and comes back
-/// through `generation` to prove it still answers the needle on screen.
+/// One needle over two lists bounded by different things. Songs is the 200-row
+/// recency set, re-walked in memory; Most Played is the library's whole played
+/// set, so its filter runs in SQL, and only while it is the tab on screen — the
+/// pick onto it clears the needle anyway.
 fn wire_filter(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     let s = state.clone();
     let ru = rp_ui.clone();
     let weak = ui.as_weak();
     ui.global::<RecentlyPlayed>().on_filter_changed(move |text| {
-        let generation = recently_played_ui_mod::set_filter(&ru, &text);
+        recently_played_ui_mod::set_filter(&ru, &text);
         recently_played_ui_mod::apply_filtered_tracks(&ru, &weak);
-
-        let ru = ru.clone();
-        let weak = weak.clone();
-        s.runtime.spawn(async move {
-            recently_played_ui_mod::apply_filtered_grid_settled(&ru, &weak, generation);
-        });
+        if ru.section_active() && ru.active_tab() == RecentlyPlayedTab::MostPlayed {
+            let Some(ui) = weak.upgrade() else { return };
+            recently_played_ui_mod::requery_grid(&ui, &s, &ru);
+        }
     });
 }
 

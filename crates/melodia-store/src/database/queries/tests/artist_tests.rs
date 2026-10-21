@@ -5,12 +5,10 @@ use melodia_core::entities::artist::FavoriteArtist;
 use melodia_core::error::AppError;
 
 #[tokio::test]
-async fn get_all_artists_excludes_empty() -> Result<(), AppError> {
+async fn the_artists_grid_leaves_out_an_artist_with_no_tracks() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let artists = queries::artist::get_all_artists(&db).await?;
-    // artist_stats filters out artists with track_count = 0,
-    // so "Unknown Artist" (sentinel, no tracks) is excluded.
-    // Should include "Artist A" + "Artist B" from seeded data.
+    let artists = listed_artists(&db).await?;
+    // "Unknown Artist" is the sentinel and holds no tracks.
     assert_eq!(artists.len(), 2);
     assert!(artists.iter().any(|a| a.name == "Artist A"));
     assert!(artists.iter().any(|a| a.name == "Artist B"));
@@ -19,9 +17,9 @@ async fn get_all_artists_excludes_empty() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn get_all_artists_sorted_by_name() -> Result<(), AppError> {
+async fn the_artists_grid_lists_by_name() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let artists = queries::artist::get_all_artists(&db).await?;
+    let artists = listed_artists(&db).await?;
     let names: Vec<&str> = artists.iter().map(|a| a.name.as_str()).collect();
     let mut sorted = names.clone();
     sorted.sort_unstable();
@@ -32,7 +30,7 @@ async fn get_all_artists_sorted_by_name() -> Result<(), AppError> {
 #[tokio::test]
 async fn get_artist_by_id_happy_path() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let artists = queries::artist::get_all_artists(&db).await?;
+    let artists = listed_artists(&db).await?;
     let artist = queries::artist::get_artist_by_id(&db, artists[0].id).await?;
     assert_eq!(artist.name, artists[0].name);
     Ok(())
@@ -124,7 +122,7 @@ async fn marking_no_artist_writes_nothing() -> Result<(), AppError> {
 #[tokio::test]
 async fn update_artist_image_path() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let artists = queries::artist::get_all_artists(&db).await?;
+    let artists = listed_artists(&db).await?;
     let artist = artists
         .iter()
         .find(|a| a.name == "Artist A")
@@ -151,7 +149,7 @@ async fn update_artist_image_path() -> Result<(), AppError> {
 #[tokio::test]
 async fn a_favorited_artist_carries_the_count_of_its_favorited_tracks() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    let artists = queries::artist::get_all_artists(&db).await?;
+    let artists = listed_artists(&db).await?;
     let artist_a = artists
         .iter()
         .find(|a| a.name == "Artist A")
@@ -164,7 +162,7 @@ async fn a_favorited_artist_carries_the_count_of_its_favorited_tracks() -> Resul
             .await?;
     queries::track::set_favorite(&db, &ids, true).await?;
 
-    let favorites = queries::artist::get_favorite_artists(&db).await?;
+    let favorites = listed_favorite_artists(&db).await?;
 
     assert_eq!(
         favorites,
@@ -181,6 +179,6 @@ async fn a_favorited_artist_carries_the_count_of_its_favorited_tracks() -> Resul
 #[tokio::test]
 async fn a_library_with_no_favorites_has_no_favorite_artists() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
-    assert!(queries::artist::get_favorite_artists(&db).await?.is_empty());
+    assert!(listed_favorite_artists(&db).await?.is_empty());
     Ok(())
 }

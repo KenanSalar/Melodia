@@ -1,13 +1,15 @@
-use crate::database::{DbPool, IDS_PER_SET, set_where_id_in};
+use crate::database::{
+    DbPool, IDS_PER_SET, chunked_in_query, in_id_order, select_in_id_order, set_where_id_in,
+};
 use melodia_core::entities::artist;
 use melodia_core::error::AppError;
 
-pub async fn get_all_artists(db: &DbPool) -> Result<Vec<artist::ArtistStats>, AppError> {
-    let artists =
-        sqlx::query_as::<_, artist::ArtistStats>("SELECT * FROM artist_stats ORDER BY name ASC")
-            .fetch_all(db.read())
-            .await?;
-    Ok(artists)
+/// The Artists grid's cards for `ids`, in the order asked for.
+pub async fn get_artists_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<artist::ArtistStats>, AppError> {
+    select_in_id_order(db, "SELECT * FROM artist_stats", ids, |a: &artist::ArtistStats| a.id).await
 }
 
 pub async fn get_artist_by_id(db: &DbPool, id: i64) -> Result<artist::ArtistStats, AppError> {
@@ -67,23 +69,25 @@ pub async fn update_artist_image_path(
     Ok(())
 }
 
-/// Artists that have at least one favorited track, with favorite count.
-///
-/// Unordered — a caller owes its own ordering. The one there is,
-/// `ui::favorites::grids::refresh_grids`, re-sorts the whole result through
-/// `sort_artists` on every fetch, so an `ORDER BY` here would only be overwritten.
-pub async fn get_favorite_artists(db: &DbPool) -> Result<Vec<artist::FavoriteArtist>, AppError> {
-    let artists = sqlx::query_as::<_, artist::FavoriteArtist>(
-        "SELECT ar.id, ar.name, ar.image_path, \
-                COUNT(DISTINCT t.id) AS favorite_count \
-         FROM artists ar \
-         JOIN track_artists ta ON ta.artist_id = ar.id \
-         JOIN tracks t ON t.id = ta.track_id AND t.is_favorite = TRUE \
-         GROUP BY ar.id",
-    )
-    .fetch_all(db.read())
+/// Favorites' Favorite Artists cards for `ids`, each with how many of its tracks are favourites,
+/// in the order asked for. An id that has lost its last favourite since the keyset was read
+/// returns nothing.
+pub async fn get_favorite_artists_by_ids(
+    db: &DbPool,
+    ids: &[i64],
+) -> Result<Vec<artist::FavoriteArtist>, AppError> {
+    let rows = chunked_in_query(db.read(), ids, |placeholders| {
+        format!(
+            "SELECT ar.id, ar.name, ar.image_path, COUNT(DISTINCT t.id) AS favorite_count \
+             FROM artists ar \
+             JOIN track_artists ta ON ta.artist_id = ar.id \
+             JOIN tracks t ON t.id = ta.track_id AND t.is_favorite = TRUE \
+             WHERE ar.id IN ({placeholders}) \
+             GROUP BY ar.id"
+        )
+    })
     .await?;
-    Ok(artists)
+    Ok(in_id_order(rows, ids, |a: &artist::FavoriteArtist| a.id))
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
 //! `Genres.*` / `GenreDetail.*` callbacks: [`grid`] (the tile grid — client-side
 //! filter / sort, drill-in), [`detail`] (close-detail, plus the set every detail
 //! shares) and
-//! [`lifecycle`] (section enter/leave caches plus the `library_changed` re-fetch
-//! subscriber).
+//! [`lifecycle`] (what the tab hands the shared section lifecycle,
+//! `callbacks::grid_tab`).
 //!
 //! A mirror of `albums/callbacks` minus everything cover-related — genres have no
 //! intrinsic artwork — so there is no `request-cover` handler, no grid-cover release

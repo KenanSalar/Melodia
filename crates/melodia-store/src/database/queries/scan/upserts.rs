@@ -7,6 +7,7 @@ use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::error::AppError;
 
 use super::name_cache::NameCache;
+use crate::database::queries::search_name::{self, Named};
 
 /// The statements a credit rewrite is made of, one per table.
 ///
@@ -185,10 +186,12 @@ async fn write_genres(
     Ok(())
 }
 
-/// [`replace_track_joins`] for an album, plus the rendered credit `album_stats` displays.
+/// [`replace_track_joins`] for an album, plus the rendered credit `album_stats` displays and the
+/// `search_name` the Albums grid filters that same line by.
 ///
 /// No insert-only sibling: `upsert_album` reaches this down both arms of its `ON CONFLICT`, so the
-/// rows may or may not be there and only the delete can tell.
+/// rows may or may not be there and only the delete can tell. Both arms reaching it is also what
+/// makes it the one place an album's `search_name` is written.
 pub(crate) async fn replace_album_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     album_id: i64,
@@ -209,7 +212,7 @@ pub(crate) async fn replace_album_credits(
         .bind(album_id)
         .execute(&mut **tx)
         .await?;
-    Ok(())
+    search_name::refill(tx, Named::Albums, album_id).await
 }
 
 /// Drop a parent's whole credit, ahead of writing the replacement.
@@ -313,7 +316,7 @@ async fn apply_artist_details(
     if sort_name.is_none() && musicbrainz_id.is_none() {
         return Ok(());
     }
-    sqlx::query(
+    let written = sqlx::query(
         "UPDATE artists SET
             sort_name = CASE
                 WHEN ? IS NOT NULL AND (sort_name IS NULL OR sort_name = '') THEN ?
@@ -334,11 +337,19 @@ async fn apply_artist_details(
     .bind(musicbrainz_id)
     .execute(&mut **tx)
     .await?;
+    // Either column may be the one that moved; refilling for a MusicBrainz id alone costs a write
+    // as rare as this one.
+    if written.rows_affected() > 0 {
+        search_name::refill(tx, Named::Artists, artist_id).await?;
+    }
     Ok(())
 }
 
 /// Find or create an artist by name, returning the artist ID.
 /// Uses the provided `unknown_artist_id` for empty artist names.
+///
+/// A new row's `search_name` packs the name alone, no sort name having been written yet. The
+/// conflict arm only re-cases the name, which folds the same, so it leaves the column be.
 pub(crate) async fn upsert_artist(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     name: &str,
@@ -348,11 +359,12 @@ pub(crate) async fn upsert_artist(
         return Ok(unknown_artist_id);
     }
     let id = sqlx::query_scalar::<_, i64>(
-        "INSERT INTO artists (name) VALUES (?)
+        "INSERT INTO artists (name, search_name) VALUES (?, ?)
          ON CONFLICT(name) DO UPDATE SET name = excluded.name
          RETURNING id",
     )
     .bind(name)
+    .bind(search_name::pack(&[name]))
     .fetch_one(&mut **tx)
     .await?;
     Ok(id)
@@ -428,7 +440,8 @@ pub(crate) async fn upsert_album(
 }
 
 /// Find or create a genre by name, returning the genre ID.
-/// Returns None if the genre name is empty.
+/// Returns None if the genre name is empty. The conflict arm only re-cases the name, which folds
+/// the same, so only a new row writes its `search_name`.
 pub(crate) async fn upsert_genre(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     name: &str,
@@ -437,11 +450,12 @@ pub(crate) async fn upsert_genre(
         return Ok(None);
     }
     let id = sqlx::query_scalar::<_, i64>(
-        "INSERT INTO genres (name) VALUES (?)
+        "INSERT INTO genres (name, search_name) VALUES (?, ?)
          ON CONFLICT(name) DO UPDATE SET name = excluded.name
          RETURNING id",
     )
     .bind(name)
+    .bind(search_name::pack(&[name]))
     .fetch_one(&mut **tx)
     .await?;
     Ok(Some(id))

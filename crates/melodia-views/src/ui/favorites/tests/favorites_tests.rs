@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use super::rows::Scrolls;
 use super::{FavoritesTab, FavoritesUi};
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
-use melodia_core::entities::artist::FavoriteArtist;
 use melodia_testkit::write_test_png;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -19,25 +19,29 @@ const SONGS: &str = include_str!("../songs.rs");
 const SONGS_TAB: &str =
     include_str!("../../../../../melodia-ui/ui/views/favorites/songs-tab.slint");
 const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
+const TRACK_ROWS: &str = include_str!("../../paged_rows/track_rows.rs");
+
+/// The body after `marker` in `src`, up to the end of the item it opens.
+fn item_body<'a>(src: &'a str, marker: &str, end: &str) -> &'a str {
+    src.split_once(marker)
+        .and_then(|(_, rest)| rest.split_once(end))
+        .map(|(body, _)| body)
+        .unwrap_or_default()
+}
 
 /// `Favorites.tracks` feeds one element in the whole tree, under the Songs
-/// tab's `if` — so off that tab, every filter walk the Songs path runs
-/// reaches nothing and every snapshot it leaves in the model is pinned behind a
-/// view nobody can see.
+/// tab's `if` — so off that tab, every keyset load the Songs path runs
+/// reaches nothing.
 ///
-/// Four things hold that, and each fails differently. `build_filtered_tracks`'
-/// bail is what skips the cost; drop it and the tab gate becomes decorative,
-/// with the whole favourites list still walked per keystroke on the UI thread.
-/// `write_filtered_tracks`' is what survives a pick landing mid-post; drop it
-/// and the retention comes back on exactly the race the first one can't see. The
-/// tab-leave **clear** is what empties what the last visit left; drop it and the
-/// snapshot simply stays. And the tab pick writing through the **non-hopping**
-/// `apply_filtered_tracks_now` is what stops that clear becoming visible: the
-/// entering tab mounts on the next frame, and a posted write that loses the race
-/// paints a `TrackList` of headers over nothing.
+/// Two things hold that, and each fails differently. `requery_tracks`' bail is
+/// what skips the query; drop it and the tab gate becomes decorative, every
+/// keystroke on a grid tab reloading a list nobody can see. The tab term in
+/// `still_wanted`, which the shared load path asks again on the UI thread, is
+/// what survives a pick landing mid-load; drop either half and a load the pick
+/// overtook replaces the list the tab left behind, without the dirty flag that
+/// tells the next visit to reload it.
 ///
-/// None of the four shows on screen except the last, and that one only for a
-/// frame — which is why they are pinned rather than trusted.
+/// Neither shows on screen, which is why they are pinned rather than trusted.
 #[test]
 fn the_songs_model_is_written_only_while_its_tab_is_mounted() {
     assert!(
@@ -45,27 +49,21 @@ fn the_songs_model_is_written_only_while_its_tab_is_mounted() {
         "songs-tab.slint is the sole reader of `Favorites.tracks` — if that moved, this gate needs re-deriving"
     );
 
-    let build =
-        SONGS.split_once("fn build_filtered_tracks").map(|(_, rest)| rest).unwrap_or_default();
+    let requery = item_body(SONGS, "pub fn requery_tracks(", "\n}\n");
     assert!(
-        build.contains("if fav_ui.active_tab() != FavoritesTab::Songs {"),
-        "`build_filtered_tracks` must bail before the prepare walk when Songs isn't mounted"
+        requery.contains("if fav_ui.active_tab() != FavoritesTab::Songs {"),
+        "`requery_tracks` must bail before the query when Songs isn't mounted"
     );
 
-    let write =
-        SONGS.split_once("fn write_filtered_tracks").map(|(_, rest)| rest).unwrap_or_default();
+    let wanted = item_body(SONGS, "fn still_wanted(", "\n    }\n");
     assert!(
-        write.contains("|| fav_ui.active_tab() != FavoritesTab::Songs"),
-        "`write_filtered_tracks` must re-check the tab — a pick can land while the post is in flight"
+        wanted.contains("self.active_tab() == FavoritesTab::Songs"),
+        "`still_wanted` must ask for the tab, a pick being able to land while the load is in flight"
     );
-
+    let show = item_body(TRACK_ROWS, "fn show<", "\n}\n");
     assert!(
-        SUBVIEWS.contains("favorites_ui_mod::hide_tracks(&g);"),
-        "leaving the Songs tab must empty `Favorites.tracks`, the way `write_filtered_grids` empties the grid it isn't mounting"
-    );
-    assert!(
-        SUBVIEWS.contains("apply_filtered_tracks_now(&ui, &fu)"),
-        "the tab pick must write without hopping the event loop, or the clear above shows as a bare list"
+        show.contains("list.still_wanted(&query)"),
+        "the shared load path must ask `still_wanted` again on the UI thread, where the pick lands"
     );
 }
 
@@ -305,25 +303,14 @@ fn every_grid_mount_forwards_the_covers_generation() {
 #[test]
 fn a_leave_keeps_a_proxy_of_what_the_grid_painted() -> TestResult {
     let (_tmp, path) = write_test_png(512)?;
-    let path = path.to_str().ok_or("temp path is not UTF-8")?;
+    let path_str = path.to_str().ok_or("temp path is not UTF-8")?;
 
-    let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()), None);
-    fav_ui.set_active_tab(FavoritesTab::Artists);
-    *fav_ui.state().fav_artists.lock() = vec![FavoriteArtist {
-        id: 1,
-        name: "Artist".to_owned(),
-        image_path: Some(path.to_owned()),
-        favorite_count: 2,
-    }];
-
-    fav_ui.set_section_active(true);
-    fav_ui.prewarm_tab_covers(FavoritesTab::Artists);
-    let warm = crate::ui::grid_prewarm::grid_cover(path).size().width;
+    crate::ui::grid_prewarm::prewarm(std::slice::from_ref(&path));
+    let warm = crate::ui::grid_prewarm::grid_cover(path_str).size().width;
     assert!(warm > 0, "a prewarm must leave its covers in the tier");
 
-    fav_ui.set_section_active(false);
     crate::ui::grid_prewarm::hand_back_covers();
-    let proxy = crate::ui::grid_prewarm::grid_cover(path).size().width;
+    let proxy = crate::ui::grid_prewarm::grid_cover(path_str).size().width;
     assert!(
         proxy > 0 && proxy < warm,
         "a leave must leave a smaller picture behind, not an empty one \
@@ -332,147 +319,95 @@ fn a_leave_keeps_a_proxy_of_what_the_grid_painted() -> TestResult {
     Ok(())
 }
 
-/// Each fetch is armed wherever the cache it fills is emptied and disarmed
-/// wherever it is filled — the `RecentlyPlayedUi::grid_dirty` discipline, over
-/// two flags because this page has two gated fetches.
+/// Each tab's load is armed wherever the list it fills is emptied and disarmed
+/// wherever it is filled — the `RecentlyPlayedUi::grid_dirty` discipline, one
+/// flag per tab.
 ///
-/// Three obligations, each a bug on the way in. The fetching branch **consumes**
+/// Three obligations, each a bug on the way in. The loading tab **consumes**
 /// its flag (seeded `true`, so a boot onto a tab otherwise pays for its own
-/// fetch twice) and marks the *other*, which is the whole record that a tick
-/// went by. The section wipe re-arms both beside the caches it just cleared,
-/// rather than leaving it to the leave's own `mark_dirty` two files away. And
-/// each fetch re-arms its own on either way of storing nothing — a failed query
-/// or a leave landing mid-flight — because the tab pick consumes the flag
-/// *before* spawning, so nothing else would.
+/// load twice) and marks the *others*, which is the whole record that a tick
+/// went by. The section wipe re-arms every tab beside the lists it just
+/// cleared, rather than leaving it to the leave's own `mark_dirty` two files
+/// away. And each load re-arms its own on a way of storing nothing, because
+/// the tab pick consumes the flag *before* spawning, so nothing else would.
 #[test]
 fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
     const LIFECYCLE: &str = include_str!("../callbacks/lifecycle.rs");
     const HANDLE: &str = include_str!("../mod.rs");
-    const GRIDS_FETCH: &str = include_str!("../grids/fetch.rs");
+    const GRIDS: &str = include_str!("../grids/mod.rs");
 
     let kick = LIFECYCLE
         .split_once("async fn kick_full_refresh(")
         .and_then(|(_, rest)| rest.split_once("\n}"))
         .map(|(body, _)| body)
         .unwrap_or_default();
-    for consumed in ["fav_ui.take_songs_dirty();", "fav_ui.take_grids_dirty();"] {
-        assert!(
-            kick.contains(consumed),
-            "`kick_full_refresh`'s fetching branch must consume its own flag — leaving it set \
-             makes the next pick re-query a cache this call just filled ({consumed})"
-        );
-    }
-    for marked in ["fav_ui.mark_songs_dirty();", "fav_ui.mark_grids_dirty();"] {
-        assert!(
-            kick.contains(marked),
-            "and it must mark the branch it skipped, or the pick that mounts that tab has no \
-             record that a tick went by ({marked})"
-        );
-    }
+    assert!(
+        kick.contains("fav_ui.take_tab_dirty(tab);"),
+        "`kick_full_refresh` must consume the mounted tab's flag — leaving it set makes the \
+         next pick reload a list this call just filled"
+    );
+    assert!(
+        kick.contains("fav_ui.mark_tab_dirty(tab);"),
+        "and it must mark the tabs it skipped, or the pick that mounts one has no record that \
+         a tick went by"
+    );
 
     let release = HANDLE
         .split_once("pub fn release_section_state(")
         .and_then(|(_, rest)| rest.split_once("\n    }"))
         .map(|(body, _)| body)
         .unwrap_or_default();
-    for marked in ["self.mark_songs_dirty();", "self.mark_grids_dirty();"] {
-        assert!(
-            release.contains(marked),
-            "`release_section_state` must re-arm both flags beside the caches it wipes ({marked})"
-        );
-    }
+    assert!(
+        release.contains("self.mark_tab_dirty(tab);"),
+        "`release_section_state` must re-arm every tab beside the lists it wipes"
+    );
 
-    // Two ways of storing nothing per fetch: a failed query and a leave landing
-    // mid-flight. `refresh_tracks` asks the section guard twice — before and
-    // after its cover prewarm — so it carries three marks in all.
-    assert_eq!(
-        SONGS.matches("mark_songs_dirty()").count(),
-        3,
-        "`refresh_tracks` must re-arm on the failed query and on both section bails"
+    // The Songs loads re-arm through `load_dropped`, which the shared path calls on
+    // a failed query in either load, a failed facts read in a reload, both bails off
+    // the event loop (before and after the reload's cover prewarm), and a write the
+    // tab or the section overtook: six calls in all.
+    assert!(
+        item_body(SONGS, "fn load_dropped(", "\n    }\n").contains("self.mark_songs_dirty();"),
+        "a Songs load that shows nothing must re-arm the tab's flag"
     );
     assert_eq!(
-        GRIDS_FETCH.matches("mark_grids_dirty()").count(),
+        TRACK_ROWS.matches("list.load_dropped()").count(),
+        6,
+        "the shared load path must re-arm on both failed queries, the failed facts read, both \
+         bails off the event loop and a refused write"
+    );
+    // A grid's load that fails re-arms its own tab through `load_failed`; a leave
+    // landing mid-flight is the release's, which marks every tab.
+    assert_eq!(
+        GRIDS.matches("fn load_failed(").count(),
         2,
-        "`refresh_grids` must re-arm on a failed query and on the section bail"
+        "each grid tab must re-arm its own flag on a failed load"
     );
 }
 
-/// A grid pick that spawns a fetch takes back the count its synchronous apply
-/// just wrote.
-///
-/// The apply walks the cache the skipped tick left empty, so the `0` it writes
-/// is the one value meaning "there is nothing here" — `GridEmptyState` over a
-/// library that has plenty, for the length of the query plus the cover-decode
-/// burst it awaits. Songs owes no equivalent and that asymmetry is the point:
-/// `Favorites.track-count` is written by `refresh_hero`, which is never gated.
+/// A tab pick clears the needle the three tabs share, so a tab left filtered holds ids the next
+/// visit doesn't show, and owes a reload. Unfiltered, the list is already what the pick will
+/// show.
 #[test]
-fn a_grid_pick_rewinds_the_count_it_could_not_answer() {
-    let pick = SUBVIEWS
-        .split_once("fn wire_tab_changed(")
-        .and_then(|(_, rest)| rest.split_once("\n}"))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
-
-    let (before_fetch, after_fetch) = pick.split_once("if needs_fetch {").unwrap_or_default();
-    assert!(
-        before_fetch.contains("fu.take_songs_dirty()")
-            && before_fetch.contains("fu.take_grids_dirty()"),
-        "the pick must consume the entering tab's flag before the applies — the answer is what \
-         decides whether the count they write stands for anything"
-    );
-    assert!(
-        before_fetch.contains("apply_filtered_grids_now(&ui, &fu)"),
-        "and the apply must come first, so a warm cache still paints on this tick"
-    );
-    for rewound in ["set_most_played_count(UNFETCHED_COUNT)", "set_artist_count(UNFETCHED_COUNT)"] {
-        assert!(
-            after_fetch.contains(rewound),
-            "a grid pick that spawns a fetch must rewind that tab's count ({rewound})"
+fn only_a_tab_left_filtered_owes_a_reload() {
+    const CASES: [(FavoritesTab, &str, bool, &str); 4] = [
+        (FavoritesTab::Songs, "ha", true, "Songs, filtered"),
+        (FavoritesTab::Songs, "", false, "Songs, unfiltered"),
+        (FavoritesTab::Songs, "   ", false, "Songs, a needle of spaces, which trims to nothing"),
+        (FavoritesTab::Artists, "ha", true, "a grid tab, filtered"),
+    ];
+    for (tab, filter, expected, case) in CASES {
+        let fav_ui = FavoritesUi::new(
+            Arc::new(CoverThumbs::new()),
+            None,
+            Scrolls::default(),
+            slint::Weak::default(),
         );
-    }
-    assert!(
-        !after_fetch.contains("set_track_count(UNFETCHED_COUNT)"),
-        "Songs must not rewind: its count comes from the ungated `refresh_hero`, so it is \
-         answered on every tab either way"
-    );
-}
+        fav_ui.set_active_tab(tab);
+        super::set_filter(&fav_ui, filter);
 
-/// And the apply that answers that rewind writes its counts **above** the
-/// signature guard, or the sentinel above is permanent.
-///
-/// The pick stamps a signature over the cache its skipped tick left in place and
-/// only then rewinds; the fetch it spawned lands on that same signature whenever
-/// the content hasn't moved — an empty grid on a library with no favourites, or a
-/// `stats_changed` tick for a track this query doesn't rank — so a count written
-/// past the guard is one that never arrives. `-1` misses `> 0` as well as `== 0`,
-/// so what strands is not only the empty state: `favorites-view.slint` gates the
-/// Most Played Shuffle pill and the Artists sort row the other way, and both
-/// vanish over a grid that is full.
-///
-/// The mutation to check is moving either write back under the guard, where it
-/// reads as belonging with the model write beside it and compiles.
-#[test]
-fn the_grid_counts_are_written_before_the_signature_can_skip_them() {
-    const GRIDS_APPLY: &str = include_str!("../grids/apply.rs");
+        let owed = fav_ui.shows_filtered();
 
-    let write = GRIDS_APPLY
-        .split_once("fn write_filtered_grids(")
-        .and_then(|(_, rest)| rest.split_once("\n}"))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
-
-    assert!(
-        write.contains("last_grid_signature"),
-        "`write_filtered_grids` must still take the signature guard — this pin is about where \
-         the counts sit relative to it, not about retiring it"
-    );
-    let before_guard = write.split_once("last_grid_signature").map_or("", |(head, _)| head);
-    for count in ["set_most_played_count(", "set_artist_count("] {
-        assert!(
-            before_guard.contains(count),
-            "{count} must be written above the signature guard: the guard is what a tab pick's \
-             own fetch lands on when the content hasn't moved, and it would leave \
-             `UNFETCHED_COUNT` standing with no answer coming"
-        );
+        assert_eq!(owed, expected, "{case}");
     }
 }

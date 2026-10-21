@@ -1,24 +1,23 @@
-//! The Slint models the view writes into, and the row mapper that fills the
-//! Most Played grid.
+//! The Slint models the view writes into.
 
 use std::rc::Rc;
 
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, VecModel};
 
-use crate::ui::util::{clamp_i64_to_i32, opt_shared};
-use melodia_core::entities::track::MostPlayedFavorite;
-use melodia_ui::{
-    AppWindow, EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow,
-    RecentlyPlayed, TrackListRow as UiTrackListRow,
-};
+use super::grid::RecentMostPlayed;
+use crate::ui::card_grid;
+use crate::ui::paged_rows::ScrollPoint;
+use melodia_app::state::AppState;
+use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
-/// Bind empty Slint `VecModel`s for the Most Played grid, the Songs list and the
-/// selection set. Subsequent updates locate them by downcasting back to
-/// `VecModel<T>` from the UI thread.
-pub(super) fn install_recently_played_models(ui: &AppWindow) {
+/// Bind the page's models, each installed once: the Most Played grid a `PagedGrid`, the Songs list
+/// and the selection set `VecModel`s. Hands back where the grid is scrolled, for the loads that
+/// seed it.
+pub(super) fn install_recently_played_models(ui: &AppWindow, state: &AppState) -> ScrollPoint {
     let g = ui.global::<RecentlyPlayed>();
 
-    let most_played: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
+    let most_played = card_grid::install::<RecentMostPlayed>(state, ui);
+    let scroll = most_played.scroll_point();
     g.set_most_played_rows(ModelRc::from(most_played));
 
     let tracks: Rc<VecModel<UiTrackListRow>> = Rc::new(VecModel::default());
@@ -26,18 +25,5 @@ pub(super) fn install_recently_played_models(ui: &AppWindow) {
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     g.set_selected_ids(ModelRc::from(sel));
-}
-
-/// Map a `MostPlayedFavorite` to its Slint card row. Subtitle is the artist
-/// name; `play_count` rides in the `play_count` slot so the grid's
-/// `show-play-count: true` reveals the badge.
-pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
-    UiEntityStripRow {
-        id: clamp_i64_to_i32(t.id),
-        title: SharedString::from(t.title.as_str()),
-        subtitle: opt_shared(t.artist.as_deref()),
-        artwork_path: opt_shared(t.artwork_path.as_deref()),
-        play_count: t.play_count,
-        is_favorite: t.is_favorite,
-    }
+    scroll
 }

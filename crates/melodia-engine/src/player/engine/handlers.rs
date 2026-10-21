@@ -17,8 +17,8 @@ use super::state::{
 };
 use super::types::{PersistedPlayback, PlaybackSource, PlaybackStatus};
 use melodia_audio::player::source::prebuffer::StreamShared;
+use melodia_core::entities::track::TrackSummary;
 use melodia_playback::player::playback::crossfade;
-use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
 /// How often the monitor wakes: tight enough that gapless preload triggers and
 /// end-of-stream detection stay responsive, loose enough not to spin.
@@ -142,8 +142,9 @@ pub struct BackendSnapshot {
 /// make the *same* transition.
 pub struct PlayingTick {
     pub tick: PositionTick,
-    /// Path + baked `ReplayGain` of the track to stage behind the current one.
-    pub late_preload: Option<(String, TrackReplayGain)>,
+    /// The track to stage behind the current one. Its path and baked `ReplayGain` go to the deck,
+    /// and the monitor keeps the record to seat once the deck hands over to it.
+    pub late_preload: Option<Arc<TrackSummary>>,
     pub crossfade: Option<crossfade::CrossfadeDecision>,
 }
 
@@ -181,8 +182,10 @@ pub fn evaluate_playing_tick(
         return Some(PlayingTick { tick, late_preload: None, crossfade: None });
     }
 
-    let next = state.queue.peek_next();
-    let same_album = match (state.current_track(), next) {
+    // A next track whose record the window doesn't hold yet is no next yet: neither the crossfade
+    // nor the stage below can wait on a fetch, and the next poll asks again.
+    let next = state.queue.peek_next().and_then(|id| state.record(id));
+    let same_album = match (state.current_track(), next.as_ref()) {
         (Some(cur), Some(nxt)) => crossfade::same_album(cur, nxt),
         _ => false,
     };
@@ -244,10 +247,7 @@ pub fn evaluate_playing_tick(
         && pulled_ms <= state.duration_ms
         && state.duration_ms.saturating_sub(pulled_ms) < PRELOAD_LEAD_MS
     {
-        // Capture the next track's baked ReplayGain alongside its path — it must
-        // travel with *its own* source (the preloaded track has different tags
-        // than the playing one), so the gain is baked per source, not shared.
-        state.queue.peek_next().map(|t| (t.file_path.clone(), t.as_ref().into()))
+        next
     } else {
         None
     };
@@ -273,7 +273,7 @@ fn next_needs_reopen(
         if !state.source_allows(PlaybackSource::advances_queue) {
             return false;
         }
-        state.queue.peek_next().map(|track| track.file_path.clone())
+        state.queue.peek_next().and_then(|id| state.record(id)).map(|track| track.file_path.clone())
     };
     next_path.is_some_and(|path| engine.reopens_for(&path))
 }
@@ -402,6 +402,9 @@ struct Monitor {
     save_tick_counter: u64,
     publish: SecondGate,
     pause_watch: PauseWatch,
+    /// The record of the track last staged behind the current one, which the deck plays once it
+    /// hands over. Only the monitor stages, and a deck holds one stage at a time.
+    staged: Option<Arc<TrackSummary>>,
     /// Last ICY title generation reconciled into `PlayerState`. Generations are process-wide
     /// tickets starting at 1, so this holds across stations and `0` means nothing seen yet.
     last_title_generation: u64,
@@ -419,6 +422,7 @@ impl Monitor {
             save_tick_counter: 0,
             publish: SecondGate::default(),
             pause_watch: PauseWatch::default(),
+            staged: None,
             last_title_generation: 0,
         }
     }
@@ -462,7 +466,8 @@ impl Monitor {
         }
     }
 
-    fn advance_gapless(&self) {
+    fn advance_gapless(&mut self) {
+        let staged = self.staged.take();
         let engine = &self.engine;
         emit_and_execute(&*self.engine, &self.player_state, &self.sinks, |state| {
             // Claimed under the emit, as a crossfade re-verifies its decision there: a track start
@@ -471,23 +476,7 @@ impl Monitor {
             if !engine.claim_gapless_handover() {
                 return Vec::new();
             }
-            let mut actions = Vec::with_capacity(2);
-
-            // Update play count for the track that just finished
-            if let Some(track) = state.current_track() {
-                actions.push(PlayerAction::UpdatePlayCount(track.id));
-            }
-
-            // Advance queue — update state only (the deck is already playing).
-            // The next gapless preload is staged later, by the `Playing`
-            // branch, when this new current track approaches its own end.
-            if let Some(track) = state.queue.advance().cloned() {
-                state.position_ms = 0;
-                state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
-                state.source = Some(PlaybackSource::Track(track));
-            }
-
-            actions
+            state.build_gapless_advance_actions(staged)
         });
     }
 
@@ -551,8 +540,11 @@ impl Monitor {
             emit_and_execute(&*self.engine, &self.player_state, &self.sinks, |state| {
                 state.build_crossfade_actions(decision)
             });
-        } else if let Some((path, rg)) = late_preload {
-            self.engine.preload_gapless(Some(&path), rg);
+        } else if let Some(track) = late_preload {
+            // The staged track's own `ReplayGain`, baked into its own source: its tags are not
+            // the playing track's.
+            self.engine.preload_gapless(Some(&track.file_path), track.as_ref().into());
+            self.staged = Some(track);
         }
         Poll::Counted
     }

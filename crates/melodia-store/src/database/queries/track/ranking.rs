@@ -1,12 +1,14 @@
 //! The play-count rankings: the Favorites hero and its Most Played tab, and the library-wide Most
 //! Played tab.
 
-use sqlx::AssertSqlSafe;
+use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite};
 
-use super::columns;
+use super::keyset::{fetch_packed_ids, push_needle};
 use crate::database::DbPool;
 use melodia_core::entities::track;
+use melodia_core::entities::track_list::{MostPlayedTotals, TrackListScope};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 
 /// The `ORDER BY` body every "most played" surface ranks with, the Favorites hero mosaic included.
 ///
@@ -19,13 +21,10 @@ use melodia_core::error::AppError;
 /// last gap.
 const MOST_PLAYED_ORDER: &str = "play_count DESC, last_played DESC, date_added DESC, id ASC";
 
-/// Aggregate stats for the Favorites hero header: count, total duration, up to 4 artwork paths.
+/// Aggregate stats for the Favorites hero header: count, total duration, the artist and album
+/// spread, up to 4 artwork paths.
 pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, AppError> {
-    let (count, total_duration_ms): (i64, i64) = sqlx::query_as(
-        "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0) FROM tracks WHERE is_favorite = TRUE",
-    )
-    .fetch_one(db.read())
-    .await?;
+    let facts = super::scope_facts(db, TrackListScope::Favorites).await?;
 
     // Up to 4 *distinct* artworks for the Favorites banner collage: walk the
     // favourites in `MOST_PLAYED_ORDER` and keep each cover's best slot, which
@@ -52,56 +51,74 @@ pub async fn get_favorite_stats(db: &DbPool) -> Result<track::FavoriteStats, App
     .fetch_all(db.read())
     .await?;
 
-    Ok(track::FavoriteStats { count, total_duration_ms, artwork_paths })
+    Ok(track::FavoriteStats {
+        count: facts.tracks,
+        total_duration_ms: facts.duration_ms,
+        artists: facts.artists,
+        albums: facts.albums,
+        artwork_paths,
+    })
 }
 
-/// Favorite tracks by play count, most played first (only those with `play_count` > 0), ordered
-/// by [`MOST_PLAYED_ORDER`].
-///
-/// Returns the whole set rather than a top N — the Most Played tab is a
-/// virtualized grid, so it has nothing to gain by truncating. Once `ANALYZE`
-/// has run (shutdown's `PRAGMA optimize`) the partial `idx_tracks_play_count`
-/// drives the scan and supplies the leading term, leaving the three
-/// tiebreakers to a sort inside each tied group; with no stats yet the planner
-/// prefers the `is_favorite` equality index and sorts the lot.
-pub async fn get_most_played_favorites(
+/// Every track the library-wide Most Played tab ranks.
+const PLAYED: &str = "play_count > 0";
+
+/// Every track Favorites' Most Played tab ranks.
+const PLAYED_FAVORITES: &str = "is_favorite = TRUE AND play_count > 0";
+
+/// The library-wide Most Played tab's ids, ranked by [`MOST_PLAYED_ORDER`] and narrowed by
+/// `needle`: what a grid holding only ids keeps.
+pub async fn most_played_ids(db: &DbPool, needle: &Needle) -> Result<Vec<i64>, AppError> {
+    ranked_ids(db, PLAYED, needle).await
+}
+
+/// [`most_played_ids`] over the favorites alone.
+pub async fn most_played_favorite_ids(db: &DbPool, needle: &Needle) -> Result<Vec<i64>, AppError> {
+    ranked_ids(db, PLAYED_FAVORITES, needle).await
+}
+
+/// Read back packed, as `track_ids` argues: a played set can be most of a library.
+async fn ranked_ids(
     db: &DbPool,
-) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    // The order's trailing keys are read, not selected — `MostPlayedFavorite`
-    // is the card projection and has no slot for a timestamp.
-    let cols = columns::MOST_PLAYED.joined();
-    let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
-        "SELECT {cols} \
-           FROM tracks \
-          WHERE is_favorite = TRUE AND play_count > 0 \
-          ORDER BY {MOST_PLAYED_ORDER}"
-    )))
-    .fetch_all(db.read())
-    .await?;
-    Ok(rows)
+    membership: &'static str,
+    needle: &Needle,
+) -> Result<Vec<i64>, AppError> {
+    let mut qb = QueryBuilder::<Sqlite>::new(
+        "SELECT group_concat(id, ',') FROM (SELECT id FROM tracks WHERE ",
+    );
+    qb.push(membership);
+    if !needle.is_empty() {
+        qb.push(" AND ");
+        push_needle(&mut qb, needle);
+    }
+    qb.push(" ORDER BY ").push(MOST_PLAYED_ORDER).push(")");
+    fetch_packed_ids(db, qb).await
 }
 
-/// Tracks by play count across the whole library, most played first (only those with
-/// `play_count` > 0). Sibling of [`get_most_played_favorites`] without the `is_favorite` filter —
-/// drives the Recently-Played view's "Most Played" tab through the same `MostPlayedFavorite` card
-/// projection and [`MOST_PLAYED_ORDER`].
-///
-/// **Returns the whole set rather than a top N**, because the tab that reads it is a virtualized
-/// grid and a cap there is a ceiling the user can scroll into with nothing saying why the list
-/// stops. This predicate reaches everything ever played, so on a large library each
-/// `stats_changed` tick — one per finished track, while the page is on screen — materializes a row
-/// per played track, and the Rust side holds them until the section is left
-/// (`RecentlyPlayedUiState::most_played`). Partial index `idx_tracks_play_count` covers the `WHERE`
-/// and the leading `ORDER BY` term.
-pub async fn get_most_played(db: &DbPool) -> Result<Vec<track::MostPlayedFavorite>, AppError> {
-    let cols = columns::MOST_PLAYED.joined();
-    let rows = sqlx::query_as::<_, track::MostPlayedFavorite>(AssertSqlSafe(format!(
-        "SELECT {cols} \
-           FROM tracks \
-          WHERE play_count > 0 \
-          ORDER BY {MOST_PLAYED_ORDER}"
+/// What the library-wide Most Played tab adds up to, whatever its filter shows: the band states
+/// the page, not the filter.
+pub async fn most_played_totals(db: &DbPool) -> Result<MostPlayedTotals, AppError> {
+    ranked_totals(db, PLAYED).await
+}
+
+/// [`most_played_totals`] over the favorites alone.
+pub async fn most_played_favorite_totals(db: &DbPool) -> Result<MostPlayedTotals, AppError> {
+    ranked_totals(db, PLAYED_FAVORITES).await
+}
+
+async fn ranked_totals(
+    db: &DbPool,
+    membership: &'static str,
+) -> Result<MostPlayedTotals, AppError> {
+    let (tracks, duration_ms, plays): (i64, i64, i64) = sqlx::query_as(AssertSqlSafe(format!(
+        "SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), COALESCE(SUM(play_count), 0) \
+           FROM tracks WHERE {membership}"
     )))
-    .fetch_all(db.read())
+    .fetch_one(db.read())
     .await?;
-    Ok(rows)
+    Ok(MostPlayedTotals {
+        tracks: i32::try_from(tracks).unwrap_or(i32::MAX),
+        duration_ms,
+        plays: i32::try_from(plays).unwrap_or(i32::MAX),
+    })
 }

@@ -213,6 +213,10 @@ msgid "Clear"
 msgstr "Törlés"
 
 #: ui/components/dialog/playlist-mosaic-picker.slint
+msgid "None of the tracks these rules match have artwork."
+msgstr "Az ezeknek a szabályoknak megfelelő számok egyikének sincs borítója."
+
+#: ui/components/dialog/playlist-mosaic-picker.slint
 msgid "Add tracks to this playlist to pick artwork."
 msgstr "Borító választásához adj számokat ehhez a lejátszási listához."
 
@@ -2534,11 +2538,6 @@ msgstr "A Melodia ingyenes és nyílt forráskódú. A támogatás segít, hogy 
 #: ui/views/settings/about-section.slint
 msgid "License"
 msgstr "Licenc"
-
-#. Translators: Ko-fi is a brand and stays as is; support means funding
-#: ui/views/settings/about-section.slint
-msgid "Support me on Ko-fi"
-msgstr "Támogass a Ko-fin"
 
 #: ui/views/settings/about-section.slint
 msgid "Welcome Guide"

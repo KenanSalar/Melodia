@@ -1,15 +1,10 @@
-//! The chunk every card grid does before it can hand Slint a model.
+//! The chunk a built card grid does before it can hand Slint a model.
 //!
 //! Each grid's `ListView` virtualizes by *row*, so the chunking is the virtualization
 //! boundary: a flat card list becomes `ceil(n / columns)` one-field row structs, each
-//! holding that row's cards as a nested model. Every card grid does it, differing only in
-//! the card type, the row type, and how a card is built.
-//!
-//! **That last difference is what splits the two entry points.** A caller that keeps its
-//! source and projects a card out of it borrows ([`chunk_rows`]); one that builds its cards
-//! in the same walk that filters them hands the `Vec` over ([`chunk_built_rows`]). Reaching
-//! for the borrowing form with `Clone::clone` as the projection is how the second group
-//! clones every card it was about to throw away.
+//! holding that row's cards as a nested model. The library grids page theirs through
+//! `ui::paged_rows::grid`; Browse and Radio build a flat `Vec` in the walk that filters it
+//! and chunk it here.
 //!
 //! Kept out of [`crate::ui::grid_prewarm`]: that module is the grids' shared *cover*
 //! machinery, and nothing here touches a cache.
@@ -18,38 +13,9 @@ use std::rc::Rc;
 
 use slint::{ModelRc, VecModel};
 
-use melodia_ui::{EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow};
-
-/// Chunk `items` into rows of `columns`, mapping each item through `card` and wrapping each
-/// row's cards through `row`. `columns` is floored at one — a grid mid-layout can report
-/// zero, and a zero-width chunk is a panic rather than an empty grid.
-pub fn chunk_rows<T, C, R>(
-    items: &[T],
-    columns: i32,
-    card: impl Fn(&T) -> C,
-    row: impl Fn(ModelRc<C>) -> R,
-) -> Vec<R>
-where
-    C: Clone + 'static,
-{
-    let cols = usize::try_from(columns.max(1)).unwrap_or(1);
-    let mut rows: Vec<R> = Vec::with_capacity(items.len().div_ceil(cols));
-    for chunk in items.chunks(cols) {
-        let cards: Vec<C> = chunk.iter().map(&card).collect();
-        rows.push(row(ModelRc::from(Rc::new(VecModel::from(cards)))));
-    }
-    rows
-}
-
-/// [`chunk_rows`] for a caller that already owns its cards — it **moves** them into the
-/// per-row models instead of projecting new ones out of a source.
-///
-/// The four entity grids chunk *indices* and build each card from a `GridData` they keep,
-/// so they need the borrowing form; the tabbed pages and Browse build a flat `Vec` in the
-/// same walk that filters it and then drop it, and handing that to [`chunk_rows`] means
-/// `Clone::clone` as the projection — a second full pass cloning every card into the chunk
-/// about to replace it, on the UI thread, once per finished track. None of it can move off
-/// that thread (`Rc<VecModel<_>>` is `!Send`), so dropping the clone is the whole win.
+/// Chunk `cards` into rows of `columns`, **moving** each card into its row's model and
+/// wrapping each row through `row`. `columns` is floored at one — a grid mid-layout can
+/// report zero, and a zero-width chunk is a panic rather than an empty grid.
 pub fn chunk_built_rows<C, R>(cards: Vec<C>, columns: i32, row: impl Fn(ModelRc<C>) -> R) -> Vec<R>
 where
     C: Clone + 'static,
@@ -66,12 +32,6 @@ where
         }
         rows.push(row(ModelRc::from(Rc::new(VecModel::from(chunk)))));
     }
-}
-
-/// The `EntityStripRow` → `EntityGridRow` specialisation of [`chunk_built_rows`], for
-/// the tabbed pages, whose cards are built by the walk that filters them.
-pub fn chunk_entity_rows(rows: Vec<UiEntityStripRow>, columns: i32) -> Vec<UiEntityGridRow> {
-    chunk_built_rows(rows, columns, |entities| UiEntityGridRow { entities })
 }
 
 #[cfg(test)]

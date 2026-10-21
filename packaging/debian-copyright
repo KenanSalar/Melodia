@@ -43,7 +43,7 @@ Files: crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRounded.ttf
  crates/melodia-ui/ui/assets/fonts/MaterialSymbolsRoundedFilled.ttf
 Copyright: 2026 Google LLC
 License: Apache-2.0
-Comment: Subset by scripts/subset-icon-fonts.sh down to the icon ligatures
+Comment: Subset by scripts/subset-icon-fonts.py down to the icon ligatures
  listed in scripts/icons.txt. No outline is altered.
 
 Files: winit/*

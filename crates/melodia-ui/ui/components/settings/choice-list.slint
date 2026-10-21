@@ -15,7 +15,6 @@ component ChoiceRow inherits Rectangle {
     background: root.selected
         ? Theme.accent.with-alpha(0.16)
         : (touch.has-hover ? Theme.card-control : transparent);
-    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;

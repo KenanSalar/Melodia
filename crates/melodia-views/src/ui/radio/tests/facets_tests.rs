@@ -71,15 +71,14 @@ fn a_codec_pick_sends_the_directorys_own_word_rather_than_the_label() {
 fn a_codec_row_is_found_by_the_word_it_draws() {
     let chip = Some(ChipFilter::Codec);
     let facet = |name: &str| Facet { name: name.to_owned(), code: None, station_count: 1 };
-    let found =
-        |facet: &Facet, needle: &str| matches_needle(chip, facet, &row_match::fold_needle(needle));
+    let found = |facet: &Facet, needle: &str| matches_needle(chip, facet, &fold_needle(needle));
 
     let rewritten = facet(UNKNOWN_CODEC);
     for needle in [SEGMENTED_CODEC_LABEL, "hls", "HL", UNKNOWN_CODEC] {
         assert!(found(&rewritten, needle), "the `HLS` row is dropped for `{needle}`");
     }
     assert!(
-        equals_needle(chip, &rewritten, &row_match::fold_needle("hls")),
+        equals_needle(chip, &rewritten, &fold_needle("hls")),
         "a needle spelling the whole label is exact, which is what ranks one pill over another"
     );
 

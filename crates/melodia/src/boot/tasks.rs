@@ -25,7 +25,11 @@ pub fn spawn_background_tasks(
     tasks::playback_monitor::spawn(spawner, state);
     tasks::file_event_processor::spawn(spawner, state, channels.file_event_rx);
     tasks::queue_prune::spawn(spawner, state);
+    // Fetches the records the player starts tracks from, which the queue holds only ids for.
+    // Before the restore, which seats its own window but whose first change this has to see.
+    tasks::queue_window::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
+    tasks::search_text_backfill::spawn(spawner, state);
     // Puts back a stored cover a cache finds missing: mid-session, and with watching off, where no
     // boot scan reconciles the library, one gone while the app was closed too.
     tasks::artwork_restore::spawn(spawner, state);

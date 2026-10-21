@@ -133,9 +133,9 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `SqlSafeStr`) — data never rides in the string, only through `.bind()`.
 
 - **Track projections by use case**, each with a column list in `queries::track::columns`:
-  `TrackSummary` (17 cols; queue/NP/playback, incl. 4 ReplayGain + `rating`); `TrackListRow` (17;
-  every list incl. Browse, whose directory fetch selects `file_path` beside it as the key it
-  matches files on disk by; incl. `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36;
+  `TrackSummary` (17 cols; the player's window of records and NP, incl. 4 ReplayGain + `rating`);
+  `TrackListRow` (17; every list incl. the queue sheet and Browse, whose directory fetch selects
+  `file_path` beside it as the key it matches files on disk by; incl. `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36;
   Edit-Tags dialog — the only production by-id multi-fetch, every single-valued tag column + the
   technical Summary cols); `PlaylistExportRow` (5;
   `file_path`/`file_hash`/`title`/`artist`/`duration_ms`, M3U8 export only); `Track` (60; scan
@@ -150,39 +150,48 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     populated from the rendered line splits `Chanson, Francaise` into two genres and saving makes
     that permanent.
 
-  - **The other half of narrowing is `ui::track_list_cache`**: the two views that retain a whole
-    list resident (My Library's Songs tab, Favorites') keep *converted* rows rather than
-    `TrackListRow`s, so the columns a list doesn't render are freed at fetch rather than held for
-    the session, and `ui::track_list_model` shows them to Slint in place, so the set is held once
-    rather than again as a `VecModel` copy. **Recently Played's Songs tab retains a list too and
-    deliberately stays off it** — `get_recently_played` is capped at 200 rows, so what the cache is
-    for (a resident set large enough that a second copy of it is the view's footprint) doesn't
-    apply, and it keeps the plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped*
-    fourth view belongs on the cache and its model, not on a sixth projection.
+  - **The other half of narrowing is the keyset**: every list that can grow with the library (both
+    Songs tabs, and the four details, a broad genre or a smart playlist running as long as one)
+    keeps only its ids and fetches the rows near the viewport by id
+    (`get_track_list_rows_by_ids`), converted as they land (`ui::paged_rows`), so no list holds a
+    row per track. **The queue is the same shape one layer down**: the engine holds its ids and
+    only a window of full records around the current slot (`audio-stack.md`), and the queue sheet
+    and Up Next fetch their rows by id. A detail's hero facts come off the same membership in SQL
+    (`queries::track::scope_facts`, `genre_lines`), the page holding no rows to fold them from.
+    **Recently Played's Songs tab retains a list and deliberately stays off it**:
+    `get_recently_played` is capped at 200 rows, so a keyset saves nothing there, and it keeps the
+    plain `Mutex<Vec<TrackListRow>>` plus `track_matches`. An *uncapped* list belongs on a keyset
+    and `ui::paged_rows`, not on a sixth projection. **The card grids are the same shape over
+    entity ids**: `queries::entity_keyset` sorts and filters each one, the cards near the viewport
+    come back by id (the `get_*_by_ids` beside each kind's queries, `get_most_played_by_ids` for
+    the two Most Played grids), and no whole-table fetch is left for a grid to reach for.
 
-  - **It is also why the whole-table fetches take no sort**: `get_all_tracks_for_list` and
-    `get_favorite_tracks_for_list` lost their `sort_by`/`sort_dir` when their callers started
-    re-permuting retained rows through `ui::track_sort`, and the eight-arm `track_list_order_by`
-    behind them went with them — one fixed `TRACK_LIST_ORDER` const in its place, argued at its
-    definition. Don't reintroduce a sort parameter for a fifth caller; retain and permute like the
-    other two.
+  - **`queries::track::keyset` sorts and filters in SQL**, with arms that reproduce
+    `ui::track_sort`'s one for one, the Songs tabs' reading of a missing year and of the length
+    included, each ending in the id so a descending sort is the exact reverse.
+    `crates/melodia/tests/cross_tier.rs` holds every arm against the comparator, including the
+    order the packed result is read back in, which `track_ids` argues. **The whole-table
+    `get_all_tracks_for_list` serves no list any more**: it is the comparator's input in
+    `cross_tier.rs` and the rating-import tests, in the fixed `TRACK_LIST_ORDER` argued at its
+    definition. Don't give it a sort parameter back; a list that needs an order takes a keyset.
 
-  - **Which makes a `for_list` query's own `ORDER BY` dead, and copying one the trap.** Every
-    detail view re-sorts what it fetched, so that clause decides nothing there.
-    `queries::track::entity_ids`, which answers what a card's right-click Play queues, has no
-    re-sort behind it and its clause is the whole answer. The two have to agree on the page's
-    **default** and can agree on nothing else, `resolve_view_sort` reading a field the user
-    persisted into `views.json`. Short of that they disagree from the first row: the same set
-    plays in one order from the page and another from the card beside it, which is what shipped:
-    `sort_key` where Artist and Genre Detail default to `"album"`, and bare nullable columns where
-    `ui::track_sort` maps an untagged track to `i32::MAX` and SQLite sorts NULL first. **Neither
-    crate can check it**, `melodia-store` being unable to name `melodia-views` and the comparator
-    being Rust against SQL, so the pin is `crates/melodia/tests/cross_tier.rs`'s
+  - **A card queues its tracks through a second query, and that query owes the page's default.**
+    `queries::track::entity_ids` answers what a card's right-click Play queues, while the page
+    beside it lists its keyset. The two have to agree on the page's **default** and can agree on
+    nothing else, `resolve_view_sort` reading a field the user persisted into `views.json`. Short
+    of that they disagree from the first row: the same set plays in one order from the page and
+    another from the card beside it, which is what shipped: `sort_key` where Artist and Genre
+    Detail default to `"album"`, and bare nullable columns where `ui::track_sort` maps an untagged
+    track to `i32::MAX` and SQLite sorts NULL first. **Neither crate can check it**,
+    `melodia-store` being unable to name `melodia-views` and the comparator being Rust against SQL,
+    so the pin is `crates/melodia/tests/cross_tier.rs`'s
     `a_card_queues_its_{artist,genre,album}_in_the_order_the_page_shows_it`: it asks both sides over
     a library built out of the partitions they answer differently, a tidy fixture agreeing by
-    accident. A new batch-action query states which arm it reproduces and joins that walk. **The
-    page's own default is the other half and moves separately**, so it is read off each detail
-    file's `resolve_view_sort` literal beside them.
+    accident. A new batch-action query states which arm it reproduces and joins that walk, and
+    copying `TRACK_LIST_ORDER` into one is the trap its definition argues. `entity_ids` takes both
+    of its orders from `keyset::detail_order`, so a card and the keyset of the page beside it share
+    one SQL spelling as well as one oracle. **The page's own default is the other half and moves
+    separately**, so it is read off each detail file's `resolve_view_sort` literal beside them.
 
 - **`tracks_fts` indexes eight columns, and adding a ninth is a migration, not an edit.** fts5 has
   no `ALTER`, so a change means dropping the table plus all three triggers and rebuilding.
@@ -190,27 +199,50 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   weights with the argument for each, which is `20260910000000` and was `20260802000001` before it
   — a rebuild moves that text rather than amending it, so read the latest one;
   `crates/melodia-store/src/database/queries/search.rs` carries the query shape and the folding
-  asymmetry. Two things neither of them can tell you: **a ninth column is two edits**, since the
-  per-view filter boxes never touch this index and walk in-memory caches through
-  `ui::row_match::search_fields`, which mirrors the column list by hand
-  (`.claude/rules/ui-patterns.md` owns that side, including the two places the answers deliberately
-  diverge); and **nothing outside that migration and `search_tests` may name a shadow table**,
+  asymmetry. Two things neither of them can tell you: **a ninth column is three edits**, since the
+  per-view filter boxes never touch this index. They match through `SearchFields`, which mirrors
+  the column list by hand (`.claude/rules/ui-patterns.md` owns that side, including the two places
+  the answers deliberately diverge), and the library-sized lists match its packed copy,
+  `tracks.search_text`, so the third edit is a migration blanking that column for the per-launch
+  backfill to refill in the new shape. `search_tests` pins the first against the index. And
+  **nothing outside that migration and `search_tests` may name a shadow table**,
   `tracks_fts_{data,idx,docsize,config}` being fts5's private storage, taking no foreign key and
   none of it droppable, `_docsize` least of all since bm25 reads it.
+
+- **A statement writing any of the five searchable columns writes `search_text` beside it.** Title,
+  artist, album artist, album and genre are folded into that column at write time, and today only
+  `bind_track_columns` writes them, through `DerivedColumns`. An `UPDATE` rewriting a rendered
+  artist line on its own leaves every library-sized filter matching the old name, and nothing
+  fails: the column is filled, so the backfill never looks at it again.
+
+- **The same holds for a card's name and `search_name`**, the folded copy each of `albums`,
+  `artists`, `genres` and `playlists` keeps for its grid's filter, packed by `queries::search_name`
+  with every field terminated so a filled row is never `''`. What it packs is what the card shows a
+  needle could mean: an album's name **with its displayed artist line**, `artist_credit` over the
+  primary artist, which is why the album is refilled after `replace_album_credits`, the one
+  statement writing that credit, rather than off the join; an artist's name with its sort name,
+  refilled wherever `apply_artist_details` fills one. An insert binds it beside the name, and the
+  per-launch backfill fills whatever a writer missed only while it is still `''`.
+
+- **`UNICODE_LOWER` is a query-side collation and never schema.** `database::collation` registers it
+  on every pool so an `ORDER BY` can reproduce `to_lowercase()`; an index, view, trigger or column
+  naming it leaves the table unreadable to any connection without it, the `sqlite3` CLI included.
+  Written here because the place to break it is a migration, nowhere near that module.
 
 ## Ratings
 
 - **Star ratings mirror the favorite path.** Inert `tracks.rating` (0–5) surfaced via a
   **hover-revealed** `StarRating` (`crates/melodia-ui/ui/components/star-rating.slint`) inside the
-  track-row Title cell — no rating column, no in-table sort. Rides on `TrackListRow` +
+  title cell track rows and queue rows share (`components/track-list/track-title.slint`) — no
+  rating column, no in-table sort. Rides on `TrackListRow` +
   `TrackSummary`. Writes via `library::ratings::{set_rating, set_current_rating}` (clamped 0–5),
   mirroring `favorites::{set_favorite, toggle_current_favorite}` down to the `sync_current_track_*`
   helper (over `player::state::sync_current_track_if_in`) that flips the playing track's cached
   field + emits, so the NP star updates from a list-row edit — it re-checks the id under the emit
   lock, safe against a mid-write track change. Rating **never changes list membership**, so every
-  surface is optimistic (`flip_rating`/`apply_row_rating`, detail siblings), wired via
-  `wire_row_flag!`; Search included, having no `library_changed` subscriber to fall back on. NP
-  parity via `wire_now_playing_rating`.
+  surface is optimistic (`flip_rating`/`apply_row_rating`, a paged list's `PagedRows::patch`),
+  wired via `wire_row_flag!`; Search included, having no `library_changed` subscriber to fall back
+  on. NP parity via `wire_now_playing_rating`.
 
 ## Write-through to files
 
@@ -268,9 +300,17 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   the same grid + detail** (My Library's Playlists tab, where the retired nav 7 folds):
   `PlaylistRow.is_smart` **gates off every manual-membership edit** — reorder, remove, file-drop,
   Add-to-Playlist, adding being a write of orphan `playlist_items` a smart list never reads.
+  Remove drops out through the detail's `view-context`, a smart one passing
+  `smart-playlist-detail`, which has no remove arm. **Wherever the playlist may be a smart one,
+  what it holds is asked through `queries::track`'s `Membership`, never a join on
+  `playlist_items`**, which answers nothing for a smart list and fails quietly: the artwork
+  picker's pool sat empty that way. Covers included: the picker reads `cover_paths`, and the
+  automatic thumbnail is filled on every read (`smart_playlists::fill_from_rules`) and never
+  written, so the artwork sweep holds nothing for it.
   `DurationMs` stores **whole seconds**, scaled ×1000 to the ms column. A **`stats_changed`
-  subscriber** gated on `has_stat_dependent_smart_playlists()` recounts only smart lists whose
-  criteria `depends_on_play_stats`. `rating` rules need the **full** `idx_tracks_rating` (a partial
+  subscriber** recounts only the smart lists the grid holds whose criteria
+  `depends_on_play_stats` (`smart_playlists::reading_play_stats`), and does nothing when none
+  does. `rating` rules need the **full** `idx_tracks_rating` (a partial
   `WHERE rating > 0` index is *not* used for `rating >= N`). **Load-bearing index alignment:** the
   editor's inline `@tr` dropdown arrays mirror the const arrays in `entities::smart_criteria`
   (`FIELDS`/`ops_for`/`MATCH_MODES`/`LIMIT_ORDERS`) **by position** — `smart_criteria_tests`

@@ -5,8 +5,8 @@ import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
 import { IconButton } from "../icon-button.slint";
 
-// Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust chunks the flat list
-// into rows of `columns` cards, covers come lazily off the host's
+// Virtualized playlist-card grid, `AlbumGrid`'s shape: Rust hands it rows of
+// `columns` cards, covers come lazily off the host's
 // `request-cover`, and the host mounts the scrollbar through the `v-*` contract.
 // Only a mounted card evaluates its cover binding, so the model stays pure data.
 export component PlaylistGrid inherits Rectangle {
@@ -103,6 +103,7 @@ export component PlaylistGrid inherits Rectangle {
                         // `crates/melodia/tests/entity_card_overlay.rs` bans the word here
                         // outright rather than trying to tell a position from a write.
                         context-requested(x, y) => { cell.open-menu(x, y); }
+                        menu-open: cell.menu-open;
 
                         // The hover-revealed CRUD trio. **The card's slot rather than the card
                         // itself**: it lived in `EntityCard` once, where every other host raising

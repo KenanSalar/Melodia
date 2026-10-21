@@ -1,48 +1,52 @@
-//! The Slint models the view writes into, and the row mappers that fill them.
+//! The Slint models the view writes into, and the row mapper Favorite Artists fills its cards with.
 
 use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use crate::ui::track_list_model::TrackListModel;
+use super::grids::{FavoriteArtistsGrid, FavoriteMostPlayed};
+use crate::ui::card_grid;
+use crate::ui::paged_rows::ScrollPoint;
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
+use melodia_app::state::AppState;
 use melodia_core::entities::artist::FavoriteArtist;
-use melodia_core::entities::track::MostPlayedFavorite;
-use melodia_ui::{
-    AppWindow, EntityGridRow as UiEntityGridRow, EntityStripRow as UiEntityStripRow, Favorites,
-};
+use melodia_ui::{AppWindow, EntityStripRow as UiEntityStripRow, Favorites};
 
-/// Bind empty models for the two grid tabs, the Songs list and the selection
-/// set. Subsequent updates locate them by downcasting back from the UI thread:
-/// the Songs list to a [`TrackListModel`], the rest to `VecModel<T>`.
-pub(super) fn install_favorites_models(ui: &AppWindow) {
+/// Where each of the page's three lists was last read, for the loads that seed them.
+#[derive(Default)]
+pub(super) struct Scrolls {
+    pub songs: ScrollPoint,
+    pub most_played: ScrollPoint,
+    pub artists: ScrollPoint,
+}
+
+/// Bind the page's models, each installed once: the Songs list a [`TrackRows`], the two grid tabs
+/// a `PagedGrid` each, and the selection set a `VecModel`. Later updates locate them by
+/// downcasting back from the UI thread.
+pub(super) fn install_favorites_models(ui: &AppWindow, state: &AppState) -> Scrolls {
     let g = ui.global::<Favorites>();
 
-    let most_played: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
+    let most_played = card_grid::install::<FavoriteMostPlayed>(state, ui);
+    let most_played_scroll = most_played.scroll_point();
     g.set_most_played_rows(ModelRc::from(most_played));
 
-    let artists: Rc<VecModel<UiEntityGridRow>> = Rc::new(VecModel::default());
+    let artists = card_grid::install::<FavoriteArtistsGrid>(state, ui);
+    let artists_scroll = artists.scroll_point();
     g.set_artist_rows(ModelRc::from(artists));
 
-    let tracks: Rc<TrackListModel> = Rc::new(TrackListModel::default());
+    let tracks: Rc<TrackRows> = TrackRows::new(track_rows::fetcher(state));
+    let songs = tracks.scroll_point();
     g.set_tracks(ModelRc::from(tracks));
 
     let sel: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     g.set_selected_ids(ModelRc::from(sel));
+    Scrolls { songs, most_played: most_played_scroll, artists: artists_scroll }
 }
 
-/// Map a `MostPlayedFavorite` to its Slint card row. Subtitle is the
-/// artist name. `play_count` rides in the `play_count` slot so the grid's
-/// `show-play-count: true` reveals the badge.
-pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
-    UiEntityStripRow {
-        id: clamp_i64_to_i32(t.id),
-        title: SharedString::from(t.title.as_str()),
-        subtitle: opt_shared(t.artist.as_deref()),
-        artwork_path: opt_shared(t.artwork_path.as_deref()),
-        play_count: t.play_count,
-        is_favorite: t.is_favorite,
-    }
+/// The Most Played grid's track ids, in card order.
+pub fn most_played_ids(ui: &AppWindow) -> Vec<i64> {
+    card_grid::shown_ids::<FavoriteMostPlayed>(ui)
 }
 
 /// Map a `FavoriteArtist` + caller-supplied subtitle to its Slint card

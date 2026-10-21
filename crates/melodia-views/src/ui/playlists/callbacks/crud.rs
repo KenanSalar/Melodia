@@ -49,9 +49,7 @@ fn wire_create(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>
             .await
             {
                 Ok(_) => {
-                    if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-                        log::warn!("playlists::create_playlist refetch: {}", describe(&e));
-                    }
+                    playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
                     log::info!("playlists::create_playlist: {name_str:?}");
                 }
                 Err(e) => {
@@ -173,9 +171,7 @@ fn spawn_delete(
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<CardSelection>().invoke_clear();
         });
-        if let Err(e) = playlists_ui_mod::fetch_grid(&s, &pu, weak).await {
-            log::warn!("{label} refetch grid: {}", describe(&e));
-        }
+        playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
     });
 }
 
@@ -189,6 +185,8 @@ fn close_detail_if_among(weak: &Weak<AppWindow>, playlists_ui: &PlaylistsUi, ids
         d.set_playlist_id(-1);
         release_detail_hero_images(&ui, &d);
         playlists_ui.clear_detail();
+        // The grid reload after the delete pays whatever the detail left owed.
+        playlists_ui.section().take_grid_owed();
     }
     true
 }

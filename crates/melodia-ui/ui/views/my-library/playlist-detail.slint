@@ -57,7 +57,8 @@ export component PlaylistDetailBody inherits Rectangle {
             sort-field: PlaylistDetail.sort-field;
             sort-dir: PlaylistDetail.sort-dir;
             playing-track-id: Player.vm.track.id;
-            view-context: "playlist-detail";
+            // A smart playlist's rows come from its rules, so its context offers no removal.
+            view-context: PlaylistDetail.playlist.is_smart ? "smart-playlist-detail" : "playlist-detail";
             current-playlist-id: PlaylistDetail.playlist.id;
             view-selected-ids: PlaylistDetail.selected-ids;
 

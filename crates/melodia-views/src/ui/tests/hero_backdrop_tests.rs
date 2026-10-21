@@ -136,6 +136,7 @@ fn the_detail_gate_is_the_live_tab_read_after_the_drill_lands() {
 #[test]
 fn a_tab_the_launch_hides_restores_its_detail_on_its_first_enter() {
     const RESTORE: &str = include_str!("../track_detail/restore.rs");
+    const GRID_TAB: &str = include_str!("../callbacks/grid_tab.rs");
     // The tab each slice names is part of the anchor: one naming a sibling's defers on the
     // wrong tab and reads alike.
     const SLICES: [(&str, &str, &str, &str); 4] = [
@@ -177,7 +178,8 @@ fn a_tab_the_launch_hides_restores_its_detail_on_its_first_enter() {
          nothing draws"
     );
     assert!(
-        RESTORE.contains(".section().take_deferred_restore("),
+        RESTORE.contains(".section().take_deferred_restore(")
+            && GRID_TAB.contains("restore::resume_deferred("),
         "the section gate must resume the restore the seed deferred, or the detail the user left \
          open never comes back"
     );
@@ -185,7 +187,7 @@ fn a_tab_the_launch_hides_restores_its_detail_on_its_first_enter() {
         assert!(
             detail.contains(&format!("const TAB: MyLibraryTab = MyLibraryTab::{tab};"))
                 && detail.contains("restore::seed_or_defer(")
-                && lifecycle.contains("restore::resume_deferred("),
+                && lifecycle.contains("grid_tab::wire("),
             "{name} must seed and resume through the shared restore under its own tab, or its \
              detail reopens at launch behind a hidden tab or never comes back"
         );

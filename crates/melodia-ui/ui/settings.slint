@@ -349,6 +349,8 @@ export global Settings {
     // Opens the Ko-fi page, from the About card's button and the one-time support toast's action
     // alike — hence `crates/melodia-views/src/ui/support.rs` rather than `about.rs`.
     callback open-kofi();
+    // The About card's other support button, beside Ko-fi's and wired with it.
+    callback open-github-sponsors();
 
     // The About card's "Welcome Guide" row. Handled in `crates/melodia-views/src/ui/onboarding/`,
     // which owns the card, rather than in `about.rs` — the Ko-fi row's split, for its reason.

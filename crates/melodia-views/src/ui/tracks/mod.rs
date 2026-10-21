@@ -1,19 +1,15 @@
 //! Tracks-view glue between Rust and Slint.
 //!
-//! The Slint `Tracks` global owns a [`TrackListModel`] set once at startup
-//! via `install_tracks_model`. The canonical (unfiltered) list lives in
-//! `TracksUi::cache` so client-side filter changes don't hit the DB.
+//! The Slint `Tracks` global owns a [`TrackRows`] set once at startup via
+//! `install_tracks_model`. It holds the library's ids in the current sort and
+//! filter, and only the rows near the viewport; a sort or a filter reloads the
+//! ids from SQL (`crate::ui::paged_rows`).
 //!
 //! Cross-thread layout:
 //! * `TracksUi` is `Send + Sync` — `Arc<TracksUi>` cloned into callback
 //!   closures and tokio tasks.
-//! * Slint properties / model can only be touched from the UI thread; we
-//!   reach back via `Weak<AppWindow>::upgrade_in_event_loop`.
-//!
-//! Allocation strategy is [`crate::ui::track_list_cache`]'s and is argued
-//! there: this is the largest list in the app, so it retains *converted*
-//! rows once and the model reads them in place. A refilter takes one lock
-//! and one `Arc::clone`, and copies no row.
+//! * Slint properties / model can only be touched from the UI thread; a load
+//!   reaches back through the `Tracks` global's own weak handle.
 
 mod callbacks;
 mod fetch;
@@ -21,51 +17,53 @@ mod fetch;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use parking_lot::Mutex;
+use slint::{ComponentHandle, Global as _, ModelRc, SharedString, VecModel, Weak};
 
+use crate::ui::paged_rows::ScrollPoint;
+use crate::ui::paged_rows::track_rows::{self, ListLoads, TrackRows};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
-use crate::ui::track_list_cache::TrackListCache;
-use crate::ui::track_list_model::TrackListModel;
 use crate::ui::util::{StringPool, clamp_i64_to_i32};
 use crate::ui::view_ctx::ViewCtx;
+use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
 // `boot::ui_setup` kicks the first fetch after the window is shown, which is
-// why `fetch_and_apply` can't fold into `install` with the rest.
-pub use fetch::fetch_and_apply;
+// why `refresh` can't fold into `install` with the rest.
+pub use fetch::{SongsQuery, refresh};
 
-// Reached only from this slice's own `callbacks.rs`, which used to live two
-// modules away, plus the cross-slice `repaint_row` mirror in
-// `callbacks::now_playing`. `pub(super)` is `pub(in crate::ui)` here, which is
-// exactly that reach.
-pub(super) use fetch::{refilter, repaint_row, resort_and_apply};
+// Reached only from this slice's own `callbacks`. `pub(super)` is
+// `pub(in crate::ui)` here.
+pub(super) use fetch::requery;
 
 /// Install the Tracks models, build the handle, and wire every `Tracks.*`
 /// callback to it.
 ///
-/// The returned handle is read by `install_views` for the initial fetch and the
-/// `library_changed` refresher. It is not a keepalive; see
-/// [`crate::ui::albums::install`].
+/// The returned handle is read by `install_views` for the initial fetch, the
+/// `library_changed` refresher and the now-playing row mirrors. It is not a
+/// keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<TracksUi> {
-    install_tracks_model(cx.app);
+    let scroll = install_tracks_model(cx.app, cx.state);
     install_selection_model(cx.app);
-    let tracks_ui = Arc::new(TracksUi::new(cx.cover_thumbs.clone()));
+    let tracks_ui = Arc::new(TracksUi {
+        cover_thumbs: cx.cover_thumbs.clone(),
+        section: SectionState::new(),
+        global: cx.app.global::<Tracks>().as_weak(),
+        loads: ListLoads::new(scroll),
+        query: Mutex::new(SongsQuery::new("", "", "")),
+    });
     callbacks::wire(cx.app, cx.state, cx.view_state, &tracks_ui);
     tracks_ui
 }
 
-/// Holds the unfiltered set of tracks the Tracks view is currently sorted by.
-/// Filter changes re-derive the visible model from this cache without a DB hit.
+/// What the Songs tab's callbacks and loads share across threads.
 pub struct TracksUi {
-    /// Canonical row set plus its filter keys, sort keys and display-order
-    /// permutation. A header-click sort recomputes only the permutation.
-    pub(super) cache: TrackListCache,
-    /// The shared row tier, which a fetch prewarms in display order. The
-    /// now-playing bar reads the same tier, so its tile reuses what the
-    /// Tracks view warmed.
-    pub(super) cover_thumbs: Arc<CoverThumbs>,
+    /// The shared row tier, which a refresh prewarms for the rows it opens
+    /// on. The now-playing bar reads the same tier, so its tile reuses what
+    /// the Tracks view warmed.
+    cover_thumbs: Arc<CoverThumbs>,
     /// Visibility and staleness bookkeeping (`section-active-changed`
     /// shadow plus dirty flag). Unlike the entity-grid views, Tracks
     /// releases nothing on leave — `dirty` is set by a launch that doesn't
@@ -73,44 +71,22 @@ pub struct TracksUi {
     /// arrives while the section is hidden, and consumed on re-enter to run
     /// one deferred fetch.
     section: SectionState,
-}
-
-impl TracksUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>) -> Self {
-        Self { cache: TrackListCache::new(), cover_thumbs, section: SectionState::new() }
-    }
-
-    /// IDs of the rows that pass `filter`, in the current sort order.
-    /// `play-row` hands these to `player_play_tracks`, so the queue becomes
-    /// exactly the view the user was looking at.
-    pub fn current_ids_filtered(&self, filter: &str) -> Vec<i64> {
-        // One lock, one `Arc::clone`, then walk off it — a concurrent fetch
-        // can swap the cache underneath but not tear the set we hold.
-        self.cache.snapshot().ids_filtered(&crate::ui::row_match::fold_needle(filter))
-    }
-
-    /// Surgical mutation of `is_favorite` on the cached row. Combined with
-    /// `repaint_row`, lets us avoid re-fetching the whole list on a
-    /// single-row favourite toggle (preserves scroll position + no flash).
-    pub fn flip_favorite(&self, id: i64, fav: bool) {
-        self.cache.set_favorite(id, fav);
-    }
-
-    /// Surgical mutation of `rating` on the cached row — the star-rating
-    /// analogue of [`Self::flip_favorite`]. Paired with `repaint_row` so a
-    /// hover-set rating doesn't re-fetch the whole list.
-    pub fn flip_rating(&self, id: i64, rating: i32) {
-        self.cache.set_rating(id, rating);
-    }
+    global: Weak<Tracks<'static>>,
+    loads: ListLoads,
+    /// The sort and the filter the next load runs under, written where they are picked and read
+    /// once the load holds its ticket.
+    query: Mutex<SongsQuery>,
 }
 
 impl_section_state_helpers!(TracksUi);
 
-/// Hand the Slint `Tracks` global an empty [`TrackListModel`]. Subsequent
-/// updates locate it by downcasting `Tracks.rows` back to one.
-fn install_tracks_model(ui: &AppWindow) {
-    let model: Rc<TrackListModel> = Rc::new(TrackListModel::default());
+/// Hand the Slint `Tracks` global an empty [`TrackRows`], installed once:
+/// every later keyset swaps inside it, `Repeater` comparing models by pointer.
+fn install_tracks_model(ui: &AppWindow, state: &AppState) -> ScrollPoint {
+    let model: Rc<TrackRows> = TrackRows::new(track_rows::fetcher(state));
+    let scroll = model.scroll_point();
     ui.global::<Tracks>().set_rows(ModelRc::from(model));
+    scroll
 }
 
 /// Install a persistent `VecModel<i32>` for `Tracks.selected-ids` so

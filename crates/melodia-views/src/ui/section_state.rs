@@ -23,9 +23,12 @@ use parking_lot::{Mutex, MutexGuard};
 ///   detail id can: a launch reopening the last detail writes the id only once its rows are in.
 /// * [`take_deferred_restore`](Self::take_deferred_restore) holds that reopen for a section the
 ///   launch left hidden, until its first enter.
+/// * [`take_grid_owed`](Self::take_grid_owed) is `dirty` for a grid a detail covers while the
+///   section stays up, settled by the close rather than by an enter.
 pub struct SectionState {
     active: AtomicBool,
     dirty: AtomicBool,
+    grid_owed: AtomicBool,
     restoring: AtomicBool,
     deferred_restore: Mutex<Option<i64>>,
     gate: Mutex<()>,
@@ -43,6 +46,7 @@ impl SectionState {
         Self {
             active: AtomicBool::new(false),
             dirty: AtomicBool::new(false),
+            grid_owed: AtomicBool::new(false),
             restoring: AtomicBool::new(false),
             deferred_restore: Mutex::new(None),
             gate: Mutex::new(()),
@@ -97,14 +101,27 @@ impl SectionState {
     }
 
     /// Mark the cached grid and detail data as needing a re-fetch on the next enter.
-    /// Called synchronously on section-leave.
+    /// Called synchronously on section-leave. The enter's reload is the one an owed grid was
+    /// waiting for, so it settles that too.
     pub fn mark_dirty(&self) {
         self.dirty.store(true, Ordering::Release);
+        self.grid_owed.store(false, Ordering::Release);
     }
 
     /// Read-and-clear — `true` iff a leave marked the data stale since the last call.
     pub fn take_dirty(&self) -> bool {
         self.dirty.swap(false, Ordering::AcqRel)
+    }
+
+    /// A library change landed while a detail covered the grid. The grid draws nothing under it,
+    /// so it reloads once on the close rather than once per change.
+    pub fn owe_grid(&self) {
+        self.grid_owed.store(true, Ordering::Release);
+    }
+
+    /// Read-and-clear, asked by a close that lands back on the grid.
+    pub fn take_grid_owed(&self) -> bool {
+        self.grid_owed.swap(false, Ordering::AcqRel)
     }
 
     /// Hold around a bulk wipe or data write so the two can't interleave; drop it before

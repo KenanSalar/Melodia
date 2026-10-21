@@ -31,16 +31,16 @@ use std::rc::Rc;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::ui::favorites::{FavoritesTab, FavoritesUi, NAV_FAVORITES};
-use crate::ui::hero_folds::{HeroFold, MostPlayedTotals};
+use crate::ui::hero_folds::HeroFold;
 use crate::ui::my_library::{MyLibraryTab, NAV_MY_LIBRARY, tab_from_index};
 use crate::ui::radio::NAV_RADIO;
 use crate::ui::recently_played::{NAV_RECENTLY_PLAYED, RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::tracks::format_duration_ms;
-use crate::ui::util::len_as_i32;
 use melodia_core::entities::album::AlbumStats;
 use melodia_core::entities::artist::ArtistStats;
 use melodia_core::entities::genre::GenreStats;
 use melodia_core::entities::playlist::PlaylistStats;
+use melodia_core::entities::track_list::MostPlayedTotals;
 use melodia_ui::{
     AlbumDetail, AppWindow, ArtistDetail, GenreDetail, HeroChips, MyLibrary, Nav, PlaylistDetail,
     Radio,
@@ -335,17 +335,20 @@ pub fn publish_station(ui: &AppWindow, facts: &StationFacts, section_active: boo
 /// stale, never half-built.
 pub fn publish_favorites(ui: &AppWindow, fav_ui: &FavoritesUi) {
     let state = fav_ui.state();
-    // One at a time: four sibling locks with no argued ordering, and a struct literal
+    // One at a time: three sibling locks with no argued ordering, and a struct literal
     // would hold every guard it built until the statement ended.
-    let (tracks, duration_ms) = {
+    let (tracks, duration_ms, songs) = {
         let stats = state.stats.lock();
-        (i32::try_from(stats.count).unwrap_or(i32::MAX), stats.total_duration_ms)
+        let spread = HeroFold {
+            artists: i32::try_from(stats.artists).unwrap_or(i32::MAX),
+            albums: i32::try_from(stats.albums).unwrap_or(i32::MAX),
+        };
+        (i32::try_from(stats.count).unwrap_or(i32::MAX), stats.total_duration_ms, spread)
     };
-    let songs = *state.songs_fold.lock();
     let most_played = *state.most_played_totals.lock();
     // The whole set, not the filtered grid: a band names the page it sits on, and the
     // filtered count is the one gating that tab's empty state.
-    let artists = len_as_i32(state.fav_artists.lock().len());
+    let artists = *state.artist_total.lock();
 
     let facts = FavoritesFacts {
         tab: fav_ui.active_tab(),

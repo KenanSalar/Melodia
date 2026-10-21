@@ -44,25 +44,23 @@ export global Favorites {
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Chunked card rows, one per grid, both on `EntityStripRow`'s unified shape. **Rust
-    // fills only the mounted tab's model**, so the hidden one costs nothing.
+    // Card rows, one paged model per grid, both on `EntityStripRow`'s unified shape. Each
+    // keeps its cards across a tab pick and loads only while its tab is mounted.
     in-out property <[EntityGridRow]> most-played-rows;
     in-out property <[EntityGridRow]> artist-rows;
     // Pre-chunk counts gating the two `GridEmptyState`s — `rows.length` is a row count, not a card
-    // count. Not the band's, which takes its facts from the `FavoritesUiState` folds. `-1` until
+    // count. Not the band's, which states the whole set whatever the filter shows. `-1` until
     // fetched; see `track-count` above.
     in-out property <int> most-played-count: -1;
     in-out property <int> artist-count: -1;
 
     // Its own pair rather than the Songs tab's below, which name track columns this grid has no
-    // notion of. **Applied to the Rust-side cache, not the filtered copy** — the cover prewarm
-    // reads that cache to pick its first screenful.
+    // notion of.
     in-out property <string> artist-sort-field: "favorite_count";  // name | favorite_count
     in-out property <string> artist-sort-dir: "desc";
     callback request-artist-sort(string /*field*/);
 
-    // The post-filter view the list renders: Rust filters an internal `tracks-all` cache
-    // in memory and writes the result here, as the Tracks view does.
+    // The post-filter view the list renders, the paged model the Tracks view's `rows` is.
     in-out property <[TrackListRow]> tracks;
     in-out property <string>         filter;
     in-out property <int>            blur-search-tick: 0;
@@ -151,12 +149,12 @@ export global RecentlyPlayed {
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Library-wide tracks by play count, chunked into grid rows. **Rust fills this only
-    // while Most Played is the mounted tab**, so the hidden one costs nothing.
+    // Library-wide tracks by play count, a paged model of card rows. It keeps its cards across a
+    // tab pick and loads only while Most Played is the mounted tab.
     in-out property <[EntityGridRow]> most-played-rows;
     // Pre-chunk card count gating the `GridEmptyState` — `rows.length` is a row count, not a card
-    // count. Not the band's, which takes its facts from `most_played_totals`. `-1` until fetched,
-    // which is also what a tab pick writes back when the cache it walked was left empty.
+    // count. Not the band's, which states the whole played set whatever the filter shows. `-1`
+    // until fetched.
     in-out property <int> most-played-count: -1;
 
     // The post-filter view Rust writes, always in fetch (recency) order. **There is no

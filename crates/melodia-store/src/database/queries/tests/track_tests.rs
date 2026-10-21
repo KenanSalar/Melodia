@@ -2,8 +2,13 @@ use crate::database::queries;
 #[allow(clippy::wildcard_imports)]
 use crate::database::queries::fixtures::*;
 use crate::database::{DbPool, IDS_PER_SET};
+use melodia_core::entities::smart_criteria::Draw;
 use melodia_core::entities::track::TrackMeta;
+use melodia_core::entities::track_list::{
+    MostPlayedTotals, SortDir, TrackListScope, TrackOrder, TrackSortField,
+};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::{Needle, fold_needle};
 
 async fn seed_db() -> Result<DbPool, AppError> {
     let db = DbPool::test_pool().await?;
@@ -411,38 +416,6 @@ async fn set_favorite_flips_flag() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn get_favorite_tracks_returns_only_favorites() -> Result<(), AppError> {
-    let db = seed_db().await?;
-    let all = queries::track::get_all_tracks(&db).await?;
-
-    // Favorite the first track
-    queries::track::set_favorite(&db, &[all[0].id], true).await?;
-
-    let favs = queries::track::get_favorite_tracks_for_list(&db).await?;
-    assert_eq!(favs.len(), 1);
-    assert_eq!(favs[0].id, all[0].id);
-    assert!(favs[0].is_favorite);
-    Ok(())
-}
-
-#[tokio::test]
-async fn the_favorites_fetch_shares_the_whole_table_order() -> Result<(), AppError> {
-    // The Songs tab hands its own permutation to `store_in_order`, computed
-    // before the section guards let it store — so the two orders only line up
-    // because this fetch and `get_all_tracks_for_list` share one clause.
-    // Backwards-seeded for the reason the whole-table pin above is.
-    let db = seed_db_inserted_backwards().await?;
-    let all = queries::track::get_all_tracks(&db).await?;
-    let ids: Vec<i64> = all.iter().map(|t| t.id).collect();
-    queries::track::set_favorite(&db, &ids, true).await?;
-
-    let favs = queries::track::get_favorite_tracks_for_list(&db).await?;
-    let titles: Vec<&str> = favs.iter().map(|t| t.title.as_str()).collect();
-    assert_eq!(titles, ["Alpha", "Beta", "Gamma"]);
-    Ok(())
-}
-
-#[tokio::test]
 async fn set_favorite_empty_ids_is_noop() -> Result<(), AppError> {
     let db = seed_db().await?;
     // Should not error
@@ -601,6 +574,24 @@ async fn get_favorite_stats_empty_when_favorites_have_no_artwork() -> Result<(),
     Ok(())
 }
 
+/// The Songs band's spread, which `ui::hero_folds::fold_tracks` used to count off the resident
+/// rows. Beta and Gamma share one artist and one album; the untagged Delta is credited to the
+/// unknown artist, as every scan credits one, and has no album; Alpha's own pair is no favourite's.
+#[tokio::test]
+async fn the_favorite_spread_counts_each_artist_and_album_of_the_favorites_once()
+-> Result<(), AppError> {
+    let db = seed_db().await?;
+    insert_test_track(&db, "/music/delta.mp3", "Delta", "", "", "").await?;
+    let favorites =
+        [id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?, id_of(&db, "Delta").await?];
+    queries::track::set_favorite(&db, &favorites, true).await?;
+
+    let stats = queries::track::get_favorite_stats(&db).await?;
+
+    assert_eq!((stats.count, stats.artists, stats.albums), (3, 2, 1));
+    Ok(())
+}
+
 /// The hero mosaic and the Most Played tab are the same list seen two ways, so
 /// they have to resolve a tie the same way. The mosaic used to rank distinct
 /// covers by `MAX(play_count)` under a tiebreaker of its own, and the grid broke
@@ -644,7 +635,8 @@ async fn the_hero_mosaic_leads_with_the_covers_the_most_played_tab_shows() -> Re
         .execute(db.write())
         .await?;
 
-    let grid = queries::track::get_most_played_favorites(&db).await?;
+    let ranked = queries::track::most_played_favorite_ids(&db, &Needle::default()).await?;
+    let grid = queries::track::get_most_played_by_ids(&db, &ranked).await?;
     let titles: Vec<&str> = grid.iter().map(|t| t.title.as_str()).collect();
     assert_eq!(
         titles,
@@ -709,8 +701,27 @@ async fn get_recently_played_respects_limit() -> Result<(), AppError> {
     Ok(())
 }
 
+/// One flush stamps every play in its batch with the same `last_played`, and the page shows this
+/// order as it stands, so the id settles the tie and the cap keeps whichever it puts first.
 #[tokio::test]
-async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
+async fn get_recently_played_breaks_a_shared_stamp_toward_the_higher_id() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query(
+        "UPDATE tracks SET last_played = '2026-06-01T00:00:00+00:00' \
+         WHERE title IN ('Alpha', 'Beta')",
+    )
+    .execute(db.write())
+    .await?;
+
+    let rows = queries::track::get_recently_played(&db, 200).await?;
+
+    let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(titles, ["Beta", "Alpha"], "Beta was inserted after Alpha");
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_most_played_ranking_orders_by_count_and_excludes_zero() -> Result<(), AppError> {
     let db = seed_db().await?;
     insert_test_track(&db, "/music/delta.mp3", "Delta", "Zeta Artist", "B Album", "Pop").await?;
 
@@ -741,7 +752,9 @@ async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppEr
         .execute(db.write())
         .await?;
 
-    let rows = queries::track::get_most_played(&db).await?;
+    let ranked = queries::track::most_played_ids(&db, &Needle::default()).await?;
+
+    let rows = queries::track::get_most_played_by_ids(&db, &ranked).await?;
     let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
     assert_eq!(
         titles,
@@ -752,13 +765,13 @@ async fn get_most_played_orders_by_count_and_excludes_zero() -> Result<(), AppEr
     Ok(())
 }
 
-/// The tab this feeds is a virtualized grid, so it takes the whole set — the
-/// `LIMIT 10` it carried was sized for the ten-card carousel it replaced, and
+/// The tab this feeds is a paged grid, so it takes the whole set — the
+/// `LIMIT 10` it once carried was sized for the ten-card carousel it replaced, and
 /// re-adding one is a ceiling the user can scroll into with nothing saying why
 /// the list stops. Seeded past that old cap so a reintroduced `LIMIT` fails here
 /// rather than only on a library large enough to notice.
 #[tokio::test]
-async fn get_most_played_is_not_capped() -> Result<(), AppError> {
+async fn the_most_played_ranking_is_not_capped() -> Result<(), AppError> {
     const PLAYED: i64 = 12;
 
     let db = seed_db().await?;
@@ -773,9 +786,10 @@ async fn get_most_played_is_not_capped() -> Result<(), AppError> {
             .await?;
     }
 
-    let rows = queries::track::get_most_played(&db).await?;
+    let ranked = queries::track::most_played_ids(&db, &Needle::default()).await?;
+
     assert_eq!(
-        i64::try_from(rows.len()).unwrap_or(-1),
+        i64::try_from(ranked.len()).unwrap_or(-1),
         PLAYED,
         "every played track must come back — the seeded set is `play_count > 0` and the three \
          `seed_db` rows are left at zero"
@@ -783,43 +797,55 @@ async fn get_most_played_is_not_capped() -> Result<(), AppError> {
     Ok(())
 }
 
+/// The band states what its tab ranks, so an unplayed favourite counts toward neither total, and
+/// a played track that is no favourite counts toward the library's alone.
 #[tokio::test]
-async fn both_most_played_queries_project_what_the_filter_searches() -> Result<(), AppError> {
-    // The cards render title + artist, so a `SELECT` that drops one of the
-    // other four still compiles and still paints correctly — it only stops
-    // the hero search bar narrowing the card grid the way it narrows the
-    // track list beside it. `FromRow` catches a missing column at run time,
-    // which is why this asserts the values rather than just the row count.
+async fn each_most_played_total_adds_up_the_tracks_its_tab_ranks() -> Result<(), AppError> {
     let db = seed_db().await?;
-    sqlx::query(
-        "UPDATE tracks SET play_count = 5, is_favorite = TRUE, album_artist = 'Various Artists' \
-         WHERE title = 'Alpha'",
-    )
-    .execute(db.write())
-    .await?;
+    sqlx::query("UPDATE tracks SET play_count = 2 WHERE title = 'Alpha'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET play_count = 5, duration_ms = 60000 WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET is_favorite = TRUE WHERE title IN ('Beta', 'Gamma')")
+        .execute(db.write())
+        .await?;
 
-    let favorites = queries::track::get_most_played_favorites(&db).await?;
-    let all = queries::track::get_most_played(&db).await?;
+    let totals = (
+        queries::track::most_played_totals(&db).await?,
+        queries::track::most_played_favorite_totals(&db).await?,
+    );
 
-    for (label, rows) in [("favorites", favorites), ("all", all)] {
-        let card = rows.iter().find(|t| t.title == "Alpha");
-        assert_eq!(
-            card.map(|c| (
-                c.artist.as_deref(),
-                c.album_artist.as_deref(),
-                c.album.as_deref(),
-                c.genre.as_deref(),
-                c.year,
-            )),
-            Some((
-                Some("Zeta Artist"),
-                Some("Various Artists"),
-                Some("B Album"),
-                Some("Pop"),
-                Some(2024),
-            )),
-            "{label}: the most-played projection dropped a field the filter searches"
-        );
+    assert_eq!(
+        totals,
+        (
+            MostPlayedTotals { tracks: 2, duration_ms: 240_000, plays: 7 },
+            MostPlayedTotals { tracks: 1, duration_ms: 60_000, plays: 5 },
+        )
+    );
+    Ok(())
+}
+
+/// Both rankings narrow on every field the Songs filter searches, not only the two a card draws:
+/// on Recently Played the grid and the recency list sit under one search bar, so a narrower match
+/// would let one query show a genre's tracks in the list and none of its cards.
+#[tokio::test]
+async fn both_most_played_rankings_filter_on_every_searched_field() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let alpha = id_of(&db, "Alpha").await?;
+    queries::track::set_favorite(&db, &[alpha], true).await?;
+    queries::track::add_play_counts(&db, &[(alpha, 5)], "2026-10-18T00:00:00Z").await?;
+    let cases: [(&str, &[i64]); 4] =
+        [("b album", &[alpha]), ("pop", &[alpha]), ("2024", &[alpha]), ("zzz", &[])];
+
+    for (needle, expected) in cases {
+        let folded = fold_needle(needle);
+        let all = queries::track::most_played_ids(&db, &folded).await?;
+        let favorites = queries::track::most_played_favorite_ids(&db, &folded).await?;
+
+        assert_eq!(all, expected, "the whole-library ranking under {needle:?}");
+        assert_eq!(favorites, expected, "the favorites ranking under {needle:?}");
     }
     Ok(())
 }
@@ -836,8 +862,9 @@ async fn the_whole_library_ranking_reports_each_tracks_own_heart() -> Result<(),
         .execute(db.write())
         .await?;
 
-    let rows = queries::track::get_most_played(&db).await?;
+    let ranked = queries::track::most_played_ids(&db, &Needle::default()).await?;
 
+    let rows = queries::track::get_most_played_by_ids(&db, &ranked).await?;
     let hearts: Vec<(&str, bool)> =
         rows.iter().map(|r| (r.title.as_str(), r.is_favorite)).collect();
     assert_eq!(hearts, [("Alpha", true), ("Beta", false)]);
@@ -1067,86 +1094,6 @@ async fn a_hash_backfill_leaves_the_rows_it_did_not_name_alone() -> Result<(), A
     Ok(())
 }
 
-// --- Detail-page list projections ---
-
-/// One album whose disc and track numbers agree with neither the row order nor the titles, plus a
-/// track in a second album, artist and genre.
-///
-/// The disagreement is the whole fixture: seeded in the order they come back, a missing `ORDER BY`
-/// is satisfied by a bare table scan, which is the trap [`seed_db_inserted_backwards`] was written
-/// for one section up. `make_test_metadata` gives every row disc 1 / track 1, so the numbers are
-/// patched after the insert rather than carried in.
-async fn seed_two_albums() -> Result<DbPool, AppError> {
-    let db = DbPool::test_pool().await?;
-    queries::folder::insert_folder(&db, "/music", true).await?;
-    insert_test_track(&db, "/music/beta.mp3", "Beta", "Artist One", "Album A", "Rock").await?;
-    insert_test_track(&db, "/music/alpha.mp3", "Alpha", "Artist One", "Album A", "Rock").await?;
-    insert_test_track(&db, "/music/gamma.mp3", "Gamma", "Artist One", "Album A", "Rock").await?;
-    insert_test_track(&db, "/music/delta.mp3", "Delta", "Artist Two", "Album B", "Jazz").await?;
-
-    for (title, disc, track) in [("Beta", 1, 1), ("Gamma", 1, 2), ("Alpha", 2, 1)] {
-        sqlx::query("UPDATE tracks SET disc_number = ?, track_number = ? WHERE title = ?")
-            .bind(disc)
-            .bind(track)
-            .bind(title)
-            .execute(db.write())
-            .await?;
-    }
-    Ok(db)
-}
-
-async fn parent_id(db: &DbPool, table: &str, name: &str) -> Result<i64, AppError> {
-    let sql = format!("SELECT id FROM {table} WHERE name = ?");
-    let id = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
-        .bind(name)
-        .fetch_one(db.read())
-        .await?;
-    Ok(id)
-}
-
-fn titles(rows: &[melodia_core::entities::track::TrackListRow]) -> Vec<&str> {
-    rows.iter().map(|row| row.title.as_str()).collect()
-}
-
-/// An album reads in the order it was pressed: disc first, track second. Ordering on the track
-/// number alone files disc two's opener among disc one's, and ordering on `sort_key`, which is what
-/// every other track list uses, scrambles the album outright.
-#[tokio::test]
-async fn an_album_lists_by_disc_then_track() -> Result<(), AppError> {
-    let db = seed_two_albums().await?;
-    let album_id = parent_id(&db, "albums", "Album A").await?;
-
-    let rows = queries::track::get_tracks_by_album_for_list(&db, album_id).await?;
-
-    assert_eq!(titles(&rows), ["Beta", "Gamma", "Alpha"]);
-    Ok(())
-}
-
-/// An artist page is one flat list, so it takes the natural order every other track list takes,
-/// and it holds that artist's tracks alone.
-#[tokio::test]
-async fn an_artists_tracks_are_its_own_in_natural_order() -> Result<(), AppError> {
-    let db = seed_two_albums().await?;
-    let artist_id = parent_id(&db, "artists", "Artist One").await?;
-
-    let rows = queries::track::get_tracks_by_artist_for_list(&db, artist_id).await?;
-
-    assert_eq!(titles(&rows), ["Alpha", "Beta", "Gamma"]);
-    Ok(())
-}
-
-/// And a genre page the same, over the column one join away from the artist's.
-#[tokio::test]
-async fn a_genres_tracks_are_its_own_in_natural_order() -> Result<(), AppError> {
-    let db = seed_two_albums().await?;
-    let genre_id = parent_id(&db, "genres", "Rock").await?;
-
-    let rows = queries::track::get_tracks_by_genre_for_list(&db, genre_id).await?;
-
-    assert_eq!(titles(&rows), ["Alpha", "Beta", "Gamma"]);
-    Ok(())
-}
-
 // --- add_play_counts / add_skip_counts ---
 
 const FLUSHED_AT: &str = "2026-09-14T12:00:00+00:00";
@@ -1296,5 +1243,197 @@ async fn an_empty_library_marks_nothing_stale() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;
 
     assert_eq!(queries::track::mark_every_track_stale(&db).await?, 0);
+    Ok(())
+}
+
+// === The search column, keysets and rows by id ===
+
+async fn id_of(db: &DbPool, title: &str) -> Result<i64, AppError> {
+    let id = sqlx::query_scalar("SELECT id FROM tracks WHERE title = ?")
+        .bind(title)
+        .fetch_one(db.read())
+        .await?;
+    Ok(id)
+}
+
+async fn search_texts(db: &DbPool) -> Result<Vec<String>, AppError> {
+    let texts = sqlx::query_scalar("SELECT search_text FROM tracks ORDER BY id")
+        .fetch_all(db.read())
+        .await?;
+    Ok(texts)
+}
+
+/// **The backfill owes exactly the rows a migration left empty.** Every write path fills the
+/// column, so `''` is what a row from before it looks like, and one holding anything else is a row
+/// a scan has written since: overwriting it would put back fields the scan replaced.
+#[tokio::test]
+async fn the_backfill_fills_the_empty_rows_and_only_those() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET search_text = '' WHERE title IN ('Alpha', 'Gamma')")
+        .execute(db.write())
+        .await?;
+    sqlx::query("UPDATE tracks SET search_text = 'kept' WHERE title = 'Beta'")
+        .execute(db.write())
+        .await?;
+
+    let filled = queries::track::backfill_search_text(&db).await?;
+
+    assert_eq!(filled, 2);
+    assert_eq!(
+        search_texts(&db).await?,
+        ["alpha\nzeta artist\n\nb album\npop", "kept", "gamma\nalpha artist\n\na album\nrock"]
+    );
+    Ok(())
+}
+
+/// What makes the pass cheap enough to run on every launch.
+#[tokio::test]
+async fn a_filled_library_gives_the_backfill_nothing_to_do() -> Result<(), AppError> {
+    let db = seed_db().await?;
+
+    assert_eq!(queries::track::backfill_search_text(&db).await?, 0);
+    Ok(())
+}
+
+/// **A row the backfill hasn't reached matches every needle**, so the window after an upgrade
+/// widens a filtered list rather than hiding rows from it.
+#[tokio::test]
+async fn a_row_without_search_text_matches_every_needle() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    sqlx::query("UPDATE tracks SET search_text = '' WHERE title = 'Gamma'")
+        .execute(db.write())
+        .await?;
+    let natural = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+
+    let ids =
+        queries::track::track_ids(&db, TrackListScope::Library, natural, &fold_needle("zeta"))
+            .await?;
+
+    assert_eq!(ids, [id_of(&db, "Alpha").await?, id_of(&db, "Gamma").await?]);
+    Ok(())
+}
+
+/// The aggregate the ids are packed into is NULL over no rows at all.
+#[tokio::test]
+async fn a_keyset_with_no_track_in_it_is_empty() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let natural = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+
+    let ids =
+        queries::track::track_ids(&db, TrackListScope::Favorites, natural, &Needle::default())
+            .await?;
+
+    assert_eq!(ids, Vec::<i64>::new());
+    Ok(())
+}
+
+/// One id packs with no separator to split on.
+#[tokio::test]
+async fn a_keyset_of_one_track_is_that_track() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let beta = id_of(&db, "Beta").await?;
+    queries::track::set_favorite(&db, &[beta], true).await?;
+    let natural = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+
+    let ids =
+        queries::track::track_ids(&db, TrackListScope::Favorites, natural, &Needle::default())
+            .await?;
+
+    assert_eq!(ids, [beta]);
+    Ok(())
+}
+
+/// The page a list draws comes back in the order the keyset holds it, a row deleted since the
+/// keyset was read leaves a gap rather than an error, and an id asked twice comes back once, as
+/// `get_track_summaries_by_ids` has always answered.
+#[tokio::test]
+async fn rows_by_id_come_back_in_the_order_asked_and_once_each() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+
+    let rows =
+        queries::track::get_track_list_rows_by_ids(&db, &[gamma, alpha, 999_999, gamma, beta])
+            .await?;
+
+    let titles: Vec<&str> = rows.iter().map(|r| r.title.as_str()).collect();
+    assert_eq!(titles, ["Gamma", "Alpha", "Beta"]);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_favorite_ranking_holds_only_played_favorites_the_needle_matches()
+-> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+    queries::track::set_favorite(&db, &[alpha, beta], true).await?;
+    queries::track::add_play_counts(
+        &db,
+        &[(alpha, 2), (beta, 5), (gamma, 7)],
+        "2026-10-18T00:00:00Z",
+    )
+    .await?;
+
+    let ranked = queries::track::most_played_favorite_ids(&db, &fold_needle("zeta")).await?;
+
+    assert_eq!(ranked, [alpha]);
+    Ok(())
+}
+
+/// **A playlist's own order is its positions**, and descending is their exact reverse.
+#[tokio::test]
+async fn a_playlist_keyset_follows_its_positions() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+    let playlist =
+        queries::playlist::create_playlist_with_tracks(&db, "Mix", None, &[gamma, alpha, beta])
+            .await?;
+    let scope = TrackListScope::Playlist(playlist, Draw::default());
+    let by_position = |dir| TrackOrder { field: TrackSortField::Position, dir };
+    let empty = Needle::default();
+
+    let ascending =
+        queries::track::track_ids(&db, scope, by_position(SortDir::Asc), &empty).await?;
+    let descending =
+        queries::track::track_ids(&db, scope, by_position(SortDir::Desc), &empty).await?;
+
+    assert_eq!(ascending, [gamma, alpha, beta]);
+    assert_eq!(descending, [beta, alpha, gamma]);
+    Ok(())
+}
+
+/// **A smart playlist's own order is its criteria's, and the cap applies before any other sort.**
+/// Sorting the top two by title has to sort those two, not take two off the whole library sorted
+/// by title.
+#[tokio::test]
+async fn a_smart_playlist_keyset_sorts_its_capped_membership() -> Result<(), AppError> {
+    let db = seed_db().await?;
+    let (alpha, beta, gamma) =
+        (id_of(&db, "Alpha").await?, id_of(&db, "Beta").await?, id_of(&db, "Gamma").await?);
+    queries::track::add_play_counts(
+        &db,
+        &[(alpha, 4), (beta, 1), (gamma, 9)],
+        "2026-10-18T00:00:00Z",
+    )
+    .await?;
+    let smart = queries::playlist::create_smart_playlist(
+        &db,
+        "Top two",
+        None,
+        r#"{"limit":{"count":2,"order":"play_count_desc"}}"#,
+    )
+    .await?;
+    let scope = TrackListScope::Playlist(smart.id, Draw::default());
+    let empty = Needle::default();
+
+    let by_position = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
+    let by_title = TrackOrder { field: TrackSortField::Title, dir: SortDir::Asc };
+    let ranked = queries::track::track_ids(&db, scope, by_position, &empty).await?;
+    let titled = queries::track::track_ids(&db, scope, by_title, &empty).await?;
+
+    assert_eq!(ranked, [gamma, alpha]);
+    assert_eq!(titled, [alpha, gamma]);
     Ok(())
 }

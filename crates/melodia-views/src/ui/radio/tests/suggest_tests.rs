@@ -1,4 +1,4 @@
-use crate::ui::row_match::fold_needle;
+use melodia_core::utils::needle::fold_needle;
 
 use super::{ChipFilter, Facet, FacetIndex, StationSearch, Suggestion, suggestions};
 

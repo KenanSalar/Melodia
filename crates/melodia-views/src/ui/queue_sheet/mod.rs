@@ -1,48 +1,29 @@
 //! Queue bottom-sheet UI wiring. Owns the Slint `Queue` global's
-//! callbacks, the row `VecModel`, the per-row selection shadow, and
+//! callbacks, its rows, a [`QueueRows`] over the queue's ids, and
 //! the `is_open` atomic that the winit `DroppedFile` filter consults
 //! to decide whether to forward dropped paths into
 //! `library::queue::queue_import_files`.
+//!
+//! **Picks are by track, as on every other list**: the queue can hold a track twice, and picking
+//! either row picks both, which is what the batch entries then act on.
 
 mod callbacks;
-mod links;
 mod rows;
 
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use parking_lot::Mutex;
-use slint::{ComponentHandle, ModelRc, VecModel, Weak};
+use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
+use crate::ui::list_selection::{NO_ANCHOR, write_selection_ids};
+use crate::ui::paged_rows::queue_rows::{self, QueueRows};
+use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
-use melodia_core::entities::track::TrackSummary;
-use melodia_ui::{AppWindow, Queue, QueueRow};
-
-pub(crate) use rows::to_slint_queue_row;
-
-/// Per-row selection snapshot, beside the summary the row was built from. Kept deliberately
-/// minimal so the shadow is `Send + Sync` regardless of `SharedString`'s thread-safety
-/// guarantees — those live on the UI side inside `Rc<VecModel<QueueRow>>`.
-///
-/// `source` is what lets a rebuild answer "did any row's content move" without building one, and
-/// **the strong reference is the whole reason `Arc::ptr_eq` against it is exact.** A summary *is*
-/// mutated in place where it is uniquely owned (`sync_track_summaries` reaches `queue.tracks`
-/// through `Arc::make_mut`), so an address alone would compare equal to content that had moved
-/// underneath it. Holding one here puts the refcount above one, which is what leaves `make_mut`
-/// no arm but to clone — so a shadowed row that changed is always a different pointer.
-///
-/// `None` past the close teardown: the summaries are the larger half of what the shadow costs on
-/// a queue the size of the library, and a queue replaced while the sheet is closed would leave
-/// them pinned with nothing to draw them. The row-count term is what covers the reopen.
-#[derive(Clone)]
-pub(super) struct ShadowEntry {
-    pub id: i64,
-    pub selected: bool,
-    pub source: Option<Arc<TrackSummary>>,
-}
+use melodia_ui::{AppWindow, Queue};
 
 /// Public handle returned by [`install`]. Surfaces the `is_open`
 /// atomic to boot so it can be forwarded into
@@ -61,17 +42,17 @@ pub fn install(
     state: &AppState,
     row_covers: &Arc<CoverThumbs>,
 ) -> Result<QueueSheetHandles, slint::EventLoopError> {
-    let queue_model: Rc<VecModel<QueueRow>> = Rc::new(VecModel::default());
-    ui.global::<Queue>().set_rows(ModelRc::from(queue_model.clone()));
+    let rows = QueueRows::new(queue_rows::fetcher(state));
+    ui.global::<Queue>().set_rows(ModelRc::from(rows.clone()));
 
     // Persistent, so every later write mutates in place rather than swapping a
     // model out from under the rows reading it — the track lists' idiom.
     let selected_ids: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Queue>().set_selected_ids(ModelRc::from(selected_ids));
 
-    let shadow: Arc<Mutex<Vec<ShadowEntry>>> = Arc::new(Mutex::new(Vec::new()));
-    let link_cache: links::LinkCache = Arc::new(Mutex::new(std::collections::HashMap::new()));
-    let anchor: Arc<Mutex<Option<usize>>> = Arc::new(Mutex::new(None));
+    // The id a shift-click ranges from, the track lists' anchor, kept here because `Queue` has no
+    // property for it.
+    let anchor = Rc::new(Cell::new(NO_ANCHOR));
     let is_open = Arc::new(AtomicBool::new(false));
     // Private so closing can drop it wholesale: clearing the row tier would yank covers the track
     // lists and the now-playing bar still need. Backed by it, so a cover both draw is one buffer.
@@ -84,12 +65,11 @@ pub fn install(
     // "is this tier warm yet" flag, which is what keeps the first frame off
     // the decoder. The teardown rewinds it to 0 in the same guarded closure
     // that clears the cache, so 0 always coincides with an empty tier — and
-    // an open facing one would otherwise have every row it mounts
-    // synchronously under `on_open_changed` miss and decode *on the UI
-    // thread*, mid-slide-up, which is the one thing the synchronous row build
-    // exists to avoid. Cache-only until the warm-up bump; after it, a row
-    // scrolled into view decodes on demand like every other list in the app.
-    // See the callback's declaration in `globals/queue.slint`.
+    // an open facing one would otherwise have every row it mounts while the
+    // sheet slides up miss and decode *on the UI thread*. Cache-only until
+    // the warm-up bump; after it, a row scrolled into view decodes on demand
+    // like every other list in the app. See the callback's declaration in
+    // `globals/queue.slint`.
     {
         let covers = queue_covers.clone();
         ui.global::<Queue>().on_request_cover(move |path, generation| {
@@ -98,56 +78,58 @@ pub fn install(
         });
     }
 
-    callbacks::wire_callbacks(
-        ui,
-        state,
-        &queue_model,
-        &queue_covers,
-        &shadow,
-        &link_cache,
-        &anchor,
-        &is_open,
-    );
-    rows::spawn_queue_rows_subscriber(ui, state, queue_model, shadow, link_cache, is_open.clone())?;
+    callbacks::wire_callbacks(ui, state, &rows, &queue_covers, &anchor, &is_open);
+    rows::spawn_queue_rows_subscriber(ui, state, rows, anchor, is_open.clone())?;
 
     // No install-time seed: the sheet is closed at startup, so the
     // subscriber is gated and the model stays empty (no covers decoded
-    // for an off-screen overlay). `on_open_changed(true)` does a fresh
-    // rebuild from PlayerState on the first open.
+    // for an off-screen overlay). `on_open_changed(true)` shows the queue
+    // on the first open.
 
     Ok(QueueSheetHandles { is_open })
 }
 
-/// Push the selection from the shadow into the Slint `Queue` global: the
-/// count the row context menu labels its batch entries with, and the id list
-/// it hands them.
+/// Make `picked` the sheet's picks, less any track the queue no longer holds: stamped on the rows,
+/// and published as the count the row menu labels its batch entries with and the ids it hands
+/// them.
 ///
-/// **The count is rows and the ids are deduped**, which is the same number
-/// everywhere except a queue holding one track twice. Selection is preserved
-/// by track id across a rebuild, so ticking either instance marks both — and
-/// an undeduped list would then add that track to a playlist twice. The menu's
-/// multi-mode gate reads the count, so the labels still say what the pill says.
-pub(super) fn push_selection(weak: &Weak<AppWindow>, shadow: &[ShadowEntry]) {
-    if let Some(ui) = weak.upgrade() {
-        write_selection(&ui, shadow);
+/// **The count is rows and the ids are each once**, the same number everywhere except a queue
+/// holding one track twice: both rows are picked, and both are what Remove takes, where a playlist
+/// should get the track once. The ids go in queue order, which is the order Copy writes them in.
+pub(super) fn apply_picks(ui: &AppWindow, rows: &QueueRows, picked: &HashSet<i32>) {
+    let mut count = 0usize;
+    let mut held = HashSet::new();
+    let mut ids = Vec::with_capacity(picked.len());
+    for id in rows.row_ids() {
+        if !picked.contains(&id) {
+            continue;
+        }
+        count += 1;
+        if held.insert(id) {
+            ids.push(id);
+        }
     }
-}
-
-/// [`push_selection`] against a live handle, for the rebuild path that already
-/// holds one.
-pub(super) fn write_selection(ui: &AppWindow, shadow: &[ShadowEntry]) {
-    let selected = shadow.iter().filter(|e| e.selected);
-    let count = i32::try_from(selected.clone().count()).unwrap_or(i32::MAX);
-
-    let mut seen: HashSet<i64> = HashSet::new();
-    let ids: Vec<i32> = selected
-        .filter(|e| seen.insert(e.id))
-        .map(|e| i32::try_from(e.id).unwrap_or(i32::MAX))
-        .collect();
-
+    rows.select(&held);
     let queue = ui.global::<Queue>();
-    queue.set_selected_count(count);
-    crate::ui::list_selection::write_selection_ids(&queue.get_selected_ids(), ids, |m| {
-        queue.set_selected_ids(m);
-    });
+    queue.set_selected_count(i32::try_from(count).unwrap_or(i32::MAX));
+    write_selection_ids(&queue.get_selected_ids(), ids, |m| queue.set_selected_ids(m));
 }
+
+/// The sheet's picks, as `apply_picks` last published them.
+pub(super) fn picked(ui: &AppWindow) -> HashSet<i32> {
+    ui.global::<Queue>().get_selected_ids().iter().collect()
+}
+
+/// The positions of the rows `picked` names, every copy of a track queued twice included.
+pub(super) fn picked_positions(rows: &QueueRows, picked: &HashSet<i32>) -> Vec<usize> {
+    rows.ids()
+        .iter()
+        .enumerate()
+        .filter(|&(_, &id)| picked.contains(&clamp_i64_to_i32(id)))
+        .map(|(position, _)| position)
+        .collect()
+}
+
+#[cfg(test)]
+#[path = "tests/picks_tests.rs"]
+mod tests;

@@ -4,9 +4,9 @@
 use std::sync::Arc;
 
 use super::{PlayerAction, PlayerState};
-use crate::player::engine::queue::current_index_from_i32;
+use crate::player::engine::queue::QueueState;
 use crate::player::engine::types::{
-    PersistableQueue, PersistedPlayback, PlaybackSource, PlaybackStatus, RadioNowPlaying,
+    PersistedPlayback, PlaybackSource, PlaybackStatus, RadioNowPlaying,
 };
 use melodia_core::entities::track::TrackSummary;
 
@@ -24,25 +24,15 @@ impl PlayerState {
     }
 }
 
-/// Restore queue from persisted data. Called at startup via
-/// `library::queue::restore_persisted_playback`.
-///
-/// `shuffle_enabled` and `repeat_mode` are user preferences and live in
-/// `settings.json`, not `queue.json` — the caller is responsible for
-/// hydrating them. Note that `original_order` is not persisted, so a
-/// caller restoring a non-empty queue should also force shuffle off.
-pub fn restore_queue(
-    state: &mut PlayerState,
-    tracks: Vec<Arc<TrackSummary>>,
-    persistable: &PersistableQueue,
-) {
-    let len = tracks.len();
-    state.queue.tracks = tracks;
-    state.queue.play_order = (0..len).collect();
-    state.queue.original_order = (0..len).collect();
-    state.queue.current_index = current_index_from_i32(persistable.current_index);
+/// Seat a restored queue and the records of its window, with the current track on the deck where
+/// it was left. Called at startup via `library::queue::restore_persisted_playback`, which has
+/// already settled the queue's shuffle and repeat against `settings.json` and dropped the ids
+/// whose rows are gone.
+pub fn restore_queue(state: &mut PlayerState, queue: QueueState, records: Vec<Arc<TrackSummary>>) {
+    state.queue = queue;
+    state.window.seat(&state.queue.window_ids(), records);
 
-    if let Some(track) = state.queue.get_current().cloned() {
+    if let Some(track) = state.queue.current_id().and_then(|id| state.record(id)) {
         state.duration_ms = u64::try_from(track.duration_ms.max(0)).unwrap_or(0);
         state.position_ms = u64::try_from(track.last_position.max(0)).unwrap_or(0);
         state.source = Some(PlaybackSource::Track(track));
