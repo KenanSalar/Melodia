@@ -273,8 +273,8 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 | Seek backward / forward 5s | `←` / `→` |
 | Seek backward / forward 30s | `Shift+←` / `Shift+→` |
 | Previous / Next track | `Ctrl+←` / `Ctrl+→`, or `P` / `N` |
-| Volume up / down 5% | `↑` / `↓` |
-| Volume up / down 1% | `Ctrl+↑` / `Ctrl+↓` |
+| Volume up / down 5% | `↑` / `↓`, or the mouse wheel over the volume control |
+| Volume up / down 1% | `Ctrl+↑` / `Ctrl+↓`, or `Ctrl`+wheel over the volume control |
 | Seek to 0–90% | `0`–`9` |
 | Mute | `M` |
 | Favorite current track | `L` |

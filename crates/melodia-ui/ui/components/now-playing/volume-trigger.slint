@@ -2,9 +2,9 @@ import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { IconButton } from "../icon-button.slint";
 
-// The button both volume popups open from, and the keyboard readout they share. A volume key bumps
-// `Player.volume-hud-tick`; this counts down from it and force-shows the button's own tooltip on
-// the current percentage, the same pill and anchor as the hover one.
+// The button both volume popups open from, and the step readout they share. A volume key or a wheel
+// notch bumps `Player.volume-step-tick`; this counts down from it and force-shows the button's own
+// tooltip on the current percentage, the same pill and anchor as the hover one.
 export component VolumeTrigger inherits Rectangle {
     in property <length> diameter: 36px;
     in property <length> icon-size: 22px;
@@ -24,11 +24,11 @@ export component VolumeTrigger inherits Rectangle {
     width: btn.width;
     height: btn.height;
 
-    property <int> hud-tick-mirror: Player.volume-hud-tick;
+    property <int> step-tick-mirror: Player.volume-step-tick;
     property <int> tooltip-ticks-remaining: 0;
 
-    changed hud-tick-mirror => {
-        // Reset on every keystroke, so rapid taps keep the tooltip up smoothly.
+    changed step-tick-mirror => {
+        // Reset on every step, so rapid taps or a spin keep the tooltip up smoothly.
         root.tooltip-ticks-remaining = 15;
     }
 
@@ -62,8 +62,11 @@ export component VolumeTrigger inherits Rectangle {
         recolor-duration: root.recolor-duration;
         on-backdrop: root.on-backdrop;
         tooltip-text: round(Player.vm.volume) + "%";
-        force-tooltip: root.tooltip-ticks-remaining > 0;
+        // An open popup reads the level out beside its own slider, and the miniplayer's flyout
+        // leaves this pill uncovered.
+        force-tooltip: root.tooltip-ticks-remaining > 0 && !root.popup-open;
         force-bg: root.popup-open;
         clicked => { root.clicked(); }
+        scroll-event(event) => { return Player.wheel-volume(event); }
     }
 }

@@ -473,6 +473,10 @@ this file is what builds, looks right, and is wrong.
   replacing it: `changed` doesn't fire on a first evaluation, so a component mounted under the
   pointer would never engage. Opaque fills are fine — don't retrofit the latch where there is
   nothing to see through.
+  **Where nothing underneath takes the wheel, the flag stays down until the pointer moves**, opaque
+  fill or not: Slint re-sends the pointer's position only after a wheel event something accepted. A
+  control that takes the wheel itself answers `accept` on every event, an empty one included, and
+  keeps its hover (`Player.wheel-volume`).
 
 - **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`,
   `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop

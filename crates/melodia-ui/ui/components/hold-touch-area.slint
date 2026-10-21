@@ -20,6 +20,9 @@ export component HoldTouchArea {
 
     callback clicked();
     callback held(int /*step*/);
+    // The inner area's own, so a host that takes the wheel answers on the area that tracks the
+    // hover. Unhandled, it rejects and the wheel reaches whatever scrolls underneath.
+    callback scroll-event(PointerScrollEvent) -> EventResult;
 
     private property <bool> building: root.hold-delay > 0ms && touch.pressed && !root.hold-fired;
     private property <duration> pressed-at;
@@ -58,6 +61,9 @@ export component HoldTouchArea {
             if (!root.hold-fired) {
                 root.clicked();
             }
+        }
+        scroll-event(event) => {
+            return root.scroll-event(event);
         }
     }
 }

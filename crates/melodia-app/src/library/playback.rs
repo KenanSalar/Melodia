@@ -322,6 +322,20 @@ pub fn player_set_volume(ctx: &PlaybackContext, level: u32) -> Result<(), AppErr
     Ok(())
 }
 
+/// Steps the volume by `delta` from the engine's own level. The volume keys and the wheel come
+/// through here, persisting through `commit_player_settings` once a burst settles.
+pub fn player_step_volume(ctx: &PlaybackContext, delta: i32) -> Result<(), AppError> {
+    // A wheel spun against either end would otherwise emit a view model per notch.
+    {
+        let s = lock_state(&ctx.player_state);
+        if s.stepped_volume(delta) == s.volume && !s.is_muted {
+            return Ok(());
+        }
+    }
+    ctx.emit_and_execute(|s| s.build_step_volume_actions(delta));
+    Ok(())
+}
+
 /// [`player_set_volume`] and its commit at once, for a move that arrives whole rather than as a
 /// drag: the OS media panel's, or the device's own control's.
 pub async fn player_set_volume_committed(

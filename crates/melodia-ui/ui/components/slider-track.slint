@@ -28,6 +28,9 @@ export component SliderTrack inherits Rectangle {
 
     callback changed(float);
     callback committed(float);
+    // The pointer's own, for `IconButton`'s reason: only the area tracking the hover can take the
+    // wheel and keep it.
+    callback scroll-event(PointerScrollEvent) -> EventResult;
 
     // Tall enough to host the 24 px vertical thumb without clipping.
     min-height: 24px;
@@ -125,5 +128,6 @@ export component SliderTrack inherits Rectangle {
         grab-half: root.thumb-bg-w / 2;
         changed(v) => { root.changed(v); }
         committed(v) => { root.committed(v); }
+        scroll-event(event) => { return root.scroll-event(event); }
     }
 }

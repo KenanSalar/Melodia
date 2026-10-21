@@ -24,11 +24,19 @@ export component ShortcutScope inherits FocusScope {
     // First grab, at first show.
     init => { root.grab-focus(); }
 
-    // The debounce for the *persistence* side of a keyboard volume change. `bump-volume` always
-    // pushes the new value to the backend, which is cheap, and resets this; the timer below drains
-    // it and commits once on the trailing edge, so a held arrow key writes `settings.json` at
-    // release. A slider drag has the same one-commit-per-gesture contract via its own gate.
+    // The debounce for the *persistence* side of a volume step, key or wheel. `Player.bump-volume`
+    // pushes the step to the backend at once, which is cheap; every step resets this, and the timer
+    // below drains it and commits once on the trailing edge, so a held arrow key or a spun wheel
+    // writes `settings.json` when it stops. Here rather than beside the step because a global holds
+    // no timer, and this scope is mounted over the miniplayer too. A slider drag has the same
+    // one-commit-per-gesture contract via its own gate.
     property <int> commit-debounce-ticks: 0;
+
+    // On a mirror because `changed` rejects path expressions on globals.
+    property <int> watched-volume-step: Player.volume-step-tick;
+    changed watched-volume-step => {
+        root.commit-debounce-ticks = 3;
+    }
 
     commit-debounce-timer := Timer {
         interval: 100ms;
@@ -36,23 +44,11 @@ export component ShortcutScope inherits FocusScope {
         triggered => {
             root.commit-debounce-ticks =
                 max(0, root.commit-debounce-ticks - 1);
-            // Trailing edge only. A fresh keystroke reuses this timer by resetting
-            // the counter inside `bump-volume`.
+            // Trailing edge only. A fresh step reuses this timer by resetting the counter.
             if (root.commit-debounce-ticks == 0) {
                 Player.commit-volume();
             }
         }
-    }
-
-    // The clamp matches the slider's own emit range. Applies immediately so audio moves
-    // on the keystroke, and defers the persist to the debounce above. Bumping
-    // `volume-hud-tick` is what force-shows `VolumeTrigger`'s tooltip with the new
-    // percentage.
-    function bump-volume(delta: int) {
-        Player.set-volume(clamp(Player.vm.volume + delta, 0, 100));
-        Player.volume-hud-tick += 1;
-        // Reset on every keystroke, so the commit fires once the user stops.
-        root.commit-debounce-ticks = 3;
     }
 
     // Scrubbing off the end of a track is how a track change lands mid-run, and it is the
@@ -160,11 +156,11 @@ export component ShortcutScope inherits FocusScope {
             return accept;
         }
         if (ev.text == Key.UpArrow) {
-            bump-volume(ev.modifiers.control ? 1 : 5);
+            Player.bump-volume(Player.volume-step(ev.modifiers));
             return accept;
         }
         if (ev.text == Key.DownArrow) {
-            bump-volume(ev.modifiers.control ? -1 : -5);
+            Player.bump-volume(-Player.volume-step(ev.modifiers));
             return accept;
         }
 

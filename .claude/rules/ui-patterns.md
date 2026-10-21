@@ -93,9 +93,13 @@ silently miss the other.
   for. **Both pass `in-popup: true`**, being the only mounts inside a `PopupWindow`, whose
   `absolute-position` would have the pill fit a window that isn't there (`slint-pitfalls.md`). A
   third mount inside a popup owes the same. **The disc both popups open from is
-  `components/now-playing/volume-trigger.slint`'s `VolumeTrigger`**, which also owns the keyboard
-  readout (the `Player.volume-hud-tick` countdown force-showing the disc's own tooltip), so a
-  popup keeps only its slider's readout. `placeholder_tests` holds each file to one percentage.
+  `components/now-playing/volume-trigger.slint`'s `VolumeTrigger`**, which also owns the step
+  readout: the `Player.volume-step-tick` countdown, bumped by a volume key or a wheel notch,
+  force-shows the disc's own tooltip. It stands down while the disc's popup is open, a popup
+  keeping only its slider's readout and the miniplayer's flyout leaving the disc's pill uncovered.
+  **The disc and both sliders take the wheel through `Player.wheel-volume`**, on the pointer area
+  that tracks their hover (`IconButton` and `SliderTrack` forward a `scroll-event` for it), so the
+  hover holds through a spin. `placeholder_tests` holds each file to one percentage.
 
 ### Pills, chips, sort rows
 
