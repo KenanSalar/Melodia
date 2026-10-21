@@ -111,21 +111,6 @@ impl<S> SortedQuery<S> {
     }
 }
 
-/// The count a header states whatever the filter leaves: `ids`' own length unfiltered, else
-/// `count`'s answer.
-pub async fn unfiltered_total(
-    ids: &[i64],
-    needle: &Needle,
-    count: impl Future<Output = AppResult<i64>>,
-) -> AppResult<i32> {
-    let total = if needle.is_empty() {
-        i64::try_from(ids.len()).unwrap_or(i64::MAX)
-    } else {
-        count.await?
-    };
-    Ok(i32::try_from(total).unwrap_or(i32::MAX))
-}
-
 /// An empty grid of `K`, to install once on its global.
 pub fn install<K: CardGrid>(state: &AppState, ui: &AppWindow) -> Rc<PagedGrid<K::Row>> {
     let grid = PagedGrid::new(fetcher::<K>(state, ui.as_weak()));
@@ -189,6 +174,14 @@ pub fn set_columns<K: CardGrid>(ui: &AppWindow, columns: i32) {
     if let Some(grid) = PagedGrid::installed(&K::model(ui), K::LABEL) {
         grid.set_columns(columns);
     }
+}
+
+/// The ids `K` shows, in card order, so a card's Play queues what the grid shows, filter included.
+/// UI thread.
+pub fn shown_ids<K: CardGrid>(ui: &AppWindow) -> Vec<i64> {
+    PagedGrid::installed(&K::model(ui), K::LABEL)
+        .map(|grid| grid.ids().to_vec())
+        .unwrap_or_default()
 }
 
 /// Empty `K` for a section leave, refusing every load still on its way: nothing it brings has a

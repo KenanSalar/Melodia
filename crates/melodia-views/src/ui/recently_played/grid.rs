@@ -23,8 +23,6 @@ use melodia_core::error::AppResult;
 use melodia_core::utils::needle::Needle;
 use melodia_ui::{AppWindow, EntityGridRow as UiEntityGridRow, RecentlyPlayed};
 
-pub(super) const MOST_PLAYED_LABEL: &str = "RecentlyPlayed.most-played-rows";
-
 pub(super) struct RecentMostPlayed;
 
 impl CardGrid for RecentMostPlayed {
@@ -34,7 +32,7 @@ impl CardGrid for RecentMostPlayed {
     type Facts = MostPlayedTotals;
     type Handle = RecentlyPlayedUi;
 
-    const LABEL: &'static str = MOST_PLAYED_LABEL;
+    const LABEL: &'static str = "RecentlyPlayed.most-played-rows";
 
     fn loads(handle: &RecentlyPlayedUi) -> &GridLoads {
         &handle.most_played
@@ -118,5 +116,5 @@ pub fn prewarm_covers(rp_ui: &RecentlyPlayedUi) {
 
 /// The grid's track ids, in card order.
 pub fn most_played_ids(ui: &AppWindow) -> Vec<i64> {
-    most_played::shown_ids(&ui.global::<RecentlyPlayed>().get_most_played_rows(), MOST_PLAYED_LABEL)
+    card_grid::shown_ids::<RecentMostPlayed>(ui)
 }

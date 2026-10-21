@@ -1,8 +1,8 @@
 //! The Favorites page: a pinned hero over three mutually exclusive tabs.
 //!
 //! The hero's mosaic tiles are the first 4 *distinct* covers of the Most Played tab's own walk —
-//! both rank through one shared clause (`queries::track::MOST_PLAYED_ORDER`) rather than two
-//! hand-matched ones, so they can't disagree about a tie — topped up from the favourites that tab
+//! both rank through one clause in the store's ranking queries rather than two hand-matched
+//! ones, so they can't disagree about a tie — topped up from the favourites that tab
 //! excludes once the played covers run out. Songs binds a `TrackList` over a
 //! [`TrackRows`](crate::ui::paged_rows::track_rows::TrackRows) whose search *and* sort run in SQL;
 //! Most Played and Favorite Artists are paged grids whose search and sort do too. There is no
@@ -26,16 +26,19 @@ mod tabs;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
+use slint::{ComponentHandle, Global as _, Weak};
+
 use crate::ui::artists::ArtistsUi;
 use crate::ui::artwork_cache::BlurSpec;
 use crate::ui::card_grid::GridLoads;
 use crate::ui::detail_artwork;
-use crate::ui::paged_rows::ScrollPoint;
+use crate::ui::paged_rows::track_rows::ListLoads;
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::view_ctx::ViewCtx;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::FavoriteStats;
 use melodia_core::entities::track_list::MostPlayedTotals;
+use melodia_ui::Favorites;
 
 use rows::Scrolls;
 use state::FavoritesUiState;
@@ -52,8 +55,7 @@ pub(super) use grids::{prewarm_tab_covers, release_grids, reload_grid, requery_g
 pub(super) use hero::refresh_hero;
 pub(super) use rows::{most_played_ids, to_slint_fav_artist_row};
 pub(super) use songs::{
-    current_filter, displayed_ids, patch_row, refresh_tracks, release_tracks, remove_rows,
-    requery_tracks, set_filter, set_sort,
+    current_filter, displayed_ids, release_tracks, requery_tracks, set_filter, set_sort,
 };
 pub use tabs::FavoritesTab;
 pub(super) use tabs::{seed_tab, tab_from_index};
@@ -76,6 +78,7 @@ pub fn install(cx: ViewCtx<'_>, artists_ui: &Arc<ArtistsUi>) -> Arc<FavoritesUi>
         cx.cover_thumbs.clone(),
         detail_artwork::blur_spec(cx.app),
         scrolls,
+        cx.app.global::<Favorites>().as_weak(),
     ));
     callbacks::wire(cx.app, cx.state, cx.view_state, &favorites_ui, artists_ui);
     if let Some(vs) = cx.view_state {
@@ -93,9 +96,10 @@ pub struct FavoritesUi {
     /// The band's blur shape, or `None` under the aurora setting — read once at install, the
     /// setting being restart-gated, because the compose runs where no window handle is in reach.
     pub(super) hero_blur: Option<BlurSpec>,
-    /// Where the Songs list was last read, which every Songs load seeds its rows around.
-    pub(super) songs_scroll: ScrollPoint,
-    /// What each grid tab's loads share.
+    /// The global the Songs list lands through.
+    global: Weak<Favorites<'static>>,
+    /// What the Songs tab's loads share, and each grid tab's.
+    songs: ListLoads,
     pub(super) most_played: GridLoads,
     pub(super) artists: GridLoads,
     /// Visibility + staleness + the mutation gate, the unit every entity grid carries.
@@ -116,12 +120,18 @@ pub struct FavoritesUi {
 }
 
 impl FavoritesUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>, hero_blur: Option<BlurSpec>, scrolls: Scrolls) -> Self {
+    fn new(
+        cover_thumbs: Arc<CoverThumbs>,
+        hero_blur: Option<BlurSpec>,
+        scrolls: Scrolls,
+        global: Weak<Favorites<'static>>,
+    ) -> Self {
         Self {
             inner: FavoritesUiState::new(),
             cover_thumbs,
             hero_blur,
-            songs_scroll: scrolls.songs,
+            global,
+            songs: ListLoads::new(scrolls.songs),
             most_played: GridLoads::new(scrolls.most_played),
             artists: GridLoads::new(scrolls.artists),
             section: SectionState::new(),

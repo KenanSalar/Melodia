@@ -50,14 +50,21 @@ pub async fn track_ids(
     qb.push(" ORDER BY ")
         .push(order_by(Page::of(&membership), order, membership.position()))
         .push(")");
+    fetch_packed_ids(db, qb).await
+}
+
+/// The ids `qb` reads back as one `group_concat(id, ',')`, in the order joined. The aggregate is
+/// NULL where nothing matched.
+pub(crate) async fn fetch_packed_ids(
+    db: &DbPool,
+    mut qb: QueryBuilder<Sqlite>,
+) -> Result<Vec<i64>, AppError> {
     let packed: Option<String> =
         qb.build_query_scalar().persistent(false).fetch_one(db.read()).await?;
     packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
 }
 
-/// The ids `group_concat` joined, in order. The aggregate is NULL where nothing matched, which
-/// the caller answers before getting here.
-pub(crate) fn unpack_ids(packed: &str) -> Result<Vec<i64>, AppError> {
+fn unpack_ids(packed: &str) -> Result<Vec<i64>, AppError> {
     let mut ids = Vec::with_capacity(packed.bytes().filter(|&b| b == b',').count() + 1);
     for id in packed.split(',') {
         ids.push(id.parse().map_err(|e| sqlx::Error::Decode(Box::new(e)))?);
@@ -145,10 +152,7 @@ impl Page {
 /// The `ORDER BY` body for `order` on `page`. `position` is the list's own order where it has
 /// one, a playlist's.
 fn order_by(page: Page, order: TrackOrder, position: Option<&str>) -> String {
-    let dir = match order.dir {
-        SortDir::Asc => "ASC",
-        SortDir::Desc => "DESC",
-    };
+    let dir = sql_direction(order.dir);
     let tie = page.tie_break();
     let then_tie = |key: &str| format!("{key} {dir}, {tie} {dir}, t.id {dir}");
     match (order.field, position) {
@@ -169,6 +173,13 @@ fn order_by(page: Page, order: TrackOrder, position: Option<&str>) -> String {
             Page::Songs => format!("{NATURAL} {dir}, t.id {dir}"),
             Page::Detail => then_tie(NATURAL),
         },
+    }
+}
+
+pub(crate) fn sql_direction(dir: SortDir) -> &'static str {
+    match dir {
+        SortDir::Asc => "ASC",
+        SortDir::Desc => "DESC",
     }
 }
 

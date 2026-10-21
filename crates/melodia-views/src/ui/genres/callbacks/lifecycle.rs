@@ -45,8 +45,8 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, genres_ui: &Arc<GenresUi>
     ui.global::<Genres>().on_section_active_changed(move |active| {
         gu.set_section_active(active);
         if !active {
-            // Land synchronously before the release task spawns — see
-            // `GenresUi::data_dirty` for the race details.
+            // Land synchronously before the release task spawns, so the
+            // re-enter's `take_dirty()` never sees a grid not yet released.
             gu.mark_dirty();
         }
         if !active && let Some(ui) = weak.upgrade() {

@@ -5,7 +5,8 @@
 use parking_lot::Mutex;
 use slint::{StrongHandle, Weak};
 
-use crate::ui::paged_rows::{KeysetTickets, ScrollPoint};
+use crate::ui::paged_rows::ScrollPoint;
+use crate::ui::paged_rows::track_rows::ListLoads;
 use melodia_core::entities::track_list::{SortDir, TrackOrder, TrackSortField};
 use melodia_core::utils::needle::{Needle, fold_needle};
 
@@ -23,9 +24,7 @@ pub struct DetailCache<G: StrongHandle> {
     /// The two above move at a pick and this one only once a load shows, and a row's index on
     /// screen is a position only while it names the open entity.
     own_order_shown: Mutex<Option<i64>>,
-    pub(super) tickets: KeysetTickets,
-    /// Where the list was last read, which every load seeds its rows around.
-    pub(super) scroll: ScrollPoint,
+    loads: ListLoads,
 }
 
 impl<G: StrongHandle> DetailCache<G> {
@@ -36,13 +35,16 @@ impl<G: StrongHandle> DetailCache<G> {
             order: Mutex::new(TrackOrder::new("", SortDir::Asc)),
             filter: Mutex::new(Needle::default()),
             own_order_shown: Mutex::new(None),
-            tickets: KeysetTickets::default(),
-            scroll,
+            loads: ListLoads::new(scroll),
         }
     }
 
     pub fn global(&self) -> &Weak<G> {
         &self.global
+    }
+
+    pub fn loads(&self) -> &ListLoads {
+        &self.loads
     }
 
     pub fn id(&self) -> i64 {

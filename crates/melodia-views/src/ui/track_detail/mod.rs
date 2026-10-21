@@ -1,6 +1,7 @@
 //! What the four track-list details (Album, Artist, Genre and Playlist) share: the Slint surface
-//! of their globals, the view handle the shared wiring drives, the list each keeps as a keyset,
-//! and the launch's reopen. The wiring itself is [`crate::ui::callbacks::track_detail`].
+//! of their globals, the view handle the shared wiring drives, the list each keeps as a keyset
+//! (a [`PagedTrackList`] through the one impl below), and the launch's reopen. The wiring itself
+//! is [`crate::ui::callbacks::track_detail`].
 
 mod cache;
 pub mod load;
@@ -14,14 +15,14 @@ use slint::{ModelRc, SharedString};
 
 use crate::ui::list_selection::RowSelectionView;
 use crate::ui::my_library::MyLibraryTab;
-use crate::ui::paged_rows::track_rows::{self, TrackRows};
+use crate::ui::paged_rows::track_rows::{ListLoads, ListQuery, PagedTrackList, TrackRows};
 use crate::ui::section_state::SectionState;
 use crate::ui::track_list_view::{TrackListActions, TrackListColumnState};
+use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track_list::TrackListScope;
-use melodia_ui::{
-    AlbumDetail, ArtistDetail, GenreDetail, PlaylistDetail, TrackListRow as UiTrackListRow,
-};
+use melodia_core::error::AppResult;
+use melodia_ui::{AlbumDetail, ArtistDetail, GenreDetail, PlaylistDetail};
 
 /// The Slint surface of a detail global the shared wiring needs beyond what every track list has.
 /// Method names stay apart from the generated accessors, as [`RowSelectionView`]'s do.
@@ -130,42 +131,59 @@ pub trait TrackDetail: Send + Sync + 'static {
     }
 }
 
+// The hooks a detail spells on `TrackDetail` keep their names here, so the bodies name the trait
+// they forward to.
+impl<V: TrackDetail> PagedTrackList for V {
+    type Global = V::Global;
+    type Facts = ();
+
+    const LABEL: &'static str = V::VIEW_ID;
+
+    fn loads(&self) -> &ListLoads {
+        self.cache().loads()
+    }
+
+    fn global(&self) -> &slint::Weak<V::Global> {
+        self.cache().global()
+    }
+
+    fn row_covers(&self) -> &Arc<CoverThumbs> {
+        TrackDetail::row_covers(self)
+    }
+
+    fn query(&self) -> Option<ListQuery> {
+        let (id, order, needle) = self.cache().query();
+        (id >= 0).then(|| ListQuery { scope: self.scope(id), order, needle })
+    }
+
+    fn facts(_: &AppState, _: &ListQuery, _: &[i64]) -> impl Future<Output = AppResult<()>> + Send {
+        std::future::ready(Ok(()))
+    }
+
+    /// The detail still lists the entity the load was for.
+    fn still_wanted(&self, query: &ListQuery) -> bool {
+        self.scope(self.cache().id()) == query.scope
+    }
+
+    fn rows_moving(&self, g: &V::Global) {
+        TrackDetail::rows_moving(self, g);
+    }
+
+    fn shown(&self, _: &V::Global, query: &ListQuery, _: Option<()>) {
+        let cache = self.cache();
+        cache.record_shown(cache.id(), query.order, &query.needle);
+    }
+}
+
 /// The ids the detail shows, in order, for a play or a shuffle.
 pub fn displayed_ids<G: DetailGlobal>(g: &G) -> Vec<i64> {
     TrackRows::ids_of(&g.track_rows(), G::VIEW_ID)
 }
 
-/// Patch the row showing `id` after a heart or a star, a no-op where the detail doesn't list it.
-/// Neither moves a track in or out of a detail, so nothing is fetched and the scroll holds. Safe
-/// from any thread.
-pub fn patch_row<V: TrackDetail>(
-    view: &V,
-    id: i64,
-    edit: impl FnOnce(&mut UiTrackListRow) + Send + 'static,
-) {
-    let _ = view.cache().global().upgrade_in_event_loop(move |g| {
-        let rows = g.track_rows();
-        if let Some(model) = TrackRows::installed(&rows, V::VIEW_ID) {
-            model.patch(id, edit);
-        }
-    });
-}
-
-/// Drop the rows the user just took out of the entity, and their picks, ahead of the reload the
-/// write owes. A no-op for ids the detail doesn't list. Safe from any thread.
-pub fn remove_rows<V: TrackDetail>(view: &V, ids: Vec<i64>) {
-    let _ = view.cache().global().upgrade_in_event_loop(move |g| {
-        let rows = g.track_rows();
-        if let Some(model) = TrackRows::installed(&rows, V::VIEW_ID) {
-            track_rows::remove_rows(&g, model, &ids);
-        }
-    });
-}
-
 /// Empty the detail's list, its ids and cached rows with it, and refuse every load still on its
 /// way to it. For a close and a section leave. UI thread.
 pub fn release_rows<V: TrackDetail>(view: &V, g: &impl DetailGlobal) {
-    view.cache().tickets.revoke();
+    view.cache().loads().tickets.revoke();
     view.cache().forget_shown();
     let rows = g.track_rows();
     if let Some(model) = TrackRows::installed(&rows, V::VIEW_ID) {

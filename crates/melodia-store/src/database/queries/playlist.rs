@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use sqlx::AssertSqlSafe;
 
-use crate::database::DbPool;
 use crate::database::queries::search_name;
 use crate::database::queries::track::columns;
+use crate::database::{DbPool, select_in_id_order};
 use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
 
@@ -131,11 +131,8 @@ pub async fn get_playlists_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<playlist::PlaylistStats>, AppError> {
-    let rows = crate::database::chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT * FROM playlist_stats WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(crate::database::in_id_order(rows, ids, |p: &playlist::PlaylistStats| p.id))
+    select_in_id_order(db, "SELECT * FROM playlist_stats", ids, |p: &playlist::PlaylistStats| p.id)
+        .await
 }
 
 pub async fn get_playlist_by_id(db: &DbPool, id: i64) -> Result<playlist::PlaylistStats, AppError> {

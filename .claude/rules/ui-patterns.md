@@ -680,6 +680,10 @@ three components that answer it, and each argues its geometry at its own file.
   cached row, where the `VecModel` lists go through `model_patch`; the `list_selection` helpers
   take either model. A list over another row type implements `PagedRow` for it rather than growing
   a second model.
+  **The six track lists load through one path, `track_rows`' over `PagedTrackList`**, the twin of
+  `card_grid`: each states only where its query comes from, when a load may still land and what it
+  writes beside the rows, and the four details do it through one impl over `TrackDetail`. A track
+  list over another scope implements `PagedTrackList` rather than growing a second load path.
 
 - **A track's title and its marks are `components/track-list/track-title.slint`'s `TrackTitle`**:
   the heart a favourite keeps up, and the star strip the row reveals on hover. Track rows and queue
@@ -689,7 +693,8 @@ three components that answer it, and each argues its geometry at its own file.
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle). Each
   lists its entity as a `TrackRows`, its `DetailCache` holding the sort and filter the loads run
-  under, and `track_detail::load` is the open, reload and requery all four share. A close or a
+  under. `track_detail::load` is the fresh open, the one load running under a query of its own
+  rather than the page's; every other load is the shared track-list path. A close or a
   section leave releases the list and revokes every load still on its way to it
   (`track_detail::release_rows`). A fifth detail implements both traits rather than copying a
   `callbacks/detail.rs`.
@@ -720,7 +725,7 @@ three components that answer it, and each argues its geometry at its own file.
   `player_play_tracks` re-resolves by **track id** against what the DB returned, the fetch dropping
   ids that no longer exist. A new list view wires `play-row` to its own `*_track_ids()` helper; the
   two Most Played grid tabs have no row index and resolve by id against the grid's own keyset
-  (`most_played::shown_ids`), so the cards and the queue can't disagree about what's on screen,
+  (`card_grid::shown_ids`), so the cards and the queue can't disagree about what's on screen,
   the filter included.
 
 - **Track-list insets belong to the list, not the page.** `TrackList` and `DraggableTrackList`
@@ -1401,8 +1406,9 @@ block first; each page's section below is deltas only.** The nav-index map is in
   its dirty flag (seeded `true`, else a boot onto that tab loads twice); `release_section_state`
   **re-arms** it beside the wipe rather than leaving it to the leave's `mark_dirty` two files
   away; and a load that stores nothing re-arms it, the pick having consumed the flag *before*
-  asking. Songs re-arms on a failed query or a leave landing mid-flight, a grid through
-  `CardGrid::load_failed`, the leave's revoke covering its other half.
+  asking. Songs re-arms on a failed query or a leave landing mid-flight (Favorites' through
+  `PagedTrackList::load_dropped`), a grid through `CardGrid::load_failed`, the leave's revoke
+  covering its other half.
 
 - **Section guards sit *after* the slow part** — before it the leave hasn't happened yet, so a
   Songs load that `.await`s a cover prewarm asks twice. A grid's load asks its ticket instead,
@@ -1428,7 +1434,8 @@ block first; each page's section below is deltas only.** The nav-index map is in
 - Shared helpers: `ui::tab_bar::{clamp_tab, UNFETCHED_COUNT}`, `ui::card_grid` over
   `ui::paged_rows::grid::PagedGrid`, `ui::most_played` (the card and rows both Most Played grids
   draw), `ui::paged_rows` with the `track_rows::TrackRows` both Songs tabs and the four details
-  show, `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
+  show and the `PagedTrackList` path that loads them,
+  `ui::grid_prewarm::{tier, grid_cover, prewarm, prewarm_off_thread, hand_back_covers}`,
   `ui::mosaic_hero::{compose_off_thread, MosaicGuard}`.
 
 ### Per-page deltas

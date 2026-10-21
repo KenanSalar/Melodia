@@ -9,10 +9,10 @@ use crate::ui::albums::AlbumsUi;
 use crate::ui::artists::ArtistsUi;
 use crate::ui::browse::{self as browse_ui_mod, BrowseUi};
 use crate::ui::genres::GenresUi;
+use crate::ui::paged_rows::track_rows;
 use crate::ui::playlists::PlaylistsUi;
 use crate::ui::search::{self as search_ui_mod, SearchUi};
-use crate::ui::track_detail;
-use crate::ui::tracks as tracks_ui_mod;
+use crate::ui::tracks::TracksUi;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -26,6 +26,7 @@ use melodia_ui::{AppWindow, Player};
 /// one surface with no `library_changed` subscriber to correct a missed patch later.
 #[derive(Clone)]
 struct CurrentTrackMirrors {
+    tracks: Arc<TracksUi>,
     browse: Arc<BrowseUi>,
     albums: Arc<AlbumsUi>,
     artists: Arc<ArtistsUi>,
@@ -37,25 +38,25 @@ struct CurrentTrackMirrors {
 
 impl CurrentTrackMirrors {
     fn mirror_favorite(&self, id: i64, fav: bool) {
-        tracks_ui_mod::patch_row(&self.weak, id, move |row| row.is_favorite = fav);
+        track_rows::patch_row(&*self.tracks, id, move |row| row.is_favorite = fav);
         self.browse.flip_favorite(id, fav);
         browse_ui_mod::apply_row_favorite(&self.weak, id, fav);
-        track_detail::patch_row(&*self.albums, id, move |row| row.is_favorite = fav);
-        track_detail::patch_row(&*self.artists, id, move |row| row.is_favorite = fav);
-        track_detail::patch_row(&*self.genres, id, move |row| row.is_favorite = fav);
-        track_detail::patch_row(&*self.playlists, id, move |row| row.is_favorite = fav);
+        track_rows::patch_row(&*self.albums, id, move |row| row.is_favorite = fav);
+        track_rows::patch_row(&*self.artists, id, move |row| row.is_favorite = fav);
+        track_rows::patch_row(&*self.genres, id, move |row| row.is_favorite = fav);
+        track_rows::patch_row(&*self.playlists, id, move |row| row.is_favorite = fav);
         self.search.flip_favorite(id, fav);
         search_ui_mod::apply_row_favorite(&self.weak, id, fav);
     }
 
     fn mirror_rating(&self, id: i64, rating: i32) {
-        tracks_ui_mod::patch_row(&self.weak, id, move |row| row.rating = rating);
+        track_rows::patch_row(&*self.tracks, id, move |row| row.rating = rating);
         self.browse.flip_rating(id, rating);
         browse_ui_mod::apply_row_rating(&self.weak, id, rating);
-        track_detail::patch_row(&*self.albums, id, move |row| row.rating = rating);
-        track_detail::patch_row(&*self.artists, id, move |row| row.rating = rating);
-        track_detail::patch_row(&*self.genres, id, move |row| row.rating = rating);
-        track_detail::patch_row(&*self.playlists, id, move |row| row.rating = rating);
+        track_rows::patch_row(&*self.albums, id, move |row| row.rating = rating);
+        track_rows::patch_row(&*self.artists, id, move |row| row.rating = rating);
+        track_rows::patch_row(&*self.genres, id, move |row| row.rating = rating);
+        track_rows::patch_row(&*self.playlists, id, move |row| row.rating = rating);
         self.search.flip_rating(id, rating);
         search_ui_mod::apply_row_rating(&self.weak, id, rating);
     }
@@ -63,6 +64,7 @@ impl CurrentTrackMirrors {
 
 fn mirrors(ui: &AppWindow, handles: RowFlagHandles<'_>) -> CurrentTrackMirrors {
     CurrentTrackMirrors {
+        tracks: handles.tracks.clone(),
         browse: handles.browse.clone(),
         albums: handles.albums.clone(),
         artists: handles.artists.clone(),
@@ -77,6 +79,7 @@ fn mirrors(ui: &AppWindow, handles: RowFlagHandles<'_>) -> CurrentTrackMirrors {
 /// reads as an ordering nobody can check at the call site.
 #[derive(Clone, Copy)]
 pub struct RowFlagHandles<'a> {
+    pub tracks: &'a Arc<TracksUi>,
     pub browse: &'a Arc<BrowseUi>,
     pub albums: &'a Arc<AlbumsUi>,
     pub artists: &'a Arc<ArtistsUi>,

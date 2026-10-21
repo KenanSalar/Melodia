@@ -250,7 +250,6 @@ impl RowSelectionView for FakeView {
     fn track_rows(&self) -> ModelRc<UiTrackListRow> {
         ModelRc::from(Rc::clone(&self.rows))
     }
-    fn replace_track_rows(&self, _rows: ModelRc<UiTrackListRow>) {}
     fn bind_select_row(&self, _f: impl FnMut(i32, i32, bool, bool) + 'static) {}
     fn bind_select_all(&self, _f: impl FnMut() + 'static) {}
     fn bind_clear_selection(&self, _f: impl FnMut() + 'static) {}
@@ -384,7 +383,7 @@ fn a_removal_under_a_filter_drops_the_removed_rows_from_the_selection() {
     handle_row_click(&view, 0, 2, false, false);
     handle_row_click(&view, 1, 3, false, true);
 
-    track_rows::remove_rows(&view, &view.rows, &[3]);
+    track_rows::remove_rows_from(&view, &view.rows, &[3]);
 
     assert_eq!(view.state(), (vec![2], NO_ANCHOR, vec![true]));
 }
@@ -395,7 +394,7 @@ fn a_removal_keeps_a_pick_the_filter_hides() {
     handle_row_click(&view, 3, 1, false, false);
     view.refilter("ha");
 
-    track_rows::remove_rows(&view, &view.rows, &[3]);
+    track_rows::remove_rows_from(&view, &view.rows, &[3]);
 
     assert_eq!(view.state(), (vec![1], 1, vec![false]));
 }

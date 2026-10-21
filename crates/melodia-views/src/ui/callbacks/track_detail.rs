@@ -16,7 +16,8 @@ use super::track_list::{
 use super::{
     collect_track_ids, next_sort_with_natural, persist_view_sort, spawn_play_then_shuffle,
 };
-use crate::ui::track_detail::{self, DetailGlobal, TrackDetail, load};
+use crate::ui::paged_rows::track_rows;
+use crate::ui::track_detail::{self, DetailGlobal, TrackDetail};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track_list::TrackOrder;
@@ -95,7 +96,7 @@ fn wire_row_flags<V: TrackDetail>(g: &V::Global, state: &AppState, view: &Arc<V>
     captures: [view],
     after: |id_vec, fav| {
         for id in id_vec {
-            track_detail::patch_row(&*view, id, move |r| r.is_favorite = fav);
+            track_rows::patch_row(&*view, id, move |r| r.is_favorite = fav);
         }
     });
     wire_row_flag!(g, bind_set_row_rating, state,
@@ -104,7 +105,7 @@ fn wire_row_flags<V: TrackDetail>(g: &V::Global, state: &AppState, view: &Arc<V>
     captures: [view],
     after: |id_vec, rating| {
         for id in id_vec {
-            track_detail::patch_row(&*view, id, move |r| r.rating = rating);
+            track_rows::patch_row(&*view, id, move |r| r.rating = rating);
         }
     });
 }
@@ -128,7 +129,7 @@ fn wire_sort_and_columns<V: TrackDetail>(
                 next_sort_with_natural(&field, &dir, &clicked, V::NATURAL_SORT);
             g.set_sort(&new_field, new_dir.as_str());
             view.cache().set_order(TrackOrder::new(&new_field, new_dir));
-            load::requery(&s, &view);
+            track_rows::requery(&s, &view);
             persist_view_sort(&s, V::VIEW_ID, new_field, new_dir);
         });
     }
@@ -148,7 +149,7 @@ fn wire_filter<V: TrackDetail>(
     g.bind_filter_changed(move |text| {
         let Some(g) = weak.upgrade() else { return };
         view.cache().set_filter(&text);
-        load::requery(&s, &view);
+        track_rows::requery(&s, &view);
         view.refilter_beside(&g);
     });
 }

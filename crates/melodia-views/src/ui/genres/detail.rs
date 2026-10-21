@@ -13,6 +13,7 @@ use crate::ui::detail_view::resolve_view_sort;
 use crate::ui::hero_backdrop::GenreStops;
 use crate::ui::hero_folds::HeroFold;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::paged_rows::track_rows;
 use crate::ui::section_state::SectionState;
 use crate::ui::track_detail::{DetailCache, TrackDetail, load, restore};
 use crate::ui::track_list_view::view_id;
@@ -158,7 +159,7 @@ pub async fn refresh_detail(
     weak: Weak<AppWindow>,
     genre_id: i64,
 ) -> AppResult<()> {
-    load::reload(state, genres_ui).await?;
+    track_rows::reload(state, genres_ui).await?;
     let (detail, fold) = fetch_genre_header(state, genre_id).await?;
 
     let _ = weak.upgrade_in_event_loop(move |ui| {

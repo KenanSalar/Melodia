@@ -39,7 +39,7 @@ pub async fn refresh_hero(
     // A leave that landed while the query was in flight has already wiped `stats` and
     // forgotten the collage guard, so the store and the push below would fill both back
     // in behind a view nobody can see. The leave set `mark_dirty`, so the next enter
-    // re-fetches — the guard `refresh_tracks` carries, in the same place, after the
+    // re-fetches — the guard the Songs reload carries, in the same place, after the
     // slow part.
     if !fav_ui.section_active() {
         return Ok(());
@@ -79,7 +79,7 @@ fn push_stats_to_slint(stats: &FavoriteStats, fav_ui: &Arc<FavoritesUi>, weak: &
     let _ = slint::invoke_from_event_loop(move || {
         let Some(ui) = weak.upgrade() else { return };
         // The leave can land while this post is in flight, and it rewinds the count on its
-        // way out — the same guard, in the same place, as `songs::show_tracks`.
+        // way out — the same guard, in the same place, as the Songs tab's `still_wanted`.
         if !fav_ui.section_active() {
             return;
         }

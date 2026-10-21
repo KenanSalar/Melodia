@@ -134,7 +134,6 @@ pub fn spawn_initial_tracks_fetch(
     state: &AppState,
     tracks_ui: &Arc<ui::tracks::TracksUi>,
     view_state: Option<&services::view_state::ViewStateData>,
-    weak: &slint::Weak<AppWindow>,
 ) {
     if !tracks_ui.section_active() {
         tracks_ui.mark_dirty();
@@ -145,7 +144,7 @@ pub fn spawn_initial_tracks_fetch(
             || ui::tracks::SongsQuery::new("title", "asc", ""),
             |sort| ui::tracks::SongsQuery::new(&sort.field, sort.dir.as_str(), ""),
         );
-    ui::tracks::refresh(state, tracks_ui, weak, query);
+    ui::tracks::refresh(state, tracks_ui, query);
 }
 
 /// Kick off an entity grid's initial load, if the launch shows its My Library tab.

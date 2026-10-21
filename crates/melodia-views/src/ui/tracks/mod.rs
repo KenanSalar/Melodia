@@ -8,8 +8,8 @@
 //! Cross-thread layout:
 //! * `TracksUi` is `Send + Sync` — `Arc<TracksUi>` cloned into callback
 //!   closures and tokio tasks.
-//! * Slint properties / model can only be touched from the UI thread; we
-//!   reach back via `Weak<AppWindow>::upgrade_in_event_loop`.
+//! * Slint properties / model can only be touched from the UI thread; a load
+//!   reaches back through the `Tracks` global's own weak handle.
 
 mod callbacks;
 mod fetch;
@@ -17,10 +17,11 @@ mod fetch;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use parking_lot::Mutex;
+use slint::{ComponentHandle, Global as _, ModelRc, SharedString, VecModel, Weak};
 
-use crate::ui::paged_rows::track_rows::{self, TrackRows};
-use crate::ui::paged_rows::{KeysetTickets, ScrollPoint};
+use crate::ui::paged_rows::ScrollPoint;
+use crate::ui::paged_rows::track_rows::{self, ListLoads, TrackRows};
 use crate::ui::section_state::{SectionState, impl_section_state_helpers};
 use crate::ui::util::{StringPool, clamp_i64_to_i32};
 use crate::ui::view_ctx::ViewCtx;
@@ -33,21 +34,26 @@ use melodia_ui::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 // why `refresh` can't fold into `install` with the rest.
 pub use fetch::{SongsQuery, refresh};
 
-// Reached only from this slice's own `callbacks`, plus the cross-slice
-// `patch_row` mirror in `callbacks::now_playing`. `pub(super)` is
-// `pub(in crate::ui)` here, which is exactly that reach.
-pub(super) use fetch::{patch_row, requery};
+// Reached only from this slice's own `callbacks`. `pub(super)` is
+// `pub(in crate::ui)` here.
+pub(super) use fetch::requery;
 
 /// Install the Tracks models, build the handle, and wire every `Tracks.*`
 /// callback to it.
 ///
-/// The returned handle is read by `install_views` for the initial fetch and the
-/// `library_changed` refresher. It is not a keepalive; see
-/// [`crate::ui::albums::install`].
+/// The returned handle is read by `install_views` for the initial fetch, the
+/// `library_changed` refresher and the now-playing row mirrors. It is not a
+/// keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<TracksUi> {
     let scroll = install_tracks_model(cx.app, cx.state);
     install_selection_model(cx.app);
-    let tracks_ui = Arc::new(TracksUi::new(cx.cover_thumbs.clone(), scroll));
+    let tracks_ui = Arc::new(TracksUi {
+        cover_thumbs: cx.cover_thumbs.clone(),
+        section: SectionState::new(),
+        global: cx.app.global::<Tracks>().as_weak(),
+        loads: ListLoads::new(scroll),
+        query: Mutex::new(SongsQuery::new("", "", "")),
+    });
     callbacks::wire(cx.app, cx.state, cx.view_state, &tracks_ui);
     tracks_ui
 }
@@ -57,7 +63,7 @@ pub struct TracksUi {
     /// The shared row tier, which a refresh prewarms for the rows it opens
     /// on. The now-playing bar reads the same tier, so its tile reuses what
     /// the Tracks view warmed.
-    pub(super) cover_thumbs: Arc<CoverThumbs>,
+    cover_thumbs: Arc<CoverThumbs>,
     /// Visibility and staleness bookkeeping (`section-active-changed`
     /// shadow plus dirty flag). Unlike the entity-grid views, Tracks
     /// releases nothing on leave — `dirty` is set by a launch that doesn't
@@ -65,20 +71,11 @@ pub struct TracksUi {
     /// arrives while the section is hidden, and consumed on re-enter to run
     /// one deferred fetch.
     section: SectionState,
-    pub(super) tickets: KeysetTickets,
-    /// Where the list was last read, which every load seeds its rows around.
-    pub(super) scroll: ScrollPoint,
-}
-
-impl TracksUi {
-    fn new(cover_thumbs: Arc<CoverThumbs>, scroll: ScrollPoint) -> Self {
-        Self {
-            cover_thumbs,
-            section: SectionState::new(),
-            tickets: KeysetTickets::default(),
-            scroll,
-        }
-    }
+    global: Weak<Tracks<'static>>,
+    loads: ListLoads,
+    /// The sort and the filter the next load runs under, written where they are picked and read
+    /// once the load holds its ticket.
+    query: Mutex<SongsQuery>,
 }
 
 impl_section_state_helpers!(TracksUi);

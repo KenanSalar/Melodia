@@ -21,7 +21,6 @@ use std::sync::Arc;
 use slint::{Model, ModelNotify, ModelRc, ModelTracker};
 
 use super::{Keyset, PagedRow, PagedRows, RowNotify, RowRequest, ScrollPoint};
-use crate::ui::util::clamp_i64_to_i32;
 
 /// One grid row: up to a row's worth of cards in a nested model, the shape every `*GridRow`
 /// struct in `models.slint` has.
@@ -154,7 +153,7 @@ impl<G: GridRow> PagedGrid<G> {
 
     /// Every card's id, in order, as the card selection names them.
     pub fn card_ids(&self) -> Vec<i32> {
-        self.store.ids().iter().map(|&id| clamp_i64_to_i32(id)).collect()
+        self.store.row_ids()
     }
 
     /// [`PagedRows::scroll_point`].

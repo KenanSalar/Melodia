@@ -11,7 +11,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::hero_folds::HeroFold;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
-use crate::ui::paged_rows::track_rows::TrackRows;
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::section_state::SectionState;
 use crate::ui::track_detail::{DetailCache, TrackDetail, load, restore};
 use crate::ui::track_list_view::view_id;
@@ -195,7 +195,7 @@ pub async fn refresh_detail(
     weak: Weak<AppWindow>,
     playlist_id: i64,
 ) -> AppResult<()> {
-    load::reload(state, playlists_ui).await?;
+    track_rows::reload(state, playlists_ui).await?;
     let (detail, fold) = fetch_playlist_header(state, playlists_ui, playlist_id).await?;
 
     let pair = decode_detail_pair(

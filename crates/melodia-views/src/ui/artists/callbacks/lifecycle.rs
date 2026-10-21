@@ -43,8 +43,8 @@ fn wire_section_gate(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsU
     ui.global::<Artists>().on_section_active_changed(move |active| {
         au.set_section_active(active);
         if !active {
-            // Land synchronously before the release task spawns — see
-            // `ArtistsUi::data_dirty` for the race details.
+            // Land synchronously before the release task spawns, so the
+            // re-enter's `take_dirty()` never sees a grid not yet released.
             au.mark_dirty();
         }
         if !active && let Some(ui) = weak.upgrade() {

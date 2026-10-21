@@ -69,6 +69,82 @@ pub(crate) fn case_by_id(rows: usize) -> String {
     s
 }
 
+/// A folded copy of other columns, filled at write time, that a per-launch pass fills on the rows
+/// written before it existed.
+pub(crate) struct FoldedColumn {
+    pub table: &'static str,
+    pub column: &'static str,
+    /// The SELECT reading what each row packs, its source aliased `x`.
+    pub inputs: &'static str,
+}
+
+/// A row [`backfill_folded`] reads, and the value it packs from it.
+pub(crate) trait FoldedInputs:
+    for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin
+{
+    fn id(&self) -> i64;
+    fn packed(&self) -> String;
+}
+
+/// Rows per backfill page, so that one page is one `UPDATE` inside the bind budget.
+const BACKFILL_PAGE_ROWS: usize = MAX_BINDS_PER_STATEMENT / CASE_BINDS_PER_ROW;
+
+/// Fills `target` on every row still holding `''`, a page at a time, and returns how many rows it
+/// wrote.
+///
+/// Cheap to run on every launch: a filled table answers the first page from an empty partial
+/// index. Each page is its own statement rather than one transaction around the pass, so a writer
+/// waiting on the single connection waits for a page rather than the table. And the `UPDATE` asks
+/// again that the column is empty, so a row a writer filled between the read and the write keeps
+/// the writer's value instead of one packed from the inputs it replaced.
+pub(crate) async fn backfill_folded<R: FoldedInputs>(
+    db: &DbPool,
+    target: &FoldedColumn,
+) -> Result<u64, AppError> {
+    let page_limit = i64::try_from(BACKFILL_PAGE_ROWS).unwrap_or(i64::MAX);
+    let sql = format!(
+        "{} WHERE x.{column} = '' AND x.id > ? ORDER BY x.id LIMIT ?",
+        target.inputs,
+        column = target.column,
+    );
+    let mut after_id = 0_i64;
+    let mut written = 0;
+    loop {
+        let page: Vec<R> = sqlx::query_as(AssertSqlSafe(sql.as_str()))
+            .bind(after_id)
+            .bind(page_limit)
+            .fetch_all(db.read())
+            .await?;
+        let Some(last) = page.last() else {
+            return Ok(written);
+        };
+        after_id = last.id();
+        written += fill_folded_page(db, target, &page).await?;
+    }
+}
+
+async fn fill_folded_page<R: FoldedInputs>(
+    db: &DbPool,
+    target: &FoldedColumn,
+    page: &[R],
+) -> Result<u64, AppError> {
+    let sql = format!(
+        "UPDATE {table} SET {column} = {case} WHERE id IN ({ids}) AND {column} = ''",
+        table = target.table,
+        column = target.column,
+        case = case_by_id(page.len()),
+        ids = placeholders(page.len()),
+    );
+    let mut query = sqlx::query(AssertSqlSafe(sql));
+    for row in page {
+        query = query.bind(row.id()).bind(row.packed());
+    }
+    for row in page {
+        query = query.bind(row.id());
+    }
+    Ok(query.persistent(false).execute(db.write()).await?.rows_affected())
+}
+
 /// Execute a chunked single-column IN-clause query inside [`MAX_BINDS_PER_STATEMENT`],
 /// concatenating the results.
 ///
@@ -112,6 +188,24 @@ pub(crate) fn in_id_order<T>(rows: Vec<T>, ids: &[i64], id_of: impl Fn(&T) -> i6
         std::collections::HashMap::with_capacity(rows.len());
     by_id.extend(rows.into_iter().map(|row| (id_of(&row), row)));
     ids.iter().filter_map(|id| by_id.remove(id)).collect()
+}
+
+/// The rows `select` reads for `ids`, in the order `ids` asked for ([`in_id_order`]). `select` is
+/// the statement up to its `WHERE`, over a source with an `id` column.
+pub(crate) async fn select_in_id_order<T>(
+    db: &DbPool,
+    select: &str,
+    ids: &[i64],
+    id_of: impl Fn(&T) -> i64,
+) -> Result<Vec<T>, AppError>
+where
+    T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
+{
+    let rows = chunked_in_query(db.read(), ids, |placeholders| {
+        format!("{select} WHERE id IN ({placeholders})")
+    })
+    .await?;
+    Ok(in_id_order(rows, ids, id_of))
 }
 
 /// Ids per [`set_where_id_in`] statement, the value it sets taking one bind of the budget.

@@ -5,8 +5,9 @@ use std::sync::Arc;
 use slint::{ComponentHandle, ModelRc, Weak};
 
 use super::{PlaylistsUi, to_slint_playlist_row};
-use crate::ui::card_grid::{self, Card, CardGrid, GridLoads, unfiltered_total};
+use crate::ui::card_grid::{self, Card, CardGrid, GridLoads};
 use crate::ui::paged_rows::grid::PagedGrid;
+use crate::ui::paged_rows::unfiltered_total;
 use crate::ui::track_detail::TrackDetail;
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;

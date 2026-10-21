@@ -187,9 +187,6 @@ pub trait RowSelectionView {
     fn replace_selected_ids(&self, ids: ModelRc<i32>);
     /// The displayed track-row model.
     fn track_rows(&self) -> ModelRc<UiTrackListRow>;
-    /// Replace the displayed track-row model wholesale (downcast-miss fallback only — the model
-    /// is normally mutated in place).
-    fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>);
 
     fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static);
     fn bind_select_all(&self, f: impl FnMut() + 'static);
@@ -200,9 +197,9 @@ pub trait RowSelectionView {
 /// where every other list says `tracks`.
 macro_rules! impl_row_selection_view {
     ($global:ident) => {
-        impl_row_selection_view!($global, get_tracks, set_tracks);
+        impl_row_selection_view!($global, get_tracks);
     };
-    ($global:ident, $get_rows:ident, $set_rows:ident) => {
+    ($global:ident, $get_rows:ident) => {
         impl RowSelectionView for $global<'_> {
             fn anchor(&self) -> i32 {
                 self.get_selection_anchor()
@@ -218,9 +215,6 @@ macro_rules! impl_row_selection_view {
             }
             fn track_rows(&self) -> ModelRc<UiTrackListRow> {
                 self.$get_rows()
-            }
-            fn replace_track_rows(&self, rows: ModelRc<UiTrackListRow>) {
-                self.$set_rows(rows);
             }
             fn bind_select_row(&self, f: impl FnMut(i32, i32, bool, bool) + 'static) {
                 self.on_select_row(f);
@@ -242,7 +236,7 @@ impl_row_selection_view!(GenreDetail);
 impl_row_selection_view!(PlaylistDetail);
 impl_row_selection_view!(RecentlyPlayed);
 impl_row_selection_view!(Search);
-impl_row_selection_view!(Tracks, get_rows, set_rows);
+impl_row_selection_view!(Tracks, get_rows);
 
 /// Compute the new selection set for a list view's row click and apply it, on the UI thread.
 pub fn handle_row_click<V: RowSelectionView>(view: &V, idx: i32, id: i32, shift: bool, ctrl: bool) {

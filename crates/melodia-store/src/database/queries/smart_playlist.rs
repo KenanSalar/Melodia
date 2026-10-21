@@ -13,7 +13,7 @@ use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 use sqlx::{QueryBuilder, Sqlite};
 
 use crate::database::DbPool;
-use crate::database::queries::track::{columns, unpack_ids};
+use crate::database::queries::track::{columns, fetch_packed_ids};
 use melodia_core::entities::smart_criteria::{
     Draw, LimitOrder, MatchMode, Rule, RuleField, RuleOp, RuleValue, SmartCriteria, SmartLimit,
     ValueType, ops_for,
@@ -82,9 +82,7 @@ pub(crate) async fn pick_random(
     let mut qb: QueryBuilder<Sqlite> =
         QueryBuilder::new("SELECT group_concat(id, ',') FROM tracks");
     push_where(&mut qb, criteria);
-    let packed: Option<String> =
-        qb.build_query_scalar().persistent(false).fetch_one(db.read()).await?;
-    let matches = packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))?;
+    let matches = fetch_packed_ids(db, qb).await?;
     Ok(pick(matches, count, draw))
 }
 
@@ -115,9 +113,9 @@ fn push_membership(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
 }
 
 /// `(track_count, total_duration_ms)` for a smart playlist without projecting
-/// any track rows — backs the grid card and the hero's chips, which can't
-/// rely on the `playlist_items` triggers (a smart playlist has no junction
-/// rows). Respects the limit so a "top 25" playlist reports 25, not the full
+/// any track rows — backs the grid card and the rule editor's live count,
+/// which can't rely on the `playlist_items` triggers (a smart playlist has no
+/// junction rows). Respects the limit so a "top 25" playlist reports 25, not the full
 /// match count.
 pub async fn count_smart_playlist(
     db: &DbPool,

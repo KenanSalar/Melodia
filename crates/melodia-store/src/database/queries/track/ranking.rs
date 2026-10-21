@@ -3,7 +3,7 @@
 
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite};
 
-use super::keyset::{push_needle, unpack_ids};
+use super::keyset::{fetch_packed_ids, push_needle};
 use crate::database::DbPool;
 use melodia_core::entities::track;
 use melodia_core::entities::track_list::{MostPlayedTotals, TrackListScope};
@@ -92,9 +92,7 @@ async fn ranked_ids(
         push_needle(&mut qb, needle);
     }
     qb.push(" ORDER BY ").push(MOST_PLAYED_ORDER).push(")");
-    let packed: Option<String> =
-        qb.build_query_scalar().persistent(false).fetch_one(db.read()).await?;
-    packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
+    fetch_packed_ids(db, qb).await
 }
 
 /// What the library-wide Most Played tab adds up to, whatever its filter shows: the band states

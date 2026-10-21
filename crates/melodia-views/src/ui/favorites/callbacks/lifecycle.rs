@@ -10,6 +10,7 @@ use crate::ui::detail_view::{release_hero_slots, release_shared_hero};
 use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesTab, FavoritesUi};
 use crate::ui::list_selection;
+use crate::ui::paged_rows::track_rows;
 use crate::ui::tab_bar::UNFETCHED_COUNT;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -174,7 +175,7 @@ async fn kick_full_refresh(
         return;
     }
 
-    let (h, t) = tokio::join!(hero, favorites_ui_mod::refresh_tracks(state, fav_ui, weak));
+    let (h, t) = tokio::join!(hero, track_rows::reload(state, fav_ui));
     if let Err(e) = h {
         log::warn!("favorites::refresh_hero: {}", describe(&e));
     }

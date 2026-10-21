@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
-use super::grids::{FavoriteArtistsGrid, FavoriteMostPlayed, MOST_PLAYED_LABEL};
+use super::grids::{FavoriteArtistsGrid, FavoriteMostPlayed};
 use crate::ui::card_grid;
 use crate::ui::paged_rows::ScrollPoint;
 use crate::ui::paged_rows::track_rows::{self, TrackRows};
@@ -46,10 +46,7 @@ pub(super) fn install_favorites_models(ui: &AppWindow, state: &AppState) -> Scro
 
 /// The Most Played grid's track ids, in card order.
 pub fn most_played_ids(ui: &AppWindow) -> Vec<i64> {
-    crate::ui::most_played::shown_ids(
-        &ui.global::<Favorites>().get_most_played_rows(),
-        MOST_PLAYED_LABEL,
-    )
+    card_grid::shown_ids::<FavoriteMostPlayed>(ui)
 }
 
 /// Map a `FavoriteArtist` + caller-supplied subtitle to its Slint card

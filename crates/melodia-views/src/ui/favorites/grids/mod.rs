@@ -14,8 +14,9 @@ use std::sync::Arc;
 use slint::{ComponentHandle, ModelRc};
 
 use super::{FavoritesTab, FavoritesUi, to_slint_fav_artist_row};
-use crate::ui::card_grid::{self, Card, CardGrid, GridLoads, SortedQuery, unfiltered_total};
+use crate::ui::card_grid::{self, Card, CardGrid, GridLoads, SortedQuery};
 use crate::ui::most_played::{self, to_slint_most_played_row};
+use crate::ui::paged_rows::unfiltered_total;
 use crate::ui::util::len_as_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -27,8 +28,6 @@ use melodia_core::error::AppResult;
 use melodia_core::utils::needle::Needle;
 use melodia_ui::{AppWindow, EntityGridRow as UiEntityGridRow, Favorites};
 
-pub(super) const MOST_PLAYED_LABEL: &str = "Favorites.most-played-rows";
-
 /// The favourites ranked by play count.
 pub(super) struct FavoriteMostPlayed;
 
@@ -39,7 +38,7 @@ impl CardGrid for FavoriteMostPlayed {
     type Facts = MostPlayedTotals;
     type Handle = FavoritesUi;
 
-    const LABEL: &'static str = MOST_PLAYED_LABEL;
+    const LABEL: &'static str = "Favorites.most-played-rows";
 
     fn loads(handle: &FavoritesUi) -> &GridLoads {
         &handle.most_played

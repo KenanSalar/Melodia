@@ -8,7 +8,8 @@ use std::sync::Arc;
 use slint::{ComponentHandle, ModelRc};
 
 use super::{GenresUi, to_slint_genre_row};
-use crate::ui::card_grid::{self, Card, CardGrid, GridLoads, SortedQuery, unfiltered_total};
+use crate::ui::card_grid::{self, Card, CardGrid, GridLoads, SortedQuery};
+use crate::ui::paged_rows::unfiltered_total;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::genre::GenreStats;

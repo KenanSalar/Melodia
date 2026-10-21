@@ -1,26 +1,23 @@
-//! The Songs list's keyset loads, and the row patch a favourite or rating takes.
-//!
-//! Every load takes its ticket on the thread that read its sort and filter, before it spawns, so
-//! the last one asked for is the one shown whichever query lands first. A sort or a keystroke
-//! asked for while a library tick's refresh is still owed runs as that refresh.
+//! The Songs list as a [`PagedTrackList`]: the query its loads run under, and the library size its
+//! header states beside the rows.
 
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Weak};
+use slint::Weak;
 
 use super::TracksUi;
 use crate::ui::callbacks::macros::spawn_logged;
-use crate::ui::paged_rows::track_rows::{self, TrackRows};
-use crate::ui::paged_rows::{Keyset, Load, Ticket};
-use crate::ui::util::len_as_i32;
+use crate::ui::paged_rows::track_rows::{self, ListLoads, ListQuery, PagedTrackList};
+use crate::ui::paged_rows::unfiltered_total;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder};
 use melodia_core::error::AppResult;
 use melodia_core::utils::needle::{Needle, fold_needle};
-use melodia_ui::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
+use melodia_ui::Tracks;
 
-/// The sort and the filter a load runs under, captured when it is asked for.
+/// The sort and the filter a load runs under, as the `Tracks` global spells them.
 pub struct SongsQuery {
     order: TrackOrder,
     needle: Needle,
@@ -35,141 +32,57 @@ impl SongsQuery {
     }
 }
 
-/// Reload the list: its ids, the rows it opens on with their covers warm, and every row it still
-/// holds read again. What a launch, a re-enter and a library tick ask for.
-pub fn refresh(
-    state: &AppState,
-    tracks_ui: &Arc<TracksUi>,
-    weak: &Weak<AppWindow>,
-    query: SongsQuery,
-) {
-    let ticket = tracks_ui.tickets.issue_reload();
-    spawn_refresh(state, tracks_ui, weak, ticket, query);
-}
+impl PagedTrackList for TracksUi {
+    type Global = Tracks<'static>;
+    /// The library's size, which the header states whatever the filter leaves.
+    type Facts = i32;
 
-/// Reload the ids under a new sort or filter. The rows the list holds are still current and the
-/// library hasn't changed size, so it re-reads no row, warms no cover and leaves the count, unless
-/// it overtakes a refresh, which it then runs in that one's place.
-pub fn requery(
-    state: &AppState,
-    tracks_ui: &Arc<TracksUi>,
-    weak: &Weak<AppWindow>,
-    query: SongsQuery,
-) {
-    match tracks_ui.tickets.issue_requery() {
-        Load::Requery(ticket) => {
-            let s = state.clone();
-            let tu = Arc::clone(tracks_ui);
-            let weak = weak.clone();
-            spawn_logged!(s, "tracks::requery", requery_now(&s, tu, weak, ticket, query));
+    const LABEL: &'static str = "Tracks.rows";
+
+    fn loads(&self) -> &ListLoads {
+        &self.loads
+    }
+
+    fn global(&self) -> &Weak<Tracks<'static>> {
+        &self.global
+    }
+
+    fn row_covers(&self) -> &Arc<CoverThumbs> {
+        &self.cover_thumbs
+    }
+
+    fn query(&self) -> Option<ListQuery> {
+        let query = self.query.lock();
+        Some(ListQuery {
+            scope: TrackListScope::Library,
+            order: query.order,
+            needle: query.needle.clone(),
+        })
+    }
+
+    async fn facts(state: &AppState, query: &ListQuery, ids: &[i64]) -> AppResult<i32> {
+        unfiltered_total(ids, &query.needle, library::tracks::count(&state.db)).await
+    }
+
+    fn shown(&self, g: &Tracks<'static>, _: &ListQuery, total: Option<i32>) {
+        if let Some(total) = total {
+            g.set_total_count(total);
         }
-        Load::Reload(ticket) => spawn_refresh(state, tracks_ui, weak, ticket, query),
     }
 }
 
-fn spawn_refresh(
-    state: &AppState,
-    tracks_ui: &Arc<TracksUi>,
-    weak: &Weak<AppWindow>,
-    ticket: Ticket,
-    query: SongsQuery,
-) {
+/// Reload the list under `query`: its ids, the rows it opens on with their covers warm, and every
+/// row it still holds read again. What a launch, a re-enter and a library tick ask for.
+pub fn refresh(state: &AppState, tracks_ui: &Arc<TracksUi>, query: SongsQuery) {
+    *tracks_ui.query.lock() = query;
     let s = state.clone();
     let tu = Arc::clone(tracks_ui);
-    let weak = weak.clone();
-    spawn_logged!(s, "tracks::refresh", refresh_now(&s, tu, weak, ticket, query));
+    spawn_logged!(s, "tracks::refresh", track_rows::reload(&s, &tu));
 }
 
-/// Patch the row showing `id` after a favourite or rating write. Only that row is read again, so
-/// scroll position and its neighbours stay put.
-pub fn patch_row(
-    weak: &Weak<AppWindow>,
-    id: i64,
-    edit: impl FnOnce(&mut UiTrackListRow) + Send + 'static,
-) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        let rows = ui.global::<Tracks>().get_rows();
-        if let Some(model) = TrackRows::installed(&rows, "Tracks.rows") {
-            model.patch(id, edit);
-        }
-    });
-}
-
-async fn refresh_now(
-    state: &AppState,
-    tracks_ui: Arc<TracksUi>,
-    weak: Weak<AppWindow>,
-    ticket: Ticket,
-    query: SongsQuery,
-) -> AppResult<()> {
-    let keyset = track_rows::load(
-        state,
-        TrackListScope::Library,
-        query.order,
-        &query.needle,
-        &tracks_ui.scroll,
-    )
-    .await?;
-    let total = library_total(state, &keyset, &query.needle).await?;
-    // Overtaken already, so nothing this warms would be drawn.
-    if !tracks_ui.tickets.is_latest(ticket) {
-        return Ok(());
-    }
-    track_rows::prewarm(&tracks_ui.cover_thumbs, &keyset).await;
-
-    let unfiltered = query.needle.is_empty();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        if !tracks_ui.tickets.is_latest(ticket) {
-            return;
-        }
-        let g = ui.global::<Tracks>();
-        g.set_total_count(total);
-        let rows = g.get_rows();
-        let Some(model) = TrackRows::installed(&rows, "Tracks.rows") else {
-            return;
-        };
-        model.show(keyset);
-        track_rows::settle_reload(&g, model, &tracks_ui.tickets, ticket, unfiltered);
-    });
-    Ok(())
-}
-
-async fn requery_now(
-    state: &AppState,
-    tracks_ui: Arc<TracksUi>,
-    weak: Weak<AppWindow>,
-    ticket: Ticket,
-    query: SongsQuery,
-) -> AppResult<()> {
-    let keyset = track_rows::load(
-        state,
-        TrackListScope::Library,
-        query.order,
-        &query.needle,
-        &tracks_ui.scroll,
-    )
-    .await?;
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        if !tracks_ui.tickets.is_latest(ticket) {
-            return;
-        }
-        let rows = ui.global::<Tracks>().get_rows();
-        if let Some(model) = TrackRows::installed(&rows, "Tracks.rows") {
-            model.show(keyset);
-        }
-    });
-    Ok(())
-}
-
-/// The library's size, which the header states whatever the filter leaves.
-async fn library_total(
-    state: &AppState,
-    keyset: &Keyset<UiTrackListRow>,
-    needle: &Needle,
-) -> AppResult<i32> {
-    if needle.is_empty() {
-        return Ok(len_as_i32(keyset.ids.len()));
-    }
-    let count = library::tracks::count(&state.db).await?;
-    Ok(i32::try_from(count).unwrap_or(i32::MAX))
+/// Load the ids under a new sort or filter, the count left as it is
+/// ([`track_rows::requery`]).
+pub fn requery(state: &AppState, tracks_ui: &Arc<TracksUi>, query: SongsQuery) {
+    *tracks_ui.query.lock() = query;
+    track_rows::requery(state, tracks_ui);
 }

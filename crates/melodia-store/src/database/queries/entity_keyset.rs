@@ -8,7 +8,7 @@
 
 use sqlx::{AssertSqlSafe, QueryBuilder, Sqlite};
 
-use super::track::{push_folded_match, unpack_ids};
+use super::track::{fetch_packed_ids, push_folded_match, sql_direction};
 use crate::database::DbPool;
 use crate::database::collation::UNICODE_LOWER;
 use melodia_core::entities::grid_order::{AlbumSort, ArtistSort, FavoriteArtistSort, GenreSort};
@@ -201,16 +201,11 @@ async fn ids(
         qb.push(" GROUP BY ").push(group_by);
     }
     qb.push(" ORDER BY ").push(order_by(keys, grid.id, dir)).push(")");
-    let packed: Option<String> =
-        qb.build_query_scalar().persistent(false).fetch_one(db.read()).await?;
-    packed.map_or_else(|| Ok(Vec::new()), |packed| unpack_ids(&packed))
+    fetch_packed_ids(db, qb).await
 }
 
 fn order_by(keys: &[String], id: &str, dir: SortDir) -> String {
-    let dir = match dir {
-        SortDir::Asc => "ASC",
-        SortDir::Desc => "DESC",
-    };
+    let dir = sql_direction(dir);
     keys.iter()
         .map(String::as_str)
         .chain([id])

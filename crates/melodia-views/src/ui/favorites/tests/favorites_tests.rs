@@ -19,6 +19,15 @@ const SONGS: &str = include_str!("../songs.rs");
 const SONGS_TAB: &str =
     include_str!("../../../../../melodia-ui/ui/views/favorites/songs-tab.slint");
 const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
+const TRACK_ROWS: &str = include_str!("../../paged_rows/track_rows.rs");
+
+/// The body after `marker` in `src`, up to the end of the item it opens.
+fn item_body<'a>(src: &'a str, marker: &str, end: &str) -> &'a str {
+    src.split_once(marker)
+        .and_then(|(_, rest)| rest.split_once(end))
+        .map(|(body, _)| body)
+        .unwrap_or_default()
+}
 
 /// `Favorites.tracks` feeds one element in the whole tree, under the Songs
 /// tab's `if` — so off that tab, every keyset load the Songs path runs
@@ -26,10 +35,11 @@ const SUBVIEWS: &str = include_str!("../callbacks/subviews.rs");
 ///
 /// Two things hold that, and each fails differently. `requery_tracks`' bail is
 /// what skips the query; drop it and the tab gate becomes decorative, every
-/// keystroke on a grid tab reloading a list nobody can see. `show_tracks`'
-/// re-check is what survives a pick landing mid-load; drop it and a load the
-/// pick overtook replaces the list the tab left behind, without the dirty flag
-/// that tells the next visit to reload it.
+/// keystroke on a grid tab reloading a list nobody can see. The tab term in
+/// `still_wanted`, which the shared load path asks again on the UI thread, is
+/// what survives a pick landing mid-load; drop either half and a load the pick
+/// overtook replaces the list the tab left behind, without the dirty flag that
+/// tells the next visit to reload it.
 ///
 /// Neither shows on screen, which is why they are pinned rather than trusted.
 #[test]
@@ -39,24 +49,21 @@ fn the_songs_model_is_written_only_while_its_tab_is_mounted() {
         "songs-tab.slint is the sole reader of `Favorites.tracks` — if that moved, this gate needs re-deriving"
     );
 
-    let requery = SONGS
-        .split_once("pub fn requery_tracks(")
-        .and_then(|(_, rest)| rest.split_once("\n}\n"))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
+    let requery = item_body(SONGS, "pub fn requery_tracks(", "\n}\n");
     assert!(
         requery.contains("if fav_ui.active_tab() != FavoritesTab::Songs {"),
         "`requery_tracks` must bail before the query when Songs isn't mounted"
     );
 
-    let show = SONGS
-        .split_once("fn show_tracks(")
-        .and_then(|(_, rest)| rest.split_once("\n}\n"))
-        .map(|(body, _)| body)
-        .unwrap_or_default();
+    let wanted = item_body(SONGS, "fn still_wanted(", "\n    }\n");
     assert!(
-        show.contains("|| fav_ui.active_tab() != FavoritesTab::Songs"),
-        "`show_tracks` must re-check the tab — a pick can land while the load is in flight"
+        wanted.contains("self.active_tab() == FavoritesTab::Songs"),
+        "`still_wanted` must ask for the tab, a pick being able to land while the load is in flight"
+    );
+    let show = item_body(TRACK_ROWS, "fn show<", "\n}\n");
+    assert!(
+        show.contains("list.still_wanted(&query)"),
+        "the shared load path must ask `still_wanted` again on the UI thread, where the pick lands"
     );
 }
 
@@ -355,15 +362,19 @@ fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
         "`release_section_state` must re-arm every tab beside the lists it wipes"
     );
 
-    // `refresh_tracks` asks the section guard twice — before and after its
-    // cover prewarm — `requery_tracks` re-arms on its own failed query, and
-    // `show_tracks`, which both write through, on a write the tab or the
-    // section overtook: five marks in all.
+    // The Songs loads re-arm through `load_dropped`, which the shared path calls on
+    // a failed query or facts read in either load, both bails off the event loop
+    // (before and after the reload's cover prewarm), and a write the tab or the
+    // section overtook: six calls in all.
+    assert!(
+        item_body(SONGS, "fn load_dropped(", "\n    }\n").contains("self.mark_songs_dirty();"),
+        "a Songs load that shows nothing must re-arm the tab's flag"
+    );
     assert_eq!(
-        SONGS.matches("mark_songs_dirty()").count(),
-        5,
-        "the Songs loads must re-arm on both failed queries, both section bails and a \
-         refused write"
+        TRACK_ROWS.matches("list.load_dropped()").count(),
+        6,
+        "the shared load path must re-arm on both failed queries, the failed facts read, both \
+         bails off the event loop and a refused write"
     );
     // A grid's load that fails re-arms its own tab through `load_failed`; a leave
     // landing mid-flight is the release's, which marks every tab.
@@ -386,7 +397,12 @@ fn only_a_tab_left_filtered_owes_a_reload() {
         (FavoritesTab::Artists, "ha", true, "a grid tab, filtered"),
     ];
     for (tab, filter, expected, case) in CASES {
-        let fav_ui = FavoritesUi::new(Arc::new(CoverThumbs::new()), None, Scrolls::default());
+        let fav_ui = FavoritesUi::new(
+            Arc::new(CoverThumbs::new()),
+            None,
+            Scrolls::default(),
+            slint::Weak::default(),
+        );
         fav_ui.set_active_tab(tab);
         super::set_filter(&fav_ui, filter);
 

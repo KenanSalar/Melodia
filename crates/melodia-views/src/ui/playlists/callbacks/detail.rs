@@ -8,8 +8,8 @@ use slint::ComponentHandle;
 use super::artwork::open_edit_artwork;
 use crate::ui::callbacks::track_detail;
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
+use crate::ui::paged_rows::track_rows;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
-use crate::ui::track_detail::{load, remove_rows};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
@@ -77,7 +77,7 @@ fn wire_reorder(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi
             {
                 log::warn!("playlists::reorder: {}", describe(&e));
             }
-            load::requery(&s, &pu);
+            track_rows::requery(&s, &pu);
         });
     });
 }
@@ -131,7 +131,7 @@ fn wire_remove_track(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
                 log::warn!("playlists::remove_track: {}", describe(&e));
                 return;
             }
-            remove_rows(&*pu, id_vec);
+            track_rows::remove_rows(&*pu, id_vec);
             if let Err(e) =
                 playlists_ui_mod::refresh_detail(&s, &pu, weak.clone(), playlist_id).await
             {

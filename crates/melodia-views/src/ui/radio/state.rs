@@ -1,7 +1,7 @@
 //! The page's own state, in the shape every other view keeps it in.
 //!
-//! `albums/state.rs`, `favorites/state.rs` and `recently_played/state.rs` are the siblings, and
-//! the reason is theirs: the public `RadioUi` surface stays small while the caches behind it are
+//! `favorites/state.rs` and `recently_played/state.rs` are the siblings, and the reason is
+//! theirs: the public `RadioUi` surface stays small while the caches behind it are
 //! documented where they live. This page skipped the split and carried its fifteen fields in the
 //! module's own front door.
 

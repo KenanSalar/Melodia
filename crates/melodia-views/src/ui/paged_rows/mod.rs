@@ -46,6 +46,7 @@ use tokio::runtime::Handle;
 
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_core::error::{AppResult, describe};
+use melodia_core::utils::needle::Needle;
 
 /// The step the window moves by. A list asks for more only when Slint reads onto another page, so
 /// scrolling row by row fetches a page at a time rather than a row.
@@ -157,6 +158,21 @@ pub struct Keyset<R> {
     pub ids: Arc<[i64]>,
     pub seed: Vec<(i64, R)>,
     pub read: ReadStamp,
+}
+
+/// The count a header states whatever the filter leaves: `ids`' own length unfiltered, else
+/// `count`'s answer.
+pub async fn unfiltered_total(
+    ids: &[i64],
+    needle: &Needle,
+    count: impl Future<Output = AppResult<i64>>,
+) -> AppResult<i32> {
+    let total = if needle.is_empty() {
+        i64::try_from(ids.len()).unwrap_or(i64::MAX)
+    } else {
+        count.await?
+    };
+    Ok(i32::try_from(total).unwrap_or(i32::MAX))
 }
 
 struct Cached<R> {

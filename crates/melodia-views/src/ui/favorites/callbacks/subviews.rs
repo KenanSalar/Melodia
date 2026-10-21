@@ -12,6 +12,7 @@ use crate::ui::callbacks::macros::spawn_logged;
 use crate::ui::callbacks::{cross_tab_nav, next_sort, persist_view_sort};
 use crate::ui::favorites::NAV_FAVORITES;
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesTab, FavoritesUi};
+use crate::ui::paged_rows::track_rows;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -154,12 +155,7 @@ fn reload_tab(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>, tab: 
     }
     let s = state.clone();
     let fu = fav_ui.clone();
-    let weak = ui.as_weak();
-    state.runtime.spawn(async move {
-        if let Err(e) = favorites_ui_mod::refresh_tracks(&s, &fu, &weak).await {
-            log::warn!("favorites::refresh_tracks: {}", describe(&e));
-        }
-    });
+    spawn_logged!(s, "favorites::refresh_tracks", track_rows::reload(&s, &fu));
 }
 
 /// A sort pill: the ids reload in the new order, every cached card kept.

@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use sqlx::{AssertSqlSafe, SqliteConnection};
 
 use super::columns;
-use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, in_id_order};
+use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, select_in_id_order};
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
@@ -111,7 +111,7 @@ pub async fn get_most_played_by_ids(
         .await
 }
 
-/// `cols` of every track in `ids`, in the order `ids` asked for ([`in_id_order`]).
+/// `cols` of every track in `ids`, in the order `ids` asked for.
 async fn rows_in_id_order<T>(
     db: &DbPool,
     cols: &str,
@@ -121,11 +121,7 @@ async fn rows_in_id_order<T>(
 where
     T: for<'r> sqlx::FromRow<'r, sqlx::sqlite::SqliteRow> + Send + Unpin,
 {
-    let rows: Vec<T> = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT {cols} FROM tracks WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(in_id_order(rows, ids, id_of))
+    select_in_id_order(db, &format!("SELECT {cols} FROM tracks"), ids, id_of).await
 }
 
 /// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information dialog, preserving the

@@ -10,6 +10,7 @@ use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::hero_folds::dominant_genre;
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::paged_rows::track_rows;
 use crate::ui::section_state::SectionState;
 use crate::ui::track_detail::{DetailCache, TrackDetail, load, restore};
 use crate::ui::track_list_view::view_id;
@@ -159,7 +160,7 @@ pub async fn refresh_detail(
     weak: Weak<AppWindow>,
     album_id: i64,
 ) -> AppResult<()> {
-    load::reload(state, albums_ui).await?;
+    track_rows::reload(state, albums_ui).await?;
     let (detail, genre) = fetch_album_header(state, album_id).await?;
 
     // Re-decode the `(cover, blur)` pair — the artwork may have changed

@@ -148,10 +148,9 @@ fn seed_and_fetch(
     views: &UiHandles,
     view_state: Option<&ViewStateData>,
 ) {
-    let weak = app.as_weak();
     seed_initial_view_model(app, state, &views.cover_thumbs);
 
-    spawn_initial_tracks_fetch(state, &views.tracks_ui, view_state, &weak);
+    spawn_initial_tracks_fetch(state, &views.tracks_ui, view_state);
     spawn_initial_albums_fetch(app, state, &views.albums_ui);
     spawn_initial_artists_fetch(app, state, &views.artists_ui);
     spawn_initial_genres_fetch(app, state, &views.genres_ui);

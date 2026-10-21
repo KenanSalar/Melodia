@@ -1,6 +1,6 @@
 use sqlx::AssertSqlSafe;
 
-use crate::database::DbPool;
+use crate::database::{DbPool, select_in_id_order};
 use melodia_core::entities::{album, tags};
 use melodia_core::error::AppError;
 
@@ -69,11 +69,7 @@ pub async fn get_albums_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<album::AlbumStats>, AppError> {
-    let rows = crate::database::chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT * FROM album_stats WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(crate::database::in_id_order(rows, ids, |a: &album::AlbumStats| a.id))
+    select_in_id_order(db, "SELECT * FROM album_stats", ids, |a: &album::AlbumStats| a.id).await
 }
 
 pub async fn get_album_by_id(db: &DbPool, id: i64) -> Result<album::AlbumStats, AppError> {

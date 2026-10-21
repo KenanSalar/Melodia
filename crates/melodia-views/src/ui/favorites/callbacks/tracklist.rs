@@ -12,6 +12,7 @@ use crate::ui::callbacks::track_list::{
 };
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort};
 use crate::ui::favorites::{self as favorites_ui_mod, FavoritesUi};
+use crate::ui::paged_rows::track_rows;
 use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -22,7 +23,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     let g = ui.global::<Favorites>();
     wire_play_row(ui, state);
     wire_queue_actions(&g, state, collect_track_ids);
-    wire_row_flags(ui, state);
+    wire_row_flags(ui, state, fav_ui);
     wire_filter(ui, state, fav_ui);
     wire_sort(ui, state, fav_ui);
     wire_toggle_column(&g.as_weak(), state);
@@ -41,23 +42,23 @@ fn wire_play_row(ui: &AppWindow, state: &AppState) {
     });
 }
 
-fn wire_row_flags(ui: &AppWindow, state: &AppState) {
+fn wire_row_flags(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
-    let weak = ui.as_weak();
+    let fu = fav_ui.clone();
     // An unfavourite drops the rows on this tick; `set_favorite` has already bumped
     // `library_changed`, whose refresh reloads the list behind it, which also covers an undo
     // landing before the removal does. Multi-select arrives as `[int]`; single-row mode sends a
     // 1-element array.
     wire_row_flag!(g, on_toggle_row_favorite, state, "favorites::set_favorite",
     library::favorites::set_favorite, collect_track_ids,
-    captures: [weak],
+    captures: [fu],
     after: |id_vec, fav| {
         if !fav {
-            favorites_ui_mod::remove_rows(&weak, id_vec);
+            track_rows::remove_rows(&*fu, id_vec);
             return;
         }
         for id in id_vec {
-            favorites_ui_mod::patch_row(&weak, id, |row| row.is_favorite = true);
+            track_rows::patch_row(&*fu, id, |row| row.is_favorite = true);
         }
     });
 
@@ -65,10 +66,10 @@ fn wire_row_flags(ui: &AppWindow, state: &AppState) {
     // each row is patched in place.
     wire_row_flag!(g, on_set_row_rating, state, "favorites::set_rating",
     library::ratings::set_rating, collect_track_ids,
-    captures: [weak],
+    captures: [fu],
     after: |id_vec, rating| {
         for id in id_vec {
-            favorites_ui_mod::patch_row(&weak, id, move |row| row.rating = rating);
+            track_rows::patch_row(&*fu, id, move |row| row.rating = rating);
         }
     });
 }
@@ -82,7 +83,7 @@ fn wire_filter(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     ui.global::<Favorites>().on_filter_changed(move |text| {
         let Some(ui) = weak.upgrade() else { return };
         favorites_ui_mod::set_filter(&fu, &text);
-        favorites_ui_mod::requery_tracks(&s, &fu, &weak);
+        favorites_ui_mod::requery_tracks(&s, &fu);
         if fu.section_active() {
             favorites_ui_mod::requery_grid(&ui, &s, &fu);
         }
@@ -102,6 +103,6 @@ fn wire_sort(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
         g.set_sort_dir(SharedString::from(new_dir.as_str()));
         favorites_ui_mod::set_sort(&fu, new_field.clone(), new_dir);
         persist_view_sort(&s, view_id::FAVORITES, new_field, new_dir);
-        favorites_ui_mod::requery_tracks(&s, &fu, &weak);
+        favorites_ui_mod::requery_tracks(&s, &fu);
     });
 }

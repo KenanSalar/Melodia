@@ -9,7 +9,7 @@ use crate::ui::callbacks::track_list::{
     play_displayed, wire_queue_actions, wire_row_selection, wire_toggle_column,
 };
 use crate::ui::callbacks::{collect_track_ids, next_sort, persist_view_sort, persisted_sort};
-use crate::ui::paged_rows::track_rows::TrackRows;
+use crate::ui::paged_rows::track_rows::{self, TrackRows};
 use crate::ui::track_list_view::view_id;
 use crate::ui::tracks::{self as tracks_ui_mod, SongsQuery, TracksUi};
 use melodia_app::library;
@@ -30,7 +30,7 @@ pub(super) fn wire(
     wire_filter(ui, state, tracks_ui);
     wire_play_row(ui, state);
     wire_queue_actions(&tracks, state, collect_track_ids);
-    wire_row_flags(ui, state);
+    wire_row_flags(ui, state, tracks_ui);
     wire_row_selection(&tracks.as_weak());
     wire_toggle_column(&tracks.as_weak(), state);
     wire_refresh(ui, state, tracks_ui);
@@ -61,7 +61,7 @@ fn wire_sort(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
         g.set_sort_dir(SharedString::from(new_dir.as_str()));
 
         let query = SongsQuery::new(&new_field, new_dir.as_str(), &g.get_filter());
-        tracks_ui_mod::requery(&s, &tu, &weak, query);
+        tracks_ui_mod::requery(&s, &tu, query);
         persist_view_sort(&s, view_id::TRACKS, new_field, new_dir);
     });
 }
@@ -74,7 +74,7 @@ fn wire_filter(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Tracks>();
         let query = SongsQuery::new(&g.get_sort_field(), &g.get_sort_dir(), &text);
-        tracks_ui_mod::requery(&s, &tu, &weak, query);
+        tracks_ui_mod::requery(&s, &tu, query);
     });
 }
 
@@ -93,23 +93,23 @@ fn wire_play_row(ui: &AppWindow, state: &AppState) {
 /// Write through, then patch each affected row (no list re-fetch, so
 /// scroll position holds and there's no flash). Rating never changes list
 /// membership.
-fn wire_row_flags(ui: &AppWindow, state: &AppState) {
+fn wire_row_flags(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let tracks = ui.global::<Tracks>();
-    let weak = ui.as_weak();
+    let tu = tracks_ui.clone();
     wire_row_flag!(tracks, on_toggle_row_favorite, state, "tracks::set_favorite",
     library::favorites::set_favorite, collect_track_ids,
-    captures: [weak],
+    captures: [tu],
     after: |id_vec, fav| {
         for id in id_vec {
-            tracks_ui_mod::patch_row(&weak, id, move |row| row.is_favorite = fav);
+            track_rows::patch_row(&*tu, id, move |row| row.is_favorite = fav);
         }
     });
     wire_row_flag!(tracks, on_set_row_rating, state, "tracks::set_rating",
     library::ratings::set_rating, collect_track_ids,
-    captures: [weak],
+    captures: [tu],
     after: |id_vec, rating| {
         for id in id_vec {
-            tracks_ui_mod::patch_row(&weak, id, move |row| row.rating = rating);
+            track_rows::patch_row(&*tu, id, move |row| row.rating = rating);
         }
     });
 }
@@ -124,6 +124,6 @@ fn wire_refresh(ui: &AppWindow, state: &AppState, tracks_ui: &Arc<TracksUi>) {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Tracks>();
         let query = SongsQuery::new(&g.get_sort_field(), &g.get_sort_dir(), &g.get_filter());
-        tracks_ui_mod::refresh(&s, &tu, &weak, query);
+        tracks_ui_mod::refresh(&s, &tu, query);
     });
 }

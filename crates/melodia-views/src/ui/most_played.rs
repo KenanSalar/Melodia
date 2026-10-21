@@ -1,5 +1,5 @@
 //! The Most Played grid both curated pages draw, Favorites' over the favourites and Recently
-//! Played's over the whole library: its card, its rows by id, and the ids a card's Play queues.
+//! Played's over the whole library: its card and its rows by id.
 //!
 //! Each page implements its own `CardGrid` over these, the two differing in their ranking's
 //! membership and in what their band states beside it.
@@ -7,7 +7,7 @@
 use slint::{ModelRc, SharedString};
 
 use crate::ui::paged_rows::PagedRow;
-use crate::ui::paged_rows::grid::{GridRow, PagedGrid};
+use crate::ui::paged_rows::grid::GridRow;
 use crate::ui::util::{clamp_i64_to_i32, opt_shared};
 use melodia_app::library;
 use melodia_app::state::AppState;
@@ -46,10 +46,4 @@ pub fn to_slint_most_played_row(t: &MostPlayedFavorite) -> UiEntityStripRow {
 /// The Most Played cards behind `ids`, in the order asked.
 pub async fn rows(state: AppState, ids: Vec<i64>) -> AppResult<Vec<MostPlayedFavorite>> {
     library::keyset::most_played_by_ids(&state.db, &ids).await
-}
-
-/// The track ids a Most Played grid shows, in card order, so a card there plays that grid rather
-/// than the Songs list on another tab, and the queue holds exactly what the filter left.
-pub fn shown_ids(rows: &ModelRc<UiEntityGridRow>, label: &str) -> Vec<i64> {
-    PagedGrid::installed(rows, label).map(|grid| grid.ids().to_vec()).unwrap_or_default()
 }

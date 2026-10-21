@@ -8,15 +8,10 @@
 
 use sqlx::{AssertSqlSafe, SqliteConnection};
 
-use crate::database::{
-    CASE_BINDS_PER_ROW, DbPool, MAX_BINDS_PER_STATEMENT, case_by_id, placeholders,
-};
+use crate::database::{DbPool, FoldedColumn, FoldedInputs, backfill_folded};
 use melodia_core::entities::track_search::FIELD_SEPARATOR;
 use melodia_core::error::AppError;
 use melodia_core::utils::fold::push_folded;
-
-/// Rows per page, so that one page is one `UPDATE` inside the bind budget.
-const PAGE_ROWS: usize = MAX_BINDS_PER_STATEMENT / CASE_BINDS_PER_ROW;
 
 /// `fields` folded, each followed by [`FIELD_SEPARATOR`]. Terminated rather than joined, so a
 /// one-field kind is never `''` once filled, `''` being how the backfill finds a row it owes.
@@ -67,6 +62,10 @@ impl Named {
             Self::Playlists => "SELECT x.id AS id, x.name AS name, NULL AS extra FROM playlists x",
         }
     }
+
+    fn folded(self) -> FoldedColumn {
+        FoldedColumn { table: self.table(), column: "search_name", inputs: self.inputs() }
+    }
 }
 
 #[derive(sqlx::FromRow)]
@@ -76,7 +75,11 @@ struct Inputs {
     extra: Option<String>,
 }
 
-impl Inputs {
+impl FoldedInputs for Inputs {
+    fn id(&self) -> i64 {
+        self.id
+    }
+
     fn packed(&self) -> String {
         match &self.extra {
             Some(extra) => pack(&[&self.name, extra]),
@@ -103,53 +106,14 @@ pub(crate) async fn refill(
     Ok(())
 }
 
-/// Fills `search_name` on every row of the four tables still holding `''`, a page at a time, and
-/// returns how many rows it wrote. `backfill_search_text`'s shape and its reasons: cheap on a
-/// filled library, one statement per page, and the `UPDATE` asking again that the column is
-/// empty, so a row a writer filled meanwhile keeps the writer's value.
+/// Fills `search_name` on every row of the four tables still holding `''`, returning how many
+/// rows it wrote ([`backfill_folded`]).
 pub async fn backfill_search_name(db: &DbPool) -> Result<u64, AppError> {
     let mut written = 0;
     for kind in Named::ALL {
-        written += backfill(db, kind).await?;
+        written += backfill_folded::<Inputs>(db, &kind.folded()).await?;
     }
     Ok(written)
-}
-
-async fn backfill(db: &DbPool, kind: Named) -> Result<u64, AppError> {
-    let page_limit = i64::try_from(PAGE_ROWS).unwrap_or(i64::MAX);
-    let sql =
-        format!("{} WHERE x.search_name = '' AND x.id > ? ORDER BY x.id LIMIT ?", kind.inputs());
-    let mut after_id = 0_i64;
-    let mut written = 0;
-    loop {
-        let page: Vec<Inputs> = sqlx::query_as(AssertSqlSafe(sql.as_str()))
-            .bind(after_id)
-            .bind(page_limit)
-            .fetch_all(db.read())
-            .await?;
-        let Some(last) = page.last() else {
-            return Ok(written);
-        };
-        after_id = last.id;
-        written += fill_page(db, kind, &page).await?;
-    }
-}
-
-async fn fill_page(db: &DbPool, kind: Named, page: &[Inputs]) -> Result<u64, AppError> {
-    let sql = format!(
-        "UPDATE {} SET search_name = {} WHERE id IN ({}) AND search_name = ''",
-        kind.table(),
-        case_by_id(page.len()),
-        placeholders(page.len()),
-    );
-    let mut query = sqlx::query(AssertSqlSafe(sql));
-    for row in page {
-        query = query.bind(row.id).bind(row.packed());
-    }
-    for row in page {
-        query = query.bind(row.id);
-    }
-    Ok(query.persistent(false).execute(db.write()).await?.rows_affected())
 }
 
 #[cfg(test)]

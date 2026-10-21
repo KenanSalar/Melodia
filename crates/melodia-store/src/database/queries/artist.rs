@@ -1,4 +1,6 @@
-use crate::database::{DbPool, IDS_PER_SET, chunked_in_query, in_id_order, set_where_id_in};
+use crate::database::{
+    DbPool, IDS_PER_SET, chunked_in_query, in_id_order, select_in_id_order, set_where_id_in,
+};
 use melodia_core::entities::artist;
 use melodia_core::error::AppError;
 
@@ -7,11 +9,7 @@ pub async fn get_artists_by_ids(
     db: &DbPool,
     ids: &[i64],
 ) -> Result<Vec<artist::ArtistStats>, AppError> {
-    let rows = chunked_in_query(db.read(), ids, |placeholders| {
-        format!("SELECT * FROM artist_stats WHERE id IN ({placeholders})")
-    })
-    .await?;
-    Ok(in_id_order(rows, ids, |a: &artist::ArtistStats| a.id))
+    select_in_id_order(db, "SELECT * FROM artist_stats", ids, |a: &artist::ArtistStats| a.id).await
 }
 
 pub async fn get_artist_by_id(db: &DbPool, id: i64) -> Result<artist::ArtistStats, AppError> {

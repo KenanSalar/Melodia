@@ -12,6 +12,7 @@ use super::{ArtistsUi, to_slint_artist_row};
 use crate::ui::detail_artwork::decode_detail_pair;
 use crate::ui::detail_view::{apply_detail_artwork, resolve_view_sort};
 use crate::ui::my_library::{MyLibraryTab, tab_is_mounted};
+use crate::ui::paged_rows::track_rows;
 use crate::ui::section_state::SectionState;
 use crate::ui::track_detail::{DetailCache, TrackDetail, load, restore};
 use crate::ui::track_list_view::view_id;
@@ -178,7 +179,7 @@ pub async fn refresh_detail(
     weak: Weak<AppWindow>,
     artist_id: i64,
 ) -> AppResult<()> {
-    load::reload(state, artists_ui).await?;
+    track_rows::reload(state, artists_ui).await?;
     let (detail, albums) = fetch_artist_header(state, artist_id).await?;
 
     let pair =
