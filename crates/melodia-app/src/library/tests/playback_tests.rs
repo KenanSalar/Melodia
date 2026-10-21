@@ -316,35 +316,51 @@ async fn setting_a_volume_already_held_publishes_nothing_unless_it_is_muted() ->
 }
 
 /// The step's twin of the guard above, where a wheel spun against either end would otherwise
-/// publish a view model per notch. The muted half bites the same way: a notch that lands on the
-/// held level is still how a muted player comes back.
+/// publish a view model per notch.
 #[tokio::test]
-async fn a_step_against_either_end_publishes_nothing_unless_it_is_muted() -> Result<(), AppError> {
+async fn a_step_against_either_end_publishes_nothing() -> Result<(), AppError> {
+    for (end, delta) in [(0, -5), (MAX_VOLUME, 5)] {
+        let fx = TestPlayback::empty().await?;
+        seat(&fx, |s| s.build_set_volume_actions(end));
+        let mut published = fx.ctx.sinks.view_model.subscribe();
+        published.borrow_and_update();
+
+        player_step_volume(&fx.ctx, delta)?;
+
+        assert!(
+            !published.has_changed().unwrap_or(true),
+            "a notch of {delta} at {end} must not wake every view-model subscriber"
+        );
+    }
+    Ok(())
+}
+
+/// The guard's muted half bites as the setter's does: a notch that lands on the held level is
+/// still how a muted player comes back.
+#[tokio::test]
+async fn a_step_against_an_end_while_muted_unmutes() -> Result<(), AppError> {
     let fx = TestPlayback::empty().await?;
-    seat(&fx, |s| s.build_set_volume_actions(0));
-    let mut published = fx.ctx.sinks.view_model.subscribe();
-    published.borrow_and_update();
-
-    player_step_volume(&fx.ctx, -5)?;
-    assert!(!published.has_changed().unwrap_or(true), "a notch under the floor publishes nothing");
-
     seat(&fx, |s| s.build_set_volume_actions(MAX_VOLUME));
-    published.borrow_and_update();
-
-    player_step_volume(&fx.ctx, 5)?;
-    assert!(!published.has_changed().unwrap_or(true), "a notch past the ceiling publishes nothing");
-
     seat(&fx, PlayerState::build_toggle_mute_actions);
-    published.borrow_and_update();
 
     player_step_volume(&fx.ctx, 5)?;
-    assert!(published.has_changed().unwrap_or(false), "a notch while muted is an unmute");
-    published.borrow_and_update();
-    assert!(!lock_state(&fx.ctx.player_state).is_muted);
+
+    assert!(!lock_state(&fx.ctx.player_state).is_muted, "the guard swallowed the unmute");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_step_off_an_end_lands_where_it_points() -> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    seat(&fx, |s| s.build_set_volume_actions(MAX_VOLUME));
 
     player_step_volume(&fx.ctx, -5)?;
-    assert!(published.has_changed().unwrap_or(false), "a step off the ceiling publishes");
-    assert_eq!(lock_state(&fx.ctx.player_state).volume, MAX_VOLUME - 5);
+
+    assert_eq!(
+        lock_state(&fx.ctx.player_state).volume,
+        MAX_VOLUME - 5,
+        "the guard held a real step"
+    );
     Ok(())
 }
 

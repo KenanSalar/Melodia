@@ -344,7 +344,9 @@ export global Player {
     // chrome and commit on release.
     in-out property <int> volume-step-tick: 0;
 
-    // Ctrl (Cmd on macOS) is the fine step, for the arrow keys and the wheel alike.
+    // Ctrl (Cmd on macOS) is the fine step, for the arrow keys and the wheel alike. A wheel over an
+    // unfocused window always takes the coarse one on Linux: Wayland sends modifiers only to the
+    // focused window, and winit's X11 backend forwards them only there.
     public pure function volume-step(modifiers: KeyboardModifiers) -> int {
         return modifiers.control ? 1 : 5;
     }
