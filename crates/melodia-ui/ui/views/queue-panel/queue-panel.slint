@@ -7,47 +7,51 @@ import { MaterialIcon } from "../../components/material-icon.slint";
 import { IconButton } from "../../components/icon-button.slint";
 import { ActionPill, PillButton } from "../../components/action-pill.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { EdgeResizeHandle, GrowEdge } from "../../components/edge-resize-handle.slint";
 import { QueueRowItem } from "queue-row.slint";
 
-// The bottom-aligned slide-up sheet, mounted **inside the content panel** rather than at
-// the window root, so the animation plays only inside the main view and the sidebar and
-// bar stay visible and clickable. Declared *before* `DialogOverlay`, so a modal raised
-// from it paints above.
-//
-// One animated `t: float` drives both the backdrop alpha and the card's translate, and
-// both derivations are unanimated — a second `animate` on a derived binding phase-lags.
+// The queue, docked after the content panel in the shell's row, so the sidebar, the content and
+// the bar all stay live beside it. It draws no fill: the shell's mantle shows through, which is the
+// ground `RoundedFrame` masks the content panel's corners in.
 export component QueuePanel inherits Rectangle {
-    width: 100%;
-    height: 100%;
-
-    // The sheet is normally permanent, but **the miniplayer swap unmounts the whole
-    // full-UI branch** without touching `Queue.open` — so a remount seeds `watched-open`
-    // at the current value and the reset below never fires.
+    // The panel sits in the full-UI branch, which the miniplayer swap unmounts, so a remount finds
+    // `Queue.shown` already settled and the reset in `changed watched-shown` never fires.
     init => {
+        Queue.pointer-in = false;
         Queue.drag-source = -1;
         Queue.drop-slot = -1;
-        // Same reason the resets above are here: a remount with the sheet already open gets
-        // no `changed watched-open`, so nothing else would seat the list.
         root.arm-seat();
     }
 
-    // 0 = fully closed; 1 = fully open.
-    private property <float> t: Queue.open ? 1.0 : 0.0;
-    animate t { duration: Theme.dur-med; easing: ease-out; }
+    private property <length> open-w: clamp(
+        Queue.panel-width > 0px ? Queue.panel-width : Theme.queue-panel-default-w,
+        Theme.queue-panel-min-w,
+        Theme.queue-panel-max-w);
+    // The ease rides a float rather than the width, so dragging the edge moves `open-w` straight
+    // through instead of restarting an animation on every move.
+    private property <float> shown-t: Queue.shown ? 1.0 : 0.0;
+    animate shown-t { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // Mirrored locally so a `changed` handler can drive the Rust-side atomic — a global
-    // can't watch its own property.
-    private property <bool> watched-open: Queue.open;
-    changed watched-open => {
-        Queue.open-changed(self.watched-open);
-        // Neither an opening nor a closing sheet can have a drag in flight. Worth
-        // spelling out on close: the sheet stays mounted, so the pressed row outlives
-        // it — until the teardown drops the rows a beat later, and a destroyed row never
-        // delivers the pointer-up that would have cleared these itself.
+    // Never a bound `width`: a component root reports that as its min and max, and an eased one
+    // drags the window's own floor along with it (`slint-pitfalls.md`).
+    min-width: 0px;
+    preferred-width: root.open-w * root.shown-t;
+    max-width: root.open-w;
+    horizontal-stretch: 0;
+    // The content is laid out at `open-w` and the box eases under it, so it rides the moving edge
+    // rather than reflowing every frame. Square, so a scissor rather than a layer.
+    clip: true;
+
+    private property <bool> watched-shown: Queue.shown;
+    changed watched-shown => {
+        // Neither a showing nor a hidden panel can have a drag in flight. Worth spelling out on
+        // hide: the panel stays mounted, so the pressed row outlives it until the teardown drops
+        // the rows a beat later, and a destroyed row never delivers the pointer-up that would have
+        // cleared these itself.
         Queue.drag-source = -1;
         Queue.drop-slot = -1;
-        // `open-changed` fills the rows and the playing index before it returns, so the arm
-        // below reads the fresh index.
+        // `AppWindow` writes `Queue.shown` before it fires `shown-changed`, so this runs after Rust
+        // has filled the rows and the playing index, and the arm below reads the fresh index.
         root.arm-seat();
     }
 
@@ -83,7 +87,7 @@ export component QueuePanel inherits Rectangle {
     }
 
     // Where the viewport sits with `index` centred, pinned inside the travel. Every row is
-    // the same height, so a row's top is its index times that and the sheet needs no offset
+    // the same height, so a row's top is its index times that and the panel needs no offset
     // table.
     pure function centred-on(index: int) -> length {
         return root.in-travel(
@@ -96,29 +100,29 @@ export component QueuePanel inherits Rectangle {
     private property <int> seat-ticks-total: 40;
     private property <int> seat-ticks-left;
 
-    // Arms the seat: the open transition, and a remount that finds the sheet already open.
-    // Reading `Queue.open` is what makes a close disarm it. **Assigned rather than bound**,
+    // Arms the seat: the show transition, and a remount that finds the panel already shown.
+    // Reading `Queue.shown` is what makes a hide disarm it. **Assigned rather than bound**,
     // because `self.running = false` in the handler would orphan a binding on the first fire,
-    // leaving the sheet seating once per process; and a binding reaching the list's height
+    // leaving the panel seating once per process; and a binding reaching the list's height
     // fails earlier still, evaluated by a change tracker in the pass that mounts the branch,
-    // the sheet sitting inside the miniplayer `if`.
+    // the panel sitting inside the miniplayer `if`.
     //
-    // **Arms rather than seats.** A scroll written from `changed watched-open` lands inside
+    // **Arms rather than seats.** A scroll written from `changed watched-shown` lands inside
     // `run_change_handlers`, which drains the flickable's in-bounds tracker re-entrantly, and
-    // that tracker evaluates against the `content-height` the close teardown left at zero and
+    // that tracker evaluates against the `content-height` the hide's teardown left at zero and
     // pins the offset straight back to the top.
     function arm-seat() {
         root.seat-ticks-left = root.seat-ticks-total;
-        seat-timer.running = Queue.open && Queue.current-index >= 0;
+        seat-timer.running = Queue.shown && Queue.current-index >= 0;
     }
 
-    // Seats the list on the playing row once per open and then leaves it alone — a queue is
-    // read *past* the current track, so a sheet that kept following would fight every
+    // Seats the list on the playing row once per show and then leaves it alone — a queue is
+    // read *past* the current track, so a panel that kept following would fight every
     // scroll. **It converges rather than writing once.** A `ListView` publishes
     // `visible-height` off its own geometry and `content-height` off its repeater, and on a
     // fresh mount the two land on different passes, so a single write committed to whichever
-    // pair its one tick happened to find: the open after a miniplayer swap centred against a
-    // height of zero and put the playing row at the top, where the second open, laid out
+    // pair its one tick happened to find: the show after a miniplayer swap centred against a
+    // height of zero and put the playing row at the top, where the second show, laid out
     // already, was reliably right. Converging also picks up the ListView's own re-anchoring,
     // which row-aligns the offset and drops the centring remainder. Re-reading the target
     // each tick costs one tick where it already agreed.
@@ -149,57 +153,22 @@ export component QueuePanel inherits Rectangle {
         }
     }
 
-    // A derivation of `t`, with no `animate` of its own.
-    Rectangle {
-        width: 100%;
+    // The `CompositeScroll.hovered` shape: everything passes through to the children, and only
+    // `has-hover` is read, into what the winit filter consults to decide whether a press makes
+    // Escape and Ctrl+A the queue's. The edge handle sits inside it so a press there counts.
+    hover-catch := TouchArea {
+        x: 0;
+        y: 0;
+        width: root.open-w;
         height: 100%;
-        background: rgba(0, 0, 0, 0.3 * root.t);
-    }
-    backdrop-touch := TouchArea {
-        width: 100%;
-        height: 100%;
-        enabled: Queue.open && root.t > 0.05;
-        mouse-cursor: pointer;
-        clicked => { Queue.dismiss(); }
-    }
+        changed has-hover => { Queue.pointer-in = self.has-hover; }
 
-    // At t=0 the card sits entirely off the bottom edge; at t=1 it is bottom-aligned
-    // inside the panel. Smaller y is higher, so the residual is **added** to the open
-    // y — subtracting slides the card in from the top.
-    card := Rectangle {
-        width: min(640px, max(400px, parent.width * 0.5));
-        x: (parent.width - self.width) / 2;
-        height: parent.height * 0.8;
-        y: parent.height - self.height + (1 - root.t) * (self.height + 24px);
-        background: Theme.mantle;
-        border-color: Theme.border;
-        border-width: 1px;
-        border-top-left-radius: 16px;
-        border-top-right-radius: 16px;
-        visible: root.t > 0.01;
-
-        // Catches clicks on the card so the backdrop dismiss doesn't fire from inside.
-        card-touch := TouchArea {
-            width: 100%;
-            height: 100%;
-            enabled: Queue.open;
-            mouse-cursor: default;
-            clicked => { }
-        }
-
-        // **Esc and Ctrl+A are owned by the root `ShortcutScope`**, gated on
-        // `Queue.open`. They used to live in a nested `FocusScope` here, which only ever
-        // took focus when the user clicked the sheet's blank area — Slint focuses a
-        // `FocusScope` on mouse press, never on mount — so both keys were dead on a
-        // sheet opened with `Q`, and dead again after any confirm dialog raised from it
-        // handed focus back to the root.
         VerticalLayout {
             spacing: 0px;
 
-            // Title, count, the Clear ↔ Remove-selected action, and close.
+            // Title, count, Clear, and close.
             Rectangle {
                 height: 56px;
-                background: transparent;
                 HorizontalLayout {
                     padding-left: 20px;
                     padding-right: 8px;
@@ -253,7 +222,7 @@ export component QueuePanel inherits Rectangle {
                         icon: "close";
                         diameter: 32px;
                         icon-size: 18px;
-                        clicked => { Queue.dismiss(); }
+                        clicked => { Queue.close(); }
                     }
                 }
             }
@@ -276,7 +245,7 @@ export component QueuePanel inherits Rectangle {
                     x: 0;
                     y: 0;
                     // Reserves the rail for the overlay scrollbar — the bar itself, the
-                    // card inset, and a visible gap to the row content. Without it the
+                    // panel inset, and a visible gap to the row content. Without it the
                     // row hover pill paints under the scrollbar with no breathing room.
                     width: parent.width - 14px;
                     height: 100%;
@@ -328,7 +297,7 @@ export component QueuePanel inherits Rectangle {
                     background: Theme.accent;
                 }
 
-                // A sibling, flush with the card edge.
+                // A sibling, flush with the panel's edge.
                 OverlayScrollbar {
                     x: parent.width - self.width - 2px;
                     y: 0;
@@ -360,18 +329,15 @@ export component QueuePanel inherits Rectangle {
             }
         }
 
-        // Last child of the card, so it paints over the list, and `if` rather than
-        // `visible:` so the absent branch claims no layout slot. **A plain Rectangle
-        // with no TouchArea**, so the OS drop event still lands at the winit layer
-        // below Slint.
-        if Queue.is-drop-hovered && Queue.open: Rectangle {
+        // After the list, so it paints over it, and `if` rather than `visible:` so the absent
+        // branch claims no layout slot. **A plain Rectangle with no TouchArea**, so the OS drop
+        // event still lands at the winit layer below Slint.
+        if Queue.is-drop-hovered && Queue.shown: Rectangle {
             x: 0;
             y: 57px; // 56 px header + 1 px separator
             width: 100%;
             height: parent.height - 57px;
             background: Theme.crust.with-alpha(0.85);
-            border-bottom-left-radius: 16px;
-            border-bottom-right-radius: 16px;
 
             VerticalLayout {
                 alignment: center;
@@ -389,6 +355,23 @@ export component QueuePanel inherits Rectangle {
                     font-weight: 600;
                     horizontal-alignment: center;
                 }
+            }
+        }
+
+        // Last, over the rows it borders.
+        EdgeResizeHandle {
+            x: 0;
+            y: 0;
+            height: parent.height;
+            grows: GrowEdge.left;
+            drawn-width: root.open-w;
+            min-w: Theme.queue-panel-min-w;
+            max-w: Theme.queue-panel-max-w;
+            resized(width) => {
+                Queue.panel-width = width;
+            }
+            reset => {
+                Queue.panel-width = 0px;
             }
         }
     }

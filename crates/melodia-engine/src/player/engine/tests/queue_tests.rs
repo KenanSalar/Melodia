@@ -511,7 +511,7 @@ fn on_the_second_of_two() -> QueueState {
 }
 
 /// The ids are cached until the order moves, so a mutator that kept them would publish an order
-/// the queue no longer holds, to the sheet, Up Next and `queue.json` alike.
+/// the queue no longer holds, to the queue panel, Up Next and `queue.json` alike.
 #[test]
 fn every_change_to_the_order_publishes_the_new_order() {
     let rows: [(&str, QueueState, Edit, &[i64]); 10] = [

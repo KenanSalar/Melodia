@@ -94,7 +94,7 @@ fn install_shell(
     Ok((views, notifications))
 }
 
-/// The player's subscribers and the surfaces that render it: the queue sheet, Now Playing and the
+/// The player's subscribers and the surfaces that render it: the queue panel, Now Playing and the
 /// miniplayer.
 fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles) -> AppResult<()> {
     let weak = app.as_weak();
@@ -120,7 +120,7 @@ fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles)
         .map_err(|e| AppError::io("station history subscriber", e))?;
 
     match ui::queue_panel::install(app, state, &views.cover_thumbs) {
-        Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
+        Ok(h) => ui::window_chrome::set_queue_panel_shown(h.shown),
         Err(e) => log::warn!("queue_panel::install: {}", describe(&e)),
     }
 

@@ -1,4 +1,4 @@
-//! OS file-drop batching for the queue-sheet drop target.
+//! OS file-drop batching for the queue panel's drop target.
 //!
 //! Winit fires `WindowEvent::DroppedFile` once *per file*, so a five-track drag lands as
 //! five events in one event-loop iteration. Uncoalesced that is five concurrent
@@ -21,26 +21,25 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 
-/// Atomic mirror of `Queue.open`, which the `DroppedFile` handler consults to decide
-/// whether the user is targeting the queue sheet. A `OnceLock` so the queue sheet can
+/// Atomic mirror of `Queue.shown`, which the `DroppedFile` handler consults to decide
+/// whether the user is targeting the queue panel. A `OnceLock` so the panel can
 /// install its callbacks *after* `window_chrome::install` registered the winit filter —
 /// the handler reads through it at event-fire time, so a late set still works.
-static QUEUE_SHEET_OPEN: OnceLock<Arc<AtomicBool>> = OnceLock::new();
+static QUEUE_PANEL_SHOWN: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 
-/// Forward the `Queue.open` atomic so the `DroppedFile` filter can route into the queue.
-/// Idempotent: a second call is a silent no-op, the sheet installing once per process.
-pub fn set_queue_sheet_open(handle: Arc<AtomicBool>) {
-    let _ = QUEUE_SHEET_OPEN.set(handle);
+/// Forward the `Queue.shown` atomic so the `DroppedFile` filter can route into the queue.
+/// Idempotent: a second call is a silent no-op, the panel installing once per process.
+pub fn set_queue_panel_shown(handle: Arc<AtomicBool>) {
+    let _ = QUEUE_PANEL_SHOWN.set(handle);
 }
 
-/// Read-only view of the flag, `false` before the sheet has installed its atomic. Used
-/// by the opt-in RSS sampler to annotate log lines with the overlay state.
-pub fn is_queue_sheet_open() -> bool {
-    QUEUE_SHEET_OPEN.get().is_some_and(|atomic| atomic.load(Ordering::Relaxed))
+/// Read-only view of the flag, `false` before the panel has installed its atomic.
+pub fn is_queue_panel_shown() -> bool {
+    QUEUE_PANEL_SHOWN.get().is_some_and(|atomic| atomic.load(Ordering::Relaxed))
 }
 
 /// Currently-open playlist id, mirrored from `PlaylistDetail.playlist-id`; `-1` when the
-/// detail is closed. The flush reads it at fire time, routing there when no queue sheet
+/// detail is closed. The flush reads it at fire time, routing there when no queue panel
 /// takes precedence. One `AtomicI64` rather than a second `AtomicBool` gate — the `>= 0`
 /// test answers both "is a detail open" and "which playlist".
 static CURRENT_PLAYLIST_ID: AtomicI64 = AtomicI64::new(-1);
@@ -71,7 +70,7 @@ fn drop_coalescer() -> &'static DropCoalescer {
 
 /// Push a dropped path into the coalescer, scheduling a single delayed flush if one
 /// isn't in flight. That flush re-checks the routing at fire time, so a drop that
-/// started while the sheet was open and landed after it closed is discarded.
+/// started while the panel was shown and landed after it hid goes elsewhere or nowhere.
 pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
     let coalescer = drop_coalescer();
     coalescer.pending.lock().push(path);
@@ -97,17 +96,16 @@ pub(super) fn schedule_drop_flush(state: &AppState, path: PathBuf) {
             return;
         }
 
-        // Precedence, re-checked *after* the wait so a drop that started with one
-        // overlay open and landed after a navigate-away routes to the new target: the
-        // queue sheet first, sitting on top of every view; else an open playlist detail;
-        // else discard, no current target accepting files.
-        let queue_open =
-            QUEUE_SHEET_OPEN.get().is_some_and(|atomic| atomic.load(Ordering::Relaxed));
+        // Precedence, re-checked *after* the wait so a drop that started over one target
+        // and landed after a navigate-away routes to the new one: the queue panel first,
+        // while it is shown; else an open playlist detail; else discard, no current target
+        // accepting files.
+        let queue_shown = is_queue_panel_shown();
         let playlist_open = CURRENT_PLAYLIST_ID.load(Ordering::Relaxed) >= 0;
 
         let paths: Vec<String> = batch.iter().map(|p| p.to_string_lossy().into_owned()).collect();
 
-        if queue_open {
+        if queue_shown {
             match library::queue::queue_import_files(&state, paths).await {
                 Ok(_) => {
                     // The queue itself updates through `sinks.queue`, but no other

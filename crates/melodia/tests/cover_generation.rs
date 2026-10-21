@@ -130,7 +130,7 @@ fn every_scheduling_tier_installs_a_notifier() {
 const TIER_HOMES: [(&str, &str); 5] = [
     ("boot/ui_setup/views.rs", "the row tier, at row-tile size"),
     ("ui/grid_prewarm.rs", "the one tier every card grid draws from"),
-    ("ui/queue_panel/mod.rs", "the sheet's own, dropped on close, over the row tier's buffers"),
+    ("ui/queue_panel/mod.rs", "the panel's own, dropped once hidden, over the row tier's buffers"),
     ("ui/radio/covers.rs", "logos, whose card reads the decoded extent for its layout"),
     ("ui/search/mod.rs", "the two card strips, at strip sizes of their own"),
 ];
@@ -175,7 +175,7 @@ fn only_the_named_cover_tiers_are_built() {
 const GENERATION_PROPERTY: &str = "property <int> covers-generation";
 
 /// The two that carry one and are **not** the shared install's to answer for, each holding a tier
-/// of its own: the queue sheet's is dropped on close and Radio's logo tier is released on leave,
+/// of its own: the queue panel's is dropped once hidden and Radio's logo tier is released on leave,
 /// so `0` still means cold on both where a grid's value means nothing at all. Radio's is its own
 /// because `station-card.slint` reads the decoded *extent* for its layout.
 const PRIVATE_TIER_GLOBALS: [&str; 2] = ["Queue", "Radio"];

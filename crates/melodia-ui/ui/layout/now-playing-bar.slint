@@ -365,9 +365,9 @@ export component NowPlayingBar inherits Rectangle {
                     press-shrink: true;
                     diameter: root.btn-d;
                     icon-size: root.btn-icon-d;
-                    active: Queue.open;
+                    active: Queue.shown;
                     tooltip-text: @tr("Queue");
-                    clicked => { Queue.open = !Queue.open; }
+                    clicked => { Queue.toggle(); }
                 }
                 VolumePopup {
                     diameter: root.btn-d;

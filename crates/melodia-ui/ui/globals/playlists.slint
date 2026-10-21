@@ -140,7 +140,7 @@ export global PlaylistDetail {
     in-out property <int> drop-slot: -1;
 
     // Mirrored from Rust on an OS file-hover so the detail can paint its drop banner. Set **only**
-    // when the queue sheet is closed and this detail is open, the queue taking priority.
+    // when the queue panel is hidden and this detail is open, the queue taking priority.
     in property <bool> is-drop-hovered: false;
 
     callback close-detail();

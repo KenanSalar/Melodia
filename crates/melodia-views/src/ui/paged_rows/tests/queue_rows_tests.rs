@@ -1,4 +1,4 @@
-//! The row shape the queue sheet and Up Next both draw.
+//! The row shape the queue panel and Up Next both draw.
 
 use super::to_queue_row;
 use crate::ui::fixtures::track_row;

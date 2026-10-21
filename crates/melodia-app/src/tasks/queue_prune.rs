@@ -6,7 +6,7 @@
 //! entry — or stops if the queue is now empty.
 //!
 //! Pruning publishes through the existing `sinks.queue` watch channel via
-//! `with_state_emit`, so the queue sheet's `ViewModel` subscriber redraws
+//! `with_state_emit`, so the queue panel's `ViewModel` subscriber redraws
 //! automatically. No new UI subscriber is needed.
 
 use std::collections::HashSet;
@@ -91,7 +91,7 @@ async fn reconcile_once(
 
     // Step 4: prune + (optionally) auto-skip in a single critical section.
     // `with_state_emit` publishes the new queue VM on `sinks.queue` and the
-    // light VM on `sinks.view_model`, so the queue sheet's subscriber
+    // light VM on `sinks.view_model`, so the queue panel's subscriber
     // rebuilds rows automatically.
     emit_and_execute(&**engine, player_state, sinks, |s| {
         let outcome = s.queue.prune_missing(&to_remove);

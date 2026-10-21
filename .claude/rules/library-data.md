@@ -134,7 +134,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **Track projections by use case**, each with a column list in `queries::track::columns`:
   `TrackSummary` (17 cols; the player's window of records and NP, incl. 4 ReplayGain + `rating`);
-  `TrackListRow` (17; every list incl. the queue sheet and Browse, whose directory fetch selects
+  `TrackListRow` (17; every list incl. the queue panel and Browse, whose directory fetch selects
   `file_path` beside it as the key it matches files on disk by; incl. `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36;
   Edit-Tags dialog — the only production by-id multi-fetch, every single-valued tag column + the
   technical Summary cols); `PlaylistExportRow` (5;
@@ -155,7 +155,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     keeps only its ids and fetches the rows near the viewport by id
     (`get_track_list_rows_by_ids`), converted as they land (`ui::paged_rows`), so no list holds a
     row per track. **The queue is the same shape one layer down**: the engine holds its ids and
-    only a window of full records around the current slot (`audio-stack.md`), and the queue sheet
+    only a window of full records around the current slot (`audio-stack.md`), and the queue panel
     and Up Next fetch their rows by id. A detail's hero facts come off the same membership in SQL
     (`queries::track::scope_facts`, `genre_lines`), the page holding no rows to fold them from.
     **Recently Played's Songs tab retains a list and deliberately stays off it**:

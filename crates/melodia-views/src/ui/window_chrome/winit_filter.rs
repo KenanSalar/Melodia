@@ -1,6 +1,6 @@
 //! Winit `WindowEvent` filter installed by `window_chrome::install`.
 //!
-//! Nine reasons to subscribe:
+//! Ten reasons to subscribe:
 //!
 //! 1. **`MouseInput { Pressed, Left }`** over a `ResizeRing` grab or a drag region: an
 //!    OS-level resize or window move plus `PreventDefault`, bypassing the TouchArea-grab
@@ -30,6 +30,8 @@
 //! 9. **`Resized`**, **`CursorMoved`**, **`CursorEntered`** and **`MouseInput`** together, for
 //!    where a resize begins and where it is let go, which no one event reports. See
 //!    `resize_release`.
+//! 10. **`MouseInput { Pressed }`**, any button and whoever takes it: whether it landed on the
+//!     queue panel, which makes Escape and Ctrl+A the queue's. See [`claim_queue_keys`].
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -147,6 +149,9 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
             | WindowEvent::MouseInput { .. } => resize_watch.pointer(w),
             _ => {}
         }
+        if let WindowEvent::MouseInput { state: ElementState::Pressed, .. } = event {
+            claim_queue_keys(&weak);
+        }
         match event {
             // Ahead of the drag arm: the miniplayer's drag region runs right up to the edge, and its
             // hover can still read true for a tick after the pointer reaches a grab.
@@ -222,6 +227,15 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     });
 }
 
+/// Gives the queue Escape and Ctrl+A when a press lands on its panel, and takes them back when one
+/// lands anywhere else. Read here because no element sees a press a child took first, and the
+/// panel is all children.
+fn claim_queue_keys(weak: &slint::Weak<AppWindow>) {
+    let Some(ui) = weak.upgrade() else { return };
+    let queue = ui.global::<Queue>();
+    queue.set_keys_owned(queue.get_pointer_in());
+}
+
 /// A left press over a drag region: a window move, or the titlebar's double press.
 fn drag_press(
     w: &slint::Window,
@@ -242,7 +256,7 @@ fn drag_press(
 }
 
 /// Mouse-4 / Mouse-5 into the nav history. With an overlay up we `Propagate` instead, so Slint
-/// keeps its own input semantics — Esc and F already close NP and Queue, and the dialog backdrop
+/// keeps its own input semantics — Esc and F already close Now Playing, and the dialog backdrop
 /// catches the dismissing click.
 fn nav_button(weak: &slint::Weak<AppWindow>, state: &AppState, button: MouseButton) -> EventResult {
     let Some(ui) = weak.upgrade() else {
@@ -343,15 +357,15 @@ fn on_dropped_file(
     EventResult::Propagate
 }
 
-/// OS-level file hover, driving the queue sheet's banner or Playlist Detail's.
+/// OS-level file hover, driving the queue panel's banner or Playlist Detail's.
 /// Queue takes precedence, and `drop_coalescer`'s flush-side routing applies
 /// the same one, so the indicator always names where the drop will land.
 fn on_hovered_file(weak: &slint::Weak<AppWindow>) -> EventResult {
-    let queue_open = drop_coalescer::is_queue_sheet_open();
+    let queue_shown = drop_coalescer::is_queue_panel_shown();
     let _ = weak.upgrade_in_event_loop(move |ui| {
         ui.global::<Queue>().set_is_drop_hovered(true);
-        // Only when the queue sheet isn't the active drop target.
-        ui.global::<PlaylistDetail>().set_is_drop_hovered(!queue_open);
+        // Only when the queue panel isn't the active drop target.
+        ui.global::<PlaylistDetail>().set_is_drop_hovered(!queue_shown);
     });
     EventResult::Propagate
 }

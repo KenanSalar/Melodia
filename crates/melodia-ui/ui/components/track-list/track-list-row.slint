@@ -477,7 +477,7 @@ export component TrackListRowItem inherits Rectangle {
             }
         }
 
-        // The menu itself is `TrackContextMenu`, shared with the queue sheet's row. What stays
+        // The menu itself is `TrackContextMenu`, shared with the queue panel's row. What stays
         // here is the pointer position, the one thing it deliberately doesn't own.
         ctx-menu := TrackContextMenu {
             row-id: root.row-data.id;

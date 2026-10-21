@@ -1,6 +1,6 @@
-//! Queue bottom-sheet UI wiring. Owns the Slint `Queue` global's
+//! The queue panel's wiring. Owns the Slint `Queue` global's
 //! callbacks, its rows, a [`QueueRows`] over the queue's ids, and
-//! the `is_open` atomic that the winit `DroppedFile` filter consults
+//! the `shown` atomic that the winit `DroppedFile` filter consults
 //! to decide whether to forward dropped paths into
 //! `library::queue::queue_import_files`.
 //!
@@ -26,12 +26,12 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::{AppWindow, Queue};
 
-/// Public handle returned by [`install`]. Surfaces the `is_open`
+/// Public handle returned by [`install`]. Surfaces the `shown`
 /// atomic to boot so it can be forwarded into
-/// `window_chrome::set_queue_sheet_open` for the winit `DroppedFile`
+/// `window_chrome::set_queue_panel_shown` for the winit `DroppedFile`
 /// filter.
 pub struct QueuePanelHandles {
-    pub is_open: Arc<AtomicBool>,
+    pub shown: Arc<AtomicBool>,
 }
 
 /// Wire `Queue` callbacks, install the row model, and spawn the
@@ -54,20 +54,20 @@ pub fn install(
     // The id a shift-click ranges from, the track lists' anchor, kept here because `Queue` has no
     // property for it.
     let anchor = Rc::new(Cell::new(NO_ANCHOR));
-    let is_open = Arc::new(AtomicBool::new(false));
-    // Private so closing can drop it wholesale: clearing the row tier would yank covers the track
+    let shown = Arc::new(AtomicBool::new(false));
+    // Private so hiding can drop it wholesale: clearing the row tier would yank covers the track
     // lists and the now-playing bar still need. Backed by it, so a cover both draw is one buffer.
     let queue_covers = Arc::new(CoverThumbs::backed_by(row_covers.clone()));
 
     // Lazy row covers, wired once — the `boot::ui_setup` `RowCovers` shape,
-    // against this sheet's private tier.
+    // against this panel's private tier.
     //
     // `generation` is both the token that re-runs the row bindings and the
     // "is this tier warm yet" flag, which is what keeps the first frame off
     // the decoder. The teardown rewinds it to 0 in the same guarded closure
     // that clears the cache, so 0 always coincides with an empty tier — and
-    // an open facing one would otherwise have every row it mounts while the
-    // sheet slides up miss and decode *on the UI thread*. Cache-only until
+    // a show facing one would otherwise have every row it mounts while the
+    // panel eases in miss and decode *on the UI thread*. Cache-only until
     // the warm-up bump; after it, a row scrolled into view decodes on demand
     // like every other list in the app. See the callback's declaration in
     // `globals/queue.slint`.
@@ -80,18 +80,18 @@ pub fn install(
     }
 
     callbacks::wire_callbacks(ui, state, &rows, &anchor);
-    lifecycle::wire(ui, state, &rows, &queue_covers, &anchor, &is_open);
-    rows::spawn_queue_rows_subscriber(ui, state, rows, anchor, is_open.clone())?;
+    lifecycle::wire(ui, state, &rows, &queue_covers, &anchor, &shown);
+    rows::spawn_queue_rows_subscriber(ui, state, rows, anchor, shown.clone())?;
 
-    // No install-time seed: the sheet is closed at startup, so the
+    // No install-time seed: the panel is hidden at startup, so the
     // subscriber is gated and the model stays empty (no covers decoded
-    // for an off-screen overlay). `on_open_changed(true)` shows the queue
-    // on the first open.
+    // for an off-screen panel). `on_shown_changed(true)` shows the queue
+    // on the first show.
 
-    Ok(QueuePanelHandles { is_open })
+    Ok(QueuePanelHandles { shown })
 }
 
-/// Make `picked` the sheet's picks, less any track the queue no longer holds: stamped on the rows,
+/// Make `picked` the panel's picks, less any track the queue no longer holds: stamped on the rows,
 /// and published as the count the row menu labels its batch entries with and the ids it hands
 /// them.
 ///
@@ -117,7 +117,7 @@ pub(super) fn apply_picks(ui: &AppWindow, rows: &QueueRows, picked: &HashSet<i32
     write_selection_ids(&queue.get_selected_ids(), ids, |m| queue.set_selected_ids(m));
 }
 
-/// The sheet's picks, as `apply_picks` last published them.
+/// The panel's picks, as `apply_picks` last published them.
 pub(super) fn picked(ui: &AppWindow) -> HashSet<i32> {
     ui.global::<Queue>().get_selected_ids().iter().collect()
 }

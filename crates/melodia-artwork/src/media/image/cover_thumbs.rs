@@ -176,8 +176,8 @@ impl Default for CoverThumbs {
 }
 
 impl CoverThumbs {
-    /// The shared row tier, behind every track table and the now-playing bar. The queue sheet
-    /// keeps a [`Self::backed_by`] tier over it, released on close.
+    /// The shared row tier, behind every track table and the now-playing bar. The queue panel
+    /// keeps a [`Self::backed_by`] tier over it, released once hidden.
     pub fn new() -> Self {
         Self::default()
     }
@@ -396,11 +396,11 @@ impl CoverThumbs {
     /// improve on it: it may not decode and it may not schedule. A backed tier still borrows on a
     /// miss, which is neither.
     ///
-    /// For a surface that mounts rows *before* its tier is warm, which here is the queue sheet
-    /// alone: its rows must land in the model before `on_open_changed` returns so the slide-up has
+    /// For a surface that mounts rows *before* its tier is warm, which here is the queue panel
+    /// alone: its rows must land in the model before `on_shown_changed` returns so its ease in has
     /// text on frame one, and a per-row [`Self::get_or_load_opt`] there would block the UI thread
     /// on a screenful of decodes, freezing the very animation the synchronous build exists to
-    /// feed. The sheet swaps to the decoding lookup once its off-thread [`Self::prewarm`] lands.
+    /// feed. The panel swaps to the decoding lookup once its off-thread [`Self::prewarm`] lands.
     pub fn get_cached_opt(&self, path: Option<&str>) -> Image {
         let Some(p) = path.filter(|p| !p.is_empty()) else {
             return Image::default();

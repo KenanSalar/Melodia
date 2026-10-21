@@ -327,8 +327,8 @@ export component OverflowMenu inherits Rectangle {
                 if Settings.overflow-queue: OverflowRow {
                     icon: "queue_music";
                     label: @tr("Queue");
-                    active: Queue.open;
-                    clicked => { Queue.open = !Queue.open; root.dismiss(); }
+                    active: Queue.shown;
+                    clicked => { Queue.toggle(); root.dismiss(); }
                 }
                 // The chip's words without its dot, which a menu row has no slot for.
                 if SignalPathUi.chip-shown && Settings.overflow-quality: OverflowRow {

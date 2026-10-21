@@ -87,7 +87,7 @@ export component PlaylistDetailBody inherits Rectangle {
                 : @tr("Drag music files here, or add tracks via any track's overflow menu.");
         }
 
-        // OS file-hover banner — routed here when the queue sheet is closed and this
+        // OS file-hover banner — routed here when the queue panel is hidden and this
         // detail is open. Stacks above the empty state.
         if PlaylistDetail.is-drop-hovered && PlaylistDetail.playlist-id >= 0
             && !PlaylistDetail.playlist.is_smart: Rectangle {

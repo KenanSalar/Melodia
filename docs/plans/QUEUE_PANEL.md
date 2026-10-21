@@ -1,6 +1,6 @@
 # Plan: Queue panel (the queue docks on the right and takes drops)
 
-Status: **proposed** · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
+Status: **in progress**, Phases 1 and 2 done · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
 
 > **Validated 2026-10-21** against `72a0e74f` (`feat/queue-panel`). Three read-only traces went into it: the queue sheet, the left sidebar's resize and fold, and drag and drop with Add to Queue. They were checked against:
 > - the Slint 1.18.1 sources for `DragArea`, `DropArea` and the in-window drag (`i-slint-core/items/drag_n_drop.rs`, `window.rs`);
@@ -123,7 +123,7 @@ Working doc. Delete when every phase has shipped and passed by hand.
 | `crates/melodia-ui/ui/globals/drag.slint` (new, Phase 5) | `Drag`: the in-flight payload, `active`, the token, `begin`/`end` |
 | `crates/melodia-ui/ui/models.slint` | `DragPayload { kind, ids, origin, index, title, count, cover }` (Phase 5) |
 | `crates/melodia-ui/ui/globals/selection.slint` | Gains `effective-ids(...)`, the one statement of what a picked row or card stands for (Phase 5) |
-| `crates/melodia-ui/ui/globals/queue.slint` | `Queue` gains `panel-width` (0 = default), `panel-dragging`, `shown`, `pointer-in`, `keys-owned`, `toggle()`, `close()`, `drop-in(kind, ids, slot)`. It loses `dismiss()` and `close`; `drag-source`/`drop-slot` give way to the `Drag` payload |
+| `crates/melodia-ui/ui/globals/queue.slint` | `Queue` gains `panel-width` (0 = default), `shown`, `pointer-in`, `keys-owned`, `toggle()` (handled in Rust), `close()`, `shown-changed`, `drop-in(kind, ids, slot)`. It loses `dismiss()`, the `close` callback and `open-changed`; `drag-source`/`drop-slot` give way to the `Drag` payload |
 | `crates/melodia-ui/ui/theme.slint` | `queue-panel-{min,default,max}-w` and `content-min-w`, beside `sidebar-*-w` (`:101-104`) |
 | `crates/melodia-ui/ui/app-window.slint` (746) | The row mount, the `shown` mirror and the narrow-window derivations. The sheet's mount at `:599-604` goes |
 | `crates/melodia-ui/ui/layout/shortcut-scope.slint` | `queue-keys` replaces `queue-sheet-up` |
@@ -144,6 +144,8 @@ Every production Rust file in the blast radius stays well under the 800-line cap
 ## Phases
 
 ### Phase 1: Groundwork, no visible change
+Status: done 2026-10-21, as `86310699` (the rename) and `ac581216` (the handle and the lifecycle split). Its hand check rode Phase 2's.
+
 1. **Rename the sheet to the panel in both trees.** That covers the Slint files into `views/queue-panel/`, `ui/queue_sheet/` → `ui/queue_panel/`, and the identifiers that say "sheet". The pins that name it change with it:
    - `CALLBACK_HOMES` (`melodia-testkit/src/lib.rs:70-86`);
    - `TIER_HOMES` and `GENERATION_WRITERS` (`crates/melodia/tests/cover_generation.rs:130-186`);
@@ -154,7 +156,13 @@ Every production Rust file in the blast radius stays well under the 800-line cap
 
 **Gate:** fmt, clippy, test. **By hand:** the sidebar drag, double-click and fold behave as before; the sheet behaves as before.
 
+**Amended while implementing:**
+- `EdgeResizeHandle` takes `grows: GrowEdge` and `drawn-width` and reports through `resized(length)` / `reset()` rather than a two-way `width`, since the panel's width is 0 = default. A drag now starts from the width drawn, not the stored one.
+- Identifiers whose meaning Phase 2 changes kept their names until then, as `queue-sheet-up` did: the drop coalescer's `QUEUE_SHEET_OPEN` pair, `+QS` and the handles' `is_open`.
+
 ### Phase 2: The panel beside the content
+Status: implemented and passed by hand 2026-10-21, with small follow-ups still open. Its tests wait for Phase 8.
+
 1. **Mount `QueuePanel` after the content panel in the row**, with the width shape from decision 1.
    - **Tokens.** `Theme.queue-panel-{min,default,max}-w` start at 300 / 360 / 560 px, numbers to settle by hand. The sheet's card floor was 400 px (`queue-sheet.slint:169-179`), and rows must fit at the minimum.
    - **Default width.** `Queue.panel-width: 0px` means the default, so the default is spelled once in `Theme` and the double-click writes 0.
@@ -191,6 +199,16 @@ Every production Rust file in the blast radius stays well under the 800-line cap
 - Ctrl+A and Escape after clicking the queue and after clicking a list;
 - a locale with longer labels;
 - idle RSS with the panel open, against today's sheet open.
+
+**Amended while implementing:**
+- **`Queue.toggle()` is a callback with its one handler in Rust** (`queue_panel/lifecycle.rs`). Under Now Playing it has to close Now Playing, and `globals/queue.slint` importing `Nav` would break the rule that only the dispatchers import sibling globals. `close()` stays a Slint function.
+- **No `Queue.panel-dragging`.** The panel eases a float and multiplies its width by it, so an edge drag writes straight through and nothing needs the flag.
+- **`close()` also drops `keys-owned`**, so a panel opened again takes no keys until it is pressed.
+- **The focus regrab on `keys-owned` fires on the rising edge only.** On both edges it would steal focus from a field the user had just pressed.
+- **The panel paints no fill.** The shell's mantle shows through, the same colour with one fill fewer.
+- **The tooltip audit changed nothing.** The content panel's clip already sat inside the window's fit rect, so every host within half a pill of that edge was already end-aligned.
+- **The `queue-sheet-up` literal** lived in `crates/melodia/tests/card_selection.rs`, not the views file.
+- **The README's footprint rows keep the sheet's label**, as does `scripts/measure-footprint.py`, until they are measured again with the panel.
 
 ### Phase 3: Remembered, and the narrow window
 1. **Persistence.** `QueuePanelLayout` is written in `save_state_on_exit` beside the sidebar and hydrated beside `apply_sidebar_*` (`hydrate.rs:94-114`) before `app.show()`. A seeded open runs the lifecycle's open explicitly, since no `changed` fires on a seeded value. Older files load closed at the default width.
@@ -283,13 +301,11 @@ Lands as one commit: a row cannot host both mechanisms.
   - the filter's press arm;
   - `QueuePanelLayout` defaults and an older `settings.json`;
   - drop routing by position.
-- **Docs:**
-  - `ui-patterns.md`: Lists and playback `:605-686`, Covers `:904-1003`, Keyboard shortcuts `:1139-1157`;
-  - `desktop-shell.md`: the drop flow, and "discarded when neither the queue sheet nor a playlist is open";
-  - `slint-pitfalls.md`: the drag-pan entry naming `queue-sheet.slint`, and the stale `DragArea` claim deleted with `queue-row-item.slint:20-24`;
-  - the root `CLAUDE.md`'s queue-sheet mentions;
-  - `README.md`, wherever it describes the queue;
-  - `winit/README.md`.
+- **Docs.** Phases 1 and 2's half landed on 2026-10-21: the panel's three cross-tree facts and the keys in `ui-patterns.md`, the sheet's mentions across the rules, the root `CLAUDE.md` and `README.md`. Still open:
+  - `ui-patterns.md` and `slint-pitfalls.md` for the drag (Phase 5), including the stale `DragArea` claim that goes with `queue-row.slint:20-24`;
+  - `desktop-shell.md`'s drop flow, routed by position (Phase 7);
+  - `README.md`'s footprint rows, relabelled with `scripts/measure-footprint.py` when they are measured again;
+  - `winit/README.md` (Phase 7).
 
 ## Cross-cutting
 - **`settings.json` compatibility.** The new keys are `#[serde(default)]` (closed, default width), so any older file loads, and an older build ignores the keys.

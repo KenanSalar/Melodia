@@ -1,6 +1,6 @@
-//! [`PagedRows`] over the queue sheet's rows, and the row shape Up Next draws too.
+//! [`PagedRows`] over the queue panel's rows, and the row shape Up Next draws too.
 //!
-//! The queue holds ids, as long as the library at its longest, so the sheet fetches its rows by id
+//! The queue holds ids, as long as the library at its longest, so the panel fetches its rows by id
 //! like any other list that can hold the whole library. They come through the track-list
 //! projection, which carries the album, artist and genre ids the row menu's "Go to" entries need.
 
@@ -30,12 +30,12 @@ impl PagedRow for QueueRow {
     }
 }
 
-/// Fetches the rows the queue sheet asks for.
+/// Fetches the rows the queue panel asks for.
 pub fn fetcher(state: &AppState) -> impl Fn(RowRequest<QueueRow>) + 'static {
     fetch_by_id(state, convert)
 }
 
-/// The queue's `ids` with the rows of the [`window`] around `at`, so the sheet opens on text where
+/// The queue's `ids` with the rows of the [`window`] around `at`, so the panel opens on text where
 /// it seats the current track rather than on placeholders.
 pub async fn seed(state: &AppState, ids: Arc<[i64]>, at: usize) -> AppResult<Keyset<QueueRow>> {
     let read = ReadStamp::now();
@@ -50,7 +50,7 @@ pub fn convert(rows: &[RsTrackListRow]) -> Vec<(i64, QueueRow)> {
     rows.iter().map(|row| (row.id, to_queue_row(row, &mut pool))).collect()
 }
 
-/// One track as a queue row, unselected. Carries no cover: the sheet and Up Next each resolve
+/// One track as a queue row, unselected. Carries no cover: the panel and Up Next each resolve
 /// their own through their `request-cover`, which is what lets them share this while reading
 /// different cover tiers.
 pub fn to_queue_row(row: &RsTrackListRow, pool: &mut StringPool) -> QueueRow {

@@ -94,9 +94,9 @@ pub fn log_current(ui: &AppWindow) {
 
 /// Format the current view as a compact tag.
 ///
-/// Trailing markers: `+NP` = Now Playing full-screen, `+QS` = queue sheet. Both
-/// annotate the view underneath rather than replacing it, which is what makes
-/// "covered" and "left" readable apart in a log.
+/// Trailing markers: `+NP` = Now Playing full-screen, `+QP` = queue panel shown. Both
+/// annotate the view rather than replacing it, which is what makes "covered" and
+/// "left" readable apart in a log.
 pub fn format_view(ui: &AppWindow) -> String {
     let nav = ui.global::<Nav>();
     let nav_idx = nav.get_selected_index();
@@ -124,8 +124,8 @@ pub fn format_view(ui: &AppWindow) -> String {
     if nav.get_now_playing_open() {
         tag.push_str("+NP");
     }
-    if crate::ui::window_chrome::is_queue_sheet_open() {
-        tag.push_str("+QS");
+    if crate::ui::window_chrome::is_queue_panel_shown() {
+        tag.push_str("+QP");
     }
     tag
 }

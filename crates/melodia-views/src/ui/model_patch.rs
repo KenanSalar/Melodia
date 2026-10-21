@@ -4,7 +4,7 @@
 //! favorite/rating change into its visible rows the same way: walk the model, mutate
 //! the row that matters, write back only that one. This module owns that walk; the
 //! per-view `apply_row_*` wrappers keep only their `upgrade_in_event_loop` hop and
-//! the global they read. The two Songs lists, the four details and the queue sheet
+//! the global they read. The two Songs lists, the four details and the queue panel
 //! patch the row their [`PagedRows`](crate::ui::paged_rows::PagedRows) holds instead.
 
 use slint::{Model, ModelRc, VecModel};

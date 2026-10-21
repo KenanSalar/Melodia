@@ -36,7 +36,7 @@ mod resize_release;
 mod winit_filter;
 
 pub use drop_coalescer::{
-    is_playlist_detail_open, is_queue_sheet_open, set_current_playlist_id, set_queue_sheet_open,
+    is_playlist_detail_open, is_queue_panel_shown, set_current_playlist_id, set_queue_panel_shown,
 };
 
 use std::path::PathBuf;

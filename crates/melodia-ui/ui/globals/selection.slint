@@ -11,9 +11,9 @@ import { Browse, Tracks } from "tracks.slint";
 // chain asks once instead of importing ten globals to spell a ten-term `||` inside a key binding.
 // A dispatcher over siblings, `globals/dialog.slint`'s shape, and a leaf: nothing imports this.
 //
-// **The queue is deliberately absent.** Its sheet owns Escape for as long as it is up and already
-// clears its own selection on the first press; joining here would put a second arm in front of
-// that one and leave the sheet's dead.
+// **The queue is deliberately absent.** Its picks are Escape's only while the queue was the last
+// thing pressed, which its own arm in `shortcut-scope.slint` asks; joining here would clear them
+// wherever Escape landed.
 export global Selection {
     // Every surface tests its own set, because there is no shared one — the card grids share
     // `CardSelection` keyed by scope, the nine lists each keep their own `selected-ids`.

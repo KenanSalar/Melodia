@@ -150,9 +150,9 @@ pub async fn get_track_paths_by_ids(
     rows_in_id_order(db, "id, file_path", ids, |&(id, _): &(i64, String)| id).await
 }
 
-/// Fetch `TrackLinks` projections by IDs, preserving the input order. The queue sheet renders from
-/// `TrackSummary`, which carries no foreign keys, so its context menu resolves them here rather
-/// than widening the projection the player and `queue.json` share.
+/// Fetch `TrackLinks` projections by IDs, preserving the input order. The now-playing bar renders
+/// from `TrackSummary`, which carries no foreign keys, so its context menu resolves them here
+/// rather than widening the projection the player and `queue.json` share.
 pub async fn get_track_links_by_ids(
     db: &DbPool,
     ids: &[i64],

@@ -274,12 +274,24 @@ export component AppWindow inherits Window {
         shortcut-scope.grab-focus();
     }
 
-    // The sheet is the odd one out: permanent, mounting nothing, only animating in. But its Esc /
-    // Ctrl+A live in the scope and nothing moves focus when it opens — the bar button and the
-    // overflow entry are both TouchArea clicks — so a filter SearchBar swallows the `a`.
-    property <bool> watched-queue-open: Queue.open;
-    changed watched-queue-open => {
-        shortcut-scope.grab-focus();
+    // Here rather than in the panel, which the miniplayer unmounts: a mirror there would miss the
+    // change, and Rust would keep rows nobody can see. `shown` is written before `shown-changed`
+    // fires, which the panel's own seat counts on.
+    property <bool> queue-shown: Queue.open && !mini-switch.render-active && !Nav.now-playing-open;
+    changed queue-shown => {
+        Queue.shown = self.queue-shown;
+        Queue.shown-changed(self.queue-shown);
+    }
+
+    // The panel is the odd one out: it unmounts nothing, but nothing moves focus onto the scope
+    // when a press makes the queue's keys live — a row is a TouchArea — so a filter SearchBar
+    // would swallow the `a`. **On the rising edge only**: the press that takes the keys away is
+    // one Slint is about to hand a field, and a grab here would land after it.
+    property <bool> watched-queue-keys: Queue.keys-owned;
+    changed watched-queue-keys => {
+        if (self.watched-queue-keys) {
+            shortcut-scope.grab-focus();
+        }
     }
 
     // The welcome card's buttons can hold focus, and Slint doesn't hand it back to an ancestor
@@ -593,18 +605,8 @@ export component AppWindow inherits Window {
                         NowPlayingView { width: 100%; height: 100%; }
                     }
 
-                    // Inside the content panel so its backdrop and slide stay off the sidebar
-                    // and the bar, after the view branches so it stacks above them. Always
-                    // rendered so the close animation can play; the panel's clip hides it.
-                    QueuePanel {
-                        x: 0;
-                        y: 0;
-                        width: parent.width;
-                        height: parent.height;
-                    }
-
-                    // Last, so the corners and the border sit over every view and the sheet. The
-                    // shell's ground is all that shows around the panel, so it's the mask colour.
+                    // Last, so the corners and the border sit over every view. The shell's
+                    // ground is all that shows around the panel, so it's the mask colour.
                     // The radius is the one the mantle shell rounds with when frameless:
                     // concentric arcs under the custom titlebar, the host's corners under the
                     // native one.
@@ -619,6 +621,9 @@ export component AppWindow inherits Window {
                         ground: WindowChrome.mantle;
                     }
                 }
+
+                // Mounted whether shown or not, so it can ease out; hidden, it takes no width.
+                QueuePanel {}
             }
 
             NowPlayingBar {}

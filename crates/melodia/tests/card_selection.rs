@@ -47,8 +47,8 @@ const LONE_ROW_MOUNTS: [&str; 5] = [
     "views/recently-played-view.slint",
 ];
 
-/// The queue sheet owns Escape for as long as it is up and clears its own selection on the first
-/// press, so joining the dispatcher would put a second arm in front of that one.
+/// The queue's picks are Escape's only while the queue was the last thing pressed, which its own
+/// arm asks, so joining the dispatcher would clear them wherever Escape landed.
 const NOT_IN_THE_DISPATCHER: &str = "Queue";
 
 fn wiring_sources() -> Vec<(String, String)> {
@@ -225,7 +225,7 @@ fn a_selection_press_is_the_last_arm_of_the_escape_chain() {
     let selection = at("Selection.any-live()");
     assert!(selection.is_some(), "the Escape chain no longer reaches a live selection at all");
 
-    for earlier in ["Dialog.open", "Onboarding.open", "queue-sheet-up", "Nav.now-playing-open"] {
+    for earlier in ["Dialog.open", "Onboarding.open", "queue-keys", "Nav.now-playing-open"] {
         let arm = at(earlier);
         assert!(arm.is_some(), "the Escape chain no longer carries an arm for {earlier}");
         assert!(arm < selection, "the selection arm has moved ahead of {earlier}");

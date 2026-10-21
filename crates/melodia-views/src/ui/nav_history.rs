@@ -32,7 +32,7 @@ use crate::ui::radio::NAV_RADIO;
 use crate::ui::view_tag;
 use melodia_app::state::AppState;
 use melodia_core::error::{AppResult, describe};
-use melodia_ui::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Queue, Radio};
+use melodia_ui::{AppWindow, Dialog, MyLibrary, Nav, NavEnterFrom, Radio};
 
 const HISTORY_CAP: usize = 24;
 
@@ -503,13 +503,12 @@ fn land_pending(pending: Option<PendingNav>, weak: &Weak<AppWindow>) {
     }
 }
 
-/// Whether Now Playing, the queue sheet or a modal dialog is up. Mouse-4/5 gate on it:
-/// overlays have their own input contexts, Esc and F closing them, and absorbing
-/// browser-style nav while one is up would surprise the user.
+/// Whether Now Playing or a modal dialog is up. Mouse-4/5 gate on it: overlays have
+/// their own input contexts, Esc and F closing them, and absorbing browser-style nav while
+/// one is up would surprise the user. The queue panel is not one, sitting beside the page
+/// it would navigate.
 pub fn overlay_open(ui: &AppWindow) -> bool {
-    ui.global::<Nav>().get_now_playing_open()
-        || ui.global::<Queue>().get_open()
-        || ui.global::<Dialog>().get_open()
+    ui.global::<Nav>().get_now_playing_open() || ui.global::<Dialog>().get_open()
 }
 
 /// Per-section UI-handle registry, filled at startup by each `wire_*` once its

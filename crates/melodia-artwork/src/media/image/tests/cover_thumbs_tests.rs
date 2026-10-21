@@ -440,7 +440,7 @@ fn a_shrink_does_not_reorder_the_tier() -> TestResult {
 
 // --- A tier backed by another ---
 
-/// The queue sheet draws mostly what the row tier already holds, so a copy of each buffer is the
+/// The queue panel draws mostly what the row tier already holds, so a copy of each buffer is the
 /// memory the backing exists to save.
 #[test]
 fn a_backed_tier_shares_the_backings_buffer() -> TestResult {
@@ -455,7 +455,7 @@ fn a_backed_tier_shares_the_backings_buffer() -> TestResult {
     Ok(())
 }
 
-/// A stale entry is the backing's to replace on its own next lookup. Borrowed, the sheet would
+/// A stale entry is the backing's to replace on its own next lookup. Borrowed, the panel would
 /// draw a cover at a size the window no longer asks for.
 #[test]
 fn a_backed_tier_decodes_rather_than_borrow_an_entry_at_a_stale_size() -> TestResult {
@@ -489,7 +489,7 @@ fn a_backed_tier_draws_at_the_backings_size_whatever_it_is_told() -> TestResult 
     Ok(())
 }
 
-/// The queue sheet mounts its rows before its tier is warm and may not decode there, so a borrow
+/// The queue panel mounts its rows before its tier is warm and may not decode there, so a borrow
 /// is the only way those rows open on a cover rather than the placeholder.
 #[test]
 fn a_cache_only_lookup_on_a_backed_tier_borrows_on_a_miss() -> TestResult {

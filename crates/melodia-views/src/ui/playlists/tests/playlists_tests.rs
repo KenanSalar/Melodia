@@ -17,7 +17,7 @@ const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
 /// A row drag and the list's own drag-pan are one gesture, and whichever element
 /// owns it the other gets nothing: a pan intercepts the row's grab mid-drag, so
 /// the drop never commits. The list around the rows opts out, and so does the
-/// queue sheet's. Nothing else catches a regression here — it compiles,
+/// queue panel's. Nothing else catches a regression here — it compiles,
 /// reads clean, and only misbehaves on a list long enough to scroll.
 ///
 /// The value was `!reorder-enabled`, which reads as leaving a `true` default alone
@@ -36,7 +36,7 @@ fn every_draggable_list_opts_out_of_drag_panning() {
     );
     assert!(
         code_tokens(QUEUE_PANEL).contains("mouse-drag-pan-enabled: false"),
-        "every row in the queue sheet is draggable, so its ListView never gets the gesture"
+        "every row in the queue panel is draggable, so its ListView never gets the gesture"
     );
 }
 

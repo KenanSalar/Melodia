@@ -1,4 +1,4 @@
-//! The sheet's picks over a queue holding a track twice. Picks are by track, as on every other
+//! The panel's picks over a queue holding a track twice. Picks are by track, as on every other
 //! list, so both of its rows are picked and both are what Remove takes.
 
 use std::collections::HashSet;
@@ -11,7 +11,7 @@ use super::picked_positions;
 use crate::ui::paged_rows::queue_rows::QueueRows;
 use crate::ui::paged_rows::{Keyset, ReadStamp};
 
-/// The sheet over a queue playing 1, 2, 1, 3, no row fetched.
+/// The panel over a queue playing 1, 2, 1, 3, no row fetched.
 fn panel_over_a_repeat() -> Rc<QueueRows> {
     let rows = QueueRows::new(|_request| {});
     rows.show(Keyset { ids: Arc::from([1, 2, 1, 3]), seed: Vec::new(), read: ReadStamp::now() });

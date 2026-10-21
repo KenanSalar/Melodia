@@ -1,18 +1,15 @@
 import { QueueRow } from "../models.slint";
 
-// The two surfaces rendering the play queue — the bottom-sheet inspector and the Up Next
+// The two surfaces rendering the play queue — the panel beside the content and the Up Next
 // list inside Now Playing. Same rows, deliberately separate lifecycles.
 
-// The bottom-sheet inspector. Rust owns the `rows` model and writes both it and
-// `current-index` from a subscriber on the same `sinks.queue` watch `Player.queue` reads.
+// The queue panel. Rust owns the `rows` model and writes both it and `current-index` from a
+// subscriber on the same `sinks.queue` watch `Player.queue` reads.
 //
 // **The drag plumbing is bespoke rather than `DragArea` / `DropArea`** — `queue-row.slint`
-// says why. The sheet flips `drag-source`/`drop-slot` from row-level `pointer-event` handlers and
+// says why. The panel flips `drag-source`/`drop-slot` from row-level `pointer-event` handlers and
 // fires `reorder` on pointer-up only; both clear out from under a drag the pressed row can no
-// longer finish — Rust on a `rows` rebuild, the sheet on either `open` transition and at mount.
-//
-// `open` is mirrored to a Rust atomic through `open-changed`, which the winit `DroppedFile` filter
-// consults before forwarding paths; a global can't watch its own property.
+// longer finish — Rust on a `rows` rebuild, the panel on either `shown` transition and at mount.
 export global Queue {
     in-out property <[QueueRow]> rows;
     // -1 when nothing is playing. Rows derive `playing: idx == current-index`, so the
@@ -26,24 +23,36 @@ export global Queue {
     // undeduped list would add that track to a playlist twice. The menu counts rows and acts on
     // ids, which is why both properties exist.
     in property <[int]> selected-ids;
-    // The close animation outlives `open == false`, so the sheet never gates on `if Queue.open`.
+    // What the user asked for. Whether the panel is on screen is `shown`.
     in-out property <bool> open;
+    // `open`, less what covers the panel: Now Playing, and the miniplayer, which unmounts it.
+    // Written only by `AppWindow`, a global being unable to watch its own properties; the rows,
+    // the covers and the file drop follow it through `shown-changed`.
+    in-out property <bool> shown;
+    // 0 is the default width, so changing `Theme.queue-panel-default-w` reaches everyone who never
+    // dragged the edge.
+    in-out property <length> panel-width: 0px;
+    // Whether the pointer is over the panel, for the winit filter to read at a press.
+    in-out property <bool> pointer-in;
+    // The panel was the last thing pressed, so Escape and Ctrl+A are its. Written by the winit
+    // filter, which sees a press before any element can take it.
+    in-out property <bool> keys-owned;
     // -1 when idle, else the play-order index being dragged.
     in-out property <int> drag-source: -1;
     // Where the dragged row would land, in `[0, rows.length]`. **Slot semantics, not row-index**:
     // slot K is the *gap* between rows K-1 and K, which is what makes the two neighbouring slots
-    // recognisable no-ops the sheet hides. -1 is no candidate.
+    // recognisable no-ops the panel hides. -1 is no candidate.
     in-out property <int> drop-slot: -1;
     // Mirrored from Rust on an OS file-hover for the drop banner, gated in markup on
-    // `is-drop-hovered && open`. Wayland needs the vendored winit patch.
+    // `is-drop-hovered && shown`. Wayland needs the vendored winit patch.
     in property <bool> is-drop-hovered: false;
 
-    // Lazy row cover against the sheet's *own* tier, so closing releases every buffer. That tier
+    // Lazy row cover against the panel's *own* tier, so hiding it releases every buffer. That tier
     // borrows what the row tier already holds, so a cover the track lists draw is one buffer.
     // **`generation` does two jobs**: reading it makes the binding depend on the counter, a `pure`
     // callback's result being cached until a dependency is dirtied; its *value* is whether the tier
-    // is warm. The sheet can't prewarm-then-set, its rows landing before the prewarm does, so at 0
-    // the lookup is cache-only. Closing rewinds to 0.
+    // is warm. The panel can't prewarm-then-set, its rows landing before the prewarm does, so at 0
+    // the lookup is cache-only. Hiding rewinds to 0.
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 
@@ -54,14 +63,13 @@ export global Queue {
     callback remove-selected();
     callback skip-to(int /*play_order_index*/);
     callback clear-queue();
-    // Close-side effects, so the sheet can close without coupling to the `open-changed` atomic.
-    callback close();
-    // The close triple every dismiss site spells. A `public function` rather than a body on
-    // `close()`: that callback has a single handler slot, which Rust's `on_close` claims, so a
-    // default body here would be installed at construction and then silently replaced.
-    public function dismiss() {
-        self.close();
+    // The bar's button, its overflow entry and Q. Rust's, since a press under Now Playing closes
+    // it to bring the panel up, and `Nav` is not this file's to import.
+    callback toggle();
+    // Picks and the keys go with the panel, so neither is waiting on one nobody can see.
+    public function close() {
         self.open = false;
+        self.keys-owned = false;
         self.clear-selection();
     }
     // Plain replaces, ctrl toggles, shift extends; the anchor lives in Rust.
@@ -75,7 +83,7 @@ export global Queue {
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
 
-    callback open-changed(bool);
+    callback shown-changed(bool);
 }
 
 // The "Up Next" list inside Now Playing. Its own global rather than more fields on the

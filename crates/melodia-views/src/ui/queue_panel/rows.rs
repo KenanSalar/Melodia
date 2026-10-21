@@ -1,5 +1,5 @@
 //! The `sinks.queue` and `library_changed` subscriber, and what showing a new queue owes the
-//! sheet's picks and drag state.
+//! panel's picks and drag state.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -17,18 +17,18 @@ use melodia_app::state::AppState;
 use melodia_engine::player::engine::state::QueueViewModel;
 use melodia_ui::{AppWindow, Queue};
 
-/// Follow the queue and the library while the sheet is open: each queue publish shows the queue,
-/// and each library tick reads the rows the sheet holds again.
+/// Follow the queue and the library while the panel is shown: each queue publish shows the queue,
+/// and each library tick reads the rows the panel holds again.
 ///
-/// Gated on the sheet being on screen: closed, nobody sees the rows and the teardown has released
-/// them, so following would fetch rows nothing reads. The next `on_open_changed(true)` shows the
+/// Gated on the panel being on screen: hidden, nobody sees the rows and the teardown has released
+/// them, so following would fetch rows nothing reads. The next `on_shown_changed(true)` shows the
 /// queue from `PlayerState`.
 pub(super) fn spawn_queue_rows_subscriber(
     ui: &AppWindow,
     state: &AppState,
     rows: Rc<QueueRows>,
     anchor: Rc<Cell<i32>>,
-    is_open: Arc<AtomicBool>,
+    shown: Arc<AtomicBool>,
 ) -> Result<(), slint::EventLoopError> {
     let weak = ui.as_weak();
     let mut queue_rx = state.sinks.queue.subscribe();
@@ -49,7 +49,7 @@ pub(super) fn spawn_queue_rows_subscriber(
                     false
                 }
             };
-            if !is_open.load(Ordering::Relaxed) {
+            if !shown.load(Ordering::Relaxed) {
                 continue;
             }
             let Some(ui) = weak.upgrade() else { break };
@@ -67,10 +67,10 @@ pub(super) fn spawn_queue_rows_subscriber(
     Ok(())
 }
 
-/// Show the queue `qvm` describes and point the sheet at its current row.
+/// Show the queue `qvm` describes and point the panel at its current row.
 ///
 /// The same ids in the same order repaint nothing, which is every track change and the publish
-/// that follows a drag the sheet already moved. Anything else resets the list, so a drag still in
+/// that follows a drag the panel already moved. Anything else resets the list, so a drag still in
 /// flight is aborted (its indices no longer describe the queue, and the reset destroys the row
 /// holding the pointer grab, which left set keeps the source ghosted and the drop line stranded),
 /// and picks of tracks that left the queue go.
@@ -105,7 +105,7 @@ fn keep_picks_within_queue(ui: &AppWindow, rows: &QueueRows, anchor: &Cell<i32>)
     apply_picks(ui, rows, &picked);
 }
 
-/// Read every row the sheet holds again, those on screen first, after a library change that may
+/// Read every row the panel holds again, those on screen first, after a library change that may
 /// have rewritten any of them. The ids are the queue's rather than a query's, so the stamp they
 /// are read again against is now.
 fn reread_rows(rows: &QueueRows) {

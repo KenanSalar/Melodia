@@ -28,7 +28,7 @@ pub(super) fn wire_callbacks(
     wire_selection(ui, rows, anchor);
 }
 
-/// The five rows that only ask the engine for something, plus the sheet's reserved close hook.
+/// The five rows that only ask the engine for something.
 ///
 /// None of them reports anything back: the mutation lands on `sinks.queue` and the subscriber
 /// shows it from there.
@@ -118,19 +118,13 @@ fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
             });
         });
     }
-
-    // Reserved hook — the sheet's `Queue.close()` invocation lets us
-    // attach future side effects without coupling to the open-changed
-    // atomic. Slint also clears selection synchronously from the same
-    // event handler, so this stays empty.
-    queue.on_close(|| {});
 }
 
 /// The heart and the star strip, from a row or from the menu: the write, then the rows it covers
 /// patched, as on every track list.
 ///
 /// Each write reaches the playing track and bumps `library_changed`, which re-reads every row the
-/// sheet holds and the records the player starts from. The patch is what moves the row now rather
+/// panel holds and the records the player starts from. The patch is what moves the row now rather
 /// than a fetch later, and the heart's is also what its next click reads, which would otherwise
 /// compute `!false` again and write nothing.
 fn wire_row_flags(ui: &AppWindow, state: &AppState) {

@@ -117,6 +117,8 @@ this file is what builds, looks right, and is wrong.
 - **Drag handles inside resized element need absolute coords.** Snapshot
   `start_abs = self.absolute-position.x + self.pressed-x` on `down`, then
   `parent.width = clamp(start_w + (self.absolute-position.x + self.mouse-x - start_abs), ...)`.
+  `components/edge-resize-handle.slint` is the one that does it, mounted by the sidebar and the
+  queue panel; a new resizable edge mounts it too.
 
 - **Material Symbols glyphs need a collapsed line-box.** `Text` defaults to ~1.2× `font-size`;
   pin inside fixed `icon-size × icon-size` Rectangle. `MaterialIcon` does this.
@@ -206,7 +208,7 @@ this file is what builds, looks right, and is wrong.
   indicator paints either. It still reads as intermittent, both escapes being real: a list shorter
   than its viewport can't flick, and a press held past 500 ms before moving is never intercepted.
   Both draggable lists opt out outright, `draggable-track-list.slint`'s `inner-list` and
-  `queue-sheet.slint`'s, pinned by
+  `queue-panel.slint`'s, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
   under a pointer; the click-to-act grids and lists are pinned by `crates/melodia/tests/scrollbars.rs`.
   **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
@@ -304,7 +306,7 @@ this file is what builds, looks right, and is wrong.
     row stops at whatever max its contents report. Self-align only where every stretched sibling's
     max is unbounded: a `Text` or `TextInput`, a `Rectangle` whose children are all `if`s, a layout
     of such cells. Otherwise the row stays on the plain path and keeps its wrappers
-    (`queue-row-item.slint`, whose duration cell reports the hover heart's 26 px).
+    (`queue-row.slint`, whose duration cell reports the hover heart's 26 px).
   - **An explicit `x`/`y` on a cell is a build error**, the solve owning every position.
   - **A removed wrapper can cap the row.** A row's cross-axis info ignores `cross-axis-alignment`
     and takes the least of its cells' maxes, and a wrapper whose own `alignment` wasn't `stretch`

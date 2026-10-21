@@ -147,7 +147,7 @@ where
     playlists_ui.detail.set_id(playlist_id);
 
     // Inform the OS file-drop coalescer that this playlist is the current drop target — used only
-    // when the Queue Sheet is closed, the queue taking priority when both are open. A smart
+    // when the queue panel is hidden, the queue taking priority when both are up. A smart
     // playlist's membership is derived, so it registers none and drops fall through to import.
     crate::ui::window_chrome::set_current_playlist_id(if detail.is_smart {
         -1

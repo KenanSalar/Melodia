@@ -6,7 +6,7 @@
 //! was a section leave releasing its own. That is what [`hand_back_covers`] replaces: the leave
 //! hands back the bytes without handing back the picture.
 //!
-//! Search's two card strips and the queue sheet keep private tiers, theirs decoding at sizes of
+//! Search's two card strips and the queue panel keep private tiers, theirs decoding at sizes of
 //! their own. Radio's logo tier is private for a different reason and argues it at
 //! `ui::radio::covers`: its card reads the decoded extent, so a proxy would move the layout.
 //!
@@ -211,13 +211,15 @@ const MAX_CARD_W: u32 = 224;
 /// The pitch `GridGeometry` packs columns at.
 const CARD_PITCH_W: u32 = MIN_CARD_W + GAP;
 
-/// What the window keeps before the grid's body starts: the widest the sidebar can be dragged
-/// (`Theme.sidebar-max-w`) plus the page's `pad-lg` at both edges.
+/// What the window keeps beside the grid's body: the widest the sidebar can be dragged
+/// (`Theme.sidebar-max-w`), the widest the queue panel can (`Theme.queue-panel-max-w`), and the
+/// page's `pad-lg` at both edges.
 ///
-/// Subtracted rather than ignored, the sidebar being the user's to drag while only the window is
-/// measurable from here. Assuming the *widest* one is the safe direction: over-subtracting costs
-/// a tier one step too large, under-subtracting puts the cards on an upscale.
-const BODY_CHROME_W: u32 = 400 + 2 * 16;
+/// Subtracted rather than ignored, both being the user's to drag and to open while only the
+/// window is measurable from here. Assuming the *widest*, panel shown, is the safe direction:
+/// over-subtracting costs a tier one step too large, under-subtracting puts the cards on an
+/// upscale.
+const BODY_CHROME_W: u32 = 400 + 560 + 2 * 16;
 
 /// The size a tier is built at, before any geometry is known.
 ///

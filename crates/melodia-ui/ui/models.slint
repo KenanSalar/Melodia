@@ -299,7 +299,7 @@ export struct QueueVm {
     has_previous: bool,
 }
 
-// Fetched by id as the sheet scrolls (`ui::paged_rows::queue_rows`). **`is_current` is deliberately
+// Fetched by id as the panel scrolls (`ui::paged_rows::queue_rows`). **`is_current` is deliberately
 // not a field** — the highlight comes off `Queue.current-index`, so one integer write repaints the
 // two affected rows instead of rewriting the whole model. `selected` rides on the row for the
 // `TrackListRow` reason: the model stamps it on every row it hands out, placeholders included, so

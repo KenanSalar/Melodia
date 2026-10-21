@@ -10,7 +10,7 @@ import { TrackCopyFields } from "../track-copy-items.slint";
 //
 // **The host says where; this keeps the menu.** A row hands over where the right-click landed
 // through `show-at`, which stores it: an open popup follows its `x`/`y`, so an anchor bound to the
-// row's pointer would drag the menu after it. Three hosts: `TrackListRowItem`, the queue sheet's
+// row's pointer would drag the menu after it. Three hosts: `TrackListRowItem`, the queue panel's
 // `QueueRowItem` and the now-playing bar's track card, which is why the entries live here rather
 // than inline in the first.
 //
@@ -103,7 +103,7 @@ export component TrackContextMenu inherits Rectangle {
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-favorite([int] /*track_ids*/, bool /*new_state*/);
-    // Playlist Detail removes from the open playlist, the queue sheet from the queue.
+    // Playlist Detail removes from the open playlist, the queue panel from the queue.
     callback request-remove([int] /*track_ids*/);
     // Take every displayed row, and drop the whole set. No payload either way: the host owns
     // the set, and the queue's is a different shape from a track list's.

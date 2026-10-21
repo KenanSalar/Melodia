@@ -221,7 +221,7 @@ The other way paths arrive from outside, and the one that can arrive before ther
 `main()`'s ordering constraints are the root `CLAUDE.md`'s; this is the shape.
 
 - **Two verbs, and they are not one.** A drop appends (`queue_import_files`, routed by
-  `drop_coalescer`, *discarded* when neither the queue sheet nor a playlist is open); an open
+  `drop_coalescer`, *discarded* when the queue panel is hidden and no playlist is open); an open
   **replaces the queue and plays** (`queue::open_files`). They share `sort_for_queue` and nothing
   else. **Neither existing fn was the whole answer**: `queue_import_files` never sets
   `current_index`, and `player_play_tracks` wants ids in order where

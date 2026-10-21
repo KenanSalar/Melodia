@@ -605,7 +605,7 @@ three components that answer it, and each argues its geometry at its own file.
 ### Lists and playback
 
 - **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
-  place its entries are mounted.** Three hosts: `TrackListRowItem`, the queue sheet's
+  place its entries are mounted.** Three hosts: `TrackListRowItem`, the queue panel's
   `QueueRowItem` and the now-playing bar's track card. It owns the entries, the `multi-active` gate
   (this row selected *and* more than one selected, so a right-click on an unselected row falls back
   to that row alone) and the `effective-ids` every handler reads; the host only says where, through
@@ -619,12 +619,13 @@ three components that answer it, and each argues its geometry at its own file.
   rather than a property.
   **The bar, the one host with no list row, reads the "Go to" ids through `ui::track_links`**,
   `TrackSummary` carrying no foreign keys: onto `Player.track-{album,artist,genre}-id` per track
-  change and again per library tick, a retag keeping the id. The queue sheet's rows carry theirs
+  change and again per library tick, a retag keeping the id. The queue panel's rows carry theirs
   from the track-list projection, as a list row does.
   **"Go to" calls `Nav.go-to-*` straight, as Open Containing Folder calls `Nav`**, with no host
   forwarding: the origin a drill records is read off where the user stands, so there was nothing
-  per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands, closing
-  Now Playing and dismissing the queue sheet, the bar staying reachable over both.
+  per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands by closing
+  Now Playing, the bar staying reachable over it. The queue panel stays open, sitting beside the
+  page rather than over it.
 
 - **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
@@ -666,7 +667,7 @@ three components that answer it, and each argues its geometry at its own file.
     being picked by a side the width decides.
   - **An item menu's Copy acts on the effective set, one line per item, in the order handed over**, never
     re-sorted: on a list or grid that is the selection's pick order (a range in display order, a
-    ctrl-click appended), so it matches what Play queues, and on the queue sheet it is queue order,
+    ctrl-click appended), so it matches what Play queues, and on the queue panel it is queue order,
     the set being read back off its rows. An item without the field adds no line. Why line breaks
     and never a space is `library::clipboard`'s. Menus pass ids to `CopyActions` and Rust resolves
     the text there; stations copy through `Radio.copy-stations` by `select_key`, resolving against
@@ -680,7 +681,7 @@ three components that answer it, and each argues its geometry at its own file.
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and
   its module doc argues the window, the one fetch in flight and the seed a load fetches where the
   list is scrolled. Both Songs tabs and the four details are six of them, all
-  `track_rows::TrackRows`. The queue sheet is the seventh, a `queue_rows::QueueRows` over the ids
+  `track_rows::TrackRows`. The queue panel is the seventh, a `queue_rows::QueueRows` over the ids
   the engine publishes, and its picks are by track as every other list's are, so a track queued
   twice is picked, counted and removed as both rows. A favourite or rating change patches the
   cached row, where the `VecModel` lists go through `model_patch`; the `list_selection` helpers
@@ -690,6 +691,24 @@ three components that answer it, and each argues its geometry at its own file.
   `card_grid`: each states only where its query comes from, when a load may still land and what it
   writes beside the rows, and the four details do it through one impl over `TrackDetail`. A track
   list over another scope implements `PagedTrackList` rather than growing a second load path.
+
+- **The queue panel sits after the content panel in the shell's row**, and three things about it
+  reach across the two trees.
+  - **`Queue.shown` is `open` less what covers the panel**: Now Playing, and the miniplayer, which
+    unmounts it. It is computed and written on the `AppWindow` root alone, a global being unable to
+    watch its own properties and a mirror inside the panel missing the miniplayer swap. Rust's rows,
+    the private cover tier and the file-drop route all follow it through `shown-changed`, so a
+    hidden panel holds nothing past `lifecycle::TEARDOWN_DELAY`, whatever hid it. The root writes
+    `shown` before it fires `shown-changed`, which is what lets the panel's seat read the playing
+    index Rust has just written.
+  - **`Queue.toggle()` is Rust's** (`ui::queue_panel::lifecycle`), the one path the bar, its
+    overflow entry and Q share. Under Now Playing the panel is open but stepped aside, so a press
+    closes Now Playing to bring it back, and `globals/queue.slint` importing `Nav` would break the
+    rule that only the dispatchers import sibling globals. `Queue.close()` needs nothing outside
+    the global and stays a Slint function.
+  - **Its inner edge is `components/edge-resize-handle.slint`'s `EdgeResizeHandle`, and so is the
+    sidebar's.** A third resizable side mounts it with its own `grows` rather than copying the
+    absolute-coordinate drag.
 
 - **A track's title and its marks are `components/track-list/track-title.slint`'s `TrackTitle`**:
   the heart a favourite keeps up, and the star strip the row reveals on hover. Track rows and queue
@@ -901,7 +920,7 @@ three components that answer it, and each argues its geometry at its own file.
   bought nothing but a section leave releasing its own, which is what made every re-entry cold. A module singleton rather than a
   `ViewCtx` field, there being exactly one of it and no view owning it — the shape
   `ui::nav_history::nav()` takes. **The tiers that stay private are private on decode size**:
-  Search's two card strips and the row tier. Two are private on other grounds: the queue sheet's,
+  Search's two card strips and the row tier. Two are private on other grounds: the queue panel's,
   on lifetime (the `QueueRow` entry below), and Radio's logo tier, below.
 
 - **A leave hands the pixels back and keeps the picture.** `grid_prewarm::hand_back_covers` shrinks
@@ -976,7 +995,7 @@ three components that answer it, and each argues its geometry at its own file.
     calling thread" is a rule about the *uncapped* surfaces: grids, and the shared row tier.
 
 - **`QueueRow` goes through two globals rather than `RowCovers`**, each wanting a different tier:
-  the queue sheet's *private* `CoverThumbs` (so closing it drops every buffer without yanking
+  the queue panel's *private* `CoverThumbs` (so hiding it drops every buffer without yanking
   covers the track lists still need) and the shared row tier. **The private one is
   `CoverThumbs::backed_by` the shared one**: a miss borrows the row tier's buffer before decoding,
   and its size is the row tier's, retunes included, so a cover both draw is one allocation. That
@@ -998,7 +1017,7 @@ three components that answer it, and each argues its geometry at its own file.
     curated pages' fetch-and-apply, the `mark_covers_warm` / `repaint_covers` split, and the `bool`
     every `prewarm_tab_covers` returned.
   - **Two surfaces still gate on the value, and both hold a tier that really is released**: the
-    queue sheet's **open**, whose private tier is dropped on close, and Radio's leave.
+    queue panel's **show**, whose private tier is dropped once it hides, and Radio's leave.
     There `0` still means cold, the lookup still answers cache-only, and the rewind still sits
     beside the clear. `radio::covers::logo_cover` is that branch's one remaining home.
   - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from
@@ -1066,7 +1085,7 @@ three components that answer it, and each argues its geometry at its own file.
   on a wide one. A tier spelling its own size is the thing to reach for this instead of. Needs no
   winit round trip, the scale factor being Slint's own, and shares the cap's zero-extent bail.
   `cover_thumbs::row_cover_size` is the row tier's twin, applied in the same `display-changed`
-  retune. The queue sheet's tier takes the row tier's size through its backing rather than being
+  retune. The queue panel's tier takes the row tier's size through its backing rather than being
   wired a second time.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
@@ -1143,18 +1162,27 @@ three components that answer it, and each argues its geometry at its own file.
     the focused item is destroyed, so a view unmounting with focus inside it leaves shortcuts dead
     until the next click. Nine are one per branch selector of an `if` chain that mounts a view —
     the same reason `CompositeScroll.reset()` needs its five, so a new always-mounted mirror
-    unmounting a *composite* view owes both (this set is the wider). The tenth, `Queue.open`, is
-    not about destruction: the sheet is permanent and mounts nothing, but *nothing else moves focus
-    onto it*, so without the grab a filter `SearchBar` keeps the keyboard and eats the `a`.
-  - Non-Esc gates on `!Dialog.open`; typed keys in TextInputs never reach root. The three queue
-    bindings are mini-gated — the sheet doesn't exist in miniplayer mode, and arming `Queue.open`
-    with no mounted mirror to fire `open-changed` remounts it rows-less.
-  - **`ShortcutScope` is the only `FocusScope` in the tree, and the queue sheet is why that's worth
-    stating.** A `FocusScope` takes focus on **mouse press**, never on mount, so the sheet's own
-    nested scope left Esc and Ctrl+A dead on a sheet opened with `Q`. Both sit at the root now,
-    gated on `queue-sheet-up` (`Queue.open && !MiniPlayer.active`, the flag alone surviving the
-    miniplayer swap), which also fixes the priority — Esc reaches the *dialog* first. A second
-    scope reintroduces all three problems; put new key handling here.
+    unmounting a *composite* view owes both (this set is the wider). The tenth,
+    `Queue.keys-owned`, is not about destruction: the queue panel mounts nothing, but *nothing
+    moves focus onto the scope* when a press hands the queue its keys, so without the grab a filter
+    `SearchBar` keeps the keyboard and eats the `a`. **It grabs on the rising edge only**: the
+    press that takes the keys away is one Slint is about to hand a field, and a grab there lands
+    after it.
+  - Non-Esc gates on `!Dialog.open`; typed keys in TextInputs never reach root. Q is mini-gated,
+    the miniplayer having no queue to show.
+  - **`ShortcutScope` is the only `FocusScope` in the tree, and the queue is why that's worth
+    stating.** A `FocusScope` takes focus on **mouse press**, never on mount, so the old sheet's
+    nested scope left Esc and Ctrl+A dead on a sheet opened with `Q`. Both sit at the root, gated
+    on `queue-keys` (`Queue.shown && Queue.keys-owned`), which also fixes the priority: Esc
+    reaches the *dialog* first. A second scope reintroduces all three problems; put new key
+    handling here.
+  - **Whether Esc and Ctrl+A are the queue's is decided at the press, in the winit filter.** The
+    panel sits beside the page, so its keys are live only while it was the last thing pressed. A
+    hover sentinel round its content publishes `Queue.pointer-in`, and
+    `winit_filter::claim_queue_keys` copies that into `Queue.keys-owned` on every press, ahead of
+    Slint's dispatch. Slint alone can't answer it: a `TouchArea` never sees a press a child took,
+    and a nested `FocusScope` is the bullet above. With the keys, Esc clears the queue's picks and
+    never closes the panel; without picks it falls through to the arms below.
 
 - **Animated view transitions** — content branches mount via `ViewTransition`: enter-only fade +
   32 px axis slide, no exit anim, Slint `if` destroying the outgoing branch instantly. Direction on
