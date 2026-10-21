@@ -130,7 +130,7 @@ fn every_scheduling_tier_installs_a_notifier() {
 const TIER_HOMES: [(&str, &str); 5] = [
     ("boot/ui_setup/views.rs", "the row tier, at row-tile size"),
     ("ui/grid_prewarm.rs", "the one tier every card grid draws from"),
-    ("ui/queue_sheet/mod.rs", "the sheet's own, dropped on close, over the row tier's buffers"),
+    ("ui/queue_panel/mod.rs", "the sheet's own, dropped on close, over the row tier's buffers"),
     ("ui/radio/covers.rs", "logos, whose card reads the decoded extent for its layout"),
     ("ui/search/mod.rs", "the two card strips, at strip sizes of their own"),
 ];
@@ -183,7 +183,7 @@ const PRIVATE_TIER_GLOBALS: [&str; 2] = ["Queue", "Radio"];
 /// The three files allowed to move a `covers-generation` at all: the shared install, and the two
 /// private tiers above.
 const GENERATION_WRITERS: [&str; 3] =
-    ["boot/ui_setup/views.rs", "ui/queue_sheet/callbacks.rs", "ui/radio/covers.rs"];
+    ["boot/ui_setup/views.rs", "ui/queue_panel/callbacks.rs", "ui/radio/covers.rs"];
 
 /// The grids one notifier answers for, **derived from the globals rather than listed**: a seventh
 /// grid that reaches neither a list here nor the closure would pass a list against itself, and it

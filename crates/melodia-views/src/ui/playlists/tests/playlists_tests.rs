@@ -6,7 +6,8 @@ use melodia_testkit::code_tokens;
 
 const DRAGGABLE_LIST: &str =
     include_str!("../../../../../melodia-ui/ui/components/track-list/draggable-track-list.slint");
-const QUEUE_SHEET: &str = include_str!("../../../../../melodia-ui/ui/views/queue-sheet.slint");
+const QUEUE_PANEL: &str =
+    include_str!("../../../../../melodia-ui/ui/views/queue-panel/queue-panel.slint");
 const DETAIL_VIEW: &str =
     include_str!("../../../../../melodia-ui/ui/views/my-library/playlist-detail.slint");
 const SHARED_DETAIL_WIRING: &str = include_str!("../../callbacks/track_detail.rs");
@@ -34,7 +35,7 @@ fn every_draggable_list_opts_out_of_drag_panning() {
         "`inner-list` must opt out, the only scroller the rows sit in"
     );
     assert!(
-        code_tokens(QUEUE_SHEET).contains("mouse-drag-pan-enabled: false"),
+        code_tokens(QUEUE_PANEL).contains("mouse-drag-pan-enabled: false"),
         "every row in the queue sheet is draggable, so its ListView never gets the gesture"
     );
 }

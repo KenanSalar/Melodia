@@ -29,7 +29,7 @@ use melodia_ui::{AppWindow, Queue};
 /// atomic to boot so it can be forwarded into
 /// `window_chrome::set_queue_sheet_open` for the winit `DroppedFile`
 /// filter.
-pub struct QueueSheetHandles {
+pub struct QueuePanelHandles {
     pub is_open: Arc<AtomicBool>,
 }
 
@@ -41,7 +41,7 @@ pub fn install(
     ui: &AppWindow,
     state: &AppState,
     row_covers: &Arc<CoverThumbs>,
-) -> Result<QueueSheetHandles, slint::EventLoopError> {
+) -> Result<QueuePanelHandles, slint::EventLoopError> {
     let rows = QueueRows::new(queue_rows::fetcher(state));
     ui.global::<Queue>().set_rows(ModelRc::from(rows.clone()));
 
@@ -86,7 +86,7 @@ pub fn install(
     // for an off-screen overlay). `on_open_changed(true)` shows the queue
     // on the first open.
 
-    Ok(QueueSheetHandles { is_open })
+    Ok(QueuePanelHandles { is_open })
 }
 
 /// Make `picked` the sheet's picks, less any track the queue no longer holds: stamped on the rows,

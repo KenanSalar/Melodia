@@ -61,7 +61,7 @@ import { SearchView } from "views/search-view.slint";
 import { SettingsView } from "views/settings-view.slint";
 import { NowPlayingView } from "views/now-playing-view.slint";
 import { MiniPlayerView } from "views/mini-player.slint";
-import { QueueSheet } from "views/queue-sheet.slint";
+import { QueuePanel } from "views/queue-panel/queue-panel.slint";
 import { DialogOverlay } from "components/dialog/dialog.slint";
 import { OnboardingOverlay } from "components/onboarding/onboarding-overlay.slint";
 import { CustomTitleBar } from "components/custom-titlebar.slint";
@@ -596,7 +596,7 @@ export component AppWindow inherits Window {
                     // Inside the content panel so its backdrop and slide stay off the sidebar
                     // and the bar, after the view branches so it stacks above them. Always
                     // rendered so the close animation can play; the panel's clip hides it.
-                    QueueSheet {
+                    QueuePanel {
                         x: 0;
                         y: 0;
                         width: parent.width;

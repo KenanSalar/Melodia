@@ -246,7 +246,7 @@ export component TrackListRowItem inherits Rectangle {
                         // Slot → `to` index; removing the source shifts higher indices down by
                         // one. `drag-source == row-index` ties the commit to state nobody reset
                         // behind our back — that pair lives on a global outliving this view, where
-                        // `drag-started` is per-row. `queue-row-item.slint` carries the same guard.
+                        // `drag-started` is per-row. `queue-row.slint` carries the same guard.
                         if (root.drag-started
                             && root.drag-source == root.row-index
                             && root.drop-slot >= 0
@@ -281,11 +281,11 @@ export component TrackListRowItem inherits Rectangle {
                         root.drag-source = root.row-index;
                     }
                     // Only the row holding `drag-source` drives `drop-slot` — the
-                    // `queue-row-item.slint` ownership rule.
+                    // `queue-row.slint` ownership rule.
                     if (root.drag-started && root.drag-source == root.row-index) {
                         root.drag-cur-abs-y = self.absolute-position.y + self.mouse-y;
                         root.drop-slot = root.drag-computed-slot;
-                        // Edge auto-scroll — the band and nudge `queue-row-item.slint` uses.
+                        // Edge auto-scroll — the band and nudge `queue-row.slint` uses.
                         if (root.list-height > 0px) {
                             if ((self.absolute-position.y + self.mouse-y) - root.list-y0 < 40px) {
                                 root.request-scroll-by(-6px);

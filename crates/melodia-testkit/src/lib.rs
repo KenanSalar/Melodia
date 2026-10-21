@@ -78,7 +78,7 @@ pub const CALLBACK_HOMES: [&str; 14] = [
     "my_library",
     "onboarding",
     "playlists",
-    "queue_sheet",
+    "queue_panel",
     "radio",
     "recently_played",
     "search",

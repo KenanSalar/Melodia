@@ -1,13 +1,13 @@
 import { ListView } from "std-widgets.slint";
-import { Theme } from "../theme.slint";
-import { Dialog, DialogKind } from "../globals/dialog.slint";
-import { Queue } from "../globals/queue.slint";
-import { ListTravel } from "../globals/list-travel.slint";
-import { MaterialIcon } from "../components/material-icon.slint";
-import { IconButton } from "../components/icon-button.slint";
-import { ActionPill, PillButton } from "../components/action-pill.slint";
-import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
-import { QueueRowItem } from "queue-row-item.slint";
+import { Theme } from "../../theme.slint";
+import { Dialog, DialogKind } from "../../globals/dialog.slint";
+import { Queue } from "../../globals/queue.slint";
+import { ListTravel } from "../../globals/list-travel.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+import { IconButton } from "../../components/icon-button.slint";
+import { ActionPill, PillButton } from "../../components/action-pill.slint";
+import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { QueueRowItem } from "queue-row.slint";
 
 // The bottom-aligned slide-up sheet, mounted **inside the content panel** rather than at
 // the window root, so the animation plays only inside the main view and the sidebar and
@@ -16,7 +16,7 @@ import { QueueRowItem } from "queue-row-item.slint";
 //
 // One animated `t: float` drives both the backdrop alpha and the card's translate, and
 // both derivations are unanimated — a second `animate` on a derived binding phase-lags.
-export component QueueSheet inherits Rectangle {
+export component QueuePanel inherits Rectangle {
     width: 100%;
     height: 100%;
 

@@ -1,14 +1,14 @@
-import { Theme } from "../theme.slint";
-import { Queue } from "../globals/queue.slint";
-import { QueueRow } from "../models.slint";
-import { MaterialIcon } from "../components/material-icon.slint";
-import { ArtworkImage } from "../components/artwork-image.slint";
-import { IconButton } from "../components/icon-button.slint";
-import { Checkbox } from "../components/checkbox.slint";
-import { TrackContextMenu } from "../components/track-list/track-context-menu.slint";
-import { ContextClick } from "../components/context-menu.slint";
-import { SelectionPill } from "../components/track-list/selection-pill.slint";
-import { TrackTitle } from "../components/track-list/track-title.slint";
+import { Theme } from "../../theme.slint";
+import { Queue } from "../../globals/queue.slint";
+import { QueueRow } from "../../models.slint";
+import { MaterialIcon } from "../../components/material-icon.slint";
+import { ArtworkImage } from "../../components/artwork-image.slint";
+import { IconButton } from "../../components/icon-button.slint";
+import { Checkbox } from "../../components/checkbox.slint";
+import { TrackContextMenu } from "../../components/track-list/track-context-menu.slint";
+import { ContextClick } from "../../components/context-menu.slint";
+import { SelectionPill } from "../../components/track-list/selection-pill.slint";
+import { TrackTitle } from "../../components/track-list/track-title.slint";
 
 // One fixed-height queue row: number-or-checkbox, artwork, title with its favourite and rating
 // marks, duration, delete.
@@ -31,7 +31,7 @@ export component QueueRowItem inherits Rectangle {
     // Owned by the host, so the slot math here and the host's drop indicator can't
     // disagree about how tall a row is.
     in property <length> row-height;
-    // Merge contiguous selected rows into one continuous pill; `QueueSheet` computes
+    // Merge contiguous selected rows into one continuous pill; `QueuePanel` computes
     // both from `Queue.rows[idx ± 1].selected`.
     in property <bool> prev-selected;
     in property <bool> next-selected;

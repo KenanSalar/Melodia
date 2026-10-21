@@ -292,7 +292,7 @@ pub fn install(
 
     // `watch::Receiver::changed()` only fires on sends *after* subscribe and the
     // startup queue-restore already broadcast, so without an explicit seed the view is
-    // empty until the next playback transition. As in `queue_sheet::install`.
+    // empty until the next playback transition. As in `queue_panel::install`.
     let (current_source, qvm) = {
         let s = lock_state(&state.player_state);
         (NowPlayingSource::from_vm(&s.to_view_model_light()), s.to_queue_view_model())

@@ -163,7 +163,7 @@ export component DraggableTrackList inherits Rectangle {
                 request-scroll-by(dy) => {
                     // `dy` is a content-space delta, so it *subtracts* from
                     // `content-y`, which runs 0 at the top and negative
-                    // downwards. Same shape as `queue-sheet.slint`.
+                    // downwards. Same shape as `queue-panel.slint`.
                     //
                     // The nudge is skipped when it would carry the dragged
                     // row out of the visible range: the ListView destroys

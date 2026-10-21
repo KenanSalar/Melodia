@@ -6,7 +6,7 @@ import { QueueRow } from "../models.slint";
 // The bottom-sheet inspector. Rust owns the `rows` model and writes both it and
 // `current-index` from a subscriber on the same `sinks.queue` watch `Player.queue` reads.
 //
-// **The drag plumbing is bespoke rather than `DragArea` / `DropArea`** — `queue-row-item.slint`
+// **The drag plumbing is bespoke rather than `DragArea` / `DropArea`** — `queue-row.slint`
 // says why. The sheet flips `drag-source`/`drop-slot` from row-level `pointer-event` handlers and
 // fires `reorder` on pointer-up only; both clear out from under a drag the pressed row can no
 // longer finish — Rust on a `rows` rebuild, the sheet on either `open` transition and at mount.

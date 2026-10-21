@@ -62,7 +62,7 @@ pub(super) fn spawn_queue_rows_subscriber(
                 show_queue(&ui, &rows, &anchor, &qvm);
             }
         }
-        log::debug!("ui::queue_sheet rows subscriber stopped");
+        log::debug!("ui::queue_panel rows subscriber stopped");
     }))?;
     Ok(())
 }

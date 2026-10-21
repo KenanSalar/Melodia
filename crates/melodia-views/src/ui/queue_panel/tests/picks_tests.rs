@@ -12,7 +12,7 @@ use crate::ui::paged_rows::queue_rows::QueueRows;
 use crate::ui::paged_rows::{Keyset, ReadStamp};
 
 /// The sheet over a queue playing 1, 2, 1, 3, no row fetched.
-fn sheet_over_a_repeat() -> Rc<QueueRows> {
+fn panel_over_a_repeat() -> Rc<QueueRows> {
     let rows = QueueRows::new(|_request| {});
     rows.show(Keyset { ids: Arc::from([1, 2, 1, 3]), seed: Vec::new(), read: ReadStamp::now() });
     rows
@@ -22,7 +22,7 @@ fn sheet_over_a_repeat() -> Rc<QueueRows> {
 /// act on and what the count beside them says.
 #[test]
 fn picking_a_track_queued_twice_marks_both_of_its_rows() {
-    let rows = sheet_over_a_repeat();
+    let rows = panel_over_a_repeat();
 
     rows.select(&HashSet::from([1]));
 
@@ -34,7 +34,7 @@ fn picking_a_track_queued_twice_marks_both_of_its_rows() {
 /// still marked as picked.
 #[test]
 fn removing_the_picks_takes_both_copies_of_a_track_queued_twice() {
-    let rows = sheet_over_a_repeat();
+    let rows = panel_over_a_repeat();
 
     let positions = picked_positions(&rows, &HashSet::from([1]));
 

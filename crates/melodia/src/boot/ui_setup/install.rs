@@ -119,9 +119,9 @@ fn install_player_surfaces(app: &AppWindow, state: &AppState, views: &UiHandles)
     ui::radio::install_history(weak, &views.radio_ui, &state.sinks)
         .map_err(|e| AppError::io("station history subscriber", e))?;
 
-    match ui::queue_sheet::install(app, state, &views.cover_thumbs) {
+    match ui::queue_panel::install(app, state, &views.cover_thumbs) {
         Ok(h) => ui::window_chrome::set_queue_sheet_open(h.is_open),
-        Err(e) => log::warn!("queue_sheet::install: {}", describe(&e)),
+        Err(e) => log::warn!("queue_panel::install: {}", describe(&e)),
     }
 
     // Now Playing owns its own small `(cover, blur)` tier, separate from
