@@ -6,6 +6,7 @@ import { WindowChrome } from "../globals/shell.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { NavRow } from "../components/nav-row.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { EdgeResizeHandle, GrowEdge } from "../components/edge-resize-handle.slint";
 
 // Single nav row. Reads selected state from Nav, fires `select` on click.
 component SidebarItem inherits NavRow {
@@ -192,44 +193,21 @@ export component Sidebar inherits Rectangle {
         SidebarItem { index: 9; label: @tr("Settings"); icon: "settings"; }
     }
 
-    // Drag-resize handle on the right edge — only meaningful when expanded.
-    if !Nav.sidebar-collapsed: Rectangle {
-        x: parent.width - 4px;
+    // Only meaningful when expanded.
+    if !Nav.sidebar-collapsed: EdgeResizeHandle {
+        x: parent.width - self.width;
         y: 0;
-        width: 4px;
         height: parent.height;
-        background: resize-touch.pressed ? Theme.accent : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
-
-        resize-touch := TouchArea {
-            mouse-cursor: ew-resize;
-            // **The handle's own coordinate frame moves with the sidebar as it
-            // resizes**, so a local `mouse-x - pressed-x` underestimates the cursor's
-            // travel: the sidebar grows by half the delta and the handle lags the
-            // pointer. Tracking in window-absolute coordinates keeps it glued.
-            property <length> start-w;
-            property <length> press-abs-x;
-            pointer-event(ev) => {
-                if (ev.kind == PointerEventKind.down) {
-                    self.start-w = Nav.sidebar-width;
-                    self.press-abs-x = self.absolute-position.x + self.pressed-x;
-                    Nav.sidebar-dragging = true;
-                }
-                if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
-                    Nav.sidebar-dragging = false;
-                }
-            }
-            moved => {
-                if (self.pressed) {
-                    Nav.sidebar-width = clamp(
-                        self.start-w + (self.absolute-position.x + self.mouse-x - self.press-abs-x),
-                        Theme.sidebar-min-w,
-                        Theme.sidebar-max-w);
-                }
-            }
-            double-clicked => {
-                Nav.sidebar-width = Theme.sidebar-default-w;
-            }
+        grows: GrowEdge.right;
+        drawn-width: clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
+        min-w: Theme.sidebar-min-w;
+        max-w: Theme.sidebar-max-w;
+        dragging <=> Nav.sidebar-dragging;
+        resized(width) => {
+            Nav.sidebar-width = width;
+        }
+        reset => {
+            Nav.sidebar-width = Theme.sidebar-default-w;
         }
     }
 

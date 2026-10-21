@@ -183,7 +183,7 @@ const PRIVATE_TIER_GLOBALS: [&str; 2] = ["Queue", "Radio"];
 /// The three files allowed to move a `covers-generation` at all: the shared install, and the two
 /// private tiers above.
 const GENERATION_WRITERS: [&str; 3] =
-    ["boot/ui_setup/views.rs", "ui/queue_panel/callbacks.rs", "ui/radio/covers.rs"];
+    ["boot/ui_setup/views.rs", "ui/queue_panel/lifecycle.rs", "ui/radio/covers.rs"];
 
 /// The grids one notifier answers for, **derived from the globals rather than listed**: a seventh
 /// grid that reaches neither a list here nor the closure would pass a list against itself, and it

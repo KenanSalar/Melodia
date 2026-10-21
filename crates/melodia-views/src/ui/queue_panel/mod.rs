@@ -8,6 +8,7 @@
 //! either row picks both, which is what the batch entries then act on.
 
 mod callbacks;
+mod lifecycle;
 mod rows;
 
 use std::cell::Cell;
@@ -78,7 +79,8 @@ pub fn install(
         });
     }
 
-    callbacks::wire_callbacks(ui, state, &rows, &queue_covers, &anchor, &is_open);
+    callbacks::wire_callbacks(ui, state, &rows, &anchor);
+    lifecycle::wire(ui, state, &rows, &queue_covers, &anchor, &is_open);
     rows::spawn_queue_rows_subscriber(ui, state, rows, anchor, is_open.clone())?;
 
     // No install-time seed: the sheet is closed at startup, so the
