@@ -9,9 +9,10 @@ use slint::{ComponentHandle, Image, Model, ModelRc, SharedString, VecModel, Weak
 use super::refresh_after_edit;
 use crate::ui::callbacks::DialogClaim;
 use crate::ui::playlists::PlaylistsUi;
-use crate::ui::track_detail::TrackDetail;
 use melodia_app::library;
 use melodia_app::state::AppState;
+use melodia_core::entities::smart_criteria::Draw;
+use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Dialog, PlaylistRow as UiPlaylistRow, Playlists};
 
@@ -19,7 +20,7 @@ use melodia_ui::{AppWindow, Dialog, PlaylistRow as UiPlaylistRow, Playlists};
 const MOSAIC_CAP: usize = 4;
 
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    wire_request_edit_artwork_for(ui, state, playlists_ui);
+    wire_request_edit_artwork_for(ui, state);
     wire_toggle_mosaic_candidate(ui);
     wire_apply_mosaic(ui, state, playlists_ui);
     wire_clear_artwork(ui, state, playlists_ui);
@@ -31,13 +32,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
 /// path the card itself uses for `request-cover`, so the decode is already
 /// warm). `slint::Image` isn't `Send`, so only the path crosses the spawn
 /// boundary and the lookup runs inside the opener's UI-thread hop.
-fn wire_request_edit_artwork_for(
-    ui: &AppWindow,
-    state: &AppState,
-    playlists_ui: &Arc<PlaylistsUi>,
-) {
+fn wire_request_edit_artwork_for(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
-    let pu = playlists_ui.clone();
     let weak = ui.as_weak();
     ui.global::<Playlists>().on_request_edit_artwork_for(move |id| {
         let id = i64::from(id);
@@ -46,11 +42,12 @@ fn wire_request_edit_artwork_for(
         }
         let Some(claim) = DialogClaim::take_from(&weak) else { return };
         let Some(ui) = weak.upgrade() else { return };
-        // The card raising this is on screen, so its row is cached; a miss is a grid that moved
-        // under the click.
+        // A miss is a card whose row hasn't landed: nothing to preview, and no kind to pick the
+        // empty pool's hint by.
         let Some(card) = crate::ui::playlists::shown_card(&ui, id) else { return };
         let artwork_path = card.artwork_path.to_string();
-        open_edit_artwork(&s, &pu, &weak, claim, &card, move |_| {
+        // The default draw, the one the card's own cover was filled under.
+        open_edit_artwork(&s, &weak, claim, &card, Draw::default(), move |_| {
             if artwork_path.is_empty() {
                 Image::default()
             } else {
@@ -60,19 +57,21 @@ fn wire_request_edit_artwork_for(
     });
 }
 
-/// Populate the mosaic candidates from the covers `playlist`'s page lists, under the draw that
-/// page shows, and open the picker on `cover`, a preview of the saved state. The rest of the
-/// chrome is `Dialog.prepare-edit-artwork`'s. `claim` is taken by the caller at its click.
+/// Populate the mosaic candidates from the covers `playlist` lists under `draw`, and open the
+/// picker on `cover`, a preview of the saved state. The draw is the surface's own, which only a
+/// random cap reads: the page's on the detail, the default its thumbnail was filled under on a
+/// card. The rest of the chrome is `Dialog.prepare-edit-artwork`'s. `claim` is taken by the caller
+/// at its click.
 pub(super) fn open_edit_artwork(
     state: &AppState,
-    playlists_ui: &PlaylistsUi,
     weak: &Weak<AppWindow>,
     claim: DialogClaim,
     playlist: &UiPlaylistRow,
+    draw: Draw,
     cover: impl FnOnce(&AppWindow) -> Image + Send + 'static,
 ) {
     let (id, is_smart) = (playlist.id, playlist.is_smart);
-    let scope = playlists_ui.scope(i64::from(id));
+    let scope = TrackListScope::Playlist(i64::from(id), draw);
     let s = state.clone();
     let weak = weak.clone();
     state.runtime.spawn(async move {

@@ -98,7 +98,7 @@ fn wire_edit_artwork(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playli
         let Some(claim) = DialogClaim::take_from(&weak) else { return };
         let Some(ui) = weak.upgrade() else { return };
         let playlist = ui.global::<PlaylistDetail>().get_playlist();
-        open_edit_artwork(&s, &pu, &weak, claim, &playlist, |ui| {
+        open_edit_artwork(&s, &weak, claim, &playlist, pu.draw(), |ui| {
             ui.global::<PlaylistDetail>().get_cover()
         });
     });

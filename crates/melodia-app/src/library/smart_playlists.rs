@@ -108,3 +108,7 @@ pub async fn update_smart_criteria(
     state.library_changed.bump();
     Ok(playlist)
 }
+
+#[cfg(test)]
+#[path = "tests/smart_playlists_tests.rs"]
+mod tests;

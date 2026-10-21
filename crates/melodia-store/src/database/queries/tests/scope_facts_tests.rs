@@ -2,8 +2,8 @@
 //! keyset lists, the genre lines an album's chip is tallied from, and the covers the artwork
 //! picker offers.
 //!
-//! Every facts and genre-line fixture holds tracks outside the scope asked about, so a membership
-//! that lost its narrowing counts them and fails.
+//! Every fixture but the seeded cover ones holds tracks outside the scope asked about, so a
+//! membership that lost its narrowing counts them and fails.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -17,8 +17,11 @@ use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::genre::GenreList;
 use melodia_core::entities::scan::ExtractedMetadata;
 use melodia_core::entities::smart_criteria::Draw;
-use melodia_core::entities::track_list::{ScopeFacts, TrackListScope};
+use melodia_core::entities::track_list::{
+    ScopeFacts, SortDir, TrackListScope, TrackOrder, TrackSortField,
+};
 use melodia_core::error::AppError;
+use melodia_core::utils::needle::Needle;
 
 const LIBRARY_ROOT: &str = "/music";
 
@@ -29,6 +32,13 @@ const PLAYED_AT: &str = "2026-10-18T00:00:00Z";
 
 /// A smart playlist of the library's two most played tracks.
 const TOP_TWO_BY_PLAYS: &str = r#"{"limit":{"count":2,"order":"play_count_desc"}}"#;
+
+/// A smart playlist of the library's one Pop track, `Four`.
+const POP_ONLY: &str =
+    r#"{"rules":[{"field":"genre","op":"contains","value":{"kind":"text","value":"Pop"}}]}"#;
+
+/// A smart playlist of three tracks its draw picks.
+const RANDOM_THREE: &str = r#"{"limit":{"count":3,"order":"random"}}"#;
 
 async fn empty_library() -> Result<DbPool, AppError> {
     let db = DbPool::test_pool().await?;
@@ -274,5 +284,113 @@ async fn the_mosaic_candidate_list_stops_at_the_limit_it_was_given() -> Result<(
     let candidates = queries::track::cover_paths(&db, scope, 2).await?;
 
     assert_eq!(candidates.len(), 2);
+    Ok(())
+}
+
+/// Each of `lib`'s tracks under a cover of its own, named for its title.
+async fn cover_every_track(lib: &Library) -> Result<(), AppError> {
+    set_test_artwork(&lib.db, lib.one, "/artwork/One.jpg").await?;
+    set_test_artwork(&lib.db, lib.two, "/artwork/Two.jpg").await?;
+    set_test_artwork(&lib.db, lib.three, "/artwork/Three.jpg").await?;
+    set_test_artwork(&lib.db, lib.four, "/artwork/Four.jpg").await
+}
+
+#[tokio::test]
+async fn a_manual_playlist_offers_no_cover_from_a_track_it_does_not_hold() -> Result<(), AppError> {
+    let lib = library().await?;
+    cover_every_track(&lib).await?;
+    let lone =
+        queries::playlist::create_playlist_with_tracks(&lib.db, "Lone", None, &[lib.two]).await?;
+
+    let scope = TrackListScope::Playlist(lone, Draw::default());
+    let candidates = queries::track::cover_paths(&lib.db, scope, 4).await?;
+
+    assert_eq!(candidates, ["/artwork/Two.jpg"]);
+    Ok(())
+}
+
+/// A smart playlist has no `playlist_items` rows, so a pool read off them came back empty and the
+/// picker had nothing to apply.
+#[tokio::test]
+async fn a_smart_playlist_offers_the_covers_of_the_tracks_its_rules_match() -> Result<(), AppError>
+{
+    let lib = library().await?;
+    cover_every_track(&lib).await?;
+    let pop = queries::playlist::create_smart_playlist(&lib.db, "Pop", None, POP_ONLY).await?;
+
+    let scope = TrackListScope::Playlist(pop.id, Draw::default());
+    let candidates = queries::track::cover_paths(&lib.db, scope, 4).await?;
+
+    assert_eq!(candidates, ["/artwork/Four.jpg"]);
+    Ok(())
+}
+
+/// Ranked against both the id and the title order, so a pool that kept the cap but lost its
+/// ranking fails too.
+#[tokio::test]
+async fn a_capped_smart_playlist_offers_its_covers_in_the_order_its_cap_ranks_them()
+-> Result<(), AppError> {
+    let lib = library().await?;
+    cover_every_track(&lib).await?;
+    queries::track::add_play_counts(
+        &lib.db,
+        &[(lib.three, 9), (lib.one, 5), (lib.two, 1)],
+        PLAYED_AT,
+    )
+    .await?;
+    let top = queries::playlist::create_smart_playlist(&lib.db, "Top two", None, TOP_TWO_BY_PLAYS)
+        .await?;
+
+    let scope = TrackListScope::Playlist(top.id, Draw::default());
+    let candidates = queries::track::cover_paths(&lib.db, scope, 4).await?;
+
+    assert_eq!(candidates, ["/artwork/Three.jpg", "/artwork/One.jpg"]);
+    Ok(())
+}
+
+/// The expected order is read off the page rather than written out: the pick is a hash of the
+/// draw, and agreeing with what the page lists under it is the contract.
+#[tokio::test]
+async fn a_random_cap_offers_the_covers_its_draw_lists_in_that_order() -> Result<(), AppError> {
+    let lib = library().await?;
+    cover_every_track(&lib).await?;
+    let random =
+        queries::playlist::create_smart_playlist(&lib.db, "Random", None, RANDOM_THREE).await?;
+    let scope = TrackListScope::Playlist(random.id, Draw(7));
+    let own_order = TrackOrder { field: TrackSortField::Position, dir: SortDir::Asc };
+    let page = queries::track::track_ids(&lib.db, scope, own_order, &Needle::default()).await?;
+    assert_eq!(page.len(), 3, "the fixture's draw keeps its cap");
+    let listed: Vec<String> = queries::track::get_track_list_rows_by_ids(&lib.db, &page)
+        .await?
+        .into_iter()
+        .filter_map(|row| row.artwork_path)
+        .collect();
+
+    let candidates = queries::track::cover_paths(&lib.db, scope, 4).await?;
+
+    assert_eq!(candidates, listed, "under Draw(7)");
+    Ok(())
+}
+
+/// What the picker's empty state is for. The smart case is the one its hint names, and `One`
+/// carries a cover so a pool that lost its narrowing offers it.
+#[tokio::test]
+async fn a_scope_with_no_cover_offers_none() -> Result<(), AppError> {
+    let lib = library().await?;
+    set_test_artwork(&lib.db, lib.one, "/artwork/One.jpg").await?;
+    let empty = queries::playlist::create_playlist(&lib.db, "Empty", None).await?;
+    let coverless =
+        queries::playlist::create_smart_playlist(&lib.db, "Pop", None, POP_ONLY).await?;
+    let cases = [
+        (empty.id, "an empty playlist"),
+        (ABSENT_PLAYLIST_ID, "a playlist that no longer exists"),
+        (coverless.id, "a smart playlist whose tracks carry no cover"),
+    ];
+    for (id, case) in cases {
+        let scope = TrackListScope::Playlist(id, Draw::default());
+        let candidates = queries::track::cover_paths(&lib.db, scope, 4).await?;
+
+        assert_eq!(candidates, Vec::<String>::new(), "{case}");
+    }
     Ok(())
 }
