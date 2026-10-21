@@ -25,9 +25,9 @@ export global Queue {
     in property <[int]> selected-ids;
     // What the user asked for. Whether the panel is on screen is `shown`.
     in-out property <bool> open;
-    // `open`, less what covers the panel: Now Playing, and the miniplayer, which unmounts it.
-    // Written only by `AppWindow`, a global being unable to watch its own properties; the rows,
-    // the covers and the file drop follow it through `shown-changed`.
+    // `open`, less what covers the panel: Now Playing, the miniplayer, which unmounts it, and a
+    // window with no room for it. Written only by `AppWindow`, a global being unable to watch its
+    // own properties; the rows, the covers and the file drop follow it through `shown-changed`.
     in-out property <bool> shown;
     // Whether the window has room for the panel at all, which the miniplayer and a narrow window
     // don't. The controls that open it stand down without it, having nowhere to put it. Written

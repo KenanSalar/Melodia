@@ -68,7 +68,7 @@ fn wire_toggle(ui: &AppWindow) {
 }
 
 /// Show the queue as the panel comes on screen, hand everything back once it has been gone a
-/// while. Hidden covers a close, Now Playing and the miniplayer alike.
+/// while. Hidden covers a close, Now Playing, the miniplayer and a narrow window alike.
 fn wire_shown(
     ui: &AppWindow,
     state: &AppState,

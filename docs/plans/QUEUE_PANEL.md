@@ -226,13 +226,14 @@ Status: implemented 2026-10-21, waiting on the hand pass. Its tests wait for Pha
 - shrink and widen the window through every step, with the sidebar expanded and folded.
 
 **Amended while implementing:**
-- **Under a forced rail the sidebar's fold toggle and Ctrl+B stand down** (Kenan). This settles open question 1.
+- **Under a forced rail the sidebar's fold toggle and Ctrl+B stand down** (Kenan). This settles open question 1. They also stand down over the user's own fold while expanding wouldn't fit beside the shown panel, where a press would only flip the persisted fold with nothing on screen to show for it.
 - **While the panel can't fit, the queue button, its overflow row and Q stand down** (Kenan). `AppWindow` publishes `Queue.fits` beside `shown`. It covers the miniplayer too, so Q's own `!MiniPlayer.active` gate went into it.
 - **The sidebar comes back once the panel has stepped aside.** The fold is keyed on `shown`, not `open`, which is where this departs from the prior art. With both sets of controls standing down, a panel too wide to show would otherwise hold the sidebar folded with nothing left to press.
 - **A seeded open needs no explicit call into the lifecycle.** `queue-shown`'s tracker takes its baseline inside `AppWindow::new()`, before hydration, so the first change-handler pass reads the seeded open as an edge.
 - **`Nav.sidebar-yields` and `Queue.fits` are written from `changed` mirrors, not bound.** Bound to the window's width, they would restart the sidebar's width ease and `IconButton`'s colour ease on every resize move (`slint-pitfalls.md`, the structural-dirt entry).
 - **The panel's room doesn't depend on `shown`.** So it keeps its width while it eases out from under Now Playing, rather than narrowing as the sidebar comes back.
 - **The edge drag stops at the room.** It can't store a width the window won't draw, or fold the sidebar to make one.
+- **So does the sidebar's, while the panel is shown.** Dragged past the room, the sidebar would yield to its rail mid-drag, unmounting its handle under the pointer and leaving `Nav.sidebar-dragging` up.
 - **`Theme.content-min-w` starts at 452 px**: the narrowest body that still packs two grid columns, plus the page's insets. At the default widths the sidebar folds below a 996 px window, the panel narrows from 862 px to its minimum at 802 px, and it steps aside below that.
 - **The settings keys carry the prefix their flattened siblings do**: `queue_panel_open`, `queue_panel_width`.
 

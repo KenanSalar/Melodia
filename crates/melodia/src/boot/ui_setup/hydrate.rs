@@ -119,7 +119,7 @@ fn apply_queue_panel(app: &AppWindow, settings: &services::settings::SettingsDat
 
 #[expect(
     clippy::cast_possible_truncation,
-    reason = "panel widths are small pixel counts; f32 precision is sufficient"
+    reason = "sidebar and panel widths are small pixel counts; f32 precision is sufficient"
 )]
 fn logical_px(width: f64) -> f32 {
     width as f32

@@ -43,9 +43,10 @@ export global Nav {
     // outside the range is drawn inside it wherever it came from.
     out property <length> sidebar-expanded-w:
         clamp(self.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
-    // The rail a narrow window forces while the queue panel takes the room. Written only by
-    // `AppWindow`, which alone sees the window's width, and written rather than bound so a resize
-    // can't restart the sidebar's width ease on every move.
+    // Up while the queue panel holds the room an expanded sidebar needs, folded or not: the rail is
+    // forced and the fold controls stand down. Written only by `AppWindow`, which alone sees the
+    // window's width, and written rather than bound so a resize can't restart the sidebar's width
+    // ease on every move.
     in-out property <bool> sidebar-yields: false;
     // What the sidebar draws, which every part of it reads. The fold toggle writes
     // `sidebar-collapsed` and stands down while the rail is forced.

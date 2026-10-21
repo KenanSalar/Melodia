@@ -58,6 +58,9 @@ component Divider inherits Rectangle {
 }
 
 export component Sidebar inherits Rectangle {
+    // What the row leaves the sidebar beside a shown queue panel, the furthest its edge drags.
+    in property <length> room;
+
     width: Nav.sidebar-rail ? Theme.sidebar-collapsed-w : Nav.sidebar-expanded-w;
     animate width { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
 
@@ -197,7 +200,9 @@ export component Sidebar inherits Rectangle {
         grows: GrowEdge.right;
         drawn-width: Nav.sidebar-expanded-w;
         min-w: Theme.sidebar-min-w;
-        max-w: Theme.sidebar-max-w;
+        // Past the room the sidebar would yield to its rail mid-drag, unmounting the handle under
+        // the pointer and stranding `dragging`.
+        max-w: clamp(root.room, Theme.sidebar-min-w, Theme.sidebar-max-w);
         dragging <=> Nav.sidebar-dragging;
         resized(width) => {
             Nav.sidebar-width = width;

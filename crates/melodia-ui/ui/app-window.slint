@@ -284,8 +284,10 @@ export component AppWindow inherits Window {
         Queue.panel-width > 0px ? Queue.panel-width : Theme.queue-panel-default-w,
         Theme.queue-panel-min-w,
         Theme.queue-panel-max-w);
-    property <bool> sidebar-would-yield: !Nav.sidebar-collapsed
-        && root.row-w < Nav.sidebar-expanded-w + root.queue-chosen-w + Theme.content-min-w;
+    // What the row leaves an expanded sidebar beside the panel at its chosen width. Folded or not,
+    // a sidebar wider than this has nothing to expand into while the panel is up.
+    property <length> sidebar-room: root.row-w - root.queue-chosen-w - Theme.content-min-w;
+    property <bool> sidebar-would-yield: Nav.sidebar-expanded-w > root.sidebar-room;
     // Whether or not the panel is shown, so it keeps its width while it eases out from under Now
     // Playing rather than narrowing as the sidebar comes back.
     property <length> queue-room: root.row-w - Theme.content-min-w
@@ -538,7 +540,9 @@ export component AppWindow inherits Window {
                 vertical-stretch: 1;
                 padding-right: Theme.pad-xs;
 
-                sidebar := Sidebar {}
+                sidebar := Sidebar {
+                    room: root.queue-shown ? root.sidebar-room : Theme.sidebar-max-w;
+                }
 
                 // Content panel. **Rounded by `RoundedFrame`, not by a rounded clip**: that clip
                 // would hold the whole view as a texture and render it again on every change inside,
