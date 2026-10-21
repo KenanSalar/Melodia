@@ -15,7 +15,6 @@ use melodia_app::services::settings::ViewSort;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track_list::{SortDir, TrackListScope, TrackOrder};
-use melodia_core::error::AppResult;
 use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::Favorites;
 
@@ -46,10 +45,6 @@ impl PagedTrackList for FavoritesUi {
             order: TrackOrder::new(&sort.field, sort.dir),
             needle: current_filter(self),
         })
-    }
-
-    fn facts(_: &AppState, _: &ListQuery, _: &[i64]) -> impl Future<Output = AppResult<()>> + Send {
-        std::future::ready(Ok(()))
     }
 
     /// Songs mounted on a page still on screen. A leave has already emptied the model, so a load

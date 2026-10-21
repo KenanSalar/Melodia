@@ -180,6 +180,6 @@ async fn kick_full_refresh(
         log::warn!("favorites::refresh_hero: {}", describe(&e));
     }
     if let Err(e) = t {
-        log::warn!("favorites::refresh_tracks: {}", describe(&e));
+        log::warn!("favorites::reload_songs: {}", describe(&e));
     }
 }

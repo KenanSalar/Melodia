@@ -52,7 +52,7 @@ pub trait PagedTrackList: Send + Sync + 'static {
     /// The global the rows live on, which a load lands through.
     type Global: RowSelectionView + StrongHandle + 'static;
     /// What a reload writes beside the rows, answered with its keyset.
-    type Facts: Send + 'static;
+    type Facts: Default + Send + 'static;
 
     /// Names the list in a log line.
     const LABEL: &'static str;
@@ -67,15 +67,18 @@ pub trait PagedTrackList: Send + Sync + 'static {
     /// What a load runs under, read once it holds its ticket. `None` where nothing is listed.
     fn query(&self) -> Option<ListQuery>;
 
-    /// What a reload under `query` writes beside the `ids` it found.
+    /// What a reload under `query` writes beside the `ids` it found, the default for a list that
+    /// writes nothing there.
     fn facts(
-        state: &AppState,
-        query: &ListQuery,
-        ids: &[i64],
-    ) -> impl Future<Output = AppResult<Self::Facts>> + Send;
+        _state: &AppState,
+        _query: &ListQuery,
+        _ids: &[i64],
+    ) -> impl Future<Output = AppResult<Self::Facts>> + Send {
+        std::future::ready(Ok(Self::Facts::default()))
+    }
 
-    /// Whether a load under `query` may still show. Asked once the ids are in, again after the
-    /// covers are warm, and on the UI thread before the rows go in.
+    /// Whether a load under `query` may still show. A reload asks once its ids are in and again
+    /// after its covers are warm, and every load asks on the UI thread before the rows go in.
     fn still_wanted(&self, _query: &ListQuery) -> bool {
         true
     }

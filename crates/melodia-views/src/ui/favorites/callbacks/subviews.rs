@@ -155,7 +155,7 @@ fn reload_tab(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>, tab: 
     }
     let s = state.clone();
     let fu = fav_ui.clone();
-    spawn_logged!(s, "favorites::refresh_tracks", track_rows::reload(&s, &fu));
+    spawn_logged!(s, "favorites::reload_songs", track_rows::reload(&s, &fu));
 }
 
 /// A sort pill: the ids reload in the new order, every cached card kept.

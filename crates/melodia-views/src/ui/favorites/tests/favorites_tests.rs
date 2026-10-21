@@ -363,9 +363,9 @@ fn each_gated_fetch_is_armed_beside_the_cache_it_fills() {
     );
 
     // The Songs loads re-arm through `load_dropped`, which the shared path calls on
-    // a failed query or facts read in either load, both bails off the event loop
-    // (before and after the reload's cover prewarm), and a write the tab or the
-    // section overtook: six calls in all.
+    // a failed query in either load, a failed facts read in a reload, both bails off
+    // the event loop (before and after the reload's cover prewarm), and a write the
+    // tab or the section overtook: six calls in all.
     assert!(
         item_body(SONGS, "fn load_dropped(", "\n    }\n").contains("self.mark_songs_dirty();"),
         "a Songs load that shows nothing must re-arm the tab's flag"

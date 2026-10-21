@@ -18,10 +18,8 @@ use crate::ui::my_library::MyLibraryTab;
 use crate::ui::paged_rows::track_rows::{ListLoads, ListQuery, PagedTrackList, TrackRows};
 use crate::ui::section_state::SectionState;
 use crate::ui::track_list_view::{TrackListActions, TrackListColumnState};
-use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track_list::TrackListScope;
-use melodia_core::error::AppResult;
 use melodia_ui::{AlbumDetail, ArtistDetail, GenreDetail, PlaylistDetail};
 
 /// The Slint surface of a detail global the shared wiring needs beyond what every track list has.
@@ -154,10 +152,6 @@ impl<V: TrackDetail> PagedTrackList for V {
     fn query(&self) -> Option<ListQuery> {
         let (id, order, needle) = self.cache().query();
         (id >= 0).then(|| ListQuery { scope: self.scope(id), order, needle })
-    }
-
-    fn facts(_: &AppState, _: &ListQuery, _: &[i64]) -> impl Future<Output = AppResult<()>> + Send {
-        std::future::ready(Ok(()))
     }
 
     /// The detail still lists the entity the load was for.
