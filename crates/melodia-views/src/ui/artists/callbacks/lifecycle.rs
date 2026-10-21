@@ -39,16 +39,12 @@ impl GridTab for ArtistsUi {
         clear_vec_model::<UiAlbumRow>(&g.get_albums(), "artists: clear detail albums");
     }
 
-    /// The detail's artwork and Albums strip and the grid tier's pixels down to proxies, then the
-    /// freed pages. One tier serves the grid and the strip, so the shrink covers both.
+    /// The detail's artwork and Albums strip, and the grid tier's pixels down to proxies. One tier
+    /// serves the grid and the strip, so the shrink covers both.
     fn release_section_state(&self) {
-        if self.section_active() {
-            return;
-        }
         crate::ui::grid_prewarm::shrink_covers();
         self.detail_artwork.clear();
         self.detail.albums.lock().clear();
-        melodia_platform::services::platform::allocator::trim();
     }
 
     async fn open(

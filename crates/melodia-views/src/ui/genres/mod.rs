@@ -89,7 +89,7 @@ impl GenresUi {
 
     /// Hand retained glibc arena slack back, with no LRU to drop first. The
     /// close-detail trim, where wiping the grid would be wrong — the user is now
-    /// looking at it. A section leave takes `GridTab::release_section_state`.
+    /// looking at it. A section leave trims through `callbacks::grid_tab` instead.
     pub fn release_caches(&self) {
         melodia_platform::services::platform::allocator::trim();
     }

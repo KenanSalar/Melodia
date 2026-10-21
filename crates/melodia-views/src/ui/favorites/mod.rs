@@ -201,8 +201,8 @@ impl FavoritesUi {
     /// Drop every section-local buffer, so a hidden page holds nothing. Runs off the UI thread on
     /// section leave, which set `mark_dirty()` and released the lists and grids synchronously.
     ///
-    /// Release order matches `AlbumsUi::release_section_state`: per-section LRUs first, then
-    /// mutated state under the section gate, then an `allocator::trim`.
+    /// Per-section LRUs go first, then the state under the section gate, then one
+    /// `allocator::trim` over all of it.
     ///
     /// The gate serializes those stores but does **not** order them, so it is not what stops a
     /// fetch resolving *after* the leave from repopulating what this emptied. That is each

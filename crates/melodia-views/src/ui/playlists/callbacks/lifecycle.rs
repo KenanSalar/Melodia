@@ -36,14 +36,10 @@ impl GridTab for PlaylistsUi {
         release_detail_hero_images(ui, g);
     }
 
-    /// The grid tier's pixels down to proxies and the detail's artwork, then the freed pages.
+    /// The grid tier's pixels down to proxies, and the detail's artwork.
     fn release_section_state(&self) {
-        if self.section_active() {
-            return;
-        }
         crate::ui::grid_prewarm::shrink_covers();
         self.detail_artwork.clear();
-        melodia_platform::services::platform::allocator::trim();
     }
 
     async fn open(

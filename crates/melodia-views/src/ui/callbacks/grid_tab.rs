@@ -36,9 +36,9 @@ pub(in crate::ui) trait GridTab: TrackDetail {
     /// is the one.
     fn release_beside(&self, _g: &Self::Global) {}
 
-    /// Hands back what the tab keeps resident, off the UI thread, once the leave has released the
-    /// grid and the detail's rows there.
-    fn release_section_state(&self);
+    /// Drops what the tab keeps resident beyond its grid and the detail's rows. Blocking, and only
+    /// while the tab is still off screen; the leave trims after it.
+    fn release_section_state(&self) {}
 
     fn open(
         state: &AppState,
@@ -95,7 +95,7 @@ fn wire_section_gate<V: GridTab>(ui: &AppWindow, state: &AppState, view: &Arc<V>
             ui.global::<CardSelection>().invoke_clear();
         }
         let view = Arc::clone(&view);
-        s.runtime.spawn_blocking(move || view.release_section_state());
+        s.runtime.spawn_blocking(move || release_off_thread(&*view));
     });
 }
 
@@ -112,6 +112,16 @@ fn release_on_ui_thread<V: GridTab>(ui: &AppWindow, view: &V) {
     track_detail::release_rows(view, &g);
     view.release_beside(&g);
     list_selection::clear_row_selection(&g);
+}
+
+/// The leave's blocking half, skipped where the tab is back before the pool reached it: the enter
+/// is already reloading into what this would hand back.
+fn release_off_thread<V: GridTab>(view: &V) {
+    if view.section().active() {
+        return;
+    }
+    view.release_section_state();
+    melodia_platform::services::platform::allocator::trim();
 }
 
 /// The tab came back on screen: a reload where a leave released the grid, else a prewarm of its

@@ -143,7 +143,8 @@ struct LibraryPage {
     /// The Slint global declaring the count, and the file declaring the global.
     global: &'static str,
     source: &'static str,
-    /// The Rust handler owning the section leave.
+    /// The file spelling the section leave's rewind. A grid tab spells it in its
+    /// `GridTab::rewind_count`, which [`GRID_TAB`]'s leave calls.
     lifecycle: &'static str,
     /// Whether that leave owes the sentinel rewind — true for the four that empty their
     /// models on the way out; [`every_library_leave_rewinds_the_count_it_numbered`] has
@@ -244,7 +245,15 @@ fn every_library_leave_rewinds_the_count_it_numbered() {
             page.label
         );
     }
+    assert!(
+        GRID_TAB.contains("V::rewind_count(ui);"),
+        "the four grid tabs leave through `grid_tab`, so a `rewind_count` it never calls rewinds \
+         nothing, however each tab spells it"
+    );
 }
+
+/// The section leave the four grid tabs share.
+const GRID_TAB: &str = include_str!("../callbacks/grid_tab.rs");
 
 const SECTION_GATE: &str =
     include_str!("../../../../melodia-ui/ui/components/section-active-gate.slint");

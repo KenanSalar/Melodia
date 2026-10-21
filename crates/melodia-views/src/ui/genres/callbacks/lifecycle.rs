@@ -37,14 +37,6 @@ impl GridTab for GenresUi {
         release_shared_hero(ui);
     }
 
-    /// Only the freed pages: no LRU lives here to drop first.
-    fn release_section_state(&self) {
-        if self.section_active() {
-            return;
-        }
-        melodia_platform::services::platform::allocator::trim();
-    }
-
     async fn open(
         state: &AppState,
         view: &Arc<Self>,

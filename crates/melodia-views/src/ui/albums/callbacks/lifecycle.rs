@@ -34,14 +34,10 @@ impl GridTab for AlbumsUi {
         release_detail_hero_images(ui, g);
     }
 
-    /// The detail's artwork and the grid tier's pixels down to proxies, then the freed pages.
+    /// The detail's artwork, and the grid tier's pixels down to proxies.
     fn release_section_state(&self) {
-        if self.section_active() {
-            return;
-        }
         crate::ui::grid_prewarm::shrink_covers();
         self.detail_artwork.clear();
-        melodia_platform::services::platform::allocator::trim();
     }
 
     async fn open(
