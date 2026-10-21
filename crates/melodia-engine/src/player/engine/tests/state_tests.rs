@@ -1308,6 +1308,33 @@ fn set_volume_clamps_and_unmutes() {
     assert_eq!(state.volume, 75, "a level inside the band passes through untouched");
 }
 
+/// A step lands inside `0..=MAX_VOLUME` from either end, and a muted player steps from the level
+/// it holds rather than from the silence it plays, unmuting on the way.
+#[test]
+fn stepping_clamps_at_both_ends_and_unmutes() {
+    let rows = [
+        (50, false, -5, 45),
+        (98, false, 5, MAX_VOLUME),
+        (MAX_VOLUME, false, 1, MAX_VOLUME),
+        (3, false, -5, 0),
+        (0, false, -1, 0),
+        (40, true, 5, 45),
+    ];
+    for (volume, is_muted, delta, expected) in rows {
+        let mut state = PlayerState { volume, is_muted, ..Default::default() };
+
+        let actions = state.build_step_volume_actions(delta);
+
+        assert_eq!(state.volume, expected, "{volume} stepped by {delta}");
+        assert!(!state.is_muted, "a step unmutes from {volume}, as a slider move does");
+        assert_eq!(
+            actions,
+            vec![PlayerAction::SetVolume(state.effective_volume())],
+            "{volume} stepped by {delta} sends the landed level to the device"
+        );
+    }
+}
+
 /// souvlaki states that a host may send a value outside `[0, 1]`, so the clamp is the whole of
 /// what stands between an OS panel and a volume of 200. Half a percent is the other half:
 /// rounding is what makes the quietest step reachable, where a truncating cast needs a full

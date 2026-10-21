@@ -255,14 +255,19 @@ impl PlayerState {
         vec![PlayerAction::SetVolume(self.effective_volume())]
     }
 
+    /// Returns whether setting `level` would change nothing. Never while muted, setting the held
+    /// level being how the user unmutes.
+    pub fn holds_volume(&self, level: u32) -> bool {
+        self.volume == level && !self.is_muted
+    }
+
     /// Returns the level a step of `delta` lands on, clamped to `0..=MAX_VOLUME`. Steps from the
     /// stored level while muted, as [`Self::build_set_volume_actions`] then unmutes.
     pub fn stepped_volume(&self, delta: i32) -> u32 {
         self.volume.saturating_add_signed(delta).min(MAX_VOLUME)
     }
 
-    /// Build actions for a relative volume step, applied against the level held here rather than
-    /// one the UI read back, which a burst of steps would all read before the first landed.
+    /// Build actions for a relative volume step.
     pub fn build_step_volume_actions(&mut self, delta: i32) -> Vec<PlayerAction> {
         self.build_set_volume_actions(self.stepped_volume(delta))
     }

@@ -11,7 +11,7 @@ use super::*;
 use crate::services::settings::{SettingsData, read_settings, write_settings};
 use crate::state::fixtures::TestPlayback;
 use melodia_engine::player::engine::fixtures::test_station;
-use melodia_engine::player::engine::state::{MAX_SPEED, MIN_SPEED, PlayerState};
+use melodia_engine::player::engine::state::{MAX_SPEED, MAX_VOLUME, MIN_SPEED, PlayerState};
 
 /// Mutate the fixture's state through the shipped emit, so a test starts from a state the machine
 /// built rather than from fields poked into it.
@@ -312,6 +312,39 @@ async fn setting_a_volume_already_held_publishes_nothing_unless_it_is_muted() ->
     let state = lock_state(&fx.ctx.player_state);
     assert!(!state.is_muted);
     assert_eq!(state.volume, held - 30);
+    Ok(())
+}
+
+/// The step's twin of the guard above, where a wheel spun against either end would otherwise
+/// publish a view model per notch. The muted half bites the same way: a notch that lands on the
+/// held level is still how a muted player comes back.
+#[tokio::test]
+async fn a_step_against_either_end_publishes_nothing_unless_it_is_muted() -> Result<(), AppError> {
+    let fx = TestPlayback::empty().await?;
+    seat(&fx, |s| s.build_set_volume_actions(0));
+    let mut published = fx.ctx.sinks.view_model.subscribe();
+    published.borrow_and_update();
+
+    player_step_volume(&fx.ctx, -5)?;
+    assert!(!published.has_changed().unwrap_or(true), "a notch under the floor publishes nothing");
+
+    seat(&fx, |s| s.build_set_volume_actions(MAX_VOLUME));
+    published.borrow_and_update();
+
+    player_step_volume(&fx.ctx, 5)?;
+    assert!(!published.has_changed().unwrap_or(true), "a notch past the ceiling publishes nothing");
+
+    seat(&fx, PlayerState::build_toggle_mute_actions);
+    published.borrow_and_update();
+
+    player_step_volume(&fx.ctx, 5)?;
+    assert!(published.has_changed().unwrap_or(false), "a notch while muted is an unmute");
+    published.borrow_and_update();
+    assert!(!lock_state(&fx.ctx.player_state).is_muted);
+
+    player_step_volume(&fx.ctx, -5)?;
+    assert!(published.has_changed().unwrap_or(false), "a step off the ceiling publishes");
+    assert_eq!(lock_state(&fx.ctx.player_state).volume, MAX_VOLUME - 5);
     Ok(())
 }
 
