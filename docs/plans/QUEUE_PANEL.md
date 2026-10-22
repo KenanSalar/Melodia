@@ -310,7 +310,7 @@ Status: implemented 2026-10-22, waiting on the hand pass. Its tests wait for Pha
 **C. The pills drop their labels** (`library-tab-band.slint`, `action-pill.slint`, both pill rows, both pages). The slot spans only the room beside the cover; short of it, every labelled pill shows its glyph with the label as its tooltip, on every row in the band (Kenan). The labelled width is measured off a hidden copy of the row. Radio's Favorites row keeps its labels, its cell clipping an in-tree tooltip.
 
 **By hand:**
-- A: narrow with the panel closed and the sidebar expanded (it folds before the content drops under the floor, and comes back on widening); the toggle and Ctrl+B under the forced rail; a relaunch keeps the user's fold; the edge drag on a narrow window.
+- A: narrow with the panel closed and the sidebar expanded (it folds before the content drops under the floor, and comes back on widening); the toggle and Ctrl+B under the forced rail; a relaunch keeps the user's fold, and one at a narrow width opens on the rail; the edge drag on a narrow window.
 - B: a playlist open in My Library, narrowed until the filter folds; open by a click, type, click away with text and without, ✕, widen while open.
 - C: a playlist detail, smart and not, and a Radio station page, narrowed until the labels drop; their tooltips; no flicker at the threshold; a longer locale.
 - The miniplayer and back.
@@ -318,7 +318,8 @@ Status: implemented 2026-10-22, waiting on the hand pass. Its tests wait for Pha
 **Gate:** fmt, clippy, test. One pin moved with the change, `placeholder_tests::the_search_bar_negotiates_its_width`. No new strings or icons.
 
 **Amended after the first hand pass:**
-- **Every fold eases the way a compact tab does** (Kenan): the filter onto its glyph and back, the field across the row and the tabs out from under it, and each pill's label onto its glyph. The header and the band each own the floats, written from `changed` and eased on the tab bar's curve; `SearchBar.fold-t` and `PillButton.compact-t` only draw them. The pills land rather than ease while the band morphs, so a row arriving with a detail takes the shape it has room for.
+- **Every fold eases the way a compact tab does** (Kenan): the filter onto its glyph and back, the field across the row and the tabs out from under it, and each pill's label onto its glyph. The header and the band each own the floats, written from `changed` and eased on the tab bar's curve; `SearchBar.fold-t` and `PillButton.compact-t` only draw them. The pills land rather than ease while the band morphs, so a row arriving with a detail takes the shape it has room for. A second pin moved with it, `tab_search_header_tests::every_painted_brush_is_an_input`, which now reads the bar's brushes through their fade.
+- **A narrow launch forces the rail too.** The window's term in `sidebar-yields` waits for a measured row: there is none at construction, where its `changed` mirror takes its baseline, so a row read as narrow there left a launch that really was narrow with no edge to write, and the sidebar drew expanded under the floor.
 
 ### Phase 4: Prove the drag primitives (a spike; nothing lands)
 On a throwaway build, confirm each fact the next two phases stand on:
@@ -407,7 +408,7 @@ Lands as one commit: a row cannot host both mechanisms.
   - `QueuePanelLayout` defaults and an older `settings.json`;
   - drop routing by position;
   - Phase 3.5: the Delete arm's gate; `RatingMenuRow` as the only `StarRating` inside a menu, by a walk; `Queue.floating` written beside `shown`; the overlay's Escape arm above `Selection.any-live()`.
-  - Phase 3.6: `sidebar-yields` carrying the bare-row term; the folded header and the compact detail row seating inside `Theme.content-min-w`, as arithmetic over the published floors; both pages feeding the band from a hidden ruler.
+  - Phase 3.6: `sidebar-yields` carrying the bare-row term, the window's term waiting for a measured row; the folded header and the compact detail row seating inside `Theme.content-min-w`, as arithmetic over the published floors; both pages feeding the band from a hidden ruler.
 - **Docs.** Phases 1 to 3's half landed on 2026-10-21, and Phase 3.5's on 2026-10-22 (`ui-patterns.md`'s row menu, queue block, `TrackTitle` and keys, `library-data.md`'s rating paths, `slint-pitfalls.md`'s `queue-row.slint` example, and the README's shortcut table and feature lines), and Phase 3.6's the same day (`ui-patterns.md`'s narrow-window block and its `PillButton`, `TabBar` and `LibraryTabBand` entries, the last one's stale pill-slot line retired with it, and `slint-pitfalls.md`'s `SearchBar` entry). Phases 1 to 3:
   - the panel's cross-file facts and the keys in `ui-patterns.md`, the narrow window's order and its two flags among them;
   - the sheet's mentions across the rules;

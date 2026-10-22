@@ -132,9 +132,10 @@ export component PillButton inherits Rectangle {
             }
             // **Always mounted** with a label, and closed by shrinking its slot to nothing, as a
             // compact tab's is. Rectangular so it lowers to a scissor, as tall as the chrome so
-            // marks reaching past the line box keep their slack, and the label pinned left so the
-            // clip eats the tail. The patched Vazirmatn metrics land the glyph mass at the line-box
-            // centre, so centring the line box is enough.
+            // marks reaching past the line box keep their slack, the label eliding so its own line
+            // box doesn't cut them first, and pinned left so the clip eats the tail. The patched
+            // Vazirmatn metrics land the glyph mass at the line-box centre, so centring the line
+            // box is enough.
             if root.text != "": Rectangle {
                 clip: true;
                 width: lbl.preferred-width * root.open;
@@ -147,6 +148,7 @@ export component PillButton inherits Rectangle {
                     font-size: Theme.font-size-sm;
                     font-weight: 500;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
             }
             // Always rendered when reserved, so the chrome's width doesn't depend on

@@ -334,8 +334,11 @@ export component AppWindow inherits Window {
     // `open`, so the sidebar comes back once the panel has stepped aside: with both fold controls
     // standing down under a forced rail, a panel too wide to show would otherwise hold the sidebar
     // folded with nothing the user could press to free it. An overlay takes no room in the row, so
-    // it folds nothing.
-    property <bool> sidebar-yields: Nav.sidebar-expanded-w > root.bare-sidebar-room
+    // it folds nothing. The window's half waits for a row: there is none at construction, where
+    // the tracker below takes its baseline, and one read as narrow there leaves a narrow launch
+    // with no edge to write.
+    property <bool> sidebar-yields:
+        (root.row-w > 0px && Nav.sidebar-expanded-w > root.bare-sidebar-room)
         || (root.queue-docked && root.sidebar-would-yield);
     changed sidebar-yields => {
         Nav.sidebar-yields = self.sidebar-yields;

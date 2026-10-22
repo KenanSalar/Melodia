@@ -142,9 +142,9 @@ fn the_search_bar_negotiates_its_width() {
     ] {
         assert!(src.contains(constraint), "search-bar.slint's root is missing `{constraint}`");
     }
-    // Leading space so this doesn't read the tail of `max-width: input-width;`.
+    // Leading space so this doesn't read the tail of `max-width: root.slot-w;`.
     assert!(
-        !src.contains(" width: input-width;"),
+        !src.contains(" width: root.slot-w;") && !src.contains(" width: input-width;"),
         "search-bar.slint's root binds `width` again — that is reported as both \
          min and max, and drags the window's resize floor with the locale"
     );
