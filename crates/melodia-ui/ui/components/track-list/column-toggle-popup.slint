@@ -2,6 +2,8 @@ import { Theme } from "../../theme.slint";
 import { TrackColumns } from "../../models.slint";
 import { PillButton } from "../action-pill.slint";
 import { Checkbox } from "../checkbox.slint";
+import { PopupColumn } from "../popup-column.slint";
+import { PopupFit } from "../popup-fit.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
@@ -82,30 +84,35 @@ export component ColumnTogglePopup inherits Rectangle {
     }
 
     pop := PopupWindow {
-        // Hangs below rather than above, since the trigger sits in the page
-        // header. Slint's `place_popup` clamps a popup's right edge to the
-        // window clip region, so a negative-x offset on a page-edge trigger just
-        // claims space the clamp takes back — the wrapper layout below reserves
-        // transparent margin *inside* the popup instead, and the visible chrome
-        // stops short of the edge even when the bounding box is clamped flush.
+        // Below the pill, or above it where below is short and above has more room, so the list
+        // never opens over the pill (`PopupFit`). Both off the outer box rather than the button,
+        // so the gap holds whatever the button's own alignment does.
+        property <length> above-y: root.absolute-position.y - Theme.popup-gap;
+        property <length> below-y: root.absolute-position.y + root.height + Theme.popup-gap;
+        property <bool> opens-above: PopupFit.opens-above(self.above-y, self.below-y, col.rows-h);
+
+        // The trigger sits at the page's edge, where Slint clamps a popup's box flush to the
+        // window: a negative-x offset just claims room the clamp takes back. The `pad-lg` margin
+        // is held *inside* the popup instead, so the chrome stops short of the edge either way.
         x: btn.width - self.width;
-        // Off the outer's bottom, not the button's, so the gap holds whatever
-        // the inner positioning does.
-        y: root.height + Theme.popup-gap;
+        y: self.opens-above ? -Theme.popup-gap - self.height : root.height + Theme.popup-gap;
+        width: col.rows-w + col.gutter + Theme.pad-lg;
+        height: PopupFit.side-h(self.above-y, self.below-y, col.rows-h);
         close-policy: close-on-click-outside;
 
         FocusLossWatcher {
             close => { pop.close(); }
         }
 
-        HorizontalLayout {
-            padding-right: Theme.pad-lg;
-            alignment: start;
+        PopupSurface {
+            x: 0px;
+            y: 0px;
+            width: parent.width - Theme.pad-lg;
+            height: parent.height;
 
-            chrome := PopupSurface {
-                VerticalLayout {
-                    padding: Theme.pad-xs;
-                    spacing: 0;
+            col := PopupColumn {
+                width: 100%;
+                height: 100%;
 
                 ColumnToggleRow {
                     // `#` is a numeric column glyph, not a word — left as-is.
@@ -165,7 +172,6 @@ export component ColumnTogglePopup inherits Rectangle {
                     label: @tr("Length");
                     checked: true;
                     locked: true;
-                }
                 }
             }
         }

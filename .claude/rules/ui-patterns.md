@@ -179,6 +179,15 @@ silently miss the other.
 
 - **`PopupSurface`** — every `PopupWindow` body wraps it. `pill: true` for vertical-pill.
 
+- **A popup whose rows can outgrow the window places itself through `PopupFit` and lists them in a
+  `PopupColumn`** (`components/popup-fit.slint`, `components/popup-column.slint`), never a
+  hand-rolled scroller. `PopupFit` holds the two placement rules: raised at a point, a popup slides
+  to stay in the shell; hanging off a control, it opens on the side with room so it never covers
+  the control. The column scrolls whatever its own box can't hold and publishes what its host
+  sizes off. Its hosts are `ContextMenuPopup`, `Dropdown`, `ColumnTogglePopup` and the bar's
+  overflow menu with both its flyouts; `FacetChip` takes `PopupFit` alone, its virtualized list
+  scrolling itself. `slint-pitfalls.md`'s oversized-popup entry is why.
+
 - **A surface that floats over the app edges with `Theme.surface2`, never `Theme.border`.** All
   four Catppuccin variants define `border` as the same hex as `surface0`, so a `surface0` card
   bordered with it has no rim at all. The test is the fill underneath, not the element's kind:
@@ -671,8 +680,8 @@ three components that answer it, and each argues its geometry at its own file.
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
     being picked by a side the width decides.
   - **A menu taller than the window scrolls** (`slint-pitfalls.md`'s oversized-popup entry). The
-    column caps at `ContextMenuMetrics.max-menu-h` and the popup places its own `y` through
-    `fit-y`, which is why each menu passes `anchor-window-y` beside `anchor-window-x`. A scrolling
+    column caps at `PopupFit.max-h` in a `PopupColumn` and the popup places its own `y` through
+    `PopupFit.fit-y`, which is why each menu passes `anchor-window-y` beside `anchor-window-x`. A scrolling
     menu widens by the bar's gutter rather than taking it from a row, and the Copy flyout follows
     its row through the scroll.
   - **An item menu's Copy acts on the effective set, one line per item, in the order handed over**, never

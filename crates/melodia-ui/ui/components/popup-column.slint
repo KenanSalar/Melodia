@@ -1,0 +1,60 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { OverlayScrollbar } from "overlay-scrollbar.slint";
+import { PopupFit } from "popup-fit.slint";
+
+// A popup's column of rows, scrolling whatever its own box can't hold. It goes inside the popup's
+// surface, which keeps the chrome, and the host sizes it off `rows-w` and `rows-h`, which only this
+// component can read off the rows' layout. `PopupFit` decides the box.
+//
+// **A row's height may not follow its width.** The gutter is decided off the rows' height and
+// taken from their width, so a wrapping row would be a binding loop.
+export component PopupColumn inherits Rectangle {
+    // A row to open scrolled to, centred where the list allows: a picker's current choice.
+    in property <length> reveal-y;
+    in property <length> reveal-h;
+
+    out property <length> rows-w: rows.preferred-width;
+    out property <length> rows-h: rows.preferred-height;
+    out property <bool> scrolls: root.rows-h > root.height;
+    // What a host adds to its width while the column scrolls, so the bar takes none from a row.
+    out property <length> gutter: root.scrolls ? PopupFit.scroll-gutter : 0px;
+    // How far the rows are scrolled, for a flyout lined up with one of them.
+    out property <length> scroll-y: -sv.content-y;
+
+    sv := ScrollView {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        horizontal-scrollbar-policy: always-off;
+        vertical-scrollbar-policy: always-off;
+        content-width: sv.visible-width - root.gutter;
+        // A binding only until the first wheel or bar write replaces it, so it sets where the
+        // column opens and nothing after.
+        content-y: -clamp(root.reveal-y + root.reveal-h / 2 - sv.visible-height / 2, 0px,
+            max(0px, sv.content-height - sv.visible-height));
+        // An entry click acts, so a press may not start a pan.
+        mouse-drag-pan-enabled: false;
+
+        rows := VerticalLayout {
+            padding: PopupFit.column-inset;
+            spacing: 0;
+            @children
+        }
+    }
+
+    // Inset from the border on all three sides: flush against it, the idle thumb is the border's
+    // own colour and reads as the edge thickening.
+    OverlayScrollbar {
+        horizontal: false;
+        x: parent.width - self.width - PopupFit.column-inset;
+        y: PopupFit.column-inset;
+        width: Theme.scrollbar-slot;
+        height: parent.height - 2 * PopupFit.column-inset;
+        visible-size: sv.visible-height;
+        content-size: sv.content-height;
+        offset: -sv.content-y;
+        scroll-to(o) => { sv.content-y = -o; }
+    }
+}

@@ -1,10 +1,10 @@
-import { ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { WindowChrome } from "../globals/shell.slint";
 import { FocusLossWatcher } from "focus-loss-watcher.slint";
 import { MaterialIcon } from "material-icon.slint";
-import { OverlayScrollbar } from "overlay-scrollbar.slint";
+import { PopupColumn } from "popup-column.slint";
 import { PopupDismissCatcher } from "popup-dismiss-catcher.slint";
+import { PopupFit } from "popup-fit.slint";
 import { PopupSurface } from "popup-surface.slint";
 
 // The one answer to whether a pointer event raises a right-click menu, read by every surface that
@@ -21,7 +21,7 @@ export global ContextClick {
     }
 }
 
-// What every right-click menu with a flyout shares, so the flyout's room and the edge tests are
+// What every right-click menu with a flyout shares, so the flyout's room and the edge test are
 // stated once rather than per menu. A menu opening its flyout rightward grows by that room while
 // the flyout is open; one opening it leftward holds the room from the start, because growing left
 // moves the popup's origin and Slint moves an open popup a loop pass after re-laying its content,
@@ -30,8 +30,8 @@ export global ContextMenuMetrics {
     out property <length> item-h: 32px;
     out property <length> flyout-w: 200px;
     out property <length> gap: Theme.pad-xs;
-    // The padding a menu column puts round its rows.
-    out property <length> inset: Theme.pad-xs;
+    // The padding a menu column puts round its rows, which the flyout's rows line up with.
+    out property <length> inset: PopupFit.column-inset;
     // A menu column is as wide as its widest row, between these: the floor keeps a short menu
     // reading as one, the ceiling keeps a long translation from crossing the window, and a row
     // past it elides rather than running off the surface.
@@ -39,8 +39,6 @@ export global ContextMenuMetrics {
     out property <length> menu-max-w: 400px;
     // The width a flyout adds beside its menu's column, on whichever side has room.
     out property <length> flyout-room: root.gap + root.flyout-w;
-    // A column taller than this scrolls rather than running past the window.
-    out property <length> max-menu-h: WindowChrome.shell-height - 2 * WindowChrome.edge-clearance;
 
     // Off the rows' `preferred-width`, which only the popup holding them can read.
     pure public function menu-w(rows-w: length) -> length {
@@ -69,14 +67,6 @@ export global ContextMenuMetrics {
     // outside the popup, where the position still means the window.
     pure public function opens-left(anchor-x: length, menu-w: length) -> bool {
         return anchor-x + menu-w + root.flyout-room > WindowChrome.shell-x + WindowChrome.shell-width;
-    }
-
-    // The popup's `y` in the host's frame, slid only as far as keeps `popup-h` inside the shell.
-    // Placed here rather than left to Slint, which fits a popup to the whole window and parks it
-    // flush against the edge.
-    pure public function fit-y(anchor-y: length, anchor-window-y: length, popup-h: length) -> length {
-        return anchor-y - anchor-window-y + clamp(anchor-window-y, WindowChrome.edge-clearance,
-            WindowChrome.shell-height - WindowChrome.edge-clearance - popup-h);
     }
 }
 
@@ -199,7 +189,8 @@ export struct CopyField {
 // way: opening leftward, the popup opens that much further left.
 //
 // **A column taller than the shell scrolls.** Slint keeps an oversized popup's height and draws
-// it past the window's edge, so the column caps at `max-menu-h` and the popup places its own `y`.
+// it past the window's edge, so the column caps at `PopupFit.max-h` and scrolls in its
+// `PopupColumn`, and the popup places its own `y`.
 //
 // The flyout's rows are data rather than children because the popup reserves their height before
 // the flyout mounts: counted off a list's length, a row added to it can't be clipped.
@@ -220,18 +211,14 @@ export component ContextMenuPopup inherits PopupWindow {
 
     // Wider by a gutter while it scrolls, which keeps the bar off the stars and the chevron without
     // taking width from a row.
-    out property <length> menu-w: ContextMenuMetrics.menu-w(menu-vl.preferred-width) + root.gutter;
+    out property <length> menu-w: ContextMenuMetrics.menu-w(col.rows-w) + col.gutter;
     out property <bool> flyout-left: root.has-copy-flyout
         && ContextMenuMetrics.opens-left(root.anchor-window-x, root.menu-w);
 
     callback dismiss-requested();
     callback copy-picked(string /*token*/);
 
-    // Off the column rather than the scroller, which reports a height of its own.
-    property <length> rows-h: menu-vl.preferred-height;
-    property <bool> scrolls: root.rows-h > ContextMenuMetrics.max-menu-h;
-    property <length> menu-h: min(root.rows-h, ContextMenuMetrics.max-menu-h);
-    property <length> gutter: root.scrolls ? Theme.scrollbar-slot + ContextMenuMetrics.inset : 0px;
+    property <length> menu-h: min(col.rows-h, PopupFit.max-h);
     property <length> flyout-h: ContextMenuMetrics.flyout-h(root.copy-fields.length);
     property <length> flyout-room:
         root.copy-open || root.flyout-left ? ContextMenuMetrics.flyout-room : 0px;
@@ -239,7 +226,7 @@ export component ContextMenuPopup inherits PopupWindow {
     property <length> fitted-h: max(root.menu-h, root.has-copy-flyout ? root.flyout-h : 0px);
 
     x: root.anchor-x - (root.flyout-left ? root.flyout-room : 0px);
-    y: ContextMenuMetrics.fit-y(root.anchor-y, root.anchor-window-y, root.fitted-h);
+    y: PopupFit.fit-y(root.anchor-y, root.anchor-window-y, root.fitted-h);
     width: root.menu-w + root.flyout-room;
     height: max(root.menu-h, root.copy-open ? root.flyout-h : 0px);
     close-policy: close-on-click-outside;
@@ -264,36 +251,10 @@ export component ContextMenuPopup inherits PopupWindow {
         width: root.menu-w;
         height: root.menu-h;
 
-        sv := ScrollView {
-            x: 0px;
-            y: 0px;
-            width: parent.width;
-            height: parent.height;
-            horizontal-scrollbar-policy: always-off;
-            vertical-scrollbar-policy: always-off;
-            content-width: sv.visible-width - root.gutter;
-            // An entry click acts, so a press may not start a pan.
-            mouse-drag-pan-enabled: false;
-
-            menu-vl := VerticalLayout {
-                padding: ContextMenuMetrics.inset;
-                spacing: 0;
-                @children
-            }
-        }
-
-        // Inset from the border on all three sides: flush against it, the idle thumb is the
-        // border's own colour and reads as the edge thickening.
-        OverlayScrollbar {
-            horizontal: false;
-            x: parent.width - self.width - ContextMenuMetrics.inset;
-            y: ContextMenuMetrics.inset;
-            width: Theme.scrollbar-slot;
-            height: parent.height - 2 * ContextMenuMetrics.inset;
-            visible-size: sv.visible-height;
-            content-size: sv.content-height;
-            offset: -sv.content-y;
-            scroll-to(o) => { sv.content-y = -o; }
+        col := PopupColumn {
+            width: 100%;
+            height: 100%;
+            @children
         }
     }
 
@@ -301,7 +262,7 @@ export component ContextMenuPopup inherits PopupWindow {
     // as drawn, scroll included.
     if root.copy-open: MenuFlyout {
         x: ContextMenuMetrics.flyout-x(root.flyout-left, root.menu-w);
-        y: ContextMenuMetrics.flyout-y(root.copy-row-y + sv.content-y, root.height, root.flyout-h);
+        y: ContextMenuMetrics.flyout-y(root.copy-row-y - col.scroll-y, root.height, root.flyout-h);
         height: root.flyout-h;
 
         for field in root.copy-fields: MenuItem {

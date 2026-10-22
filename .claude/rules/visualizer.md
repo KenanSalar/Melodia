@@ -152,9 +152,10 @@ counter, both worth reading before changing a gate.
 - **A host with flyouts keeps one `dismiss()` function** holding its close set, `pop.close()` and
   its flyout flags, that every closing path calls; a function, not a callback, for the same
   single-handler-slot reason the Dialog teardown is one. The single-column hosts have nothing but
-  `pop.close()` to call. What can't move into `MenuSurface` is the rows' `VerticalLayout`: the
-  popup sizes itself off that layout's `preferred-width` and only the host can name a descendant,
-  so it stays in the host and passes through `@children`.
+  `pop.close()` to call. What can't move into `MenuSurface` is the rows' container, a
+  `VerticalLayout` or, where the rows can outgrow the window, a `PopupColumn`: the popup sizes
+  itself off the rows' width and only the host can name a descendant, so it stays in the host and
+  passes through `@children`.
 
 - **The picker needs no Rust.** "Off" writes **both** halves of `Visualizer.enabled` (the two-way
   binding, so the Settings toggle and `watched-viz-active` follow, plus `set-enabled` to persist);

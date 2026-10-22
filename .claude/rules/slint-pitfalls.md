@@ -538,11 +538,12 @@ this file is what builds, looks right, and is wrong.
   oversized rect to the window, but its two callers in `i-slint-core/window.rs`,
   `WindowInner::show_popup` and `update_popup_properties`, keep only the origin it hands back. The
   popup is parked at the window's top at its full height and the rows past the bottom are cut off,
-  with nothing reporting it, and only on a window short enough to show it. Cure: cap the column at
-  the shell's height, scroll it, and place `y` yourself, as `ContextMenuPopup` does. Four popups
-  can still outgrow the full UI's shortest window: `Dropdown`, whose rows are its options, the
-  bar's `OverflowMenu`, `ColumnTogglePopup` on a list hiding no column, and `FacetChip`'s
-  fixed-height picker.
+  with nothing reporting it, and only on a window short enough to show it. Cure: place it yourself
+  through `components/popup-fit.slint`'s `PopupFit`, which slides a popup raised at a point
+  (`fit-y`) and opens one hanging off a control on the side with room, capped at it
+  (`opens-above`, `side-h`), and list its rows in a `PopupColumn`, which scrolls what that box
+  can't hold. Every popup whose rows can outgrow the full UI's shortest window takes both; the
+  rest are short enough that Slint's own slide never cuts them.
 
 - **A press outside an open `PopupWindow` closes it and reaches nothing else.**
   `WindowInner::process_mouse_input` closes the popup on that press and, the pointer being outside
