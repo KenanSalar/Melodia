@@ -93,8 +93,8 @@ export component OverflowMenu inherits Rectangle {
     property <length> sleep-flyout-h:
         FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + 9px
         + FlyoutMetrics.chrome-h;
-    // Reserve the wider one, and the gutter either widens by while it scrolls, so the popup keeps
-    // its box on a switch.
+    // Reserve the wider one plus the gutter either takes while it scrolls, so the popup keeps its
+    // box on a switch.
     property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w) + PopupFit.scroll-gutter;
     // Keeps the two columns reading as separate floating chromes.
     property <length> gap: 8px;

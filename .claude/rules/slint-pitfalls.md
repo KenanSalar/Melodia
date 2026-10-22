@@ -542,8 +542,9 @@ this file is what builds, looks right, and is wrong.
   through `components/popup-fit.slint`'s `PopupFit`, which slides a popup raised at a point
   (`fit-y`) and opens one hanging off a control on the side with room, capped at it
   (`opens-above`, `side-h`), and list its rows in a `PopupColumn`, which scrolls what that box
-  can't hold. Every popup whose rows can outgrow the full UI's shortest window takes both; the
-  rest are short enough that Slint's own slide never cuts them.
+  can't hold. Every popup whose rows can outgrow the full UI's shortest window places itself that
+  way and lists its rows in a `PopupColumn`, but for `FacetChip`, whose virtualized list scrolls
+  itself; the rest are short enough that Slint's own slide never cuts them.
 
 - **A press outside an open `PopupWindow` closes it and reaches nothing else.**
   `WindowInner::process_mouse_input` closes the popup on that press and, the pointer being outside
