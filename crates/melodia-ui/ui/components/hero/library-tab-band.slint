@@ -477,9 +477,34 @@ export component LibraryTabBand inherits Rectangle {
         - (root.detail-open ? Theme.hero-artwork + Theme.pad-lg : 0px);
     property <length> pill-hysteresis: 24px;
     property <bool> pill-latched: false;
-    out property <bool> pills-compact:
+    property <bool> pills-short:
         root.pill-room < root.pill-natural-w + (root.pill-latched ? root.pill-hysteresis : 0px);
-    changed pills-compact => { root.pill-latched = root.pills-compact; }
+
+    // That decision rendered over time, which the host hands its labelled pills: `TabBar`'s
+    // `compact-t`, seeded by the binding and owned by the handler, `pills-short` reading the
+    // page's width and an eased binding over it restarting on every move of a resize drag.
+    out property <float> pills-compact-t: root.pills-short ? 1.0 : 0.0;
+    changed pills-short => {
+        root.pill-latched = root.pills-short;
+        root.pills-compact-t = root.pills-short ? 1.0 : 0.0;
+    }
+    // The tab bar's curve and length, so the band's two rows fold alike. Landed rather than eased
+    // while the band morphs, a row arriving with a detail taking the shape it has room for rather
+    // than closing its labels under the growing hero, and for the band's first moments, which are
+    // it learning its width rather than a change.
+    animate pills-compact-t {
+        duration: 350ms;
+        easing: cubic-bezier(0.2, 0, 0, 1);
+        enabled: root.pills-eased && !root.morphing;
+    }
+    property <bool> pills-eased: false;
+    Timer {
+        interval: 100ms;
+        triggered => {
+            root.pills-eased = true;
+            self.running = false;
+        }
+    }
 
     // The action pills — the tab's, or the open detail's. **A floating slot rather than children of
     // the meta column**, Slint allowing one `@children` and the two states needing it in different

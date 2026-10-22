@@ -317,6 +317,9 @@ Status: implemented 2026-10-22, waiting on the hand pass. Its tests wait for Pha
 
 **Gate:** fmt, clippy, test. One pin moved with the change, `placeholder_tests::the_search_bar_negotiates_its_width`. No new strings or icons.
 
+**Amended after the first hand pass:**
+- **Every fold eases the way a compact tab does** (Kenan): the filter onto its glyph and back, the field across the row and the tabs out from under it, and each pill's label onto its glyph. The header and the band each own the floats, written from `changed` and eased on the tab bar's curve; `SearchBar.fold-t` and `PillButton.compact-t` only draw them. The pills land rather than ease while the band morphs, so a row arriving with a detail takes the shape it has room for.
+
 ### Phase 4: Prove the drag primitives (a spike; nothing lands)
 On a throwaway build, confirm each fact the next two phases stand on:
 1. **A `DragArea` around a track row in a pan-disabled `ListView` keeps every row interaction:** click, Ctrl/Shift pick, double-click, right-click menu, checkbox, hover heart and stars. It starts a drag past 8 px.

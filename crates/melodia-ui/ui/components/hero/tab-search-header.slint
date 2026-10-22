@@ -78,13 +78,39 @@ export component TabSearchHeader inherits HorizontalLayout {
     property <bool> folds: root.search-shown
         && root.content-w < bar.compact-w + 2 * Theme.pad-md + root.search-w-min
             + (root.fold-latched ? root.fold-hysteresis : 0px);
-    changed folds => { root.fold-latched = root.folds; }
     // Opened across the row, over the bar, for as long as it holds focus or text. Covering the
     // tabs costs little: a pick would clear the filter anyway.
     property <bool> field-over-tabs: root.folds && (search.has-focus || root.filter != "");
-    // What the box takes from the bar's budget. Folded it is the glyph's square whether or not
-    // the field is open over the bar, so opening it never replays the bar's compact morph.
-    property <length> box-w: root.folds ? search.bar-height : root.search-w;
+
+    // Both decisions rendered over time, the way `TabBar` renders its own: **seeded by the binding
+    // and owned by the handler**, since each verdict reads the row's width and an eased binding
+    // over it would restart on every move of a resize drag. The tab bar's curve and length, so the
+    // row folds as one, and landed rather than eased while the row is still learning its width.
+    property <float> fold-t: root.folds ? 1.0 : 0.0;
+    property <float> open-t: root.field-over-tabs ? 1.0 : 0.0;
+    changed folds => {
+        root.fold-latched = root.folds;
+        root.fold-t = root.folds ? 1.0 : 0.0;
+    }
+    changed field-over-tabs => { root.open-t = root.field-over-tabs ? 1.0 : 0.0; }
+    animate fold-t, open-t {
+        duration: 350ms;
+        easing: cubic-bezier(0.2, 0, 0, 1);
+        enabled: root.eased;
+    }
+    // `TabBar`'s gate and for its reason: it has to outlast the host's first `changed width`.
+    property <bool> eased: false;
+    Timer {
+        interval: 100ms;
+        triggered => {
+            root.eased = true;
+            self.running = false;
+        }
+    }
+
+    // What the box takes from the bar's budget: the glyph's square once folded, whether or not the
+    // field is open over the bar, so opening it never replays the bar's compact morph.
+    property <length> box-w: root.search-w + (search.bar-height - root.search-w) * root.fold-t;
 
     // --- What a host's sub-view bodies read ---------------------------------
     out property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
@@ -114,32 +140,36 @@ export component TabSearchHeader inherits HorizontalLayout {
 
     @children
 
-    // Collapsed under the opened field rather than unmounted, the way the box's cell collapses
-    // below, so the bar keeps its compact verdict and the budget keeps reading it. Hidden, it draws
-    // nothing and takes no events.
-    HorizontalLayout {
-        min-width: root.field-over-tabs ? 0px : bar.min-width;
-        preferred-width: root.field-over-tabs ? 0px : bar.preferred-width;
-        max-width: root.field-over-tabs ? 0px : bar.max-width;
+    // Shrunk to nothing under the opening field rather than unmounted, so the bar keeps its compact
+    // verdict and the budget keeps reading it. Shut, the empty clip takes every event and draws
+    // nothing. A rectangular clip, so a scissor, and nothing the bar draws reaches past it, its
+    // tooltip being the host's to paint. The brushes fade with the shrink, folded into the inputs
+    // because the bar eases floats and never a brush.
+    Rectangle {
+        clip: true;
+        min-width: root.open-t > 0.0 ? 0px : bar.min-width;
+        preferred-width: bar.preferred-width * (1.0 - root.open-t);
+        max-width: bar.max-width * (1.0 - root.open-t);
 
-        bar := TabBar {
-            visible: !root.field-over-tabs;
-            labels: root.tab-labels;
-            icons: root.tab-icons;
-            avail-width: root.content-w - root.box-w - 2 * Theme.pad-md;
-            selected-index <=> root.tab-idx;
-            label-color: root.label-color;
-            active-color: root.active-color;
-            hover-fill: root.hover-fill;
-            divider-color: root.divider-color;
-            selected(i) => {
-                // Direction first, in the same handler that moved the index: Slint re-evaluates a
-                // host's `if` branches next frame, so this lands before the new body mounts.
-                root.tab-enter-from = i > bar.previous-index
-                    ? NavEnterFrom.right
-                    : NavEnterFrom.left;
-                root.tab-anim-armed = true;
-                root.tab-selected(i);
+        HorizontalLayout {
+            bar := TabBar {
+                labels: root.tab-labels;
+                icons: root.tab-icons;
+                avail-width: root.content-w - root.box-w - 2 * Theme.pad-md;
+                selected-index <=> root.tab-idx;
+                label-color: root.label-color.transparentize(root.open-t);
+                active-color: root.active-color.transparentize(root.open-t);
+                hover-fill: root.hover-fill.transparentize(root.open-t);
+                divider-color: root.divider-color.transparentize(root.open-t);
+                selected(i) => {
+                    // Direction first, in the same handler that moved the index: Slint re-evaluates
+                    // a host's `if` branches next frame, so this lands before the new body mounts.
+                    root.tab-enter-from = i > bar.previous-index
+                        ? NavEnterFrom.right
+                        : NavEnterFrom.left;
+                    root.tab-anim-armed = true;
+                    root.tab-selected(i);
+                }
             }
         }
     }
@@ -177,11 +207,11 @@ export component TabSearchHeader inherits HorizontalLayout {
         VerticalLayout {
             alignment: center;
             padding-bottom: Theme.pad-sm;
+            // Opening over the bar takes the field out of its fold and across the row together.
             search := SearchBar {
-                folded: root.folds && !root.field-over-tabs;
-                input-width: root.field-over-tabs
-                    ? root.content-w - 2 * Theme.pad-md
-                    : root.search-w;
+                fold-t: root.fold-t * (1.0 - root.open-t);
+                input-width: root.search-w
+                    + (root.content-w - 2 * Theme.pad-md - root.search-w) * root.open-t;
                 text <=> root.filter;
                 placeholder: root.filter-placeholder;
                 blur-trigger: root.blur-tick;

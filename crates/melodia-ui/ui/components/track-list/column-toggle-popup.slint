@@ -67,8 +67,8 @@ export component ColumnTogglePopup inherits Rectangle {
     in property <bool> hide-album: false;
     in property <bool> hide-artist: false;
     in property <bool> hide-genre: false;
-    // `PillButton.compact`, for a host whose row is short of room.
-    in property <bool> compact: false;
+    // `PillButton.compact-t`, for a host whose row is short of room.
+    in property <float> compact-t: 0.0;
 
     callback toggled(string /*column_id*/);
 
@@ -82,7 +82,7 @@ export component ColumnTogglePopup inherits Rectangle {
     btn := PillButton {
         icon: "tune";
         text: @tr("Columns");
-        compact: root.compact;
+        compact-t: root.compact-t;
         force-bg: pop.is-open;
         clicked => { pop.show(); }
     }

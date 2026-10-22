@@ -51,10 +51,10 @@ export component RadioTabPills inherits Rectangle {
     // Spelled once: the collapse below and the pills it holds must not be able to disagree about
     // whether the row is up.
     property <bool> favorites-row-up: !Radio.detail-open && Radio.tab-idx == Radio.tab-favorites;
-    // The band's verdict that the row is short of room, handed to the station page's pills. The
-    // Favorites row keeps its label: its cell clips, so a dropped label would land on a tooltip
+    // The band's eased verdict that the row is short of room, handed to the station page's pills.
+    // The Favorites row keeps its label: its cell clips, so a dropped label would land on a tooltip
     // nothing draws, and the full band it sits in seats it at the narrowest content width.
-    in property <bool> compact: false;
+    in property <float> compact-t: 0.0;
 
     HorizontalLayout {
         alignment: end;
@@ -207,7 +207,7 @@ export component RadioTabPills inherits Rectangle {
                 icon: "play_arrow";
                 icon-filled: true;
                 text: @tr("Play");
-                compact: root.compact;
+                compact-t: root.compact-t;
                 clicked => { Radio.play-station(Radio.detail-station); }
             }
             if Radio.detail-votable || Radio.detail-station.editable: PillDivider { }
@@ -221,7 +221,7 @@ export component RadioTabPills inherits Rectangle {
                 icon: "thumb_up";
                 icon-size: 16px;
                 text: @tr("Vote");
-                compact: root.compact;
+                compact-t: root.compact-t;
                 clicked => {
                     Radio.vote(Radio.detail-station.uuid, Radio.detail-station.id);
                 }
@@ -232,7 +232,7 @@ export component RadioTabPills inherits Rectangle {
             if Radio.detail-station.editable: PillButton {
                 icon: "edit";
                 text: @tr("Edit");
-                compact: root.compact;
+                compact-t: root.compact-t;
                 clicked => { Radio.edit-station(Radio.detail-station); }
             }
         }

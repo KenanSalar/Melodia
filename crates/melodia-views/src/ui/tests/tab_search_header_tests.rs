@@ -174,7 +174,7 @@ fn every_painted_brush_is_an_input() {
              and a literal here is invisible until one of them is on screen"
         );
         assert!(
-            HEADER.contains(&format!("{prop}: root.{prop};")),
+            HEADER.contains(&format!("{prop}: root.{prop}")),
             "the bar must read `{prop}` off the input rather than the token"
         );
     }

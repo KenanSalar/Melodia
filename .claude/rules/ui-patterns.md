@@ -50,7 +50,7 @@ silently miss the other.
   on its own**, and that one is not a knob: the chrome collapses to 28 px while the label stays
   several times that, so the centred arm has nothing left to centre against, and the chips these
   sit in are right-aligned. `PillButton.icon-only` is the single statement of it, a pill whose
-  label `compact` dropped included, and **both mount shapes read that property rather than
+  label `compact-t` closed included, and **both mount shapes read that property rather than
   restating the test** (in-tree binds it directly; a top-layer host publishes it beside the rect,
   as `tab-pills`' `tip-align-end` and Browse's `view-toggle.icon-only` do). The text has its own
   single statement, `PillButton.tip-text`, which is the dropped label wherever the pill names no
@@ -108,9 +108,9 @@ silently miss the other.
 - **`PillButton`** (`components/action-pill.slint`) — `danger: true` tints icon **and** label
   only; the filled destructive treatment is `SectionButton`'s, and the two are not one pattern.
   Compose inside `ActionPill`, separated by `PillDivider`; `IconButton` for round controls
-  *outside* chips. **`compact` drops the label onto the tooltip**, the glyph standing in, and a
-  text-only pill ignores it. Only the band decides when (`LibraryTabBand`, below), and a pill bound
-  to it needs a tooltip something actually draws.
+  *outside* chips. **`compact-t` closes the label onto the glyph and moves it to the tooltip**, a
+  compact tab's morph, and a text-only pill ignores it. Only the band decides when and eases it
+  (`LibraryTabBand`, below), and a pill bound to it needs a tooltip something actually draws.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
   the right-click menu's, on rows and cards alike: "Select all" ungated wherever the host has a set,
@@ -1426,9 +1426,10 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
   ends of the clamp read a published floor (`compact-w`, `min-w`) rather than a restated literal,
   which keeps each from drifting and makes the row's minimum a sum the page can check. **Past that
   sum the box folds to its glyph** rather than drawing past its cell, and opens across the row
-  over the bar while it holds focus or text, a tab pick clearing the filter anyway. It is one
-  `SearchBar` throughout, so a resize hands no focus across, which is where it parts from Settings'
-  two boxes. The fold and the open state are `tab-search-header.slint`'s.
+  over the bar while it holds focus or text, a tab pick clearing the filter anyway. Both ease on
+  the bar's own morph, written from `changed` for the bar's reason. It is one `SearchBar`
+  throughout, so a resize hands no focus across, which is where it parts from Settings' two boxes.
+  The fold and the open state are `tab-search-header.slint`'s.
   **`tip-x`/`tip-y` carry the bar's own `absolute-position` offset inside the row**, the half a
   host cannot supply — dropped, the pill lands a whole `lead-w` left of the tab it names, on the
   one mount with a leading slot.
@@ -1478,10 +1479,11 @@ two-row cap is measured against the same slack) and the tooltip frame.
 
 - **The pill row's fit is the band's, and the width it weighs is the host's.** The slot spans
   only the room beside the cover, so a row that can't fit runs off under the clip rather than over
-  the artwork, and short of that room `pills-compact` drops every labelled pill to its glyph. The
-  labelled width can't come off the drawn row, which stops reporting it once its labels drop, so
-  each host mounts a hidden second copy of its pill row outside every layout (`pill-ruler`) and
-  hands the band its `preferred-width`: `TabBar`'s ruler, one level up. **A pill in a clipping
+  the artwork, and short of that room `pills-compact-t` closes every labelled pill onto its glyph,
+  eased on the tab bar's curve and landed while the band morphs. The labelled width can't come off
+  the drawn row, which stops reporting it once its labels close, so each host mounts a hidden
+  second copy of its pill row outside every layout (`pill-ruler`) and hands the band its
+  `preferred-width`: `TabBar`'s ruler, one level up. **A pill in a clipping
   cell keeps its label unless its tooltip is drawn from the top layer**, an in-tree one landing
   under the clip. My Library's Playlists row publishes its anchors and compacts; Radio's Favorites
   row doesn't, and keeps its label.
