@@ -1,0 +1,40 @@
+// The in-window drag, which Slint's `DragArea` carries as an opaque `data-transfer` that Slint code
+// can't read. So the token is a constant and what a drag means sits here.
+
+// The list a drag came out of. A list takes back only its own rows, as a reorder.
+export enum DragOrigin { none, queue, up-next, playlist }
+
+export struct DragPayload {
+    origin: DragOrigin,
+    // The row lifted, in its own list's order.
+    index: int,
+}
+
+export global Drag {
+    // What every `DragSource` carries. Rust builds it once, a `data-transfer` being constructible
+    // only through the host, and gives it user data alone, so no backend can take the drag out of
+    // the window.
+    in property <data-transfer> token;
+
+    // **Armed by the row a press lands on, and disarmed by every press first** (the winit filter,
+    // ahead of Slint's dispatch). A `DragArea` starts a drag from any press it contains, a gap
+    // between rows or a row's own button included, and no element sees every press, so a drag from
+    // one of those carries nothing rather than the last row clicked.
+    out property <DragPayload> payload;
+
+    public function arm(origin: DragOrigin, index: int) {
+        self.payload = { origin: origin, index: index };
+    }
+
+    public function disarm() {
+        self.payload = { origin: DragOrigin.none, index: -1 };
+    }
+
+    // For a list whose rows moved under a live drag: it goes on, the source surviving the rebuild,
+    // but its index no longer names the row it lifted.
+    public function revoke(origin: DragOrigin) {
+        if (self.payload.origin == origin) {
+            self.disarm();
+        }
+    }
+}

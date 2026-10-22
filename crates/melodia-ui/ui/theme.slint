@@ -40,6 +40,10 @@ export global Theme {
     // the database. One value, since the list row and the card draw the same file.
     out property <float> fade-disk-only: 0.45;
 
+    // How much of its weight a row being dragged keeps: dim enough not to read as a live row, but
+    // still there, the silhouette being what says which track was picked up.
+    out property <float> fade-lifted: 0.4;
+
     // Where a lit control rests while nothing is pointing at it, as an alpha. Full weight belongs
     // to the pointer, so a control already at it has nothing left to answer a hover with. Shared
     // rather than spelled per component because the Now-Playing star row and the glyph family

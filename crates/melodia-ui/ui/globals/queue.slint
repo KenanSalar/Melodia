@@ -5,11 +5,6 @@ import { QueueRow } from "../models.slint";
 
 // The queue panel. Rust owns the `rows` model and writes both it and `current-index` from a
 // subscriber on the same `sinks.queue` watch `Player.queue` reads.
-//
-// **The drag plumbing is bespoke rather than `DragArea` / `DropArea`** — `queue-row.slint`
-// says why. The panel flips `drag-source`/`drop-slot` from row-level `pointer-event` handlers and
-// fires `reorder` on pointer-up only; both clear out from under a drag the pressed row can no
-// longer finish — Rust on a `rows` rebuild, the panel on either `shown` transition and at mount.
 export global Queue {
     in-out property <[QueueRow]> rows;
     // -1 when nothing is playing. Rows derive `playing: idx == current-index`, so the
@@ -48,12 +43,6 @@ export global Queue {
     // winit filter, which sees a press before any element can take it, and handed back by a row's
     // menu as it closes, its popup having hidden that press from `pointer-in`.
     in-out property <bool> keys-owned;
-    // -1 when idle, else the play-order index being dragged.
-    in-out property <int> drag-source: -1;
-    // Where the dragged row would land, in `[0, rows.length]`. **Slot semantics, not row-index**:
-    // slot K is the *gap* between rows K-1 and K, which is what makes the two neighbouring slots
-    // recognisable no-ops the panel hides. -1 is no candidate.
-    in-out property <int> drop-slot: -1;
     // Mirrored from Rust on an OS file-hover for the drop banner, gated in markup on
     // `is-drop-hovered && shown`. Wayland needs the vendored winit patch.
     in property <bool> is-drop-hovered: false;
@@ -67,7 +56,7 @@ export global Queue {
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 
-    // Fires on pointer-up only once the drag passed the 4 px click threshold.
+    // A drag of one row dropped somewhere that moves it, in play order.
     callback reorder(int /*from*/, int /*to*/);
     callback remove(int /*play_order_index*/);
     // Removes every row Rust holds picked, both copies of a track queued twice.
@@ -117,6 +106,10 @@ export global NowPlaying {
     // Under repeat-all the list wraps past the end of the queue, so a row's real play-order
     // index is `mod(base-index + idx, queue-length)`.
     in property <int> queue-length: 0;
+
+    // A drag of one row dropped somewhere that moves it, in the list's own rows. Rust maps the two
+    // onto play order, refusing a move across the repeat-all wrap.
+    callback reorder(int /*from-row*/, int /*to-row*/);
 
     // Drives the one-shot Up Next slide; anything at or past `slide-frames` is at rest. Reset to 0
     // **only** on a real current-track change, not on a reorder keeping the same track. On the

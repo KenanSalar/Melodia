@@ -22,7 +22,7 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::{AppResult, describe};
-use melodia_ui::{AppWindow, NavEnterFrom, PlaylistDetail};
+use melodia_ui::{AppWindow, DragOrigin, NavEnterFrom, PlaylistDetail};
 
 /// The playlist's own curated order. Synthetic — no column header asks for it,
 /// which is why the sort cycle has to hand it back (`next_sort_with_natural`).
@@ -50,13 +50,12 @@ impl TrackDetail for PlaylistsUi {
         TrackListScope::Playlist(id, self.draw())
     }
 
-    /// Abort any in-flight drag-reorder: the row indices it was computed against no longer
-    /// describe the playlist, and the reset destroys the row instance holding the pointer grab, so
-    /// it can never clear this state itself. Left set, the source row stays ghosted and the drop
-    /// line stranded.
-    fn rows_moving(&self, g: &Self::Global) {
-        g.set_drag_source(-1);
-        g.set_drop_slot(-1);
+    /// A drag still in flight goes on, the list's source surviving the rows it holds, but the
+    /// index it lifted no longer names the same track.
+    fn rows_moving(&self, _g: &Self::Global) {
+        if let Some(drag) = self.drag.upgrade() {
+            drag.invoke_revoke(DragOrigin::Playlist);
+        }
     }
 
     fn clear_detail(&self) {

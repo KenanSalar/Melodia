@@ -31,7 +31,8 @@
 //!    where a resize begins and where it is let go, which no one event reports. See
 //!    `resize_release`.
 //! 10. **`MouseInput { Pressed }`**, any button and whoever takes it: whether it landed on the
-//!     queue panel, which makes Escape, Ctrl+A and Delete the queue's. See [`claim_queue_keys`].
+//!     queue panel, which makes Escape, Ctrl+A and Delete the queue's, and a disarm of what an
+//!     in-window drag would carry. See [`claim_queue_keys`] and [`disarm_drag`].
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -46,7 +47,7 @@ use slint::winit_030::{EventResult, WinitWindowAccessor};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, CompositeScroll, DragRegion, PlaylistDetail, Queue, Theme, WindowChrome,
+    AppWindow, CompositeScroll, Drag, DragRegion, PlaylistDetail, Queue, Theme, WindowChrome,
 };
 
 use super::drag_region::{DoublePress, PressAction};
@@ -151,6 +152,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
         }
         if let WindowEvent::MouseInput { state: ElementState::Pressed, .. } = event {
             claim_queue_keys(&weak);
+            disarm_drag(&weak);
         }
         match event {
             // Ahead of the drag arm: the miniplayer's drag region runs right up to the edge, and its
@@ -235,6 +237,15 @@ fn claim_queue_keys(weak: &slint::Weak<AppWindow>) {
     let Some(ui) = weak.upgrade() else { return };
     let queue = ui.global::<Queue>();
     queue.set_keys_owned(queue.get_shown() && queue.get_pointer_in());
+}
+
+/// Empties what an in-window drag would carry, ahead of Slint's dispatch, so only the row this
+/// press lands on can arm it. A list's `DragArea` starts a drag from any press it contains, a gap
+/// between rows or a row's own button included, and no element sees all of those, so without this
+/// such a drag would carry the last row clicked. Here for the reason [`claim_queue_keys`] is.
+fn disarm_drag(weak: &slint::Weak<AppWindow>) {
+    let Some(ui) = weak.upgrade() else { return };
+    ui.global::<Drag>().invoke_disarm();
 }
 
 /// A left press over a drag region: a window move, or the titlebar's double press.

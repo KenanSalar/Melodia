@@ -118,6 +118,7 @@ pub fn install_views(
     let cover_thumbs = Arc::new(image::cover_thumbs::CoverThumbs::new());
     install_row_covers(app, &cover_thumbs);
     install_grid_covers(app);
+    ui::drag::install(app);
 
     let cx = ui::view_ctx::ViewCtx {
         app,

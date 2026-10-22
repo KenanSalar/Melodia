@@ -76,42 +76,11 @@ export component TrackListRowItem inherits Rectangle {
     // right-clicked row and the whole selection. Multi-mode needs this row selected *and* more
     // than one entry — right-clicking an unselected row falls back to that row alone.
     in property <[int]> view-selected-ids;
-
-    // Drag-reorder, opt-in via `enable-drag`; `TrackList` and every other consumer leave it off and
-    // pay nothing. On, the row's own `touch` also tracks press → move → release — a wrapping or
-    // sibling TouchArea can't, Slint's deepest-wins routing delivering press/up exclusively to
-    // `touch` while the outer one sees only `moved`, so a drag started and never cleaned up. The
-    // shared state lives on `DraggableTrackList` through two-way `drag-source` / `drop-slot`.
-    in property <bool> enable-drag: false;
+    // The list's length, which the `index` number mode counts down from.
     in property <int> row-count: 0;
-    in property <length> list-y0: 0px;
-    in property <length> list-height: 0px;
-    in property <length> list-viewport-y: 0px;
-    in-out property <int> drag-source: -1;
-    in-out property <int> drop-slot: -1;
-    // Per-row drag state — meaningful only while `enable-drag` is on and this row is
-    // pressed.
-    property <length> drag-press-abs-y;
-    property <bool> drag-started: false;
-    property <length> drag-cur-abs-y: 0px;
+    // The row the list's drag picked up. Only a list with a `DragSource` sets it.
+    in property <bool> lifted: false;
     property <length> pitch: Theme.track-row-pitch(root.columns.show_artwork);
-    // Slot math: list-relative pointer Y → row index → upper/lower half → slot in
-    // `0..=row-count`.
-    property <length> drag-cur-list-y:
-        root.drag-cur-abs-y - root.list-y0 - root.list-viewport-y;
-    property <int> drag-cur-row: clamp(
-        Math.floor(root.drag-cur-list-y / root.pitch),
-        0,
-        max(0, root.row-count - 1),
-    );
-    property <bool> drag-upper-half:
-        (root.drag-cur-list-y - root.drag-cur-row * root.pitch)
-            < root.pitch / 2;
-    property <int> drag-computed-slot: clamp(
-        root.drag-upper-half ? root.drag-cur-row : root.drag-cur-row + 1,
-        0,
-        root.row-count,
-    );
 
     callback double-clicked-row();
     callback toggle-favorite();
@@ -141,12 +110,8 @@ export component TrackListRowItem inherits Rectangle {
     // clicks, checkbox clicks, right-click. Slint doesn't blur a TextInput on an outside click, so
     // the host watches this counter and clears focus itself.
     callback request-blur-search();
-    // Fires on pointer-up only when a drag really started (4 px threshold) and the slot would move
-    // this row. `DraggableTrackList` routes it to `reorder_playlist`.
-    callback drag-reorder(int /*from*/, int /*to*/);
-    // Requested viewport delta while dragging near a list edge, negative being up; the host
-    // re-clamps and applies it.
-    callback request-scroll-by(length /*delta-y*/);
+    // A left press on the row body, which is what a drag from it would carry.
+    callback pressed();
 
     // No width of its own: the list sets every row to its own width, which is the width `layout`
     // was resolved for.
@@ -171,9 +136,8 @@ export component TrackListRowItem inherits Rectangle {
             // cursor.
             min-height: Theme.track-row-h(root.columns.show_artwork);
             max-height: Theme.track-row-h(root.columns.show_artwork);
-        // A drag source fades so it reads as lifted out of position, for the length of the drag
-        // only. Inert without `enable-drag`, `drag-source` staying -1.
-        opacity: root.enable-drag && root.drag-source == root.row-index ? 0.4 : 1.0;
+        // Fades so the row reads as lifted out of position, for the length of the drag only.
+        opacity: root.lifted ? Theme.fade-lifted : 1.0;
         animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
         // No radius here: a clip copies its element's radius, and a rounded one renders the whole
         // row into a texture. Nothing reaches the corners, so a plain clip cuts the same overflow.
@@ -199,19 +163,13 @@ export component TrackListRowItem inherits Rectangle {
             // A disabled TouchArea processes nothing, so disk-only rows get no hover background,
             // no checkbox swap-in and no double-click.
             enabled: root.enabled;
-            // Grabbing only once a real drag is in flight; hover and idle press stay
-            // `default` so inner cell cursors aren't overridden when drag is off.
-            mouse-cursor:
-                root.enable-drag && self.pressed && root.drag-started
-                    ? grabbing
-                    : default;
             // A row-body click picks only once the view holds a selection, so the first pick is
             // the box's and an idle list can't select by accident. **On `clicked`** rather than
             // the release: this row's favourite toggle and star strip are the worked example in
-            // `slint-pitfalls.md`'s grab-invalidation entry. It runs before `pointer-event`, so
-            // `drag-started` still holds the value the block below is about to reset.
+            // `slint-pitfalls.md`'s grab-invalidation entry. A drag sends this area a cancel, so
+            // it lands no pick.
             clicked => {
-                if (root.enabled && root.selecting && !root.drag-started) {
+                if (root.enabled && root.selecting) {
                     root.pick(root.press-shift);
                 }
             }
@@ -219,13 +177,13 @@ export component TrackListRowItem inherits Rectangle {
             // comes out where it started.
             double-clicked => { root.double-clicked-row(); }
             // The blur request is every left release, so clicking anywhere on a row drops filter
-            // focus. Drag press/up tracking shares this handler, `touch` being where Slint
-            // delivers them.
+            // focus.
             pointer-event(ev) => {
                 // `clicked` carries no modifiers, so the shift a range-pick needs is taken off
                 // the press that armed it.
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                     root.press-shift = ev.modifiers.shift;
+                    root.pressed();
                 }
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
                     root.request-blur-search();
@@ -234,67 +192,6 @@ export component TrackListRowItem inherits Rectangle {
                     && ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
                     ctx-menu.show-at(self.mouse-x, self.mouse-y);
                     root.request-blur-search();
-                }
-                // Drag-reorder tracking — opt-in via `enable-drag`.
-                if (root.enable-drag) {
-                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
-                        root.drag-press-abs-y = self.absolute-position.y + self.pressed-y;
-                        root.drag-started = false;
-                        root.drop-slot = -1;
-                    }
-                    if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
-                        // Slot → `to` index; removing the source shifts higher indices down by
-                        // one. `drag-source == row-index` ties the commit to state nobody reset
-                        // behind our back — that pair lives on a global outliving this view, where
-                        // `drag-started` is per-row. `queue-row.slint` carries the same guard.
-                        if (root.drag-started
-                            && root.drag-source == root.row-index
-                            && root.drop-slot >= 0
-                            && root.drop-slot != root.row-index
-                            && root.drop-slot != root.row-index + 1) {
-                            root.drag-reorder(
-                                root.row-index,
-                                root.drop-slot <= root.row-index
-                                    ? root.drop-slot
-                                    : root.drop-slot - 1,
-                            );
-                        }
-                        root.drag-source = -1;
-                        root.drop-slot = -1;
-                        root.drag-started = false;
-                    }
-                    if (ev.kind == PointerEventKind.cancel) {
-                        root.drag-source = -1;
-                        root.drop-slot = -1;
-                        root.drag-started = false;
-                    }
-                }
-            }
-            moved => {
-                if (!root.enable-drag) {
-                    return;
-                }
-                if (self.pressed) {
-                    if (!root.drag-started
-                        && Math.abs((self.absolute-position.y + self.mouse-y) - root.drag-press-abs-y) > 4px) {
-                        root.drag-started = true;
-                        root.drag-source = root.row-index;
-                    }
-                    // Only the row holding `drag-source` drives `drop-slot` — the
-                    // `queue-row.slint` ownership rule.
-                    if (root.drag-started && root.drag-source == root.row-index) {
-                        root.drag-cur-abs-y = self.absolute-position.y + self.mouse-y;
-                        root.drop-slot = root.drag-computed-slot;
-                        // Edge auto-scroll — the band and nudge `queue-row.slint` uses.
-                        if (root.list-height > 0px) {
-                            if ((self.absolute-position.y + self.mouse-y) - root.list-y0 < 40px) {
-                                root.request-scroll-by(-6px);
-                            } else if (((root.list-y0 + root.list-height)
-                                        - (self.absolute-position.y + self.mouse-y)) < 40px) {
-                                root.request-scroll-by(6px);
-                            }
-                        }
-                    }
                 }
             }
 

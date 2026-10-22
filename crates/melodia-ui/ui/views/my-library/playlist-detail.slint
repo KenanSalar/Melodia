@@ -11,15 +11,6 @@ import { MaterialIcon } from "../../components/material-icon.slint";
 // drag-free for Tracks / Browse / the other three details — plus the empty state and the
 // OS file-drop banner, which both fill `body`.
 export component PlaylistDetailBody inherits Rectangle {
-    // The `<=>`s below adopt whatever the globals held — a two-way link keeps the right
-    // side's value, and the globals outlive this view. Without the reset a drag
-    // interrupted by nav-away returns as a ghosted row under a stranded drop line. `init`
-    // runs after the links, so it wins.
-    init => {
-        PlaylistDetail.drag-source = -1;
-        PlaylistDetail.drop-slot = -1;
-    }
-
     // Catches clicks no inner TouchArea consumes; the band's SearchBar blurs on the tick.
     TouchArea {
         clicked => { MyLibrary.blur-search-tick += 1; }
@@ -46,11 +37,6 @@ export component PlaylistDetailBody inherits Rectangle {
                 && PlaylistDetail.sort-dir != "desc"
                 && PlaylistDetail.filter == ""
                 && !PlaylistDetail.playlist.is_smart;
-            // On the global so Rust can abort an in-flight drag: refreshing `tracks`
-            // destroys the row holding the pointer grab, and a dead row never delivers
-            // the pointer-up that would clear these.
-            drag-source <=> PlaylistDetail.drag-source;
-            drop-slot <=> PlaylistDetail.drop-slot;
 
             columns <=> PlaylistDetail.track-columns;
 

@@ -618,14 +618,17 @@ three components that answer it, and each argues its geometry at its own file.
 ### Lists and playback
 
 - **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
-  place its entries are mounted.** Three hosts: `TrackListRowItem`, the queue panel's
-  `QueueRowItem` and the now-playing bar's track card. It owns the entries, the `multi-active` gate
-  (this row selected *and* more than one selected, so a right-click on an unselected row falls back
-  to that row alone) and the `effective-ids` every handler reads; the host only says where, through
-  `show-at`.
+  place its entries are mounted.** Four hosts: `TrackListRowItem`, the queue panel's
+  `QueueRowItem`, Up Next's row and the now-playing bar's track card. It owns the entries, the
+  `multi-active` gate and the `effective-ids` every handler reads; the host only says where, through
+  `show-at`. **The gate's rule is `Selection.acts-on-set` and `effective-ids`**, the item selected
+  *and* more than one selected, so a right-click on an unselected item falls back to that item
+  alone; the card and station menus read the same two, and a menu spelling the rule again is the
+  copy those replaced.
   **`view-context` is most of what a host configures** — it suppresses the entry naming the
   surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add to
-  Queue outright, the queue being what they name. `"now-playing"` drops those two and Play as well,
+  Queue outright, the queue being what they name. `"up-next"` is the queue's arm less the selection
+  group, Up Next picking nothing. `"now-playing"` drops those two and Play as well,
   its row being the track already playing out of a queue that holds it, and the selection group
   with them, the bar having no set. A remove label handed over by the host would ship
   untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
@@ -699,6 +702,22 @@ three components that answer it, and each argues its geometry at its own file.
     platform clipboard Slint's backend owns, which on Wayland is the app's own display connection
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
+
+- **A list reorders through `components/drag-source.slint`'s `DragSource` round its `ListView` and
+  `components/list-drop-target.slint`'s `ListDropTarget` over it, never a gesture of its own.**
+  Three mounts: the queue panel, Playlist Detail's `DraggableTrackList` and Up Next. The row reports
+  its press (`pressed => { src.arm(idx); }`) and reads `lifted: src.lifts(idx)`, dimming by
+  `Theme.fade-lifted`; the target owns the slot, the line, the edge scroll and the no-op slots,
+  handing the host `reorder(from, to)` and `scroll-by(dy)`.
+  - **What a drag carries is `Drag.payload`, written from two trees** (`ui::drag` names the three
+    writes): the pressed row arms it, every press disarms it first in
+    `winit_filter::disarm_drag`, and a list whose rows move under a drag revokes its own origin
+    (`queue_panel::rows::show_queue`, `PlaylistsUi::rows_moving`, Up Next's `show_slice`). **A new
+    reorderable list owes the revoke**, the one write nothing fails without: the drag goes on over
+    the rebuilt rows, and the index it lifted lands on another track.
+  - **Up Next's rows are play order only modulo the repeat-all wrap**, so its target hands
+    `NowPlaying.reorder` row indices and `up_next::play_order_move` maps them, refusing a move
+    across the wrap. The queue panel and the playlist reorder in their own rows.
 
 - **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and

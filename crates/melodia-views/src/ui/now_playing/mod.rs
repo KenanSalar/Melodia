@@ -41,7 +41,7 @@ use async_compat::Compat;
 
 pub(crate) use source_change::republish_for_palette;
 use source_change::{apply_source_change, spawn_source_change_subscriber};
-use up_next::{spawn_seed, spawn_up_next_subscriber, wire_now_playing_open};
+use up_next::{spawn_seed, spawn_up_next_subscriber, wire_now_playing_open, wire_reorder};
 
 /// Re-fill a `NowPlayingState`-shadowed surface (the Up Next list, the high-res cover slot or the
 /// lyrics panel's sheet), or hand the cover back.
@@ -303,6 +303,7 @@ pub fn install(
     spawn_source_change_subscriber(ui, state, np_artwork.clone(), np_state.clone(), initial_key)?;
     spawn_up_next_subscriber(ui, state, up_next_model.clone(), np_state.clone())?;
     wire_now_playing_open(ui, state, np_artwork.clone(), up_next_model.clone(), np_state.clone());
+    wire_reorder(ui, state, up_next_model.clone(), np_state.clone());
 
     // Seeded here, the queue-restore broadcast having fired before the subscriber subscribed; the
     // snapshot also stays in `latest_qvm` for a later open. The rows land once the loop runs.

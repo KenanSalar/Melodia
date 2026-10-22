@@ -1,0 +1,25 @@
+import { Drag, DragOrigin } from "../globals/drag.slint";
+
+// A list's drag: a `DragArea` round its `ListView`, one per list.
+//
+// **Never inside a row.** The runtime holds the source weakly and reports `drag-finished` only to
+// one that still exists, and a `ListView` destroys a row rather than recycling it, so a row that
+// scrolled out, was rebuilt under the drag or was moved by the reorder itself would never hear its
+// drag end. Round the list it outlives all of those.
+//
+// It takes the press at 8 px and sends the rows a cancel, so a drag lands no click. The rows report
+// their press through `arm`, which `Drag.payload` argues.
+export component DragSource inherits DragArea {
+    in property <DragOrigin> origin;
+
+    data: Drag.token;
+
+    public function arm(index: int) {
+        Drag.arm(root.origin, index);
+    }
+
+    // Whether row `index` is the one this list's drag lifted, for the row to dim.
+    public pure function lifts(index: int) -> bool {
+        return root.dragging && Drag.payload.origin == root.origin && Drag.payload.index == index;
+    }
+}

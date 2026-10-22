@@ -9,6 +9,9 @@ import { IconButton } from "../../components/icon-button.slint";
 import { ActionPill, PillButton } from "../../components/action-pill.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { EdgeResizeHandle, GrowEdge } from "../../components/edge-resize-handle.slint";
+import { DragSource } from "../../components/drag-source.slint";
+import { ListDropTarget } from "../../components/list-drop-target.slint";
+import { DragOrigin } from "../../globals/drag.slint";
 import { QueueRowItem } from "queue-row.slint";
 
 // The queue, docked after the content panel in the shell's row, so the sidebar, the content and
@@ -24,8 +27,6 @@ export component QueuePanel inherits Rectangle {
     // `Queue.shown` already settled and the reset in `changed watched-shown` never fires.
     init => {
         Queue.pointer-in = false;
-        Queue.drag-source = -1;
-        Queue.drop-slot = -1;
         root.arm-seat();
     }
 
@@ -77,12 +78,6 @@ export component QueuePanel inherits Rectangle {
 
     private property <bool> watched-shown: Queue.shown;
     changed watched-shown => {
-        // Neither a showing nor a hidden panel can have a drag in flight. Worth spelling out on
-        // hide: the panel stays mounted, so the pressed row outlives it until the teardown drops
-        // the rows a beat later, and a destroyed row never delivers the pointer-up that would have
-        // cleared these itself.
-        Queue.drag-source = -1;
-        Queue.drop-slot = -1;
         // `AppWindow` writes `Queue.shown` before it fires `shown-changed`, so this runs after Rust
         // has filled the rows and the playing index, and the arm below reads the fresh index.
         root.arm-seat();
@@ -90,30 +85,9 @@ export component QueuePanel inherits Rectangle {
 
     private property <bool> has-rows: Queue.rows.length > 0;
 
-    // Owned here and handed to every row. The drop indicator and the rows' slot math
-    // both derive from it, so **one value is what keeps the painted line and the
-    // committed insert on the same row**.
+    // Handed to every row and to the drop target, so the line it paints and the slot it commits
+    // are the same one.
     private property <length> row-height: 50px;
-    // Where the dragged row's top sits inside the visible list — meaningful only
-    // mid-drag, and read by the auto-scroll gate below.
-    private property <length> drag-src-screen-y:
-        Queue.drag-source * root.row-height + inner-list.content-y;
-
-    // In the list body's own coordinates: centred on the slot boundary, then **pinned
-    // inside the band**. The after-the-last-row slot sits exactly on the content's
-    // bottom edge, which the body's `clip` cuts away once the queue is scrolled to the
-    // end, so an unpinned line for that slot is never drawn at all; the top end is
-    // pinned for the mirror case, and both ends catch a pointer dragged clean out of the
-    // list. `draggable-track-list.slint` has the same shape — keep the two in step.
-    private property <length> drop-line-h: 2px;
-    private property <length> drop-line-y: max(
-        0px,
-        min(
-            inner-list.visible-height - root.drop-line-h,
-            Queue.drop-slot * root.row-height + inner-list.content-y
-                - root.drop-line-h / 2,
-        ),
-    );
 
     pure function in-travel(y: length) -> length {
         return ListTravel.pin(y, inner-list.visible-height, inner-list.content-height);
@@ -286,10 +260,9 @@ export component QueuePanel inherits Rectangle {
                 vertical-stretch: 1;
                 clip: true;
 
-                inner-list := ListView {
-                    // The `OverlayScrollbar` below is the only scrollbar.
-                    vertical-scrollbar-policy: always-off;
-                    horizontal-scrollbar-policy: always-off;
+                src := DragSource {
+                    origin: DragOrigin.queue;
+                    allow-move: true;
                     x: 0;
                     y: 0;
                     // Reserves the rail for the overlay scrollbar — the bar itself, the
@@ -297,52 +270,44 @@ export component QueuePanel inherits Rectangle {
                     // row hover pill paints under the scrollbar with no breathing room.
                     width: parent.width - 14px;
                     height: 100%;
-                    // Every row here is draggable, so the pan never gets the gesture:
-                    // it intercepts the row's grab mid-drag and the drop never commits.
-                    // Stated rather than inherited, the default being the style's to
-                    // pick; mechanism in `draggable-track-list.slint`.
-                    mouse-drag-pan-enabled: false;
-                    for row[idx] in Queue.rows: QueueRowItem {
-                        row-data: row;
-                        row-index: idx;
-                        list-y0: inner-list.absolute-position.y;
-                        list-height: inner-list.height;
-                        list-viewport-y: inner-list.content-y;
-                        row-height: root.row-height;
-                        // Drives the per-corner radius gating, so contiguous selected
-                        // rows merge into one pill.
-                        prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
-                        next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
-                        request-scroll-by(dy) => {
-                            // **Skipped when the nudge would carry the dragged row out
-                            // of the visible range.** A `ListView` destroys the rows
-                            // that leave it, and a destroyed row never delivers its
-                            // pointer-up, so the drag would neither commit nor clean up
-                            // — auto-scroll stops once the source reaches the far edge.
-                            if (Queue.drag-source >= 0
-                                && (root.drag-src-screen-y - dy) > -root.row-height
-                                && (root.drag-src-screen-y - dy) < inner-list.visible-height) {
-                                inner-list.content-y =
-                                    root.in-travel(inner-list.content-y - dy);
-                            }
+
+                    inner-list := ListView {
+                        // The `OverlayScrollbar` below is the only scrollbar.
+                        vertical-scrollbar-policy: always-off;
+                        horizontal-scrollbar-policy: always-off;
+                        width: 100%;
+                        height: 100%;
+                        // A drag and a drag-pan are one gesture and only one element can own
+                        // it. Stated rather than inherited, the default being the style's to
+                        // pick; mechanism in `slint-pitfalls.md`.
+                        mouse-drag-pan-enabled: false;
+                        for row[idx] in Queue.rows: QueueRowItem {
+                            row-data: row;
+                            row-index: idx;
+                            row-height: root.row-height;
+                            // Drives the per-corner radius gating, so contiguous selected
+                            // rows merge into one pill.
+                            prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
+                            next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
+                            lifted: src.lifts(idx);
+                            pressed => { src.arm(idx); }
                         }
                     }
                 }
 
-                // Painted in the gap *between* rows rather than at a row's top edge, so
-                // the drop target reads clearly against the still-painted source ghost.
-                // Hidden when the slot is a no-op — either side of the source both mean
-                // "stays put" after the slot → index adjustment, so a line there would
-                // mislead.
-                if Queue.drag-source >= 0
-                    && Queue.drop-slot >= 0
-                    && Queue.drop-slot != Queue.drag-source
-                    && Queue.drop-slot != Queue.drag-source + 1: Rectangle {
-                    x: 0;
-                    y: root.drop-line-y;
-                    width: inner-list.width;
-                    height: root.drop-line-h;
-                    background: Theme.accent;
+                ListDropTarget {
+                    x: src.x;
+                    y: src.y;
+                    width: src.width;
+                    height: src.height;
+                    origin: DragOrigin.queue;
+                    row-height: root.row-height;
+                    row-count: Queue.rows.length;
+                    content-y: inner-list.content-y;
+                    reorder(from, to) => { Queue.reorder(from, to); }
+                    scroll-by(dy) => {
+                        inner-list.content-y = root.in-travel(inner-list.content-y - dy);
+                    }
                 }
 
                 // A sibling, flush with the panel's edge.

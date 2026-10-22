@@ -103,9 +103,7 @@ export global Playlists {
 // **Drag-to-reorder is gated to an ascending `"position"` sort** — reordering a list sorted by
 // something else means nothing. No header cell asks for that field, so the third click on a column
 // hands it back (`ui::callbacks::next_sort_with_natural`); without one, one click on Title retires
-// reordering for the whole install. `drag-source` / `drop-slot` mirror `Queue`'s reorder state,
-// living on `DraggableTrackList` and two-way bound here. Rust never writes them mid-drag, only
-// clearing them when it rebuilds `tracks` under one; the view clears them on `init` too.
+// reordering for the whole install.
 export global PlaylistDetail {
     in-out property <int> playlist-id: -1;
     // See `AlbumDetail.restoring`.
@@ -134,11 +132,6 @@ export global PlaylistDetail {
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // -1 when idle, else a 0-based track index and a `0..=length` insertion slot — the
-    // `Queue.drag-source` / `drop-slot` semantics.
-    in-out property <int> drag-source: -1;
-    in-out property <int> drop-slot: -1;
-
     // Mirrored from Rust on an OS file-hover so the detail can paint its drop banner. Set **only**
     // when the queue panel is hidden and this detail is open, the queue taking priority.
     in property <bool> is-drop-hovered: false;
@@ -156,8 +149,7 @@ export global PlaylistDetail {
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
 
-    // Fires on pointer-up only once the drag passed the click threshold *and* the sort
-    // is still `"position"`, ascending.
+    // A drag of one row dropped somewhere that moves it, the sort still `"position"`, ascending.
     callback reorder(int /*from*/, int /*to*/);
 
     // The one action needing a Rust hop before its dialog mounts, the mosaic picker having to query

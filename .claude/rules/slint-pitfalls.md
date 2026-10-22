@@ -202,12 +202,10 @@ this file is what builds, looks right, and is wrong.
   (`input.rs`) re-consults exactly those ancestors *during* the inner grab; past
   `DISTANCE_THRESHOLD` (8 px) inside `DURATION_THRESHOLD` (500 ms) on a scrollable axis it returns
   `Intercept`, and every item below is sent `MouseEvent::Exit`, delivered by `TouchArea` as
-  `PointerEventKind::Cancel`. The row's drag state is wiped and the committing pointer-up never
-  arrives. **The row arms at 4 px, i.e. inside that window**, so the failure is total rather than
-  occasional, and at 4–8 px of travel the computed slot is still the source's own, so no drop
-  indicator paints either. It still reads as intermittent, both escapes being real: a list shorter
-  than its viewport can't flick, and a press held past 500 ms before moving is never intercepted.
-  Both draggable lists opt out outright, `draggable-track-list.slint`'s `inner-list` and
+  `PointerEventKind::Cancel`. A list's `DragSource` takes the press at that same 8 px, so on a list
+  that pans the two compete for one gesture. It reads as intermittent, both escapes being real: a
+  list shorter than its viewport can't flick, and a press held past 500 ms before moving is never
+  intercepted. The draggable lists opt out outright, `draggable-track-list.slint`'s `inner-list` and
   `queue-panel.slint`'s, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
   under a pointer; the click-to-act grids and lists are pinned by `crates/melodia/tests/scrollbars.rs`.
@@ -832,6 +830,21 @@ this file is what builds, looks right, and is wrong.
   same. To audit, grep the generated file for `r#Flickable :: FIELD_OFFSETS . r#content_y ())`
   (empty parens included): 2 `link_two_way` hits, every other one a read, a write, or the pin a
   `ListView`'s repeater is handed.
+
+- **Slint's in-window drag goes round a list, never in a row, and a `DropArea` drawn over another
+  takes its drops.** Each half builds, passes a quick drag, and is wrong.
+  - **A `DragArea` in a row never hears its drag end.** The runtime holds the source weakly and a
+    `ListView` destroys rows rather than recycling them, so a row scrolled out, rebuilt under the
+    drag or moved by the reorder itself misses `drag-finished`. `components/drag-source.slint` is
+    the one spelling.
+  - **It drags from any left press it contains**, a row's own button and the gap between rows
+    included, so what a drag carries can't be "the row last pressed" without every press clearing
+    it first. `globals/drag.slint` argues the arming.
+  - **A `Drop` goes to whatever the hit test finds, not to the area that accepted the hover**, and
+    a `DropArea` takes any `Drop` it receives (`i-slint-core/window.rs`, `items/drag_n_drop.rs`).
+    So one drawn in front of a target eats that target's drops even while it answers `none` to
+    every move, which passes the moves on and never a drop. Behind the targets, a window-sized one
+    sees exactly the moves none of them took.
 
 - **Stock Slint 1.18 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
   in-process only, with no `PathBuf`. Vendored winit PR #4009. Fix

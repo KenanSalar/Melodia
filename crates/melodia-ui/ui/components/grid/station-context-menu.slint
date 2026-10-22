@@ -1,6 +1,7 @@
 import { RadioStationRow } from "../../models.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Radio } from "../../globals/radio.slint";
+import { Selection } from "../../globals/selection.slint";
 import { ContextMenuPopup, CopyField, FavoriteMenuItem, MenuItem, MenuSeparator } from "../context-menu.slint";
 
 // The right-click menu a station card raises, on all three Radio tabs.
@@ -22,9 +23,7 @@ export component StationContextMenu inherits Rectangle {
     in property <[int]> effective-selection;
     in property <int> selection-count;
 
-    // Multi mode needs this card selected *and* more than one selected, so a right-click on an
-    // unselected card acts on that card alone.
-    out property <bool> multi-active: root.card-selected && root.selection-count > 1;
+    out property <bool> multi-active: Selection.acts-on-set(root.card-selected, root.selection-count);
     out property <bool> is-open: pop.is-open;
 
     property <int> multi-count: root.selection-count;
@@ -94,8 +93,9 @@ export component StationContextMenu inherits Rectangle {
             root.dismiss();
         }
 
-        property <[int]> effective-ids:
-            root.multi-active ? root.effective-selection : [root.station.select_key];
+        property <[int]> effective-ids: Selection.effective-ids(
+            root.station.select_key, root.card-selected, root.selection-count,
+            root.effective-selection);
 
         // What the card's own hover controls do, single-target as they are.
         if root.has-play-group: MenuItem {

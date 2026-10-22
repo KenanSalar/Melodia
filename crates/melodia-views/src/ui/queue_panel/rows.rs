@@ -1,5 +1,5 @@
 //! The `sinks.queue` and `library_changed` subscriber, and what showing a new queue owes the
-//! panel's picks and drag state.
+//! panel's picks and its drag.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -15,7 +15,7 @@ use crate::ui::paged_rows::queue_rows::QueueRows;
 use crate::ui::paged_rows::{Keyset, ReadStamp};
 use melodia_app::state::AppState;
 use melodia_engine::player::engine::state::QueueViewModel;
-use melodia_ui::{AppWindow, Queue};
+use melodia_ui::{AppWindow, Drag, DragOrigin, Queue};
 
 /// Follow the queue and the library while the panel is shown: each queue publish shows the queue,
 /// and each library tick reads the rows the panel holds again.
@@ -71,9 +71,8 @@ pub(super) fn spawn_queue_rows_subscriber(
 ///
 /// The same ids in the same order repaint nothing, which is every track change and the publish
 /// that follows a drag the panel already moved. Anything else resets the list, so a drag still in
-/// flight is aborted (its indices no longer describe the queue, and the reset destroys the row
-/// holding the pointer grab, which left set keeps the source ghosted and the drop line stranded),
-/// and picks of tracks that left the queue go.
+/// flight is revoked (it goes on, the panel's source surviving its rows, but the index it lifted no
+/// longer names the same track), and picks of tracks that left the queue go.
 pub(super) fn show_queue(
     ui: &AppWindow,
     rows: &QueueRows,
@@ -87,8 +86,7 @@ pub(super) fn show_queue(
     if !moved {
         return;
     }
-    queue.set_drag_source(-1);
-    queue.set_drop_slot(-1);
+    ui.global::<Drag>().invoke_revoke(DragOrigin::Queue);
     keep_picks_within_queue(ui, rows, anchor);
 }
 

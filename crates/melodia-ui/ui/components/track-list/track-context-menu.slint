@@ -3,6 +3,7 @@ import { TagEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
 import { Playlists } from "../../globals/playlists.slint";
+import { Selection } from "../../globals/selection.slint";
 import { Theme } from "../../theme.slint";
 import { ContextMenuMetrics, ContextMenuPopup, FavoriteMenuItem, MenuItem,
          MenuSeparator } from "../context-menu.slint";
@@ -13,9 +14,9 @@ import { TrackCopyFields } from "../track-copy-items.slint";
 //
 // **The host says where; this keeps the menu.** A row hands over where the right-click landed
 // through `show-at`, which stores it: an open popup follows its `x`/`y`, so an anchor bound to the
-// row's pointer would drag the menu after it. Three hosts: `TrackListRowItem`, the queue panel's
-// `QueueRowItem` and the now-playing bar's track card, which is why the entries live here rather
-// than inline in the first.
+// row's pointer would drag the menu after it. Four hosts: `TrackListRowItem`, the queue panel's
+// `QueueRowItem`, Up Next's row and the now-playing bar's track card, which is why the entries
+// live here rather than inline in the first.
 //
 // **The root is zero-size on purpose.** It mounts as a free sibling of the row's TouchArea, so the
 // popup's coordinate frame is the row chrome's, which is the frame `touch.mouse-x` already reports
@@ -35,7 +36,7 @@ export component TrackContextMenu inherits Rectangle {
     // Suppresses the entry naming the surface you are already looking at, and picks the remove
     // arm. One of "tracks", "album-detail", "artist-detail", "genre-detail", "playlist-detail",
     // "smart-playlist-detail", "browse", "favorites", "recently_played", "search", "queue",
-    // "now-playing"; empty means no suppression.
+    // "up-next", "now-playing"; empty means no suppression.
     in property <string> view-context;
     // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list filters it
     // out so "add to the playlist you're looking at" never appears. 0 = none.
@@ -49,21 +50,22 @@ export component TrackContextMenu inherits Rectangle {
     in property <int> selection-count;
 
     // Read by the host to route a batch action, so it sits on the root rather than in the popup.
-    // Multi mode needs this row selected *and* more than one selected — right-clicking an
-    // unselected row falls back to that row alone and leaves the selection untouched.
-    out property <bool> multi-active: root.row-selected && root.selection-count > 1;
+    out property <bool> multi-active: Selection.acts-on-set(root.row-selected, root.selection-count);
     out property <bool> is-open: pop.is-open;
 
     property <int> multi-count: root.selection-count;
     // The bar's card is the track already playing, out of a queue already holding it, and it has
     // no set to select from.
     property <bool> on-now-playing: root.view-context == "now-playing";
+    // Up Next is the queue past the playing track, and picks nothing.
+    property <bool> on-up-next: root.view-context == "up-next";
+    property <bool> on-queue: root.view-context == "queue" || root.on-up-next;
     property <bool> show-play: !root.multi-active && !root.on-now-playing;
     // The queue *is* the target both of these name, so it takes neither, and the playing track is
     // in it. The separator under them is on a wider gate: single mode still has Play above it, and
     // only when that is gone too would it land first in the menu.
-    property <bool> show-queue-actions: root.view-context != "queue" && !root.on-now-playing;
-    property <bool> show-selection-actions: !root.on-now-playing;
+    property <bool> show-queue-actions: !root.on-queue && !root.on-now-playing;
+    property <bool> show-selection-actions: !root.on-now-playing && !root.on-up-next;
 
     // One source of truth for the "Go to …" entries, read by each entry's own `if` and by the
     // preceding separator's `any-cross-tab-visible` — so the divider tracks *any* entry being
@@ -76,8 +78,7 @@ export component TrackContextMenu inherits Rectangle {
         !root.multi-active && root.genre-id != 0 && root.view-context != "genre-detail";
     property <bool> any-cross-tab-visible:
         show-go-to-album || show-go-to-artist || show-go-to-genre;
-    property <bool> show-remove:
-        root.view-context == "playlist-detail" || root.view-context == "queue";
+    property <bool> show-remove: root.view-context == "playlist-detail" || root.on-queue;
 
     // The Copy flyout. Collapsed by every `show-at()`, so the menu always opens on its own column.
     property <bool> copy-open;
@@ -108,7 +109,7 @@ export component TrackContextMenu inherits Rectangle {
     callback add-to-queue([int]);
     callback toggle-favorite([int] /*track_ids*/, bool /*new_state*/);
     callback rate([int] /*track_ids*/, int /*rating*/);
-    // Playlist Detail removes from the open playlist, the queue panel from the queue.
+    // Playlist Detail removes from the open playlist, the queue panel and Up Next from the queue.
     callback request-remove([int] /*track_ids*/);
     // Take every displayed row, and drop the whole set. No payload either way: the host owns
     // the set, and the queue's is a different shape from a track list's.
@@ -144,10 +145,9 @@ export component TrackContextMenu inherits Rectangle {
             root.dismiss();
         }
 
-        // This row alone in single mode, the whole selection in multi. Computed once so every
-        // `clicked` handler reads the same list.
-        property <[int]> effective-ids:
-            root.multi-active ? root.effective-selection : [root.row-id];
+        // Computed once so every `clicked` handler reads the same list.
+        property <[int]> effective-ids: Selection.effective-ids(
+            root.row-id, root.row-selected, root.selection-count, root.effective-selection);
         // Gates the Add-to-Playlist entry. On Playlist Detail the current playlist is left out,
         // adding to itself being a no-op.
         property <int> visible-playlist-count:
@@ -366,7 +366,7 @@ export component TrackContextMenu inherits Rectangle {
                 root.dismiss();
             }
         }
-        if root.view-context == "queue": MenuItem {
+        if root.on-queue: MenuItem {
             label: root.multi-active
                 // Translators: `{}` is how many items are selected
                 ? @tr("Remove {} from Queue", root.multi-count)
