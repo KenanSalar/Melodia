@@ -670,6 +670,11 @@ three components that answer it, and each argues its geometry at its own file.
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
     being picked by a side the width decides.
+  - **A menu taller than the window scrolls** (`slint-pitfalls.md`'s oversized-popup entry). The
+    column caps at `ContextMenuMetrics.max-menu-h` and the popup places its own `y` through
+    `fit-y`, which is why each menu passes `anchor-window-y` beside `anchor-window-x`. A scrolling
+    menu widens by the bar's gutter rather than taking it from a row, and the Copy flyout follows
+    its row through the scroll.
   - **An item menu's Copy acts on the effective set, one line per item, in the order handed over**, never
     re-sorted: on a list or grid that is the selection's pick order (a range in display order, a
     ctrl-click appended), so it matches what Play queues, and on the queue panel it is queue order,

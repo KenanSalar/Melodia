@@ -134,6 +134,7 @@ export component TrackContextMenu inherits Rectangle {
         anchor-y: root.at-y;
         // Off the root's position, which sits outside the popup and so still means the window.
         anchor-window-x: root.absolute-position.x + root.at-x;
+        anchor-window-y: root.absolute-position.y + root.at-y;
         copy-open: root.copy-open;
         copy-fields: TrackCopyFields.list;
         copy-row-y: copy-row.y;

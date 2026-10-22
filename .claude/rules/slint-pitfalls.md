@@ -534,6 +534,13 @@ this file is what builds, looks right, and is wrong.
   once that lands, the output device picker being the host that needed it
   (`components/settings/dropdown.slint`).
 
+- **A `PopupWindow` taller than the window is drawn past its edge.** `place_popup`
+  (`i-slint-core/window/popup.rs`) slides an oversized popup's origin into the window but keeps its
+  height, so the rows that don't fit are cut off with nothing reporting it, and only on a window
+  short enough to show it. Cure: cap the column at the shell's height, scroll it, and place `y`
+  yourself, as `ContextMenuPopup` does. The bar's overflow menu, the column toggle, the sort menu
+  and the dropdowns don't yet.
+
 - **A press outside an open `PopupWindow` closes it and reaches nothing else.**
   `WindowInner::process_mouse_input` closes the popup on that press and, the pointer being outside
   a popup that isn't a `Menu`, dispatches it nowhere, so whatever it landed on never sees it. The
