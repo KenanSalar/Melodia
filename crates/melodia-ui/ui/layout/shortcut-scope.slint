@@ -4,7 +4,7 @@ import { Onboarding } from "../globals/onboarding.slint";
 import { Player } from "../globals/player.slint";
 import { Queue } from "../globals/queue.slint";
 import { Selection } from "../globals/selection.slint";
-import { WindowChrome } from "../globals/shell.slint";
+import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 
 // The app's global keyboard shortcuts, and the focus scope catching them. It takes the whole main
 // layout as its children, so it sits between any nested scope and the Window's key dispatch. **It
@@ -80,15 +80,16 @@ export component ShortcutScope inherits FocusScope {
         }
     }
 
-    // The panel sits beside the page rather than over it, so its keys are live only while it is
-    // what the user last pressed.
-    property <bool> queue-keys: Queue.shown && Queue.keys-owned;
+    // The docked panel sits beside the page rather than over it, so its keys are live only while
+    // it is what the user last pressed. The overlay sits over the page and owns them while it is
+    // up.
+    property <bool> queue-keys: Queue.shown && (Queue.keys-owned || Queue.floating);
 
     key-pressed(ev) => {
-        // Priority: dialog cancel, the welcome card, the queue's picks, closing Now Playing, then
-        // a live selection. A nested `FocusScope` can't own the panel's Esc — Slint focuses a
-        // scope on mouse press, never on mount — so owning both keys at the root is what makes
-        // the priority explicit.
+        // Priority: dialog cancel, the welcome card, the queue's picks, the floating queue,
+        // closing Now Playing, then a live selection. A nested `FocusScope` can't own the panel's
+        // Esc — Slint focuses a scope on mouse press, never on mount — so owning both keys at the
+        // root is what makes the priority explicit.
         if (ev.text == Key.Escape) {
             if (Dialog.open) {
                 Dialog.cancelled();
@@ -101,10 +102,15 @@ export component ShortcutScope inherits FocusScope {
                 Onboarding.dismiss();
                 return accept;
             }
-            // Picks only: the panel is a place, not a popup, so Escape never closes it, and with
-            // nothing picked the press falls through to the arms below.
+            // Picks first: the docked panel is a place, not a popup, so Escape never closes it,
+            // and with nothing picked the press falls through to the arms below.
             if (root.queue-keys && Queue.selected-count > 0) {
                 Queue.clear-selection();
+                return accept;
+            }
+            // The overlay is the popup, so with its picks gone the next press closes it.
+            if (Queue.floating) {
+                Queue.close();
                 return accept;
             }
             if (Nav.now-playing-open) {
@@ -129,6 +135,13 @@ export component ShortcutScope inherits FocusScope {
         // through the backdrop. The welcome card has no input at all and owes it twice over.
         if (Dialog.open || Onboarding.open) {
             return reject;
+        }
+
+        // Removes the queue's picks. Backspace too, being the key a Mac labels delete.
+        if ((ev.text == Key.Delete || ev.text == Key.Backspace)
+            && root.queue-keys && Queue.selected-count > 0) {
+            Queue.remove-selected();
+            return accept;
         }
 
         // Bare seeks or steps the volume, Shift takes a bigger seek, Ctrl skips tracks
@@ -217,9 +230,9 @@ export component ShortcutScope inherits FocusScope {
         if (ev.text == "s") { Player.toggle-shuffle();  return accept; }
         if (ev.text == "r") { Player.cycle-repeat();    return accept; }
 
-        // Neither the miniplayer nor a narrow window has room for the panel, so Q there would flip
-        // one nobody sees.
-        if (ev.text == "q" && Queue.fits) {
+        // The miniplayer has no panel to open, so Q there would flip one nobody sees. A narrow
+        // window opens the overlay.
+        if (ev.text == "q" && !MiniPlayer.active) {
             Queue.toggle();
             return accept;
         }

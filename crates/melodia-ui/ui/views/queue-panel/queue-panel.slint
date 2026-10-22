@@ -3,6 +3,7 @@ import { Theme } from "../../theme.slint";
 import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { Queue } from "../../globals/queue.slint";
 import { ListTravel } from "../../globals/list-travel.slint";
+import { WindowChrome } from "../../globals/shell.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 import { IconButton } from "../../components/icon-button.slint";
 import { ActionPill, PillButton } from "../../components/action-pill.slint";
@@ -11,8 +12,13 @@ import { EdgeResizeHandle, GrowEdge } from "../../components/edge-resize-handle.
 import { QueueRowItem } from "queue-row.slint";
 
 // The queue, docked after the content panel in the shell's row, so the sidebar, the content and
-// the bar all stay live beside it. It draws no fill: the shell's mantle shows through, which is the
-// ground `RoundedFrame` masks the content panel's corners in.
+// the bar all stay live beside it. Docked it draws no fill: the shell's mantle shows through, which
+// is the ground `RoundedFrame` masks the content panel's corners in.
+//
+// **A window with no room to dock floats it over the content panel instead**, and it stays this
+// one element: a second would share the rows' fetch anchor, the drag state and `pointer-in`, and
+// couldn't sit behind an `if`, its tracker on `Queue.shown` outliving the branch. Floating, the
+// root takes no width in the row and draws its body to its own left.
 export component QueuePanel inherits Rectangle {
     // The panel sits in the full-UI branch, which the miniplayer swap unmounts, so a remount finds
     // `Queue.shown` already settled and the reset in `changed watched-shown` never fires.
@@ -28,20 +34,46 @@ export component QueuePanel inherits Rectangle {
     in property <length> open-w;
     // What the row leaves the panel beside the sidebar as it is drawn, the furthest its edge drags.
     in property <length> room;
-    // The ease rides a float rather than the width, so dragging the edge moves `open-w` straight
+    // The width it floats at. The host's too, for the same reason as `open-w`.
+    in property <length> float-w;
+    // How far a floating panel keeps from the content panel's top, right and bottom edges, so it
+    // never covers the corners `RoundedFrame` rounds. Published for the host's `float-w`.
+    out property <length> float-inset: Theme.pad-sm;
+
+    // The eases ride floats rather than the width, so dragging the edge moves `open-w` straight
     // through instead of restarting an animation on every move.
-    private property <float> shown-t: Queue.shown ? 1.0 : 0.0;
-    animate shown-t { duration: Theme.dur-med; easing: ease-in-out; }
+    private property <float> docked-t: Queue.shown && !Queue.floating ? 1.0 : 0.0;
+    animate docked-t { duration: Theme.dur-med; easing: ease-in-out; }
+    private property <float> float-t: Queue.floating ? 1.0 : 0.0;
+    animate float-t { duration: Theme.dur-med; easing: ease-in-out; }
+    // Still floating while it slides back out.
+    private property <bool> floating-drawn: Queue.floating || root.float-t > 0;
+
+    // Where the body is drawn, in the root's frame. Floating, it slides in from beyond the content
+    // panel's right edge, which is the root's left.
+    private property <length> body-x: root.floating-drawn
+        ? -(root.float-w + root.float-inset) * root.float-t
+        : 0px;
+    private property <length> body-y: root.floating-drawn ? root.float-inset : 0px;
+    private property <length> body-w: root.floating-drawn ? root.float-w : root.open-w;
+    private property <length> body-h: root.floating-drawn
+        ? root.height - 2 * root.float-inset
+        : root.height;
+    // The list stops a corner's radius above a floating body's bottom, so its square clip never
+    // cuts into the rounding and no rounded clip has to hold the list as a texture.
+    private property <length> body-pad-bottom: root.floating-drawn ? Theme.radius-lg : 0px;
 
     // Never a bound `width`: a component root reports that as its min and max, and an eased one
     // drags the window's own floor along with it (`slint-pitfalls.md`).
     min-width: 0px;
-    preferred-width: root.open-w * root.shown-t;
+    preferred-width: root.open-w * root.docked-t;
     max-width: root.open-w;
     horizontal-stretch: 0;
     // The content is laid out at `open-w` and the box eases under it, so it rides the moving edge
-    // rather than reflowing every frame. Square, so a scissor rather than a layer.
-    clip: true;
+    // rather than reflowing every frame. Square, so a scissor rather than a layer. Off while
+    // floating: a clipping item takes every press outside its own box, and the body is all
+    // outside it then.
+    clip: !root.floating-drawn;
 
     private property <bool> watched-shown: Queue.shown;
     changed watched-shown => {
@@ -154,18 +186,33 @@ export component QueuePanel inherits Rectangle {
         }
     }
 
+    // A floating surface over the page: the docked look's mantle, rimmed so it lifts off the
+    // content, with fill and border on one element so the renderer tucks one under the other.
+    if root.floating-drawn: Rectangle {
+        x: root.body-x;
+        y: root.body-y;
+        width: root.body-w;
+        height: root.body-h;
+        background: WindowChrome.mantle;
+        border-width: 1px;
+        border-color: Theme.surface2;
+        border-radius: Theme.radius-lg;
+    }
+
     // The `CompositeScroll.hovered` shape: everything passes through to the children, and only
     // `has-hover` is read, into what the winit filter consults to decide whether a press makes
-    // Escape and Ctrl+A the queue's. The edge handle sits inside it so a press there counts.
+    // Escape, Ctrl+A and Delete the queue's. The edge handle sits inside it so a press there
+    // counts. Floating, it also keeps a press on the body's bare parts off the scrim beneath.
     hover-catch := TouchArea {
-        x: 0;
-        y: 0;
-        width: root.open-w;
-        height: 100%;
+        x: root.body-x;
+        y: root.body-y;
+        width: root.body-w;
+        height: root.body-h;
         changed has-hover => { Queue.pointer-in = self.has-hover; }
 
         VerticalLayout {
             spacing: 0px;
+            padding-bottom: root.body-pad-bottom;
 
             // Title, count, Clear, and close.
             Rectangle {
@@ -337,7 +384,7 @@ export component QueuePanel inherits Rectangle {
             x: 0;
             y: 57px; // 56 px header + 1 px separator
             width: 100%;
-            height: parent.height - 57px;
+            height: parent.height - 57px - root.body-pad-bottom;
             background: Theme.crust.with-alpha(0.85);
 
             VerticalLayout {
@@ -359,8 +406,9 @@ export component QueuePanel inherits Rectangle {
             }
         }
 
-        // Last, over the rows it borders.
-        EdgeResizeHandle {
+        // Last, over the rows it borders. Docked only: a floating panel's width is the room the
+        // content panel leaves it, nothing to drag.
+        if !root.floating-drawn: EdgeResizeHandle {
             x: 0;
             y: 0;
             height: parent.height;

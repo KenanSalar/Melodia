@@ -30,7 +30,9 @@ use crate::ui::track_list_view::view_id;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
-use melodia_ui::{AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, NavEnterFrom};
+use melodia_ui::{
+    AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, NavEnterFrom, Queue,
+};
 
 /// Where the user is standing when a "Go to …" fires: the nav index, plus the My Library
 /// tab when that index *is* My Library. Both halves are read synchronously, before any
@@ -99,9 +101,14 @@ pub fn wire_cross_tab_nav(
 
 /// Moves to the drill's tab once it has landed, uncovering the content panel first: the
 /// player bar stays reachable over Now Playing, and a detail opened under it is one nobody
-/// sees. The queue panel stays as it is, beside the page rather than over it.
+/// sees. The floating queue closes for the same reason. The docked panel stays as it is,
+/// beside the page rather than over it.
 fn land(ui: &AppWindow, tab: i32) {
     ui.global::<Nav>().set_now_playing_open(false);
+    let queue = ui.global::<Queue>();
+    if queue.get_floating() {
+        queue.invoke_close();
+    }
     go_to_tab(ui, tab);
 }
 

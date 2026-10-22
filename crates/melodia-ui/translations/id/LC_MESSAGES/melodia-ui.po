@@ -362,7 +362,7 @@ msgid "Bitrate (kbps)"
 msgstr "Bitrate (kbps)"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+#: ui/components/rating-menu-row.slint ui/settings.slint
 msgid "Rating"
 msgstr "Rating"
 
@@ -1279,6 +1279,11 @@ msgstr "Kembali"
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Berikutnya"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/rating-menu-row.slint
+msgid "Rating for {}"
+msgstr "Rating untuk {}"
 
 #: ui/components/search-bar.slint
 msgid "Search…"

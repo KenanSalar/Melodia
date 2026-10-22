@@ -31,7 +31,7 @@
 //!    where a resize begins and where it is let go, which no one event reports. See
 //!    `resize_release`.
 //! 10. **`MouseInput { Pressed }`**, any button and whoever takes it: whether it landed on the
-//!     queue panel, which makes Escape and Ctrl+A the queue's. See [`claim_queue_keys`].
+//!     queue panel, which makes Escape, Ctrl+A and Delete the queue's. See [`claim_queue_keys`].
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -227,10 +227,10 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     });
 }
 
-/// Gives the queue Escape and Ctrl+A when a press lands on its panel, and takes them back when one
-/// lands anywhere else. Read here because no element sees a press a child took first, and the
-/// panel is all children. Only a shown panel claims: `pointer-in` moves with the pointer, not the
-/// panel, so one that eased away under a still pointer would take the next press.
+/// Gives the queue Escape, Ctrl+A and Delete when a press lands on its panel, and takes them back
+/// when one lands anywhere else. Read here because no element sees a press a child took first, and
+/// the panel is all children. Only a shown panel claims: `pointer-in` moves with the pointer, not
+/// the panel, so one that eased away under a still pointer would take the next press.
 fn claim_queue_keys(weak: &slint::Weak<AppWindow>) {
     let Some(ui) = weak.upgrade() else { return };
     let queue = ui.global::<Queue>();

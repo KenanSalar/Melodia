@@ -62,6 +62,7 @@ import { SettingsView } from "views/settings-view.slint";
 import { NowPlayingView } from "views/now-playing-view.slint";
 import { MiniPlayerView } from "views/mini-player.slint";
 import { QueuePanel } from "views/queue-panel/queue-panel.slint";
+import { QueueScrim } from "views/queue-panel/queue-scrim.slint";
 import { DialogOverlay } from "components/dialog/dialog.slint";
 import { OnboardingOverlay } from "components/onboarding/onboarding-overlay.slint";
 import { CustomTitleBar } from "components/custom-titlebar.slint";
@@ -277,7 +278,7 @@ export component AppWindow inherits Window {
     // The row the sidebar, the content panel and the queue panel share, less its gutter. A
     // narrowing window takes room back from it in a fixed order, so the content keeps
     // `Theme.content-min-w`: the sidebar folds to its rail, the queue panel narrows to its minimum,
-    // and then the panel steps aside.
+    // and then the panel steps aside, opening as an overlay from then on.
     property <length> row-w: root.content-width - Theme.pad-xs;
     // 0 is the default, so the default is spelled once, in `Theme`.
     property <length> queue-chosen-w: clamp(
@@ -296,32 +297,51 @@ export component AppWindow inherits Window {
             : Nav.sidebar-expanded-w);
     property <bool> queue-fits: !mini-switch.render-active
         && root.queue-room >= Theme.queue-panel-min-w;
+    // A window gaining the room docks an open overlay, so the queue the user had up stays up.
+    // `shown` holds through it, the overlay still counting until `open` takes over.
     changed queue-fits => {
         Queue.fits = self.queue-fits;
+        if (self.queue-fits && Queue.overlay-open) {
+            Queue.open = true;
+            Queue.overlay-open = false;
+        }
     }
 
     // Here rather than in the panel, which the miniplayer unmounts: a mirror there would miss the
-    // change, and Rust would keep rows nobody can see. `shown` is written before `shown-changed`
-    // fires, which the panel's own seat counts on.
-    property <bool> queue-shown: Queue.open && !Nav.now-playing-open && root.queue-fits;
+    // change, and Rust would keep rows nobody can see. Only the overlay's own `open` floats the
+    // panel, so a narrowing window hides a docked one rather than turning it into an overlay
+    // mid-resize.
+    property <bool> queue-shown: !mini-switch.render-active && !Nav.now-playing-open
+        && (Queue.overlay-open || (Queue.open && root.queue-fits));
+    property <bool> queue-docked: root.queue-shown && root.queue-fits;
+    property <bool> queue-floating: root.queue-shown && !root.queue-fits;
+    // `floating` is written with `shown`, so the two never describe different panels for a frame,
+    // and `shown` before `shown-changed` fires, which the panel's own seat counts on.
     changed queue-shown => {
+        Queue.floating = root.queue-floating;
         Queue.shown = self.queue-shown;
         Queue.shown-changed(self.queue-shown);
     }
+    // The dock hand-off, which changes the mode under a `shown` that holds.
+    changed queue-floating => {
+        Queue.floating = self.queue-floating;
+    }
 
-    // Keyed on `shown` rather than `open`, so the sidebar comes back once the panel has stepped
-    // aside: with both fold controls standing down under a forced rail, a panel too wide to show
-    // would otherwise hold the sidebar folded with nothing the user could press to free it.
-    property <bool> sidebar-yields: root.queue-shown && root.sidebar-would-yield;
+    // Keyed on the docked panel rather than `open`, so the sidebar comes back once the panel has
+    // stepped aside: with both fold controls standing down under a forced rail, a panel too wide to
+    // show would otherwise hold the sidebar folded with nothing the user could press to free it.
+    // An overlay takes no room in the row, so it folds nothing.
+    property <bool> sidebar-yields: root.queue-docked && root.sidebar-would-yield;
     changed sidebar-yields => {
         Nav.sidebar-yields = self.sidebar-yields;
     }
 
     // The panel is the odd one out: it unmounts nothing, but nothing moves focus onto the scope
     // when a press makes the queue's keys live — a row is a TouchArea — so a filter SearchBar
-    // would swallow the `a`. **On the rising edge only**: the press that takes the keys away is
-    // one Slint is about to hand a field, and a grab here would land after it.
-    property <bool> watched-queue-keys: Queue.keys-owned;
+    // would swallow the `a`. An overlay owns the keys from the moment it opens, a field focused or
+    // not. **On the rising edge only**: the press that takes the keys away is one Slint is about
+    // to hand a field, and a grab here would land after it.
+    property <bool> watched-queue-keys: Queue.keys-owned || Queue.floating;
     changed watched-queue-keys => {
         if (self.watched-queue-keys) {
             shortcut-scope.grab-focus();
@@ -541,7 +561,7 @@ export component AppWindow inherits Window {
                 padding-right: Theme.pad-xs;
 
                 sidebar := Sidebar {
-                    room: root.queue-shown ? root.sidebar-room : Theme.sidebar-max-w;
+                    room: root.queue-docked ? root.sidebar-room : Theme.sidebar-max-w;
                 }
 
                 // Content panel. **Rounded by `RoundedFrame`, not by a rounded clip**: that clip
@@ -641,6 +661,15 @@ export component AppWindow inherits Window {
                         NowPlayingView { width: 100%; height: 100%; }
                     }
 
+                    // Under the floating queue, which the row draws over the content panel, and
+                    // ahead of the frame, so the corners and the border stay drawn over the dim.
+                    QueueScrim {
+                        x: 0;
+                        y: 0;
+                        width: 100%;
+                        height: 100%;
+                    }
+
                     // Last, so the corners and the border sit over every view. The shell's
                     // ground is all that shows around the panel, so it's the mask colour.
                     // The radius is the one the mantle shell rounds with when frameless:
@@ -658,10 +687,18 @@ export component AppWindow inherits Window {
                     }
                 }
 
-                // Mounted whether shown or not, so it can ease out; hidden, it takes no width.
+                // Mounted whether shown or not, so it can ease out; hidden or floating, it takes no
+                // width. Floating, it draws over the content panel, whose width here is the row's
+                // less the sidebar, which an overlay never folds.
                 QueuePanel {
                     open-w: clamp(root.queue-room, Theme.queue-panel-min-w, root.queue-chosen-w);
                     room: root.queue-room;
+                    float-w: min(
+                        root.queue-chosen-w,
+                        root.row-w - 2 * self.float-inset
+                            - (Nav.sidebar-rail
+                                ? Theme.sidebar-collapsed-w
+                                : Nav.sidebar-expanded-w));
                 }
             }
 

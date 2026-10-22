@@ -365,7 +365,7 @@ msgid "Bitrate (kbps)"
 msgstr "Bitráta (kbps)"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+#: ui/components/rating-menu-row.slint ui/settings.slint
 msgid "Rating"
 msgstr "Értékelés"
 
@@ -1284,6 +1284,11 @@ msgstr "Vissza"
 #: ui/components/onboarding/onboarding-overlay.slint ui/globals/player.slint
 msgid "Next"
 msgstr "Következő"
+
+#. Translators: `{}` is how many items are selected
+#: ui/components/rating-menu-row.slint
+msgid "Rating for {}"
+msgstr "{} elem értékelése"
 
 #: ui/components/search-bar.slint
 msgid "Search…"

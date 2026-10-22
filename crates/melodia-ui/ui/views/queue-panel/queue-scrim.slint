@@ -1,0 +1,25 @@
+import { Theme } from "../../theme.slint";
+import { Queue } from "../../globals/queue.slint";
+
+// The page under the floating queue: dimmed, kept from scrolling, and closing the overlay on a
+// click. Mounted inside the content panel, so the sidebar and the bar stay live beside the
+// overlay, and always, so the fade-out plays on the panel's own curve.
+export component QueueScrim {
+    private property <float> t: Queue.floating ? 1.0 : 0.0;
+    animate t { duration: Theme.dur-med; easing: ease-in-out; }
+
+    // Behind an `if` rather than faded to nothing, a fill bound to stay transparent still costing
+    // a path every frame (`slint-pitfalls.md`).
+    if root.t > 0: Rectangle {
+        width: root.width;
+        height: root.height;
+        background: rgba(0, 0, 0, 0.3 * root.t);
+
+        // Off once the overlay is closing, so a click during the fade reaches the page.
+        TouchArea {
+            enabled: Queue.floating;
+            clicked => { Queue.close(); }
+            scroll-event(ev) => { return accept; }
+        }
+    }
+}

@@ -306,7 +306,7 @@ this file is what builds, looks right, and is wrong.
     row stops at whatever max its contents report. Self-align only where every stretched sibling's
     max is unbounded: a `Text` or `TextInput`, a `Rectangle` whose children are all `if`s, a layout
     of such cells. Otherwise the row stays on the plain path and keeps its wrappers
-    (`queue-row.slint`, whose duration cell reports the hover heart's 26 px).
+    (`queue-row.slint`, whose duration cell reports the remove button's 26 px while it shows).
   - **An explicit `x`/`y` on a cell is a build error**, the solve owning every position.
   - **A removed wrapper can cap the row.** A row's cross-axis info ignores `cross-axis-alignment`
     and takes the least of its cells' maxes, and a wrapper whose own `alignment` wasn't `stretch`

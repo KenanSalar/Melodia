@@ -1,6 +1,6 @@
 # Plan: Queue panel (the queue docks on the right and takes drops)
 
-Status: **in progress**, Phases 1 and 2 done, Phase 3 implemented · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
+Status: **in progress**, Phases 1 and 2 done, Phases 3 and 3.5 implemented · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
 
 > **Validated 2026-10-21** against `72a0e74f` (`feat/queue-panel`). Three read-only traces went into it: the queue sheet, the left sidebar's resize and fold, and drag and drop with Add to Queue. They were checked against:
 > - the Slint 1.18.1 sources for `DragArea`, `DropArea` and the in-window drag (`i-slint-core/items/drag_n_drop.rs`, `window.rs`);
@@ -43,7 +43,7 @@ Working doc. Delete when every phase has shipped and passed by hand.
   - Double-click to play; the playing row stays highlighted.
   - Drag reorder with edge scrolling.
   - Picks with click, Ctrl, Shift and Ctrl+A; the right-click menu acts on what is picked.
-  - The heart and stars on each row, and its remove button.
+  - The favourite heart on each title, and the row's remove button, which shows in the duration's place on hover. Rating moves to the right-click menu (Phase 3.5).
   - Opening scrolled to the playing track.
   - The empty state.
   - Go to Album, Artist and Genre.
@@ -103,11 +103,14 @@ Working doc. Delete when every phase has shipped and passed by hand.
     2. The panel narrows toward its minimum.
     3. The panel steps aside, through `shown`, exactly as under Now Playing.
 
+    **Amended in Phase 3.5: below that step the panel opens as an overlay** over the content's right edge, and its controls stay live. Narrowing hides a docked panel rather than turning it into an overlay mid-resize (Kenan, 2026-10-22: the overlay dims the page and takes the keys, which a resize shouldn't raise unasked), and widening with the overlay open docks it. Phase 3's amendment standing the bar button, its overflow row and Q down on `fits` is superseded.
+
     The constant and the panel widths are settled on a real window. The track lists and grids already fit to their own width (`track-list.slint:32-33`, `GridGeometry` off `body.width`).
 11. **The lifecycle follows `shown`, not `open`.** Rows and covers are released 350 ms after the panel stops being shown (`TEARDOWN_DELAY`, `queue_sheet/callbacks.rs:40`). That covers a close, Now Playing, the miniplayer and a narrow window alike. A long-open panel costs what the sheet cost while it was up: the same `QueueRows` window, the same private cover tier and the same 24-cover prewarm.
 
 **Prior art** (two open-source desktop players' source; repo convention keeps their names out):
 - **A right-hand queue panel hides below a window breakpoint rather than floating.** It reserves its width before the left sidebar measures, so the left sidebar folds first and stays folded when the panel hides in turn. Its width is clamped between a minimum and a maximum and capped to leave the content a floor. That shaped decision 10.
+- **Corrected by a wider survey (2026-10-21):** two desktop players that follow their platform's guidelines overlay the pane below their breakpoint and keep its toggle working, and so do all five design systems checked (Material, Fluent/WinUI, GNOME, KDE, Apple). None greys the toggle out. That is Phase 3.5's overlay.
 - **A drag carries ids and resolves them on the drop.** The drop gap is the upper or lower half of the row under the pointer, plus a few pixels of slack. The ghost is a small chip (a 20 px cover and a one-line label, at most 240 px wide, offset 8 px from the cursor). That shaped decision 7 and the ghost in Phase 6.
 - **Not copied:** writing the panel width to settings on every drag move. Melodia flushes chrome state at exit, as it does for the sidebar.
 
@@ -115,21 +118,26 @@ Working doc. Delete when every phase has shipped and passed by hand.
 
 | File | Owns |
 |---|---|
-| `crates/melodia-ui/ui/views/queue-panel/queue-panel.slint` (was `views/queue-sheet.slint`, 395) | The panel: width, edge handle mount, header, list host, empty state, file and drag banners, seat-on-open |
-| `crates/melodia-ui/ui/views/queue-panel/queue-row.slint` (was `views/queue-row-item.slint`, 407) | One queue row, its menu and its drag source. The hand-rolled drag goes (Phase 5) |
+| `crates/melodia-ui/ui/views/queue-panel/queue-panel.slint` (was `views/queue-sheet.slint`, 395) | The panel: width, edge handle mount, header, list host, empty state, file and drag banners, seat-on-open. Docked or floating as an overlay (Phase 3.5) |
+| `crates/melodia-ui/ui/views/queue-panel/queue-row.slint` (was `views/queue-row-item.slint`, 407) | One queue row, its menu and its drag source: number, cover, title, and the duration that turns into the remove button on hover (Phase 3.5). The hand-rolled drag goes (Phase 5) |
+| `crates/melodia-ui/ui/views/queue-panel/queue-scrim.slint` (new, Phase 3.5) | The overlay's scrim and its outside-click close, mounted inside the content panel |
+| `crates/melodia-ui/ui/components/rating-menu-row.slint` (new, Phase 3.5) | The rating row both menu families mount, lifted from `overflow-menu.slint:259-298`; sized by its host |
+| `crates/melodia-ui/ui/components/track-list/track-context-menu.slint` | Gains the rating entry, `row-rating` and `rate([int], int)` (Phase 3.5) |
+| `crates/melodia-ui/ui/components/now-playing/overflow-menu.slint` | Mounts `RatingMenuRow` in place of its inline copy (Phase 3.5) |
 | `crates/melodia-ui/ui/components/edge-resize-handle.slint` (new, Phase 1) | The inner-edge drag, its clamp and its double-click reset, for whichever side grows. Lifted from `sidebar.slint:195-234`, which mounts it |
 | `crates/melodia-ui/ui/components/drag-source.slint` (new, Phase 5) | A `DragArea` that writes the `Drag` payload as its drag starts and clears it as it ends |
 | `crates/melodia-ui/ui/components/list-drop-target.slint` (new, Phase 5) | A `DropArea` over a list: slot from the pointer, the drop line, the edge-scroll `Timer`. Mounted by the queue panel, the playlist detail and Up Next |
 | `crates/melodia-ui/ui/globals/drag.slint` (new, Phase 5) | `Drag`: the in-flight payload, `active`, the token, `begin`/`end` |
 | `crates/melodia-ui/ui/models.slint` | `DragPayload { kind, ids, origin, index, title, count, cover }` (Phase 5) |
 | `crates/melodia-ui/ui/globals/selection.slint` | Gains `effective-ids(...)`, the one statement of what a picked row or card stands for (Phase 5) |
-| `crates/melodia-ui/ui/globals/queue.slint` | `Queue` gains `panel-width` (0 = default), `shown`, `pointer-in`, `keys-owned`, `toggle()` (handled in Rust), `close()`, `shown-changed`, `drop-in(kind, ids, slot)`. It loses `dismiss()`, the `close` callback and `open-changed`; `drag-source`/`drop-slot` give way to the `Drag` payload |
+| `crates/melodia-ui/ui/globals/queue.slint` | `Queue` gains `panel-width` (0 = default), `shown`, `pointer-in`, `keys-owned`, `toggle()` (handled in Rust), `close()`, `shown-changed`, `drop-in(kind, ids, slot)`. It loses `dismiss()`, the `close` callback and `open-changed`; `drag-source`/`drop-slot` give way to the `Drag` payload. Phase 3.5 adds `overlay-open` and `floating`, and `close()` closes whichever mode is up |
 | `crates/melodia-ui/ui/theme.slint` | `queue-panel-{min,default,max}-w` and `content-min-w`, beside `sidebar-*-w` (`:101-104`) |
-| `crates/melodia-ui/ui/app-window.slint` (746) | The row mount, the `shown` mirror and the narrow-window derivations. The sheet's mount at `:599-604` goes |
-| `crates/melodia-ui/ui/layout/shortcut-scope.slint` | `queue-keys` replaces `queue-sheet-up` |
+| `crates/melodia-ui/ui/app-window.slint` (746) | The row mount, the `shown` mirror and the narrow-window derivations. The sheet's mount at `:599-604` goes. Phase 3.5: the `floating` mirror, the dock hand-off and the scrim mount |
+| `crates/melodia-ui/ui/layout/shortcut-scope.slint` | `queue-keys` replaces `queue-sheet-up`. Phase 3.5: Delete and Backspace, the overlay's Escape arm, Q off `fits` |
 | `crates/melodia-ui/ui/components/now-playing/up-next-list.slint` | `editable`, the row menu and the drop target (Phase 5) |
 | `crates/melodia-views/src/ui/queue_panel/{mod,callbacks,rows}.rs` (was `queue_sheet/`, 135/409/114) | As today, plus `drop-in` (Phase 6) |
-| `crates/melodia-views/src/ui/queue_panel/lifecycle.rs` (new, Phase 1) | Open, seat and teardown on `shown`, lifted from `callbacks.rs:244-409`. That file then holds the row actions alone |
+| `crates/melodia-views/src/ui/queue_panel/lifecycle.rs` (new, Phase 1) | Open, seat and teardown on `shown`, lifted from `callbacks.rs:244-409`. That file then holds the row actions alone. Phase 3.5: the toggle opens whichever mode fits |
+| `crates/melodia-views/src/ui/nav_history.rs`, `callbacks/cross_tab_nav.rs` | Phase 3.5: Mouse-4/5 and the composite wheel stand down under the overlay, and Go to closes it, as they did for the sheet |
 | `crates/melodia-views/src/ui/window_chrome/winit_filter.rs` (421) | The press arm writes `keys-owned` (Phase 2). The positioned drag arms move the file-drop banners (Phase 7) |
 | `crates/melodia-views/src/ui/window_chrome/drop_coalescer.rs` (142) | Routes a batch by where it was let go; `QUEUE_SHEET_OPEN` goes (Phase 7) |
 | `crates/melodia-views/src/ui/callbacks/card_actions.rs` (208) | `spawn_with_track_ids` becomes `pub(crate)` (Phase 6) |
@@ -227,7 +235,7 @@ Status: implemented 2026-10-21, waiting on the hand pass. Its tests wait for Pha
 
 **Amended while implementing:**
 - **Under a forced rail the sidebar's fold toggle and Ctrl+B stand down** (Kenan). This settles open question 1. They also stand down over the user's own fold while expanding wouldn't fit beside the shown panel, where a press would only flip the persisted fold with nothing on screen to show for it.
-- **While the panel can't fit, the queue button, its overflow row and Q stand down** (Kenan). `AppWindow` publishes `Queue.fits` beside `shown`. It covers the miniplayer too, so Q's own `!MiniPlayer.active` gate went into it.
+- **While the panel can't fit, the queue button, its overflow row and Q stand down** (Kenan; superseded by Phase 3.5's overlay). `AppWindow` publishes `Queue.fits` beside `shown`. It covers the miniplayer too, so Q's own `!MiniPlayer.active` gate went into it.
 - **The sidebar comes back once the panel has stepped aside.** The fold is keyed on `shown`, not `open`, which is where this departs from the prior art. With both sets of controls standing down, a panel too wide to show would otherwise hold the sidebar folded with nothing left to press.
 - **A seeded open needs no explicit call into the lifecycle.** `queue-shown`'s tracker takes its baseline inside `AppWindow::new()`, before hydration, so the first change-handler pass reads the seeded open as an edge.
 - **`Nav.sidebar-yields` and `Queue.fits` are written from `changed` mirrors, not bound.** Bound to the window's width, they would restart the sidebar's width ease and `IconButton`'s colour ease on every resize move (`slint-pitfalls.md`, the structural-dirt entry).
@@ -236,6 +244,52 @@ Status: implemented 2026-10-21, waiting on the hand pass. Its tests wait for Pha
 - **So does the sidebar's, while the panel is shown.** Dragged past the room, the sidebar would yield to its rail mid-drag, unmounting its handle under the pointer and leaving `Nav.sidebar-dragging` up.
 - **`Theme.content-min-w` starts at 452 px**: the narrowest body that still packs two grid columns, plus the page's insets. At the default widths the sidebar folds below a 996 px window, the panel narrows from 862 px to its minimum at 802 px, and it steps aside below that.
 - **The settings keys carry the prefix their flattened siblings do**: `queue_panel_open`, `queue_panel_width`.
+
+### Phase 3.5: Titles get the room, rating in the menu, Delete, and an overlay
+Status: implemented 2026-10-22, waiting on the hand pass. Its tests wait for Phase 8.
+
+**What you see before it.**
+- **Titles barely fit.** A row's fixed cells take 246 px of the panel, so at the default 360 px a title gets 114 px, and 22 px while the row is hovered: the hover star strip opens beside it (92 px) and the remove button keeps a column of its own. At the 300 px minimum the title gets 54 px and disappears on hover.
+- **Below the docked threshold the queue can't be opened at all.** The bar button and its overflow row grey out and Q does nothing.
+- **Picked rows have no Delete key**, only the menu and the hover button.
+- **Only the playing track can be rated from a menu**, through the overflow menu's inline stars. The row menu has Favourite and no rating.
+
+**What keeps working.** The docked panel, its width, edge drag, persistence, and the order a narrowing window gives way in. The 300 / 360 / 560 widths stay, so the freed room goes to titles: 90 / 150 / 350 px, hovered or not. The favourite heart on a title. The overflow menu's rating looks and behaves as before.
+
+**A. Slimmer rows** (`queue-row.slint`).
+- The duration cell shows the remove button on hover, right-aligned where the duration ends. The hover heart goes, and so does the button's own column with its gap.
+- `TrackTitle` keeps `is-favorite` and stops being handed the star strip. The track list rows keep theirs.
+
+**B. One rating row for both menus.**
+- `RatingMenuRow` (`components/rating-menu-row.slint`) is the overflow menu's inline row lifted out: glyph, label, stars, dimming through the brushes. Its host passes the row height, icon and star sizes and the idle icon colour, so the overflow menu keeps its look. It closes nothing; the overflow menu stays open after a star, the row menu closes.
+- It is mounted in every track menu, right under Favourite: track lists, the queue and the bar's track card (Kenan). `TrackContextMenu` gains `row-rating` and `rate([int], int)`. A track list routes it to its own `set-row-rating`, the queue to `Queue.set-row-rating` and the bar to `Player.set-current-rating`.
+- Over a selection it shows the clicked row's stars and applies the pick to the whole set, so clicking the lit star clears every pick. That is Favourite's rule; nothing in the tree has a mixed state to reuse. Its label is "Rating", or "Rating for {}" over a selection, the one new string.
+- No Rust: `library::ratings::set_rating` already takes many ids, and 0 clears.
+
+**C. Delete.** Delete and Backspace remove the queue's picks while the queue holds the keys (Backspace is the Mac's delete key). One arm after the dialog guard, through `Queue.remove-selected()`.
+
+**D. The overlay** (decision 10, amended).
+- **Two states.** `Queue.open` stays the docked panel's and the persisted one. A session-only `Queue.overlay-open` is the overlay's, so a narrow launch with the panel saved open shows nothing until the window widens or the user opens it.
+- **What `AppWindow` derives.** `shown` is the docked panel fitting and open, or the overlay open, in the full UI and outside Now Playing. `floating` is `shown` without the docked room, written beside `shown` so the two never disagree for a frame. When `fits` rises with the overlay open, the overlay docks (`open` set, `overlay-open` cleared) with `shown` held through it.
+- **One `QueuePanel` for both modes.** A second instance would share the rows' fetch anchor, the drag globals and `pointer-in`, and couldn't sit behind an `if` (its tracker on `Queue.shown`). Floating, the root takes no room in the row, stops clipping (a clipping item intercepts presses outside its box, `items.rs:757-766`), and slides its body in over the content panel's right edge, inset so the panel's rounded corners stay clear. The edge handle stands down.
+- **The scrim** (`queue-scrim.slint`) mounts inside the content panel before `RoundedFrame`, where the sheet sat, closes on a click and takes the wheel.
+- **Keys.** An overlay owns them without a press. Escape clears picks first and then closes it. Q stands down only in the miniplayer.
+- **The sidebar folds only for the docked panel.** An overlay takes no room in the row.
+- **Rust.** The toggle opens whichever mode fits. Mouse-4/5 and the composite wheel stand down under the overlay, and Go to closes it, as they did for the sheet. File drops, `claim_queue_keys`, the content-width estimate and persistence are unchanged.
+
+**By hand:**
+- A: hover rows at 300, 360 and 560 px; a favourite's heart; the button removes; the row stays lit under its menu.
+- B: the overflow menu's rating, unchanged; rate a queue row, a track list row, the bar's card and a multi-selection; a Browse row outside the library can't be rated; clear by the lit star; every list showing the track repaints.
+- C: Delete and Backspace with picks after clicking the queue; nothing after clicking a list, in a search field, or under a dialog.
+- D: narrow with the panel docked (it hides, the sidebar comes back); open by button, overflow and Q; close by ✕, Escape, the scrim, the button and Q; Escape with picks; Delete and Ctrl+A in it; widen with it open (it docks); Go to Album from it; Mouse-4/5 under it; Now Playing and the miniplayer and back; a narrow launch with the panel saved open; the Clear queue confirm over it; the content panel's corners.
+
+**Gate:** fmt, clippy, test, and `scripts/update-translations.py` with every catalog filled for the new string. A to C land together and D as its own commit.
+
+**Amended while implementing:**
+- **`Queue.close()` always closes the overlay, and the docked panel only where it fits.** A narrow window's ✕ leaves the docked panel open for when the room comes back, and a close landing in the dock hand-off's one tick can't leave the overlay standing.
+- **The floating inset is the panel's own `float-inset`**, which `AppWindow` reads for `float-w`, so the inset is spelled once.
+- **The rating row elides its label**, as `MenuItem` does, for a long translation in a menu at its width ceiling. The overflow menu sizes itself to the row's preferred width, so nothing there elides.
+- **"Rating for {}" follows each catalog's own "Edit Tags for {}"**, so the two read alike in every language.
 
 ### Phase 4: Prove the drag primitives (a spike; nothing lands)
 On a throwaway build, confirm each fact the next two phases stand on:
@@ -262,7 +316,7 @@ Record each answer here as an amendment before Phase 5 starts.
 
 **Visible:**
 - reorders start at 8 px rather than 4;
-- edge scrolling keeps going while the pointer rests;
+- edge scrolling keeps going while the pointer rests, at a steady speed (one prior-art player's speeds up a row per tick and is past control within a second);
 - a reorder may carry its row out of view, which is refused today (`queue-sheet.slint:299-311`);
 - Up Next gains its menu and reorder.
 
@@ -283,7 +337,10 @@ Lands as one commit: a row cannot host both mechanisms.
 4. **What letting go will do.**
    - While a drag hovers the panel, a banner reads the payload: `Add {n} track(s) to the queue` for tracks, `Add “{}” to the queue` for a card.
    - That means new `@tr` strings: run `scripts/update-translations.py` and fill every catalog.
-5. **The ghost**, in whichever shape Phase 4 settled.
+5. **The ghost**, in whichever shape Phase 4 settled. A drag of several items shows their count on it.
+6. **The bar's queue button takes drops** (added in Phase 3.5's survey), so a drag needn't open the panel first.
+   - A drop on it appends the whole payload, the pick included. A desktop player that takes button drops is reported adding only the first track of a multi-track drop; that is the bug to avoid.
+   - Held over it for 500 ms during a drag, it opens the panel, docked or as the overlay, so the drop can be placed at a slot. 500 ms is GTK's own hover-to-switch delay.
 
 **By hand:**
 - a drag from each surface;
@@ -292,7 +349,8 @@ Lands as one commit: a row cannot host both mechanisms.
 - a drop onto the empty queue;
 - a drop between rows under shuffle;
 - a drop above the playing row: playback is undisturbed and the highlight follows;
-- a drag released outside any target.
+- a drag released outside any target;
+- a picked set dropped on the queue button, and a hover over it that opens the panel, docked and as the overlay.
 
 ### Phase 7: File drops land where they are let go
 1. **The fork reports the pointer during a file drag** on Wayland, X11 and Win32 (decision 9). `winit/README.md` lists the fourth change.
@@ -318,8 +376,9 @@ Lands as one commit: a row cannot host both mechanisms.
   - the prewarm test's width table gaining the panel (`grid_prewarm_tests.rs:227-260`);
   - the filter's press arm;
   - `QueuePanelLayout` defaults and an older `settings.json`;
-  - drop routing by position.
-- **Docs.** Phases 1 to 3's half landed on 2026-10-21:
+  - drop routing by position;
+  - Phase 3.5: the Delete arm's gate; `RatingMenuRow` as the only `StarRating` inside a menu, by a walk; `Queue.floating` written beside `shown`; the overlay's Escape arm above `Selection.any-live()`.
+- **Docs.** Phases 1 to 3's half landed on 2026-10-21, and Phase 3.5's on 2026-10-22 (`ui-patterns.md`'s row menu, queue block, `TrackTitle` and keys, `library-data.md`'s rating paths, `slint-pitfalls.md`'s `queue-row.slint` example, and the README's shortcut table and feature lines). Phases 1 to 3:
   - the panel's cross-file facts and the keys in `ui-patterns.md`, the narrow window's order and its two flags among them;
   - the sheet's mentions across the rules;
   - `settings.json`'s contents in the root `CLAUDE.md`;
@@ -340,7 +399,7 @@ Lands as one commit: a row cannot host both mechanisms.
 1. ~~**The sidebar's fold toggle and Ctrl+B while a narrow window forces the rail**~~: settled in Phase 3, both stand down.
 2. **The ghost's shape** waits on Phase 4.
 3. **Browse's card mode and folder cards** aren't in the issue's list. They can join later through the same `DragSource`, with folders resolved as `folder_actions` does.
-4. **The panel widths and the content floor** (300 / 360 / 560 and 452 px) are settled in the Phase 2 and Phase 3 hand passes.
+4. **The panel widths and the content floor** (300 / 360 / 560 and 452 px) are settled in the Phase 2 and Phase 3 hand passes. Phase 3.5 keeps the 300 px minimum: once the overlay keeps the queue reachable, the minimum only decides how cramped the docked panel gets, and the slimmer rows give its title 90 px there.
 
 ## Verification
 - **Every phase:**

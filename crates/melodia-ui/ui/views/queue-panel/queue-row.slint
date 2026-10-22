@@ -1,7 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Queue } from "../../globals/queue.slint";
 import { QueueRow } from "../../models.slint";
-import { MaterialIcon } from "../../components/material-icon.slint";
 import { ArtworkImage } from "../../components/artwork-image.slint";
 import { IconButton } from "../../components/icon-button.slint";
 import { Checkbox } from "../../components/checkbox.slint";
@@ -10,8 +9,9 @@ import { ContextClick } from "../../components/context-menu.slint";
 import { SelectionPill } from "../../components/track-list/selection-pill.slint";
 import { TrackTitle } from "../../components/track-list/track-title.slint";
 
-// One fixed-height queue row: number-or-checkbox, artwork, title with its favourite and rating
-// marks, duration, delete.
+// One fixed-height queue row: number-or-checkbox, artwork, title with its favourite mark, and the
+// duration, which gives way to the remove button on hover. Rating is the row menu's, so the title
+// keeps the room a star strip would take.
 //
 // **The checkbox starts a selection and the row body extends one** — a body click is a no-op
 // until the panel holds a pick, the whole-row TouchArea otherwise being drag-to-reorder past a
@@ -245,9 +245,8 @@ export component QueueRowItem inherits Rectangle {
                 }
             }
 
-            // Kept off the cross-axis solve, so the artwork and remove button keep their own
-            // centring layouts: under it the duration cell would be held to the heart's 26 px
-            // while the heart shows.
+            // Kept off the cross-axis solve, so the artwork keeps its own centring layout: under
+            // it the duration cell would be held to the remove button's 26 px while it shows.
             HorizontalLayout {
                 padding-left: Theme.pad-md;
                 padding-right: Theme.pad-md;
@@ -313,16 +312,14 @@ export component QueueRowItem inherits Rectangle {
                         title: root.row-data.title;
                         ink: root.playing ? Theme.accent : Theme.text;
                         is-favorite: root.row-data.is_favorite;
-                        rating: root.row-data.rating;
-                        rating-shown: root.hovered;
-                        rated(n) => { Queue.set-row-rating([root.row-data.id], n); }
                     }
                 }
 
-                // The track-list length-cell pattern: duration by default, swapping to a
-                // heart on hover. The `min-width` keeps the cell wide enough that the
-                // heart lands where the duration's right edge was, and `alignment: end`
-                // right-aligns both states; an `h:mm:ss` duration expands it naturally.
+                // The track-list length-cell pattern with the remove button in the heart's
+                // place: the `min-width` keeps the cell wide enough that the button lands where
+                // the duration's right edge was, and `alignment: end` right-aligns both states;
+                // an `h:mm:ss` duration expands it naturally. Swapped rather than faded, as the
+                // checkbox is: a fade leaves trails as the pointer sweeps across rows.
                 Rectangle {
                     min-width: 50px;
                     clip: true;
@@ -335,41 +332,7 @@ export component QueueRowItem inherits Rectangle {
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: right;
                         }
-                        if root.hovered: Rectangle {
-                            width: 26px;
-                            height: 26px;
-                            border-radius: self.height / 2;
-                            background: fav-touch.has-hover ? Theme.surface1 : transparent;
-                            MaterialIcon {
-                                x: (parent.width - self.width) / 2;
-                                y: (parent.height - self.height) / 2;
-                                name: root.row-data.is_favorite ? "favorite" : "favorite_border";
-                                icon-size: 18px;
-                                icon-color: root.row-data.is_favorite ? Theme.red : Theme.subtext0;
-                                filled: root.row-data.is_favorite;
-                            }
-                            fav-touch := TouchArea {
-                                mouse-cursor: pointer;
-                                clicked => {
-                                    Queue.toggle-row-favorite(
-                                        [root.row-data.id],
-                                        !root.row-data.is_favorite,
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Always laid out, snapping via opacity to match the checkbox's instant
-                // swap — a fade leaves trails as the pointer sweeps across rows.
-                VerticalLayout {
-                    alignment: center;
-                    Rectangle {
-                        width: 26px;
-                        height: 26px;
-                        opacity: root.hovered ? 1.0 : 0.0;
-                        IconButton {
+                        if root.hovered: IconButton {
                             diameter: 26px;
                             icon-size: 18px;
                             icon: "close";
@@ -388,6 +351,7 @@ export component QueueRowItem inherits Rectangle {
         ctx-menu := TrackContextMenu {
             row-id: root.row-data.id;
             row-is-favorite: root.row-data.is_favorite;
+            row-rating: root.row-data.rating;
             row-selected: root.row-data.selected;
             album-id: root.row-data.album_id;
             artist-id: root.row-data.artist_id;
@@ -398,6 +362,7 @@ export component QueueRowItem inherits Rectangle {
 
             play-single => { Queue.skip-to(root.row-index); }
             toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
+            rate(ids, n) => { Queue.set-row-rating(ids, n); }
             select-all => { Queue.select-all(); }
             clear-selection => { Queue.clear-selection(); }
             // Index-shaped rather than by the payload's ids: a single remove takes this row and

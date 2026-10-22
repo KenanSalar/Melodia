@@ -482,6 +482,7 @@ export component TrackListRowItem inherits Rectangle {
         ctx-menu := TrackContextMenu {
             row-id: root.row-data.id;
             row-is-favorite: root.row-data.is_favorite;
+            row-rating: root.row-data.rating;
             row-selected: root.row-data.selected;
             album-id: root.row-data.album_id;
             artist-id: root.row-data.artist_id;
@@ -495,6 +496,7 @@ export component TrackListRowItem inherits Rectangle {
             play-next(ids) => { root.play-next(ids); }
             add-to-queue(ids) => { root.add-to-queue(ids); }
             toggle-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
+            rate(ids, n) => { root.set-row-rating(ids, n); }
             request-remove(ids) => { root.request-remove-from-playlist(ids); }
             select-all => { root.select-all(); }
             clear-selection => { root.clear-selection(); }

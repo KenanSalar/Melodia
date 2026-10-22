@@ -74,7 +74,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Favorites and Recently Played, each a hero banner over sortable lists and browsable card grids
 - Browse by folder, as a detailed list or a grid of cards
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
-- Multi-selection on every library list and card grid: tick one to start, then a click anywhere on a row or card adds the next and shift-click takes a range. Right-click acts on the whole set, from queueing it to editing its tags; `Esc` clears it
+- Multi-selection on every library list and card grid: tick one to start, then a click anywhere on a row or card adds the next and shift-click takes a range. Right-click acts on the whole set, from queueing it to rating it or editing its tags; `Esc` clears it
 - Copy from any right-click menu: a song's title, artist, album, "Artist - Title" or file path, an album's name and artist, or a station's name, stream URL or website. A selection copies one line per item, in the order it was picked, and the queue's in queue order
 - Tag editing for one track or many at once, cover art included, written straight back to the files. A track's artists, its genres and the ten studio credits (composer, lyricist, conductor, performer, producer and the rest) are each an editable list rather than one text box, beside the rest of what a file can carry: work and movement, key, mood, ISRC, and the release's own label, catalog number, barcode and medium
 - Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as a single `.zip` that imports back without extracting, drag-and-drop import and reordering
@@ -85,7 +85,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks, and under exclusive output too wherever the next track needs no change of device format
 - 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, adjusted from the player bar's overflow menu without leaving the page you're on, or under Settings ▸ Effects
 - ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways
-- Queue with shuffle and repeat, in a resizable panel beside whatever page is open that reopens as you left it and makes room on a narrow window; playing from any list queues that list behind your pick
+- Queue with shuffle and repeat, in a resizable panel beside whatever page is open that reopens as you left it and makes room on a narrow window, opening over the page once there's no room left to dock it; playing from any list queues that list behind your pick
 - Hold Previous or Next to scan through a track in short audible jumps that grow the longer you hold, and hold Play/Pause to stop, which takes the track back to its start
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
 - Right-click the playing song in the player bar for the menu its row has in a list: copy its details, add it to a playlist or your favorites, edit its tags, open its folder, or go to its album, artist or genre
@@ -282,12 +282,13 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 | Repeat mode | `R` |
 | Queue panel | `Q` |
 | Select all in the queue, after clicking it | `Ctrl+A` |
+| Remove the queue's selected tracks, after clicking it | `Delete` or `Backspace` |
 | Now Playing view | `F` |
 | Maximize | `F11` |
 | Toggle sidebar | `Ctrl+B` |
 | Settings | `Ctrl+,` |
 | New playlist | `Ctrl+N` |
-| Close dialog / close Now Playing / clear selection | `Esc` |
+| Close dialog / close Now Playing or the queue overlay / clear selection | `Esc` |
 | Navigate back / forward through history | `Mouse-4` / `Mouse-5` |
 
 OS media keys (play/pause, next, previous, stop) are also handled. Stop takes the track back to its start, as holding the Play/Pause button does.

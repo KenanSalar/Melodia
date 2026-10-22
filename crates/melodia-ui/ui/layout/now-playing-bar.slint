@@ -198,12 +198,15 @@ export component NowPlayingBar inherits Rectangle {
             track-menu := TrackContextMenu {
                 row-id: Player.vm.track.id;
                 row-is-favorite: Player.vm.track.is_favorite;
+                row-rating: Player.vm.track.rating;
                 album-id: Player.track-album-id;
                 artist-id: Player.track-artist-id;
                 genre-id: Player.track-genre-id;
                 view-context: "now-playing";
-                // The heart's path, which also repaints every list showing this track.
+                // The heart's path and the overflow menu's stars', each of which also repaints
+                // every list showing this track.
                 toggle-favorite(ids, on) => { Player.toggle-favorite(); }
+                rate(ids, n) => { Player.set-current-rating(n); }
             }
         }
 
@@ -366,7 +369,6 @@ export component NowPlayingBar inherits Rectangle {
                     diameter: root.btn-d;
                     icon-size: root.btn-icon-d;
                     active: Queue.shown;
-                    button-enabled: Queue.fits;
                     tooltip-text: @tr("Queue");
                     clicked => { Queue.toggle(); }
                 }

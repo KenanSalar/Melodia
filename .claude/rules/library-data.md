@@ -233,8 +233,10 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **Star ratings mirror the favorite path.** Inert `tracks.rating` (0–5) surfaced via a
   **hover-revealed** `StarRating` (`crates/melodia-ui/ui/components/star-rating.slint`) inside the
-  title cell track rows and queue rows share (`components/track-list/track-title.slint`) — no
-  rating column, no in-table sort. Rides on `TrackListRow` +
+  track rows' title cell (`components/track-list/track-title.slint`, which the queue rows mount
+  without the strip), and via `components/rating-menu-row.slint` in the row menu, over a row or a
+  selection, and in the bar's overflow menu. No rating column, no in-table sort. Rides on
+  `TrackListRow` +
   `TrackSummary`. Writes via `library::ratings::{set_rating, set_current_rating}` (clamped 0–5),
   mirroring `favorites::{set_favorite, toggle_current_favorite}` down to the `sync_current_track_*`
   helper (over `player::state::sync_current_track_if_in`) that flips the playing track's cached

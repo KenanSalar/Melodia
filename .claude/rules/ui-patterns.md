@@ -617,6 +617,11 @@ three components that answer it, and each argues its geometry at its own file.
   with them, the bar having no set. A remove label handed over by the host would ship
   untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
   rather than a property.
+  **Its rating entry is `components/rating-menu-row.slint`'s `RatingMenuRow`, which the bar's
+  overflow menu mounts too**, each host sizing it to its own rows and deciding whether a star
+  closes the menu. Over a selection it shows the clicked row's stars and the host applies the pick
+  to the whole set, `FavoriteMenuItem`'s rule. It is the queue rows' only way to rate, their title
+  carrying no strip.
   **The bar, the one host with no list row, reads the "Go to" ids through `ui::track_links`**,
   `TrackSummary` carrying no foreign keys: onto `Player.track-{album,artist,genre}-id` per track
   change and again per library tick, a retag keeping the id. The queue panel's rows carry theirs
@@ -624,8 +629,8 @@ three components that answer it, and each argues its geometry at its own file.
   **"Go to" calls `Nav.go-to-*` straight, as Open Containing Folder calls `Nav`**, with no host
   forwarding: the origin a drill records is read off where the user stands, so there was nothing
   per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands by closing
-  Now Playing, the bar staying reachable over it. The queue panel stays open, sitting beside the
-  page rather than over it.
+  Now Playing, the bar staying reachable over it, and the floating queue with it. The docked queue
+  panel stays open, sitting beside the page rather than over it.
 
 - **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
@@ -692,42 +697,57 @@ three components that answer it, and each argues its geometry at its own file.
   writes beside the rows, and the four details do it through one impl over `TrackDetail`. A track
   list over another scope implements `PagedTrackList` rather than growing a second load path.
 
-- **The queue panel sits after the content panel in the shell's row**, and four things about it
+- **The queue panel sits after the content panel in the shell's row**, and five things about it
   reach across files.
-  - **`Queue.shown` is `open` less what covers the panel**: Now Playing, the miniplayer, which
-    unmounts it, and a window with no room for it. It is computed and written on the `AppWindow`
-    root alone, a global being unable to watch its own properties and a mirror inside the panel
-    missing the miniplayer swap. Rust's rows, the private cover tier and the file-drop route all
-    follow it through `shown-changed`, so a hidden panel holds nothing past
+  - **`Queue.shown` is the docked panel open with room for it, or the overlay open, less what
+    covers either**: Now Playing, and the miniplayer, which unmounts it. It is computed and written
+    on the `AppWindow` root alone, a global being unable to watch its own properties and a mirror
+    inside the panel missing the miniplayer swap. Rust's rows, the private cover tier and the
+    file-drop route all follow it through `shown-changed`, so a hidden panel holds nothing past
     `lifecycle::TEARDOWN_DELAY`, whatever hid it. The root writes `shown` before it fires
     `shown-changed`, which is what lets the panel's seat read the playing index Rust has just
-    written.
+    written, and `Queue.floating` in the same handler, so the two never describe different panels
+    for a frame.
   - **`Queue.toggle()` is Rust's** (`ui::queue_panel::lifecycle`), the one path the bar, its
     overflow entry and Q share. Under Now Playing the panel is open but stepped aside, so a press
     closes Now Playing to bring it back, and `globals/queue.slint` importing `Nav` would break the
-    rule that only the dispatchers import sibling globals. `Queue.close()` needs nothing outside
-    the global and stays a Slint function.
+    rule that only the dispatchers import sibling globals. It opens whichever mode the window has
+    room for. `Queue.close()` needs nothing outside the global and stays a Slint function.
   - **Its inner edge is `components/edge-resize-handle.slint`'s `EdgeResizeHandle`, and so is the
     sidebar's.** A third resizable side mounts it with its own `grows` rather than copying the
     absolute-coordinate drag.
   - **A narrow window takes room back in a fixed order, so the content keeps
     `Theme.content-min-w`**: the sidebar draws its rail, the panel narrows to its minimum, and then
     it steps aside through `shown`. The `AppWindow` root works the steps out, being the one element
-    that sees the row, and argues them there. Two flags carry them out of that file, each written
-    from a `changed` mirror rather than bound, since a binding over the window's width restarts the
-    sidebar's width ease on every resize move (`slint-pitfalls.md`'s structural-dirt entry).
+    that sees the row, and argues them there. The flags carrying them out of that file
+    (`Nav.sidebar-yields`, `Queue.fits`, `Queue.floating`) are each written from a `changed` mirror
+    rather than bound, since a binding over the window's width restarts the sidebar's width ease on
+    every resize move (`slint-pitfalls.md`'s structural-dirt entry).
     **`Nav.sidebar-yields` feeds `Nav.sidebar-rail`, and every part of the sidebar draws from the
     rail.** `sidebar-collapsed` is the user's own fold and the only one persisted, so a renderer
-    reading it draws an expanded sidebar over a forced rail. **`Queue.fits` is what every control
-    that opens the panel stands down on**, as the fold toggle and Ctrl+B stand down on
-    `sidebar-yields`. The fold is keyed on `shown` rather than `open`, so the sidebar comes back once
-    the panel has stepped aside: keyed on `open`, a panel too wide to show would hold the sidebar
-    folded with both sets of controls standing down.
+    reading it draws an expanded sidebar over a forced rail. The fold toggle and Ctrl+B stand down
+    on `sidebar-yields`. The fold is keyed on the docked panel rather than `open`, so the sidebar
+    comes back once the panel has stepped aside: keyed on `open`, a panel too wide to show would
+    hold the sidebar folded with both fold controls standing down.
+  - **Past that last step the panel opens as an overlay, and its controls stay live.** Two states
+    carry it: `Queue.open` is the docked panel's and the persisted one, `Queue.overlay-open` the
+    overlay's and session-only, so a narrow launch with the panel saved open shows nothing.
+    **Narrowing hides a docked panel rather than floating it** (Kenan): the overlay dims the page
+    and takes the keys, which a resize should never raise unasked. Widening with the overlay open
+    docks it, in `changed queue-fits`, with `shown` held through the hand-off. **It is the same
+    `QueuePanel`**: a second would share the rows' fetch anchor, the drag state and `pointer-in`,
+    and couldn't sit behind an `if`. Floating, the root takes no width, stops clipping (a
+    clipping item takes every press outside its own box) and draws its body to its own left, inset
+    by `float-inset` off the content panel's edges so `RoundedFrame`'s corners stay clear.
+    `QueueScrim` dims the page from inside the content panel, ahead of `RoundedFrame`, and closes
+    the overlay on a click. An overlay folds no sidebar, taking no room in the row, and owns the
+    queue's keys while it is up.
 
 - **A track's title and its marks are `components/track-list/track-title.slint`'s `TrackTitle`**:
-  the heart a favourite keeps up, and the star strip the row reveals on hover. Track rows and queue
-  rows both mount it, so the two can't come to mark a track differently; a third row showing a
-  track's title mounts it too.
+  the heart a favourite keeps up, and the star strip a track list row reveals on hover. Track rows
+  and queue rows both mount it, so the two can't come to mark a track differently; a third row
+  showing a track's title mounts it too. The queue rows leave the strip off, their rating being the
+  row menu's, so the title keeps that room.
 
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle). Each
@@ -1177,29 +1197,31 @@ three components that answer it, and each argues its geometry at its own file.
     until the next click. Nine are one per branch selector of an `if` chain that mounts a view —
     the same reason `CompositeScroll.reset()` needs its five, so a new always-mounted mirror
     unmounting a *composite* view owes both (this set is the wider). The tenth,
-    `Queue.keys-owned`, is not about destruction: the queue panel mounts nothing, but *nothing
-    moves focus onto the scope* when a press hands the queue its keys, so without the grab a filter
-    `SearchBar` keeps the keyboard and eats the `a`. **It grabs on the rising edge only**: the
-    press that takes the keys away is one Slint is about to hand a field, and a grab there lands
-    after it.
+    `Queue.keys-owned || Queue.floating`, is not about destruction: the queue panel mounts nothing,
+    but *nothing moves focus onto the scope* when a press hands the queue its keys or the overlay
+    opens, so without the grab a filter `SearchBar` keeps the keyboard and eats the `a`. **It grabs
+    on the rising edge only**: the press that takes the keys away is one Slint is about to hand a
+    field, and a grab there lands after it.
   - Non-Esc gates on `!Dialog.open`; typed keys in TextInputs never reach root. Q is gated on
-    `Queue.fits`, neither the miniplayer nor a narrow window having room for the panel, and Ctrl+B
-    on `!Nav.sidebar-yields`, a forced rail having nothing to expand into.
+    `!MiniPlayer.active`, the miniplayer having no panel to open and a narrow window opening the
+    overlay, and Ctrl+B on `!Nav.sidebar-yields`, a forced rail having nothing to expand into.
   - **`ShortcutScope` is the only `FocusScope` in the tree, and the queue is why that's worth
     stating.** A `FocusScope` takes focus on **mouse press**, never on mount, so the old sheet's
-    nested scope left Esc and Ctrl+A dead on a sheet opened with `Q`. Both sit at the root, gated
-    on `queue-keys` (`Queue.shown && Queue.keys-owned`), which also fixes the priority: Esc
+    nested scope left Esc and Ctrl+A dead on a sheet opened with `Q`. Esc, Ctrl+A and Delete (with
+    Backspace, the key a Mac labels delete) sit at the root, gated on `queue-keys`
+    (`Queue.shown && (Queue.keys-owned || Queue.floating)`), which also fixes the priority: Esc
     reaches the *dialog* first. A second scope reintroduces all three problems; put new key
     handling here.
-  - **Whether Esc and Ctrl+A are the queue's is decided at the press, in the winit filter.** The
-    panel sits beside the page, so its keys are live only while it was the last thing pressed. A
-    hover sentinel round its content publishes `Queue.pointer-in`, and
+  - **Whether the docked panel's keys are the queue's is decided at the press, in the winit
+    filter.** The panel sits beside the page, so its keys are live only while it was the last thing
+    pressed. A hover sentinel round its content publishes `Queue.pointer-in`, and
     `winit_filter::claim_queue_keys` copies that into `Queue.keys-owned` on every press, ahead of
-    Slint's dispatch, and only a shown panel can claim them. Slint alone can't answer it: a `TouchArea` never
-    sees a press a child took, and a nested `FocusScope` is the bullet above. **A row's menu hands
-    the keys back as it closes**, its popup having taken the sentinel's hover, so the press on an
-    entry read as one elsewhere. With the keys, Esc clears the queue's picks and never closes the
-    panel; without picks it falls through to the arms below.
+    Slint's dispatch, and only a shown panel can claim them. Slint alone can't answer it: a
+    `TouchArea` never sees a press a child took, and a nested `FocusScope` is the bullet above.
+    **A row's menu hands the keys back as it closes**, its popup having taken the sentinel's hover,
+    so the press on an entry read as one elsewhere. The overlay owns the keys while it is up, a
+    press or not. With the keys, Esc clears the queue's picks first; then the overlay closes, and
+    the docked panel never does, the press falling through to the arms below.
 
 - **Animated view transitions** — content branches mount via `ViewTransition`: enter-only fade +
   32 px axis slide, no exit anim, Slint `if` destroying the outgoing branch instantly. Direction on

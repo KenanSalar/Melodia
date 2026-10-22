@@ -8,8 +8,7 @@ import { Queue } from "../../globals/queue.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
 import { WindowChrome } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
-import { MaterialIcon } from "../material-icon.slint";
-import { StarRating } from "../star-rating.slint";
+import { RatingMenuRow } from "../rating-menu-row.slint";
 import { MenuSurface } from "./menu-surface.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
 import { OverflowRow } from "./overflow-row.slint";
@@ -256,44 +255,18 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // Inline, so unlike the dialog rows above it neither closes the popup nor
-                // opens a flyout: a star applies immediately.
-                rating-row := Rectangle {
-                    // Not an `OverflowRow`, so it has to take the shared row
-                    // height itself — `menu-h` above reserves one for it.
-                    height: FlyoutMetrics.menu-row-h;
-                    // `OverflowRow`'s dimming, through the brushes rather than `opacity`, which
-                    // would hold a texture for as long as the menu is open with nothing to rate.
-                    property <float> fade: Player.vm.has_track ? 1.0 : 0.5;
-                    HorizontalLayout {
-                        padding-left: Theme.pad-sm;
-                        padding-right: Theme.pad-sm;
-                        spacing: Theme.pad-sm;
-                        alignment: stretch;
-                        cross-axis-alignment: center;
-                        MaterialIcon {
-                            name: "star";
-                            icon-size: 20px;
-                            icon-color: Player.vm.track.rating > 0 ? Theme.accent : Theme.text;
-                            filled: Player.vm.track.rating > 0;
-                            fade: rating-row.fade;
-                        }
-                        Text {
-                            horizontal-stretch: 1;
-                            text: @tr("Rating");
-                            color: Theme.text.transparentize(1.0 - rating-row.fade);
-                            font-size: Theme.font-size-md;
-                        }
-                        StarRating {
-                            rating: Player.vm.track.rating;
-                            star-size: 18px;
-                            enabled: Player.vm.has_track;
-                            filled-color: Theme.yellow.transparentize(1.0 - rating-row.fade);
-                            empty-color: Theme.subtext0.transparentize(1.0 - rating-row.fade);
-                            rated(n) => {
-                                Player.set-current-rating(n);
-                            }
-                        }
+                // Unlike the dialog rows above it neither closes the popup nor opens a flyout:
+                // a star applies immediately. Not an `OverflowRow`, so it takes the shared row
+                // height and that row's icon treatment itself; `menu-h` above reserves one row.
+                RatingMenuRow {
+                    row-height: FlyoutMetrics.menu-row-h;
+                    icon-size: 20px;
+                    star-size: 18px;
+                    idle-icon-color: Theme.text;
+                    rating: Player.vm.track.rating;
+                    enabled: Player.vm.has_track;
+                    rated(n) => {
+                        Player.set-current-rating(n);
                     }
                 }
 
@@ -328,7 +301,6 @@ export component OverflowMenu inherits Rectangle {
                     icon: "queue_music";
                     label: @tr("Queue");
                     active: Queue.shown;
-                    button-enabled: Queue.fits;
                     clicked => { Queue.toggle(); root.dismiss(); }
                 }
                 // The chip's words without its dot, which a menu row has no slot for.

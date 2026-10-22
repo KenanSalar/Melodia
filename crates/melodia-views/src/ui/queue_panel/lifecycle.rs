@@ -48,7 +48,7 @@ pub(super) fn wire(
 
 /// The bar's button, its overflow entry and Q. Under Now Playing the panel is open but stepped
 /// aside, so a press closes Now Playing to bring it back beside the library rather than closing
-/// the queue nobody can see.
+/// the queue nobody can see. A window with no room to dock it opens the overlay instead.
 fn wire_toggle(ui: &AppWindow) {
     let weak = ui.as_weak();
     ui.global::<Queue>().on_toggle(move || {
@@ -63,7 +63,11 @@ fn wire_toggle(ui: &AppWindow) {
             nav_transition::mark(&ui, NavEnterFrom::Above);
             nav.set_now_playing_open(false);
         }
-        queue.set_open(true);
+        if queue.get_fits() {
+            queue.set_open(true);
+        } else {
+            queue.set_overlay_open(true);
+        }
     });
 }
 

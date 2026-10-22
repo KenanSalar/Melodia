@@ -1,4 +1,5 @@
-//! `Queue.*` callback wiring: the transport rows, the heart and the stars, and the picks.
+//! `Queue.*` callback wiring: the transport rows, the row menu's favourite and rating, and the
+//! picks.
 
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -120,13 +121,13 @@ fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
     }
 }
 
-/// The heart and the star strip, from a row or from the menu: the write, then the rows it covers
-/// patched, as on every track list.
+/// The row menu's favourite and rating, over the clicked row or the picks: the write, then the
+/// rows it covers patched, as on every track list.
 ///
 /// Each write reaches the playing track and bumps `library_changed`, which re-reads every row the
 /// panel holds and the records the player starts from. The patch is what moves the row now rather
-/// than a fetch later, and the heart's is also what its next click reads, which would otherwise
-/// compute `!false` again and write nothing.
+/// than a fetch later, and the favourite's is also what the menu reads its next direction from,
+/// which would otherwise compute `!false` again and write nothing.
 fn wire_row_flags(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Queue>();
     let weak = ui.as_weak();

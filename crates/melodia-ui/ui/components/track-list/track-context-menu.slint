@@ -3,7 +3,10 @@ import { TagEditor } from "../../globals/dialog-forms.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
 import { Playlists } from "../../globals/playlists.slint";
-import { ContextMenuPopup, FavoriteMenuItem, MenuItem, MenuSeparator } from "../context-menu.slint";
+import { Theme } from "../../theme.slint";
+import { ContextMenuMetrics, ContextMenuPopup, FavoriteMenuItem, MenuItem,
+         MenuSeparator } from "../context-menu.slint";
+import { RatingMenuRow } from "../rating-menu-row.slint";
 import { TrackCopyFields } from "../track-copy-items.slint";
 
 // The right-click menu every track row raises, and the only place its entries are mounted.
@@ -23,6 +26,7 @@ import { TrackCopyFields } from "../track-copy-items.slint";
 export component TrackContextMenu inherits Rectangle {
     in property <int> row-id;
     in property <bool> row-is-favorite;
+    in property <int> row-rating;
     in property <bool> row-selected;
     // FK targets; 0 means no linkage and hides the entry.
     in property <int> album-id;
@@ -103,6 +107,7 @@ export component TrackContextMenu inherits Rectangle {
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-favorite([int] /*track_ids*/, bool /*new_state*/);
+    callback rate([int] /*track_ids*/, int /*rating*/);
     // Playlist Detail removes from the open playlist, the queue panel from the queue.
     callback request-remove([int] /*track_ids*/);
     // Take every displayed row, and drop the whole set. No payload either way: the host owns
@@ -226,6 +231,22 @@ export component TrackContextMenu inherits Rectangle {
             multi-count: root.multi-count;
             clicked => {
                 root.toggle-favorite(pop.effective-ids, !root.row-is-favorite);
+                root.dismiss();
+            }
+        }
+        // A Browse row outside the library has nothing to rate; a selection still does, its host
+        // dropping the ids it can't.
+        RatingMenuRow {
+            row-height: ContextMenuMetrics.item-h;
+            icon-size: 16px;
+            star-size: 16px;
+            idle-icon-color: Theme.subtext1;
+            rating: root.row-rating;
+            enabled: root.multi-active || root.row-id != 0;
+            multi-active: root.multi-active;
+            multi-count: root.multi-count;
+            rated(n) => {
+                root.rate(pop.effective-ids, n);
                 root.dismiss();
             }
         }
