@@ -121,7 +121,7 @@ pub trait TrackDetail: Send + Sync + 'static {
 
     /// A load is about to show ids other than the ones on screen, so anything keyed on a row index
     /// is stale. Playlist Detail's drag is the one.
-    fn rows_moving(&self, _g: &Self::Global) {}
+    fn rows_moving(&self) {}
 
     /// Drops the detail's Rust-side state once its id is back to `-1`.
     fn clear_detail(&self) {
@@ -159,8 +159,8 @@ impl<V: TrackDetail> PagedTrackList for V {
         self.scope(self.cache().id()) == query.scope
     }
 
-    fn rows_moving(&self, g: &V::Global) {
-        TrackDetail::rows_moving(self, g);
+    fn rows_moving(&self) {
+        TrackDetail::rows_moving(self);
     }
 
     fn shown(&self, _: &V::Global, query: &ListQuery, _: Option<()>) {

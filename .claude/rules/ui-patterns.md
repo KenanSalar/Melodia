@@ -708,16 +708,20 @@ three components that answer it, and each argues its geometry at its own file.
   Three mounts: the queue panel, Playlist Detail's `DraggableTrackList` and Up Next. The row reports
   its press (`pressed => { src.arm(idx); }`) and reads `lifted: src.lifts(idx)`, dimming by
   `Theme.fade-lifted`; the target owns the slot, the line, the edge scroll and the no-op slots,
-  handing the host `reorder(from, to)` and `scroll-by(dy)`.
+  handing the host `reorder(from, to)` and `scroll-by(dy)`. A host whose rows fall into two runs
+  that a move may not cross names the second's first row in `split-row`, and the slots across it
+  draw no line and drop nothing.
   - **What a drag carries is `Drag.payload`, written from two trees** (`ui::drag` names the three
     writes): the pressed row arms it, every press disarms it first in
-    `winit_filter::disarm_drag`, and a list whose rows move under a drag revokes its own origin
-    (`queue_panel::rows::show_queue`, `PlaylistsUi::rows_moving`, Up Next's `show_slice`). **A new
-    reorderable list owes the revoke**, the one write nothing fails without: the drag goes on over
-    the rebuilt rows, and the index it lifted lands on another track.
+    `winit_filter::disarm_drag`, a touch's start included, and a list whose rows move under a drag
+    revokes its own origin (`queue_panel::rows::show_queue`, `PlaylistsUi::rows_moving`, Up Next's
+    `show_slice`). **A new reorderable list owes the revoke**, the one write nothing fails without:
+    the drag goes on over the rebuilt rows, and the index it lifted lands on another track.
   - **Up Next's rows are play order only modulo the repeat-all wrap**, so its target hands
     `NowPlaying.reorder` row indices and `up_next::play_order_move` maps them, refusing a move
-    across the wrap. The queue panel and the playlist reorder in their own rows.
+    across the wrap. Up Next's `split-row` sits on that wrap, so no line promises a move Rust then
+    refuses, and Rust's refusal stays the one that holds. The queue panel and the playlist reorder
+    in their own rows.
 
 - **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and

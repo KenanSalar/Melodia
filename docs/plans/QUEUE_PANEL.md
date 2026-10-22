@@ -379,7 +379,7 @@ Confirm each fact the next two phases stand on:
 - **`TrackList`'s `ListView` sets no `mouse-drag-pan-enabled`.** It inherits fluent's `false`.
 
 ### Phase 5: One drag mechanism for the reorders
-Status: done, implemented and passed by hand 2026-10-22. Its tests wait for Phase 8.
+Status: done, implemented and passed by hand 2026-10-22, its validation fixes still to pass by hand. Its tests wait for Phase 8.
 
 1. **The shared pieces:**
    - `DragPayload`;
@@ -418,11 +418,22 @@ Lands as one commit: a list cannot host both mechanisms.
 **Amended while implementing** (each read in the Slint 1.18.1 sources):
 - **The payload is armed by the pressed row at the press, not written as `dragging` rises (amends decision 7).** A `DragArea` starts a drag from any left press it contains, so a press on a gap between rows, a row's own button or the space under the last row drags too. Nothing in Slint sees every press, so the winit filter's press arm disarms `Drag` ahead of Slint's dispatch and the row the press lands on arms it within that dispatch. A drag from anywhere else carries nothing. This holds by construction, where a `changed dragging` write would also land a pass after the press.
 - **`DragPayload` carries `origin` and `index` alone, and lives in `globals/drag.slint`.** Rust never names it. Phase 6 adds the rest with the code that reads it.
-- **A rebuild under a live drag revokes the payload rather than resetting `drag-source`/`drop-slot`.** The source survives the rebuild, so the drag goes on, but its index no longer names the row it lifted. `Drag.revoke(origin)` is called from `queue_panel::rows::show_queue` when the ids moved, from `PlaylistsUi::rows_moving` (through a weak `Drag` the handle holds, the hook being handed only its own global), and from Up Next's `show_slice` when its ids or base moved, a library tick reseeding the same slice.
+- **A rebuild under a live drag revokes the payload rather than resetting `drag-source`/`drop-slot`.** The source survives the rebuild, so the drag goes on, but its index no longer names the row it lifted. `Drag.revoke(origin)` is called from `queue_panel::rows::show_queue` when the ids moved, from `PlaylistsUi::rows_moving` (through a weak `Drag` the handle holds, the hook being handed nothing to reach it through), and from Up Next's `show_slice` when its ids or base moved, a library tick reseeding the same slice.
 - **Up Next's move maps onto play order in Rust**, through `NowPlaying.reorder(from-row, to-row)` and `up_next::play_order_move`, so the wrap refusal can be pinned. Its row moves on show first, as the panel's does. Skip and remove keep the `Math.mod` the click already spelled, worked out once per row as `play-index`.
 - **The edge-scroll `Timer`'s `running` reads no layout property.** All three targets sit inside an `if`, so `can-drop` works out the edge band with the pointer and stores it.
 - **`Selection.acts-on-set` and `effective-ids` cover three menus**, the station menu spelling the same rule as the track and card menus.
 - **`Theme.fade-lifted` is the one weight a lifted row keeps.** The queue and track rows keep their `opacity`; Up Next's row folds it into its brushes, having no layer today.
+
+**Amended in validation** (2026-10-22, each read in the Slint 1.18.1 sources):
+- **A touch's start disarms `Drag` too.** Slint takes a first touch as a left press, so a disarm keyed on `MouseInput` alone let a touch drag from a gap carry the last row pressed. The queue's key claim stays a mouse press's, reading a hover no touch has ahead of it.
+- **`ListDropTarget.split-row` keeps a slot across Up Next's wrap from drawing its line.** Up Next binds `queue-length - base-index`, and `play_order_move` still refuses, being the check that holds. The target's slot-to-index step is one `landing` property now.
+- **`rows_moving` takes no global**, its one implementer having stopped reading the one it was handed.
+- **`slint-pitfalls.md`'s drag-pan entry described a binding older than 1.18.** Every 1.18 style binds its flickable's own `mouse-drag-pan-enabled` and pins it off, Material included, and `interactive` stays on, so a touch still pans. Corrected there, in `station-grid.slint` and in `scrollbars.rs`.
+
+**By hand, after validation:**
+- Up Next under repeat-all: a drag across the wrap draws no line and moves nothing;
+- a touch drag from a gap between rows moves nothing;
+- a touchscreen swipe on each of the three lists, which the `DragSource` and the list's own touch pan now compete for.
 
 ### Phase 6: Dragging into the queue
 1. **Engine and library.**
@@ -478,8 +489,8 @@ Lands as one commit: a list cannot host both mechanisms.
   - `effective-ids` as the only statement of the rule, by a walk;
   - no hand-rolled slot maths left outside `ListDropTarget`, by a walk;
   - no `DragArea` inside a `for`, by a walk (Phase 4), and no `DragArea`/`DropArea` outside `drag-source.slint` and `list-drop-target.slint`;
-  - the winit filter's press arm disarming `Drag`, and each list that rebuilds its rows revoking its own origin (Phase 5);
-  - `play_order_move` within each side of the repeat-all wrap and refusing across it (Phase 5);
+  - the winit filter's press and touch arms disarming `Drag`, and each list that rebuilds its rows revoking its own origin (Phase 5);
+  - `play_order_move` within each side of the repeat-all wrap and refusing across it, at the boundary slot from both sides, with every row past the wrap and on an empty queue, and Up Next's `split-row` refusing the same moves (Phase 5);
   - `min <= default <= max` on the panel tokens;
   - the prewarm test's width table gaining the panel (`grid_prewarm_tests.rs:227-260`);
   - the filter's press arm;
@@ -487,7 +498,7 @@ Lands as one commit: a list cannot host both mechanisms.
   - drop routing by position;
   - Phase 3.5: the Delete arm's gate; `RatingMenuRow` as the only `StarRating` inside a menu, by a walk; `Queue.floating` written beside `shown`; the overlay's Escape arm above `Selection.any-live()`.
   - Phase 3.6: `sidebar-yields` carrying the bare-row term, the window's term waiting for a measured row; the folded header and the compact detail row seating inside `Theme.content-min-w`, as arithmetic over the published floors; both pages feeding the band from a hidden ruler.
-- **Docs.** Phases 1 to 3's half landed on 2026-10-21, and Phase 3.5's on 2026-10-22 (`ui-patterns.md`'s row menu, queue block, `TrackTitle` and keys, `library-data.md`'s rating paths, `slint-pitfalls.md`'s `queue-row.slint` example, and the README's shortcut table and feature lines), and Phase 3.6's the same day (`ui-patterns.md`'s narrow-window block and its `PillButton`, `TabBar` and `LibraryTabBand` entries, the last one's stale pill-slot line retired with it, and `slint-pitfalls.md`'s `SearchBar` entry), and Phase 5's the same day (`ui-patterns.md`'s drag entry and the row menu's four hosts, its `"up-next"` context and the `Selection` rule, `slint-pitfalls.md`'s drag-pan entry and its in-window drag entry carrying Phase 4's traps, the README's queue line, and the root `CLAUDE.md`'s globals count). Phases 1 to 3:
+- **Docs.** Phases 1 to 3's half landed on 2026-10-21, and Phase 3.5's on 2026-10-22 (`ui-patterns.md`'s row menu, queue block, `TrackTitle` and keys, `library-data.md`'s rating paths, `slint-pitfalls.md`'s `queue-row.slint` example, and the README's shortcut table and feature lines), and Phase 3.6's the same day (`ui-patterns.md`'s narrow-window block and its `PillButton`, `TabBar` and `LibraryTabBand` entries, the last one's stale pill-slot line retired with it, and `slint-pitfalls.md`'s `SearchBar` entry), and Phase 5's the same day (`ui-patterns.md`'s drag entry and the row menu's four hosts, its `"up-next"` context and the `Selection` rule, `slint-pitfalls.md`'s drag-pan entry and its in-window drag entry carrying Phase 4's traps, the README's queue line, and the root `CLAUDE.md`'s globals count), and its validation's the same day (`ui-patterns.md`'s drag entry gaining `split-row` and the touch disarm, `slint-pitfalls.md`'s drag-pan entry corrected to 1.18's binding and its in-window drag entry gaining the touch press). Phases 1 to 3:
   - the panel's cross-file facts and the keys in `ui-patterns.md`, the narrow window's order and its two flags among them;
   - the sheet's mentions across the rules;
   - `settings.json`'s contents in the root `CLAUDE.md`;

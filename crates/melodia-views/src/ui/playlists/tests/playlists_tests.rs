@@ -20,7 +20,7 @@ const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
 /// reads clean, and only misbehaves on a list long enough to scroll.
 ///
 /// The value was `!reorder-enabled`, which reads as leaving a `true` default alone
-/// and is not one: every style but Material publishes this off, so that spelling
+/// and is not one: every style publishes this off, so that spelling
 /// *enabled* the pan on every sort that retires the drag.
 #[test]
 fn every_draggable_list_opts_out_of_drag_panning() {

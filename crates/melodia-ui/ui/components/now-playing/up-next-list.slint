@@ -273,6 +273,9 @@ export component UpNextList inherits Rectangle {
         row-height: root.row-h;
         row-count: NowPlaying.up-next-rows.length;
         content-y: up-next-list.content-y;
+        // Where the rows past the repeat-all wrap begin, `up_next::play_order_move` refusing a
+        // move across it. With no wrap it falls past the last row.
+        split-row: NowPlaying.queue-length - NowPlaying.base-index;
         line-color: root.ink;
         reorder(from, to) => { NowPlaying.reorder(from, to); }
         scroll-by(dy) => {

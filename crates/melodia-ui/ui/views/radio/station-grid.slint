@@ -65,11 +65,11 @@ export component StationGrid inherits Rectangle {
         vertical-scrollbar-policy: always-off;
         horizontal-scrollbar-policy: always-off;
         // **Stated because the default is the *style's* to pick, and a card click and a
-        // drag-pan are one gesture.** Every style but Material publishes this off, so a
-        // scroller that binds nothing is one `SLINT_STYLE` from panning. Where it is on
+        // drag-pan are one gesture.** Every style publishes this off today, so a scroller
+        // that binds nothing is one upstream default away from panning. Where it is on
         // the pan takes a press that drifts, which reads as "sometimes it doesn't open"
         // and only on a grid long enough to flick. Nothing here wants drag-to-pan; the
-        // wheel still works, `!interactive` forwarding it unchanged.
+        // wheel scrolls either way.
         // `slint-pitfalls.md` carries the mechanism.
         mouse-drag-pan-enabled: false;
 

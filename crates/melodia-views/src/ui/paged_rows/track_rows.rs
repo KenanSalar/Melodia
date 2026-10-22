@@ -88,7 +88,7 @@ pub trait PagedTrackList: Send + Sync + 'static {
     fn load_dropped(&self) {}
 
     /// The ids about to show differ from the ones on screen. UI thread.
-    fn rows_moving(&self, _g: &Self::Global) {}
+    fn rows_moving(&self) {}
 
     /// A keyset loaded under `query` just went in, with what it wrote beside it where it was a
     /// reload. UI thread.
@@ -306,7 +306,7 @@ fn show<L: PagedTrackList>(list: &L, g: &L::Global, landing: Landing<L::Facts>) 
         return;
     };
     if *model.ids() != *keyset.ids {
-        list.rows_moving(g);
+        list.rows_moving();
     }
     model.show(keyset);
     list.shown(g, &query, facts);

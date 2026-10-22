@@ -52,7 +52,7 @@ impl TrackDetail for PlaylistsUi {
 
     /// A drag still in flight goes on, the list's source surviving the rows it holds, but the
     /// index it lifted no longer names the same track.
-    fn rows_moving(&self, _g: &Self::Global) {
+    fn rows_moving(&self) {
         if let Some(drag) = self.drag.upgrade() {
             drag.invoke_revoke(DragOrigin::Playlist);
         }

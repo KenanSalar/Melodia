@@ -183,19 +183,18 @@ this file is what builds, looks right, and is wrong.
   the upper section is a header the list belongs under, not a peer view: `browse-view.slint` and
   `ArtistDetailBody`.
 
-- **The same `Flickable` steals a *mouse* drag wherever it is interactive, and there the cure is
+- **The same `Flickable` steals a *mouse* drag wherever its drag-pan is on, and there the cure is
   per-list: `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture and only one
-  element can own it. **Which one wins is the *style's* answer rather than Slint's**, and the
-  property is the styled widget's, not the item's: `ScrollView` publishes
-  `mouse-drag-pan-enabled <=> flickable.interactive`, and while the bare `Flickable.interactive`
-  does default **`true`**, fluent, cupertino, cosmic and qt each pin `interactive: false` inside
-  their own `ScrollView`. Material is the one that doesn't, which is what the Slint docs mean by
-  "defaults to `true` for the Material style and `false` for all other styles".
+  element can own it. **Which one wins is the *style's* answer rather than Slint's**: the bare
+  `Flickable.mouse-drag-pan-enabled` defaults **`true`**, and every style's `ScrollView` binds its
+  own `mouse-drag-pan-enabled` to its flickable's and pins it `false`, Material included.
+  `interactive` is a separate property left at `true`, and it alone decides a touch, so a
+  touchscreen pans every list whatever `mouse-drag-pan-enabled` says.
   `ListView inherits ScrollView`, so it takes the same answer, and the tree declares no bare
   `Flickable` at all. Melodia sets no style and `i-slint-compiler`'s `typeloader.rs` resolves it to
   **fluent**, so the live default here is *off* and every scroller binding nothing already
   compiles to `false`. What the opt-outs buy is therefore a pin rather than an override: no
-  click-to-act list depends on which style compiled. **Verify in the generated file, never in the
+  click-to-act list depends on a style's default. **Verify in the generated file, never in the
   `.slint`** — the value is inlined per instance, so a source binding and an inherited default are
   the same line.
   Where the pan *is* on, a press inside one returns `DelayForwarding`, and `handle_mouse_grab`
@@ -203,15 +202,16 @@ this file is what builds, looks right, and is wrong.
   `DISTANCE_THRESHOLD` (8 px) inside `DURATION_THRESHOLD` (500 ms) on a scrollable axis it returns
   `Intercept`, and every item below is sent `MouseEvent::Exit`, delivered by `TouchArea` as
   `PointerEventKind::Cancel`. A list's `DragSource` takes the press at that same 8 px, so on a list
-  that pans the two compete for one gesture. It reads as intermittent, both escapes being real: a
-  list shorter than its viewport can't flick, and a press held past 500 ms before moving is never
-  intercepted. The draggable lists opt out outright, `draggable-track-list.slint`'s `inner-list` and
+  that pans, which under a touch is every list, the two compete for one gesture. It reads as
+  intermittent, both escapes being real: a list shorter than its viewport can't flick, and a press
+  held past 500 ms before moving is never intercepted. The draggable lists opt out outright,
+  `draggable-track-list.slint`'s `inner-list` and
   `queue-panel.slint`'s, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
   under a pointer; the click-to-act grids and lists are pinned by `crates/melodia/tests/scrollbars.rs`.
   **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
   as leaving a `true` default alone and instead *enables* the pan on every sort that retires the
-  drag. `!interactive` still forwards wheel events, so only drag-to-pan goes.
+  drag. The wheel scrolls either way, so only the mouse drag-pan goes.
 
 - **A grabbing item that unmounts mid-gesture hands its release to the ancestor, as a fresh
   event.** `handle_mouse_grab` walks the `item_stack` upgrading each weak ref, and a grabber whose
@@ -839,7 +839,8 @@ this file is what builds, looks right, and is wrong.
     the one spelling.
   - **It drags from any left press it contains**, a row's own button and the gap between rows
     included, so what a drag carries can't be "the row last pressed" without every press clearing
-    it first. `globals/drag.slint` argues the arming.
+    it first. A touch is a left press to it as well, so a clear that watches only `MouseInput`
+    misses one. `globals/drag.slint` argues the arming.
   - **A `Drop` goes to whatever the hit test finds, not to the area that accepted the hover**, and
     a `DropArea` takes any `Drop` it receives (`i-slint-core/window.rs`, `items/drag_n_drop.rs`).
     So one drawn in front of a target eats that target's drops even while it answers `none` to

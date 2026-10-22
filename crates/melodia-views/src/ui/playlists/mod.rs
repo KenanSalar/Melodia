@@ -105,7 +105,7 @@ pub struct PlaylistsUi {
     /// The pick a random-capped smart playlist's detail lists, drawn once per open so its sorts,
     /// filters, reloads and hero all describe the same tracks.
     draw: Mutex<Draw>,
-    /// What the detail's rows moving revokes, the hook being handed only this view's own global.
+    /// What the detail's rows moving revokes, the hook being handed nothing to reach it through.
     drag: slint::Weak<Drag<'static>>,
 }
 

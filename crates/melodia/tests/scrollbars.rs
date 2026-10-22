@@ -19,10 +19,10 @@ use melodia_testkit::{
 };
 
 /// The elements both block walks recognise. `Flickable` is deliberately absent, and
-/// the reason differs per walk: it owns no scrollbar pair to turn off, and it spells
-/// drag-panning `interactive` rather than `mouse-drag-pan-enabled`. The tree declares
-/// none — held by [`the_tree_declares_no_bare_flickable`], since one that appears is
-/// outside every walk in this file.
+/// the reason differs per walk: it owns no scrollbar pair to turn off, and its own
+/// `mouse-drag-pan-enabled` defaults on where every style's `ScrollView` pins it off. The
+/// tree declares none — held by [`the_tree_declares_no_bare_flickable`], since one that
+/// appears is outside every walk in this file.
 const SCROLLERS: [&str; 2] = ["ScrollView", "ListView"];
 const AXES: [&str; 2] = ["horizontal", "vertical"];
 const OPT_OUT: &str = "always-off";
@@ -164,9 +164,9 @@ fn every_scroller_opts_out_of_the_stock_scrollbar() {
 }
 
 /// A card click and a drag-pan are one gesture, and which of them a grid gets is the
-/// *style's* answer unless the grid states one: every style but Material publishes
-/// `mouse-drag-pan-enabled` off, so a scroller binding nothing rides a default no file here
-/// owns. Where the pan is on, 8 px of travel inside 500 ms hands the flickable the grab and
+/// *style's* answer unless the grid states one: every style's `ScrollView` publishes
+/// `mouse-drag-pan-enabled` off today, so a scroller binding nothing rides a default no file
+/// here owns. Where the pan is on, 8 px of travel inside 500 ms hands the flickable the grab and
 /// every item under it is sent a cancel, so a press that drifts that far never lands as a
 /// click — "sometimes it doesn't open", on a grid long enough to flick and nowhere else.
 /// `views/radio/station-grid.slint` carries the argument.
@@ -221,8 +221,8 @@ fn every_card_shaped_list_opts_out_of_drag_to_pan() {
 }
 
 /// Both block walks key on [`SCROLLERS`], so what makes them complete is that nothing
-/// declares a bare `Flickable` — which spells drag-panning `interactive`, carries the `true`
-/// default the opt-outs exist to pin against, and is invisible to every needle here.
+/// declares a bare `Flickable`, which carries the `true` drag-pan default the opt-outs exist
+/// to pin against and is invisible to every needle here.
 #[test]
 fn the_tree_declares_no_bare_flickable() {
     let offenders: Vec<_> = sources()

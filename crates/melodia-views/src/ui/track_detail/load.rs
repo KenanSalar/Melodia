@@ -72,7 +72,7 @@ impl Opening {
         }
         let rows = g.track_rows();
         let Some(model) = TrackRows::installed(&rows, V::VIEW_ID) else { return };
-        view.rows_moving(&g);
+        view.rows_moving();
         // Every row it holds afterwards is one this open fetched, so none owes a re-read.
         model.clear();
         model.show(self.keyset);

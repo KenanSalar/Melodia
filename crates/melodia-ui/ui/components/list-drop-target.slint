@@ -15,6 +15,9 @@ export component ListDropTarget inherits DropArea {
     // The list's `content-y`, 0 at the top and negative scrolled down.
     in property <length> content-y;
     in property <brush> line-color: Theme.accent;
+    // -1, or the first row of a second run. A row moves only within its own, so a slot across the
+    // break draws no line and drops nothing.
+    in property <int> split-row: -1;
 
     // `to` is where the row lands once it has left `from`.
     callback reorder(int /*from*/, int /*to*/);
@@ -49,7 +52,11 @@ export component ListDropTarget inherits DropArea {
         0,
         root.row-count,
     );
-    property <bool> moves: root.own-drag && root.slot != root.lifted && root.slot != root.lifted + 1;
+    property <int> landing: root.slot <= root.lifted ? root.slot : root.slot - 1;
+    property <bool> same-run: root.split-row < 0
+        || (root.lifted < root.split-row) == (root.landing < root.split-row);
+    property <bool> moves: root.own-drag && root.slot != root.lifted && root.slot != root.lifted + 1
+        && root.same-run;
 
     function follow(y: length) {
         root.pointer-y = y;
@@ -72,7 +79,7 @@ export component ListDropTarget inherits DropArea {
         if (!root.moves) {
             return DragAction.none;
         }
-        root.reorder(root.lifted, root.slot <= root.lifted ? root.slot : root.slot - 1);
+        root.reorder(root.lifted, root.landing);
         return DragAction.move;
     }
 

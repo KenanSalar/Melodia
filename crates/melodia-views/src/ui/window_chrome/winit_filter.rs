@@ -32,7 +32,8 @@
 //!    `resize_release`.
 //! 10. **`MouseInput { Pressed }`**, any button and whoever takes it: whether it landed on the
 //!     queue panel, which makes Escape, Ctrl+A and Delete the queue's, and a disarm of what an
-//!     in-window drag would carry. See [`claim_queue_keys`] and [`disarm_drag`].
+//!     in-window drag would carry, which **`Touch { Started }`** makes too. See
+//!     [`claim_queue_keys`] and [`disarm_drag`].
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -40,7 +41,9 @@ use std::time::{Duration, Instant};
 
 use slint::ComponentHandle;
 use slint::winit_030::winit::error::ExternalError;
-use slint::winit_030::winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use slint::winit_030::winit::event::{
+    ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
+};
 use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 use slint::winit_030::{EventResult, WinitWindowAccessor};
 
@@ -152,6 +155,15 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
         }
         if let WindowEvent::MouseInput { state: ElementState::Pressed, .. } = event {
             claim_queue_keys(&weak);
+            disarm_drag(&weak);
+        }
+        // Slint takes a first touch as a left press, so it disarms too. A second finger's does as
+        // well, and Slint ends the first one's press for it, so a second finger ends a touch drag
+        // with nothing dropped rather than committing a pinch as a move. The queue's claim stays a
+        // mouse press's: it reads the pointer's hover, which no touch has ahead of it.
+        if let WindowEvent::Touch(touch) = event
+            && touch.phase == TouchPhase::Started
+        {
             disarm_drag(&weak);
         }
         match event {
