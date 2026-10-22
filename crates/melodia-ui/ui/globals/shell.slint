@@ -44,6 +44,8 @@ export global WindowChrome {
     in-out property <length> shell-x;
     in-out property <length> shell-width;
     in-out property <length> shell-height;
+    // What a tooltip or menu fitted to that rect keeps clear of its edges.
+    out property <length> edge-clearance: Theme.pad-xs;
 
     // The frameless outline's colour, resolved from the Window Border Color pick. Unfocused is its
     // own brush because Windows' accent borders go neutral on an inactive window; for any other pick

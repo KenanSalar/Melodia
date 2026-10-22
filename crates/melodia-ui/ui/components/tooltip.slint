@@ -37,7 +37,6 @@ export component Tooltip {
     in property <bool> in-popup: false;
 
     private property <bool> shown;
-    private property <length> edge-clearance: Theme.pad-xs;
 
     // **A zero-size anchor at the host's origin, with the pill as its child**: the pill's own `x`
     // can't read its `absolute-position` without reading itself back, where the anchor's is the
@@ -55,11 +54,12 @@ export component Tooltip {
     private property <bool> fits-window: !root.in-popup && root.drawn;
 
     // The window's edges, in the host's coordinates.
-    private property <length> min-x: WindowChrome.shell-x + root.edge-clearance - root.absolute-position.x;
-    private property <length> max-x: WindowChrome.shell-x + WindowChrome.shell-width - root.edge-clearance
-        - root.absolute-position.x;
-    private property <length> min-y: root.edge-clearance - root.absolute-position.y;
-    private property <length> max-y: WindowChrome.shell-height - root.edge-clearance - root.absolute-position.y;
+    private property <length> min-x: WindowChrome.shell-x + WindowChrome.edge-clearance - root.absolute-position.x;
+    private property <length> max-x: WindowChrome.shell-x + WindowChrome.shell-width
+        - WindowChrome.edge-clearance - root.absolute-position.x;
+    private property <length> min-y: WindowChrome.edge-clearance - root.absolute-position.y;
+    private property <length> max-y: WindowChrome.shell-height - WindowChrome.edge-clearance
+        - root.absolute-position.y;
 
     private property <length> above-y: -pill.height - root.gap;
     private property <length> below-y: root.host-height + root.gap;

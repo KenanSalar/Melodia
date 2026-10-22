@@ -35,9 +35,9 @@ silently miss the other.
   host's edge to stay inside the shell rect `AppWindow` mirrors into `WindowChrome.shell-*`. So no
   host picks a side to dodge the window. What a host still owns is the two things the pill can't
   see: **a clip between it and the window**, and **a sibling painted after it**. **The rect it
-  fits is the client's, not the panel's**: `edge-clearance` is `Theme.pad-xs` and so is the
-  panel's own right gutter, so a pill wide enough to reach the clamp parks its trailing border on
-  the clip line rather than inside it. Publishing the panel rect instead is not the fix,
+  fits is the client's, not the panel's**: `WindowChrome.edge-clearance` is `Theme.pad-xs` and so
+  is the panel's own right gutter, so a pill wide enough to reach the clamp parks its trailing
+  border on the clip line rather than inside it. Publishing the panel rect instead is not the fix,
   `globals/shell.slint` sizing the miniplayer's artwork off the same two properties. Keep a wide
   pill off the limit, which is what the alignment below does for the hosts that reach it.
 

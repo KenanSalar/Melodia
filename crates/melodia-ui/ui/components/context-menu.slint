@@ -39,10 +39,8 @@ export global ContextMenuMetrics {
     out property <length> menu-max-w: 400px;
     // The width a flyout adds beside its menu's column, on whichever side has room.
     out property <length> flyout-room: root.gap + root.flyout-w;
-    // What a menu keeps clear of the shell's top and bottom, `Tooltip`'s clearance.
-    out property <length> edge-clearance: Theme.pad-xs;
     // A column taller than this scrolls rather than running past the window.
-    out property <length> max-menu-h: WindowChrome.shell-height - 2 * root.edge-clearance;
+    out property <length> max-menu-h: WindowChrome.shell-height - 2 * WindowChrome.edge-clearance;
 
     // Off the rows' `preferred-width`, which only the popup holding them can read.
     pure public function menu-w(rows-w: length) -> length {
@@ -77,8 +75,8 @@ export global ContextMenuMetrics {
     // Placed here rather than left to Slint, which fits a popup to the whole window and parks it
     // flush against the edge.
     pure public function fit-y(anchor-y: length, anchor-window-y: length, popup-h: length) -> length {
-        return anchor-y - anchor-window-y + clamp(anchor-window-y, root.edge-clearance,
-            WindowChrome.shell-height - root.edge-clearance - popup-h);
+        return anchor-y - anchor-window-y + clamp(anchor-window-y, WindowChrome.edge-clearance,
+            WindowChrome.shell-height - WindowChrome.edge-clearance - popup-h);
     }
 }
 
@@ -233,7 +231,7 @@ export component ContextMenuPopup inherits PopupWindow {
     property <length> rows-h: menu-vl.preferred-height;
     property <bool> scrolls: root.rows-h > ContextMenuMetrics.max-menu-h;
     property <length> menu-h: min(root.rows-h, ContextMenuMetrics.max-menu-h);
-    property <length> gutter: root.scrolls ? Theme.scrollbar-slot : 0px;
+    property <length> gutter: root.scrolls ? Theme.scrollbar-slot + ContextMenuMetrics.inset : 0px;
     property <length> flyout-h: ContextMenuMetrics.flyout-h(root.copy-fields.length);
     property <length> flyout-room:
         root.copy-open || root.flyout-left ? ContextMenuMetrics.flyout-room : 0px;
@@ -284,9 +282,11 @@ export component ContextMenuPopup inherits PopupWindow {
             }
         }
 
+        // Inset from the border on all three sides: flush against it, the idle thumb is the
+        // border's own colour and reads as the edge thickening.
         OverlayScrollbar {
             horizontal: false;
-            x: parent.width - self.width;
+            x: parent.width - self.width - ContextMenuMetrics.inset;
             y: ContextMenuMetrics.inset;
             width: Theme.scrollbar-slot;
             height: parent.height - 2 * ContextMenuMetrics.inset;
