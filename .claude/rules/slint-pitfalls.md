@@ -457,7 +457,9 @@ this file is what builds, looks right, and is wrong.
   never evaluate it. What every mount keeps is the `min-width` floor: below it the bar compresses
   and the placeholder elides. That floor is **published as `out property min-w`**, the
   `TabBar.compact-w` contract — a host budgeting its row reserves against it rather than restating
-  the number. `ui::placeholder_tests` pins both ends.
+  the number. **A host with no room for the floor folds the bar instead**, and folded all three
+  give way to a `bar-height` square around the glyph; the input stays mounted at zero width, so it
+  keeps its focus target and its `blur-trigger` tracker. `ui::placeholder_tests` pins both ends.
 
 - **`has-hover` is not continuous, so a *translucent* fill may not read it raw.** Slint clears the
   flag from two places the pointer never left: `input_items.rs` drops it on a wheel event the

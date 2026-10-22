@@ -1,6 +1,6 @@
 # Plan: Queue panel (the queue docks on the right and takes drops)
 
-Status: **in progress**, Phases 1 and 2 done, Phases 3 and 3.5 implemented · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
+Status: **in progress**, Phases 1 and 2 done, Phases 3, 3.5 and 3.6 implemented · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
 
 > **Validated 2026-10-21** against `72a0e74f` (`feat/queue-panel`). Three read-only traces went into it: the queue sheet, the left sidebar's resize and fold, and drag and drop with Add to Queue. They were checked against:
 > - the Slint 1.18.1 sources for `DragArea`, `DropArea` and the in-window drag (`i-slint-core/items/drag_n_drop.rs`, `window.rs`);
@@ -104,6 +104,8 @@ Working doc. Delete when every phase has shipped and passed by hand.
     3. The panel steps aside, through `shown`, exactly as under Now Playing.
 
     **Amended in Phase 3.5: below that step the panel opens as an overlay** over the content's right edge, and its controls stay live. Narrowing hides a docked panel rather than turning it into an overlay mid-resize (Kenan, 2026-10-22: the overlay dims the page and takes the keys, which a resize shouldn't raise unasked), and widening with the overlay open docks it. Phase 3's amendment standing the bar button, its overflow row and Q down on `fits` is superseded.
+
+    **Amended in Phase 3.6: the floor holds without the panel too.** The sidebar folds once the window alone would leave the content under it, which makes the floor the narrowest content panel every page has to seat. The two rows that couldn't seat it now fit it: My Library's header folds its filter to a glyph, and the band drops its pills' labels onto their tooltips.
 
     The constant and the panel widths are settled on a real window. The track lists and grids already fit to their own width (`track-list.slint:32-33`, `GridGeometry` off `body.width`).
 11. **The lifecycle follows `shown`, not `open`.** Rows and covers are released 350 ms after the panel stops being shown (`TEARDOWN_DELAY`, `queue_sheet/callbacks.rs:40`). That covers a close, Now Playing, the miniplayer and a narrow window alike. A long-open panel costs what the sheet cost while it was up: the same `QueueRows` window, the same private cover tier and the same 24-cover prewarm.
@@ -291,6 +293,30 @@ Status: implemented 2026-10-22, waiting on the hand pass. Its tests wait for Pha
 - **The rating row elides its label**, as `MenuItem` does, for a long translation in a menu at its width ceiling. The overflow menu sizes itself to the row's preferred width, so nothing there elides.
 - **"Rating for {}" follows each catalog's own "Edit Tags for {}"**, so the two read alike in every language.
 
+### Phase 3.6: The content floor holds without the panel
+Status: implemented 2026-10-22, waiting on the hand pass. Its tests wait for Phase 8.
+
+**What you see before it.**
+- With the panel closed, an expanded sidebar keeps its width however narrow the window gets, so the content panel shrinks well below `Theme.content-min-w`.
+- With a detail open, My Library's header needs more than the floor: the filter draws past its cell and the band's clip cuts it off, panel or not.
+- A detail's action pills slide left over the cover once the row is wider than the text column.
+
+**What keeps working.** The user's fold, persisted and untouched by a forced rail. The order a narrowing window gives way in beside a docked panel. Every header and pill row exactly as drawn wherever it already fits.
+
+**A. The sidebar** (`app-window.slint`). `sidebar-yields` also rises once an expanded sidebar would leave the bare row under the floor, and the sidebar's edge drag stops at that room with no panel docked.
+
+**B. The filter folds** (`tab-search-header.slint`, `search-bar.slint`). Past the row that seats the compact bar beside the input's floor, the box folds to its glyph. A click opens it across the row over the bar, where it stays while it holds focus or text, and ✕ clears and folds it (Kenan). One `SearchBar` throughout, so a resize hands no focus across.
+
+**C. The pills drop their labels** (`library-tab-band.slint`, `action-pill.slint`, both pill rows, both pages). The slot spans only the room beside the cover; short of it, every labelled pill shows its glyph with the label as its tooltip, on every row in the band (Kenan). The labelled width is measured off a hidden copy of the row. Radio's Favorites row keeps its labels, its cell clipping an in-tree tooltip.
+
+**By hand:**
+- A: narrow with the panel closed and the sidebar expanded (it folds before the content drops under the floor, and comes back on widening); the toggle and Ctrl+B under the forced rail; a relaunch keeps the user's fold; the edge drag on a narrow window.
+- B: a playlist open in My Library, narrowed until the filter folds; open by a click, type, click away with text and without, ✕, widen while open.
+- C: a playlist detail, smart and not, and a Radio station page, narrowed until the labels drop; their tooltips; no flicker at the threshold; a longer locale.
+- The miniplayer and back.
+
+**Gate:** fmt, clippy, test. One pin moved with the change, `placeholder_tests::the_search_bar_negotiates_its_width`. No new strings or icons.
+
 ### Phase 4: Prove the drag primitives (a spike; nothing lands)
 On a throwaway build, confirm each fact the next two phases stand on:
 1. **A `DragArea` around a track row in a pan-disabled `ListView` keeps every row interaction:** click, Ctrl/Shift pick, double-click, right-click menu, checkbox, hover heart and stars. It starts a drag past 8 px.
@@ -378,7 +404,8 @@ Lands as one commit: a row cannot host both mechanisms.
   - `QueuePanelLayout` defaults and an older `settings.json`;
   - drop routing by position;
   - Phase 3.5: the Delete arm's gate; `RatingMenuRow` as the only `StarRating` inside a menu, by a walk; `Queue.floating` written beside `shown`; the overlay's Escape arm above `Selection.any-live()`.
-- **Docs.** Phases 1 to 3's half landed on 2026-10-21, and Phase 3.5's on 2026-10-22 (`ui-patterns.md`'s row menu, queue block, `TrackTitle` and keys, `library-data.md`'s rating paths, `slint-pitfalls.md`'s `queue-row.slint` example, and the README's shortcut table and feature lines). Phases 1 to 3:
+  - Phase 3.6: `sidebar-yields` carrying the bare-row term; the folded header and the compact detail row seating inside `Theme.content-min-w`, as arithmetic over the published floors; both pages feeding the band from a hidden ruler.
+- **Docs.** Phases 1 to 3's half landed on 2026-10-21, and Phase 3.5's on 2026-10-22 (`ui-patterns.md`'s row menu, queue block, `TrackTitle` and keys, `library-data.md`'s rating paths, `slint-pitfalls.md`'s `queue-row.slint` example, and the README's shortcut table and feature lines), and Phase 3.6's the same day (`ui-patterns.md`'s narrow-window block and its `PillButton`, `TabBar` and `LibraryTabBand` entries, the last one's stale pill-slot line retired with it, and `slint-pitfalls.md`'s `SearchBar` entry). Phases 1 to 3:
   - the panel's cross-file facts and the keys in `ui-patterns.md`, the narrow window's order and its two flags among them;
   - the sheet's mentions across the rules;
   - `settings.json`'s contents in the root `CLAUDE.md`;

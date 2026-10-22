@@ -65,6 +65,10 @@ export component LibraryTabBand inherits Rectangle {
     in property <bool> use-a;
     in property <bool> has-blur;
 
+    // The pill row's width with every label shown, measured by the host off a hidden copy of the
+    // row: the drawn one stops reporting it once its labels drop.
+    in property <length> pill-natural-w;
+
     callback back-clicked();
     // Fires *after* the direction and the arming below are settled, so a host handler that clears
     // its filter and calls into Rust can't be sequenced ahead of them. The bar has already
@@ -464,15 +468,30 @@ export component LibraryTabBand inherits Rectangle {
         overflow: elide;
     }
 
+    // --- The pill row's fit -------------------------------------------------
+    //
+    // The room beside the cover, keyed on `detail-open` rather than `hero-t` so it moves once per
+    // morph instead of on every frame of one. Short of it the host's labelled pills drop to their
+    // glyphs, latched across the tab bar's band for the same jittered resize drag.
+    property <length> pill-room: root.page-w - 2 * Theme.pad-lg
+        - (root.detail-open ? Theme.hero-artwork + Theme.pad-lg : 0px);
+    property <length> pill-hysteresis: 24px;
+    property <bool> pill-latched: false;
+    out property <bool> pills-compact:
+        root.pill-room < root.pill-natural-w + (root.pill-latched ? root.pill-hysteresis : 0px);
+    changed pills-compact => { root.pill-latched = root.pills-compact; }
+
     // The action pills — the tab's, or the open detail's. **A floating slot rather than children of
     // the meta column**, Slint allowing one `@children` and the two states needing it in different
     // places; the root's lower edge is the meta row's floor in both, so no anchor is interpolated.
     // A `HorizontalLayout` rather than a bare `Rectangle`, which reports 0×0 over `if`-conditional
-    // children. `pills` is a cell of its own so the count line can reserve against it.
+    // children. `pills` is a cell of its own so the count line can reserve against it. **It spans
+    // only `pill-room`**, so a row too wide even with its labels dropped runs off under the clip
+    // rather than back over the artwork.
     HorizontalLayout {
-        x: Theme.pad-lg;
+        x: root.page-w - Theme.pad-lg - root.pill-room;
         y: root.height - Theme.pad-lg - root.pill-h;
-        width: root.page-w - 2 * Theme.pad-lg;
+        width: root.pill-room;
         height: root.pill-h;
         alignment: end;
 

@@ -129,13 +129,16 @@ fn the_multiline_placeholder_is_bounded_and_wraps() {
 
 /// The bar sizes its slot to the placeholder it was handed, and a bound `width` on a
 /// component root is reported as both `min` and `max` — so one here puts the window's
-/// resize floor on the running locale. Same split `tab-bar.slint` carries.
+/// resize floor on the running locale. Same split `tab-bar.slint` carries. Folded, all
+/// three give way to the glyph's square.
 #[test]
 fn the_search_bar_negotiates_its_width() {
     let src = normalized(SEARCH_BAR);
-    for constraint in
-        ["min-width: root.min-w;", "preferred-width: input-width;", "max-width: input-width;"]
-    {
+    for constraint in [
+        "min-width: root.folded ? root.bar-height : root.min-w;",
+        "preferred-width: root.folded ? root.bar-height : input-width;",
+        "max-width: root.folded ? root.bar-height : input-width;",
+    ] {
         assert!(src.contains(constraint), "search-bar.slint's root is missing `{constraint}`");
     }
     // Leading space so this doesn't read the tail of `max-width: input-width;`.

@@ -67,6 +67,8 @@ export component ColumnTogglePopup inherits Rectangle {
     in property <bool> hide-album: false;
     in property <bool> hide-artist: false;
     in property <bool> hide-genre: false;
+    // `PillButton.compact`, for a host whose row is short of room.
+    in property <bool> compact: false;
 
     callback toggled(string /*column_id*/);
 
@@ -75,10 +77,12 @@ export component ColumnTogglePopup inherits Rectangle {
     width: btn.width;
     height: 32px;
 
-    // The label carries the meaning, so there's no tooltip repeating it.
+    // The label carries the meaning, so there's no tooltip repeating it; a compact pill moves it
+    // to the tooltip instead.
     btn := PillButton {
         icon: "tune";
         text: @tr("Columns");
+        compact: root.compact;
         force-bg: pop.is-open;
         clicked => { pop.show(); }
     }

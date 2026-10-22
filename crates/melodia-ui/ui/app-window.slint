@@ -285,9 +285,11 @@ export component AppWindow inherits Window {
         Queue.panel-width > 0px ? Queue.panel-width : Theme.queue-panel-default-w,
         Theme.queue-panel-min-w,
         Theme.queue-panel-max-w);
-    // What the row leaves an expanded sidebar beside the panel at its chosen width. Folded or not,
-    // a sidebar wider than this has nothing to expand into while the panel is up.
-    property <length> sidebar-room: root.row-w - root.queue-chosen-w - Theme.content-min-w;
+    // What the row leaves an expanded sidebar beside the content's floor, and beside the panel at
+    // its chosen width as well. Folded or not, a sidebar wider than the second has nothing to
+    // expand into while the panel is up.
+    property <length> bare-sidebar-room: root.row-w - Theme.content-min-w;
+    property <length> sidebar-room: root.bare-sidebar-room - root.queue-chosen-w;
     property <bool> sidebar-would-yield: Nav.sidebar-expanded-w > root.sidebar-room;
     // Whether or not the panel is shown, so it keeps its width while it eases out from under Now
     // Playing rather than narrowing as the sidebar comes back.
@@ -327,11 +329,14 @@ export component AppWindow inherits Window {
         Queue.floating = self.queue-floating;
     }
 
-    // Keyed on the docked panel rather than `open`, so the sidebar comes back once the panel has
-    // stepped aside: with both fold controls standing down under a forced rail, a panel too wide to
-    // show would otherwise hold the sidebar folded with nothing the user could press to free it.
-    // An overlay takes no room in the row, so it folds nothing.
-    property <bool> sidebar-yields: root.queue-docked && root.sidebar-would-yield;
+    // Forced wherever an expanded sidebar would leave the content under its floor: by the window
+    // alone, or beside the docked panel. The panel's half is keyed on the docked panel rather than
+    // `open`, so the sidebar comes back once the panel has stepped aside: with both fold controls
+    // standing down under a forced rail, a panel too wide to show would otherwise hold the sidebar
+    // folded with nothing the user could press to free it. An overlay takes no room in the row, so
+    // it folds nothing.
+    property <bool> sidebar-yields: Nav.sidebar-expanded-w > root.bare-sidebar-room
+        || (root.queue-docked && root.sidebar-would-yield);
     changed sidebar-yields => {
         Nav.sidebar-yields = self.sidebar-yields;
     }
@@ -561,7 +566,7 @@ export component AppWindow inherits Window {
                 padding-right: Theme.pad-xs;
 
                 sidebar := Sidebar {
-                    room: root.queue-docked ? root.sidebar-room : Theme.sidebar-max-w;
+                    room: root.queue-docked ? root.sidebar-room : root.bare-sidebar-room;
                 }
 
                 // Content panel. **Rounded by `RoundedFrame`, not by a rounded clip**: that clip

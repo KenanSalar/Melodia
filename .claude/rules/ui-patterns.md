@@ -49,10 +49,12 @@ silently miss the other.
   answer for a host whose pill is drawn on the top layer. **An unlabelled `PillButton` takes it
   on its own**, and that one is not a knob: the chrome collapses to 28 px while the label stays
   several times that, so the centred arm has nothing left to centre against, and the chips these
-  sit in are right-aligned. `PillButton.icon-only` is the single statement of it, and **both
-  mount shapes read that property rather than restating the test** (in-tree binds it directly; a
-  top-layer host publishes it beside the rect, as `tab-pills`' `tip-align-end` and Browse's
-  `view-toggle.icon-only` do).
+  sit in are right-aligned. `PillButton.icon-only` is the single statement of it, a pill whose
+  label `compact` dropped included, and **both mount shapes read that property rather than
+  restating the test** (in-tree binds it directly; a top-layer host publishes it beside the rect,
+  as `tab-pills`' `tip-align-end` and Browse's `view-toggle.icon-only` do). The text has its own
+  single statement, `PillButton.tip-text`, which is the dropped label wherever the pill names no
+  tooltip of its own, and the top-layer `tip-label`s read that.
 
 - **A pill landing on a later-declared sibling is lifted with a constant `z`**, on the host's
   branch at the level where it and the occluder are siblings, where lifting it overlaps nothing
@@ -106,7 +108,9 @@ silently miss the other.
 - **`PillButton`** (`components/action-pill.slint`) — `danger: true` tints icon **and** label
   only; the filled destructive treatment is `SectionButton`'s, and the two are not one pattern.
   Compose inside `ActionPill`, separated by `PillDivider`; `IconButton` for round controls
-  *outside* chips.
+  *outside* chips. **`compact` drops the label onto the tooltip**, the glyph standing in, and a
+  text-only pill ignores it. Only the band decides when (`LibraryTabBand`, below), and a pill bound
+  to it needs a tooltip something actually draws.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
   the right-click menu's, on rows and cards alike: "Select all" ungated wherever the host has a set,
@@ -732,17 +736,20 @@ three components that answer it, and each argues its geometry at its own file.
     absolute-coordinate drag.
   - **A narrow window takes room back in a fixed order, so the content keeps
     `Theme.content-min-w`**: the sidebar draws its rail, the panel narrows to its minimum, and then
-    it steps aside through `shown`. The `AppWindow` root works the steps out, being the one element
-    that sees the row, and argues them there. The flags carrying them out of that file
-    (`Nav.sidebar-yields`, `Queue.fits`, `Queue.floating`) are each written from a `changed` mirror
-    rather than bound, since a binding over the window's width restarts the sidebar's width ease on
-    every resize move (`slint-pitfalls.md`'s structural-dirt entry).
+    it steps aside through `shown`. **The floor holds without the panel too**: the sidebar folds
+    once the window alone would leave the content under it, which makes the floor the narrowest
+    content panel any page has to seat. The shared header and the band answer to it rather than
+    to the window (`TabBar` and `LibraryTabBand`, below). The `AppWindow` root works the steps
+    out, being the one element that sees the row, and argues them there. The flags carrying them
+    out of that file (`Nav.sidebar-yields`, `Queue.fits`, `Queue.floating`) are each written from
+    a `changed` mirror rather than bound, since a binding over the window's width restarts the
+    sidebar's width ease on every resize move (`slint-pitfalls.md`'s structural-dirt entry).
     **`Nav.sidebar-yields` feeds `Nav.sidebar-rail`, and every part of the sidebar draws from the
     rail.** `sidebar-collapsed` is the user's own fold and the only one persisted, so a renderer
     reading it draws an expanded sidebar over a forced rail. The fold toggle and Ctrl+B stand down
-    on `sidebar-yields`. The fold is keyed on the docked panel rather than `open`, so the sidebar
-    comes back once the panel has stepped aside: keyed on `open`, a panel too wide to show would
-    hold the sidebar folded with both fold controls standing down.
+    on `sidebar-yields`. The panel's half of the fold is keyed on the docked panel rather than
+    `open`, so the sidebar comes back once the panel has stepped aside: keyed on `open`, a panel
+    too wide to show would hold the sidebar folded with both fold controls standing down.
   - **Past that last step the panel opens as an overlay, and its controls stay live.** Two states
     carry it: `Queue.open` is the docked panel's and the persisted one, `Queue.overlay-open` the
     overlay's and session-only, so a narrow launch with the panel saved open shows nothing.
@@ -1417,7 +1424,11 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
 - **Sharing the row means the two widths are budgeted, not independent**, and **the filter yields
   before the tabs do** — tabs are navigation, search only refines what a tab already shows. Both
   ends of the clamp read a published floor (`compact-w`, `min-w`) rather than a restated literal,
-  which keeps each from drifting and makes the row's minimum a sum the page can check.
+  which keeps each from drifting and makes the row's minimum a sum the page can check. **Past that
+  sum the box folds to its glyph** rather than drawing past its cell, and opens across the row
+  over the bar while it holds focus or text, a tab pick clearing the filter anyway. It is one
+  `SearchBar` throughout, so a resize hands no focus across, which is where it parts from Settings'
+  two boxes. The fold and the open state are `tab-search-header.slint`'s.
   **`tip-x`/`tip-y` carry the bar's own `absolute-position` offset inside the row**, the half a
   host cannot supply — dropped, the pill lands a whole `lead-w` left of the tab it names, on the
   one mount with a leading slot.
@@ -1444,9 +1455,9 @@ siblings, not one parameterised component**, differing in which artwork square t
 `ArtworkImage`, whose fallback is an SVG asset) and in fixed-height-versus-morph, neither of which
 Slint can abstract over — so the header-row fixes are *ported
 verbatim* and `ui::library_tab_band_tests` holds the copy to a contract a copy is exactly how you
-lose. **Two things stay at each host**: the per-tab `ActionPill` rows (`@children`, placed after the
-trailing spacer, which is also the slack the chip strip's two-row cap is measured against) and the
-tooltip frame.
+lose. **Two things stay at each host**: the per-tab `ActionPill` rows (`@children`, in a slot
+floating over the foot of the meta column, which reserves the row's height so the chip strip's
+two-row cap is measured against the same slack) and the tooltip frame.
 
 - **The height is a `min`/`preferred`/`max-height` split with `clip: true`**, never a bound
   `height` — the animated-root-dimension pitfall one axis over. **`hero-t` is *written* from
@@ -1464,6 +1475,16 @@ tooltip frame.
   multiplies alpha — never `with-alpha`, which sets it**; where the element has brushes feeding its
   own `animate` blocks, make it satisfy `need_layer`'s second bail rather than folding the fade in.
   Full argument in `slint-pitfalls.md`.
+
+- **The pill row's fit is the band's, and the width it weighs is the host's.** The slot spans
+  only the room beside the cover, so a row that can't fit runs off under the clip rather than over
+  the artwork, and short of that room `pills-compact` drops every labelled pill to its glyph. The
+  labelled width can't come off the drawn row, which stops reporting it once its labels drop, so
+  each host mounts a hidden second copy of its pill row outside every layout (`pill-ruler`) and
+  hands the band its `preferred-width`: `TabBar`'s ruler, one level up. **A pill in a clipping
+  cell keeps its label unless its tooltip is drawn from the top layer**, an in-tree one landing
+  under the clip. My Library's Playlists row publishes its anchors and compacts; Radio's Favorites
+  row doesn't, and keeps its label.
 
 - **Everything else here is one file's internals** — the two morph curves, the count line's anchor
   and axis flip, the back disc's doubled bias. `library-tab-band.slint` and

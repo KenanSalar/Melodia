@@ -58,7 +58,8 @@ component Divider inherits Rectangle {
 }
 
 export component Sidebar inherits Rectangle {
-    // What the row leaves the sidebar beside a shown queue panel, the furthest its edge drags.
+    // What the row leaves the sidebar beside the content's floor and any docked queue panel, the
+    // furthest its edge drags.
     in property <length> room;
 
     width: Nav.sidebar-rail ? Theme.sidebar-collapsed-w : Nav.sidebar-expanded-w;

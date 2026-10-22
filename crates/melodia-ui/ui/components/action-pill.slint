@@ -56,6 +56,9 @@ export component PillButton inherits Rectangle {
     in property <bool> reserve-sort-slot: false;
     in property <string> sort-direction: "";
     in property <string> tooltip-text: "";
+    // Drops the label for a row short of room, the glyph standing in and the label moving to the
+    // tooltip. A text-only pill has nothing to stand in and ignores it.
+    in property <bool> compact: false;
     // Suppresses the in-tree tooltip so a host can paint one on a higher layer, needed
     // wherever later-painted sibling content would occlude it. `hovered` is exposed so
     // the host can drive that overlay.
@@ -68,7 +71,11 @@ export component PillButton inherits Rectangle {
 
     // `out` so a host drawing the pill on a higher layer asks this rather than restating the
     // test beside its own frame. The alignment below is the same rule on the other mount.
-    out property <bool> icon-only: root.text == "" && root.icon != "";
+    out property <bool> icon-only: root.icon != "" && (root.text == "" || root.compact);
+    // The same for the text: a dropped label is the tooltip unless the pill names one of its own.
+    out property <string> tip-text: root.tooltip-text != ""
+        ? root.tooltip-text
+        : (root.icon-only ? root.text : "");
 
     height: 32px;
     width: chrome.width;
@@ -111,7 +118,7 @@ export component PillButton inherits Rectangle {
             }
             // The patched Vazirmatn metrics land the glyph mass at the line-box
             // centre, so centring the line box is enough.
-            if root.text != "": Text {
+            if root.text != "" && !root.icon-only: Text {
                 text: root.text;
                 color: root.danger
                     ? (touch.has-hover ? Theme.danger : Theme.text)
@@ -135,7 +142,7 @@ export component PillButton inherits Rectangle {
         }
 
         Tooltip {
-            text: root.tooltip-text;
+            text: root.tip-text;
             hovered: touch.has-hover && !root.tooltip-overlay;
             host-width: chrome.width;
             host-height: chrome.height;

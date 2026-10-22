@@ -28,6 +28,11 @@ export component SearchBar inherits Rectangle {
     // For a host with two boxes on one filter, handing the focus across when it swaps them.
     out property <bool> has-focus: input.has-focus;
 
+    // The glyph alone, in a `bar-height` square, for a host short of room. The input stays mounted
+    // at zero width, so a click on the square focuses it like any other and the host unfolds the
+    // bar on that focus.
+    in property <bool> folded: false;
+
     // Named because `chrome-overhead` has to add the same number the layout does.
     property <length> icon-size: 16px;
     // Everything in the pill that isn't the text. The clear button stays out: it only mounts
@@ -61,6 +66,8 @@ export component SearchBar inherits Rectangle {
     changed blur-trigger => { input.clear-input-focus(); }
 
     callback edited(string);
+    // The ✕ alone, where `edited("")` also follows a backspace to empty.
+    callback cleared();
 
     // Most consumers don't wire this, their `edited` already refiltering per keystroke. **The
     // Search view does**: it skips the debounce and commits synchronously, so a user can re-trigger
@@ -113,9 +120,9 @@ export component SearchBar inherits Rectangle {
     // handed exactly `input-width` and the focus swell happens *inside* it. **What the split buys
     // over a bound `width` is the other end**: Slint reports a root's bound `width` as both `min`
     // and `max`, so a locale-sized default would drag the window's own resize floor out with it.
-    min-width: root.min-w;
-    preferred-width: input-width;
-    max-width: input-width;
+    min-width: root.folded ? root.bar-height : root.min-w;
+    preferred-width: root.folded ? root.bar-height : input-width;
+    max-width: root.folded ? root.bar-height : input-width;
     height: root.bar-height;
     background: transparent;
 
@@ -170,9 +177,11 @@ export component SearchBar inherits Rectangle {
             clicked => { input.focus-input(); }
 
         HorizontalLayout {
-            padding-left: Theme.pad-sm;
-            padding-right: Theme.pad-xs;
-            spacing: Theme.pad-xs;
+            // Folded, the glyph is centred with nothing left over for the input.
+            property <length> fold-inset: (root.bar-height - root.icon-size) / 2;
+            padding-left: root.folded ? self.fold-inset : Theme.pad-sm;
+            padding-right: root.folded ? self.fold-inset : Theme.pad-xs;
+            spacing: root.folded ? 0px : Theme.pad-xs;
             alignment: stretch;
 
             MaterialIcon {
@@ -219,6 +228,7 @@ export component SearchBar inherits Rectangle {
                     clicked => {
                         root.text = "";
                         root.edited("");
+                        root.cleared();
                     }
                 }
             }

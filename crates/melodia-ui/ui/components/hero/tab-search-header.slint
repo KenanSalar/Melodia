@@ -11,7 +11,8 @@ import { TabBar } from "../tab-bar.slint";
 //     bar at `compact-w` *and* the input at `search-w-max`; a host seeds its width mirror off it,
 //     seeded wide being how the bar draws full-width tabs into a panel that can't seat them.
 //  2. **The budget reserves against two *published* floors**, `bar.compact-w` and `search.min-w`.
-//  3. **The filter yields before the tabs do** — tabs navigate, search only refines.
+//  3. **The filter yields before the tabs do**, down to its floor and then to its glyph. Tabs
+//     navigate, search only refines.
 //  4. **The slide direction comes off `bar.previous-index`**, never a mirror of `selected-index`:
 //     the cell writes that *before* it emits `selected`, and a page can be re-entered on any tab.
 //  5. **The tooltip anchor is published rather than drawn**, the pill having to be declared after
@@ -67,6 +68,24 @@ export component TabSearchHeader inherits HorizontalLayout {
     // The bar's own height, published so a host can reserve its row without restating it.
     out property <length> row-h: bar.height;
 
+    // --- The fold -----------------------------------------------------------
+    //
+    // Past the narrowest row seating the compact bar beside the input's floor, the box folds to
+    // its glyph rather than drawing past its cell. Measured against the budget's own floors, and
+    // latched across the bar's band, a resize drag otherwise flipping it on every jittered pixel.
+    property <length> fold-hysteresis: 24px;
+    property <bool> fold-latched: false;
+    property <bool> folds: root.search-shown
+        && root.content-w < bar.compact-w + 2 * Theme.pad-md + root.search-w-min
+            + (root.fold-latched ? root.fold-hysteresis : 0px);
+    changed folds => { root.fold-latched = root.folds; }
+    // Opened across the row, over the bar, for as long as it holds focus or text. Covering the
+    // tabs costs little: a pick would clear the filter anyway.
+    property <bool> field-over-tabs: root.folds && (search.has-focus || root.filter != "");
+    // What the box takes from the bar's budget. Folded it is the glyph's square whether or not
+    // the field is open over the bar, so opening it never replays the bar's compact morph.
+    property <length> box-w: root.folds ? search.bar-height : root.search-w;
+
     // --- What a host's sub-view bodies read ---------------------------------
     out property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
     // Starts `false` so a page's own entry animation isn't compounded with a horizontal slide — the
@@ -85,7 +104,8 @@ export component TabSearchHeader inherits HorizontalLayout {
     out property <length> tip-w: bar.tab-w;
     out property <length> tip-h: bar.height;
     out property <string> tip-label: bar.hovered-label;
-    out property <bool> tip-visible: bar.hovered-idx >= 0 && bar.compact;
+    out property <bool> tip-visible:
+        bar.hovered-idx >= 0 && bar.compact && !root.field-over-tabs;
 
     vertical-stretch: 0;
     // **Every gap in this row belongs to a child, not to the layout**, the leading slot's having to
@@ -94,23 +114,33 @@ export component TabSearchHeader inherits HorizontalLayout {
 
     @children
 
-    bar := TabBar {
-        labels: root.tab-labels;
-        icons: root.tab-icons;
-        avail-width: root.content-w - root.search-w - 2 * Theme.pad-md;
-        selected-index <=> root.tab-idx;
-        label-color: root.label-color;
-        active-color: root.active-color;
-        hover-fill: root.hover-fill;
-        divider-color: root.divider-color;
-        selected(i) => {
-            // Direction first, in the same handler that moved the index: Slint re-evaluates a
-            // host's `if` branches next frame, so this lands before the new body mounts.
-            root.tab-enter-from = i > bar.previous-index
-                ? NavEnterFrom.right
-                : NavEnterFrom.left;
-            root.tab-anim-armed = true;
-            root.tab-selected(i);
+    // Collapsed under the opened field rather than unmounted, the way the box's cell collapses
+    // below, so the bar keeps its compact verdict and the budget keeps reading it. Hidden, it draws
+    // nothing and takes no events.
+    HorizontalLayout {
+        min-width: root.field-over-tabs ? 0px : bar.min-width;
+        preferred-width: root.field-over-tabs ? 0px : bar.preferred-width;
+        max-width: root.field-over-tabs ? 0px : bar.max-width;
+
+        bar := TabBar {
+            visible: !root.field-over-tabs;
+            labels: root.tab-labels;
+            icons: root.tab-icons;
+            avail-width: root.content-w - root.box-w - 2 * Theme.pad-md;
+            selected-index <=> root.tab-idx;
+            label-color: root.label-color;
+            active-color: root.active-color;
+            hover-fill: root.hover-fill;
+            divider-color: root.divider-color;
+            selected(i) => {
+                // Direction first, in the same handler that moved the index: Slint re-evaluates a
+                // host's `if` branches next frame, so this lands before the new body mounts.
+                root.tab-enter-from = i > bar.previous-index
+                    ? NavEnterFrom.right
+                    : NavEnterFrom.left;
+                root.tab-anim-armed = true;
+                root.tab-selected(i);
+            }
         }
     }
 
@@ -134,7 +164,7 @@ export component TabSearchHeader inherits HorizontalLayout {
     // swell reaches past it; a clip shaved the swollen ends flat. Slint lowers `visible` to a clip
     // that only applies while hidden, which is the whole collapse this needs.
     //
-    // **The budget above is deliberately not gated with it.** `search-w` still reserves, so
+    // **The budget above is deliberately not gated with it.** `box-w` still reserves, so
     // `TabBar.avail-width` does not move and the bar does not play its 350 ms compact morph on a
     // frame the box merely went away on. What is freed is dead strip at the row's trailing edge,
     // which on the one host that hides it is under the action pills anyway.
@@ -148,11 +178,20 @@ export component TabSearchHeader inherits HorizontalLayout {
             alignment: center;
             padding-bottom: Theme.pad-sm;
             search := SearchBar {
-                input-width: root.search-w;
+                folded: root.folds && !root.field-over-tabs;
+                input-width: root.field-over-tabs
+                    ? root.content-w - 2 * Theme.pad-md
+                    : root.search-w;
                 text <=> root.filter;
                 placeholder: root.filter-placeholder;
                 blur-trigger: root.blur-tick;
                 edited(t) => { root.search-edited(t); }
+                // Folded, the cross also hands the row back to the tabs.
+                cleared => {
+                    if (root.folds) {
+                        self.clear-input-focus();
+                    }
+                }
             }
         }
     }
