@@ -1,6 +1,8 @@
 //! View-section setters: locale, overflow-menu buttons, the snap-to-preset corner radius helper,
 //! and per-view column visibility.
 
+use std::collections::BTreeMap;
+
 use crate::services;
 use melodia_core::config::Paths;
 use melodia_core::entities::locale::SUPPORTED_LOCALES;
@@ -157,12 +159,12 @@ pub fn update_view_columns(
     })
 }
 
-/// Persist the visible row marks for `view_id` into `views.json`'s `view_marks`, the
+/// Persist whether `view_id` shows each row mark into `views.json`'s `view_marks`, the
 /// [`update_view_columns`] twin.
 pub fn update_view_marks(
     paths: &Paths,
     view_id: String,
-    marks: Vec<String>,
+    marks: BTreeMap<String, bool>,
 ) -> Result<(), AppError> {
     services::view_state::mutate_view_state(paths, move |vs| {
         vs.view_marks.insert(view_id, marks);

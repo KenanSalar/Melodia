@@ -45,7 +45,7 @@ const MARKS: [&str; 3] = ["favorite_mark", "favorite_button", "rating_strip"];
 pub trait TrackListColumnState {
     /// The key every `views.json` map holds this view under.
     const VIEW_ID: &'static str;
-    /// The toggleable ids, columns or marks, a view hides until it has a set of its own saved.
+    /// The toggleable ids, columns or marks, a view hides until it has saved its own choice.
     const HIDDEN_BY_DEFAULT: &'static [&'static str];
     /// The column a detail view hides for good, every row sharing its value.
     const LOCKED: Option<&'static str>;
@@ -67,27 +67,21 @@ pub trait TrackListColumnState {
             columns.show_genre,
             columns.show_year,
         ];
-        shown_ids(TOGGLEABLE, shown)
-            .filter(|&id| Self::LOCKED != Some(id))
-            .map(str::to_owned)
+        TOGGLEABLE
+            .iter()
+            .zip(shown)
+            .filter(|&(id, shown)| shown && Self::LOCKED != Some(*id))
+            .map(|(id, _)| (*id).to_owned())
             .collect()
     }
 
-    /// The row marks currently shown, in [`MARKS`] order, for `view_marks[view_id]`.
-    fn snapshot_marks(&self) -> Vec<String> {
+    /// Every row mark against whether it is shown, for `view_marks[view_id]`.
+    fn snapshot_marks(&self) -> BTreeMap<String, bool> {
         let columns = self.read_columns();
         let shown =
             [columns.show_favorite_mark, columns.show_favorite_button, columns.show_rating_strip];
-        shown_ids(MARKS, shown).map(str::to_owned).collect()
+        MARKS.into_iter().zip(shown).map(|(id, shown)| (id.to_owned(), shown)).collect()
     }
-}
-
-/// The ids whose flag is set, in order.
-fn shown_ids<const N: usize>(
-    ids: [&'static str; N],
-    shown: [bool; N],
-) -> impl Iterator<Item = &'static str> {
-    ids.into_iter().zip(shown).filter_map(|(id, shown)| shown.then_some(id))
 }
 
 /// The callbacks every track list's global declares alike, for the wiring
@@ -122,27 +116,22 @@ pub fn persist_toggled<T: TrackListColumnState>(state: &AppState, h: &T, toggled
 }
 
 /// Write the view's columns to the handle: `views.json`'s widths and visibility where it has
-/// them, the defaults where it doesn't. The marks and the columns fall back apart, an install
-/// having saved columns long before it had marks to save.
+/// them, the defaults where it doesn't. The columns fall back as one set and each mark on its own,
+/// an install having saved its columns before it had marks, and its marks before any added since.
 fn hydrate<T: TrackListColumnState>(vs: &ViewStateData, h: &T) {
     let widths = vs.view_column_widths.get(T::VIEW_ID).cloned().unwrap_or_default();
-    let saved_columns = saved_ids(&vs.view_columns, T::VIEW_ID);
-    let saved_marks = saved_ids(&vs.view_marks, T::VIEW_ID);
+    let saved_columns: Option<HashSet<&str>> =
+        vs.view_columns.get(T::VIEW_ID).map(|ids| ids.iter().map(String::as_str).collect());
+    let saved_marks = vs.view_marks.get(T::VIEW_ID);
     let shown = |id: &str| {
-        let saved = if MARKS.contains(&id) { &saved_marks } else { &saved_columns };
-        match saved {
-            Some(visible) => visible.contains(id),
-            None => !T::HIDDEN_BY_DEFAULT.contains(&id),
-        }
+        let saved = if MARKS.contains(&id) {
+            saved_marks.and_then(|marks| marks.get(id)).copied()
+        } else {
+            saved_columns.as_ref().map(|visible| visible.contains(id))
+        };
+        saved.unwrap_or_else(|| !T::HIDDEN_BY_DEFAULT.contains(&id))
     };
     h.write_columns(columns_from(&widths, shown, T::LOCKED));
-}
-
-fn saved_ids<'a>(
-    saved: &'a BTreeMap<String, Vec<String>>,
-    view_id: &str,
-) -> Option<HashSet<&'a str>> {
-    saved.get(view_id).map(|ids| ids.iter().map(String::as_str).collect())
 }
 
 /// Snapshot widths, visible columns and marks into the view's `views.json` entries, mutating `vs`
