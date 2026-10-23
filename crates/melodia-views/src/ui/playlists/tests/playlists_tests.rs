@@ -45,7 +45,7 @@ fn every_draggable_list_opts_out_of_drag_panning() {
 /// every drop at the mirrored slot; a filter makes those indices name a
 /// different track entirely; and a smart playlist has no curated order to
 /// reorder into. Dropping one of the last three costs no wrong write —
-/// `apply_optimistic_reorder` refuses the filtered case and the query the empty
+/// `apply_optimistic_move` refuses the filtered case and the query the empty
 /// item set — but the drag then starts, paints a ghost and a drop line, and does
 /// nothing on release, which is worse than a list that never armed.
 #[test]
@@ -121,10 +121,10 @@ fn the_optimistic_reorder_refuses_a_list_not_shown_in_the_playlists_own_order() 
     );
 }
 
-/// `apply_optimistic_reorder` up to where the display indices reach the keyset.
+/// `apply_optimistic_move` up to where the display indices reach the keyset.
 fn reorder_guard(src: &str) -> &str {
-    let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
-    body.split_once("let rows =").map_or("", |(head, _)| head)
+    let body = src.split_once("pub fn apply_optimistic_move").map_or("", |(_, rest)| rest);
+    body.split_once("let tracks =").map_or("", |(head, _)| head)
 }
 
 /// The reload a removal brings prunes nothing under a filter, so the removal drops its own rows

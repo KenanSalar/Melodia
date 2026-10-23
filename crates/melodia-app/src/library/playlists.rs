@@ -80,13 +80,13 @@ pub async fn remove_tracks_from_playlist_batch(
     queries::playlist::remove_tracks_from_playlist_batch(db, playlist_id, &track_ids).await
 }
 
-pub async fn reorder_playlist(
+pub async fn move_playlist_tracks(
     db: &DbPool,
     playlist_id: i64,
-    from: i32,
-    to: i32,
+    track_ids: Vec<i64>,
+    to: usize,
 ) -> Result<(), AppError> {
-    queries::playlist::reorder_playlist_track(db, playlist_id, from, to).await
+    queries::playlist::move_playlist_tracks(db, playlist_id, &track_ids, to).await
 }
 
 /// How many distinct covers the Edit-Artwork mosaic picker offers.

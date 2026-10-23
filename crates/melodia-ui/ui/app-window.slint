@@ -46,7 +46,7 @@ import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListR
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
          GenreRow, GenreGridRow,
-         PlaylistRow, PlaylistGridRow, SmartRuleRow, LyricRow,
+         PlaylistRow, PlaylistGridRow, SmartRuleRow, LyricRow, LiftedRun,
          TrackColumns, TrackColumnLayout, TrackColumn } from "models.slint";
 import { Sidebar } from "layout/sidebar.slint";
 import { NowPlayingBar } from "layout/now-playing-bar.slint";
@@ -80,7 +80,7 @@ import { ViewTransition } from "components/view-transition.slint";
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
     Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, TrackColumnSizing, CardSelection, CardActions, CopyActions, Selection, Drag, DragOrigin, FileDrag, FileDropTarget, WindowRect,
-    TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow,
+    TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow, LiftedRun,
     TrackColumns, TrackColumnLayout, TrackColumn,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,

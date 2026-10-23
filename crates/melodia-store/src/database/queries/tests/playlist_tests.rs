@@ -141,7 +141,7 @@ async fn remove_tracks_batch_empty_is_noop() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn reorder_playlist_track() -> Result<(), AppError> {
+async fn move_playlist_tracks() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
     let all_tracks = queries::track::get_all_tracks(&db).await?;
@@ -150,7 +150,7 @@ async fn reorder_playlist_track() -> Result<(), AppError> {
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids).await?;
 
     // Move first track to last position
-    queries::playlist::reorder_playlist_track(&db, pl.id, 0, 2).await?;
+    queries::playlist::move_playlist_tracks(&db, pl.id, &[track_ids[0]], 2).await?;
 
     let tracks = queries::playlist::get_playlist_tracks(&db, pl.id).await?;
     assert_eq!(tracks.len(), 3);
@@ -160,10 +160,10 @@ async fn reorder_playlist_track() -> Result<(), AppError> {
 }
 
 #[tokio::test]
-async fn reorder_playlist_track_invalid_index() -> Result<(), AppError> {
+async fn move_playlist_tracks_on_an_empty_playlist_is_refused() -> Result<(), AppError> {
     let db = setup_seeded_db().await?;
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
-    let result = queries::playlist::reorder_playlist_track(&db, pl.id, 0, 99).await;
+    let result = queries::playlist::move_playlist_tracks(&db, pl.id, &[1], 99).await;
     assert!(result.is_err());
     Ok(())
 }
@@ -444,7 +444,7 @@ async fn tracks_past_the_first_insert_chunk_land_in_order_with_no_gap() -> Resul
     Ok(())
 }
 
-// --- reorder_playlist_track ---
+// --- move_playlist_tracks ---
 
 async fn seeded_playlist() -> Result<(crate::database::DbPool, i64, Vec<i64>), AppError> {
     let db = setup_seeded_db().await?;
@@ -457,7 +457,7 @@ async fn seeded_playlist() -> Result<(crate::database::DbPool, i64, Vec<i64>), A
 async fn moving_a_track_down_shifts_the_ones_it_passed_up() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
 
-    queries::playlist::reorder_playlist_track(&db, playlist, 0, 2).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
 
     assert_eq!(order(&db, playlist).await?, [ids[1], ids[2], ids[0]]);
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2]);
@@ -468,7 +468,7 @@ async fn moving_a_track_down_shifts_the_ones_it_passed_up() -> Result<(), AppErr
 async fn moving_a_track_up_shifts_the_ones_it_passed_down() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
 
-    queries::playlist::reorder_playlist_track(&db, playlist, 2, 0).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[2]], 0).await?;
 
     assert_eq!(order(&db, playlist).await?, [ids[2], ids[0], ids[1]]);
     assert_eq!(positions(&db, playlist).await?, [0, 1, 2]);
@@ -479,30 +479,19 @@ async fn moving_a_track_up_shifts_the_ones_it_passed_down() -> Result<(), AppErr
 async fn dropping_a_track_back_onto_its_own_slot_changes_nothing() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
 
-    queries::playlist::reorder_playlist_track(&db, playlist, 1, 1).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[1]], 1).await?;
 
     assert_eq!(order(&db, playlist).await?, ids);
     Ok(())
 }
 
 #[tokio::test]
-async fn a_negative_index_is_refused_as_invalid() -> Result<(), AppError> {
-    let (db, playlist, _) = seeded_playlist().await?;
+async fn a_track_outside_the_playlist_or_a_slot_past_its_end_is_refused_as_missing()
+-> Result<(), AppError> {
+    let (db, playlist, ids) = seeded_playlist().await?;
 
-    let from = queries::playlist::reorder_playlist_track(&db, playlist, -1, 0).await;
-    let to = queries::playlist::reorder_playlist_track(&db, playlist, 0, -1).await;
-
-    assert!(matches!(from, Err(AppError::Validation(_))), "{from:?}");
-    assert!(matches!(to, Err(AppError::Validation(_))), "{to:?}");
-    Ok(())
-}
-
-#[tokio::test]
-async fn an_index_one_past_the_last_slot_is_refused_as_missing() -> Result<(), AppError> {
-    let (db, playlist, _) = seeded_playlist().await?;
-
-    let from = queries::playlist::reorder_playlist_track(&db, playlist, 3, 0).await;
-    let to = queries::playlist::reorder_playlist_track(&db, playlist, 0, 3).await;
+    let from = queries::playlist::move_playlist_tracks(&db, playlist, &[-1], 0).await;
+    let to = queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 3).await;
 
     assert!(matches!(from, Err(AppError::NotFound(_))), "{from:?}");
     assert!(matches!(to, Err(AppError::NotFound(_))), "{to:?}");
@@ -516,7 +505,7 @@ async fn a_reorder_closes_the_gap_a_deleted_track_left() -> Result<(), AppError>
     sqlx::query("DELETE FROM tracks WHERE id = ?").bind(ids[1]).execute(db.write()).await?;
     assert_eq!(positions(&db, playlist).await?, [0, 2], "test setup: the delete leaves a gap");
 
-    queries::playlist::reorder_playlist_track(&db, playlist, 0, 1).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 1).await?;
 
     assert_eq!(order(&db, playlist).await?, [ids[2], ids[0]]);
     assert_eq!(positions(&db, playlist).await?, [0, 1]);
@@ -528,7 +517,7 @@ async fn a_reorder_leaves_every_other_playlist_alone() -> Result<(), AppError> {
     let (db, playlist, ids) = seeded_playlist().await?;
     let other = queries::playlist::create_playlist_with_tracks(&db, "Other", None, &ids).await?;
 
-    queries::playlist::reorder_playlist_track(&db, playlist, 0, 2).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
 
     assert_eq!(order(&db, other).await?, ids);
     assert_eq!(positions(&db, other).await?, [0, 1, 2]);
@@ -542,7 +531,7 @@ async fn a_reorder_moving_more_rows_than_one_update_holds_lands_every_position()
     let (db, ids) = numbered_library(400).await?;
     let playlist = queries::playlist::create_playlist_with_tracks(&db, "Long", None, &ids).await?;
 
-    queries::playlist::reorder_playlist_track(&db, playlist, 0, 399).await?;
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 399).await?;
 
     let mut expected = ids[1..].to_vec();
     expected.push(ids[0]);

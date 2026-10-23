@@ -1,4 +1,4 @@
-import { QueueRow } from "../models.slint";
+import { LiftedRun, QueueRow } from "../models.slint";
 
 // The two surfaces rendering the play queue — the panel beside the content and the Up Next
 // list inside Now Playing. Same rows, deliberately separate lifecycles.
@@ -55,6 +55,10 @@ export global Queue {
 
     // A drag of one row dropped somewhere that moves it, in play order.
     callback reorder(int /*from*/, int /*to*/);
+    // A drag of the picks, gathering every picked row in front of play-order slot `slot`.
+    callback move-picks(int /*slot*/);
+    // Where the picked rows sit, asked by a press on one of them. Only Rust holds the whole list.
+    callback picked-run() -> LiftedRun;
     // Another list's drag let go over the rows: what Add to Queue on it would queue, landing in
     // front of play-order slot `slot`.
     callback drop-in(string /*kind*/, [int] /*ids*/, int /*slot*/);

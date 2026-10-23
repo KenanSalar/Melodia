@@ -1,5 +1,5 @@
-//! `PlaylistDetail.*` callbacks: close-detail, drag-reorder, the edit-artwork picker open and
-//! track removal here, the rest through [`crate::ui::callbacks::track_detail`].
+//! `PlaylistDetail.*` callbacks: close-detail, the drags that move rows, the edit-artwork picker
+//! open and track removal here, the rest through [`crate::ui::callbacks::track_detail`].
 
 use std::sync::Arc;
 
@@ -8,11 +8,13 @@ use slint::ComponentHandle;
 use super::artwork::open_edit_artwork;
 use crate::ui::callbacks::{DialogClaim, collect_track_ids};
 use crate::ui::callbacks::{grid_tab, track_detail};
+use crate::ui::drag;
 use crate::ui::paged_rows::track_rows;
 use crate::ui::playlists::{self as playlists_ui_mod, PlaylistsUi};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
+use melodia_core::utils::block_move;
 use melodia_ui::{AppWindow, PlaylistDetail};
 
 /// Wire the `PlaylistDetail` callbacks. See [`super::wire`].
@@ -48,40 +50,73 @@ fn wire_close(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>)
     });
 }
 
-/// A row drag released. Optimistically moves the row, writes, then asks the database for the
-/// order it holds: a failed write is rolled back that way, and a refresh that landed mid-write and
-/// showed the order from before the drop is put right.
+/// The two row drags: one row, or every picked row gathered at a slot, and where the picks sit
+/// for the press that lifts them.
 fn wire_reorder(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
-    let s = state.clone();
-    let pu = playlists_ui.clone();
-    let weak = ui.as_weak();
-    ui.global::<PlaylistDetail>().on_reorder(move |from, to| {
-        let Some(ui) = weak.upgrade() else { return };
-        let Ok(from_u) = usize::try_from(from) else {
-            return;
-        };
-        let Ok(to_u) = usize::try_from(to) else {
-            return;
-        };
-        if from_u == to_u {
-            return;
-        }
-        let playlist_id = pu.detail_playlist_id();
-        if playlist_id < 0 {
-            return;
-        }
-        if !playlists_ui_mod::apply_optimistic_reorder(&ui, &pu, from_u, to_u) {
-            return;
-        }
-        let s = s.clone();
-        let pu = pu.clone();
-        s.runtime.clone().spawn(async move {
-            if let Err(e) = library::playlists::reorder_playlist(&s.db, playlist_id, from, to).await
-            {
-                log::warn!("playlists::reorder: {}", describe(&e));
-            }
-            track_rows::requery(&s, &pu);
+    let g = ui.global::<PlaylistDetail>();
+
+    {
+        let (s, pu, weak) = (state.clone(), playlists_ui.clone(), ui.as_weak());
+        g.on_reorder(move |from, to| {
+            let Some(ui) = weak.upgrade() else { return };
+            let (Ok(from), Ok(to)) = (usize::try_from(from), usize::try_from(to)) else {
+                return;
+            };
+            move_tracks(&ui, &s, &pu, &[from], to);
         });
+    }
+
+    {
+        let (s, pu, weak) = (state.clone(), playlists_ui.clone(), ui.as_weak());
+        g.on_move_picks(move |slot| {
+            let Some(ui) = weak.upgrade() else { return };
+            let Ok(slot) = usize::try_from(slot) else {
+                return;
+            };
+            let picked = playlists_ui_mod::picked_rows(&ui);
+            move_tracks(&ui, &s, &pu, &picked, block_move::landing(&picked, slot));
+        });
+    }
+
+    let weak = ui.as_weak();
+    g.on_picked_run(move || {
+        let picked = weak.upgrade().map(|ui| playlists_ui_mod::picked_rows(&ui));
+        drag::lifted_run(&picked.unwrap_or_default())
+    });
+}
+
+/// Optimistically moves the rows at `rows` to `to`, writes, then asks the database for the order
+/// it holds: a failed write is rolled back that way, and a refresh that landed mid-write and
+/// showed the order from before the drop is put right. A write that lands has the header and the
+/// card read again too, since the automatic cover follows whichever track now leads.
+fn move_tracks(
+    ui: &AppWindow,
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    rows: &[usize],
+    to: usize,
+) {
+    let playlist_id = playlists_ui.detail_playlist_id();
+    if playlist_id < 0 {
+        return;
+    }
+    let track_ids = playlists_ui_mod::track_ids_at(ui, rows);
+    if !playlists_ui_mod::apply_optimistic_move(ui, playlists_ui, rows, to) {
+        return;
+    }
+    let (s, pu, weak) = (state.clone(), playlists_ui.clone(), ui.as_weak());
+    state.runtime.spawn(async move {
+        let moved =
+            library::playlists::move_playlist_tracks(&s.db, playlist_id, track_ids, to).await;
+        track_rows::requery(&s, &pu);
+        if let Err(e) = moved {
+            log::warn!("playlists::move: {}", describe(&e));
+            return;
+        }
+        if let Err(e) = playlists_ui_mod::refresh_header(&s, &pu, weak.clone(), playlist_id).await {
+            log::warn!("playlists::move refresh: {}", describe(&e));
+        }
+        playlists_ui_mod::refresh_after_write(&s, &pu, &weak);
     });
 }
 

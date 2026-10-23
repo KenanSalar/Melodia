@@ -1,6 +1,8 @@
 // The in-window drag, which Slint's `DragArea` carries as an opaque `data-transfer` that Slint code
 // can't read. So the token is a constant and what a drag means sits here.
 
+import { LiftedRun } from "../models.slint";
+
 // The list a drag came out of. A list takes back only its own rows, as a reorder.
 export enum DragOrigin { none, queue, up-next, playlist }
 
@@ -15,8 +17,12 @@ export struct DragItems {
 
 export struct DragPayload {
     origin: DragOrigin,
-    // The row lifted, in its own list's order.
+    // The row pressed, in its own list's order.
     index: int,
+    // Whether the press lifted every row its list holds picked, rather than that row alone.
+    picks: bool,
+    // Where the lifted rows sit, so a drop beside them can be told to move nothing.
+    run: LiftedRun,
     items: DragItems,
 }
 
@@ -49,11 +55,28 @@ export global Drag {
     out property <bool> ghost-shown;
 
     public function arm(origin: DragOrigin, index: int) {
-        self.payload = { origin: origin, index: index };
+        self.payload = { origin: origin, index: index, run: { first: index, count: 1 } };
     }
 
     public function arm-items(origin: DragOrigin, index: int, items: DragItems) {
-        self.payload = { origin: origin, index: index, items: items };
+        self.payload = {
+            origin: origin,
+            index: index,
+            run: { first: index, count: 1 },
+            items: items,
+        };
+    }
+
+    // For a press on a picked row while others are picked too, after it armed: the drag lifts
+    // them all. Rust says where they sit, a list it pages being one Slint can't walk.
+    public function lift-picks(run: LiftedRun) {
+        self.payload = {
+            origin: self.payload.origin,
+            index: self.payload.index,
+            picks: true,
+            run: run,
+            items: self.payload.items,
+        };
     }
 
     public function disarm() {

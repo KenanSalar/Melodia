@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use slint::Model;
 
-use super::picked_positions;
 use crate::ui::paged_rows::queue_rows::QueueRows;
 use crate::ui::paged_rows::{Keyset, ReadStamp};
 
@@ -36,7 +35,7 @@ fn picking_a_track_queued_twice_marks_both_of_its_rows() {
 fn removing_the_picks_takes_both_copies_of_a_track_queued_twice() {
     let rows = panel_over_a_repeat();
 
-    let positions = picked_positions(&rows, &HashSet::from([1]));
+    rows.select(&HashSet::from([1]));
 
-    assert_eq!(positions, [0, 2]);
+    assert_eq!(rows.picked_rows(), [0, 2]);
 }

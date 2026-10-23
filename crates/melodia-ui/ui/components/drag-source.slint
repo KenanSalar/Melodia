@@ -1,4 +1,5 @@
 import { Drag, DragItems, DragOrigin } from "../globals/drag.slint";
+import { LiftedRun } from "../models.slint";
 
 // A list's drag: a `DragArea` round its `ListView`, one per list.
 //
@@ -8,12 +9,17 @@ import { Drag, DragItems, DragOrigin } from "../globals/drag.slint";
 // drag end. Round the list it outlives all of those.
 //
 // It takes the press at 8 px and sends the rows a cancel, so a drag lands no click. The rows report
-// their press through `arm` or `arm-items`, which `Drag.payload` argues.
+// their press through `arm` or `arm-items`, which `Drag.payload` argues, and a press that carries
+// the list's picks adds `lift-picks`.
 export component DragSource inherits DragArea {
     in property <DragOrigin> origin;
     // The host's switch. Hosts set this rather than `enabled`, which a mount would override and
     // drop the touch gate with.
     in property <bool> active: true;
+
+    // This list's drag lifted every picked row, each of which dims as `lifts` dims the pressed one.
+    out property <bool> lifting-picks: root.dragging && Drag.payload.origin == root.origin
+        && Drag.payload.picks;
 
     callback background-clicked();
 
@@ -39,6 +45,10 @@ export component DragSource inherits DragArea {
 
     public function arm-items(index: int, items: DragItems) {
         Drag.arm-items(root.origin, index, items);
+    }
+
+    public function lift-picks(run: LiftedRun) {
+        Drag.lift-picks(run);
     }
 
     // Whether row `index` is the one this list's drag lifted, for the row to dim.

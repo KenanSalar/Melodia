@@ -714,9 +714,18 @@ three components that answer it, and each argues its geometry at its own file.
   file, and the five card grids. The row reports its press, `src.arm(idx)` where the drag only
   reorders and `src.arm-items(…)` where it carries something out, and a reorderable row reads
   `lifted: src.lifts(idx)`, dimming by `Theme.fade-lifted`; the target owns the slot, the line, the
-  edge scroll and the no-op slots, handing the host `reorder(from, to)` and `scroll-by(dy)`. A host
-  whose rows fall into two runs that a move may not cross names the second's first row in
-  `split-row`, and the slots across it draw no line and drop nothing.
+  edge scroll and the no-op slots, handing the host `reorder(from, to)`, `move-picks(slot)` and
+  `scroll-by(dy)`. A host whose rows fall into two runs that a move may not cross names the
+  second's first row in `split-row`, and the slots across it draw no line and drop nothing.
+  - **A press on a picked row while others are picked lifts them all**, the menu's rule
+    (`Selection.acts-on-set`). The row arms as usual, then `src.lift-picks(…)` with the host
+    global's `picked-run()`, Rust being the only side that can find the picks in a list it pages
+    (`PagedRows::picked_rows`, `ui::drag::lifted_run`). Each picked row adds
+    `|| (row.selected && src.lifting-picks)` to its `lifted`, the no-op slots widen to the run
+    (scattered picks have none, any drop gathering them), and the drop arrives as
+    `move-picks(slot)`. The queue panel and Playlist Detail take it; Up Next has no picks.
+    **Every tier moves through `melodia_core::utils::block_move`**, one row being a block of one,
+    so the play order, the shown keyset and `playlist_items` can't land one drop three ways.
   - **What a drag carries is `Drag.payload`, written from two trees** (`ui::drag` names the three
     writes): the pressed row arms it, every press disarms it first in
     `winit_filter::disarm_drag`, a touch's start included, and a list whose rows move under a drag

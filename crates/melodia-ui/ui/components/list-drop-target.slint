@@ -1,13 +1,15 @@
 import { Theme } from "../theme.slint";
 import { Drag, DragOrigin } from "../globals/drag.slint";
+import { LiftedRun } from "../models.slint";
 
 // Takes a list's own rows back as a reorder, and where the host says so, what another list's drag
 // carries as an insert: a `DropArea` mounted over the list's viewport, so a drop's position is a
 // position in the list as drawn. Clicks and the wheel pass through it to the rows.
 //
 // Slots, not rows: slot K is the gap above row K, `[0, row-count]`, so below the last row and the
-// whole of an empty list are the end. For its own rows the two either side of the lifted row leave
-// it where it is, so they draw no line and move nothing.
+// whole of an empty list are the end. For its own rows the slots inside and either side of the
+// lifted run leave it where it is, so they draw no line and move nothing. Picks scattered through
+// the list have no such slot, every drop gathering them.
 export component ListDropTarget inherits DropArea {
     in property <DragOrigin> origin;
     // Whether it takes what other lists carry out, as a copy landing at the slot.
@@ -24,6 +26,9 @@ export component ListDropTarget inherits DropArea {
 
     // `to` is where the row lands once it has left `from`.
     callback reorder(int /*from*/, int /*to*/);
+    // The list's picks, gathered in front of row `slot`, as `Drag.payload.picks` says the drag
+    // lifted them.
+    callback move-picks(int /*slot*/);
     // Another list's items, landing in front of row `slot`. They are `Drag.payload.items`.
     callback dropped-items(int /*slot*/);
     // Positive scrolls down; the host clamps.
@@ -65,8 +70,10 @@ export component ListDropTarget inherits DropArea {
     property <int> landing: root.slot <= root.lifted ? root.slot : root.slot - 1;
     property <bool> same-run: root.split-row < 0
         || (root.lifted < root.split-row) == (root.landing < root.split-row);
-    property <bool> moves: root.own-drag && root.slot != root.lifted && root.slot != root.lifted + 1
-        && root.same-run;
+    property <LiftedRun> run: Drag.payload.run;
+    property <bool> still: root.run.count > 0 && root.slot >= root.run.first
+        && root.slot <= root.run.first + root.run.count;
+    property <bool> moves: root.own-drag && !root.still && root.same-run;
 
     function follow(y: length) {
         root.pointer-y = y;
@@ -96,7 +103,11 @@ export component ListDropTarget inherits DropArea {
         if (!root.moves) {
             return DragAction.none;
         }
-        root.reorder(root.lifted, root.landing);
+        if (Drag.payload.picks) {
+            root.move-picks(root.slot);
+        } else {
+            root.reorder(root.lifted, root.landing);
+        }
         return DragAction.move;
     }
 

@@ -1,4 +1,4 @@
-import { PlaylistRow, PlaylistGridRow, TrackListRow, TrackColumns } from "../models.slint";
+import { LiftedRun, PlaylistRow, PlaylistGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
 // The Playlist grid view, on the `Albums` / `Artists` ownership contract: Rust installs
 // `grid-rows` once and `apply-filter` reloads its ids. Sorted by most-recently-updated and staying
@@ -147,6 +147,10 @@ export global PlaylistDetail {
 
     // A drag of one row dropped somewhere that moves it, the sort still `"position"`, ascending.
     callback reorder(int /*from*/, int /*to*/);
+    // A drag of the picks, gathering every picked row in front of row `slot`, on the same sort.
+    callback move-picks(int /*slot*/);
+    // Where the picked rows sit, asked by a press on one of them. Only Rust holds the whole list.
+    callback picked-run() -> LiftedRun;
 
     // The one action needing a Rust hop before its dialog mounts, the mosaic picker having to query
     // the playlist's track artworks first. The handler writes `Dialog` through

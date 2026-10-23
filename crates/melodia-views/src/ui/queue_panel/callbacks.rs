@@ -1,5 +1,5 @@
-//! `Queue.*` callback wiring: the transport rows, a drop from another list, the row menu's
-//! favourite and rating, and the picks.
+//! `Queue.*` callback wiring: the transport rows, the drags that move rows, a drop from another
+//! list, the row menu's favourite and rating, and the picks.
 
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -7,16 +7,18 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Weak};
 
-use super::{apply_picks, picked, picked_positions};
+use super::{apply_picks, picked};
 use crate::ui::callbacks::card_actions::spawn_with_track_ids;
 use crate::ui::callbacks::collect_track_ids;
 use crate::ui::callbacks::macros::wire_row_flag;
+use crate::ui::drag;
 use crate::ui::list_selection::{NO_ANCHOR, compute_click_selection};
 use crate::ui::paged_rows::queue_rows::QueueRows;
 use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
+use melodia_core::utils::block_move;
 use melodia_ui::{AppWindow, Queue, QueueRow};
 
 pub(super) fn wire_callbacks(
@@ -26,40 +28,18 @@ pub(super) fn wire_callbacks(
     anchor: &Rc<Cell<i32>>,
 ) {
     wire_transport(ui, state, rows);
+    wire_moves(ui, state, rows);
     wire_drop_in(ui, state);
     wire_row_flags(ui, state);
     wire_selection(ui, rows, anchor);
 }
 
-/// The five rows that only ask the engine for something.
+/// The four rows that only ask the engine for something.
 ///
 /// None of them reports anything back: the mutation lands on `sinks.queue` and the subscriber
 /// shows it from there.
 fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
     let queue = ui.global::<Queue>();
-
-    {
-        let s = state.clone();
-        let rows = rows.clone();
-        queue.on_reorder(move |from, to| {
-            let Ok(from) = usize::try_from(from) else {
-                return;
-            };
-            let Ok(to) = usize::try_from(to) else { return };
-            if from == to {
-                return;
-            }
-            // Moved here first, so the queue the engine publishes back is the one already on
-            // show and every other row keeps its delegate.
-            rows.move_row(from, to);
-            let s_inner = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::queue::queue_move(&s_inner, from, to) {
-                    log::warn!("queue_move({from},{to}): {}", describe(&e));
-                }
-            });
-        });
-    }
 
     {
         let s = state.clone();
@@ -79,10 +59,8 @@ fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
     {
         let s = state.clone();
         let rows = rows.clone();
-        let weak = ui.as_weak();
         queue.on_remove_selected(move || {
-            let Some(ui) = weak.upgrade() else { return };
-            let indices = picked_positions(&rows, &picked(&ui));
+            let indices = rows.picked_rows();
             if indices.is_empty() {
                 return;
             }
@@ -121,6 +99,50 @@ fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
             });
         });
     }
+}
+
+/// The two drags that move rows: one row, or every picked row gathered at a slot.
+fn wire_moves(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
+    let queue = ui.global::<Queue>();
+
+    {
+        let (s, rows) = (state.clone(), rows.clone());
+        queue.on_reorder(move |from, to| {
+            let (Ok(from), Ok(to)) = (usize::try_from(from), usize::try_from(to)) else {
+                return;
+            };
+            send_move(&s, &rows, vec![from], to);
+        });
+    }
+
+    {
+        let (s, rows) = (state.clone(), rows.clone());
+        queue.on_move_picks(move |slot| {
+            let Ok(slot) = usize::try_from(slot) else {
+                return;
+            };
+            let picked = rows.picked_rows();
+            let to = block_move::landing(&picked, slot);
+            send_move(&s, &rows, picked, to);
+        });
+    }
+
+    let rows = rows.clone();
+    queue.on_picked_run(move || drag::lifted_run(&rows.picked_rows()));
+}
+
+/// Moves `moved` on show first, so the queue the engine publishes back is the one already on show
+/// and every other row keeps its delegate, then has the engine move them.
+fn send_move(state: &AppState, rows: &QueueRows, moved: Vec<usize>, to: usize) {
+    if !rows.move_rows(&moved, to) {
+        return;
+    }
+    let s = state.clone();
+    state.runtime.spawn(async move {
+        if let Err(e) = library::queue::queue_move(&s, &moved, to) {
+            log::warn!("queue_move({} rows → {to}): {}", moved.len(), describe(&e));
+        }
+    });
 }
 
 /// Another list's drag let go over the rows, resolved as Add to Queue on it would be and spliced

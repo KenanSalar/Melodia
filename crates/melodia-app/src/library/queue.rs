@@ -162,11 +162,13 @@ pub fn queue_remove(state: &AppState, index: usize) -> Result<(), AppError> {
     Ok(())
 }
 
-pub fn queue_move(state: &AppState, from: usize, to: usize) -> Result<(), AppError> {
+/// Moves the play-order slots `rows` together to `to`, counted once they have left: one dragged
+/// row, or every row the panel holds picked.
+pub fn queue_move(state: &AppState, rows: &[usize], to: usize) -> Result<(), AppError> {
     // Once per drop, not per drag frame — Slint only emits on the drop gesture.
-    log::debug!("queue: move {from} → {to}");
+    log::debug!("queue: move {} row(s) → {to}", rows.len());
     with_state_emit(&state.player_state, &state.sinks, |s| {
-        s.queue.move_track(from, to);
+        s.queue.move_rows(rows, to);
     });
     Ok(())
 }

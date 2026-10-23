@@ -8,7 +8,8 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, DataTransfer};
 
-use melodia_ui::{AppWindow, Drag};
+use crate::ui::util::len_as_i32;
+use melodia_ui::{AppWindow, Drag, LiftedRun};
 
 /// Gives every `DragSource` the token it carries. Slint can build a `data-transfer` only through
 /// the host, and a `DragArea` holding an empty one never starts a drag. User data alone, so no
@@ -17,4 +18,16 @@ pub fn install(app: &AppWindow) {
     let mut token = DataTransfer::default();
     token.set_user_data(Rc::new(()));
     app.global::<Drag>().set_token(token);
+}
+
+/// Where a drag of picked `rows` lifts them from, for the drop target to draw no line where
+/// letting go would leave them be. Rows with a gap between them say so with a count of 0: a drop
+/// anywhere gathers them, which changes the order.
+pub fn lifted_run(rows: &[usize]) -> LiftedRun {
+    match (rows.first(), rows.last()) {
+        (Some(&first), Some(&last)) if last - first + 1 == rows.len() => {
+            LiftedRun { first: len_as_i32(first), count: len_as_i32(rows.len()) }
+        }
+        _ => LiftedRun { first: -1, count: 0 },
+    }
 }

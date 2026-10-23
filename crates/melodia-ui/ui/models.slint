@@ -329,6 +329,13 @@ export struct QueueRow {
     genre_id: int,
 }
 
+// Where a list's picks sit, as Rust finds them in a list it pages (`ui::drag::lifted_run`): `count`
+// rows together from `first`, or a `count` of 0 for picks scattered through the list.
+export struct LiftedRun {
+    first: int,
+    count: int,
+}
+
 // The Now Playing chip row's technical metadata, async-fetched on track change through
 // an 8-column projection rather than a full `Track`. Every field is a formatted display
 // string where `""` means unknown or not yet loaded, so the view gates each chip on

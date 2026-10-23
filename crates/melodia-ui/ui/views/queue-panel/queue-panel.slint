@@ -2,6 +2,7 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { Dialog, DialogKind } from "../../globals/dialog.slint";
 import { Queue } from "../../globals/queue.slint";
+import { Selection } from "../../globals/selection.slint";
 import { ListTravel } from "../../globals/list-travel.slint";
 import { WindowChrome } from "../../globals/shell.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
@@ -355,8 +356,13 @@ export component QueuePanel inherits Rectangle {
                             // rows merge into one pill.
                             prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
                             next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
-                            lifted: src.lifts(idx);
-                            pressed => { src.arm(idx); }
+                            lifted: src.lifts(idx) || (row.selected && src.lifting-picks);
+                            pressed => {
+                                src.arm(idx);
+                                if (Selection.acts-on-set(row.selected, Queue.selected-count)) {
+                                    src.lift-picks(Queue.picked-run());
+                                }
+                            }
                         }
                     }
                 }
@@ -372,6 +378,7 @@ export component QueuePanel inherits Rectangle {
                     row-count: Queue.rows.length;
                     content-y: inner-list.content-y;
                     reorder(from, to) => { Queue.reorder(from, to); }
+                    move-picks(slot) => { Queue.move-picks(slot); }
                     dropped-items(slot) => {
                         Queue.drop-in(Drag.payload.items.kind, Drag.payload.items.ids, slot);
                     }

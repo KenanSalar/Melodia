@@ -19,7 +19,6 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::ui::list_selection::{NO_ANCHOR, write_selection_ids};
 use crate::ui::paged_rows::queue_rows::{self, QueueRows};
-use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::{AppWindow, Queue};
@@ -110,16 +109,6 @@ pub(super) fn apply_picks(ui: &AppWindow, rows: &QueueRows, picked: &HashSet<i32
 /// The panel's picks, as `apply_picks` last published them.
 pub(super) fn picked(ui: &AppWindow) -> HashSet<i32> {
     ui.global::<Queue>().get_selected_ids().iter().collect()
-}
-
-/// The positions of the rows `picked` names, every copy of a track queued twice included.
-pub(super) fn picked_positions(rows: &QueueRows, picked: &HashSet<i32>) -> Vec<usize> {
-    rows.ids()
-        .iter()
-        .enumerate()
-        .filter(|&(_, &id)| picked.contains(&clamp_i64_to_i32(id)))
-        .map(|(position, _)| position)
-        .collect()
 }
 
 #[cfg(test)]

@@ -60,6 +60,8 @@ export component PlaylistDetailBody inherits Rectangle {
             // A click in the track list blurs the band's SearchBar.
             request-blur-search => { MyLibrary.blur-search-tick += 1; }
             reorder(from, to) => { PlaylistDetail.reorder(from, to); }
+            move-picks(slot) => { PlaylistDetail.move-picks(slot); }
+            picked-run => { return PlaylistDetail.picked-run(); }
             remove-from-playlist(ids) => { PlaylistDetail.remove-track(ids); }
         }
 

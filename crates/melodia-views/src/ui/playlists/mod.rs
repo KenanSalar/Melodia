@@ -59,7 +59,10 @@ pub use grid::reload_grid;
 
 // Reached from this slice's own `callbacks/`. `pub(super)` is `pub(in crate::ui)`
 // here, one notch wider than that.
-pub(super) use detail::{apply_optimistic_reorder, open_playlist, refresh_detail, restore_detail};
+pub(super) use detail::{
+    apply_optimistic_move, open_playlist, picked_rows, refresh_detail, refresh_header,
+    restore_detail, track_ids_at,
+};
 pub(super) use grid::{refresh_after_write, refresh_play_stats, shown_card};
 
 /// The M3U8 import / export and Add-to-Playlist wiring, kept out of [`install`] because each

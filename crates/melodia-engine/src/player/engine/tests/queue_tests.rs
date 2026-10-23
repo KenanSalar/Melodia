@@ -152,32 +152,30 @@ fn remove_batch_empty_is_noop() {
     assert_eq!(q.play_order.len(), 3);
 }
 
-// ── move_track ──────────────────────────────────────────────────────
+// ── move_rows ───────────────────────────────────────────────────────
 
 #[test]
-fn move_track_out_of_bounds() {
+fn move_rows_out_of_bounds() {
     let mut q = make_queue(3);
-    assert!(!q.move_track(0, 10));
-    assert!(!q.move_track(10, 0));
+    assert!(!q.move_rows(&[0], 10));
+    assert!(!q.move_rows(&[10], 0));
 }
 
 #[test]
-fn move_track_forward_adjusts_current() {
+fn move_rows_forward_adjusts_current() {
     let mut q = make_queue(4);
     q.current_index = Some(1);
-    // Move track at 0 to position 2 (moving past current)
-    q.move_track(0, 2);
-    // from < current && to >= current → current -= 1
+    // The row ahead of the current one moves past it, so the current one steps up.
+    q.move_rows(&[0], 2);
     assert_eq!(q.current_index, Some(0));
 }
 
 #[test]
-fn move_track_backward_adjusts_current() {
+fn move_rows_backward_adjusts_current() {
     let mut q = make_queue(4);
     q.current_index = Some(1);
-    // Move track at 3 to position 0 (moving before current)
-    q.move_track(3, 0);
-    // from > current && to <= current → current += 1
+    // A row from behind lands ahead of the current one, so the current one steps down.
+    q.move_rows(&[3], 0);
     assert_eq!(q.current_index, Some(2));
 }
 
@@ -185,7 +183,7 @@ fn move_track_backward_adjusts_current() {
 fn move_current_track() {
     let mut q = make_queue(4);
     q.current_index = Some(1);
-    q.move_track(1, 3);
+    q.move_rows(&[1], 3);
     assert_eq!(q.current_index, Some(3));
 }
 
@@ -527,10 +525,10 @@ fn every_change_to_the_order_publishes_the_new_order() {
         ),
         ("remove_batch", make_queue(3), |q| q.remove_batch(&[0, 2]), &[2]),
         (
-            "move_track",
+            "move_rows",
             make_queue(3),
             |q| {
-                q.move_track(0, 2);
+                q.move_rows(&[0], 2);
             },
             &[2, 3, 1],
         ),

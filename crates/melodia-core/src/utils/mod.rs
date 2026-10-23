@@ -1,5 +1,6 @@
 pub mod atomic_file;
 pub mod audio_ext;
+pub mod block_move;
 pub mod event_bridge;
 pub mod exe;
 pub mod fold;

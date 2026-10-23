@@ -413,7 +413,7 @@ fn a_move_lands_the_row_where_the_drag_drops_it() {
     for (from, to, expected, case) in CASES {
         let watched = Watched::new();
 
-        let moved = watched.rows.move_row(from, to);
+        let moved = watched.rows.move_rows(&[from], to);
 
         assert_eq!((moved, &watched.rows.ids()[..]), (true, &expected[..]), "{case}");
     }
@@ -424,7 +424,7 @@ fn a_move_lands_the_row_where_the_drag_drops_it() {
 fn a_move_rereads_only_the_row_it_moved() {
     let watched = Watched::new();
 
-    watched.rows.move_row(0, 3);
+    watched.rows.move_rows(&[0], 3);
 
     assert_eq!((watched.list.row_count(), watched.seen()), (4, vec![2]));
 }
@@ -436,7 +436,7 @@ fn a_move_from_or_to_outside_the_list_moves_nothing() {
     for (from, to, case) in CASES {
         let watched = Watched::new();
 
-        let moved = watched.rows.move_row(from, to);
+        let moved = watched.rows.move_rows(&[from], to);
 
         let unmoved = (false, &[2, 4, 3, 1][..], Vec::<i32>::new());
         assert_eq!((moved, &watched.rows.ids()[..], watched.seen()), unmoved, "{case}");
@@ -447,7 +447,7 @@ fn a_move_from_or_to_outside_the_list_moves_nothing() {
 fn an_empty_list_moves_nothing() {
     let list = Fetching::over(0);
 
-    let moved = list.rows.move_row(0, 0);
+    let moved = list.rows.move_rows(&[0], 0);
 
     assert!(!moved);
 }

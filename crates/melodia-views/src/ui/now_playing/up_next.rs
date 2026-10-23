@@ -436,7 +436,7 @@ pub(super) fn wire_reorder(
         move_shown_row(&up_next_model, &np_state, from_row, to_row);
         let s = state.clone();
         state.runtime.clone().spawn(async move {
-            if let Err(e) = library::queue::queue_move(&s, from, to) {
+            if let Err(e) = library::queue::queue_move(&s, &[from], to) {
                 log::warn!("queue_move({from},{to}): {}", describe(&e));
             }
         });

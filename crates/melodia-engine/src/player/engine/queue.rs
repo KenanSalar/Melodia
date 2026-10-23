@@ -1,6 +1,8 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
+use melodia_core::utils::block_move;
+
 use super::types::{PersistableQueue, RepeatMode};
 
 /// Slots before the current one whose records the window holds: the one Previous lands on.
@@ -266,24 +268,18 @@ impl QueueState {
         self.order_changed();
     }
 
-    pub fn move_track(&mut self, from: usize, to: usize) -> bool {
-        if from >= self.play_order.len() || to >= self.play_order.len() {
+    /// Move the play-order slots `rows` together to `to`, as [`block_move::move_block`] does.
+    /// Answers whether anything moved.
+    ///
+    /// The current track stays current wherever the block lands, found again by its entry: each
+    /// names its own slot in `tracks`, a track queued twice included.
+    pub fn move_rows(&mut self, rows: &[usize], to: usize) -> bool {
+        let current = self.current_index.and_then(|ci| self.play_order.get(ci).copied());
+        if !block_move::move_block(&mut self.play_order, rows, to) {
             return false;
         }
-
-        let idx = self.play_order.remove(from);
-        self.play_order.insert(to, idx);
-
-        if let Some(ci) = self.current_index {
-            self.current_index = Some(if from == ci {
-                to
-            } else if from < ci && to >= ci {
-                ci - 1
-            } else if from > ci && to <= ci {
-                ci + 1
-            } else {
-                ci
-            });
+        if let Some(entry) = current {
+            self.current_index = self.play_order.iter().position(|&e| e == entry);
         }
         self.order_changed();
         true
