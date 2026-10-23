@@ -232,10 +232,13 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                         };
                         state.events_sink.push_window_event(event, hovered_window);
                         data_device_state.finish_offer();
-                    } else {
+                    } else if data_device_state.read_token.is_some() {
                         // The path list is still arriving, and sending what has come so far would
                         // drop the rest; the read finishes the drop once it has it all.
                         data_device_state.dropped = true;
+                    } else {
+                        // The read is over without entering: it named no file, or it failed.
+                        data_device_state.release_offer();
                     }
                 }
             },
@@ -350,13 +353,21 @@ impl DataDeviceState {
         }
     }
 
-    /// The path list is in: the drag enters, and a drop that was waiting on it lands.
+    /// The path list is in: the drag enters, and a drop that was waiting on it lands. A list naming
+    /// no file, such as a browser's link, enters nothing, as X11's parse and Windows' `CF_HDROP`
+    /// already refuse one.
     fn read_finished(&mut self, events_sink: &mut EventSink) {
         let Some(hovered_window) = self.hovered_window else {
             warn!("No window specified to push DragEntered to");
             return;
         };
         let paths = self.file_paths();
+        if paths.is_empty() {
+            if self.dropped {
+                self.release_offer();
+            }
+            return;
+        }
         let position = self.position;
         self.entered = true;
         events_sink.push_window_event(

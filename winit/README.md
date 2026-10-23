@@ -19,7 +19,8 @@ Windows and X11 halves port that PR, the Windows one with its fix to the
 by value. Those three platforms send the new events in place of `HoveredFile`,
 `DroppedFile` and `HoveredFileCancelled`; macOS is untouched and still sends
 the old ones. On Wayland a drop that arrives before the path list waits for it,
-rather than sending what has been read so far.
+rather than sending what has been read so far, and a list naming no file enters
+nothing, as on X11 and Windows.
 
 Upstream `master` has since replaced these events with ID-based ones whose paths
 are fetched separately (PR #4571), so retiring the fork rewrites the filter's

@@ -1,8 +1,9 @@
 import { WindowRect } from "../globals/drag.slint";
 
 // Reports the window rect its host draws into, for a hit test made outside Slint. Mount it at the
-// host's full size, and never inside an `if` or a `for`: its tracker watches layout, and a branch
-// dropped while its parent re-flows panics on it (`slint-pitfalls.md`).
+// host's full size, and inside no `if` or `for` but the full-UI branch: its tracker watches layout,
+// and a branch dropped while its parent re-flows panics on it (`slint-pitfalls.md`). The miniplayer
+// swap drops that one on a tick of its own, as it does `NowPlayingBar`'s width mirror.
 export component WindowRectReport {
     callback moved(WindowRect);
 

@@ -726,8 +726,8 @@ three components that answer it, and each argues its geometry at its own file.
 - **A file dragged in from the file manager is not that drag, and no `DropArea` sees it.** Its
   banners read `FileDrag.target`, which the winit filter writes from a hit test in Rust, and a
   target says where it is drawn through `components/window-rect-report.slint`'s
-  `WindowRectReport`. A new file target mounts a report outside any `if` and gains an arm in
-  `window_chrome::file_drop`; `desktop-shell.md` has the flow.
+  `WindowRectReport`. A new file target mounts a report outside any `if` but the full-UI branch
+  and gains an arm in `window_chrome::file_drop`; `desktop-shell.md` has the flow.
 
 - **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and

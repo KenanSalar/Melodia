@@ -223,10 +223,10 @@ the OS owns has to be attached late or not at all on at least one platform.
   against whichever can take a drop: the queue while `Queue.shown`, the content panel while
   `playlists::detail_on_screen` names a playlist and the overlay isn't up. The filter writes the
   answer to `FileDrag.target`, the one thing both banners read, so a banner always names where the
-  files go, and a drop starts one import. **A report never sits inside an `if`**: it watches its
-  own geometry, so it is the `changed`-in-`if` panic (`slint-pitfalls.md`), which is why the
-  playlist's target is the whole content panel rather than the list that unmounts inside the
-  band's morph.
+  files go, and a drop starts one import. **A report sits inside no `if` but the full-UI branch**,
+  which the miniplayer swap drops on a tick of its own: it watches its own geometry, so any other
+  branch is the `changed`-in-`if` panic (`slint-pitfalls.md`), which is why the playlist's target
+  is the whole content panel rather than the list that unmounts inside the band's morph.
 
 ## Opening a file from the file manager
 
