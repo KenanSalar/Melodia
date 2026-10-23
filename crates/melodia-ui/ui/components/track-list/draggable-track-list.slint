@@ -11,10 +11,11 @@ import { ListDropTarget } from "../list-drop-target.slint";
 import { DragOrigin } from "../../globals/drag.slint";
 
 // Drag-reorderable sibling of `TrackList` — same external contract plus a `reorder(from, to)` fired
-// on a drop that moves a row, and `move-picks(slot)` on one that moves the picks. **The shared `TrackList` drags its rows out but takes none back**;
-// Playlist Detail is the only consumer. The drag is a `DragSource` round the list with a
-// `ListDropTarget` over it. The move is gated on `reorder-enabled`, a reorder being ambiguous in any
-// sort but the insertion one; the copy into the queue is not.
+// on a drop that moves a row, and `move-picks(slot)` on one that moves the picks. **The shared
+// `TrackList` drags its rows out but takes none back**; Playlist Detail is the only consumer. The
+// drag is a `DragSource` round the list with a `ListDropTarget` over it. The move is gated on
+// `reorder-enabled`, a reorder being ambiguous in any sort but the insertion one; the copy into
+// the queue is not.
 export component DraggableTrackList inherits Rectangle {
     in property <[TrackListRow]> rows;
 

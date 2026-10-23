@@ -2,7 +2,8 @@
 //!
 //! Three writes, each where its occasion is: the token here, the disarm every press makes in
 //! `window_chrome::winit_filter` with whether a touch made it, and a revoke from each list that
-//! rebuilds its rows under a drag.
+//! rebuilds its rows under a drag. [`lifted_run`] answers the one question Slint can't, where a
+//! paged list's picks sit, for the press that lifts them.
 
 use std::rc::Rc;
 
@@ -20,12 +21,12 @@ pub fn install(app: &AppWindow) {
     app.global::<Drag>().set_token(token);
 }
 
-/// Where a drag of picked `rows` lifts them from, for the drop target to draw no line where
-/// letting go would leave them be. Rows with a gap between them say so with a count of 0: a drop
-/// anywhere gathers them, which changes the order.
+/// Where a drag of picked `rows`, ascending, lifts them from, for the drop target to draw no line
+/// where letting go would leave them be. Rows with a gap between them say so with a count of 0: a
+/// drop anywhere gathers them, which changes the order.
 pub fn lifted_run(rows: &[usize]) -> LiftedRun {
     match (rows.first(), rows.last()) {
-        (Some(&first), Some(&last)) if last - first + 1 == rows.len() => {
+        (Some(&first), Some(&last)) if first + rows.len() == last + 1 => {
             LiftedRun { first: len_as_i32(first), count: len_as_i32(rows.len()) }
         }
         _ => LiftedRun { first: -1, count: 0 },
