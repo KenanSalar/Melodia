@@ -76,3 +76,28 @@ export global Drag {
         self.ghost-shown = ghost;
     }
 }
+
+// Where letting go of a file dragged in from outside the window lands.
+export enum FileDropTarget { none, queue, playlist }
+
+// A box in window coordinates, which is the space the winit filter has the pointer in.
+export struct WindowRect {
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+}
+
+// A file dragged in from the file manager. No OS drag reaches a `DropArea`, and Slint has no
+// pointer while one is under way, so the winit filter hit-tests the drag against where the two
+// targets are drawn and says here what letting go would do.
+export global FileDrag {
+    // The queue panel's body, docked or floating, and the content panel, each written by a
+    // `WindowRectReport` as it moves. The filter reads them only while their target can take a
+    // drop, so neither is cleared when its target goes.
+    in-out property <WindowRect> queue-rect;
+    in-out property <WindowRect> content-rect;
+
+    // Written by the filter on every move, and the one thing either banner reads.
+    in property <FileDropTarget> target;
+}

@@ -345,8 +345,9 @@ open its database, and the two can run at once. `MELODIA_DATA_DIR` points either
 directory of your choosing.
 
 `winit/` is a checked-in copy of winit 0.30.13 plus an unmerged Wayland file drag-and-drop fix
-([winit#1881]), wired by `Cargo.toml`'s `[patch.crates-io]`. A fresh clone builds with no setup;
-dropping the patch costs only that drag-and-drop.
+([winit#1881]) and drag events that say where the pointer is, which is how a dropped file finds
+the queue or the open playlist. It is wired by `Cargo.toml`'s `[patch.crates-io]`, so a fresh clone
+builds with no setup.
 
 Last.fm scrobbling needs an [API application](https://www.last.fm/api/account/create)'s key and
 shared secret, which identify the app rather than any account. They are read at compile time from
@@ -443,5 +444,6 @@ License 1.1), with its Greek, Russian, Ukrainian and Vietnamese letters taken fr
 [Roboto](https://github.com/googlefonts/roboto-3-classic) (Apache License 2.0), and draws its icons
 from [Material Symbols Rounded](https://github.com/google/material-design-icons) (Apache License
 2.0). All three are modified, as is the vendored [winit](https://github.com/rust-windowing/winit) fork
-(Apache License 2.0) that gives Wayland its drag-and-drop events. What changed in each ships in
+(Apache License 2.0) that gives Wayland its drag-and-drop events and says where a drag is on every
+platform Melodia ships for. What changed in each ships in
 [`licenses/`](licenses/).

@@ -7,8 +7,8 @@
 //! with its frame decided rather than swapping it on screen), the
 //! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
 //! [`drag_region`], [`resize_grab`], [`resize_release`]), the Slint tick a Win32 drag parks
-//! (`parked_loop`), file-drop coalescing ([`drop_coalescer`]), geometry ([`geometry`]) and the
-//! restart flow.
+//! (`parked_loop`), routing a file drop by where it is let go ([`file_drop`]), geometry
+//! ([`geometry`]) and the restart flow.
 //!
 //! **Dragging and resizing belong at the winit layer.** `drag_window()` from a `TouchArea`'s
 //! `pointer-event` leaks the grab: the compositor takes pointer ownership for the move and
@@ -27,17 +27,13 @@
 
 mod controls;
 mod drag_region;
-mod drop_coalescer;
+mod file_drop;
 pub mod geometry;
 #[cfg(target_os = "windows")]
 pub mod parked_loop;
 mod resize_grab;
 mod resize_release;
 mod winit_filter;
-
-pub use drop_coalescer::{
-    is_playlist_detail_open, is_queue_panel_shown, set_current_playlist_id, set_queue_panel_shown,
-};
 
 use std::path::PathBuf;
 use std::sync::Mutex;

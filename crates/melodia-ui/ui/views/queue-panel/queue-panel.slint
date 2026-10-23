@@ -11,7 +11,8 @@ import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 import { EdgeResizeHandle, GrowEdge } from "../../components/edge-resize-handle.slint";
 import { DragSource } from "../../components/drag-source.slint";
 import { ListDropTarget } from "../../components/list-drop-target.slint";
-import { Drag, DragItems, DragOrigin } from "../../globals/drag.slint";
+import { Drag, DragItems, DragOrigin, FileDrag, FileDropTarget } from "../../globals/drag.slint";
+import { WindowRectReport } from "../../components/window-rect-report.slint";
 import { QueueRowItem } from "queue-row.slint";
 
 // The queue, docked after the content panel in the shell's row, so the sidebar, the content and
@@ -203,6 +204,15 @@ export component QueuePanel inherits Rectangle {
         width: root.body-w;
         height: root.body-h;
         changed has-hover => { Queue.pointer-in = self.has-hover; }
+
+        // Where a file let go of lands in the queue, docked or floating.
+        WindowRectReport {
+            x: 0;
+            y: 0;
+            width: 100%;
+            height: 100%;
+            moved(rect) => { FileDrag.queue-rect = rect; }
+        }
 
         VerticalLayout {
             spacing: 0px;
@@ -399,9 +409,8 @@ export component QueuePanel inherits Rectangle {
         }
 
         // After the list, so it paints over it, and `if` rather than `visible:` so the absent
-        // branch claims no layout slot. **A plain Rectangle with no TouchArea**, so the OS drop
-        // event still lands at the winit layer below Slint.
-        if Queue.is-drop-hovered && Queue.shown: Rectangle {
+        // branch claims no layout slot.
+        if FileDrag.target == FileDropTarget.queue: Rectangle {
             x: 0;
             y: 57px; // 56 px header + 1 px separator
             width: 100%;

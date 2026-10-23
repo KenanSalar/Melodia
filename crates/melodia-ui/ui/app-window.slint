@@ -32,7 +32,7 @@ import { Selection } from "globals/selection.slint";
 import { CardActions } from "globals/card-actions.slint";
 import { CopyActions } from "globals/copy-actions.slint";
 import { Queue, NowPlaying } from "globals/queue.slint";
-import { Drag, DragOrigin } from "globals/drag.slint";
+import { Drag, DragOrigin, FileDrag, FileDropTarget, WindowRect } from "globals/drag.slint";
 import { Radio } from "globals/radio.slint";
 import { Search } from "globals/search.slint";
 import { SettingsPage } from "globals/settings-page.slint";
@@ -71,6 +71,7 @@ import { EdgeOutline } from "components/edge-outline.slint";
 import { RoundedFrame } from "components/rounded-frame.slint";
 import { NotificationStack } from "components/dialog/notification-stack.slint";
 import { DragGhost } from "components/drag-ghost.slint";
+import { WindowRectReport } from "components/window-rect-report.slint";
 import { MiniPlayerSwitch } from "components/mini-player-switch.slint";
 import { SectionActiveGate } from "components/section-active-gate.slint";
 import { Tooltip, TooltipSide } from "components/tooltip.slint";
@@ -78,7 +79,7 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, TrackColumnSizing, CardSelection, CardActions, CopyActions, Selection, Drag, DragOrigin,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, TrackColumnSizing, CardSelection, CardActions, CopyActions, Selection, Drag, DragOrigin, FileDrag, FileDropTarget, WindowRect,
     TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow,
     TrackColumns, TrackColumnLayout, TrackColumn,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
@@ -601,6 +602,17 @@ export component AppWindow inherits Window {
                         width: 100%;
                         height: 100%;
                         background: Theme.base;
+                    }
+
+                    // Where a file let go of over the page lands in an open playlist. The panel
+                    // rather than the detail's own list, which unmounts inside the band's morph
+                    // and so can't carry the report's tracker.
+                    WindowRectReport {
+                        x: 0;
+                        y: 0;
+                        width: 100%;
+                        height: 100%;
+                        moved(rect) => { FileDrag.content-rect = rect; }
                     }
 
                     // One branch per nav index, `if` rather than `visible: false` so the

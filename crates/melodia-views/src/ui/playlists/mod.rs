@@ -54,7 +54,7 @@ use grid::PlaylistsGrid;
 // detail, `boot::ui_setup` seeds the persisted one, and its
 // `initial_grid_fetch!` kicks the first load after the window is shown
 // — which is why `reload_grid` can't fold into `install` with the rest.
-pub use detail::{open_playlist_with, seed_detail_from_settings};
+pub use detail::{detail_on_screen, open_playlist_with, seed_detail_from_settings};
 pub use grid::reload_grid;
 
 // Reached from this slice's own `callbacks/`. `pub(super)` is `pub(in crate::ui)`

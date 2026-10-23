@@ -847,10 +847,12 @@ this file is what builds, looks right, and is wrong.
     every move, which passes the moves on and never a drop. Behind the targets, a window-sized one
     sees exactly the moves none of them took.
 
-- **Stock Slint 1.18 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
-  in-process only, with no `PathBuf`. Vendored winit PR #4009. Fix
-  merged upstream but unreleased: winit **#4571**, a new `DataTransfer` DnD API superseding
-  #1881/#4009.
+- **Stock Slint 1.18 + winit 0.30 have zero OS file-drop on Wayland, and no pointer during one
+  anywhere.** `DragArea`/`DropArea` is in-process only, with no `PathBuf`, so no OS drag reaches a
+  `DropArea`, and no hover moves under one: a file target can't tell it is being hovered. The
+  vendored fork reports the pointer and Rust routes the drop against rects the targets publish
+  (`desktop-shell.md`). Fix merged upstream but unreleased: winit **#4571**, a new `DataTransfer`
+  DnD API superseding #1881/#4009 and the positioned events the fork copies from its betas.
 
 - **`changed <local-prop>` doesn't fire when first layout settles directly on final value.**
   Native-titlebar reaches final grid width in one pass — derived counts never *transition*. Fix:

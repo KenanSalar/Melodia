@@ -1,8 +1,6 @@
 //! The queue panel's wiring. Owns the Slint `Queue` global's
 //! callbacks, its rows, a [`QueueRows`] over the queue's ids, and
-//! the `shown` atomic that the winit `DroppedFile` filter consults
-//! to decide whether to forward dropped paths into
-//! `library::queue::queue_import_files`.
+//! the `shown` atomic its row subscriber and lifecycle are gated on.
 //!
 //! **Picks are by track, as on every other list**: the queue can hold a track twice, and picking
 //! either row picks both, which is what the batch entries then act on.
@@ -26,14 +24,6 @@ use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_ui::{AppWindow, Queue};
 
-/// Public handle returned by [`install`]. Surfaces the `shown`
-/// atomic to boot so it can be forwarded into
-/// `window_chrome::set_queue_panel_shown` for the winit `DroppedFile`
-/// filter.
-pub struct QueuePanelHandles {
-    pub shown: Arc<AtomicBool>,
-}
-
 /// Wire `Queue` callbacks, install the row model, and spawn the
 /// queue-rows watch subscriber.
 ///
@@ -42,7 +32,7 @@ pub fn install(
     ui: &AppWindow,
     state: &AppState,
     row_covers: &Arc<CoverThumbs>,
-) -> Result<QueuePanelHandles, slint::EventLoopError> {
+) -> Result<(), slint::EventLoopError> {
     let rows = QueueRows::new(queue_rows::fetcher(state));
     ui.global::<Queue>().set_rows(ModelRc::from(rows.clone()));
 
@@ -81,14 +71,14 @@ pub fn install(
 
     callbacks::wire_callbacks(ui, state, &rows, &anchor);
     lifecycle::wire(ui, state, &rows, &queue_covers, &anchor, &shown);
-    rows::spawn_queue_rows_subscriber(ui, state, rows, anchor, shown.clone())?;
+    rows::spawn_queue_rows_subscriber(ui, state, rows, anchor, shown)?;
 
     // No install-time seed: the panel is hidden at startup, so the
     // subscriber is gated and the model stays empty (no covers decoded
     // for an off-screen panel). `on_shown_changed(true)` shows the queue
     // on the first show.
 
-    Ok(QueuePanelHandles { shown })
+    Ok(())
 }
 
 /// Make `picked` the panel's picks, less any track the queue no longer holds: stamped on the rows,

@@ -1,6 +1,6 @@
 //! Playlist Detail's own half: the header and hero fetch, the artwork pair decode, open, refresh,
-//! the startup seed, and the drag that moves one id in the keyset. What the four details share is
-//! [`crate::ui::track_detail`].
+//! the startup seed, the drag that moves one id in the keyset, and whether a file dropped on the
+//! page lands in it. What the four details share is [`crate::ui::track_detail`].
 
 use std::sync::Arc;
 
@@ -22,7 +22,7 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::{AppResult, describe};
-use melodia_ui::{AppWindow, DragOrigin, NavEnterFrom, PlaylistDetail};
+use melodia_ui::{AppWindow, DragOrigin, MiniPlayer, Nav, NavEnterFrom, PlaylistDetail};
 
 /// The playlist's own curated order. Synthetic — no column header asks for it,
 /// which is why the sort cycle has to hand it back (`next_sort_with_natural`).
@@ -57,11 +57,21 @@ impl TrackDetail for PlaylistsUi {
             drag.invoke_revoke(DragOrigin::Playlist);
         }
     }
+}
 
-    fn clear_detail(&self) {
-        self.detail.clear();
-        crate::ui::window_chrome::set_current_playlist_id(-1);
+/// The playlist a file let go of over the page lands in: the detail open on screen, and only one
+/// whose membership is its own, a smart playlist's following its rules.
+pub fn detail_on_screen(ui: &AppWindow) -> Option<i64> {
+    let nav = ui.global::<Nav>();
+    if nav.get_now_playing_open()
+        || ui.global::<MiniPlayer>().get_active()
+        || !tab_is_mounted(ui, MyLibraryTab::Playlists)
+    {
+        return None;
     }
+    let detail = ui.global::<PlaylistDetail>();
+    let id = detail.get_playlist_id();
+    (id >= 0 && !detail.get_playlist().is_smart).then_some(i64::from(id))
 }
 
 /// Whether the rows on screen are in the playlist's own order, ascending.
@@ -144,15 +154,6 @@ where
     // Set before the UI hop so drag-reorder and play-row callbacks firing on the next tick
     // already see it.
     playlists_ui.detail.set_id(playlist_id);
-
-    // Inform the OS file-drop coalescer that this playlist is the current drop target — used only
-    // when the queue panel is hidden, the queue taking priority when both are up. A smart
-    // playlist's membership is derived, so it registers none and drops fall through to import.
-    crate::ui::window_chrome::set_current_playlist_id(if detail.is_smart {
-        -1
-    } else {
-        playlist_id
-    });
 
     let state = state.clone();
     let playlists_ui = playlists_ui.clone();

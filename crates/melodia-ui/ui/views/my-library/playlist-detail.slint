@@ -2,6 +2,7 @@ import { Theme } from "../../theme.slint";
 import { MyLibrary } from "../../globals/my-library.slint";
 import { Player } from "../../globals/player.slint";
 import { PlaylistDetail } from "../../globals/playlists.slint";
+import { FileDrag, FileDropTarget } from "../../globals/drag.slint";
 import { DraggableTrackList } from "../../components/track-list/draggable-track-list.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
@@ -73,10 +74,9 @@ export component PlaylistDetailBody inherits Rectangle {
                 : @tr("Drag music files here, or add tracks via any track's overflow menu.");
         }
 
-        // OS file-hover banner — routed here when the queue panel is hidden and this
-        // detail is open. Stacks above the empty state.
-        if PlaylistDetail.is-drop-hovered && PlaylistDetail.playlist-id >= 0
-            && !PlaylistDetail.playlist.is_smart: Rectangle {
+        // A file held over the page, which the winit filter targets only while this detail is
+        // the view on screen and takes files. Stacks above the empty state.
+        if FileDrag.target == FileDropTarget.playlist: Rectangle {
             background: Theme.accent.with-alpha(0.16);
             border-radius: Theme.radius-md;
             border-width: 2px;

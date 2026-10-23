@@ -132,10 +132,6 @@ export global PlaylistDetail {
     in-out property <bool>  blur-use-a;
     in-out property <bool>  has-blur;
 
-    // Mirrored from Rust on an OS file-hover so the detail can paint its drop banner. Set **only**
-    // when the queue panel is hidden and this detail is open, the queue taking priority.
-    in property <bool> is-drop-hovered: false;
-
     callback close-detail();
     callback shuffle-all();
     callback play-row(int /*track_id*/, int /*index*/);

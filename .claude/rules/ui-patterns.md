@@ -723,6 +723,12 @@ three components that answer it, and each argues its geometry at its own file.
     refuses, and Rust's refusal stays the one that holds. The queue panel and the playlist reorder
     in their own rows.
 
+- **A file dragged in from the file manager is not that drag, and no `DropArea` sees it.** Its
+  banners read `FileDrag.target`, which the winit filter writes from a hit test in Rust, and a
+  target says where it is drawn through `components/window-rect-report.slint`'s
+  `WindowRectReport`. A new file target mounts a report outside any `if` and gains an arm in
+  `window_chrome::file_drop`; `desktop-shell.md` has the flow.
+
 - **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and
   its module doc argues the window, the one fetch in flight and the seed a load fetches where the
@@ -743,9 +749,9 @@ three components that answer it, and each argues its geometry at its own file.
   - **`Queue.shown` is the docked panel open with room for it, or the overlay open, less what
     covers either**: Now Playing, and the miniplayer, which unmounts it. It is computed and written
     on the `AppWindow` root alone, a global being unable to watch its own properties and a mirror
-    inside the panel missing the miniplayer swap. Rust's rows, the private cover tier and the
-    file-drop route all follow it through `shown-changed`, so a hidden panel holds nothing past
-    `lifecycle::TEARDOWN_DELAY`, whatever hid it. The root writes `shown` before it fires
+    inside the panel missing the miniplayer swap. Rust's rows and the private cover tier follow
+    it through `shown-changed`, so a hidden panel holds nothing past `lifecycle::TEARDOWN_DELAY`,
+    whatever hid it, and the file-drop route reads it at every move. The root writes `shown` before it fires
     `shown-changed`, which is what lets the panel's seat read the playing index Rust has just
     written, and `Queue.floating` in the same handler, so the two never describe different panels
     for a frame.

@@ -18,8 +18,10 @@
 //! 4. **`Focused(bool)`** — mirror OS focus into `Theme.window-focused`, and use the
 //!    transition to reconcile the tray-bridge's visibility shadow: raise on focus, ask
 //!    the OS about a minimize on focus loss (see [`schedule_minimize_probe`]).
-//! 5. **`DroppedFile` / `HoveredFile` / `HoveredFileCancelled`** — Slint 1.18's winit backend
-//!    delivers no cross-app drop, so this is the only path a file drop arrives through.
+//! 5. **`DragEntered` / `DragMoved` / `DragDropped` / `DragLeft`**, the vendored winit fork's
+//!    file drag. Slint 1.18's winit backend delivers no cross-app drop, so this is the only path a
+//!    file drop arrives through, and the pointer each one carries is what routes it. See
+//!    [`file_drop`].
 //! 6. **`MouseWheel`**, for a nested `ListView` that swallows the wheel at its scroll edge. See
 //!    [`route_wheel`].
 //! 7. **`RedrawRequested`** and **`Moved`** — the Slint tick Win32's modal resize-and-move
@@ -36,28 +38,32 @@
 //!     down until a mouse presses again. See [`claim_queue_keys`] and [`disarm_drag`].
 
 use std::cell::Cell;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use slint::ComponentHandle;
+use slint::winit_030::winit::dpi::PhysicalPosition;
 use slint::winit_030::winit::error::ExternalError;
 use slint::winit_030::winit::event::{
     ElementState, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
 };
 use slint::winit_030::winit::window::{ResizeDirection, Window as WinitWindow};
 use slint::winit_030::{EventResult, WinitWindowAccessor};
+use slint::{ComponentHandle, LogicalPosition};
 
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{
-    AppWindow, CompositeScroll, Drag, DragRegion, PlaylistDetail, Queue, Theme, WindowChrome,
+    AppWindow, CompositeScroll, Drag, DragRegion, FileDrag, FileDropTarget, Queue, Theme,
+    WindowChrome,
 };
 
 use super::drag_region::{DoublePress, PressAction};
+use super::file_drop::{self, DropTargets};
+use super::geometry;
 #[cfg(target_os = "windows")]
 use super::parked_loop;
 use super::resize_release::ResizeWatch;
-use super::{drop_coalescer, geometry};
 
 /// How long to wait after a focus loss before asking whether it was a minimize.
 ///
@@ -122,10 +128,11 @@ fn start_os_drag(
     });
 }
 
-/// Takes down both drop banners, whichever of the two a drop would have landed in.
-fn clear_drop_hover(ui: &AppWindow) {
-    ui.global::<Queue>().set_is_drop_hovered(false);
-    ui.global::<PlaylistDetail>().set_is_drop_hovered(false);
+/// The conversion the Slint backend makes for its own copy of a pointer event, so the two can't
+/// disagree.
+fn to_logical(w: &slint::Window, position: PhysicalPosition<f64>) -> LogicalPosition {
+    let l = position.to_logical::<f32>(f64::from(w.scale_factor()));
+    LogicalPosition::new(l.x, l.y)
 }
 
 /// What the pointer is over that turns a left press into an OS window operation, each kept in
@@ -142,7 +149,7 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
     let weak = app.as_weak();
     let state = state.clone();
     // Where the pointer is, for the titlebar's double press below.
-    let mut cursor_pos = slint::LogicalPosition::default();
+    let mut cursor_pos = LogicalPosition::default();
     let mut double_press = DoublePress::default();
     let resize_watch = ResizeWatch::new(app.as_weak());
     app.window().on_winit_window_event(move |w, event| {
@@ -212,18 +219,21 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
                 });
                 EventResult::Propagate
             }
-            WindowEvent::DroppedFile(path) => on_dropped_file(&state, &weak, path.clone()),
-            WindowEvent::HoveredFile(_) => on_hovered_file(&weak),
-            WindowEvent::HoveredFileCancelled => {
-                let _ = weak.upgrade_in_event_loop(|ui| clear_drop_hover(&ui));
+            WindowEvent::DragEntered { position, .. } | WindowEvent::DragMoved { position } => {
+                on_file_drag(&weak, to_logical(w, *position))
+            }
+            WindowEvent::DragDropped { paths, position } => {
+                on_file_drop(&state, &weak, paths, to_logical(w, *position))
+            }
+            WindowEvent::DragLeft { .. } => {
+                if let Some(ui) = weak.upgrade() {
+                    ui.global::<FileDrag>().set_target(FileDropTarget::None);
+                }
                 EventResult::Propagate
             }
             WindowEvent::CloseRequested => on_close_requested(&weak),
-            // The same conversion the Slint backend does for its own copy, so the two
-            // can't disagree.
             WindowEvent::CursorMoved { position, .. } => {
-                let l = position.to_logical::<f32>(f64::from(w.scale_factor()));
-                cursor_pos = slint::LogicalPosition::new(l.x, l.y);
+                cursor_pos = to_logical(w, *position);
                 EventResult::Propagate
             }
             WindowEvent::MouseWheel { delta, .. } => on_mouse_wheel(w, &weak, *delta),
@@ -277,7 +287,7 @@ fn drag_press(
     weak: &slint::Weak<AppWindow>,
     double_press: &mut DoublePress,
     region: DragRegion,
-    cursor_pos: slint::LogicalPosition,
+    cursor_pos: LogicalPosition,
 ) -> EventResult {
     match double_press.press(region, Instant::now(), cursor_pos) {
         PressAction::Move => start_os_drag(w, "drag_window", WinitWindow::drag_window),
@@ -378,30 +388,28 @@ fn on_focus(weak: &slint::Weak<AppWindow>, focused: bool) -> EventResult {
     EventResult::Propagate
 }
 
-/// The coalescer batches multi-file drops and re-checks both gates at flush
-/// time. Wayland delivery depends on the vendored winit patch.
-fn on_dropped_file(
-    state: &AppState,
-    weak: &slint::Weak<AppWindow>,
-    path: std::path::PathBuf,
-) -> EventResult {
-    drop_coalescer::schedule_drop_flush(state, path);
-    // Both banners, whichever gate accepted — otherwise one sticks until the
-    // next pointer event.
-    let _ = weak.upgrade_in_event_loop(|ui| clear_drop_hover(&ui));
+/// A file held over the window raises the banner of whichever target letting go would land in.
+fn on_file_drag(weak: &slint::Weak<AppWindow>, point: LogicalPosition) -> EventResult {
+    if let Some(ui) = weak.upgrade() {
+        let route = file_drop::route(point, &DropTargets::read(&ui));
+        ui.global::<FileDrag>().set_target(route.target());
+    }
     EventResult::Propagate
 }
 
-/// OS-level file hover, driving the queue panel's banner or Playlist Detail's.
-/// Queue takes precedence, and `drop_coalescer`'s flush-side routing applies
-/// the same one, so the indicator always names where the drop will land.
-fn on_hovered_file(weak: &slint::Weak<AppWindow>) -> EventResult {
-    let queue_shown = drop_coalescer::is_queue_panel_shown();
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        ui.global::<Queue>().set_is_drop_hovered(true);
-        // Only when the queue panel isn't the active drop target.
-        ui.global::<PlaylistDetail>().set_is_drop_hovered(!queue_shown);
-    });
+/// Files let go of land where the banner over them said, routed again at the release point.
+fn on_file_drop(
+    state: &AppState,
+    weak: &slint::Weak<AppWindow>,
+    paths: &[PathBuf],
+    point: LogicalPosition,
+) -> EventResult {
+    let Some(ui) = weak.upgrade() else {
+        return EventResult::Propagate;
+    };
+    let route = file_drop::route(point, &DropTargets::read(&ui));
+    ui.global::<FileDrag>().set_target(FileDropTarget::None);
+    file_drop::import(state, route, paths);
     EventResult::Propagate
 }
 

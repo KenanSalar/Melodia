@@ -25,7 +25,7 @@ use crate::ui::recently_played::tab_from_index as recently_played_tab;
 use crate::ui::settings::settings_page::category_from_index as settings_category;
 use melodia_ui::{
     AlbumDetail, AppWindow, ArtistDetail, Favorites, GenreDetail, MyLibrary, Nav, PlaylistDetail,
-    Radio, RecentlyPlayed, SettingsPage,
+    Queue, Radio, RecentlyPlayed, SettingsPage,
 };
 
 /// `Kind(id "Name")` for an open detail, or `None` when the tab shows its grid.
@@ -124,7 +124,7 @@ pub fn format_view(ui: &AppWindow) -> String {
     if nav.get_now_playing_open() {
         tag.push_str("+NP");
     }
-    if crate::ui::window_chrome::is_queue_panel_shown() {
+    if ui.global::<Queue>().get_shown() {
         tag.push_str("+QP");
     }
     tag

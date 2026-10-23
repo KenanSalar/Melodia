@@ -208,20 +208,33 @@ the OS owns has to be attached late or not at all on at least one platform.
   and the winit arm report nothing, so there a pin moved from the titlebar still leaves the button
   behind.
 
-- **OS file drag-and-drop rides the vendored winit fork** — stock 0.30.13 has no `wl_data_device`.
-  `winit/` is 0.30.13 + 3 commits (PR #4009, `WindowId` fix, URI percent-decoding, cfg-gated to
-  Linux), wired by `[patch.crates-io]`. Flow: `winit_filter.rs::DroppedFile` →
-  `drop_coalescer.rs::schedule_drop_flush` (50 ms → `queue_import_files`);
-  `HoveredFile{,Cancelled}` toggle `Queue.is-drop-hovered`. Don't bump winit without a rebase +
-  re-sync — the root `CLAUDE.md`'s Known Gaps has what retires it.
+- **OS file drag-and-drop rides the vendored winit fork**: stock 0.30.13 has no `wl_data_device`,
+  and on no platform says where a file drag is. `winit/` is 0.30.13 + 4 commits (PR #4009, a
+  `WindowId` fix, URI percent-decoding, the positioned drag events), wired by `[patch.crates-io]`.
+  On Wayland, X11 and Windows it sends `DragEntered`/`DragMoved`/`DragDropped`/`DragLeft`, one per
+  set of files and each carrying the pointer, in the shape winit's `0.31.0` betas shipped (PR
+  #4079); macOS keeps the per-file events, which nothing reads. `winit/README.md` says what each
+  commit changed. Don't bump winit without a rebase and re-sync; the root `CLAUDE.md`'s Known Gaps
+  has what retires it.
+
+- **Where a file drop lands is decided in Rust, against rects Slint publishes**, Slint having no
+  pointer during an OS drag. `WindowRectReport` writes the queue panel's body and the content
+  panel into `FileDrag`, and `window_chrome::file_drop::route` hit-tests every move and the release
+  against whichever can take a drop: the queue while `Queue.shown`, the content panel while
+  `playlists::detail_on_screen` names a playlist and the overlay isn't up. The filter writes the
+  answer to `FileDrag.target`, the one thing both banners read, so a banner always names where the
+  files go, and a drop starts one import. **A report never sits inside an `if`**: it watches its
+  own geometry, so it is the `changed`-in-`if` panic (`slint-pitfalls.md`), which is why the
+  playlist's target is the whole content panel rather than the list that unmounts inside the
+  band's morph.
 
 ## Opening a file from the file manager
 
 The other way paths arrive from outside, and the one that can arrive before there is a window.
 `main()`'s ordering constraints are the root `CLAUDE.md`'s; this is the shape.
 
-- **Two verbs, and they are not one.** A drop appends (`queue_import_files`, routed by
-  `drop_coalescer`, *discarded* when the queue panel is hidden and no playlist is open); an open
+- **Two verbs, and they are not one.** A drop appends (`queue_import_files` when let go over the
+  queue panel, routed by `file_drop`, *discarded* over anything but it and an open playlist); an open
   **replaces the queue and plays** (`queue::open_files`). They share `sort_for_queue` and nothing
   else. **Neither existing fn was the whole answer**: `queue_import_files` never sets
   `current_index`, and `player_play_tracks` wants ids in order where

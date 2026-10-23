@@ -51,7 +51,8 @@ Copyright: 2014 The winit contributors
  2014 Pierre Krieger <pierre.krieger1708@gmail.com>
 License: Apache-2.0
 Comment: Vendored fork of winit 0.30.13 carrying three Wayland drag-and-drop
- commits, applied through Cargo's [patch.crates-io]. See winit/README.md.
+ commits and one that reports where a file drag is, applied through Cargo's
+ [patch.crates-io]. See winit/README.md.
 
 Files: crates/melodia-ui/ui/assets/icons/kofi-symbol.svg
 Copyright: Ko-fi

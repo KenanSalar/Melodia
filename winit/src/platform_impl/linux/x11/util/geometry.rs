@@ -98,6 +98,20 @@ impl XConnection {
         self.xcb_connection().translate_coordinates(window, root, 0, 0)?.reply().map_err(Into::into)
     }
 
+    /// Translates a point from `src_window`'s coordinates into `dst_window`'s.
+    pub fn translate_point(
+        &self,
+        src_window: xproto::Window,
+        dst_window: xproto::Window,
+        x: i16,
+        y: i16,
+    ) -> Result<xproto::TranslateCoordinatesReply, X11Error> {
+        self.xcb_connection()
+            .translate_coordinates(src_window, dst_window, x, y)?
+            .reply()
+            .map_err(Into::into)
+    }
+
     // This is adequate for inner_size
     pub fn get_geometry(
         &self,

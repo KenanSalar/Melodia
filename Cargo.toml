@@ -362,11 +362,12 @@ unnecessary_min_or_max      = "warn"
 useless_vec                 = "warn"
 io_other_error              = "warn"
 
-# winit 0.30.13 has no `wl_data_device` handling, so `WindowEvent::DroppedFile` fires
-# everywhere but Wayland (rust-windowing/winit#1881). `winit/` is that tag plus 3
-# commits reaching `ui::window_chrome::winit_filter`, cfg-gated to Linux and in-tree
-# so a fresh clone and every CI runner build identically. Delete both once upstream
-# lands native Wayland DnD.
+# winit 0.30.13 has no `wl_data_device` handling (rust-windowing/winit#1881), and on no
+# platform says where an OS file drag is. `winit/` is that tag plus 4 commits: Wayland
+# drag-and-drop, and the positioned drag events `ui::window_chrome::winit_filter` routes a
+# drop by on Wayland, X11 and Windows. In-tree so a fresh clone and every CI runner build
+# identically. Delete both once a Slint release builds on a winit whose drag-and-drop
+# reports a position.
 [patch.crates-io]
 winit = { path = "winit" }
 

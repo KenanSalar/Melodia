@@ -26,8 +26,8 @@ export global Queue {
     in-out property <bool> overlay-open;
     // The docked panel open with room for it, or the overlay open, less what covers either: Now
     // Playing, and the miniplayer, which unmounts it. Written only by `AppWindow`, a global being
-    // unable to watch its own properties; the rows, the covers and the file drop follow it
-    // through `shown-changed`.
+    // unable to watch its own properties; the rows and the covers follow it through
+    // `shown-changed`.
     in-out property <bool> shown;
     // `shown` as the overlay. Written only by `AppWindow`, beside `shown`.
     in-out property <bool> floating;
@@ -43,9 +43,6 @@ export global Queue {
     // winit filter, which sees a press before any element can take it, and handed back by a row's
     // menu as it closes, its popup having hidden that press from `pointer-in`.
     in-out property <bool> keys-owned;
-    // Mirrored from Rust on an OS file-hover for the drop banner, gated in markup on
-    // `is-drop-hovered && shown`. Wayland needs the vendored winit patch.
-    in property <bool> is-drop-hovered: false;
 
     // Lazy row cover against the panel's *own* tier, so hiding it releases every buffer. That tier
     // borrows what the row tier already holds, so a cover the track lists draw is one buffer.
