@@ -5,7 +5,7 @@ import { OverlayScrollbar } from "overlay-scrollbar.slint";
 // sibling for a list nested *under* another scroller. There is no horizontal bar: the columns
 // always fit the list.
 //
-// **Mount contract**, the same as `CompositeScrollbars`': last child of the view root at
+// **Mount contract**: a child of the view root, after its list, at
 // `x: 0; y: 0; width: 100%; height: 100%`, so `parent` inside resolves to the page. Everything else
 // the host mirrors off its `TrackList`, Slint having no way to hand an element over.
 //

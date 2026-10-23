@@ -349,7 +349,7 @@ fn no_page_hand_rolls_a_track_lists_scrollbars() {
     assert!(
         offenders.is_empty(),
         "a plain `TrackList` page mounts `components/track-list-scrollbars.slint`'s \
-         `TrackListScrollbars` as the last child of its root at `x: 0; y: 0; width: 100%; \
+         `TrackListScrollbars` on its root, after the list, at `x: 0; y: 0; width: 100%; \
          height: 100%` — never a hand-rolled bar, which drifts on the anchor. A list nested \
          *under* another scroller wants `CompositeScrollbars` instead:\n{}",
         offenders.join("\n")
