@@ -15,11 +15,21 @@ export component DragSource inherits DragArea {
     // drop the touch gate with.
     in property <bool> active: true;
 
+    callback background-clicked();
+
     data: Drag.token;
     enabled: root.active && !Drag.touching;
 
     changed dragging => {
         Drag.live = self.dragging;
+    }
+
+    // Behind the list. A `DragArea` takes every press its children don't, so without this a click
+    // on the empty space reaches nothing behind it. Off with the source, so a switched-off list
+    // hands the pointer to what is behind it: the miniplayer's drag region, under Up Next.
+    TouchArea {
+        enabled: root.active;
+        clicked => { root.background-clicked(); }
     }
 
     public function arm(index: int) {

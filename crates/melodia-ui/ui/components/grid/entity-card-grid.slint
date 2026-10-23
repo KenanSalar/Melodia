@@ -54,6 +54,7 @@ export component EntityCardGrid inherits Rectangle {
     in property <int> covers-generation: 0;
 
     callback row-clicked(int /*entity_id*/);
+    callback request-blur-search();
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
@@ -70,6 +71,7 @@ export component EntityCardGrid inherits Rectangle {
         width: 100%;
         height: 100%;
         allow-copy: true;
+        background-clicked => { root.request-blur-search(); }
 
         list := ListView {
             width: 100%;

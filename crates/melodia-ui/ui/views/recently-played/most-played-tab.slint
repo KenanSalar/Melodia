@@ -33,6 +33,7 @@ export component RecentlyPlayedMostPlayedTab inherits Rectangle {
         covers-generation: RecentlyPlayed.covers-generation;
         request-cover(p, gen) => { RecentlyPlayed.request-most-played-cover(p, gen) }
         row-clicked(id) => { RecentlyPlayed.play-track(id); }
+        request-blur-search => { RecentlyPlayed.blur-search-tick += 1; }
     }
 
     if RecentlyPlayed.most-played-count == 0: GridEmptyState {

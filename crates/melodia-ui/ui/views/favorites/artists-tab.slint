@@ -33,6 +33,7 @@ export component FavoritesArtistsTab inherits Rectangle {
         covers-generation: Favorites.covers-generation;
         request-cover(p, gen) => { Favorites.request-artist-cover(p, gen) }
         row-clicked(id) => { Favorites.open-artist(id); }
+        request-blur-search => { Favorites.blur-search-tick += 1; }
     }
 
     if Favorites.artist-count == 0: GridEmptyState {

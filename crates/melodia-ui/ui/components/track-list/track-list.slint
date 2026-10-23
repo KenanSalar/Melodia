@@ -109,6 +109,7 @@ export component TrackList inherits Rectangle {
         src := DragSource {
             vertical-stretch: 1;
             allow-copy: true;
+            background-clicked => { root.request-blur-search(); }
 
             // Both built-in scrollbars are off; the host mounts its own, per the metrics above.
             inner-list := ListView {

@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Albums } from "../../globals/albums.slint";
+import { MyLibrary } from "../../globals/my-library.slint";
 import { AlbumGrid } from "../../components/grid/album-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
@@ -25,6 +26,7 @@ export component MyLibraryAlbumsTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         open-album(id) => { Albums.open-album(id); }
+        request-blur-search => { MyLibrary.blur-search-tick += 1; }
         covers-generation: Albums.covers-generation;
         request-cover(p, g) => { Albums.request-cover(p, g) }
     }

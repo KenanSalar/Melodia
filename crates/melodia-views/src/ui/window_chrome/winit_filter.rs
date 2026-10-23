@@ -33,7 +33,7 @@
 //! 10. **`MouseInput { Pressed }`**, any button and whoever takes it: whether it landed on the
 //!     queue panel, which makes Escape, Ctrl+A and Delete the queue's, and a disarm of what an
 //!     in-window drag would carry, which **`Touch { Started }`** makes too, standing every drag
-//!     down for that touch. See [`claim_queue_keys`] and [`disarm_drag`].
+//!     down until a mouse presses again. See [`claim_queue_keys`] and [`disarm_drag`].
 
 use std::cell::Cell;
 use std::rc::Rc;

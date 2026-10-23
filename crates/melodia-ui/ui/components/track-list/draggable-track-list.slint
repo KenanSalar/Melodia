@@ -88,6 +88,7 @@ export component DraggableTrackList inherits Rectangle {
             origin: DragOrigin.playlist;
             allow-copy: true;
             allow-move: root.reorder-enabled;
+            background-clicked => { root.request-blur-search(); }
 
             inner-list := ListView {
                 width: 100%;

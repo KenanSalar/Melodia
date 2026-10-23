@@ -20,6 +20,7 @@ export component ArtistGrid inherits Rectangle {
     in property <int> covers-generation: 0;
 
     callback open-artist(int /*artist_id*/);
+    callback request-blur-search();
     pure callback request-cover(string /*image_path*/, int /*generation*/) -> image;
 
     out property <length> v-visible-height: list.visible-height;
@@ -33,6 +34,7 @@ export component ArtistGrid inherits Rectangle {
         width: 100%;
         height: 100%;
         allow-copy: true;
+        background-clicked => { root.request-blur-search(); }
 
         list := ListView {
             width: 100%;
