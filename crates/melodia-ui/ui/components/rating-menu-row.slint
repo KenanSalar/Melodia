@@ -4,7 +4,7 @@ import { StarRating } from "star-rating.slint";
 
 // A menu's rating row: a star glyph, the label and the strip, a star applying as it is clicked. The
 // bar's overflow menu mounts it over the playing track and the row menu over its row or selection,
-// each sized to its own rows. Whether the menu closes after a star is the host's call.
+// each sized to its own rows. Neither closes on a star, so a pick can be corrected in place.
 //
 // **Over a selection it shows the clicked row's stars and the host applies the pick to the whole
 // set**, so the lit star clears every track in it. That is `FavoriteMenuItem`'s rule, the direction
@@ -27,6 +27,10 @@ export component RatingMenuRow inherits Rectangle {
     property <float> fade: root.enabled ? 1.0 : 0.5;
 
     height: root.row-height;
+
+    // Takes every press the strip doesn't, which would otherwise fall through to the host's
+    // `PopupDismissCatcher` and close the menu on a near miss. First, so the strip stays on top.
+    TouchArea {}
 
     HorizontalLayout {
         padding-left: Theme.pad-sm;

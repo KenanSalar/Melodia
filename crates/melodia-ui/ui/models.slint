@@ -54,8 +54,10 @@ export struct TrackListRow {
 
 // One page's track list columns, and what `views.json` keeps of them. `w_number`, `w_year` and
 // `w_length` are pixels; the other four are weights, read against whatever room the list has.
-// `ui::track_columns` is the only reader of either meaning. Title and Length are always shown, and
-// `show_artwork` is the thumbnail inside the title cell rather than a column.
+// `ui::track_columns` is the only reader of either meaning. Title and Length are always shown.
+// `show_artwork` and the three marks switch what a row draws inside its cells rather than a
+// column: the thumbnail, the heart beside a favourite's title, the heart its duration gives way to
+// on hover, and the hover star strip.
 export struct TrackColumns {
     w_number: length,
     w_title: length,
@@ -70,6 +72,9 @@ export struct TrackColumns {
     show_album: bool,
     show_genre: bool,
     show_year: bool,
+    show_favorite_mark: bool,
+    show_favorite_button: bool,
+    show_rating_strip: bool,
 }
 
 // Where each column sits across one list width, for the header and every row to share. A hidden

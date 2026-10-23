@@ -92,9 +92,9 @@ export component TrackContextMenu inherits Rectangle {
         pop.show();
     }
 
-    // **Every entry closes the menu itself, after it has acted.** The popup's own policy can't:
-    // closing on any click inside would take the click that opens the Copy flyout with it. After,
-    // because `pop.effective-ids` goes with the popup.
+    // **Every entry but the rating row closes the menu itself, after it has acted.** The popup's own
+    // policy can't: closing on any click inside would take the click that opens the Copy flyout
+    // with it. After, because `pop.effective-ids` goes with the popup. A star leaves the menu up.
     function dismiss() {
         root.copy-open = false;
         pop.close();
@@ -246,10 +246,7 @@ export component TrackContextMenu inherits Rectangle {
             enabled: root.multi-active || root.row-id != 0;
             multi-active: root.multi-active;
             multi-count: root.multi-count;
-            rated(n) => {
-                root.rate(pop.effective-ids, n);
-                root.dismiss();
-            }
+            rated(n) => { root.rate(pop.effective-ids, n); }
         }
 
         // Opens the tag editor over the right-clicked row or the whole selection — batch

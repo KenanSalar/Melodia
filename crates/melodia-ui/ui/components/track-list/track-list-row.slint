@@ -51,6 +51,7 @@ export component TrackListRowItem inherits Rectangle {
     property <bool> selected: root.row-data.selected;
     // What every hover-driven binding reads, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
+    property <bool> favorite-button-shown: root.hovered && root.columns.show_favorite_button;
     // Once the view holds a selection the row body picks too. The first pick stays the box's,
     // which is what keeps an idle list from selecting by accident.
     property <bool> selecting: root.view-selected-ids.length > 0;
@@ -284,10 +285,12 @@ export component TrackListRowItem inherits Rectangle {
                     TrackTitle {
                         title: root.row-data.title;
                         ink: root.ink;
-                        is-favorite: root.row-data.is_favorite;
+                        favorite-shown: root.columns.show_favorite_mark
+                            && root.row-data.is_favorite;
                         rating: root.row-data.rating;
                         // Disk-only Browse rows can't be rated.
-                        rating-shown: root.hovered && root.enabled;
+                        rating-shown: root.columns.show_rating_strip
+                            && root.hovered && root.enabled;
                         fade: root.fade;
                         rated(n) => { root.set-row-rating([root.row-data.id], n); }
                     }
@@ -345,9 +348,8 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // The duration is fully replaced by the favourite toggle on hover. The
-            // persistent "this is a favorite" indicator lives beside the title; this
-            // swap is only the action button.
+            // The duration gives way to the favourite toggle on hover, where the view shows one.
+            // The persistent mark lives beside the title; this swap is only the action button.
             Rectangle {
                 x: root.layout.length_x;
                 y: 0;
@@ -358,7 +360,7 @@ export component TrackListRowItem inherits Rectangle {
                     spacing: Theme.pad-xs;
                     alignment: start;
                     cross-axis-alignment: center;
-                    if !root.hovered: Text {
+                    if !root.favorite-button-shown: Text {
                         // Precomputed in Rust at row build, so this binding doesn't
                         // re-run a Slint pure function on every invalidation.
                         text: root.row-data.display_duration;
@@ -366,7 +368,7 @@ export component TrackListRowItem inherits Rectangle {
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
                     }
-                    if root.hovered: Rectangle {
+                    if root.favorite-button-shown: Rectangle {
                         width: 26px;
                         height: 26px;
                         border-radius: self.height / 2;

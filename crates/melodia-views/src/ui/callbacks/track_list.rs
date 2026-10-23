@@ -8,7 +8,7 @@ use slint::{ModelRc, StrongHandle, Weak};
 use super::macros::spawn_logged;
 use super::play_row_start;
 use crate::ui::list_selection::{self, RowSelectionView};
-use crate::ui::track_list_view::{TrackListActions, TrackListColumnState, persist_visible};
+use crate::ui::track_list_view::{TrackListActions, TrackListColumnState, persist_toggled};
 use melodia_app::library;
 use melodia_app::state::AppState;
 
@@ -59,9 +59,9 @@ where
     let Some(g) = weak.upgrade() else { return };
     let s = state.clone();
     let weak = weak.clone();
-    g.bind_toggle_column(move |_id| {
+    g.bind_toggle_column(move |id| {
         let Some(g) = weak.upgrade() else { return };
-        persist_visible(&s, &g);
+        persist_toggled(&s, &g, &id);
     });
 }
 

@@ -157,6 +157,18 @@ pub fn update_view_columns(
     })
 }
 
+/// Persist the visible row marks for `view_id` into `views.json`'s `view_marks`, the
+/// [`update_view_columns`] twin.
+pub fn update_view_marks(
+    paths: &Paths,
+    view_id: String,
+    marks: Vec<String>,
+) -> Result<(), AppError> {
+    services::view_state::mutate_view_state(paths, move |vs| {
+        vs.view_marks.insert(view_id, marks);
+    })
+}
+
 /// Persist the active sort for `view_id` into `views.json`'s `view_sort`. Keyed by the same
 /// view-id strings as `view_columns` / `last_detail_ids`, so one map covers every sortable view
 /// without a top-level field per view. No runtime kick: the sort-pill callback already updated the

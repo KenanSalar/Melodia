@@ -140,6 +140,24 @@ export component ColumnTogglePopup inherits Rectangle {
                     checked: true;
                     locked: true;
                 }
+                ColumnToggleRow {
+                    // Translators: the heart shown beside a favourite track's title
+                    label: @tr("Favorite mark");
+                    checked: root.columns.show_favorite_mark;
+                    toggled => {
+                        root.columns.show_favorite_mark = !root.columns.show_favorite_mark;
+                        root.toggled("favorite_mark");
+                    }
+                }
+                ColumnToggleRow {
+                    // Translators: the stars beside a track's title while its row is hovered
+                    label: @tr("Rating on hover");
+                    checked: root.columns.show_rating_strip;
+                    toggled => {
+                        root.columns.show_rating_strip = !root.columns.show_rating_strip;
+                        root.toggled("rating_strip");
+                    }
+                }
                 if !root.hide-artist: ColumnToggleRow {
                     label: @tr("Artist");
                     checked: root.columns.show_artist;
@@ -176,6 +194,15 @@ export component ColumnTogglePopup inherits Rectangle {
                     label: @tr("Length");
                     checked: true;
                     locked: true;
+                }
+                ColumnToggleRow {
+                    // Translators: the heart shown in place of a track's length on hover
+                    label: @tr("Favorite on hover");
+                    checked: root.columns.show_favorite_button;
+                    toggled => {
+                        root.columns.show_favorite_button = !root.columns.show_favorite_button;
+                        root.toggled("favorite_button");
+                    }
                 }
             }
         }

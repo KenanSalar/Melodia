@@ -636,10 +636,12 @@ three components that answer it, and each argues its geometry at its own file.
   untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
   rather than a property.
   **Its rating entry is `components/rating-menu-row.slint`'s `RatingMenuRow`, which the bar's
-  overflow menu mounts too**, each host sizing it to its own rows and deciding whether a star
-  closes the menu. Over a selection it shows the clicked row's stars and the host applies the pick
-  to the whole set, `FavoriteMenuItem`'s rule. It is the queue rows' only way to rate, their title
-  carrying no strip.
+  overflow menu mounts too**, each host sizing it to its own rows. **A star leaves either menu
+  up**, so a pick can be corrected in place: no host dismisses on one, and the row takes every
+  press its strip misses, which would otherwise reach the host's `PopupDismissCatcher`. Over a
+  selection it shows the clicked row's stars and the host applies the pick to the whole set,
+  `FavoriteMenuItem`'s rule. The two are the queue rows' only way to rate and favourite, their
+  title carrying no marks.
   **The bar, the one host with no list row, reads the "Go to" ids through `ui::track_links`**,
   `TrackSummary` carrying no foreign keys: onto `Player.track-{album,artist,genre}-id` per track
   change and again per library tick, a retag keeping the id. The queue panel's rows carry theirs
@@ -680,10 +682,10 @@ three components that answer it, and each argues its geometry at its own file.
     the popup grows by it while it is open, leftward it holds the room from the start, an open
     popup moving its origin a frame late (`slint-pitfalls.md`). A second `PopupWindow` is not an
     option (same file).
-  - **`ContextMenuPopup` takes `close-on-click-outside`, and every entry calls the menu's
-    `dismiss()` after acting.** `close-on-click` closes on any release inside the popup, the click
-    that opens the flyout included. After, because `pop.effective-ids` goes with the popup. The
-    history list's menu and `TextEditMenu` are flat and keep `close-on-click`.
+  - **`ContextMenuPopup` takes `close-on-click-outside`, and every entry but the rating row calls
+    the menu's `dismiss()` after acting.** `close-on-click` closes on any release inside the
+    popup, the click that opens the flyout included. After, because `pop.effective-ids` goes with
+    the popup. The history list's menu and `TextEditMenu` are flat and keep `close-on-click`.
   - **The width follows the rows**, `ContextMenuMetrics.menu-w` over the rows' `preferred-width`,
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
@@ -818,10 +820,12 @@ three components that answer it, and each argues its geometry at its own file.
     queue's keys while it is up.
 
 - **A track's title and its marks are `components/track-list/track-title.slint`'s `TrackTitle`**:
-  the heart a favourite keeps up, and the star strip a track list row reveals on hover. Track rows
-  and queue rows both mount it, so the two can't come to mark a track differently; a third row
-  showing a track's title mounts it too. The queue rows leave the strip off, their rating being the
-  row menu's, so the title keeps that room.
+  the heart a favourite keeps up, and the star strip a track list row reveals on hover, each
+  switched by the host. A track list switches both per view from its columns pill, beside the
+  heart its Length cell swaps in on hover, and keeps all three in `views.json`'s `view_marks`
+  rather than `view_columns`, which `ViewStateData` argues. The queue rows mount it for the title
+  alone, their favourite and rating being the row menu's, so the title keeps that room. A third
+  row showing a track's title mounts it too, for the elide and the LTR base its `Text` carries.
 
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle). Each

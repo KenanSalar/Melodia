@@ -109,8 +109,9 @@ fn shipped<T: TrackListColumnState>() -> ShippedRow {
     (T::VIEW_ID, T::HIDDEN_BY_DEFAULT, T::LOCKED)
 }
 
-/// The first-launch columns every view ships with. The ids are spelled as bare identifiers in
-/// `track_list_views!`, so a misspelled one compiles and quietly shows the column it meant to hide.
+/// The first-launch columns and marks every view ships with. The ids are spelled as bare
+/// identifiers in `track_list_views!`, so a misspelled one compiles and quietly shows the column it
+/// meant to hide.
 #[test]
 fn every_view_hides_and_locks_the_columns_it_shipped_with() {
     let rows = [
@@ -132,7 +133,7 @@ fn every_view_hides_and_locks_the_columns_it_shipped_with() {
         ("artist_detail", &["number"], Some("artist")),
         ("genre_detail", &["number"], Some("genre")),
         ("playlist_detail", &["genre"], None),
-        ("favorites", &["number", "genre", "year"], None),
+        ("favorites", &["number", "genre", "year", "favorite_mark"], None),
         ("recently_played", &["number", "genre", "year"], None),
         ("search", &["genre", "year"], None),
     ];

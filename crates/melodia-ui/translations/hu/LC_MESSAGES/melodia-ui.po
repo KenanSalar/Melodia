@@ -1494,10 +1494,25 @@ msgstr "Oszlopok"
 msgid "Artwork"
 msgstr "Borító"
 
+#. Translators: the heart shown beside a favourite track's title
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite mark"
+msgstr "Kedvenc jelölése"
+
+#. Translators: the stars beside a track's title while its row is hovered
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Rating on hover"
+msgstr "Értékelés rámutatáskor"
+
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint
 msgid "Length"
 msgstr "Hossz"
+
+#. Translators: the heart shown in place of a track's length on hover
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite on hover"
+msgstr "Kedvenc rámutatáskor"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/track-list/track-context-menu.slint

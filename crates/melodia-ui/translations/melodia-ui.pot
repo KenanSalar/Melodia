@@ -1492,9 +1492,24 @@ msgstr ""
 msgid "Artwork"
 msgstr ""
 
+#. Translators: the heart shown beside a favourite track's title
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite mark"
+msgstr ""
+
+#. Translators: the stars beside a track's title while its row is hovered
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Rating on hover"
+msgstr ""
+
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint
 msgid "Length"
+msgstr ""
+
+#. Translators: the heart shown in place of a track's length on hover
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite on hover"
 msgstr ""
 
 #. Translators: `{}` is how many items are selected

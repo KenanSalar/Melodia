@@ -9,9 +9,9 @@ import { ContextClick } from "../../components/context-menu.slint";
 import { SelectionPill } from "../../components/track-list/selection-pill.slint";
 import { TrackTitle } from "../../components/track-list/track-title.slint";
 
-// One fixed-height queue row: number-or-checkbox, artwork, title with its favourite mark, and the
-// duration, which gives way to the remove button on hover. Rating is the row menu's, so the title
-// keeps the room a star strip would take.
+// One fixed-height queue row: number-or-checkbox, artwork, title, and the duration, which gives way
+// to the remove button on hover. Favourite and rating are the row menu's, so the title keeps the
+// room a heart and a star strip would take.
 //
 // **The checkbox starts a selection and the row body extends one** — a body click is a no-op
 // until the panel holds a pick, the whole-row TouchArea otherwise being double-click skip-to. A
@@ -161,8 +161,8 @@ export component QueueRowItem inherits Rectangle {
 
                 // The track lists' title cell. `horizontal-stretch: 1` here is half of what lets
                 // the title elide (`TrackTitle` argues the other). The right padding is breathing
-                // room between the last mark and the duration, which otherwise butt against
-                // each other across the layout's spacing.
+                // room between the title and the duration, which otherwise butt against each
+                // other across the layout's spacing.
                 VerticalLayout {
                     horizontal-stretch: 1;
                     alignment: center;
@@ -170,7 +170,6 @@ export component QueueRowItem inherits Rectangle {
                     TrackTitle {
                         title: root.row-data.title;
                         ink: root.playing ? Theme.accent : Theme.text;
-                        is-favorite: root.row-data.is_favorite;
                     }
                 }
 
