@@ -128,7 +128,9 @@ fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
 fn wire_drop_in(ui: &AppWindow, state: &AppState) {
     let state = state.clone();
     ui.global::<Queue>().on_drop_in(move |kind, ids, slot| {
-        let slot = usize::try_from(slot).unwrap_or(0);
+        let Ok(slot) = usize::try_from(slot) else {
+            return;
+        };
         spawn_with_track_ids(
             &state,
             "queue drop",

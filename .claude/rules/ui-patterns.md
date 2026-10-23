@@ -260,7 +260,9 @@ three components that answer it, and each argues its geometry at its own file.
 - **Every grid is `EntityCard` in a virtualized chunked-row `ListView`**: Rust hands it grid-row
   structs of N cards, and **`GridColumnsSync`** computes N from the width and fires
   `columns-changed`, so a resize re-chunks without touching the database. Detail views own
-  no header — the four under My Library are bodies, the banner being the page's own band.
+  no header — the four under My Library are bodies, the banner being the page's own band. The
+  `ListView` sits in a copy-only `DragSource`, so a card drags out as what Add to Queue on it would
+  take (the drag entry under Lists and playback).
 
 - **The seven library grids are paged, and `ui::card_grid` is their one load path.** My Library's
   four, Favorites' Most Played and Favorite Artists, and Recently Played's Most Played each install
@@ -703,20 +705,42 @@ three components that answer it, and each argues its geometry at its own file.
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
-- **A list reorders through `components/drag-source.slint`'s `DragSource` round its `ListView` and
-  `components/list-drop-target.slint`'s `ListDropTarget` over it, never a gesture of its own.**
-  Three mounts: the queue panel, Playlist Detail's `DraggableTrackList` and Up Next. The row reports
-  its press (`pressed => { src.arm(idx); }`) and reads `lifted: src.lifts(idx)`, dimming by
-  `Theme.fade-lifted`; the target owns the slot, the line, the edge scroll and the no-op slots,
-  handing the host `reorder(from, to)` and `scroll-by(dy)`. A host whose rows fall into two runs
-  that a move may not cross names the second's first row in `split-row`, and the slots across it
-  draw no line and drop nothing.
+- **A list drags through `components/drag-source.slint`'s `DragSource` round its `ListView`, and
+  reorders through `components/list-drop-target.slint`'s `ListDropTarget` over it, never a gesture
+  of its own.** Three lists reorder: the queue panel, Playlist Detail's `DraggableTrackList` and Up
+  Next. The rest drag out only, copy-allowed: `TrackList`, eight of the nine track surfaces in one
+  file, and the five card grids. The row reports its press, `src.arm(idx)` where the drag only
+  reorders and `src.arm-items(…)` where it carries something out, and a reorderable row reads
+  `lifted: src.lifts(idx)`, dimming by `Theme.fade-lifted`; the target owns the slot, the line, the
+  edge scroll and the no-op slots, handing the host `reorder(from, to)` and `scroll-by(dy)`. A host
+  whose rows fall into two runs that a move may not cross names the second's first row in
+  `split-row`, and the slots across it draw no line and drop nothing.
   - **What a drag carries is `Drag.payload`, written from two trees** (`ui::drag` names the three
     writes): the pressed row arms it, every press disarms it first in
     `winit_filter::disarm_drag`, a touch's start included, and a list whose rows move under a drag
     revokes its own origin (`queue_panel::rows::show_queue`, `PlaylistsUi::rows_moving`, Up Next's
     `show_slice`). **A new reorderable list owes the revoke**, the one write nothing fails without:
-    the drag goes on over the rebuilt rows, and the index it lifted lands on another track.
+    the drag goes on over the rebuilt rows, and the index it lifted lands on another track. A revoke
+    keeps the items, which are ids and survive the rebuild, so the drag can still copy out.
+  - **What another list takes is `Drag.payload.items`, Add to Queue's `(kind, ids)`.** A track row
+    builds it in `TrackListRowItem.drag-items()` and a card in `CardCell.drag-items(title, cover)`,
+    both through `Selection.effective-ids`, so a drag carries what the item's menu acts on.
+    `EntityCard.pressed` is a left press on the card body; one on its box or a hover control arms
+    nothing. The queue panel's target `takes-items` and lands them as a copy at the slot through
+    `Queue.drop-in`, which resolves as Add to Queue does (`card_actions::spawn_with_track_ids`) into
+    `queue_insert_at`; its header gives way to what letting go would do while `holds-items`. The
+    bar's `components/now-playing/queue-button.slint` takes a drop as `CardActions.add-to-queue`
+    verbatim and opens the panel after a 500 ms hover, so a drop can still be placed at a slot.
+  - **The chip under the pointer is `components/drag-ghost.slint`'s `DragGhost`**, for a drag that
+    carries items and not over its own list's reorder target (`Drag.follow`'s third argument). A
+    target positions it from its `can-drop`, and elsewhere a window-sized `DropArea` at the back of
+    the root's stack does, which can't move to the front (`slint-pitfalls.md`'s in-window drag
+    entry). `Drag.live` mirrors the source's `dragging`, the one end every drag reaches.
+  - **A touch never starts a drag**: every `DragSource` stands down while `Drag.touching`, so a host
+    switches one off through `active`, never `enabled` (`drag-source.slint` says why).
+  - **A `DragSource` hands back the click its rows don't take**, as `background-clicked`. A list or
+    grid on a page with a filter box forwards it as `request-blur-search`; the queue panel and Up
+    Next have no box and leave it unbound.
   - **Up Next's rows are play order only modulo the repeat-all wrap**, so its target hands
     `NowPlaying.reorder` row indices and `up_next::play_order_move` maps them, refusing a move
     across the wrap. Up Next's `split-row` sits on that wrap, so no line promises a move Rust then
@@ -827,7 +851,9 @@ three components that answer it, and each argues its geometry at its own file.
   shared there too, by the four flat list views and the four details**: `wire_row_selection` over
   `list_selection::RowSelectionView`, ranging over the rows on screen. Browse keeps its own
   wiring for its disk-only rows, over the same `compute_click_selection`, whose anchor is the id
-  of the row last clicked.
+  of the row last clicked. **So is the drag out**: `TrackList` and `DraggableTrackList` each mount a
+  `DragSource` round their `ListView` (the drag entry above), and a disk-only Browse row arms
+  nothing, its body being disabled.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
@@ -1268,6 +1294,9 @@ three components that answer it, and each argues its geometry at its own file.
     `winit_filter::claim_queue_keys` copies that into `Queue.keys-owned` on every press, ahead of
     Slint's dispatch, and only a shown panel can claim them. Slint alone can't answer it: a
     `TouchArea` never sees a press a child took, and a nested `FocusScope` is the bullet above.
+    **The sentinel takes the wheel its children leave**, or a tick nothing under it scrolled would
+    clear its hover until the pointer moved, and a click in place after it would claim nothing
+    (`slint-pitfalls.md`'s `has-hover` entry).
     **A row's menu hands the keys back as it closes**, its popup having taken the sentinel's hover,
     so the press on an entry read as one elsewhere. The overlay owns the keys while it is up, a
     press or not. With the keys, Esc clears the queue's picks first; then the overlay closes, and

@@ -204,6 +204,9 @@ export component QueuePanel inherits Rectangle {
         width: root.body-w;
         height: root.body-h;
         changed has-hover => { Queue.pointer-in = self.has-hover; }
+        // A wheel tick the list didn't take would clear the hover until the pointer moves, so a
+        // click in place after it wouldn't claim the keys (`slint-pitfalls.md`, `has-hover`).
+        scroll-event(ev) => { return accept; }
 
         // Where a file let go of lands in the queue, docked or floating.
         WindowRectReport {

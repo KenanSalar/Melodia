@@ -202,9 +202,10 @@ this file is what builds, looks right, and is wrong.
   `DISTANCE_THRESHOLD` (8 px) inside `DURATION_THRESHOLD` (500 ms) on a scrollable axis it returns
   `Intercept`, and every item below is sent `MouseEvent::Exit`, delivered by `TouchArea` as
   `PointerEventKind::Cancel`. A list's `DragSource` takes the press at that same 8 px, so on a list
-  that pans, which under a touch is every list, the two compete for one gesture. It reads as
-  intermittent, both escapes being real: a list shorter than its viewport can't flick, and a press
-  held past 500 ms before moving is never intercepted. The draggable lists opt out outright,
+  that pans the two compete for one gesture. It reads as intermittent, both escapes being real: a
+  list shorter than its viewport can't flick, and a press held past 500 ms before moving is never
+  intercepted. A touch pans every list, so there every `DragSource` stands down instead
+  (`Drag.touching`, `globals/drag.slint`). Under a mouse the draggable lists opt out outright,
   `draggable-track-list.slint`'s `inner-list` and
   `queue-panel.slint`'s, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
@@ -479,7 +480,9 @@ this file is what builds, looks right, and is wrong.
   **Where nothing underneath takes the wheel, the flag stays down until the pointer moves**, opaque
   fill or not: Slint re-sends the pointer's position only after a wheel event something accepted. A
   control that takes the wheel itself answers `accept` on every event, an empty one included, and
-  keeps its hover (`Player.wheel-volume`).
+  keeps its hover (`Player.wheel-volume`). So does a hover sentinel something reads at a press,
+  its children taking the wheel first: the queue panel's `hover-catch`, whose hover decides whose
+  keys a click in place after a wheel tick hands over.
 
 - **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`,
   `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop
@@ -832,7 +835,7 @@ this file is what builds, looks right, and is wrong.
   `ListView`'s repeater is handed.
 
 - **Slint's in-window drag goes round a list, never in a row, and a `DropArea` drawn over another
-  takes its drops.** Each half builds, passes a quick drag, and is wrong.
+  takes its drops.** Each trap below builds, passes a quick drag, and is wrong.
   - **A `DragArea` in a row never hears its drag end.** The runtime holds the source weakly and a
     `ListView` destroys rows rather than recycling them, so a row scrolled out, rebuilt under the
     drag or moved by the reorder itself misses `drag-finished`. `components/drag-source.slint` is
@@ -841,6 +844,15 @@ this file is what builds, looks right, and is wrong.
     included, so what a drag carries can't be "the row last pressed" without every press clearing
     it first. A touch is a left press to it as well, so a clear that watches only `MouseInput`
     misses one. `globals/drag.slint` argues the arming.
+  - **It accepts every left press none of its children takes**, so the empty space round a list's
+    rows stops reaching the page behind it, and a click there blurs nothing. `DragSource` puts a
+    `TouchArea` behind the list and hands the click back as `background-clicked`. That `TouchArea`
+    goes off with the host's switch: a switched-off `DragArea` still hands presses to its children,
+    so left on it would take the miniplayer's drag region from under Up Next.
+  - **A release over no accepting `DropArea` ends as an `Exit`, not a `Drop`** (`window.rs`), so
+    the leaf behind the targets never sees one and can't be what ends the chip. The one end every
+    drag reaches is its source's `dragging` falling, which `DragSource` mirrors into `Drag.live`; a
+    source unmounted mid-drag never hears it, and the next press's disarm is the backstop.
   - **A `Drop` goes to whatever the hit test finds, not to the area that accepted the hover**, and
     a `DropArea` takes any `Drop` it receives (`i-slint-core/window.rs`, `items/drag_n_drop.rs`).
     So one drawn in front of a target eats that target's drops even while it answers `none` to
