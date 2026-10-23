@@ -1,6 +1,6 @@
 # Plan: Queue panel (the queue docks on the right and takes drops)
 
-Status: **in progress**, Phases 1 to 7 done (Phase 6's touch checks deferred, Phase 7 still to validate on Windows), Phase 7.5 implemented and waiting on its hand pass, Phase 8 next · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
+Status: **in progress**, Phases 1 to 7 done (Phase 6's touch checks deferred, Phase 7 still to validate on Windows), Phases 7.5 and 7.6 implemented and waiting on their hand passes, Phase 8 next · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
 
 > **Validated 2026-10-21** against `72a0e74f` (`feat/queue-panel`). Three read-only traces went into it: the queue sheet, the left sidebar's resize and fold, and drag and drop with Add to Queue. They were checked against:
 > - the Slint 1.18.1 sources for `DragArea`, `DropArea` and the in-window drag (`i-slint-core/items/drag_n_drop.rs`, `window.rs`);
@@ -141,8 +141,8 @@ Working doc. Delete when every phase has shipped and passed by hand.
 | `crates/melodia-ui/ui/components/track-list/track-context-menu.slint` | Gains the rating entry, `row-rating` and `rate([int], int)` (Phase 3.5) |
 | `crates/melodia-ui/ui/components/now-playing/overflow-menu.slint` | Mounts `RatingMenuRow` in place of its inline copy (Phase 3.5) |
 | `crates/melodia-ui/ui/components/edge-resize-handle.slint` (new, Phase 1) | The inner-edge drag, its clamp and its double-click reset, for whichever side grows. Lifted from `sidebar.slint:195-234`, which mounts it |
-| `crates/melodia-ui/ui/components/drag-source.slint` (new, Phase 5) | A `DragArea` round a list's or grid's `ListView`, one per host (Phase 4). It carries `Drag.token`, arms the payload from the pressed row through `arm(index)`, and says which row it lifted through `lifts(index)`. Phase 6: `arm-items`, the `live` mirror, and `active` beside the touch gate |
-| `crates/melodia-ui/ui/components/list-drop-target.slint` (new, Phase 5) | A `DropArea` over a list: slot from the pointer, the drop line, the edge-scroll `Timer`, and the ghost's position while it holds the drag (Phase 6). With `takes-items`, another list's items as a copy at the slot (Phase 6). Mounted by the queue panel, the playlist detail and Up Next |
+| `crates/melodia-ui/ui/components/drag-source.slint` (new, Phase 5) | A `DragArea` round a list's or grid's `ListView`, one per host (Phase 4). It carries `Drag.token`, arms the payload from the pressed row through `arm(index)`, and says which row it lifted through `lifts(index)`. Phase 6: `arm-items`, the `live` mirror, and `active` beside the touch gate. Phase 7.6: `active` goes, Up Next having been its only host |
+| `crates/melodia-ui/ui/components/list-drop-target.slint` (new, Phase 5) | A `DropArea` over a list: slot from the pointer, the drop line, the edge-scroll `Timer`, and the ghost's position while it holds the drag (Phase 6). With `takes-items`, another list's items as a copy at the slot (Phase 6). Mounted by the queue panel, the playlist detail and Up Next. Phase 7.6: the edge band shrinks to a quarter of a short list |
 | `crates/melodia-ui/ui/globals/drag.slint` (new, Phase 5) | `DragOrigin`, `DragPayload { origin, index }` and `Drag`: the token, `out payload`, `arm`/`disarm`/`revoke`. Phase 6 adds `DragItems { kind, ids, title, cover }` as the payload's `items`, `arm-items`, `live`, `touching`, and the follow point the chip reads; `revoke` keeps the items. Phase 7 adds `FileDrag` beside it: the two target rects and `target`, with `FileDropTarget` and `WindowRect` |
 | `crates/melodia-views/src/ui/drag.rs` (new, Phase 5) | The token install. The press disarm is the winit filter's, saying whether a touch made it (Phase 6), and each list that rebuilds its rows revokes its own origin |
 | `crates/melodia-ui/ui/globals/selection.slint` | Gains `effective-ids(...)`, the one statement of what a picked row or card stands for (Phase 5) |
@@ -150,7 +150,7 @@ Working doc. Delete when every phase has shipped and passed by hand.
 | `crates/melodia-ui/ui/theme.slint` | `queue-panel-{min,default,max}-w` and `content-min-w`, beside `sidebar-*-w` (`:101-104`) |
 | `crates/melodia-ui/ui/app-window.slint` (746) | The row mount, the `shown` mirror and the narrow-window derivations. The sheet's mount at `:599-604` goes. Phase 3.5: the `floating` mirror, the dock hand-off and the scrim mount. Phase 6: the ghost, and the window-sized `DropArea` at the back of the root's stack that follows the pointer outside the targets |
 | `crates/melodia-ui/ui/layout/shortcut-scope.slint` | `queue-keys` replaces `queue-sheet-up`. Phase 3.5: Delete and Backspace, the overlay's Escape arm, Q off `fits` |
-| `crates/melodia-ui/ui/components/now-playing/up-next-list.slint` | `editable`, the row menu and the drop target (Phase 5) |
+| `crates/melodia-ui/ui/components/now-playing/up-next-list.slint` | `editable`, the row menu and the drop target (Phase 5). Phase 7.6: `menu-enabled` replaces `editable` and gates the menu alone, the miniplayer's mount passing it off; the `DragSource` only as tall as the rows |
 | `crates/melodia-views/src/ui/now_playing/up_next.rs` | `NowPlaying.reorder`'s handler and `play_order_move`, the row-to-play-order map with the wrap refusal (Phase 5) |
 | `crates/melodia-views/src/ui/queue_panel/{mod,callbacks,rows}.rs` (was `queue_sheet/`, 135/409/114) | As today, plus `drop-in` (Phase 6). `install` hands nothing back once the file drop stops reading its atomic (Phase 7) |
 | `crates/melodia-views/src/ui/queue_panel/lifecycle.rs` (new, Phase 1) | Open, seat and teardown on `shown`, lifted from `callbacks.rs:244-409`. That file then holds the row actions alone. Phase 3.5: the toggle opens whichever mode fits |
@@ -550,6 +550,27 @@ Status: implemented 2026-10-23, static gates green, waiting on its hand pass. It
 - a playlist on its automatic cover: a track with another cover dragged to the top changes the hero and the card, and a playlist with a picked cover keeps it;
 - Up Next's reorder unchanged, its wrap refusal included.
 
+### Phase 7.6: The miniplayer's Up Next reorders
+Status: implemented 2026-10-23, static gates green, waiting on its hand pass. Its docs landed with it; its tests wait for Phase 8.
+
+**What you saw.** In the miniplayer's column, Up Next only took a click: dragging a row did nothing, while the same list in Now Playing reordered the queue. The right-click menu stays off there, the sheet having no room for it.
+
+The miniplayer mounts the same `UpNextList`, and its `editable: false` switched off the menu, the `DragSource` and the `ListDropTarget` together. Nothing on the Rust side changes: `up_next::wire_reorder`, `play_order_move` and `show_slice`'s revoke already serve both hosts through the one `NowPlaying` global.
+
+1. **One switch, for the menu alone.** `editable` becomes `menu-enabled` on `UpNextRow` and `UpNextList`, and the reorder gates go: both hosts reorder, so a switch for it would have no `false` caller.
+2. **The `DragSource` is only as tall as its rows.** A `DragArea` accepts every left press its children leave, so at full height it took the space under a short queue from the miniplayer's window-move region. The `ListDropTarget` keeps the list's full height, a `DropArea` passing every press and hover through, so a drop under the last row still lands at the end.
+3. **`DragSource.active` goes**, Up Next having been its only host. A mount binding `enabled` still drops the touch gate, which the `enabled` line says.
+4. **The edge band is at most a quarter of the list** (Kenan: a shared rule rather than a miniplayer-only input). On a list one or two rows tall the two 40 px bands overlapped and scrolled the whole drag. Lists at least 160 px tall are unchanged.
+
+**By hand:**
+- the miniplayer column: a row dragged down and up lands where the line says, the line and the dimmed row reading on the plain palette and on the backdrop; a click still skips; a right-click does nothing;
+- repeat-all with the wrap in view: no line across it and nothing moves;
+- a track ending mid-drag: the drag is revoked and the drop moves nothing wrong;
+- a queue of one or two rows: a press under them moves the window, and a drop there sends the row to the end;
+- a long queue in a panel one or two rows tall: the list scrolls only at its edges and a drop in the middle lands without it running;
+- under a station: the queue beneath reorders;
+- Now Playing's Up Next unchanged (menu, drag, a drop under the last row); the queue panel's and Playlist Detail's edge scroll unchanged on a normal window.
+
 ### Phase 8: Tests and docs (on Kenan's go)
 - **New pins:**
   - `insert_at` at slot 0, at the end, and before, at and after current, under shuffle and not;
@@ -570,12 +591,15 @@ Status: implemented 2026-10-23, static gates green, waiting on its hand pass. It
   - Phase 3.6: `sidebar-yields` carrying the bare-row term, the window's term waiting for a measured row; the folded header and the compact detail row seating inside `Theme.content-min-w`, as arithmetic over the published floors; both pages feeding the band from a hidden ruler.
   - Phase 6: `Drag.touching` raised by the touch arm and lowered by the press arm; no `DragSource` mount binding `enabled`, which drops the touch gate, by a walk; `revoke` keeping the items; the queue button dropping through `CardActions.add-to-queue`; `insert_at` clamping a stale slot; every `DragSource` host with a filter box forwarding `background-clicked`, by a walk.
   - Phase 7.5: `move_block` at both ends, scattered, already in place, and refusing unsorted or out-of-range positions; `landing`; `QueueState::move_rows` keeping the current track across a block holding it, passing it, and landing either side of it; `PagedRows::move_rows`' notifications and `picked_rows` over a track listed twice; `lifted_run` for a run, scattered picks and none; `move_playlist_tracks` with scattered and contiguous ids, and moving an automatic cover to the track that now leads while leaving a picked one alone; `lift-picks` called only behind `Selection.acts-on-set`, by a walk.
+  - Phase 7.6: Up Next's `DragSource` bounded by its rows while its `ListDropTarget` spans the list, read from `up-next-list.slint` in `up_next_tests.rs`; `ListDropTarget`'s edge band capped at a quarter of its height; the miniplayer's mount passing `menu-enabled: false` and no other Up Next switch.
   - Phase 7: `route` inside each rect, on its edges, with the floating card over the content, with the panel hidden, with no playlist on screen, and `detail_on_screen` refusing a smart playlist, a hidden tab, Now Playing and the miniplayer; no `WindowRectReport` inside an `if` or a `for` other than the full-UI branch, by a walk; `FileDrag.target` written only by the winit filter, by a walk.
 - **Docs.** Phases 1 to 3's half landed on 2026-10-21, and Phase 3.5's on 2026-10-22 (`ui-patterns.md`'s row menu, queue block, `TrackTitle` and keys, `library-data.md`'s rating paths, `slint-pitfalls.md`'s `queue-row.slint` example, and the README's shortcut table and feature lines), and Phase 3.6's the same day (`ui-patterns.md`'s narrow-window block and its `PillButton`, `TabBar` and `LibraryTabBand` entries, the last one's stale pill-slot line retired with it, and `slint-pitfalls.md`'s `SearchBar` entry), and Phase 5's the same day (`ui-patterns.md`'s drag entry and the row menu's four hosts, its `"up-next"` context and the `Selection` rule, `slint-pitfalls.md`'s drag-pan entry and its in-window drag entry carrying Phase 4's traps, the README's queue line, and the root `CLAUDE.md`'s globals count), and its validation's the same day (`ui-patterns.md`'s drag entry gaining `split-row` and the touch disarm, `slint-pitfalls.md`'s drag-pan entry corrected to 1.18's binding and its in-window drag entry gaining the touch press), and Phase 7's on 2026-10-23 (`desktop-shell.md`'s fork and drop-routing bullets and its two verbs, `slint-pitfalls.md`'s Wayland file-drop entry, `ui-patterns.md`'s `Queue.shown` bullet and a file-drag entry beside the drag one, the root `CLAUDE.md`'s Known Gaps and globals count, the README's fork paragraph and licence note, `winit/README.md`, the comment above `[patch.crates-io]`, and the fork's entries in `licenses/ATTRIBUTION.txt` and `packaging/debian-copyright`), and Phase 6's and its validation's the same day (`ui-patterns.md`'s drag entry gaining the items, the chip, the queue button, the touch gate, `background-clicked` and `revoke` keeping the items, with pointers from its grid and track-list entries, and the keys bullet the sentinel's wheel; `slint-pitfalls.md`'s in-window drag entry gaining the unclaimed press and the release that becomes an `Exit`, its drag-pan entry trading the touch competition for the touch gate, and its `has-hover` entry the sentinel; the README's queue line), and Phase 7.5's the same day (`ui-patterns.md`'s drag entry gaining `move-picks` and the picks bullet, the README's queue and playlist lines). Phases 1 to 3:
   - the panel's cross-file facts and the keys in `ui-patterns.md`, the narrow window's order and its two flags among them;
   - the sheet's mentions across the rules;
   - `settings.json`'s contents in the root `CLAUDE.md`;
   - the queue's feature line in `README.md`.
+
+  Phase 7.6's landed the same day: `ui-patterns.md`'s drag entry (Up Next reordering in both hosts, the touch bullet without `active`) and its row menu's hosts (Up Next's menu Now Playing's only), `slint-pitfalls.md`'s in-window drag entry (a source sized to its rows rather than switched off), and the README's queue line.
 
   Still open: `README.md`'s footprint rows, relabelled with `scripts/measure-footprint.py` when they are measured again.
 

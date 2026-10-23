@@ -621,7 +621,8 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
   place its entries are mounted.** Four hosts: `TrackListRowItem`, the queue panel's
-  `QueueRowItem`, Up Next's row and the now-playing bar's track card. It owns the entries, the
+  `QueueRowItem`, Up Next's row (Now Playing's only, through `menu-enabled`, the miniplayer's sheet
+  having no room for a menu) and the now-playing bar's track card. It owns the entries, the
   `multi-active` gate and the `effective-ids` every handler reads; the host only says where, through
   `show-at`. **The gate's rule is `Selection.acts-on-set` and `effective-ids`**, the item selected
   *and* more than one selected, so a right-click on an unselected item falls back to that item
@@ -710,13 +711,14 @@ three components that answer it, and each argues its geometry at its own file.
 - **A list drags through `components/drag-source.slint`'s `DragSource` round its `ListView`, and
   reorders through `components/list-drop-target.slint`'s `ListDropTarget` over it, never a gesture
   of its own.** Three lists reorder: the queue panel, Playlist Detail's `DraggableTrackList` and Up
-  Next. The rest drag out only, copy-allowed: `TrackList`, eight of the nine track surfaces in one
-  file, and the five card grids. The row reports its press, `src.arm(idx)` where the drag only
-  reorders and `src.arm-items(…)` where it carries something out, and a reorderable row reads
-  `lifted: src.lifts(idx)`, dimming by `Theme.fade-lifted`; the target owns the slot, the line, the
-  edge scroll and the no-op slots, handing the host `reorder(from, to)`, `move-picks(slot)` and
-  `scroll-by(dy)`. A host whose rows fall into two runs that a move may not cross names the
-  second's first row in `split-row`, and the slots across it draw no line and drop nothing.
+  Next, in Now Playing and the miniplayer alike. The rest drag out only, copy-allowed: `TrackList`,
+  eight of the nine track surfaces in one file, and the five card grids. The row reports its press,
+  `src.arm(idx)` where the drag only reorders and `src.arm-items(…)` where it carries something
+  out, and a reorderable row reads `lifted: src.lifts(idx)`, dimming by `Theme.fade-lifted`; the
+  target owns the slot, the line, the edge scroll and the no-op slots, handing the host
+  `reorder(from, to)`, `move-picks(slot)` and `scroll-by(dy)`. A host whose rows fall into two runs
+  that a move may not cross names the second's first row in `split-row`, and the slots across it
+  draw no line and drop nothing.
   - **A press on a picked row while others are picked lifts them all**, the menu's rule
     (`Selection.acts-on-set`). The row arms as usual, then `src.lift-picks(…)` with the host
     global's `picked-run()`, Rust being the only side that can find the picks in a list it pages
@@ -747,8 +749,8 @@ three components that answer it, and each argues its geometry at its own file.
     target positions it from its `can-drop`, and elsewhere a window-sized `DropArea` at the back of
     the root's stack does, which can't move to the front (`slint-pitfalls.md`'s in-window drag
     entry). `Drag.live` mirrors the source's `dragging`, the one end every drag reaches.
-  - **A touch never starts a drag**: every `DragSource` stands down while `Drag.touching`, so a host
-    switches one off through `active`, never `enabled` (`drag-source.slint` says why).
+  - **A touch never starts a drag**: every `DragSource` stands down while `Drag.touching`, which is
+    its `enabled`, so no mount binds `enabled`.
   - **A `DragSource` hands back the click its rows don't take**, as `background-clicked`. A list or
     grid on a page with a filter box forwards it as `request-blur-search`; the queue panel and Up
     Next have no box and leave it unbound.

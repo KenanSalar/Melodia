@@ -37,8 +37,9 @@ export component ListDropTarget inherits DropArea {
     // A drag of another list's items is over the list, for the host to say what letting go does.
     out property <bool> holds-items: root.has-drag && root.items-drag;
 
-    // How near an edge the pointer scrolls the list, and how far one tick takes it.
-    property <length> edge-band: 40px;
+    // How near an edge the pointer scrolls the list, and how far one tick takes it. A quarter of a
+    // short list, so the two bands leave it a middle to drop in.
+    property <length> edge-band: min(40px, root.height / 4);
     property <length> scroll-step: 6px;
 
     property <bool> own-drag: Drag.payload.origin == root.origin;

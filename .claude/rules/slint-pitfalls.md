@@ -846,9 +846,10 @@ this file is what builds, looks right, and is wrong.
     misses one. `globals/drag.slint` argues the arming.
   - **It accepts every left press none of its children takes**, so the empty space round a list's
     rows stops reaching the page behind it, and a click there blurs nothing. `DragSource` puts a
-    `TouchArea` behind the list and hands the click back as `background-clicked`. That `TouchArea`
-    goes off with the host's switch: a switched-off `DragArea` still hands presses to its children,
-    so left on it would take the miniplayer's drag region from under Up Next.
+    `TouchArea` behind the list and hands the click back as `background-clicked`. Where something
+    behind the list still wants the press, size the source to its rows rather than switching it
+    off: Up Next's stops at them, so the space under a short queue stays the miniplayer's window
+    grab, and its `ListDropTarget` spans the list, a `DropArea` passing presses through.
   - **A release over no accepting `DropArea` ends as an `Exit`, not a `Drop`** (`window.rs`), so
     the leaf behind the targets never sees one and can't be what ends the chip. The one end every
     drag reaches is its source's `dragging` falling, which `DragSource` mirrors into `Drag.live`; a
