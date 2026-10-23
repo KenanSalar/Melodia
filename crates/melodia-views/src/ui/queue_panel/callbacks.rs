@@ -1,5 +1,5 @@
-//! `Queue.*` callback wiring: the transport rows, the row menu's favourite and rating, and the
-//! picks.
+//! `Queue.*` callback wiring: the transport rows, a drop from another list, the row menu's
+//! favourite and rating, and the picks.
 
 use std::cell::Cell;
 use std::collections::HashSet;
@@ -8,6 +8,7 @@ use std::rc::Rc;
 use slint::{ComponentHandle, Weak};
 
 use super::{apply_picks, picked, picked_positions};
+use crate::ui::callbacks::card_actions::spawn_with_track_ids;
 use crate::ui::callbacks::collect_track_ids;
 use crate::ui::callbacks::macros::wire_row_flag;
 use crate::ui::list_selection::{NO_ANCHOR, compute_click_selection};
@@ -25,6 +26,7 @@ pub(super) fn wire_callbacks(
     anchor: &Rc<Cell<i32>>,
 ) {
     wire_transport(ui, state, rows);
+    wire_drop_in(ui, state);
     wire_row_flags(ui, state);
     wire_selection(ui, rows, anchor);
 }
@@ -119,6 +121,24 @@ fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
             });
         });
     }
+}
+
+/// Another list's drag let go over the rows, resolved as Add to Queue on it would be and spliced
+/// in at the slot it was let go at.
+fn wire_drop_in(ui: &AppWindow, state: &AppState) {
+    let state = state.clone();
+    ui.global::<Queue>().on_drop_in(move |kind, ids, slot| {
+        let slot = usize::try_from(slot).unwrap_or(0);
+        spawn_with_track_ids(
+            &state,
+            "queue drop",
+            &kind,
+            &ids,
+            move |state, track_ids| async move {
+                library::queue::queue_insert_at(&state, slot, track_ids).await
+            },
+        );
+    });
 }
 
 /// The row menu's favourite and rating, over the clicked row or the picks: the write, then the

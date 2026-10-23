@@ -1,7 +1,8 @@
 //! The Rust half of the in-window drag, whose meaning lives on Slint's `Drag` global.
 //!
 //! Three writes, each where its occasion is: the token here, the disarm every press makes in
-//! `window_chrome::winit_filter`, and a revoke from each list that rebuilds its rows under a drag.
+//! `window_chrome::winit_filter` with whether a touch made it, and a revoke from each list that
+//! rebuilds its rows under a drag.
 
 use std::rc::Rc;
 

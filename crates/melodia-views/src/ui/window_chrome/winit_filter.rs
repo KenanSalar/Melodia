@@ -32,8 +32,8 @@
 //!    `resize_release`.
 //! 10. **`MouseInput { Pressed }`**, any button and whoever takes it: whether it landed on the
 //!     queue panel, which makes Escape, Ctrl+A and Delete the queue's, and a disarm of what an
-//!     in-window drag would carry, which **`Touch { Started }`** makes too. See
-//!     [`claim_queue_keys`] and [`disarm_drag`].
+//!     in-window drag would carry, which **`Touch { Started }`** makes too, standing every drag
+//!     down for that touch. See [`claim_queue_keys`] and [`disarm_drag`].
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -155,16 +155,15 @@ pub(super) fn install(app: &AppWindow, state: &AppState, targets: PressTargets) 
         }
         if let WindowEvent::MouseInput { state: ElementState::Pressed, .. } = event {
             claim_queue_keys(&weak);
-            disarm_drag(&weak);
+            disarm_drag(&weak, Pointer::Mouse);
         }
-        // Slint takes a first touch as a left press, so it disarms too. A second finger's does as
-        // well, and Slint ends the first one's press for it, so a second finger ends a touch drag
-        // with nothing dropped rather than committing a pinch as a move. The queue's claim stays a
-        // mouse press's: it reads the pointer's hover, which no touch has ahead of it.
+        // Slint takes a first touch as a left press, so it disarms too, and stands the drags down
+        // until a mouse presses again. The queue's claim stays a mouse press's: it reads the
+        // pointer's hover, which no touch has ahead of it.
         if let WindowEvent::Touch(touch) = event
             && touch.phase == TouchPhase::Started
         {
-            disarm_drag(&weak);
+            disarm_drag(&weak, Pointer::Touch);
         }
         match event {
             // Ahead of the drag arm: the miniplayer's drag region runs right up to the edge, and its
@@ -251,13 +250,25 @@ fn claim_queue_keys(weak: &slint::Weak<AppWindow>) {
     queue.set_keys_owned(queue.get_shown() && queue.get_pointer_in());
 }
 
+/// What a press came from, which decides whether it can start a drag.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pointer {
+    Mouse,
+    Touch,
+}
+
 /// Empties what an in-window drag would carry, ahead of Slint's dispatch, so only the row this
 /// press lands on can arm it. A list's `DragArea` starts a drag from any press it contains, a gap
 /// between rows or a row's own button included, and no element sees all of those, so without this
 /// such a drag would carry the last row clicked. Here for the reason [`claim_queue_keys`] is.
-fn disarm_drag(weak: &slint::Weak<AppWindow>) {
+///
+/// It also says whether the press is a touch, and every `DragSource` stands down for one, so the
+/// list under a finger pans rather than the two fighting over the gesture.
+fn disarm_drag(weak: &slint::Weak<AppWindow>, pointer: Pointer) {
     let Some(ui) = weak.upgrade() else { return };
-    ui.global::<Drag>().invoke_disarm();
+    let drag = ui.global::<Drag>();
+    drag.set_touching(pointer == Pointer::Touch);
+    drag.invoke_disarm();
 }
 
 /// A left press over a drag region: a window move, or the titlebar's double press.

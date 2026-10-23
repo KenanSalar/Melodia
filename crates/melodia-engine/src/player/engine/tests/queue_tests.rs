@@ -47,7 +47,7 @@ fn add_tracks_increments_version() {
 fn insert_next_after_current() {
     let mut q = make_queue(3);
     q.current_index = Some(1);
-    q.insert_next(10);
+    q.insert_next(&[10]);
 
     // Should insert at position 2 in play_order
     assert_eq!(q.play_order[2], 3); // new track index
@@ -58,7 +58,7 @@ fn insert_next_after_current() {
 fn insert_next_when_no_current() {
     let mut q = make_queue(2);
     q.current_index = None;
-    q.insert_next(10);
+    q.insert_next(&[10]);
 
     // Should insert at position 0
     assert_eq!(q.play_order[0], 2); // new track index
@@ -68,7 +68,7 @@ fn insert_next_when_no_current() {
 fn insert_next_clamps_to_end() -> Result<(), AppError> {
     let mut q = make_queue(2);
     q.current_index = Some(10); // way past end
-    q.insert_next(10);
+    q.insert_next(&[10]);
 
     // Should clamp insert position to play_order.len()
     let last =
@@ -516,7 +516,7 @@ fn on_the_second_of_two() -> QueueState {
 fn every_change_to_the_order_publishes_the_new_order() {
     let rows: [(&str, QueueState, Edit, &[i64]); 10] = [
         ("add_tracks", make_queue(3), |q| q.add_tracks(&[4]), &[1, 2, 3, 4]),
-        ("insert_next", make_queue(3), |q| q.insert_next(4), &[4, 1, 2, 3]),
+        ("insert_next", make_queue(3), |q| q.insert_next(&[4]), &[4, 1, 2, 3]),
         (
             "remove_at",
             make_queue(3),

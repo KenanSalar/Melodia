@@ -1111,7 +1111,8 @@ msgid "Repeat"
 msgstr "Ismétlés"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-panel/queue-panel.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Lejátszási sor"
@@ -2305,6 +2306,42 @@ msgstr "Következik"
 #: ui/views/placeholder-view.slint
 msgid "Coming soon"
 msgstr "Hamarosan"
+
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "{n} szám hozzáadása a lejátszási sorhoz"
+msgstr[1] "{n} szám hozzáadása a lejátszási sorhoz"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "„{}” hozzáadása a lejátszási sorhoz"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "{n} album hozzáadása a lejátszási sorhoz"
+msgstr[1] "{n} album hozzáadása a lejátszási sorhoz"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "{n} előadó hozzáadása a lejátszási sorhoz"
+msgstr[1] "{n} előadó hozzáadása a lejátszási sorhoz"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "{n} műfaj hozzáadása a lejátszási sorhoz"
+msgstr[1] "{n} műfaj hozzáadása a lejátszási sorhoz"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "{n} lejátszási lista hozzáadása a lejátszási sorhoz"
+msgstr[1] "{n} lejátszási lista hozzáadása a lejátszási sorhoz"
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"

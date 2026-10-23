@@ -7,9 +7,9 @@ import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
-// `AlbumDetailBody`'s shape over `DraggableTrackList` — the shared `TrackList` stays
-// drag-free for Tracks / Browse / the other three details — plus the empty state and the
-// OS file-drop banner, which both fill `body`.
+// `AlbumDetailBody`'s shape over `DraggableTrackList` — the shared `TrackList` takes no rows
+// back, so only this list reorders — plus the empty state and the OS file-drop banner, which both
+// fill `body`.
 export component PlaylistDetailBody inherits Rectangle {
     // Catches clicks no inner TouchArea consumes; the band's SearchBar blurs on the tick.
     TouchArea {

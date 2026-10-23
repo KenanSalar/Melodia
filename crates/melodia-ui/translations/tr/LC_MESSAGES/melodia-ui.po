@@ -1111,7 +1111,8 @@ msgid "Repeat"
 msgstr "Tekrarla"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-panel/queue-panel.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Sıra"
@@ -2313,6 +2314,42 @@ msgstr "Sıradaki"
 #: ui/views/placeholder-view.slint
 msgid "Coming soon"
 msgstr "Yakında"
+
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "{n} parçayı sıraya ekle"
+msgstr[1] "{n} parçayı sıraya ekle"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "\"{}\" sıraya ekle"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "{n} albümü sıraya ekle"
+msgstr[1] "{n} albümü sıraya ekle"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "{n} sanatçıyı sıraya ekle"
+msgstr[1] "{n} sanatçıyı sıraya ekle"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "{n} türü sıraya ekle"
+msgstr[1] "{n} türü sıraya ekle"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "{n} çalma listesini sıraya ekle"
+msgstr[1] "{n} çalma listesini sıraya ekle"
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"

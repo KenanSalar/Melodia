@@ -1110,7 +1110,8 @@ msgid "Repeat"
 msgstr "Επανάληψη"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-panel/queue-panel.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Ουρά"
@@ -2305,6 +2306,42 @@ msgstr "Επόμενα"
 #: ui/views/placeholder-view.slint
 msgid "Coming soon"
 msgstr "Έρχεται σύντομα"
+
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "Προσθήκη {n} κομματιού στην ουρά"
+msgstr[1] "Προσθήκη {n} κομματιών στην ουρά"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "Προσθήκη «{}» στην ουρά"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "Προσθήκη {n} άλμπουμ στην ουρά"
+msgstr[1] "Προσθήκη {n} άλμπουμ στην ουρά"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "Προσθήκη {n} καλλιτέχνη στην ουρά"
+msgstr[1] "Προσθήκη {n} καλλιτεχνών στην ουρά"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "Προσθήκη {n} είδους στην ουρά"
+msgstr[1] "Προσθήκη {n} ειδών στην ουρά"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "Προσθήκη {n} λίστας στην ουρά"
+msgstr[1] "Προσθήκη {n} λιστών στην ουρά"
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"

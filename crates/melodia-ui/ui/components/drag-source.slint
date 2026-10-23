@@ -1,4 +1,4 @@
-import { Drag, DragOrigin } from "../globals/drag.slint";
+import { Drag, DragItems, DragOrigin } from "../globals/drag.slint";
 
 // A list's drag: a `DragArea` round its `ListView`, one per list.
 //
@@ -8,14 +8,26 @@ import { Drag, DragOrigin } from "../globals/drag.slint";
 // drag end. Round the list it outlives all of those.
 //
 // It takes the press at 8 px and sends the rows a cancel, so a drag lands no click. The rows report
-// their press through `arm`, which `Drag.payload` argues.
+// their press through `arm` or `arm-items`, which `Drag.payload` argues.
 export component DragSource inherits DragArea {
     in property <DragOrigin> origin;
+    // The host's switch. Hosts set this rather than `enabled`, which a mount would override and
+    // drop the touch gate with.
+    in property <bool> active: true;
 
     data: Drag.token;
+    enabled: root.active && !Drag.touching;
+
+    changed dragging => {
+        Drag.live = self.dragging;
+    }
 
     public function arm(index: int) {
         Drag.arm(root.origin, index);
+    }
+
+    public function arm-items(index: int, items: DragItems) {
+        Drag.arm-items(root.origin, index, items);
     }
 
     // Whether row `index` is the one this list's drag lifted, for the row to dim.

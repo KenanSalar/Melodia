@@ -87,6 +87,9 @@ export component EntityCard inherits Rectangle {
     // A right-click, in this card's own coordinate frame. The host owns the menu, as
     // `TrackListRowItem` does for a row.
     callback context-requested(length /*x*/, length /*y*/);
+    // A left press on the card body, which is what a drag from it would carry. A press on the box
+    // or a hover control never reaches the body, so a drag from one carries nothing.
+    callback pressed();
 
     // **Every hover-driven binding on this card reads this, not `touch.has-hover`.** A
     // higher-z TouchArea captures the pointer, so hovering any nested button flips that
@@ -241,6 +244,7 @@ export component EntityCard inherits Rectangle {
             // press that armed it.
             if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                 root.press-shift = ev.modifiers.shift;
+                root.pressed();
             }
             if (ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
                 root.context-requested(self.mouse-x, self.mouse-y);

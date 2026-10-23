@@ -162,13 +162,33 @@ impl QueueState {
         self.order_changed();
     }
 
-    pub fn insert_next(&mut self, id: i64) {
-        let track_idx = self.tracks.len();
-        self.tracks.push(id);
-        self.original_order.push(track_idx);
+    /// Queue `ids` as one block right after the current track, or at the front with nothing
+    /// current.
+    pub fn insert_next(&mut self, ids: &[i64]) {
+        self.insert_at(self.current_index.map_or(0, |ci| ci + 1), ids);
+    }
 
-        let insert_pos = self.current_index.map_or(0, |ci| ci + 1).min(self.play_order.len());
-        self.play_order.insert(insert_pos, track_idx);
+    /// Splice `ids` into the play order at `slot`, a slot past the end being the end.
+    ///
+    /// The insertion order takes the block at its end, as an append does, so unshuffling puts it
+    /// back in the order it was handed over. A slot at or before the current track moves the
+    /// current index with it, so what is playing stays current.
+    pub fn insert_at(&mut self, slot: usize, ids: &[i64]) {
+        if ids.is_empty() {
+            return;
+        }
+        let slot = slot.min(self.play_order.len());
+        let start = self.tracks.len();
+        self.tracks.extend_from_slice(ids);
+        let block = start..start + ids.len();
+        self.original_order.extend(block.clone());
+        self.play_order.splice(slot..slot, block);
+
+        if let Some(ci) = self.current_index
+            && slot <= ci
+        {
+            self.current_index = Some(ci + ids.len());
+        }
         self.order_changed();
     }
 

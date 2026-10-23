@@ -1111,7 +1111,8 @@ msgid "Repeat"
 msgstr "Powtarzanie"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-panel/queue-panel.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Kolejka"
@@ -2328,6 +2329,47 @@ msgstr "Następne"
 #: ui/views/placeholder-view.slint
 msgid "Coming soon"
 msgstr "Wkrótce"
+
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "Dodaj {n} utwór do kolejki"
+msgstr[1] "Dodaj {n} utwory do kolejki"
+msgstr[2] "Dodaj {n} utworów do kolejki"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "Dodaj „{}” do kolejki"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "Dodaj {n} album do kolejki"
+msgstr[1] "Dodaj {n} albumy do kolejki"
+msgstr[2] "Dodaj {n} albumów do kolejki"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "Dodaj {n} wykonawcę do kolejki"
+msgstr[1] "Dodaj {n} wykonawców do kolejki"
+msgstr[2] "Dodaj {n} wykonawców do kolejki"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "Dodaj {n} gatunek do kolejki"
+msgstr[1] "Dodaj {n} gatunki do kolejki"
+msgstr[2] "Dodaj {n} gatunków do kolejki"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "Dodaj {n} playlistę do kolejki"
+msgstr[1] "Dodaj {n} playlisty do kolejki"
+msgstr[2] "Dodaj {n} playlist do kolejki"
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"

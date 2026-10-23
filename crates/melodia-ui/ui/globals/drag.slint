@@ -4,10 +4,20 @@
 // The list a drag came out of. A list takes back only its own rows, as a reorder.
 export enum DragOrigin { none, queue, up-next, playlist }
 
+// What a drag carries for another list to take: Add to Queue's `(kind, ids)`, and what the chip
+// under the pointer draws. A `kind` of "" carries nothing.
+export struct DragItems {
+    kind: string,
+    ids: [int],
+    title: string,
+    cover: image,
+}
+
 export struct DragPayload {
     origin: DragOrigin,
     // The row lifted, in its own list's order.
     index: int,
+    items: DragItems,
 }
 
 export global Drag {
@@ -22,19 +32,47 @@ export global Drag {
     // one of those carries nothing rather than the last row clicked.
     out property <DragPayload> payload;
 
+    // A drag is under way, as its source's `dragging` says. A release that no target takes ends as
+    // an `Exit` rather than a `Drop`, so the source is the one thing every drag's end reaches. One
+    // unmounted mid-drag never hears it, and the next press's disarm lowers this instead.
+    in-out property <bool> live;
+
+    // Raised by the winit filter as a touch begins and lowered by a mouse press, both ahead of
+    // Slint's dispatch. Every `DragSource` stands down for a touch, which then pans the list under
+    // it, so nothing drags by touch.
+    in-out property <bool> touching;
+
+    // The pointer, in window coordinates, and whether the chip shows there. Written by whatever
+    // took the last move: a target, or the leaf behind them all.
+    out property <length> x;
+    out property <length> y;
+    out property <bool> ghost-shown;
+
     public function arm(origin: DragOrigin, index: int) {
         self.payload = { origin: origin, index: index };
     }
 
+    public function arm-items(origin: DragOrigin, index: int, items: DragItems) {
+        self.payload = { origin: origin, index: index, items: items };
+    }
+
     public function disarm() {
         self.payload = { origin: DragOrigin.none, index: -1 };
+        self.live = false;
+        self.ghost-shown = false;
     }
 
     // For a list whose rows moved under a live drag: it goes on, the source surviving the rebuild,
-    // but its index no longer names the row it lifted.
+    // but its index no longer names the row it lifted. The items are ids and still hold.
     public function revoke(origin: DragOrigin) {
         if (self.payload.origin == origin) {
-            self.disarm();
+            self.payload = { origin: DragOrigin.none, index: -1, items: self.payload.items };
         }
+    }
+
+    public function follow(x: length, y: length, ghost: bool) {
+        self.x = x;
+        self.y = y;
+        self.ghost-shown = ghost;
     }
 }

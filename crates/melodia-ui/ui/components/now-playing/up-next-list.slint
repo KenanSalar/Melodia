@@ -207,7 +207,7 @@ export component UpNextList inherits Rectangle {
     // the one-shot slide without fighting a layout; the clip above hides the row height
     // it is offset by mid-slide.
     src := DragSource {
-        enabled: root.editable;
+        active: root.editable;
         origin: DragOrigin.up-next;
         allow-move: true;
         x: 0;

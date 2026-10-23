@@ -10,9 +10,10 @@ import { ListDropTarget } from "../list-drop-target.slint";
 import { DragOrigin } from "../../globals/drag.slint";
 
 // Drag-reorderable sibling of `TrackList` — same external contract plus a `reorder(from, to)` fired
-// on a drop that moves a row. **The shared `TrackList` stays drag-free**; Playlist Detail is the
-// only consumer. The drag is a `DragSource` round the list with a `ListDropTarget` over it, both
-// gated on `reorder-enabled`, a reorder being ambiguous in any sort but the insertion one.
+// on a drop that moves a row. **The shared `TrackList` drags its rows out but takes none back**;
+// Playlist Detail is the only consumer. The drag is a `DragSource` round the list with a
+// `ListDropTarget` over it. The move is gated on `reorder-enabled`, a reorder being ambiguous in any
+// sort but the insertion one; the copy into the queue is not.
 export component DraggableTrackList inherits Rectangle {
     in property <[TrackListRow]> rows;
 
@@ -85,6 +86,7 @@ export component DraggableTrackList inherits Rectangle {
         src := DragSource {
             vertical-stretch: 1;
             origin: DragOrigin.playlist;
+            allow-copy: true;
             allow-move: root.reorder-enabled;
 
             inner-list := ListView {
@@ -113,7 +115,7 @@ export component DraggableTrackList inherits Rectangle {
                     view-selected-ids: root.view-selected-ids;
                     lifted: src.lifts(idx);
 
-                    pressed => { src.arm(idx); }
+                    pressed => { src.arm-items(idx, self.drag-items()); }
                     double-clicked-row => { root.play-row(r.id, idx); }
                     toggle-favorite => { root.toggle-row-favorite([r.id], !r.is_favorite); }
                     play-row(id, i) => { root.play-row(id, i); }

@@ -58,6 +58,9 @@ export global Queue {
 
     // A drag of one row dropped somewhere that moves it, in play order.
     callback reorder(int /*from*/, int /*to*/);
+    // Another list's drag let go over the rows: what Add to Queue on it would queue, landing in
+    // front of play-order slot `slot`.
+    callback drop-in(string /*kind*/, [int] /*ids*/, int /*slot*/);
     callback remove(int /*play_order_index*/);
     // Removes every row Rust holds picked, both copies of a track queued twice.
     callback remove-selected();

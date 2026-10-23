@@ -486,9 +486,8 @@ fn equal_titles_keep_the_order_the_drop_handed_over() {
     assert_eq!(batch.iter().map(|t| t.id).collect::<Vec<_>>(), [7, 3, 5]);
 }
 
-/// "Play Next" on a multi-row selection has to land in the order the rows were listed. Every
-/// `insert_next` goes to `current_index + 1`, so the batch is walked backwards to come out
-/// forwards, and nothing else in the queue moves.
+/// "Play Next" on a multi-row selection has to land in the order the rows were listed, as one
+/// block behind the current track, and nothing else in the queue moves.
 #[tokio::test]
 async fn play_next_lands_a_batch_in_input_order_behind_the_current_track() -> Result<(), AppError> {
     let db = DbPool::test_pool().await?;

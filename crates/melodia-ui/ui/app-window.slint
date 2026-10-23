@@ -70,6 +70,7 @@ import { CustomTitleBar } from "components/custom-titlebar.slint";
 import { EdgeOutline } from "components/edge-outline.slint";
 import { RoundedFrame } from "components/rounded-frame.slint";
 import { NotificationStack } from "components/dialog/notification-stack.slint";
+import { DragGhost } from "components/drag-ghost.slint";
 import { MiniPlayerSwitch } from "components/mini-player-switch.slint";
 import { SectionActiveGate } from "components/section-active-gate.slint";
 import { Tooltip, TooltipSide } from "components/tooltip.slint";
@@ -542,6 +543,19 @@ export component AppWindow inherits Window {
             background: WindowChrome.mantle;
         }
 
+        // **Behind everything**, where it hears exactly the moves no target took and keeps the
+        // drag's chip on the pointer between them. In front it would take their drops, a drop going
+        // to whatever `DropArea` the pointer is over.
+        DropArea {
+            width: 100%;
+            height: 100%;
+            can-drop(event) => {
+                Drag.follow(self.absolute-position.x + event.position.x,
+                    self.absolute-position.y + event.position.y, true);
+                return DragAction.none;
+            }
+        }
+
         // The only FocusScope in the tree, wrapping the whole main layout — every key a focused
         // TextInput doesn't consume lands here directly. Bindings, the volume-commit debounce and
         // the focus contract are in the component.
@@ -806,6 +820,13 @@ export component AppWindow inherits Window {
         NotificationStack {
             width: 100%;
             height: 100%;
+        }
+
+        // Over everything the window draws but its outline. `Drag` keeps the pointer in window
+        // coordinates, which the shell sits inside its margins from.
+        if Drag.live && Drag.ghost-shown && Drag.payload.items.kind != "": DragGhost {
+            x: Drag.x - parent.absolute-position.x;
+            y: Drag.y - parent.absolute-position.y;
         }
 
         // The outline an OS draws round its own frames, which a frameless window has to draw for

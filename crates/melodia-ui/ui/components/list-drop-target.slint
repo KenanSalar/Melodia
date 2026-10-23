@@ -1,14 +1,17 @@
 import { Theme } from "../theme.slint";
 import { Drag, DragOrigin } from "../globals/drag.slint";
 
-// Takes a list's own rows back as a reorder: a `DropArea` mounted over the list's viewport, so a
-// drop's position is a position in the list as drawn. Clicks and the wheel pass through it to the
-// rows.
+// Takes a list's own rows back as a reorder, and where the host says so, what another list's drag
+// carries as an insert: a `DropArea` mounted over the list's viewport, so a drop's position is a
+// position in the list as drawn. Clicks and the wheel pass through it to the rows.
 //
-// Slots, not rows: slot K is the gap above row K, `[0, row-count]`, and the two either side of the
-// lifted row leave it where it is, so they draw no line and move nothing.
+// Slots, not rows: slot K is the gap above row K, `[0, row-count]`, so below the last row and the
+// whole of an empty list are the end. For its own rows the two either side of the lifted row leave
+// it where it is, so they draw no line and move nothing.
 export component ListDropTarget inherits DropArea {
     in property <DragOrigin> origin;
+    // Whether it takes what other lists carry out, as a copy landing at the slot.
+    in property <bool> takes-items: false;
     // The list's pitch, which every row has.
     in property <length> row-height;
     in property <int> row-count;
@@ -21,14 +24,21 @@ export component ListDropTarget inherits DropArea {
 
     // `to` is where the row lands once it has left `from`.
     callback reorder(int /*from*/, int /*to*/);
+    // Another list's items, landing in front of row `slot`. They are `Drag.payload.items`.
+    callback dropped-items(int /*slot*/);
     // Positive scrolls down; the host clamps.
     callback scroll-by(length /*delta-y*/);
+
+    // A drag of another list's items is over the list, for the host to say what letting go does.
+    out property <bool> holds-items: root.has-drag && root.items-drag;
 
     // How near an edge the pointer scrolls the list, and how far one tick takes it.
     property <length> edge-band: 40px;
     property <length> scroll-step: 6px;
 
     property <bool> own-drag: Drag.payload.origin == root.origin;
+    property <bool> items-drag: root.takes-items && !root.own-drag
+        && Drag.payload.items.kind != "";
     property <int> lifted: Drag.payload.index;
 
     // Written by the two callbacks, the only places a position arrives, and kept so the slot follows
@@ -64,16 +74,23 @@ export component ListDropTarget inherits DropArea {
     }
 
     can-drop(event) => {
-        if (!root.own-drag) {
+        if (!root.own-drag && !root.items-drag) {
             return DragAction.none;
         }
         root.follow(event.position.y);
-        // Never `proposed-action`, which a held Ctrl or Shift turns into a copy.
-        return DragAction.move;
+        // Over its own rows the lifted row and the line say where it lands, so no chip.
+        Drag.follow(self.absolute-position.x + event.position.x,
+            self.absolute-position.y + event.position.y, !root.own-drag);
+        // Never `proposed-action`, which a held Ctrl or Shift turns into the other one.
+        return root.own-drag ? DragAction.move : DragAction.copy;
     }
 
     dropped(event) => {
         root.follow(event.position.y);
+        if (root.items-drag) {
+            root.dropped-items(root.slot);
+            return DragAction.copy;
+        }
         // Asked again: a payload revoked under a pointer at rest is still dropped where it was
         // accepted.
         if (!root.moves) {
@@ -85,7 +102,7 @@ export component ListDropTarget inherits DropArea {
 
     Timer {
         interval: 16ms;
-        running: root.has-drag && root.own-drag && root.edge != 0;
+        running: root.has-drag && (root.own-drag || root.items-drag) && root.edge != 0;
         triggered => {
             root.scroll-by(root.edge * root.scroll-step);
         }
@@ -93,7 +110,7 @@ export component ListDropTarget inherits DropArea {
 
     // Pinned inside the band: the slot after the last row sits on the content's bottom edge, which
     // is off the viewport once the list is scrolled to its end, and the top end mirrors it.
-    if root.has-drag && root.moves: Rectangle {
+    if root.has-drag && (root.moves || root.items-drag): Rectangle {
         x: 0;
         y: max(
             0px,

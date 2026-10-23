@@ -111,6 +111,22 @@ pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(
     Ok(())
 }
 
+/// A drop into the queue panel: splice `track_ids` in at play-order `slot`, in the order they
+/// came. The slot was read before the resolve, so one the queue has since shrunk under is the end.
+pub async fn queue_insert_at(
+    state: &AppState,
+    slot: usize,
+    track_ids: Vec<i64>,
+) -> Result<(), AppError> {
+    let ids = existing_in_order(&state.db, &track_ids).await?;
+
+    log::debug!("queue: insert {} track(s) at {slot}", ids.len());
+    with_state_emit(&state.player_state, &state.sinks, |s| {
+        s.queue.insert_at(slot, &ids);
+    });
+    Ok(())
+}
+
 /// The context menu's "Play Next": insert after `current_index` in input order,
 /// so the queue reads `[current, id_0, …, id_n, …]`. One DB round-trip and one
 /// `with_state_emit` for the batch.
@@ -133,11 +149,7 @@ async fn play_next_many(
 
     log::debug!("queue: play next, {} track(s)", ids.len());
     with_state_emit(player_state, sinks, |s| {
-        // `insert_next` always lands at `current_index + 1`, so walking the
-        // input backwards is what produces forward order.
-        for &id in ids.iter().rev() {
-            s.queue.insert_next(id);
-        }
+        s.queue.insert_next(&ids);
     });
     Ok(())
 }

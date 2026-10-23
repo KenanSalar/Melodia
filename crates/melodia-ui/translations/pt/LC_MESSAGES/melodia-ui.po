@@ -1109,7 +1109,8 @@ msgid "Repeat"
 msgstr "Repetir"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-panel/queue-panel.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Fila"
@@ -2303,6 +2304,42 @@ msgstr "A seguir"
 #: ui/views/placeholder-view.slint
 msgid "Coming soon"
 msgstr "Brevemente"
+
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "Adicionar {n} faixa à fila"
+msgstr[1] "Adicionar {n} faixas à fila"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "Adicionar “{}” à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "Adicionar {n} álbum à fila"
+msgstr[1] "Adicionar {n} álbuns à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "Adicionar {n} artista à fila"
+msgstr[1] "Adicionar {n} artistas à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "Adicionar {n} género à fila"
+msgstr[1] "Adicionar {n} géneros à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "Adicionar {n} playlist à fila"
+msgstr[1] "Adicionar {n} playlists à fila"
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"

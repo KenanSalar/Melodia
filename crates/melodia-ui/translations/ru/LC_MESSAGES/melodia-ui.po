@@ -1111,7 +1111,8 @@ msgid "Repeat"
 msgstr "Повтор"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-panel/queue-panel.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Очередь"
@@ -2328,6 +2329,47 @@ msgstr "Далее"
 #: ui/views/placeholder-view.slint
 msgid "Coming soon"
 msgstr "Скоро"
+
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "Добавить {n} трек в очередь"
+msgstr[1] "Добавить {n} трека в очередь"
+msgstr[2] "Добавить {n} треков в очередь"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "Добавить «{}» в очередь"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "Добавить {n} альбом в очередь"
+msgstr[1] "Добавить {n} альбома в очередь"
+msgstr[2] "Добавить {n} альбомов в очередь"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "Добавить {n} исполнителя в очередь"
+msgstr[1] "Добавить {n} исполнителей в очередь"
+msgstr[2] "Добавить {n} исполнителей в очередь"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "Добавить {n} жанр в очередь"
+msgstr[1] "Добавить {n} жанра в очередь"
+msgstr[2] "Добавить {n} жанров в очередь"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "Добавить {n} плейлист в очередь"
+msgstr[1] "Добавить {n} плейлиста в очередь"
+msgstr[2] "Добавить {n} плейлистов в очередь"
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"

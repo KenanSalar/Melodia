@@ -1,6 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { TrackListRow, TrackColumns, TrackColumnLayout } from "../../models.slint";
 import { RowCovers } from "../../globals/tracks.slint";
+import { Selection } from "../../globals/selection.slint";
+import { DragItems } from "../../globals/drag.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { TrackTitle } from "track-title.slint";
@@ -112,6 +114,18 @@ export component TrackListRowItem inherits Rectangle {
     callback request-blur-search();
     // A left press on the row body, which is what a drag from it would carry.
     callback pressed();
+
+    // What a drag from this row carries: the set this row's menu acts on, under its own title and
+    // cover. A disk-only Browse row never reports a press, its body being disabled.
+    public pure function drag-items() -> DragItems {
+        return {
+            kind: "track",
+            ids: Selection.effective-ids(root.row-data.id, root.selected,
+                root.view-selected-ids.length, root.view-selected-ids),
+            title: root.row-data.title,
+            cover: RowCovers.request(root.row-data.artwork_path, RowCovers.generation),
+        };
+    }
 
     // No width of its own: the list sets every row to its own width, which is the width `layout`
     // was resolved for.

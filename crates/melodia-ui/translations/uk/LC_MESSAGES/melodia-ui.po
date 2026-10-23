@@ -1111,7 +1111,8 @@ msgid "Repeat"
 msgstr "Повтор"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-panel/queue-panel.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Черга"
@@ -2328,6 +2329,47 @@ msgstr "Далі"
 #: ui/views/placeholder-view.slint
 msgid "Coming soon"
 msgstr "Незабаром"
+
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "Додати {n} трек до черги"
+msgstr[1] "Додати {n} треки до черги"
+msgstr[2] "Додати {n} треків до черги"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "Додати «{}» до черги"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "Додати {n} альбом до черги"
+msgstr[1] "Додати {n} альбоми до черги"
+msgstr[2] "Додати {n} альбомів до черги"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "Додати {n} виконавця до черги"
+msgstr[1] "Додати {n} виконавців до черги"
+msgstr[2] "Додати {n} виконавців до черги"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "Додати {n} жанр до черги"
+msgstr[1] "Додати {n} жанри до черги"
+msgstr[2] "Додати {n} жанрів до черги"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "Додати {n} плейлист до черги"
+msgstr[1] "Додати {n} плейлисти до черги"
+msgstr[2] "Додати {n} плейлистів до черги"
 
 #: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"
