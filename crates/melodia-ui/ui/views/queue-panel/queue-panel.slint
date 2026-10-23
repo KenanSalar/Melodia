@@ -13,6 +13,7 @@ import { DragSource } from "../../components/drag-source.slint";
 import { ListDropTarget } from "../../components/list-drop-target.slint";
 import { Drag, DragItems, DragOrigin, FileDrag, FileDropTarget } from "../../globals/drag.slint";
 import { WindowRectReport } from "../../components/window-rect-report.slint";
+import { FileDropBanner } from "../../components/file-drop-banner.slint";
 import { QueueRowItem } from "queue-row.slint";
 
 // The queue, docked after the content panel in the shell's row, so the sidebar, the content and
@@ -413,30 +414,13 @@ export component QueuePanel inherits Rectangle {
 
         // After the list, so it paints over it, and `if` rather than `visible:` so the absent
         // branch claims no layout slot.
-        if FileDrag.target == FileDropTarget.queue: Rectangle {
+        if FileDrag.target == FileDropTarget.queue: FileDropBanner {
             x: 0;
             y: 57px; // 56 px header + 1 px separator
             width: 100%;
             height: parent.height - 57px - root.body-pad-bottom;
-            background: Theme.crust.with-alpha(0.85);
-
-            VerticalLayout {
-                alignment: center;
-                cross-axis-alignment: center;
-                spacing: Theme.pad-md;
-                MaterialIcon {
-                    name: "library_add";
-                    icon-size: 40px;
-                    icon-color: Theme.accent;
-                }
-                Text {
-                    text: @tr("Drop to add to queue");
-                    color: Theme.text;
-                    font-size: Theme.font-size-md;
-                    font-weight: 600;
-                    horizontal-alignment: center;
-                }
-            }
+            icon: "library_add";
+            label: @tr("Drop to add to queue");
         }
 
         // Last, over the rows it borders. Docked only: a floating panel's width is the room the

@@ -1,4 +1,3 @@
-import { Theme } from "../../theme.slint";
 import { MyLibrary } from "../../globals/my-library.slint";
 import { Player } from "../../globals/player.slint";
 import { PlaylistDetail } from "../../globals/playlists.slint";
@@ -6,11 +5,11 @@ import { FileDrag, FileDropTarget } from "../../globals/drag.slint";
 import { DraggableTrackList } from "../../components/track-list/draggable-track-list.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
-import { MaterialIcon } from "../../components/material-icon.slint";
+import { FileDropBanner } from "../../components/file-drop-banner.slint";
 
 // `AlbumDetailBody`'s shape over `DraggableTrackList` — the shared `TrackList` takes no rows
-// back, so only this list reorders — plus the empty state and the OS file-drop banner, which both
-// fill `body`.
+// back, so only this list reorders — plus the empty state filling `body` and the OS file-drop
+// banner over all of it.
 export component PlaylistDetailBody inherits Rectangle {
     // Catches clicks no inner TouchArea consumes; the band's SearchBar blurs on the tick.
     TouchArea {
@@ -73,32 +72,6 @@ export component PlaylistDetailBody inherits Rectangle {
                 ? @tr("No tracks match these rules.")
                 : @tr("Drag music files here, or add tracks via any track's overflow menu.");
         }
-
-        // A file held over the page, which the winit filter targets only while this detail is
-        // the view on screen and takes files. Stacks above the empty state.
-        if FileDrag.target == FileDropTarget.playlist: Rectangle {
-            background: Theme.accent.with-alpha(0.16);
-            border-radius: Theme.radius-md;
-            border-width: 2px;
-            border-color: Theme.accent;
-
-            VerticalLayout {
-                alignment: center;
-                cross-axis-alignment: center;
-                spacing: Theme.pad-sm;
-                MaterialIcon {
-                    name: "playlist_add";
-                    icon-size: 56px;
-                    icon-color: Theme.accent;
-                }
-                Text {
-                    text: @tr("Drop files to add to this playlist");
-                    color: Theme.text;
-                    font-size: Theme.font-size-lg;
-                    font-weight: 600;
-                }
-            }
-        }
     }
 
     TrackListScrollbars {
@@ -110,5 +83,12 @@ export component PlaylistDetailBody inherits Rectangle {
         v-viewport-height: tl.v-viewport-height;
         v-offset: tl.v-offset;
         set-v-offset(o) => { tl.set-v-offset(o); }
+    }
+
+    // A file held over the page, which the winit filter targets only while this detail is the
+    // view on screen and takes files. Last, so it dims the scrollbar as well as the rows.
+    if FileDrag.target == FileDropTarget.playlist: FileDropBanner {
+        icon: "playlist_add";
+        label: @tr("Drop files to add to this playlist");
     }
 }
