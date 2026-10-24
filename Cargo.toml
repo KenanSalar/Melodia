@@ -400,3 +400,12 @@ opt-level = "s"
 # which is also the build-memory peak the CI `CARGO_BUILD_JOBS` cap holds down.
 [profile.dev.package."*"]
 opt-level = 3
+
+# Full debuginfo is nearly all of what this crate's objects weigh: each codegen unit carries
+# its own copy of the type records for the Slint component tree and every async state machine
+# it touches. On MSVC an rlib is a COFF archive with 32-bit member offsets, and rustc panics
+# writing one that outgrows them rather than erroring; GNU archives move to a 64-bit symbol
+# table, so only Windows sees it. Line tables keep file:line in a backtrace, the same trade
+# the CI test jobs make.
+[profile.dev.package.melodia-views]
+debug = "line-tables-only"

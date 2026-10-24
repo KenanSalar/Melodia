@@ -1,6 +1,6 @@
 # Plan: Queue panel (the queue docks on the right and takes drops)
 
-Status: **in progress**, Phases 1 to 7 done (Phase 6's touch checks deferred, Phase 7 still to validate on Windows), Phases 7.5 and 7.6 implemented and waiting on their hand passes, Phase 8 next · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
+Status: **in progress**, Phases 1 to 7 done (Phase 6's touch checks deferred), Phases 7.5 and 7.6 implemented and waiting on their hand passes, Phase 8 next · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
 
 > **Validated 2026-10-21** against `72a0e74f` (`feat/queue-panel`). Three read-only traces went into it: the queue sheet, the left sidebar's resize and fold, and drag and drop with Add to Queue. They were checked against:
 > - the Slint 1.18.1 sources for `DragArea`, `DropArea` and the in-window drag (`i-slint-core/items/drag_n_drop.rs`, `window.rs`);
@@ -499,7 +499,7 @@ Status: done, implemented 2026-10-22 and passed by hand 2026-10-23, except the t
 - **Out of scope, joinable later through the same `DragSource`:** Search's two card strips (no menu, no Add to Queue today), Browse's card mode and folder cards (open question 3) and station cards.
 
 ### Phase 7: File drops land where they are let go
-Status: done, implemented and passed by hand on Linux 2026-10-23. Windows still needs validation on the Windows machine, and no CI run has built the branch yet, so `clippy-windows` and `test-windows` haven't compiled the fork's Win32 half either. Its tests wait for Phase 8.
+Status: done, implemented and passed by hand on Linux 2026-10-23 and on Windows 2026-10-24, where it behaves as on Linux. No CI run has built the branch yet, so the fork's Win32 half has met rustc on the Windows machine but not `clippy-windows` or `test-windows`. Its tests wait for Phase 8.
 
 1. **The fork reports the pointer during a file drag** on Wayland, X11 and Win32 (decision 9). `winit/README.md` lists the fourth change. The routing stays the filter's: no OS drag reaches a `DropArea` in 1.18.1 (Phase 4).
 2. **The filter tracks that position.**
@@ -534,6 +534,9 @@ Status: done, implemented and passed by hand on Linux 2026-10-23. Windows still 
 - **On Wayland a drop that beats the path list waits for it**, and a `Leave` arriving meanwhile leaves the read alone. The old `Drop` arm sent whatever had been read so far. A list naming no file enters nothing, as on X11 and Windows. X11 asks for the list on the first position, as before, and a drop ahead of it still lands nothing.
 - **The fork fixes the Win32 `IDropTarget` vtable**, which declared the point as a pointer where COM passes it by value. Harmless while nothing read it.
 - **macOS isn't patched.** It isn't a release target, and its backend still sends the per-file events, which the filter no longer reads.
+
+**Found in the Windows pass** (2026-10-24):
+- **A Windows dev build stopped producing `melodia-views`.** rustc panicked writing its rlib, a COFF archive with 32-bit member offsets that the crate's full debuginfo had outgrown, every codegen unit carrying its own copy of the type records for the Slint component tree. Neither gate could see it: clippy never codegens, and both test jobs build with line tables. `[profile.dev.package.melodia-views]` caps that crate's dev debuginfo at line tables, and the root `Cargo.toml` argues it at the table.
 
 ### Phase 7.5: A drag of picked rows moves them all
 Status: implemented 2026-10-23, static gates green, waiting on its hand pass. Its tests wait for Phase 8.
