@@ -1,7 +1,6 @@
 //! The queue panel's lifecycle: the toggle, the queue shown as the panel comes on screen, and its
 //! rows and covers handed back once it has gone.
 
-use std::cell::Cell;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -11,7 +10,7 @@ use std::time::Duration;
 use async_compat::Compat;
 use slint::{ComponentHandle, Weak};
 
-use super::rows::show_queue;
+use super::rows::{read_queue, show_queue};
 use crate::ui::grid_prewarm::unique_artwork_paths;
 use crate::ui::nav_transition;
 use crate::ui::paged_rows::Keyset;
@@ -19,7 +18,6 @@ use crate::ui::paged_rows::queue_rows::{self, QueueRows};
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::error::describe;
-use melodia_engine::player::engine::state::lock_state;
 use melodia_ui::{AppWindow, Nav, NavEnterFrom, Queue, QueueRow};
 
 /// Covers decoded ahead of first paint when the panel is shown.
@@ -39,11 +37,10 @@ pub(super) fn wire(
     state: &AppState,
     rows: &Rc<QueueRows>,
     queue_covers: &Arc<CoverThumbs>,
-    anchor: &Rc<Cell<i32>>,
     shown: &Arc<AtomicBool>,
 ) {
     wire_toggle(ui);
-    wire_shown(ui, state, rows, queue_covers, anchor, shown);
+    wire_shown(ui, state, rows, queue_covers, shown);
 }
 
 /// The bar's button, its overflow entry and Q. Under Now Playing the panel is open but stepped
@@ -78,7 +75,6 @@ fn wire_shown(
     state: &AppState,
     rows: &Rc<QueueRows>,
     queue_covers: &Arc<CoverThumbs>,
-    anchor: &Rc<Cell<i32>>,
     shown: &Arc<AtomicBool>,
 ) {
     // Per-handler generation counter — every hide bumps it and stamps
@@ -96,7 +92,6 @@ fn wire_shown(
         weak: ui.as_weak(),
         state: state.clone(),
         rows: rows.clone(),
-        anchor: anchor.clone(),
         queue_covers: queue_covers.clone(),
         shown: shown.clone(),
     };
@@ -116,7 +111,6 @@ struct Showing {
     weak: Weak<AppWindow>,
     state: AppState,
     rows: Rc<QueueRows>,
-    anchor: Rc<Cell<i32>>,
     queue_covers: Arc<CoverThumbs>,
     shown: Arc<AtomicBool>,
 }
@@ -137,14 +131,14 @@ impl Showing {
     ///    decoding one.
     fn show(&self) {
         let Some(ui) = self.weak.upgrade() else { return };
-        let qvm = lock_state(&self.state.player_state).to_queue_view_model();
-        show_queue(&ui, &self.rows, &self.anchor, &qvm);
+        let read = read_queue(&self.state, &self.rows);
+        let (ids, at) = (Arc::clone(&read.ids), usize::try_from(read.index).unwrap_or(0));
+        show_queue(&ui, &self.rows, read);
         drop(ui);
 
-        let at = usize::try_from(qvm.queue_index).unwrap_or(0);
         let seeded = {
             let state = self.state.clone();
-            self.state.runtime.spawn(async move { queue_rows::seed(&state, qvm.ids, at).await })
+            self.state.runtime.spawn(async move { queue_rows::seed(&state, ids, at).await })
         };
         let (weak, rows) = (self.weak.clone(), self.rows.clone());
         let (queue_covers, shown) = (self.queue_covers.clone(), self.shown.clone());
@@ -164,10 +158,8 @@ impl Showing {
                 return; // hidden while it fetched
             }
             let paths = keyset.as_ref().map(|keyset| prewarm_paths(keyset, at)).unwrap_or_default();
-            // Only over the ids it was fetched for: a queue that moved since is already on show
-            // and fetching its own rows.
-            if let Some(keyset) = keyset.filter(|keyset| *keyset.ids == *rows.ids()) {
-                rows.show(keyset);
+            if let Some(keyset) = keyset {
+                rows.land_seed(keyset);
             }
             // No early return on an empty `paths`, even though there is then nothing to decode:
             // the bump is also what takes the lookup off `get_cached_opt`, so skipping it would

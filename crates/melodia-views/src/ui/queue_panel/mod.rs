@@ -2,22 +2,20 @@
 //! callbacks, its rows, a [`QueueRows`] over the queue's ids, and
 //! the `shown` atomic its row subscriber and lifecycle are gated on.
 //!
-//! **Picks are by track, as on every other list**: the queue can hold a track twice, and picking
-//! either row picks both, which is what the batch entries then act on.
+//! **Picks are by queue entry, not by track**: the queue can hold a track twice, and each copy is
+//! its own row to pick, drag and remove.
 
 mod callbacks;
 mod lifecycle;
 mod rows;
 
-use std::cell::Cell;
-use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-use slint::{ComponentHandle, Model, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, VecModel};
 
-use crate::ui::list_selection::{NO_ANCHOR, write_selection_ids};
+use crate::ui::list_selection::write_selection_ids;
 use crate::ui::paged_rows::queue_rows::{self, QueueRows};
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
@@ -40,9 +38,6 @@ pub fn install(
     let selected_ids: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Queue>().set_selected_ids(ModelRc::from(selected_ids));
 
-    // The id a shift-click ranges from, the track lists' anchor, kept here because `Queue` has no
-    // property for it.
-    let anchor = Rc::new(Cell::new(NO_ANCHOR));
     let shown = Arc::new(AtomicBool::new(false));
     // Private so hiding can drop it wholesale: clearing the row tier would yank covers the track
     // lists and the now-playing bar still need. Backed by it, so a cover both draw is one buffer.
@@ -68,9 +63,9 @@ pub fn install(
         });
     }
 
-    callbacks::wire_callbacks(ui, state, &rows, &anchor);
-    lifecycle::wire(ui, state, &rows, &queue_covers, &anchor, &shown);
-    rows::spawn_queue_rows_subscriber(ui, state, rows, anchor, shown)?;
+    callbacks::wire_callbacks(ui, state, &rows);
+    lifecycle::wire(ui, state, &rows, &queue_covers, &shown);
+    rows::spawn_queue_rows_subscriber(ui, state, rows, shown)?;
 
     // No install-time seed: the panel is hidden at startup, so the
     // subscriber is gated and the model stays empty (no covers decoded
@@ -80,35 +75,13 @@ pub fn install(
     Ok(())
 }
 
-/// Make `picked` the panel's picks, less any track the queue no longer holds: stamped on the rows,
-/// and published as the count the row menu labels its batch entries with and the ids it hands
-/// them.
-///
-/// **The count is rows and the ids are each once**, the same number everywhere except a queue
-/// holding one track twice: both rows are picked, and both are what Remove takes, where a playlist
-/// should get the track once. The ids go in queue order, which is the order Copy writes them in.
-pub(super) fn apply_picks(ui: &AppWindow, rows: &QueueRows, picked: &HashSet<i32>) {
-    let mut count = 0usize;
-    let mut held = HashSet::new();
-    let mut ids = Vec::with_capacity(picked.len());
-    for id in rows.row_ids() {
-        if !picked.contains(&id) {
-            continue;
-        }
-        count += 1;
-        if held.insert(id) {
-            ids.push(id);
-        }
-    }
-    rows.select(&held);
+/// Publish the panel's picks as the count the row menu labels its batch entries with and the ids
+/// it hands them, in queue order, which is the order Copy writes them in.
+pub(super) fn publish_picks(ui: &AppWindow, rows: &QueueRows) {
+    let (count, ids) = rows.picked_tracks();
     let queue = ui.global::<Queue>();
     queue.set_selected_count(i32::try_from(count).unwrap_or(i32::MAX));
     write_selection_ids(&queue.get_selected_ids(), ids, |m| queue.set_selected_ids(m));
-}
-
-/// The panel's picks, as `apply_picks` last published them.
-pub(super) fn picked(ui: &AppWindow) -> HashSet<i32> {
-    ui.global::<Queue>().get_selected_ids().iter().collect()
 }
 
 #[cfg(test)]

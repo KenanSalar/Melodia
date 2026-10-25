@@ -14,9 +14,9 @@ export global Queue {
     in property <int> selected-count: 0;
     // The same selection as a batch payload for the row context menu, **deduped by track id and
     // in display order**. Deliberately not `selected-count`'s length: a queue may hold one track
-    // twice and picks are by track, so selecting either instance marks both — an
-    // undeduped list would add that track to a playlist twice. The menu counts rows and acts on
-    // ids, which is why both properties exist.
+    // twice, each copy picked on its own, and with both picked an undeduped list would add that
+    // track to a playlist twice. The menu counts rows and acts on ids, which is why both
+    // properties exist.
     in property <[int]> selected-ids;
     // What the user asked of the docked panel, and what persists. Whether the panel is on screen
     // is `shown`.
@@ -63,7 +63,7 @@ export global Queue {
     // front of play-order slot `slot`.
     callback drop-in(string /*kind*/, [int] /*ids*/, int /*slot*/);
     callback remove(int /*play_order_index*/);
-    // Removes every row Rust holds picked, both copies of a track queued twice.
+    // Removes every row Rust holds picked, and no other copy of their tracks.
     callback remove-selected();
     callback skip-to(int /*play_order_index*/);
     callback clear-queue();

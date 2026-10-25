@@ -1,7 +1,6 @@
 //! The `sinks.queue` and `library_changed` subscriber, and what showing a new queue owes the
 //! panel's picks and its drag.
 
-use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,12 +8,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use async_compat::Compat;
 use slint::ComponentHandle;
 
-use super::{apply_picks, picked};
-use crate::ui::list_selection::NO_ANCHOR;
+use super::publish_picks;
 use crate::ui::paged_rows::queue_rows::QueueRows;
-use crate::ui::paged_rows::{Keyset, ReadStamp};
 use melodia_app::state::AppState;
-use melodia_engine::player::engine::state::QueueViewModel;
+use melodia_engine::player::engine::queue::{QueueEntry, current_index_to_i32};
+use melodia_engine::player::engine::state::lock_state;
 use melodia_ui::{AppWindow, Drag, DragOrigin, Queue};
 
 /// Follow the queue and the library while the panel is shown: each queue publish shows the queue,
@@ -23,14 +21,17 @@ use melodia_ui::{AppWindow, Drag, DragOrigin, Queue};
 /// Gated on the panel being on screen: hidden, nobody sees the rows and the teardown has released
 /// them, so following would fetch rows nothing reads. The next `on_shown_changed(true)` shows the
 /// queue from `PlayerState`.
+///
+/// A queue publish is only the cue: what it shows is [`read_queue`]'s, the view model on the
+/// channel carrying no entries.
 pub(super) fn spawn_queue_rows_subscriber(
     ui: &AppWindow,
     state: &AppState,
     rows: Rc<QueueRows>,
-    anchor: Rc<Cell<i32>>,
     shown: Arc<AtomicBool>,
 ) -> Result<(), slint::EventLoopError> {
     let weak = ui.as_weak();
+    let state = state.clone();
     let mut queue_rx = state.sinks.queue.subscribe();
     let mut library_rx = state.library_changed.subscribe();
     slint::spawn_local(Compat::new(async move {
@@ -54,59 +55,47 @@ pub(super) fn spawn_queue_rows_subscriber(
             }
             let Some(ui) = weak.upgrade() else { break };
             if !queue_moved {
-                reread_rows(&rows);
+                rows.reread();
                 continue;
             }
-            let snapshot = queue_rx.borrow_and_update().clone();
-            if let Some(qvm) = snapshot {
-                show_queue(&ui, &rows, &anchor, &qvm);
-            }
+            show_queue(&ui, &rows, read_queue(&state, &rows));
         }
         log::debug!("ui::queue_panel rows subscriber stopped");
     }))?;
     Ok(())
 }
 
-/// Show the queue `qvm` describes and point the panel at its current row.
+/// The queue as the panel shows it, read in one lock so its ids and its entries describe one
+/// queue.
+pub(super) struct QueueRead {
+    pub(super) ids: Arc<[i64]>,
+    /// `None` where `ids` is the order already on show, whose entries the panel holds.
+    entries: Option<Arc<[QueueEntry]>>,
+    pub(super) index: i32,
+}
+
+/// Read the queue off the state rather than off `sinks.queue`'s view model, which carries no
+/// entries (`QueueViewModel` says why). They are derived only where the order on show has moved:
+/// a track change hands back the ids it showed.
+pub(super) fn read_queue(state: &AppState, rows: &QueueRows) -> QueueRead {
+    let player = lock_state(&state.player_state);
+    let ids = player.queue.play_ids();
+    let entries = (!rows.shows(&ids)).then(|| player.queue.play_entries());
+    QueueRead { ids, entries, index: current_index_to_i32(player.queue.current_index) }
+}
+
+/// Show the queue `read` describes and point the panel at its current row.
 ///
-/// The same ids in the same order repaint nothing, which is every track change and the publish
-/// that follows a drag the panel already moved. Anything else resets the list, so a drag still in
-/// flight is revoked (it goes on, the panel's source surviving its rows, but the index it lifted no
-/// longer names the same track), and picks of tracks that left the queue go.
-pub(super) fn show_queue(
-    ui: &AppWindow,
-    rows: &QueueRows,
-    anchor: &Cell<i32>,
-    qvm: &QueueViewModel,
-) {
-    let moved = *rows.ids() != *qvm.ids;
-    rows.show(Keyset { ids: Arc::clone(&qvm.ids), seed: Vec::new(), read: ReadStamp::now() });
-    let queue = ui.global::<Queue>();
-    queue.set_current_index(qvm.queue_index);
+/// The same entries in the same order repaint nothing, which is every track change and the
+/// publish that follows a drag the panel already moved. Anything else resets the list, so a drag
+/// still in flight is revoked (it goes on, the panel's source surviving its rows, but the index it
+/// lifted may no longer name the same row), and picks of rows that left the queue go.
+pub(super) fn show_queue(ui: &AppWindow, rows: &QueueRows, read: QueueRead) {
+    let moved = read.entries.is_some_and(|entries| rows.show(read.ids, entries));
+    ui.global::<Queue>().set_current_index(read.index);
     if !moved {
         return;
     }
     ui.global::<Drag>().invoke_revoke(DragOrigin::Queue);
-    keep_picks_within_queue(ui, rows, anchor);
-}
-
-/// Drop the picks, and the anchor, of tracks the queue no longer holds.
-fn keep_picks_within_queue(ui: &AppWindow, rows: &QueueRows, anchor: &Cell<i32>) {
-    let picked = picked(ui);
-    if picked.is_empty() && anchor.get() == NO_ANCHOR {
-        return;
-    }
-    let row_ids = rows.row_ids();
-    if !row_ids.contains(&anchor.get()) {
-        anchor.set(NO_ANCHOR);
-    }
-    apply_picks(ui, rows, &picked);
-}
-
-/// Read every row the panel holds again, those on screen first, after a library change that may
-/// have rewritten any of them. The ids are the queue's rather than a query's, so the stamp they
-/// are read again against is now.
-fn reread_rows(rows: &QueueRows) {
-    rows.show(Keyset { ids: rows.ids(), seed: Vec::new(), read: ReadStamp::now() });
-    rows.reread();
+    publish_picks(ui, rows);
 }

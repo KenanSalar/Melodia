@@ -1,41 +1,41 @@
-//! The panel's picks over a queue holding a track twice. Picks are by track, as on every other
-//! list, so both of its rows are picked and both are what Remove takes.
+//! The panel's picks over a queue holding a track twice. A pick names one queued copy, so the other
+//! copy of its track stays unpicked and out of what Remove takes.
 
-use std::collections::HashSet;
 use std::rc::Rc;
-use std::sync::Arc;
 
 use slint::Model;
 
 use crate::ui::paged_rows::queue_rows::QueueRows;
-use crate::ui::paged_rows::{Keyset, ReadStamp};
+use melodia_engine::player::engine::queue::QueueState;
 
 /// The panel over a queue playing 1, 2, 1, 3, no row fetched.
 fn panel_over_a_repeat() -> Rc<QueueRows> {
+    let mut queue = QueueState::default();
+    queue.add_tracks(&[1, 2, 1, 3]);
     let rows = QueueRows::new(|_request| {});
-    rows.show(Keyset { ids: Arc::from([1, 2, 1, 3]), seed: Vec::new(), read: ReadStamp::now() });
+    rows.show(queue.play_ids(), queue.play_entries());
     rows
 }
 
-/// Picking either row of a track queued twice picks both, which is what the batch entries then
-/// act on and what the count beside them says.
+/// A click on one row of a track queued twice marks that row and leaves the other copy alone,
+/// which is also what a drag of the picks then carries.
 #[test]
-fn picking_a_track_queued_twice_marks_both_of_its_rows() {
+fn picking_one_copy_of_a_track_queued_twice_marks_that_row_alone() {
     let rows = panel_over_a_repeat();
 
-    rows.select(&HashSet::from([1]));
+    rows.click(0, true, false);
 
     let marked: Vec<bool> = rows.iter().map(|row| row.selected).collect();
-    assert_eq!(marked, [true, false, true, false]);
+    assert_eq!(marked, [true, false, false, false]);
 }
 
-/// Remove takes every row a pick names, so it can't leave one copy of a track queued twice behind,
-/// still marked as picked.
+/// Remove takes the picked rows alone, so it can't delete the copy of a picked track the user left
+/// unpicked.
 #[test]
-fn removing_the_picks_takes_both_copies_of_a_track_queued_twice() {
+fn removing_the_picks_leaves_the_unpicked_copy_of_their_track() {
     let rows = panel_over_a_repeat();
 
-    rows.select(&HashSet::from([1]));
+    rows.click(2, true, false);
 
-    assert_eq!(rows.picked_rows(), [0, 2]);
+    assert_eq!(rows.picked_rows(), [2]);
 }

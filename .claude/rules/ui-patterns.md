@@ -722,7 +722,7 @@ three components that answer it, and each argues its geometry at its own file.
   - **A press on a picked row while others are picked lifts them all**, the menu's rule
     (`Selection.acts-on-set`). The row arms as usual, then `src.lift-picks(…)` with the host
     global's `picked-run()`, Rust being the only side that can find the picks in a list it pages
-    (`PagedRows::picked_rows`, `ui::drag::lifted_run`). Each picked row adds
+    (`picked_rows` on `PagedRows` and on `QueueRows`, `ui::drag::lifted_run`). Each picked row adds
     `|| (row.selected && src.lifting-picks)` to its `lifted`, the no-op slots widen to the run
     (scattered picks have none, any drop gathering them), and the drop arrives as
     `move-picks(slot)`. The queue panel and Playlist Detail take it; Up Next has no picks.
@@ -771,9 +771,12 @@ three components that answer it, and each argues its geometry at its own file.
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and
   its module doc argues the window, the one fetch in flight and the seed a load fetches where the
   list is scrolled. Both Songs tabs and the four details are six of them, all
-  `track_rows::TrackRows`. The queue panel is the seventh, a `queue_rows::QueueRows` over the ids
-  the engine publishes, and its picks are by track as every other list's are, so a track queued
-  twice is picked, counted and removed as both rows. A favourite or rating change patches the
+  `track_rows::TrackRows`. The queue panel is the seventh, a `queue_rows::QueueRows` built over one
+  as `PagedGrid` is, and it is the one list that **picks by row rather than by track**: a track
+  queued twice is two rows, and the picks name the engine's `QueueEntry`s, so each copy is picked,
+  dragged and removed on its own, and the menu counts rows and acts on each track once. The
+  entries come off the state through `queue_panel::rows::read_queue`, never off `QueueViewModel`,
+  whose doc says why. A favourite or rating change patches the
   cached row, where the `VecModel` lists go through `model_patch`; the `list_selection` helpers
   take either model. A list over another row type implements `PagedRow` for it rather than growing
   a second model.

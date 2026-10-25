@@ -78,6 +78,11 @@ pub struct PlayerViewModelLight {
 }
 
 /// Queue-specific `ViewModel` emitted only when the queue changes.
+///
+/// **It carries no [`QueueEntry`](crate::player::engine::queue::QueueEntry)s.** The watch and Now
+/// Playing keep the latest one alive for every install, so a field here would cost a word a
+/// queued row whether or not the queue panel is ever opened. The panel, their one reader, takes
+/// them off the state through `QueueState::play_entries` while it is shown.
 #[derive(Debug, Clone)]
 pub struct QueueViewModel {
     /// The queue in play order, shared with the state until the order moves: an advance publishes

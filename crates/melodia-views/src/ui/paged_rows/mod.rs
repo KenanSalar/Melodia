@@ -260,6 +260,9 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
     /// the same order, only the rows that read differently are repainted, so a library tick that
     /// moved nothing on screen rebuilds no `ListView` delegate; anything else resets.
     ///
+    /// The incoming ids are kept either way, so a list that built its own copy of an order (a
+    /// reorder shown ahead of the write) shares the publisher's again once that lands.
+    ///
     /// The anchor survives the reset, Slint keeping the scroll offset: the rows it reads next sit
     /// where the old ones did, which is the span the seed was fetched for.
     pub fn show(&self, keyset: Keyset<R>) {
@@ -268,11 +271,11 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
         self.absent.borrow_mut().clear();
         let changed = self.store(seed, read);
         let same = **self.keyset.borrow() == *ids;
+        *self.keyset.borrow_mut() = ids;
         if same {
             self.repaint(&changed);
             return;
         }
-        *self.keyset.borrow_mut() = ids;
         self.notify.reset();
     }
 
@@ -392,7 +395,7 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
         }
     }
 
-    /// Where the selected rows sit, in order, every row of an id the list shows twice included.
+    /// Where the selected rows sit, in order.
     pub fn picked_rows(&self) -> Vec<usize> {
         let selected = self.selected.borrow();
         self.keyset

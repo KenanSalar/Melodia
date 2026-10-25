@@ -223,9 +223,9 @@ export component QueueRowItem inherits Rectangle {
             rate(ids, n) => { Queue.set-row-rating(ids, n); }
             select-all => { Queue.select-all(); }
             clear-selection => { Queue.clear-selection(); }
-            // Index-shaped rather than by the payload's ids: a single remove takes this row and
-            // not another copy of its track, and `remove-selected` takes every row Rust has
-            // picked, which for a track queued twice is both.
+            // Index-shaped rather than by the payload's ids, which name tracks: a single remove
+            // takes this row and `remove-selected` the rows Rust has picked, neither touching
+            // another copy of the same track.
             request-remove(ids) => {
                 if (ctx-menu.multi-active) {
                     Queue.remove-selected();

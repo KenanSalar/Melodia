@@ -1,37 +1,28 @@
 //! `Queue.*` callback wiring: the transport rows, the drags that move rows, a drop from another
 //! list, the row menu's favourite and rating, and the picks.
 
-use std::cell::Cell;
-use std::collections::HashSet;
 use std::rc::Rc;
 
 use slint::{ComponentHandle, Weak};
 
-use super::{apply_picks, picked};
+use super::publish_picks;
 use crate::ui::callbacks::card_actions::spawn_with_track_ids;
 use crate::ui::callbacks::collect_track_ids;
 use crate::ui::callbacks::macros::wire_row_flag;
 use crate::ui::drag;
-use crate::ui::list_selection::{NO_ANCHOR, compute_click_selection};
 use crate::ui::paged_rows::queue_rows::QueueRows;
-use crate::ui::util::clamp_i64_to_i32;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_core::utils::block_move;
 use melodia_ui::{AppWindow, Queue, QueueRow};
 
-pub(super) fn wire_callbacks(
-    ui: &AppWindow,
-    state: &AppState,
-    rows: &Rc<QueueRows>,
-    anchor: &Rc<Cell<i32>>,
-) {
+pub(super) fn wire_callbacks(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
     wire_transport(ui, state, rows);
     wire_moves(ui, state, rows);
     wire_drop_in(ui, state);
     wire_row_flags(ui, state);
-    wire_selection(ui, rows, anchor);
+    wire_selection(ui, rows);
 }
 
 /// The four rows that only ask the engine for something.
@@ -207,40 +198,25 @@ fn patch_rows(
 }
 
 /// The three selection rows, each over the shared click semantics the track lists use.
-fn wire_selection(ui: &AppWindow, rows: &Rc<QueueRows>, anchor: &Rc<Cell<i32>>) {
+fn wire_selection(ui: &AppWindow, rows: &Rc<QueueRows>) {
     let weak = ui.as_weak();
     let queue = ui.global::<Queue>();
 
     {
-        let (rows, anchor, weak) = (rows.clone(), anchor.clone(), weak.clone());
+        let (rows, weak) = (rows.clone(), weak.clone());
         queue.on_toggle_select(move |idx, ctrl, shift| {
             let Some(ui) = weak.upgrade() else { return };
-            let Some(id) = usize::try_from(idx).ok().and_then(|at| rows.ids().get(at).copied())
-            else {
-                return;
-            };
-            let (picks, next_anchor) = compute_click_selection(
-                anchor.get(),
-                picked(&ui).into_iter().collect(),
-                || rows.row_ids(),
-                idx,
-                clamp_i64_to_i32(id),
-                shift,
-                ctrl,
-            );
-            anchor.set(next_anchor);
-            apply_picks(&ui, &rows, &picks.into_iter().collect());
+            rows.click(idx, ctrl, shift);
+            publish_picks(&ui, &rows);
         });
     }
 
     {
-        let (rows, anchor, weak) = (rows.clone(), anchor.clone(), weak.clone());
+        let (rows, weak) = (rows.clone(), weak.clone());
         queue.on_clear_selection(move || {
             let Some(ui) = weak.upgrade() else { return };
-            apply_picks(&ui, &rows, &HashSet::new());
-            // Only the clear drops the anchor: Select All leaves whatever a click last established,
-            // so a following Shift-click still extends from where the user was.
-            anchor.set(NO_ANCHOR);
+            rows.clear_picks();
+            publish_picks(&ui, &rows);
         });
     }
 
@@ -248,7 +224,8 @@ fn wire_selection(ui: &AppWindow, rows: &Rc<QueueRows>, anchor: &Rc<Cell<i32>>) 
         let rows = rows.clone();
         queue.on_select_all(move || {
             let Some(ui) = weak.upgrade() else { return };
-            apply_picks(&ui, &rows, &rows.row_ids().into_iter().collect());
+            rows.select_all();
+            publish_picks(&ui, &rows);
         });
     }
 }

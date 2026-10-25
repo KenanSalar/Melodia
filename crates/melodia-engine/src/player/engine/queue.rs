@@ -24,6 +24,12 @@ pub struct PruneOutcome {
     pub current_was_removed: bool,
 }
 
+/// One queued copy of a track, which tells a track queued twice apart from itself. It keeps its
+/// value for as long as its row is in the queue, through every move, shuffle and removal around
+/// it, and is never handed out again once the row has gone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct QueueEntry(usize);
+
 /// The queue as track ids. The records a transition needs live in the player's `TrackWindow`.
 ///
 /// The three vectors are crate-private because [`Self::play_ids`] caches what they spell, and a
@@ -32,6 +38,10 @@ pub struct PruneOutcome {
 pub struct QueueState {
     /// Every entry's track id, each queued entry once, so a track queued twice is two entries.
     pub(crate) tracks: Vec<i64>,
+    /// Slots a `clear` or a `prune_missing` has retired, the only two writes that reuse or
+    /// renumber a slot. A [`QueueEntry`] is its slot counted past these, which is what lets the
+    /// queue name its entries without storing one per track.
+    retired: usize,
     /// Current playback order — indices into `tracks`.
     pub(crate) play_order: Vec<usize>,
     /// Original insertion order — indices into `tracks`. Used to restore on unshuffle.
@@ -55,6 +65,7 @@ impl Default for QueueState {
     fn default() -> Self {
         Self {
             tracks: Vec::new(),
+            retired: 0,
             play_order: Vec::new(),
             original_order: Vec::new(),
             current_index: None,
@@ -132,6 +143,14 @@ impl QueueState {
             self.play_order.iter().filter_map(|&ti| self.tracks.get(ti).copied()).collect()
         });
         Arc::clone(ids)
+    }
+
+    /// Every entry in play order, the row-for-row twin of [`Self::play_ids`].
+    ///
+    /// Built per call where the ids are cached: the queue panel is the one reader, and only while
+    /// it is shown, so a cache here would sit resident for every install that never opens it.
+    pub fn play_entries(&self) -> Arc<[QueueEntry]> {
+        self.play_order.iter().map(|&slot| QueueEntry(self.retired + slot)).collect()
     }
 
     /// The tracks a transition can move onto without a fetch, those at [`window_slots`], each id
@@ -286,6 +305,7 @@ impl QueueState {
     }
 
     pub fn clear(&mut self) {
+        self.retired += self.tracks.len();
         self.tracks.clear();
         self.play_order.clear();
         self.original_order.clear();
@@ -563,6 +583,9 @@ impl QueueState {
                 .or_else(|| self.play_order.len().checked_sub(1))
         });
 
+        // Renumbered slots would hand the survivors' entries to other rows, so every entry
+        // retires and each survivor comes back as a new one.
+        self.retired += old_len;
         self.tracks = new_tracks;
         self.order_changed();
 
