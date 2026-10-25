@@ -18,10 +18,6 @@ use melodia_platform::services::platform::install_kind::linux_pkg::LinuxPackageF
 
 use super::InstallOutcome;
 
-/// pkexec's exit when the user dismissed the authentication dialog, per pkexec(1).
-#[cfg(target_os = "linux")]
-const PKEXEC_DISMISSED: i32 = 126;
-
 /// Hand the staged package to the resolved package manager under `pkexec`, so
 /// it validates the file, installs it and updates its own DB.
 ///
@@ -95,35 +91,20 @@ pub(super) fn install_via_package_manager(
     };
 
     if !output.status.success() {
-        let code = output.status.code().unwrap_or(-1);
-        if code == PKEXEC_DISMISSED {
-            log::info!(
-                "updater: package install cancelled at the polkit prompt; keeping {} for a retry",
-                staged.display()
-            );
-            return Ok(InstallOutcome::Cancelled);
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let reason = match code {
-            127 => format!(
-                "authorization unavailable (no polkit agent, missing policy, or auth failed): {}",
-                stderr.trim()
-            ),
-            other => {
-                // The staged bytes already passed signature verification, so
-                // they are by definition not the problem and a retry without
-                // re-download often clears this.
-                format!("{program} install exited {other}: {}", stderr.trim())
-            }
-        };
+        let outcome = pkexec_failure(
+            &format!("{program} install"),
+            output.status.code().unwrap_or(-1),
+            &output.stderr,
+        );
+        // The staged bytes already passed signature verification, so they are
+        // by definition not the problem, and a retry without re-download often
+        // clears whatever was.
         log::info!(
             "updater: keeping verified staged file at {} for retry-without-redownload \
              (auto-reaped after 7d)",
             staged.display()
         );
-        return Err(AppError::Settings(format!(
-            "update install requires admin privileges and {reason}"
-        )));
+        return outcome;
     }
 
     // The install rewrote the live binary; this process's open fd points at the
@@ -326,30 +307,42 @@ fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<InstallOut
     };
 
     if !output.status.success() {
-        // Per pkexec(1), 127 is a catch-all — not authorized, no agent, missing
-        // policy, D-Bus error, auth failed — which it doesn't distinguish, so
-        // stderr goes through verbatim. Anything else is the spawned `mv`, or a
-        // `mv` code overlapping 127, which is unavoidable. Keep `staged` so a
-        // retry reuses the verified bytes.
-        let code = output.status.code().unwrap_or(-1);
-        if code == PKEXEC_DISMISSED {
-            log::info!("updater: swap cancelled at the polkit prompt; nothing was moved");
-            return Ok(InstallOutcome::Cancelled);
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let reason = match code {
-            127 => format!(
-                "authorization unavailable (no polkit agent, missing policy, or auth failed): {}",
-                stderr.trim()
-            ),
-            other => format!("pkexec mv exited {other}: {}", stderr.trim()),
-        };
-        return Err(AppError::Settings(format!(
-            "update install requires admin privileges and {reason}"
-        )));
+        // Keep `staged` so a retry reuses the verified bytes.
+        return pkexec_failure("pkexec mv", output.status.code().unwrap_or(-1), &output.stderr);
     }
 
     Ok(InstallOutcome::Installed)
+}
+
+/// pkexec's exit when the user dismissed the authentication dialog, per pkexec(1). Only an agent
+/// that reports the dismissal produces it: GNOME Shell's does, while Plasma's completes the request
+/// unauthenticated, which pkexec reports as [`PKEXEC_REFUSED`].
+#[cfg(target_os = "linux")]
+const PKEXEC_DISMISSED: i32 = 126;
+
+/// pkexec's catch-all for every other refusal: not authorized, a failed or cancelled prompt, no
+/// agent, a D-Bus error. It doesn't say which, so stderr goes through verbatim.
+#[cfg(target_os = "linux")]
+const PKEXEC_REFUSED: i32 = 127;
+
+/// What a non-zero exit from `pkexec <command>` came to. Any code but pkexec's own two is
+/// `command`'s, and one of `command`'s landing on those two can't be told apart from them.
+#[cfg(target_os = "linux")]
+fn pkexec_failure(command: &str, code: i32, stderr: &[u8]) -> AppResult<InstallOutcome> {
+    let stderr = String::from_utf8_lossy(stderr);
+    let reason = match code {
+        PKEXEC_DISMISSED => {
+            log::info!("updater: {command} cancelled at the polkit prompt");
+            return Ok(InstallOutcome::Cancelled);
+        }
+        PKEXEC_REFUSED => format!(
+            "authorization was refused (the prompt was cancelled or failed, or no polkit agent \
+             is running): {}",
+            stderr.trim()
+        ),
+        other => format!("{command} exited {other}: {}", stderr.trim()),
+    };
+    Err(AppError::Settings(format!("update install requires admin privileges and {reason}")))
 }
 
 #[cfg(target_os = "windows")]

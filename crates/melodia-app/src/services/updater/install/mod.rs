@@ -161,7 +161,8 @@ async fn download_and_install_to(
         InstallMethod::WindowsMsi => install_via_msiexec(&staged).await?,
     };
     if outcome == InstallOutcome::Cancelled {
-        // The sidecar stays with the verified bytes, so a retry resumes rather than re-downloads.
+        // The sidecar stays with the verified bytes, so a retry reuses them rather than
+        // re-downloading.
         return Ok(outcome);
     }
 

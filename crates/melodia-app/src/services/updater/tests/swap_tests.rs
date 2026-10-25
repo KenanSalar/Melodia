@@ -4,6 +4,8 @@ use tempfile::tempdir;
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 use super::old_path;
+#[cfg(target_os = "linux")]
+use super::pkexec_failure;
 use super::swap_in_place;
 use crate::services::updater::install::staging::staged_path;
 
@@ -133,5 +135,42 @@ fn the_reported_error_is_the_rename_failure_not_the_rollback() -> TestResult {
         return Err(format!("expected the staged rename's io error, got {outcome:?}").into());
     };
     assert_eq!(err.kind(), std::io::ErrorKind::NotFound, "got {err:?}");
+    Ok(())
+}
+
+/// The one exit that is the user's own answer, so the install hands the button back without a
+/// failure toast.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_dismissed_polkit_prompt_is_a_cancel() {
+    let outcome = pkexec_failure("pkexec mv", 126, b"Request dismissed\n");
+
+    assert!(matches!(outcome, Ok(super::InstallOutcome::Cancelled)), "got {outcome:?}");
+}
+
+/// 127 also covers a policy that refuses the user and a session with no agent, neither of which
+/// may pass as a cancel the user chose.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_polkit_refusal_is_a_failure_carrying_pkexecs_reason() -> TestResult {
+    let outcome = pkexec_failure("pkexec mv", 127, b"Not authorized\n");
+
+    let Err(melodia_core::error::AppError::Settings(msg)) = outcome else {
+        return Err(format!("expected a refusal, got {outcome:?}").into());
+    };
+    assert!(msg.contains("authorization was refused"), "{msg}");
+    assert!(msg.contains("Not authorized"), "pkexec's own stderr has to reach the panel: {msg}");
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn any_other_exit_is_the_commands_own_failure() -> TestResult {
+    let outcome = pkexec_failure("dnf5 install", 1, b"No match for argument\n");
+
+    let Err(melodia_core::error::AppError::Settings(msg)) = outcome else {
+        return Err(format!("expected the command's failure, got {outcome:?}").into());
+    };
+    assert!(msg.contains("dnf5 install exited 1"), "{msg}");
     Ok(())
 }

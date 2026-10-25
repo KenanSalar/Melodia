@@ -27,12 +27,21 @@ fn set_is_checking(weak: &Weak<AppWindow>, on: bool) {
     });
 }
 
-pub(super) fn set_is_installing(weak: &Weak<AppWindow>, on: bool) {
-    let _ = weak.upgrade_in_event_loop(move |ui| {
-        ui.global::<MelodiaUpdater>().set_is_installing(on);
-        if !on {
-            ui.global::<MelodiaUpdater>().set_download_progress(0);
-        }
+/// Takes the Install button for an attempt. The last attempt's reason goes with it, or a cancel
+/// hands the button back under a failure that no longer describes anything.
+pub(super) fn paint_install_started(weak: &Weak<AppWindow>) {
+    let _ = weak.upgrade_in_event_loop(|ui| {
+        let g = ui.global::<MelodiaUpdater>();
+        g.set_is_installing(true);
+        g.set_error_message(SharedString::default());
+    });
+}
+
+pub(super) fn hand_install_back(weak: &Weak<AppWindow>) {
+    let _ = weak.upgrade_in_event_loop(|ui| {
+        let g = ui.global::<MelodiaUpdater>();
+        g.set_is_installing(false);
+        g.set_download_progress(0);
     });
 }
 

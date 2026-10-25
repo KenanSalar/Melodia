@@ -3,9 +3,9 @@
 //! The pipeline: [`run_check`] fetches `latest.json`, revalidating only where a
 //! `304` can still be trusted, `is_upgrade` decides on semver, and an accepted notification runs
 //! `download_and_install` → `verify_stream` (prehashed minisign) → `swap_in_place`
-//! (atomic, `cfg`-branched) → `request_respawn_and_quit`. The two package formats replace that
-//! last pair: dnf/apt under `pkexec`, then the same respawn, and on Windows an `msiexec` that
-//! closes Melodia itself and reopens the new build.
+//! (atomic, `cfg`-branched) → `request_respawn_and_quit`. An RPM or deb replaces only the swap,
+//! with dnf/apt under `pkexec` and the same respawn after it; an MSI replaces both, its `msiexec`
+//! closing Melodia itself and reopening the new build.
 //!
 //! The manifest schema lives in [`manifest`] and signature verification in
 //! [`minisign`]. The threat model's trust boundary is the GitHub repo: `latest.json`
