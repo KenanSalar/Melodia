@@ -1,4 +1,4 @@
-//! `Updater.install()` — download + atomic-swap install backend.
+//! `Updater.install()` — download, verify and install backend.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,14 +7,17 @@ use slint::{ComponentHandle, Weak};
 use tokio::sync::watch;
 
 use melodia_app::services::updater::{
-    self, Checked, FailureKind, UpdaterEvent, Verdict, asset_cache, check_for_update,
+    self, Checked, FailureKind, InstallOutcome, UpdaterEvent, Verdict, asset_cache,
+    check_for_update,
 };
 use melodia_app::state::AppState;
 use melodia_core::error::{AppResult, describe};
 use melodia_platform::services::platform::install_kind::install_target;
 use melodia_ui::{AppWindow, MelodiaUpdater};
 
-use super::paint::{paint_restart_needed, report_failure, set_is_installing};
+use super::paint::{
+    hand_install_back, paint_install_started, paint_restart_needed, report_failure,
+};
 
 /// True iff a `download_and_install` future is currently in flight on
 /// this process. The Slint UI gates the Install button via
@@ -57,7 +60,7 @@ pub(super) fn spawn_install(
         log::info!("updater: install already in progress; ignoring re-trigger");
         return;
     };
-    set_is_installing(&weak, true);
+    paint_install_started(&weak);
     let runtime = state.runtime.clone();
     runtime.spawn(async move {
         let _guard = guard;
@@ -87,7 +90,10 @@ pub(super) fn spawn_install(
         )
         .await
         {
-            Ok(()) => finish_installed(&weak, &event_tx, &install_target),
+            Ok(InstallOutcome::Installed) => finish_installed(&weak, &event_tx, &install_target),
+            // The user's own answer to the elevation prompt, so it earns no toast: the panel
+            // simply offers the same version again.
+            Ok(InstallOutcome::Cancelled) => hand_install_back(&weak),
             Err(e) => {
                 let kind = FailureKind::classify(&e);
                 log::warn!("updater: install failed ({kind:?}): {}", describe(&e));
@@ -126,7 +132,7 @@ async fn resolve_asset(
             Some(asset_cache::CachedAsset { version: manifest.version, asset })
         }
         Ok(Checked { verdict: Verdict::UpToDate, .. }) => {
-            set_is_installing(weak, false);
+            hand_install_back(weak);
             log::warn!(
                 "updater: install clicked but server now reports up-to-date \
                  (manifest changed between check and install)"
@@ -217,6 +223,6 @@ fn abort_install(
     reason: String,
     kind: FailureKind,
 ) {
-    set_is_installing(weak, false);
+    hand_install_back(weak);
     report_failure(weak, event_tx, reason, kind);
 }

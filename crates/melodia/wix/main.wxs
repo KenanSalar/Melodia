@@ -84,7 +84,8 @@
           prompts again, `MajorUpgrade` below replaces this version, and
           `util:RestartResource` registers the running `Melodia.exe`
           with Windows Installer's Restart Manager so the upgrade
-          doesn't need a reboot. See
+          closes it rather than needing a reboot, and `RelaunchMelodia`
+          reopens it. See
           `crates/melodia-app/src/services/updater/install/`.
         -->
         <!--
@@ -96,6 +97,24 @@
         <SummaryInformation Keywords="Installer" Description="Cross-platform desktop music player (Slint + Rust)" Manufacturer="Kenan Salar" Codepage="1252" />
 
         <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer version of [ProductName] is already installed. Setup will now exit." />
+
+        <!--
+          Restart Manager closes a running Melodia for the upgrade but can't
+          reopen it: the elevated installer is its conductor, and it won't
+          restart a process running under another SID (event 10010). So the
+          in-app updater passes MELODIA_RELAUNCH and this reopens the new
+          build once the install has committed. An immediate action runs as
+          the user who started msiexec, with their filtered token, so the app
+          doesn't come back elevated. Gated on the property so a hand-run or
+          winget install leaves the app closed, and `Secure` because the
+          elevated half of the install never sees a public property without
+          it. The updater spells the name as `swap::RELAUNCH_PROPERTY`.
+        -->
+        <Property Id="MELODIA_RELAUNCH" Secure="yes" />
+        <CustomAction Id="RelaunchMelodia" FileRef="exe0" ExeCommand="" Return="asyncNoWait" />
+        <InstallExecuteSequence>
+            <Custom Action="RelaunchMelodia" After="InstallFinalize" Condition="MELODIA_RELAUNCH AND NOT REMOVE" />
+        </InstallExecuteSequence>
 
         <Media Id="1" Cabinet="media1.cab" EmbedCab="yes" DiskPrompt="CD-ROM #1" />
         <Property Id="DiskPrompt" Value="Melodia Installation" />
@@ -127,15 +146,12 @@
         
         <!--
           Product icon shown in Add/Remove Programs ("Apps & features"
-          on Windows 10+) and on the Start Menu shortcut. Shares the
-          checked-in `assets\melodia.ico` with `build.rs`, which embeds
-          the same multi-resolution ICO into Melodia.exe as the EXE's
-          primary `ICON` resource (the source Windows pulls for the
-          taskbar, titlebar, Alt-Tab thumbnail, and Explorer entry).
-          Single source of truth across every shell surface — a logo
-          change updates the EXE, MSI, ARP, Start Menu shortcut, and
-          running-window icon in one place. To regenerate from the
-          WITH-background brand SVG:
+          on Windows 10+). Shares the checked-in `assets\melodia.ico`
+          with `build.rs`, which embeds the same multi-resolution ICO
+          into Melodia.exe as the EXE's primary `ICON` resource, the one
+          the taskbar, titlebar, Alt-Tab, Explorer and the Start Menu
+          shortcut all draw. A logo change updates every surface in one
+          place. To regenerate from the WITH-background brand SVG:
               magick -density 384 -background none \
                 assets/icons/logo-with-background.svg \
                 -define icon:auto-resize=256,128,96,64,48,32,24,16 \
@@ -284,11 +300,12 @@
                               major-upgrade install (in-app updater
                               flow: `msiexec /i melodia-X.Y.Z.msi`)
                               while the app is running can cleanly
-                              close + re-launch it instead of bouncing
-                              to the "files in use" prompt and asking
-                              for a reboot. Requires WixUtilExtension
-                              at link time; cargo-wix includes it by
-                              default.
+                              close it instead of bouncing to the
+                              "files in use" prompt and asking for a
+                              reboot. Reopening it is
+                              `RelaunchMelodia`'s job. Requires
+                              WixUtilExtension at link time; cargo-wix
+                              includes it by default.
                             -->
                             <util:RestartResource Id="MelodiaProcess" ProcessName="Melodia.exe" />
                         </Component>
@@ -392,10 +409,16 @@
               KeyPath (WiX shortcuts aren't valid keypath candidates),
               and a registry value is the conventional substitute. Its
               integer value carries no semantic meaning.
+
+              No `Icon`, so the shell draws the exe's own. An Icon table
+              entry is extracted under `%WINDIR%\Installer\{ProductCode}\`,
+              the ProductCode is new every release and the upgrade deletes
+              the old folder, and a taskbar pin copies the shortcut's icon
+              path: every update left pinned Melodias blank.
             -->
             <StandardDirectory Id="ProgramMenuFolder">
                 <Component Id="StartMenuShortcut" Guid="8F4C7E2A-5B91-4D63-A8F5-9C2E7D1B4A86">
-                    <Shortcut Id="MelodiaStartMenuShortcut" Name="Melodia" Description="Cross-platform desktop music player" Target="[#exe0]" WorkingDirectory="Bin" Icon="ProductICO" />
+                    <Shortcut Id="MelodiaStartMenuShortcut" Name="Melodia" Description="Cross-platform desktop music player" Target="[#exe0]" WorkingDirectory="Bin" />
                     <RegistryValue Root="HKLM" Key="Software\Melodia\Components" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
                 </Component>
             </StandardDirectory>

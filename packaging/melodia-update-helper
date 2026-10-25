@@ -69,7 +69,8 @@ case "$format" in
             exec dnf install -y "$package"
         else
             echo "$0: no dnf5 or dnf on PATH" >&2
-            exit 127
+            # Not 127: pkexec exits 126 and 127 itself, and the updater reads both as pkexec's.
+            exit 69  # EX_UNAVAILABLE
         fi
         ;;
     deb)
@@ -79,7 +80,7 @@ case "$format" in
             exec apt-get install -y "$package"
         else
             echo "$0: no apt or apt-get on PATH" >&2
-            exit 127
+            exit 69  # EX_UNAVAILABLE
         fi
         ;;
     *)

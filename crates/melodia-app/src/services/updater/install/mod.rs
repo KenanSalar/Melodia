@@ -13,6 +13,8 @@ mod staging;
 mod swap;
 mod verify;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use parking_lot::Mutex;
 
 use melodia_core::error::{AppError, AppResult};
@@ -41,11 +43,49 @@ pub(crate) use swap::old_path;
 /// The version an install swapped in this session, which the next launch runs.
 static INSTALLED: Mutex<Option<String>> = Mutex::new(None);
 
+/// Up while Windows Installer is replacing this binary. Restart Manager closes the window the way
+/// a user would, and a window hidden to the tray instead keeps `Melodia.exe` in use, which defers
+/// the replace to a reboot.
+static INSTALLER_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// What an install that didn't fail came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallOutcome {
+    /// The next launch runs the new version.
+    Installed,
+    /// The elevation prompt was dismissed before anything was replaced.
+    Cancelled,
+}
+
 /// The version an update check measures against: one this session already installed, else this
 /// build's own. Measured against the running build instead, a check after an install reads the
 /// release it just swapped in as new and offers it again.
 pub fn installed_version() -> String {
     INSTALLED.lock().clone().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned())
+}
+
+/// Whether a window close should quit outright, the installer waiting on this process to exit.
+pub fn installer_running() -> bool {
+    INSTALLER_RUNNING.load(Ordering::Acquire)
+}
+
+/// [`INSTALLER_RUNNING`], lowered on every way out of the wait.
+#[cfg(target_os = "windows")]
+struct InstallerRunning;
+
+#[cfg(target_os = "windows")]
+impl InstallerRunning {
+    fn raise() -> Self {
+        INSTALLER_RUNNING.store(true, Ordering::Release);
+        Self
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for InstallerRunning {
+    fn drop(&mut self) {
+        INSTALLER_RUNNING.store(false, Ordering::Release);
+    }
 }
 
 /// Stream-download `asset.url`, stream-verify it against `asset.signature`,
@@ -58,15 +98,18 @@ pub async fn download_and_install(
     asset: &PlatformAsset,
     expected_version: &str,
     on_progress: impl Fn(u8) + Send + Sync,
-) -> AppResult<()> {
+) -> AppResult<InstallOutcome> {
     let target = install_target()?;
     // Housekeeping rather than a step of this install: it collects whatever a *previous* attempt
     // left behind once the retention window closed, and runs here because an install attempt is
     // the moment the staging dir is known to matter.
     prune_stale_staging().await;
-    download_and_install_to(http, asset, expected_version, target, on_progress).await?;
-    *INSTALLED.lock() = Some(expected_version.to_owned());
-    Ok(())
+    let outcome =
+        download_and_install_to(http, asset, expected_version, target, on_progress).await?;
+    if outcome == InstallOutcome::Installed {
+        *INSTALLED.lock() = Some(expected_version.to_owned());
+    }
+    Ok(outcome)
 }
 
 /// The sequencing, against a target it is handed. Split from the host lookup so a test can drive
@@ -78,7 +121,7 @@ async fn download_and_install_to(
     expected_version: &str,
     target: std::path::PathBuf,
     on_progress: impl Fn(u8) + Send + Sync,
-) -> AppResult<()> {
+) -> AppResult<InstallOutcome> {
     let method = resolve_install_method();
     let staged = match method {
         InstallMethod::LinuxPackage(format) => staged_package_path(&asset.url, format)?,
@@ -88,8 +131,8 @@ async fn download_and_install_to(
 
     download_to_file(http, &asset.url, expected_version, asset.size, &staged, &on_progress).await?;
 
-    // Both blocking phases — the stream-verify of a multi-MB file, then whichever
-    // install the method picks — go on the blocking pool.
+    // The stream-verify of a multi-MB file goes on the blocking pool, as does every install but
+    // the MSI's.
     let verify_staged_path = staged.clone();
     let verify_signature = asset.signature.clone();
     let verify_version = expected_version.to_string();
@@ -104,23 +147,31 @@ async fn download_and_install_to(
         return Err(e);
     }
 
-    let install_staged = staged.clone();
-    let install_target_path = target.clone();
-    let install_result = tokio::task::spawn_blocking(move || match method {
-        InstallMethod::LinuxPackage(format) => install_via_package_manager(format, &install_staged),
-        InstallMethod::WindowsMsi => install_via_msiexec(&install_staged),
-        InstallMethod::AtomicSwap => swap_in_place(&install_target_path, &install_staged),
-    })
-    .await
-    .map_err(|e| AppError::Settings(format!("update install task join error: {e}")))?;
-    install_result?;
+    let outcome = match method {
+        InstallMethod::LinuxPackage(format) => {
+            let staged = staged.clone();
+            install_blocking(move || install_via_package_manager(format, &staged)).await?
+        }
+        InstallMethod::AtomicSwap => {
+            let (target, staged) = (target.clone(), staged.clone());
+            install_blocking(move || swap_in_place(&target, &staged)).await?
+        }
+        // Awaited on the runtime: Restart Manager closing this process partway through is how
+        // the wait normally ends, and a pool thread parked under it would buy nothing.
+        InstallMethod::WindowsMsi => install_via_msiexec(&staged).await?,
+    };
+    if outcome == InstallOutcome::Cancelled {
+        // The sidecar stays with the verified bytes, so a retry reuses them rather than
+        // re-downloading.
+        return Ok(outcome);
+    }
 
     // Dropped *before* the smoke test, so a rollback doesn't leak it — a later
     // prune must not read it as leftover state, and the next attempt's
     // `discard_staging_if_sidecar_mismatches` must not be fed a phantom
     // fingerprint. The staged bytes themselves are each method's own business:
     // renamed away, removed after a successful install, or left for the pruner
-    // because msiexec may still be reading them.
+    // because msiexec cached its own copy.
     let _ = std::fs::remove_file(sidecar_meta_path(&staged));
 
     // The smoke test is cheap defence against what a signature check can't
@@ -132,8 +183,7 @@ async fn download_and_install_to(
     // its, not a `.old` we could rename back. Each format is journaled and
     // recoverable out of band, better than anything a failure here could do. And
     // a blocking subprocess immediately after an elevation prompt makes the
-    // spinner look hung; on Windows it is racy besides, msiexec possibly being
-    // mid-replace. (They verify their own signatures, but none of them runs
+    // spinner look hung. (They verify their own signatures, but none of them runs
     // `Melodia --version`, so that is not the reason.)
     match method {
         InstallMethod::AtomicSwap => {
@@ -147,13 +197,21 @@ async fn download_and_install_to(
              (no in-process rollback exists once dnf/apt consumed the staged bytes)"
         ),
         InstallMethod::WindowsMsi => log::info!(
-            "updater: msiexec dispatched; skipping in-app smoke test \
-             (Windows Installer owns the replace; running the new binary now would \
-             race the in-progress swap)"
+            "updater: msiexec finished; skipping in-app smoke test \
+             (Windows Installer owns the replace and keeps its own rollback)"
         ),
     }
 
-    Ok(())
+    Ok(outcome)
+}
+
+/// Runs a synchronous install step on the blocking pool.
+async fn install_blocking(
+    install: impl FnOnce() -> AppResult<InstallOutcome> + Send + 'static,
+) -> AppResult<InstallOutcome> {
+    tokio::task::spawn_blocking(install)
+        .await
+        .map_err(|e| AppError::Settings(format!("update install task join error: {e}")))?
 }
 
 // Linux-only: every assertion is about the atomic-swap path, which is the method a cargo-built

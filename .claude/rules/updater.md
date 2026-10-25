@@ -54,10 +54,19 @@ from `main.rs` without ever opening this file.
   Component under `ProgramMenuFolder` is what lets Windows Search find the app. Console suppressed
   via `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` — release runs as GUI,
   `cargo run` keeps the console for `RUST_LOG`. The in-app updater downloads the signed `.msi` to
-  `%LocalAppData%\Melodia\update-staging\` and spawns `msiexec /i <staged> /qb!` non-blocking: UAC
-  re-prompts, and WiX `MajorUpgrade` + `util:RestartResource` handle replacing the running binary.
-  Smoke test skipped. `system_install::probe` short-circuits `windows-*-msi` keys to `false` so the
-  updater UI stays visible — symmetric with `linux_pkg::detect`.
+  `%LocalAppData%\Melodia\update-staging\` and **awaits** `msiexec /i <staged> /qb!
+  MELODIA_RELAUNCH=1` on the runtime. UAC re-prompts, `MajorUpgrade` + `util:RestartResource` have
+  Restart Manager close Melodia, and `main.wxs`'s `RelaunchMelodia` action reopens the new build
+  after `InstallFinalize`, since Restart Manager never can (event 10010: the elevated installer's
+  SID isn't the user's). So the wait normally ends with this process gone, and only an exit with
+  the app still up reports, through `swap::msiexec_outcome`: 0 is the "installed" toast and so
+  are 3010 and 1641, the two reboot codes Windows Installer counts as success, 1602 (a dismissed
+  UAC prompt) is `InstallOutcome::Cancelled`, anything else a failure.
+  `updater::installer_running()` stands close-to-tray down for the wait. **The Start Menu
+  shortcut takes no `Icon`**, argued at the shortcut in `main.wxs`; putting one back blanks every
+  taskbar pin on the next upgrade. Smoke test skipped.
+  `system_install::probe` short-circuits `windows-*-msi` keys to `false` so the updater UI stays
+  visible — symmetric with `linux_pkg::detect`.
 
 - **Polkit helper for in-app updater RPM/DEB installs.** `/usr/libexec/melodia-update-helper`
   argv-dispatches to dnf5/dnf/apt/apt-get; policy `com.github.kenansalar.melodia.update`.
