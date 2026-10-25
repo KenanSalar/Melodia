@@ -21,11 +21,11 @@ use melodia_ui::{
 /// The anchor of a list nothing has been clicked in since its selection was last cleared.
 pub const NO_ANCHOR: i32 = -1;
 
-/// Compute the new `(selected_ids, anchor)` for a row click on a list picking by track id.
+/// Compute the new `(selected_ids, anchor)` for a row click on a list picking by id.
 ///
 /// [`click_selection`] with the id lists' two conventions: [`NO_ANCHOR`] for no anchor, and no
 /// row listed as `0` ever picked, which is how Browse's disk-only rows keep their place in the
-/// displayed order without joining a range. Every caller refuses a click on `0` itself.
+/// displayed order without joining a range. Browse refuses a click on one of those itself.
 pub fn compute_click_selection(
     anchor: i32,
     cur_selected: Vec<i32>,

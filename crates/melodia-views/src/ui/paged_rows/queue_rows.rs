@@ -75,9 +75,12 @@ impl QueueRows {
     /// Where they did, the picks and the anchor keep only entries still queued, and every row
     /// whose flag that changed is repainted: a queue replaced by the same tracks keeps its ids,
     /// so the store keeps those rows and nothing else would clear their flags.
+    ///
+    /// A cleared panel has no entries to compare against, so its first show counts as a move
+    /// whatever it finds, or picks kept across the clear would outlive a queue emptied meanwhile.
     pub fn show(&self, ids: Arc<[i64]>, entries: Arc<[QueueEntry]>) -> bool {
-        let moved = **self.entries.borrow() != *entries;
         let was_entries = self.entries.replace(entries);
+        let moved = was_entries.is_empty() || *was_entries != **self.entries.borrow();
         self.store.show(Keyset { ids, seed: Vec::new(), read: ReadStamp::now() });
         if moved {
             self.keep_queued_picks(&was_entries);
