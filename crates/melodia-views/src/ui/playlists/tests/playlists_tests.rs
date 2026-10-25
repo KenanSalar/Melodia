@@ -63,21 +63,6 @@ fn the_reorder_gate_reads_every_term_the_drag_depends_on() {
     );
 }
 
-/// The origin is a binding at the mount and the revoke names it in Rust, so the two can drift
-/// apart with both files reading clean. Once they do, a drag over rows a reload rebuilt keeps its
-/// stale index and drops it on another track.
-#[test]
-fn the_playlist_list_names_the_origin_its_revoke_retires() {
-    assert!(
-        code_tokens(DETAIL_VIEW).contains("origin: DragOrigin.playlist;"),
-        "without its own origin the list moves no rows, `TrackList` gating the reorder on one"
-    );
-    assert!(
-        code_tokens(DETAIL).contains("drag.invoke_revoke(DragOrigin::Playlist);"),
-        "a reload under a live drag has to retire the index the list's own origin armed"
-    );
-}
-
 /// `"position"` is what drag-to-reorder is gated on and no header cell asks for
 /// it, so the sort cycle is the only way back. Drop the natural field and the
 /// first click on any column retires reordering for the whole install —

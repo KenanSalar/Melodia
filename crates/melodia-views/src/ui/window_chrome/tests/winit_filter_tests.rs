@@ -1,5 +1,5 @@
 use super::*;
-use melodia_testkit::{block_after, strip_line_comments};
+use melodia_testkit::{at_own_depth, block_after, block_body, code_tokens, strip_line_comments};
 
 // The sideways case is a card strip under Search's vertical outer scroller,
 // which Slint now routes by axis on its own.
@@ -212,6 +212,53 @@ fn the_resize_arm_writes_the_margins_only_when_they_were_measured() {
     assert!(
         outside.is_empty() && arm.matches("set_frame_margin_").count() == SETTERS.len(),
         "the frame margins are written outside their `Some` gate: {outside:?}\n{arm}"
+    );
+}
+
+/// The body of the hook `guard` opens at the filter closure's own depth, ahead of every arm of its
+/// `match`es, or `""` where it sits anywhere else. `guard` ends on the hook's `{`, a struct pattern
+/// in it having braces of its own.
+fn hook_ahead_of_every_arm(guard: &str) -> String {
+    let code = code_tokens(include_str!("../winit_filter.rs"));
+    let closure = block_after(&code, "on_winit_window_event(move |w, event|");
+    closure
+        .find(guard)
+        .filter(|at| at_own_depth(closure, *at))
+        .and_then(|at| block_body(closure, at + guard.len() - 1))
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// **Every press claims the queue's keys and disarms the drag, ahead of every arm.** Every press,
+/// whichever button and whoever takes it: a hook written into an arm runs for that arm's presses
+/// alone, so a resize, a window move or Mouse-4 would leave the keys with whatever the last press
+/// gave them and the next drag carrying the row pressed before.
+#[test]
+fn every_press_claims_the_queue_keys_and_disarms_as_a_mouse() {
+    let hook = hook_ahead_of_every_arm(
+        "if let WindowEvent::MouseInput { state: ElementState::Pressed, .. } = event {",
+    );
+
+    assert!(
+        hook.contains("claim_queue_keys(&weak);")
+            && hook.contains("disarm_drag(&weak, Pointer::Mouse);"),
+        "every press, ahead of the dispatch, claims the queue's keys and disarms as a mouse:\n{hook}"
+    );
+}
+
+/// **A touch's start disarms as a touch, ahead of every arm.** Slint takes a first touch as a left
+/// press, which a `DragArea` drags from, and saying it was a touch is what stands every
+/// `DragSource` down so the list under the finger pans. Nothing else checks this half until a
+/// touchscreen is to hand.
+#[test]
+fn a_touchs_start_disarms_as_a_touch() {
+    let hook = hook_ahead_of_every_arm(
+        "if let WindowEvent::Touch(touch) = event && touch.phase == TouchPhase::Started {",
+    );
+
+    assert!(
+        hook.contains("disarm_drag(&weak, Pointer::Touch);"),
+        "a touch's start, ahead of the dispatch, disarms as a touch:\n{hook}"
     );
 }
 

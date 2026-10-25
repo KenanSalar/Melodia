@@ -338,6 +338,13 @@ pub fn depth_between(src: &str, from: usize, to: usize) -> Option<usize> {
     Some(floor.min(depth))
 }
 
+/// Whether byte `at` of a block's `body` sits at the body's own depth rather than inside a child,
+/// for a pin on what the block itself binds or handles. From inside a child the walk to the end
+/// closes a scope it never opened.
+pub fn at_own_depth(body: &str, at: usize) -> bool {
+    depth_between(body, at, body.len()) == Some(0)
+}
+
 /// `src` with everything after an unquoted `//` dropped on each line, keeping the line
 /// structure.
 ///
@@ -379,6 +386,12 @@ pub fn strip_line_comments(src: &str) -> String {
 /// Four pins walked for a named block before this existed and three of them spelled the walk out
 /// again; the fourth is `scrollbar_tests::scroller_blocks`, which is this over a list of names.
 pub fn blocks_named<'a>(src: &'a str, component: &str) -> Vec<&'a str> {
+    mount_braces(src, component).into_iter().filter_map(|open| block_body(src, open)).collect()
+}
+
+/// The `{` of every block [`blocks_named`] reads. A `component X {` definition is not one, where
+/// `inherits X {` is: the component it defines is an `X` wherever it is mounted.
+fn mount_braces(src: &str, component: &str) -> Vec<usize> {
     let bytes = src.as_bytes();
     let mut out = Vec::new();
     let mut from = 0;
@@ -387,16 +400,92 @@ pub fn blocks_named<'a>(src: &'a str, component: &str) -> Vec<&'a str> {
         if at > 0 && (bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_') {
             continue;
         }
+        if src[..at].trim_end().ends_with("component") {
+            continue;
+        }
         let Some(open) = (from..bytes.len()).find(|i| !bytes[*i].is_ascii_whitespace()) else {
             continue;
         };
-        if bytes[open] == b'{'
-            && let Some(body) = block_body(src, open)
-        {
-            out.push(body);
+        if bytes[open] == b'{' {
+            out.push(open);
         }
     }
     out
+}
+
+/// Every mount of `component` in `tree`, by path, with every route from it up to a component
+/// nothing mounts. A route is the heads of the blocks it passes through, outermost first
+/// (`export component Baz inherits Window`, `if cond: Foo`, `for row in rows: Bar`), whitespace
+/// collapsed, and ends on the mount's own.
+///
+/// A route climbs through every place the tree mounts the component enclosing it, so a mount is
+/// read inside whatever branch or repeater holds its host, however many files up. Pair it with
+/// [`strip_line_comments`] for [`block_body`]'s reason. A head runs back to the nearest `;`, `{`
+/// or `}`, so one holding a string that spells one is cut short.
+pub fn mount_routes<'a>(
+    tree: &'a [(String, String)],
+    component: &str,
+) -> Vec<(&'a str, Vec<Vec<String>>)> {
+    let mut out = Vec::new();
+    for (path, src) in tree {
+        for open in mount_braces(src, component) {
+            out.push((path.as_str(), routes_from(tree, src, open + 1)));
+        }
+    }
+    out
+}
+
+/// [`mount_routes`]' climb from byte `at`, which sits inside the block it starts from.
+fn routes_from(tree: &[(String, String)], src: &str, at: usize) -> Vec<Vec<String>> {
+    let heads = enclosing_heads(src, at);
+    let Some(host) = heads.first().and_then(|head| declared_component(head)) else {
+        return vec![heads];
+    };
+    let mut routes = Vec::new();
+    for (_, file) in tree {
+        for open in mount_braces(file, host) {
+            for mut route in routes_from(tree, file, open + 1) {
+                route.extend(heads.iter().cloned());
+                routes.push(route);
+            }
+        }
+    }
+    if routes.is_empty() {
+        routes.push(heads);
+    }
+    routes
+}
+
+/// The heads of every block open at byte `at` of `src`, outermost first.
+fn enclosing_heads(src: &str, at: usize) -> Vec<String> {
+    let bytes = src.as_bytes();
+    let mut open = Vec::new();
+    let mut in_string = false;
+    let mut i = 0;
+    while i < at.min(bytes.len()) {
+        match bytes[i] {
+            b'\\' if in_string => i += 1,
+            b'"' => in_string = !in_string,
+            b'{' if !in_string => open.push(i),
+            b'}' if !in_string => {
+                open.pop();
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    open.into_iter()
+        .map(|brace| {
+            let start = src[..brace].rfind([';', '{', '}']).map_or(0, |boundary| boundary + 1);
+            normalize_ws(&src[start..brace])
+        })
+        .collect()
+}
+
+/// The `X` an `export component X …` head declares.
+fn declared_component(head: &str) -> Option<&str> {
+    let rest = head.strip_prefix("export ").unwrap_or(head).strip_prefix("component ")?;
+    rest.split_whitespace().next()
 }
 
 /// The body of the block whose `{` sits at `open`, braces excluded.

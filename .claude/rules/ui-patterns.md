@@ -734,8 +734,8 @@ three components that answer it, and each argues its geometry at its own file.
     writes): the pressed row arms it, every press disarms it first in
     `winit_filter::disarm_drag`, a touch's start included, and a list whose rows move under a drag
     revokes its own origin (`queue_panel::rows::show_queue`, `PlaylistsUi::rows_moving`, Up Next's
-    `show_slice`). **A new reorderable list owes the revoke**, the one write nothing fails without:
-    the drag goes on over the rebuilt rows, and the index it lifted lands on another track. A revoke
+    `show_slice`). **A new reorderable list owes the revoke**: without it the drag goes on over the
+    rebuilt rows, and the index it lifted lands on another track. A revoke
     keeps the items, which are ids and survive the rebuild, so the drag can still copy out.
   - **What another list takes is `Drag.payload.items`, Add to Queue's `(kind, ids)`.** A track row
     builds it in `TrackListRowItem.drag-items()` and a card in `CardCell.drag-items(title, cover)`,
