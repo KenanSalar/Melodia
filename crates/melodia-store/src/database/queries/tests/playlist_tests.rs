@@ -202,7 +202,7 @@ async fn clearing_thumbnail_persists_after_adding_tracks() -> Result<(), AppErro
     assert_eq!(track_ids.len(), 3, "test setup: the seed's three tracks");
 
     // Create playlist and add the first track — this auto-populates
-    // thumbnail_path from the track's artwork via the WHERE custom_thumbnail=FALSE branch.
+    // thumbnail_path from the track's artwork while custom_thumbnail is FALSE.
     let pl = queries::playlist::create_playlist(&db, "Test", None).await?;
     queries::playlist::add_tracks_to_playlist(&db, pl.id, &track_ids[..1]).await?;
 
@@ -669,18 +669,6 @@ async fn a_custom_cover_stays_whatever_a_move_puts_first() -> Result<(), AppErro
     Ok(())
 }
 
-/// The grid lists the most recently edited playlist first, and a reorder is an edit.
-#[tokio::test]
-async fn a_move_stamps_the_playlist_as_updated() -> Result<(), AppError> {
-    let (db, playlist, ids) = five_track_playlist().await?;
-    backdate(&db, playlist).await?;
-
-    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
-
-    assert_ne!(updated_at(&db, playlist).await?, EARLIER);
-    Ok(())
-}
-
 /// Stamping it anyway would lift the playlist to the top of the grid for an edit that changed
 /// nothing.
 #[tokio::test]
@@ -782,6 +770,70 @@ async fn an_id_deleted_under_the_grid_is_simply_absent() -> Result<(), AppError>
         queries::playlist::smart_criteria_for_playlists(&db, &[kept.id, gone.id]).await?;
 
     assert_eq!(verdicts, [(kept.id, false, None)]);
+    Ok(())
+}
+
+// --- the stamp an edit leaves ---
+
+/// Three backdated playlists over the first five of six tracks, on an automatic, a picked and a
+/// cleared cover. An edit keeps the last two covers but must still stamp, or the grid holds those
+/// playlists in place.
+async fn playlists_on_each_cover()
+-> Result<(crate::database::DbPool, Vec<i64>, [(&'static str, i64); 3]), AppError> {
+    let (db, ids) = numbered_library(6).await?;
+    let held = &ids[..5];
+    let automatic =
+        queries::playlist::create_playlist_with_tracks(&db, "Automatic", None, held).await?;
+    let picked = queries::playlist::create_playlist_with_tracks(&db, "Picked", None, held).await?;
+    queries::playlist::set_playlist_custom_thumbnail(&db, picked, "/artwork/custom.jpg").await?;
+    let cleared =
+        queries::playlist::create_playlist_with_tracks(&db, "Cleared", None, held).await?;
+    queries::playlist::update_playlist(&db, cleared, "Cleared", None, true).await?;
+    backdate(&db, automatic).await?;
+    backdate(&db, picked).await?;
+    backdate(&db, cleared).await?;
+    let covers = [
+        ("an automatic cover", automatic),
+        ("a picked cover", picked),
+        ("a cleared cover", cleared),
+    ];
+    Ok((db, ids, covers))
+}
+
+#[tokio::test]
+async fn an_add_stamps_the_playlist_whatever_its_cover() -> Result<(), AppError> {
+    let (db, ids, covers) = playlists_on_each_cover().await?;
+
+    for (cover, playlist) in covers {
+        queries::playlist::add_tracks_to_playlist(&db, playlist, &[ids[5]]).await?;
+
+        assert_ne!(updated_at(&db, playlist).await?, EARLIER, "{cover}");
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_removal_stamps_the_playlist_whatever_its_cover() -> Result<(), AppError> {
+    let (db, ids, covers) = playlists_on_each_cover().await?;
+
+    for (cover, playlist) in covers {
+        queries::playlist::remove_tracks_from_playlist_batch(&db, playlist, &[ids[4]]).await?;
+
+        assert_ne!(updated_at(&db, playlist).await?, EARLIER, "{cover}");
+    }
+    Ok(())
+}
+
+/// A reorder is an edit too, though it changes neither what the playlist holds nor its count.
+#[tokio::test]
+async fn a_move_stamps_the_playlist_whatever_its_cover() -> Result<(), AppError> {
+    let (db, ids, covers) = playlists_on_each_cover().await?;
+
+    for (cover, playlist) in covers {
+        queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+
+        assert_ne!(updated_at(&db, playlist).await?, EARLIER, "{cover}");
+    }
     Ok(())
 }
 

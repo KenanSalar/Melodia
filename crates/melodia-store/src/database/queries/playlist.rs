@@ -170,11 +170,8 @@ pub async fn update_playlist(
     let now = melodia_core::utils::now_rfc3339();
 
     if clear_thumbnail {
-        // Clear thumbnail entirely so the placeholder icon is shown.
-        // custom_thumbnail = TRUE marks this as an explicit user choice so that
-        // subsequent add/remove track operations do not auto-repopulate the
-        // thumbnail from the first track's artwork in
-        // update_playlist_thumbnail_and_timestamp_tx().
+        // custom_thumbnail = TRUE records the cleared cover as the user's choice, so a later add,
+        // removal or reorder leaves the placeholder rather than filling it from the first track.
         let result = sqlx::query_as::<_, playlist::Playlist>(
             "UPDATE playlists SET name = ?, description = ?,
                 thumbnail_path = NULL,
@@ -535,7 +532,8 @@ macro_rules! first_track_cover {
     };
 }
 
-/// Updates thumbnail and timestamp within an existing transaction.
+/// Stamps an add, removal or reorder, and points an automatic cover at the first track with one.
+/// A cover the user picked or cleared stays, but the edit still lifts the playlist in the grid.
 async fn update_playlist_thumbnail_and_timestamp_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     playlist_id: i64,
@@ -543,9 +541,9 @@ async fn update_playlist_thumbnail_and_timestamp_tx(
     let now = melodia_core::utils::now_rfc3339();
 
     sqlx::query(concat!(
-        "UPDATE playlists SET thumbnail_path = ",
+        "UPDATE playlists SET thumbnail_path = CASE WHEN custom_thumbnail = FALSE THEN ",
         first_track_cover!(),
-        ", updated_at = ? WHERE id = ? AND custom_thumbnail = FALSE"
+        " ELSE thumbnail_path END, updated_at = ? WHERE id = ?"
     ))
     .bind(&now)
     .bind(playlist_id)
