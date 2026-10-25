@@ -575,3 +575,7 @@ impl QueueState {
 #[cfg(test)]
 #[path = "tests/queue_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests/queue_entry_tests.rs"]
+mod entry_tests;

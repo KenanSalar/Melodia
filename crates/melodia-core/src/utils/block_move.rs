@@ -38,3 +38,7 @@ pub fn move_block<T>(items: &mut Vec<T>, positions: &[usize], to: usize) -> bool
     *items = kept;
     true
 }
+
+#[cfg(test)]
+#[path = "tests/block_move_tests.rs"]
+mod tests;

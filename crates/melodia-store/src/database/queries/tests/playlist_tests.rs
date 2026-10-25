@@ -361,6 +361,25 @@ async fn position_spread(
     .await?)
 }
 
+/// A stamp older than any clock a test runs under, so a write that stamps a playlist shows.
+const EARLIER: &str = "2020-01-01T00:00:00.000+00:00";
+
+async fn backdate(db: &crate::database::DbPool, playlist_id: i64) -> Result<(), AppError> {
+    sqlx::query("UPDATE playlists SET updated_at = ? WHERE id = ?")
+        .bind(EARLIER)
+        .bind(playlist_id)
+        .execute(db.write())
+        .await?;
+    Ok(())
+}
+
+async fn updated_at(db: &crate::database::DbPool, playlist_id: i64) -> Result<String, AppError> {
+    Ok(sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
+        .bind(playlist_id)
+        .fetch_one(db.read())
+        .await?)
+}
+
 // --- create_playlist_with_tracks ---
 
 #[tokio::test]
@@ -540,6 +559,144 @@ async fn a_reorder_moving_more_rows_than_one_update_holds_lands_every_position()
     Ok(())
 }
 
+async fn five_track_playlist() -> Result<(crate::database::DbPool, i64, Vec<i64>), AppError> {
+    let (db, ids) = numbered_library(5).await?;
+    let playlist = queries::playlist::create_playlist_with_tracks(&db, "Five", None, &ids).await?;
+    Ok((db, playlist, ids))
+}
+
+/// [`five_track_playlist`] with covers on its first two tracks, so it takes the first one's.
+async fn covered_five_track_playlist() -> Result<(crate::database::DbPool, i64, Vec<i64>), AppError>
+{
+    let (db, ids) = numbered_library(5).await?;
+    set_test_artwork(&db, ids[0], "/artwork/first.jpg").await?;
+    set_test_artwork(&db, ids[1], "/artwork/second.jpg").await?;
+    let playlist =
+        queries::playlist::create_playlist_with_tracks(&db, "Covered", None, &ids).await?;
+    Ok((db, playlist, ids))
+}
+
+/// The ids on `rows`, in that order.
+fn on_rows(ids: &[i64], rows: &[usize]) -> Vec<i64> {
+    rows.iter().map(|&row| ids[row]).collect()
+}
+
+/// A drag hands the picks over in click order, and they land in the order the playlist held them.
+#[tokio::test]
+async fn a_block_lands_together_in_the_order_the_playlist_held_it() -> Result<(), AppError> {
+    let rows: [(&str, &[usize], usize, [usize; 5]); 4] = [
+        ("a run moved down", &[0, 1], 2, [2, 3, 0, 1, 4]),
+        ("a run moved up", &[3, 4], 0, [3, 4, 0, 1, 2]),
+        ("scattered rows handed over out of order", &[4, 0, 2], 1, [1, 0, 2, 4, 3]),
+        ("a run landing at the end", &[1, 2], 3, [0, 3, 4, 1, 2]),
+    ];
+    for (what, handed, to, expected) in rows {
+        let (db, playlist, ids) = five_track_playlist().await?;
+
+        queries::playlist::move_playlist_tracks(&db, playlist, &on_rows(&ids, handed), to).await?;
+
+        assert_eq!(
+            (order(&db, playlist).await?, positions(&db, playlist).await?),
+            (on_rows(&ids, &expected), vec![0, 1, 2, 3, 4]),
+            "{what}"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_block_running_one_past_the_end_is_refused() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+
+    let refused = queries::playlist::move_playlist_tracks(&db, playlist, &ids[1..3], 4).await;
+
+    assert!(matches!(refused, Err(AppError::NotFound(_))), "{refused:?}");
+    assert_eq!(order(&db, playlist).await?, ids);
+    Ok(())
+}
+
+/// The ids say which rows move, so one handed over twice is one row. Counted twice, a move to the
+/// last slot would read as running past the end.
+#[tokio::test]
+async fn a_track_handed_over_twice_moves_once() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0], ids[0]], 4).await?;
+
+    assert_eq!(order(&db, playlist).await?, on_rows(&ids, &[1, 2, 3, 4, 0]));
+    Ok(())
+}
+
+#[tokio::test]
+async fn one_track_outside_the_playlist_refuses_the_whole_move() -> Result<(), AppError> {
+    let (db, ids) = numbered_library(6).await?;
+    let held = &ids[..5];
+    let playlist = queries::playlist::create_playlist_with_tracks(&db, "Five", None, held).await?;
+    backdate(&db, playlist).await?;
+
+    let refused =
+        queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0], ids[5]], 2).await;
+
+    assert!(matches!(refused, Err(AppError::NotFound(_))), "{refused:?}");
+    assert_eq!(
+        (order(&db, playlist).await?, updated_at(&db, playlist).await?),
+        (held.to_vec(), EARLIER.to_owned()),
+        "a refused move writes nothing"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_automatic_cover_follows_the_track_a_move_puts_first() -> Result<(), AppError> {
+    let (db, playlist, ids) = covered_five_track_playlist().await?;
+
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown.as_deref(), Some("/artwork/second.jpg"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_custom_cover_stays_whatever_a_move_puts_first() -> Result<(), AppError> {
+    let (db, playlist, ids) = covered_five_track_playlist().await?;
+    queries::playlist::set_playlist_custom_thumbnail(&db, playlist, "/artwork/custom.jpg").await?;
+
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+
+    let shown = queries::playlist::get_playlist_by_id(&db, playlist).await?.thumbnail_path;
+    assert_eq!(shown.as_deref(), Some("/artwork/custom.jpg"));
+    Ok(())
+}
+
+/// The grid lists the most recently edited playlist first, and a reorder is an edit.
+#[tokio::test]
+async fn a_move_stamps_the_playlist_as_updated() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    backdate(&db, playlist).await?;
+
+    queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 2).await?;
+
+    assert_ne!(updated_at(&db, playlist).await?, EARLIER);
+    Ok(())
+}
+
+/// Stamping it anyway would lift the playlist to the top of the grid for an edit that changed
+/// nothing.
+#[tokio::test]
+async fn a_move_that_moves_nothing_writes_nothing() -> Result<(), AppError> {
+    let (db, playlist, ids) = five_track_playlist().await?;
+    backdate(&db, playlist).await?;
+
+    queries::playlist::move_playlist_tracks(&db, playlist, &ids[1..3], 1).await?;
+
+    assert_eq!(
+        (order(&db, playlist).await?, updated_at(&db, playlist).await?),
+        (ids, EARLIER.to_owned())
+    );
+    Ok(())
+}
+
 /// The card menu's batch arm hands this a whole selection, and the write pool is one connection,
 /// so the loop this replaced was that many serialised round trips. Membership goes with each one
 /// through the cascade.
@@ -694,18 +851,13 @@ async fn a_custom_thumbnail_is_left_where_the_user_put_it() -> Result<(), AppErr
 /// every playlist a scan touched to the top.
 #[tokio::test]
 async fn a_refresh_leaves_the_playlists_updated_at_alone() -> Result<(), AppError> {
-    const EARLIER: &str = "2020-01-01T00:00:00.000+00:00";
     let db = setup_seeded_db().await?;
     let (playlist, ids) = covered_playlist(&db).await?;
-    sqlx::query("UPDATE playlists SET updated_at = ?").bind(EARLIER).execute(db.write()).await?;
+    backdate(&db, playlist).await?;
     set_test_artwork(&db, ids[0], "/artwork/edited.jpg").await?;
 
     refresh(&db).await?;
 
-    let updated_at: String = sqlx::query_scalar("SELECT updated_at FROM playlists WHERE id = ?")
-        .bind(playlist)
-        .fetch_one(db.read())
-        .await?;
-    assert_eq!(updated_at, EARLIER);
+    assert_eq!(updated_at(&db, playlist).await?, EARLIER);
     Ok(())
 }

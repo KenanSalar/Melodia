@@ -1,6 +1,6 @@
 # Plan: Tests for the queue panel branch
 
-Status: **planned**, no phase started; each starts on Kenan's go · Owner: Kenan · Created: 2026-10-25 · Branch `feat/queue-panel`, covering the work `QUEUE_PANEL.md` plans
+Status: **Phase 1 implemented**, uncommitted; Phases 2 and 3 not started, each on Kenan's go · Owner: Kenan · Created: 2026-10-25 · Branch `feat/queue-panel`, covering the work `QUEUE_PANEL.md` plans
 
 Working doc. Delete once all three phases have landed.
 
@@ -57,7 +57,7 @@ Both seams leave their files well under the 800-line cap (`file_drop.rs` 110, `p
 ## Phases
 
 ### Phase 1: The orders
-Status: not started.
+Status: implemented 2026-10-25, not committed. Gate green; every break below fails only Phase 1's tests, break 3 also failing two older `queue_tests` that read slot numbers.
 
 **1. `block_move`.** The one move rule the play order, the shown keyset and `playlist_items` share.
 - **`move_block`, one case per partition:**

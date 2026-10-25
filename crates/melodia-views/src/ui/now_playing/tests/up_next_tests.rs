@@ -5,7 +5,10 @@
 //! index, and nothing playing at all.
 
 use super::super::UP_NEXT_N;
-use super::{SlideKind, classify_step, outgoing_row, upcoming_indices};
+use super::{
+    SlideKind, classify_step, outgoing_row, play_order_move, upcoming_id_slice, upcoming_indices,
+};
+use melodia_engine::player::engine::queue::{QueueState, current_index_to_i32};
 use melodia_engine::player::engine::state::QueueViewModel;
 use melodia_engine::player::engine::types::RepeatMode;
 use melodia_ui::QueueRow;
@@ -146,4 +149,77 @@ fn an_id_the_list_was_not_showing_carries_nothing_off() {
     let before = shown(&[2, 3]);
 
     assert!(outgoing_row(SlideKind::Forward, &before, Some(99), None).is_none());
+}
+
+/// `(what, base, len, from_row, to_row, the play-order move)`.
+type MoveCase = (&'static str, usize, usize, usize, usize, Option<(usize, usize)>);
+
+/// `1..=6` playing slot 2 under repeat-all lists slots 3, 4 and 5, then wraps to 0 and 1: base 3,
+/// with row 3 the boundary, `base + row == len`, and the first row past the wrap.
+#[test]
+fn a_move_between_up_next_rows_maps_onto_the_play_order_within_one_run() {
+    let rows: [MoveCase; 11] = [
+        ("within the run before the wrap", 3, 6, 0, 2, Some((3, 5))),
+        ("within the run after the wrap", 3, 6, 4, 3, Some((1, 0))),
+        ("from the boundary row within its run", 3, 6, 3, 4, Some((0, 1))),
+        ("across the wrap from before it", 3, 6, 0, 4, None),
+        ("across the wrap from after it", 3, 6, 4, 0, None),
+        ("from the boundary row across the wrap", 3, 6, 3, 2, None),
+        ("onto the boundary row across the wrap", 3, 6, 2, 3, None),
+        ("down a queue with no repeat", 2, 6, 0, 3, Some((2, 5))),
+        ("up a queue with no repeat", 2, 6, 3, 0, Some((5, 2))),
+        ("with nothing playing", 0, 4, 3, 0, Some((3, 0))),
+        ("in an empty queue", 0, 0, 0, 0, None),
+    ];
+    for (what, base, len, from_row, to_row, expected) in rows {
+        assert_eq!(play_order_move(base, len, from_row, to_row), expected, "{what}");
+    }
+}
+
+/// The Now Playing view's projection of `q`.
+fn view_of(q: &QueueState) -> QueueViewModel {
+    QueueViewModel {
+        ids: q.play_ids(),
+        queue_index: current_index_to_i32(q.current_index),
+        shuffle_enabled: q.shuffle_enabled,
+        repeat_mode: q.repeat_mode,
+        has_next: true,
+        has_previous: true,
+    }
+}
+
+/// Up Next once `from_row` is dropped on `to_row` over `1..=6` playing track 3 under repeat-all,
+/// through the mapping and then the engine's own move. `None` where the mapping refused.
+fn up_next_after(from_row: usize, to_row: usize) -> Option<Vec<i64>> {
+    let mut q = QueueState::default();
+    q.add_tracks(&[1, 2, 3, 4, 5, 6]);
+    q.current_index = Some(2);
+    q.set_repeat_mode(RepeatMode::All);
+    let view = view_of(&q);
+    let (_, base) = upcoming_indices(&view);
+
+    let (from, to) = play_order_move(base, view.ids.len(), from_row, to_row)?;
+    q.move_rows(&[from], to);
+
+    Some(upcoming_id_slice(&view_of(&q)))
+}
+
+/// The list moves its own row with `remove` and `insert` before the queue answers, so the mapping
+/// and the engine's move have to agree on counting `to` once the row has left, or the publish that
+/// follows puts the row one off from where it was dropped. Up Next starts as 4, 5, 6, 1, 2.
+#[test]
+fn a_mapped_move_leaves_up_next_as_the_drop_left_the_shown_rows() {
+    let rows: [(usize, usize, [i64; 5]); 4] = [
+        (0, 2, [5, 6, 4, 1, 2]),
+        (2, 0, [6, 4, 5, 1, 2]),
+        (4, 3, [4, 5, 6, 2, 1]),
+        (3, 4, [4, 5, 6, 2, 1]),
+    ];
+    for (from_row, to_row, expected) in rows {
+        assert_eq!(
+            up_next_after(from_row, to_row),
+            Some(expected.to_vec()),
+            "row {from_row} to row {to_row}"
+        );
+    }
 }
