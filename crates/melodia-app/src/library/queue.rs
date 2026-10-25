@@ -194,19 +194,25 @@ pub fn queue_clear(state: &AppState) -> Result<(), AppError> {
 
 /// Play the queue's track at `index`. Its record is fetched first unless the window holds it, a
 /// double-click being able to land anywhere in a queue the size of the library.
+///
+/// The row is carried across the fetch as its entry, the queue being free to move under an index
+/// meanwhile, and one that has left by then plays nothing.
 pub async fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppError> {
     // The `play` line this produces names the file; only this names why.
     log::debug!("queue: skip to index {index}");
-    let unheld = {
+    let (entry, unheld) = {
         let s = lock_state(&state.player_state);
-        s.queue.id_at(index).filter(|&id| s.record(id).is_none())
+        let Some(entry) = s.queue.entry_at(index) else {
+            return Ok(());
+        };
+        (entry, s.queue.id_at(index).filter(|&id| s.record(id).is_none()))
     };
     let fetched = match unheld {
         Some(id) => queries::track::get_track_summaries_by_ids(&state.db, &[id]).await?,
         None => Vec::new(),
     };
     emit_and_execute(&*state.engine, &state.player_state, &state.sinks, |s| {
-        let Some(id) = s.queue.skip_to_index(index) else {
+        let Some(id) = s.queue.skip_to_entry(entry) else {
             return vec![];
         };
         s.window.seat(&s.queue.window_ids(), fetched.into_iter().map(Arc::new));

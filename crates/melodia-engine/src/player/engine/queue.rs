@@ -16,7 +16,7 @@ const WINDOW_AHEAD: i64 = 3;
 /// Result of [`QueueState::prune_missing`].
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct PruneOutcome {
-    /// Number of distinct entries removed from `tracks`.
+    /// Rows dropped from the play order.
     pub removed: usize,
     /// True if the `play_order[current_index]` entry — the thing the player
     /// believes is currently playing — was in `ids_to_remove`. Caller uses
@@ -38,9 +38,9 @@ pub struct QueueEntry(usize);
 pub struct QueueState {
     /// Every entry's track id, each queued entry once, so a track queued twice is two entries.
     pub(crate) tracks: Vec<i64>,
-    /// Slots a `clear` or a `prune_missing` has retired, the only two writes that reuse or
-    /// renumber a slot. A [`QueueEntry`] is its slot counted past these, which is what lets the
-    /// queue name its entries without storing one per track.
+    /// Slots a `clear` has retired, the one write that reuses a slot. A [`QueueEntry`] is its slot
+    /// counted past these, which is what lets the queue name its entries without storing one per
+    /// track.
     retired: usize,
     /// Current playback order — indices into `tracks`.
     pub(crate) play_order: Vec<usize>,
@@ -150,7 +150,16 @@ impl QueueState {
     /// Built per call where the ids are cached: the queue panel is the one reader, and only while
     /// it is shown, so a cache here would sit resident for every install that never opens it.
     pub fn play_entries(&self) -> Arc<[QueueEntry]> {
-        self.play_order.iter().map(|&slot| QueueEntry(self.retired + slot)).collect()
+        self.play_order.iter().map(|&slot| self.entry(slot)).collect()
+    }
+
+    /// The entry at `play_index`, for a caller that has to find its row again after an await.
+    pub fn entry_at(&self, play_index: usize) -> Option<QueueEntry> {
+        self.play_order.get(play_index).map(|&slot| self.entry(slot))
+    }
+
+    fn entry(&self, slot: usize) -> QueueEntry {
+        QueueEntry(self.retired + slot)
     }
 
     /// Where `entry` sits in the play order, `None` once its row has left the queue.
@@ -340,6 +349,12 @@ impl QueueState {
         self.id_at(index)
     }
 
+    /// Jump to the row `entry` wherever the queue has moved it, `None` once it has left.
+    pub fn skip_to_entry(&mut self, entry: QueueEntry) -> Option<i64> {
+        let index = self.play_index_of(entry)?;
+        self.skip_to_index(index)
+    }
+
     pub fn current_id(&self) -> Option<i64> {
         self.id_at(self.current_index?)
     }
@@ -485,13 +500,15 @@ impl QueueState {
     }
 
     /// Restore original track order (unshuffle).
+    ///
+    /// The current row is found again by its slot, as [`Self::move_rows`] does: by id, a track
+    /// queued twice would hand current to whichever copy comes first.
     pub fn unshuffle(&mut self) {
-        let current_track_id = self.current_id();
+        let current = self.current_index.and_then(|ci| self.play_order.get(ci).copied());
         self.play_order.clone_from(&self.original_order);
 
-        if let Some(track_id) = current_track_id
-            && let Some(pos) =
-                self.play_order.iter().position(|&ti| self.tracks.get(ti) == Some(&track_id))
+        if let Some(slot) = current
+            && let Some(pos) = self.play_order.iter().position(|&queued| queued == slot)
         {
             self.current_index = Some(pos);
         }
@@ -517,93 +534,37 @@ impl QueueState {
         self.version += 1;
     }
 
-    /// Drop tracks whose ID is in `ids_to_remove` from the queue. Maintains the
-    /// `tracks` / `play_order` / `original_order` invariants by remapping all
-    /// surviving track-indices. Adjusts `current_index` to land on the next
-    /// surviving play-order entry at or after the old slot (or, if everything
-    /// at or after was removed, the last survivor — or `None` for an empty
-    /// queue).
+    /// Drop the rows whose track is in `ids_to_remove` from both orders. Their slots stay in
+    /// `tracks`, as a removal's do, so every surviving row keeps its [`QueueEntry`].
+    /// `current_index` lands on the next survivor at or after the old slot, else on the last
+    /// survivor, else on `None` for an empty queue.
     ///
-    /// Bumps `version` only when at least one entry actually changed, so a
-    /// no-op call (empty input or no matches) won't trigger a `ViewModel` re-emit.
+    /// Bumps `version` only when a row went, so a no-op call (empty input or no matches) won't
+    /// trigger a `ViewModel` re-emit.
     pub fn prune_missing(&mut self, ids_to_remove: &HashSet<i64>) -> PruneOutcome {
-        if ids_to_remove.is_empty() || self.tracks.is_empty() {
-            return PruneOutcome::default();
-        }
+        let tracks = &self.tracks;
+        let gone = |slot: usize| tracks.get(slot).is_some_and(|id| ids_to_remove.contains(id));
 
-        // Step 1: classify each `tracks` slot and build the old→new remap.
-        let old_len = self.tracks.len();
-        let mut keep_mask: Vec<bool> = Vec::with_capacity(old_len);
-        let mut remap: Vec<Option<usize>> = Vec::with_capacity(old_len);
-        let mut new_tracks: Vec<i64> = Vec::with_capacity(old_len);
-        for &id in &self.tracks {
-            if ids_to_remove.contains(&id) {
-                keep_mask.push(false);
-                remap.push(None);
-            } else {
-                keep_mask.push(true);
-                remap.push(Some(new_tracks.len()));
-                new_tracks.push(id);
-            }
-        }
-
-        let removed = old_len - new_tracks.len();
-
+        let removed = self.play_order.iter().filter(|&&slot| gone(slot)).count();
         if removed == 0 {
             return PruneOutcome::default();
         }
 
-        // Step 2: figure out whether the "currently playing" entry is among
-        // the casualties — *before* mutating anything else, so `current_index`
-        // still resolves through the old `play_order`.
         let current_was_removed = self
             .current_index
-            .and_then(|ci| self.play_order.get(ci).copied())
-            .is_some_and(|ti| !keep_mask[ti]);
+            .and_then(|ci| self.play_order.get(ci))
+            .is_some_and(|&slot| gone(slot));
+        // The first survivor at or after the old slot takes the index of the survivors before it.
+        let survivors_before_current = self
+            .current_index
+            .map(|ci| self.play_order.iter().take(ci).filter(|&&slot| !gone(slot)).count());
 
-        // Step 3: rebuild play_order, dropping entries whose target was
-        // removed, and remember where each old slot lands (or that it
-        // didn't) so we can fix up `current_index` afterwards.
-        let old_play_order = std::mem::take(&mut self.play_order);
-        let mut new_play_order: Vec<usize> = Vec::with_capacity(old_play_order.len());
-        let mut slot_remap: Vec<Option<usize>> = Vec::with_capacity(old_play_order.len());
-        for old_ti in old_play_order {
-            match remap[old_ti] {
-                Some(new_ti) => {
-                    slot_remap.push(Some(new_play_order.len()));
-                    new_play_order.push(new_ti);
-                }
-                None => slot_remap.push(None),
-            }
-        }
-        self.play_order = new_play_order;
+        self.play_order.retain(|&slot| !gone(slot));
+        self.original_order.retain(|&slot| !gone(slot));
 
-        // Step 4: rebuild original_order with the same remap rules. We don't
-        // need a slot map for it — it's never indexed by `current_index`.
-        let old_original_order = std::mem::take(&mut self.original_order);
-        let mut new_original_order: Vec<usize> = Vec::with_capacity(old_original_order.len());
-        for old_ti in old_original_order {
-            if let Some(new_ti) = remap[old_ti] {
-                new_original_order.push(new_ti);
-            }
-        }
-        self.original_order = new_original_order;
-
-        // Step 5: recompute current_index in the new play_order space.
-        // Strategy: find the next surviving slot at or after the old index;
-        // fall back to the last survivor; fall back to None when empty.
-        self.current_index = self.current_index.and_then(|old_ci| {
-            slot_remap
-                .iter()
-                .skip(old_ci)
-                .find_map(|s| *s)
-                .or_else(|| self.play_order.len().checked_sub(1))
-        });
-
-        // Renumbered slots would hand the survivors' entries to other rows, so every entry
-        // retires and each survivor comes back as a new one.
-        self.retired += old_len;
-        self.tracks = new_tracks;
+        let last = self.play_order.len().checked_sub(1);
+        self.current_index =
+            survivors_before_current.and_then(|before| last.map(|last| before.min(last)));
         self.order_changed();
 
         PruneOutcome { removed, current_was_removed }
