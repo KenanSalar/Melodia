@@ -32,3 +32,7 @@ pub fn lifted_run(rows: &[usize]) -> LiftedRun {
         _ => LiftedRun { first: -1, count: 0 },
     }
 }
+
+#[cfg(test)]
+#[path = "tests/drag_tests.rs"]
+mod tests;

@@ -403,8 +403,7 @@ impl CoverThumbs {
 
     /// Cache-only lookup — **never** decodes synchronously, serving the placeholder on a miss.
     /// The one lookup that takes whatever size the tier holds, having neither of the two ways to
-    /// improve on it: it may not decode and it may not schedule. A backed tier still borrows on a
-    /// miss, which is neither.
+    /// improve on it: it may not decode and it may not schedule.
     ///
     /// For a caller with no generation to come back on when a scheduled decode lands, and nothing
     /// to gain from one: the now-playing bridge, whose slot a warm-up fills a moment later, and a
@@ -414,16 +413,10 @@ impl CoverThumbs {
         let Some(p) = path.filter(|p| !p.is_empty()) else {
             return Image::default();
         };
-        let path = Path::new(p);
-        if let Some(held) = self.cache.lock().get(path) {
+        if let Some(held) = self.cache.lock().get(Path::new(p)) {
             return buf_to_image(&held.buf);
         }
-        let Some(borrowed) = self.borrow_from_backing(path, self.thumb_size()) else {
-            return Image::default();
-        };
-        let img = buf_to_image(&borrowed.buf);
-        self.cache.lock().put(path.to_path_buf(), borrowed);
-        img
+        Image::default()
     }
 
     /// Register what to call when a scheduled batch lands. First caller wins.

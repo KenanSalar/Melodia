@@ -1,6 +1,6 @@
 # Plan: Tests for the queue panel branch
 
-Status: **Phase 1 implemented**, uncommitted; Phases 2 and 3 not started, each on Kenan's go · Owner: Kenan · Created: 2026-10-25 · Branch `feat/queue-panel`, covering the work `QUEUE_PANEL.md` plans
+Status: **Phases 1 and 2 implemented and committed**; Phase 3 not started, on Kenan's go · Owner: Kenan · Created: 2026-10-25 · Branch `feat/queue-panel`, covering the work `QUEUE_PANEL.md` plans
 
 Working doc. Delete once all three phases have landed.
 
@@ -57,7 +57,7 @@ Both seams leave their files well under the 800-line cap (`file_drop.rs` 110, `p
 ## Phases
 
 ### Phase 1: The orders
-Status: implemented 2026-10-25, not committed. Gate green; every break below fails only Phase 1's tests, break 3 also failing two older `queue_tests` that read slot numbers.
+Status: implemented 2026-10-25, committed in `99201f52`. Gate green; every break below fails only Phase 1's tests, break 3 also failing two older `queue_tests` that read slot numbers.
 
 **1. `block_move`.** The one move rule the play order, the shown keyset and `playlist_items` share.
 - **`move_block`, one case per partition:**
@@ -117,7 +117,7 @@ Status: implemented 2026-10-25, not committed. Gate green; every break below fai
 **Gate:** fmt, clippy, test, then the breaks above. One commit.
 
 ### Phase 2: What the panel shows and keeps
-Status: not started.
+Status: implemented and committed 2026-10-25. Gate green; every break below fails only Phase 2's tests, the `#[serde(default)]` break also failing 27 older `settings_tests` that parse files without the panel's keys. The playlist decision takes four inputs rather than five: Now Playing and the miniplayer fold into one `covered`, a fourth bool putting the struct past clippy's `struct_excessive_bools`.
 
 **1. `QueueRows`, over a real `QueueState`** (a queue of 1, 2, 1, 3).
 - **Picking:**

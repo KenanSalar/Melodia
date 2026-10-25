@@ -105,6 +105,22 @@ fn a_shift_range_leaves_out_the_rows_listed_as_zero() {
     assert_eq!((sel, anchor), (vec![10, 20], 10));
 }
 
+/// Every disk-only row shares the `0`, so one picked would light them all. Browse refuses the
+/// click itself; this is the line behind it, and it holds on every branch a click can take.
+#[test]
+fn no_click_picks_a_row_listed_as_zero() {
+    let shown = || vec![10, 0, 20];
+    let cases = [
+        (false, false, Vec::new(), "a plain click"),
+        (false, true, vec![10], "a Ctrl click"),
+        (true, false, vec![10], "a Shift click"),
+    ];
+    for (shift, ctrl, expected, case) in cases {
+        let (sel, _) = compute_click_selection(10, vec![10], shown, 1, 0, shift, ctrl);
+        assert_eq!(sel, expected, "{case}");
+    }
+}
+
 #[test]
 fn shift_takes_priority_over_ctrl_when_anchored() {
     let (sel, _) = compute_click_selection(10, vec![10], visible, 2, 30, true, true);

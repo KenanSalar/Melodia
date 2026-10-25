@@ -300,6 +300,19 @@ fn an_empty_path_schedules_nothing() {
     assert_eq!(thumbs.cache.lock().len(), 0);
 }
 
+/// The now-playing bridge asks on the event loop, so a cover the tier lacks is the placeholder
+/// there and never a decode.
+#[test]
+fn a_cache_only_lookup_never_decodes() -> TestResult {
+    let thumbs = CoverThumbs::new();
+    let (_tmp, path) = write_test_png(600)?;
+
+    let image = thumbs.get_cached_opt(path.to_str());
+
+    assert_eq!(image.size().width, 0, "a miss must hand back the placeholder");
+    Ok(())
+}
+
 #[test]
 fn resize_shrinks_cap_and_evicts() -> TestResult {
     let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
@@ -315,6 +328,26 @@ fn resize_shrinks_cap_and_evicts() -> TestResult {
     let cache = thumbs.cache.lock();
     assert_eq!(cache.cap(), smaller);
     assert_eq!(cache.len(), 2);
+    Ok(())
+}
+
+/// The retune behind a resize runs on every frame of a panel's ease, so the cap the tier already
+/// has leaves the brake on re-queueing in place. Another cap lifts it, an evicted entry being a
+/// miss again that the burst would otherwise refuse.
+#[test]
+fn only_a_resize_that_moves_the_cap_forgets_what_the_burst_decoded() -> TestResult {
+    let cap = NonZeroUsize::new(4).ok_or("cap must be > 0")?;
+    let other = NonZeroUsize::new(2).ok_or("cap must be > 0")?;
+    let decoded = PathBuf::from("/nonexistent/melodia/cover-burst.png");
+    let cases = [(cap, true, "the cap the tier has"), (other, false, "another cap")];
+    for (to, kept, case) in cases {
+        let thumbs = CoverThumbs::with_config(64, cap);
+        thumbs.pending.lock().settled.insert(decoded.clone());
+
+        thumbs.resize(to);
+
+        assert_eq!(thumbs.pending.lock().settled.contains(&decoded), kept, "{case}");
+    }
     Ok(())
 }
 
@@ -489,29 +522,50 @@ fn a_backed_tier_draws_at_the_backings_size_whatever_it_is_told() -> TestResult 
     Ok(())
 }
 
-/// The queue panel mounts its rows before its tier is warm and may not decode there, so a borrow
-/// is the only way those rows open on a cover rather than the placeholder.
+/// The queue panel mounts its rows before its tier is warm, and a borrow is a refcount where a
+/// schedule is a placeholder and a decode, so a cover the row tier holds paints on the frame that
+/// asked.
 #[test]
-fn a_cache_only_lookup_on_a_backed_tier_borrows_on_a_miss() -> TestResult {
+fn a_backed_tier_borrows_what_its_backing_holds_and_schedules_nothing() -> TestResult {
     let backing = Arc::new(CoverThumbs::new());
     let (_tmp, path) = write_test_png(600)?;
     backing.get_or_load_rgb8(&path).ok_or("the backing failed to decode")?;
-    let backed = CoverThumbs::backed_by(Arc::clone(&backing));
+    let backed = Arc::new(CoverThumbs::backed_by(Arc::clone(&backing)));
+    without_a_drain(&backed);
 
-    let image = backed.get_cached_opt(path.to_str());
+    let width = backed.get_or_schedule_opt(path.to_str()).size().width;
 
-    assert_eq!(image.size().width, ROW_THUMB_SIZE);
+    assert_eq!((width, backed.pending.lock().queued.is_empty()), (ROW_THUMB_SIZE, true));
+    Ok(())
+}
+
+/// A stale entry is the backing's to replace, so the panel waits on a decode of its own rather
+/// than draw a cover at a size the window no longer asks for.
+#[test]
+fn a_backed_tier_schedules_what_its_backing_holds_at_a_stale_size() -> TestResult {
+    let cap = NonZeroUsize::new(8).ok_or("cap must be > 0")?;
+    let backing = Arc::new(CoverThumbs::with_config(64, cap));
+    let (_tmp, path) = write_test_png(600)?;
+    backing.get_or_load_rgb8(&path).ok_or("the backing failed to decode")?;
+    backing.set_thumb_size(32);
+    let backed = Arc::new(CoverThumbs::backed_by(Arc::clone(&backing)));
+    without_a_drain(&backed);
+
+    let width = backed.get_or_schedule_opt(path.to_str()).size().width;
+
+    assert_eq!((width, backed.pending.lock().queued.contains(&path)), (0, true));
     Ok(())
 }
 
 #[test]
-fn a_cache_only_lookup_on_a_backed_tier_still_never_decodes() -> TestResult {
-    let backed = CoverThumbs::backed_by(Arc::new(CoverThumbs::new()));
+fn a_backed_tier_schedules_what_its_backing_lacks() -> TestResult {
+    let backed = Arc::new(CoverThumbs::backed_by(Arc::new(CoverThumbs::new())));
+    without_a_drain(&backed);
     let (_tmp, path) = write_test_png(600)?;
 
-    let image = backed.get_cached_opt(path.to_str());
+    let width = backed.get_or_schedule_opt(path.to_str()).size().width;
 
-    assert_eq!(image.size().width, 0, "a cover the backing lacks is a placeholder, not a decode");
+    assert_eq!((width, backed.pending.lock().queued.contains(&path)), (0, true));
     Ok(())
 }
 

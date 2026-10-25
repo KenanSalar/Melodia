@@ -41,17 +41,32 @@ pub(super) struct DropTargets {
     playlist: Option<(WindowRect, i64)>,
 }
 
+/// The queue panel as the window last reported it.
+struct QueuePanel {
+    shown: bool,
+    floating: bool,
+    rect: WindowRect,
+}
+
 impl DropTargets {
     pub(super) fn read(ui: &AppWindow) -> Self {
         let queue = ui.global::<Queue>();
         let drag = ui.global::<FileDrag>();
-        // Under the overlay the page is dimmed and takes no click, so it takes no drop either.
-        let playlist = if queue.get_floating() {
-            None
-        } else {
-            crate::ui::playlists::detail_on_screen(ui).map(|id| (drag.get_content_rect(), id))
+        let panel = QueuePanel {
+            shown: queue.get_shown(),
+            floating: queue.get_floating(),
+            rect: drag.get_queue_rect(),
         };
-        Self { queue: queue.get_shown().then(|| drag.get_queue_rect()), playlist }
+        let playlist =
+            crate::ui::playlists::detail_on_screen(ui).map(|id| (drag.get_content_rect(), id));
+        Self::new(panel, playlist)
+    }
+
+    /// What the queue `panel` leaves taking drops, `playlist` being the detail on screen.
+    fn new(panel: QueuePanel, playlist: Option<(WindowRect, i64)>) -> Self {
+        // Under the overlay the page is dimmed and takes no click, so it takes no drop either.
+        let playlist = if panel.floating { None } else { playlist };
+        Self { queue: panel.shown.then_some(panel.rect), playlist }
     }
 }
 
@@ -108,3 +123,7 @@ async fn import_to_playlist(state: &AppState, playlist_id: i64, paths: Vec<Strin
         Err(e) => log::warn!("import_files_to_playlist (drop): {}", describe(&e)),
     }
 }
+
+#[cfg(test)]
+#[path = "tests/file_drop_tests.rs"]
+mod tests;

@@ -78,7 +78,3 @@ pub(super) fn publish_picks(ui: &AppWindow, rows: &QueueRows) {
     queue.set_selected_count(i32::try_from(count).unwrap_or(i32::MAX));
     write_selection_ids(&queue.get_selected_ids(), ids, |m| queue.set_selected_ids(m));
 }
-
-#[cfg(test)]
-#[path = "tests/picks_tests.rs"]
-mod tests;

@@ -324,6 +324,58 @@ fn a_settings_file_from_before_the_mini_backdrop_keeps_it_off() -> Result<(), Ap
     Ok(())
 }
 
+/// A shipped file predates the panel. No width means `Theme`'s, a panel never dragged following
+/// the default.
+#[test]
+fn a_settings_file_from_before_the_queue_panel_opens_it_closed_at_the_default_width()
+-> Result<(), AppError> {
+    let settings: SettingsData =
+        reading_env(|| serde_json::from_str(r#"{"volume": 80}"#)).map_err(|e| json_err(&e))?;
+
+    let layout = settings.queue_panel;
+    assert!(!layout.queue_panel_open && layout.queue_panel_width.is_none(), "read as {layout:?}");
+    Ok(())
+}
+
+/// Flattened into the top level under these names, which every install that closed with the
+/// panel open has saved, so a rename or a lost `flatten` reopens each of them closed.
+#[test]
+fn the_queue_panel_is_saved_under_two_top_level_keys() -> Result<(), AppError> {
+    let settings = SettingsData {
+        queue_panel: QueuePanelLayout { queue_panel_open: true, queue_panel_width: Some(360.0) },
+        ..reading_env(SettingsData::default)
+    };
+
+    let written = serde_json::to_value(&settings).map_err(|e| json_err(&e))?;
+
+    let keys =
+        (written.get("queue_panel_open").is_some(), written.get("queue_panel_width").is_some());
+    assert_eq!(keys, (true, true));
+    Ok(())
+}
+
+#[test]
+fn the_queue_panel_reads_back_as_it_closed() -> Result<(), AppError> {
+    // Integral, so it parses exactly; the slack only keeps the comparison honest about floats.
+    const TOLERANCE: f64 = 1e-9;
+    let settings = SettingsData {
+        queue_panel: QueuePanelLayout { queue_panel_open: true, queue_panel_width: Some(360.0) },
+        ..reading_env(SettingsData::default)
+    };
+    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
+
+    let back: SettingsData =
+        reading_env(|| serde_json::from_str(&json)).map_err(|e| json_err(&e))?;
+
+    let layout = back.queue_panel;
+    assert!(
+        layout.queue_panel_open
+            && layout.queue_panel_width.is_some_and(|width| (width - 360.0).abs() < TOLERANCE),
+        "read back as {layout:?}"
+    );
+    Ok(())
+}
+
 #[test]
 fn a_settings_file_from_before_the_hold_restores_no_full_player() -> Result<(), AppError> {
     let settings: SettingsData =

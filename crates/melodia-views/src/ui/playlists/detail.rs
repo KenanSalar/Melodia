@@ -62,19 +62,37 @@ impl TrackDetail for PlaylistsUi {
     }
 }
 
-/// The playlist a file let go of over the page lands in: the detail open on screen, and only one
-/// whose membership is its own, a smart playlist's following its rules.
+/// The playlist a file let go of over the page lands in ([`DetailPage::drop_target`]).
 pub fn detail_on_screen(ui: &AppWindow) -> Option<i64> {
-    let nav = ui.global::<Nav>();
-    if nav.get_now_playing_open()
-        || ui.global::<MiniPlayer>().get_active()
-        || !tab_is_mounted(ui, MyLibraryTab::Playlists)
-    {
-        return None;
-    }
     let detail = ui.global::<PlaylistDetail>();
-    let id = detail.get_playlist_id();
-    (id >= 0 && !detail.get_playlist().is_smart).then_some(i64::from(id))
+    let page = DetailPage {
+        covered: ui.global::<Nav>().get_now_playing_open()
+            || ui.global::<MiniPlayer>().get_active(),
+        tab_mounted: tab_is_mounted(ui, MyLibraryTab::Playlists),
+        playlist_id: detail.get_playlist_id(),
+        is_smart: detail.get_playlist().is_smart,
+    };
+    page.drop_target()
+}
+
+/// Playlist Detail as the window has it, which is all a file drop asks of the page.
+pub(super) struct DetailPage {
+    /// Now Playing or the miniplayer is drawn over it.
+    pub(super) covered: bool,
+    pub(super) tab_mounted: bool,
+    pub(super) playlist_id: i32,
+    pub(super) is_smart: bool,
+}
+
+impl DetailPage {
+    /// The detail open on screen, and only one whose membership is its own, a smart playlist's
+    /// following its rules.
+    pub(super) fn drop_target(&self) -> Option<i64> {
+        if self.covered || !self.tab_mounted {
+            return None;
+        }
+        (self.playlist_id >= 0 && !self.is_smart).then_some(i64::from(self.playlist_id))
+    }
 }
 
 /// Whether the rows on screen are in the playlist's own order, ascending.

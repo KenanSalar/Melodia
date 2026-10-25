@@ -1,7 +1,7 @@
 //! What drag-to-reorder and the row menu's removal need to stay alive, none of
 //! which any other pin can see go missing.
 
-use super::detail::{POSITION_FIELD, is_manual_order};
+use super::detail::{DetailPage, POSITION_FIELD, is_manual_order};
 use melodia_testkit::code_tokens;
 
 const TRACK_LIST: &str =
@@ -165,4 +165,22 @@ fn only_an_ascending_position_sort_is_the_manual_order() {
     assert!(!is_manual_order("title", "desc"));
     // `SortDir::from_token`'s rule — only `"desc"` is descending.
     assert!(is_manual_order(POSITION_FIELD, "sideways"));
+}
+
+/// A detail left open on a tab out of sight keeps its id, so the id alone would take files nobody
+/// saw go in. A smart playlist's members are its rules', so a drop has nothing to write to.
+#[test]
+fn a_file_drop_lands_only_in_a_curated_playlist_on_screen() {
+    let open = DetailPage { covered: false, tab_mounted: true, playlist_id: 5, is_smart: false };
+    let cases = [
+        (DetailPage { ..open }, Some(5), "every term permitting"),
+        (DetailPage { playlist_id: 0, ..open }, Some(0), "the lowest id"),
+        (DetailPage { covered: true, ..open }, None, "under Now Playing or the miniplayer"),
+        (DetailPage { tab_mounted: false, ..open }, None, "a valid id behind another tab"),
+        (DetailPage { playlist_id: -1, ..open }, None, "no detail open"),
+        (DetailPage { is_smart: true, ..open }, None, "a smart playlist, the rest open"),
+    ];
+    for (page, expected, case) in cases {
+        assert_eq!(page.drop_target(), expected, "{case}");
+    }
 }
