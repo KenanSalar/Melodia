@@ -739,9 +739,10 @@ three components that answer it, and each argues its geometry at its own file.
     builds it in `TrackListRowItem.drag-items()` and a card in `CardCell.drag-items(title, cover)`,
     both through `Selection.effective-ids`, so a drag carries what the item's menu acts on.
     `EntityCard.pressed` is a left press on the card body; one on its box or a hover control arms
-    nothing. The queue panel's target `takes-items` and lands them as a copy at the slot through
-    `Queue.drop-in`, which resolves as Add to Queue does (`card_actions::spawn_with_track_ids`) into
-    `queue_insert_at`; its header gives way to what letting go would do while `holds-items`. The
+    nothing. The queue panel's target `takes-items` and lands them as a copy ahead of the row they
+    were let go above through `Queue.drop-in`, which names that row by its `QueueEntry` before
+    resolving as Add to Queue does (`card_actions::spawn_with_track_ids`) into
+    `queue_insert_before`; its header gives way to what letting go would do while `holds-items`. The
     bar's `components/now-playing/queue-button.slint` takes a drop as `CardActions.add-to-queue`
     verbatim and opens the panel after a 500 ms hover, so a drop can still be placed at a slot.
   - **The chip under the pointer is `components/drag-ghost.slint`'s `DragGhost`**, for a drag that

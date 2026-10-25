@@ -8,7 +8,7 @@ use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::{AppError, AppResult};
 use melodia_engine::player::engine::actions::emit_and_execute;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
-use melodia_engine::player::engine::queue::{QueueState, current_index_from_i32};
+use melodia_engine::player::engine::queue::{QueueEntry, QueueState, current_index_from_i32};
 use melodia_engine::player::engine::state::{
     PlayerAction, PlayerState, PlayerStateHandle, lock_state, restore_queue, restore_station,
     with_state_emit,
@@ -111,18 +111,19 @@ pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(
     Ok(())
 }
 
-/// A drop into the queue panel: splice `track_ids` in at play-order `slot`, in the order they
-/// came. The slot was read before the resolve, so one the queue has since shrunk under is the end.
-pub async fn queue_insert_at(
+/// A drop into the queue panel: splice `track_ids` in ahead of the row `before`, or at the end,
+/// in the order they came. The drop names a row rather than a slot because the resolve awaits the
+/// database, and the queue can move under a slot meanwhile.
+pub async fn queue_insert_before(
     state: &AppState,
-    slot: usize,
+    before: Option<QueueEntry>,
     track_ids: Vec<i64>,
 ) -> Result<(), AppError> {
     let ids = existing_in_order(&state.db, &track_ids).await?;
 
-    log::debug!("queue: insert {} track(s) at {slot}", ids.len());
+    log::debug!("queue: insert {} track(s) before {before:?}", ids.len());
     with_state_emit(&state.player_state, &state.sinks, |s| {
-        s.queue.insert_at(slot, &ids);
+        s.queue.insert_before(before, &ids);
     });
     Ok(())
 }

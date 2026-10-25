@@ -153,6 +153,12 @@ impl QueueState {
         self.play_order.iter().map(|&slot| QueueEntry(self.retired + slot)).collect()
     }
 
+    /// Where `entry` sits in the play order, `None` once its row has left the queue.
+    fn play_index_of(&self, entry: QueueEntry) -> Option<usize> {
+        let slot = entry.0.checked_sub(self.retired)?;
+        self.play_order.iter().position(|&queued| queued == slot)
+    }
+
     /// The tracks a transition can move onto without a fetch, those at [`window_slots`], each id
     /// once.
     pub fn window_ids(&self) -> Vec<i64> {
@@ -189,12 +195,23 @@ impl QueueState {
         self.insert_at(self.current_index.map_or(0, |ci| ci + 1), ids);
     }
 
+    /// Queue `ids` as one block ahead of the row `before`, or at the end for `None`.
+    ///
+    /// A caller that awaits between reading the queue and editing it names a row rather than a
+    /// slot, which the queue may have shifted under in the meantime. A row that has left since
+    /// names no place, so the block goes to the end, as an append would.
+    pub fn insert_before(&mut self, before: Option<QueueEntry>, ids: &[i64]) {
+        let slot =
+            before.and_then(|entry| self.play_index_of(entry)).unwrap_or(self.play_order.len());
+        self.insert_at(slot, ids);
+    }
+
     /// Splice `ids` into the play order at `slot`, a slot past the end being the end.
     ///
     /// The insertion order takes the block at its end, as an append does, so unshuffling puts it
     /// back in the order it was handed over. A slot at or before the current track moves the
     /// current index with it, so what is playing stays current.
-    pub fn insert_at(&mut self, slot: usize, ids: &[i64]) {
+    fn insert_at(&mut self, slot: usize, ids: &[i64]) {
         if ids.is_empty() {
             return;
         }

@@ -1,6 +1,6 @@
 # Plan: Queue panel (the queue docks on the right and takes drops)
 
-Status: **in progress**, Phases 1 to 7 and 7.7 done (Phase 6's touch checks deferred), Phases 7.5 and 7.6 implemented and waiting on their hand passes, Phase 8 next · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
+Status: **in progress**, Phases 1 to 7 and 7.7 done (Phase 6's touch checks deferred), Phases 7.5, 7.6 and 7.8 implemented and waiting on their hand passes, Phase 8 next · Owner: Kenan · Created: 2026-10-21 · Issue #136, branch `feat/queue-panel`
 
 > **Validated 2026-10-21** against `72a0e74f` (`feat/queue-panel`). Three read-only traces went into it: the queue sheet, the left sidebar's resize and fold, and drag and drop with Add to Queue. They were checked against:
 > - the Slint 1.18.1 sources for `DragArea`, `DropArea` and the in-window drag (`i-slint-core/items/drag_n_drop.rs`, `window.rs`);
@@ -455,7 +455,7 @@ Status: done, implemented 2026-10-22 and passed by hand 2026-10-23, except the t
 
 1. **Engine and library.**
    - `QueueState::insert_at(slot, &[i64])`, with `insert_next` written over it.
-   - `queue_insert_at(state, slot, ids)` beside `queue_add_tracks` (`existing_in_order`, then the splice).
+   - `queue_insert_at(state, slot, ids)` beside `queue_add_tracks` (`existing_in_order`, then the splice). `queue_insert_before(state, entry, ids)` since Phase 7.8.
    - `queue_play_next_many` becomes one call (decision 8).
 2. **Sources.**
    - Every list on the nine surfaces and every card grid mounts a `DragSource` of `(kind, effective ids)` round its `ListView`, copy-allowed. The pressed row or card names the ids (Phase 4). The playlist's list also allows move while reorder is on.
@@ -463,7 +463,7 @@ Status: done, implemented 2026-10-22 and passed by hand 2026-10-23, except the t
    - A Browse row outside the library (id 0) carries no payload, so nothing takes its drag, matching `collect_nonzero_track_ids`.
 3. **The panel as a target.**
    - It takes outside payloads as copies and its own rows as moves. Below the last row, and the whole empty list, mean slot = length.
-   - `Queue.drop-in(kind, ids, slot)` goes through `spawn_with_track_ids` into `queue_insert_at`. A slot that went stale during the resolve is clamped by the splice.
+   - `Queue.drop-in(kind, ids, slot)` goes through `spawn_with_track_ids` into `queue_insert_at`. A slot that went stale during the resolve is clamped by the splice. **Overturned in Phase 7.8**: a slot can shift as well as shrink, so the drop names the row it was let go above.
 4. **What letting go will do.**
    - While a drag hovers the panel, a banner reads the payload: `Add {n} track(s) to the queue` for tracks, `Add “{}” to the queue` for a card.
    - That means new `@tr` strings: run `scripts/update-translations.py` and fill every catalog.
@@ -599,6 +599,23 @@ The menu still counts rows and acts on each track once, and the panel still send
 - replaying the same album clears the picks; Clear queue and a refill light nothing;
 - Escape, Ctrl+A and ✕ as before; Playlist Detail's and the track lists' selection and drag unchanged.
 
+### Phase 7.8: A drop lands at the row it was let go above
+Status: implemented 2026-10-25, static gates green, waiting on its hand pass. Its docs landed with it; its tests wait for Phase 8.
+
+**What you saw.** Found in review rather than on screen: an album dropped between two rows could land some rows off, or mid-way into another queue, when the queue moved while the album was being resolved. `Queue.drop-in` handed over a play-order slot, and two database reads (`track_ids_for`, `existing_in_order`) ran before the splice used it. A reorder or Delete straight after the drop, Play Next, a shuffle from MPRIS, a prune, a second drop resolving first or a replaced queue all shift a slot, and the splice's clamp covered only one that shrank.
+
+1. **The drop names a row, not a slot.** `QueueRows::entry_at` turns the slot into the entry on show on the UI thread, before anything is spawned, and `None` past the last row means the end. The Slint side is unchanged.
+2. **The engine finds the row again under the lock.** `QueueState::insert_before(entry, ids)` takes the entry's play index through `play_index_of`, which subtracts `retired` and so misses every entry a `clear` or a prune retired. A row that has left since lands the block at the end, as Add to Queue would.
+3. **`insert_at` is private**, its callers being `insert_next` and `insert_before`, so no new caller carries a bare slot across an await. `queue_insert_at` became `queue_insert_before`.
+
+Moves and removes still send positions: nothing is awaited between reading the rows and the engine edit, so they don't share the gap.
+
+**By hand:**
+- an album dropped between two rows lands there; a drop below the last row, and one onto an empty queue, append;
+- a drop above the playing row keeps it current and lit;
+- a genre dropped above row B, then Delete at once on a picked row above B: the genre lands directly above B;
+- picks survive a drop-in, as in 7.7's pass.
+
 ### Phase 8: Tests and docs (on Kenan's go)
 - **New pins:**
   - `insert_at` at slot 0, at the end, and before, at and after current, under shuffle and not;
@@ -617,9 +634,10 @@ The menu still counts rows and acts on each track once, and the panel still send
   - drop routing by position;
   - Phase 3.5: the Delete arm's gate; `RatingMenuRow` as the only `StarRating` inside a menu, by a walk; `Queue.floating` written beside `shown`; the overlay's Escape arm above `Selection.any-live()`.
   - Phase 3.6: `sidebar-yields` carrying the bare-row term, the window's term waiting for a measured row; the folded header and the compact detail row seating inside `Theme.content-min-w`, as arithmetic over the published floors; both pages feeding the band from a hidden ruler.
-  - Phase 6: `Drag.touching` raised by the touch arm and lowered by the press arm; no `DragSource` mount binding `enabled`, which drops the touch gate, by a walk; `revoke` keeping the items; the queue button dropping through `CardActions.add-to-queue`; `insert_at` clamping a stale slot; every `DragSource` host with a filter box forwarding `background-clicked`, by a walk.
+  - Phase 6: `Drag.touching` raised by the touch arm and lowered by the press arm; no `DragSource` mount binding `enabled`, which drops the touch gate, by a walk; `revoke` keeping the items; the queue button dropping through `CardActions.add-to-queue`; every `DragSource` host with a filter box forwarding `background-clicked`, by a walk.
   - Phase 7.5: `move_block` at both ends, scattered, already in place, and refusing unsorted or out-of-range positions; `landing`; `QueueState::move_rows` keeping the current track across a block holding it, passing it, and landing either side of it; `PagedRows::move_rows`' notifications; `lifted_run` for a run, scattered picks and none; `move_playlist_tracks` with scattered and contiguous ids, and moving an automatic cover to the track that now leads while leaving a picked one alone; `lift-picks` called only behind `Selection.acts-on-set`, by a walk.
   - Phase 7.7: two copies of a track getting two entries; an entry keeping its value through `move_rows`, a shuffle, an unshuffle and the removal of other rows; `clear` and `prune_missing` never handing one out again; `QueueRows` carrying a pick through a drag, `show` dropping the picks and the anchor of entries that left, a queue replaced by the same tracks unstamping its rows, `picked_tracks` counting rows and naming each track once in queue order, and `clear` keeping the picks for the next show and that show dropping them against an empty queue; `read_queue` deriving no entries while the order holds; `PagedRows::show` keeping an equal keyset's incoming `Arc`; a Shift range from the second copy; `click_selection` over a key other than `i32`.
+  - Phase 7.8: `insert_before` landing ahead of its row after a removal above it, a `move_rows`, a shuffle, an unshuffle and an `insert_next`; at the end for `None` and for an entry removed, cleared or pruned; the current index kept with the block landing before, at and after the current row; `QueueRows::entry_at` answering `None` at the length.
   - Phase 7.6: Up Next's `DragSource` bounded by its rows while its `ListDropTarget` spans the list, read from `up-next-list.slint` in `up_next_tests.rs`; `ListDropTarget`'s edge band capped at a quarter of its height; the miniplayer's mount passing `menu-enabled: false` and no other Up Next switch.
   - Phase 7: `route` inside each rect, on its edges, with the floating card over the content, with the panel hidden, with no playlist on screen, and `detail_on_screen` refusing a smart playlist, a hidden tab, Now Playing and the miniplayer; no `WindowRectReport` inside an `if` or a `for` other than the full-UI branch, by a walk; `FileDrag.target` written only by the winit filter, by a walk.
 - **Docs.** Phases 1 to 3's half landed on 2026-10-21, and Phase 3.5's on 2026-10-22 (`ui-patterns.md`'s row menu, queue block, `TrackTitle` and keys, `library-data.md`'s rating paths, `slint-pitfalls.md`'s `queue-row.slint` example, and the README's shortcut table and feature lines), and Phase 3.6's the same day (`ui-patterns.md`'s narrow-window block and its `PillButton`, `TabBar` and `LibraryTabBand` entries, the last one's stale pill-slot line retired with it, and `slint-pitfalls.md`'s `SearchBar` entry), and Phase 5's the same day (`ui-patterns.md`'s drag entry and the row menu's four hosts, its `"up-next"` context and the `Selection` rule, `slint-pitfalls.md`'s drag-pan entry and its in-window drag entry carrying Phase 4's traps, the README's queue line, and the root `CLAUDE.md`'s globals count), and its validation's the same day (`ui-patterns.md`'s drag entry gaining `split-row` and the touch disarm, `slint-pitfalls.md`'s drag-pan entry corrected to 1.18's binding and its in-window drag entry gaining the touch press), and Phase 7's on 2026-10-23 (`desktop-shell.md`'s fork and drop-routing bullets and its two verbs, `slint-pitfalls.md`'s Wayland file-drop entry, `ui-patterns.md`'s `Queue.shown` bullet and a file-drag entry beside the drag one, the root `CLAUDE.md`'s Known Gaps and globals count, the README's fork paragraph and licence note, `winit/README.md`, the comment above `[patch.crates-io]`, and the fork's entries in `licenses/ATTRIBUTION.txt` and `packaging/debian-copyright`), and Phase 6's and its validation's the same day (`ui-patterns.md`'s drag entry gaining the items, the chip, the queue button, the touch gate, `background-clicked` and `revoke` keeping the items, with pointers from its grid and track-list entries, and the keys bullet the sentinel's wheel; `slint-pitfalls.md`'s in-window drag entry gaining the unclaimed press and the release that becomes an `Exit`, its drag-pan entry trading the touch competition for the touch gate, and its `has-hover` entry the sentinel; the README's queue line), and Phase 7.5's the same day (`ui-patterns.md`'s drag entry gaining `move-picks` and the picks bullet, the README's queue and playlist lines). Phases 1 to 3:

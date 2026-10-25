@@ -20,7 +20,7 @@ use melodia_ui::{AppWindow, Queue, QueueRow};
 pub(super) fn wire_callbacks(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
     wire_transport(ui, state, rows);
     wire_moves(ui, state, rows);
-    wire_drop_in(ui, state);
+    wire_drop_in(ui, state, rows);
     wire_row_flags(ui, state);
     wire_selection(ui, rows);
 }
@@ -137,20 +137,24 @@ fn send_move(state: &AppState, rows: &QueueRows, moved: Vec<usize>, to: usize) {
 }
 
 /// Another list's drag let go over the rows, resolved as Add to Queue on it would be and spliced
-/// in at the slot it was let go at.
-fn wire_drop_in(ui: &AppWindow, state: &AppState) {
-    let state = state.clone();
+/// in ahead of the row it was let go above.
+///
+/// The row is named by its entry here, on the thread that drew it, since the resolve awaits the
+/// database and the queue can move under a slot meanwhile.
+fn wire_drop_in(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
+    let (state, rows) = (state.clone(), rows.clone());
     ui.global::<Queue>().on_drop_in(move |kind, ids, slot| {
         let Ok(slot) = usize::try_from(slot) else {
             return;
         };
+        let before = rows.entry_at(slot);
         spawn_with_track_ids(
             &state,
             "queue drop",
             &kind,
             &ids,
             move |state, track_ids| async move {
-                library::queue::queue_insert_at(&state, slot, track_ids).await
+                library::queue::queue_insert_before(&state, before, track_ids).await
             },
         );
     });

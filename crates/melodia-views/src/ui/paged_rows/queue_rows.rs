@@ -122,6 +122,11 @@ impl QueueRows {
         self.store.clear();
     }
 
+    /// The entry on show at `row`, `None` past the last.
+    pub fn entry_at(&self, row: usize) -> Option<QueueEntry> {
+        self.entries.borrow().get(row).copied()
+    }
+
     /// Edit the cached row of track `id`, which every copy of it reads.
     pub fn patch(&self, id: i64, edit: impl FnOnce(&mut QueueRow)) {
         self.store.patch(id, edit);
@@ -264,8 +269,8 @@ impl Model for QueueRows {
     fn row_data(&self, row: usize) -> Option<QueueRow> {
         let mut data = self.store.row_data(row)?;
         let picks = self.picks.borrow();
-        data.selected = !picks.is_empty()
-            && self.entries.borrow().get(row).is_some_and(|entry| picks.contains(entry));
+        data.selected =
+            !picks.is_empty() && self.entry_at(row).is_some_and(|entry| picks.contains(&entry));
         Some(data)
     }
 
