@@ -43,25 +43,19 @@ pub fn install(
     // lists and the now-playing bar still need. Backed by it, so a cover both draw is one buffer.
     let queue_covers = Arc::new(CoverThumbs::backed_by(row_covers.clone()));
 
-    // Lazy row covers, wired once — the `boot::ui_setup` `RowCovers` shape,
-    // against this panel's private tier.
-    //
-    // `generation` is both the token that re-runs the row bindings and the
-    // "is this tier warm yet" flag, which is what keeps the first frame off
-    // the decoder. The teardown rewinds it to 0 in the same guarded closure
-    // that clears the cache, so 0 always coincides with an empty tier — and
-    // a show facing one would otherwise have every row it mounts while the
-    // panel eases in miss and decode *on the UI thread*. Cache-only until
-    // the warm-up bump; after it, a row scrolled into view decodes on demand
-    // like every other list in the app. See the callback's declaration in
-    // `globals/queue.slint`.
+    // Lazy row covers, wired once: the `boot::ui_setup` `RowCovers` shape, against this panel's
+    // private tier. A miss borrows the row tier's buffer or schedules a decode, never decoding on
+    // the UI thread, and the generation the notifier bumps is what brings a scheduled one back.
     {
         let covers = queue_covers.clone();
-        ui.global::<Queue>().on_request_cover(move |path, generation| {
-            let path = Some(path.as_str()).filter(|s| !s.is_empty());
-            if generation == 0 { covers.get_cached_opt(path) } else { covers.get_or_load_opt(path) }
+        ui.global::<Queue>().on_request_cover(move |path, _generation| {
+            covers.get_or_schedule_opt(Some(path.as_str()))
         });
     }
+    crate::ui::cover_generation::notify_on_decode(&queue_covers, ui, |app| {
+        let queue = app.global::<Queue>();
+        queue.set_covers_generation(queue.get_covers_generation().wrapping_add(1));
+    });
 
     callbacks::wire_callbacks(ui, state, &rows);
     lifecycle::wire(ui, state, &rows, &queue_covers, &shown);

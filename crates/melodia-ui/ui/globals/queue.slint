@@ -45,11 +45,10 @@ export global Queue {
     in-out property <bool> keys-owned;
 
     // Lazy row cover against the panel's *own* tier, so hiding it releases every buffer. That tier
-    // borrows what the row tier already holds, so a cover the track lists draw is one buffer.
-    // **`generation` does two jobs**: reading it makes the binding depend on the counter, a `pure`
-    // callback's result being cached until a dependency is dirtied; its *value* is whether the tier
-    // is warm. The panel can't prewarm-then-set, its rows landing before the prewarm does, so at 0
-    // the lookup is cache-only. Hiding rewinds to 0.
+    // borrows what the row tier already holds, so a cover the track lists draw is one buffer, and
+    // schedules any other miss off the UI thread. `generation` is the repaint token: reading it
+    // makes the binding depend on the counter Rust bumps as each scheduled batch lands, a `pure`
+    // callback's result being cached until a dependency is dirtied.
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 

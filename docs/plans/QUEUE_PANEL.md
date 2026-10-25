@@ -248,6 +248,10 @@ Status: implemented and passed by hand 2026-10-21, with small follow-ups still o
 - a queue too short to scroll: wheel over it, click a row without moving the pointer, then Ctrl+A, Delete and Escape act on the queue;
 - the wheel still scrolls a long queue.
 
+**Amended in the performance pass** (2026-10-25):
+- **Item 7's `BODY_CHROME_W` is gone.** Assuming the panel open at its widest and the sidebar at its 400 px maximum held the grid cover tier a step too large on HiDPI whenever the panel was closed. The content panel's `WindowRectReport` now also writes its width into `WindowChrome.content-panel-width` and fires `content-panel-resized`, which runs the same retune as `display-changed`, and `grid_prewarm` sizes the tier off that width less `PAGE_INSET_W`, Browse's inset.
+- **The panel's covers never decode on the UI thread.** `Queue.request-cover` takes `get_or_schedule_opt`, which now borrows from a backing tier before scheduling, and the panel installs its own notifier on `Queue.covers-generation`. The show's prewarm, its bump and the teardown's rewind to 0 went with the cache-only arm they served.
+
 ### Phase 3: Remembered, and the narrow window
 Status: done, implemented 2026-10-21 and passed by hand 2026-10-22. Its tests wait for Phase 8.
 
@@ -448,6 +452,8 @@ Lands as one commit: a list cannot host both mechanisms.
 
 **Amended in the refactor pass** (2026-10-25): **`DraggableTrackList` folded into `TrackList`.** Its reason to be a sibling was the drag inside its rows, which this phase removed, and Phase 6's `DragSource` left it a copy of `TrackList` plus a reorder target. `TrackList` takes `origin` and `reorder-enabled`, and only a list naming an origin dims its lifted rows or lifts picks, so the eight drag-out lists are unchanged.
 
+**Amended in the performance pass** (2026-10-25): **the queue and track rows dim through their brushes too**, superseding the line above that they keep their `opacity`. Phase 7.5 made a drag lift every picked row on screen, each one a texture of its own under `opacity`. The track row multiplies the lift into the `fade` it already carried for disk-only rows, the queue row gains one, and `SelectionPill` takes a `fade` input beside `Checkbox`, `ArtworkImage` and `IconButton`. The track row's lift now snaps rather than easing over `dur-fast`, as Up Next's and the queue row's already did: easing the float would restart `Checkbox`'s own `animate` every frame.
+
 **By hand, after validation:**
 - Up Next under repeat-all: a drag across the wrap draws no line and moves nothing;
 - ~~a touch drag from a gap between rows moves nothing~~, and ~~a touchscreen swipe on each of the three lists~~: superseded by Phase 6, where a touch starts no drag at all.
@@ -637,7 +643,8 @@ Moves and removes still send positions: they are synchronous, so only the hop on
   - the winit filter's press and touch arms disarming `Drag`, and each list that rebuilds its rows revoking its own origin (Phase 5);
   - `play_order_move` within each side of the repeat-all wrap and refusing across it, at the boundary slot from both sides, with every row past the wrap and on an empty queue, and Up Next's `split-row` refusing the same moves (Phase 5);
   - `min <= default <= max` on the panel tokens;
-  - the prewarm test's width table gaining the panel (`grid_prewarm_tests.rs:227-260`);
+  - ~~the prewarm test's width table gaining the panel~~: the performance pass rewrote it over content panel widths (`the_tier_covers_the_card_in_every_grid_body`); still open there, `cover_size_for_content` answering the fallback before the panel's first report, and `CoverThumbs::resize` keeping `settled` through an unchanged cap;
+  - from the performance pass: a backed tier's `get_or_schedule_opt` borrowing on a miss rather than scheduling; no `opacity` bound to `lifted` in a row, by a walk;
   - the filter's press arm;
   - the panel's hover sentinel answering the wheel with `accept` (found in validation);
   - `QueuePanelLayout` defaults and an older `settings.json`;
@@ -660,11 +667,13 @@ Moves and removes still send positions: they are synchronous, so only the hop on
 
   Phase 7.7's landed on 2026-10-25: `ui-patterns.md`'s `PagedRows` entry (the queue picking by row, its entries read off the state and never off `QueueViewModel`) and its drag entry's picks bullet, the root `CLAUDE.md`'s models bullet (`QueueRows` built over a `PagedRows`), and `QueueViewModel`'s doc, which now argues why it carries no entries.
 
+  The performance pass's landed on 2026-10-25: `ui-patterns.md`'s Covers block (the grid tier read off the content panel, the cap's new trigger, the queue tier scheduling with its own notifier, Radio as the one surface still gating on `0`) and its drag entry's lifted dim, `slint-pitfalls.md`'s dimmed-state entry, `desktop-shell.md`'s drop-routing bullet carrying the panel's width, and the root `CLAUDE.md`'s `grid_prewarm` line.
+
   Still open: `README.md`'s footprint rows, relabelled with `scripts/measure-footprint.py` when they are measured again.
 
 ## Cross-cutting
 - **`settings.json` compatibility.** The new keys are `#[serde(default)]` (closed, default width), so any older file loads, and an older build ignores the keys.
-- **Memory.** No new caches. What the panel holds while shown is what the sheet held while up, released on the same delay. The miniplayer now releases it too. A launch with the panel open fetches its window and prewarms its covers during boot.
+- **Memory.** No new caches. What the panel holds while shown is what the sheet held while up, released on the same delay. The miniplayer now releases it too. A launch with the panel open fetches its window during boot, and its rows borrow their covers from the row tier or schedule them off the UI thread as they ask.
 - **Commits.** One per phase, with Phase 1's rename as its own commit so the move reads as a move.
 
 ## Open questions

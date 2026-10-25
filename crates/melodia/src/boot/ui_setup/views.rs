@@ -211,7 +211,11 @@ pub fn install_views(
     // Setting the cap exactly rather than growing it: a smaller window really does draw fewer
     // cards. Nothing here re-warms or announces, and nothing has to: a retune leaves the tier's
     // buffers in place, so the cards keep painting what they had until each replacement lands.
-    app.global::<melodia_ui::WindowChrome>().on_display_changed(retune.clone());
+    // And whenever the content panel's width moves without the window's, the grids being laid out
+    // in the panel rather than the window.
+    let chrome = app.global::<melodia_ui::WindowChrome>();
+    chrome.on_display_changed(retune.clone());
+    chrome.on_content_panel_resized(retune.clone());
     if let Err(e) = slint::invoke_from_event_loop(retune) {
         log::warn!("Failed to schedule cover-cache display tuning: {}", describe(&e));
     }

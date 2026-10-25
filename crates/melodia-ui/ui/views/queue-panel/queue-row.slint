@@ -34,6 +34,13 @@ export component QueueRowItem inherits Rectangle {
 
     property <bool> playing: root.row-index == Queue.current-index;
     property <bool> selected: root.row-data.selected;
+    // The lifted row dims through its brushes rather than `opacity`, which would render it into a
+    // texture for the length of the drag, and a drag of picks lifts a screenful.
+    property <float> fade: root.lifted ? Theme.fade-lifted : 1.0;
+    // The number's and the title's colour; `Theme.text` throughout, as in the track lists: same
+    // body copy on the same background, and reading dimmer than the lists beside the panel is the
+    // one thing these rows shouldn't do.
+    property <brush> ink: (root.playing ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
     // What every hover-driven binding reads, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
     // An open menu takes the panel's hover, so the winit filter reads the press on an entry as a
@@ -70,7 +77,6 @@ export component QueueRowItem inherits Rectangle {
         x: 8px;
         width: parent.width - 16px;
         height: parent.height;
-        opacity: root.lifted ? Theme.fade-lifted : 1.0;
 
         if root.selected || root.hovered: SelectionPill {
             x: 0;
@@ -79,6 +85,7 @@ export component QueueRowItem inherits Rectangle {
             height: 100%;
             selected: root.selected;
             hovered: root.hovered;
+            fade: root.fade;
             prev-selected: root.prev-selected;
             next-selected: root.next-selected;
         }
@@ -118,11 +125,7 @@ export component QueueRowItem inherits Rectangle {
                     width: 28px;
                     if !root.show-checkbox: Text {
                         text: root.row-index + 1;
-                        // `Theme.text` throughout, as in the track lists: same
-                        // body copy on the same background, and reading dimmer
-                        // than the lists beside the panel is the one thing
-                        // these rows shouldn't do.
-                        color: root.playing ? Theme.accent : Theme.text;
+                        color: root.ink;
                         font-size: Theme.font-size-row;
                         horizontal-alignment: center;
                     }
@@ -131,6 +134,7 @@ export component QueueRowItem inherits Rectangle {
                         height: 16px;
                         Checkbox {
                             checked: root.selected;
+                            fade: root.fade;
                         }
                         // The box starts a selection; once one is live the row body
                         // picks too. Modifiers ride through `ev.modifiers`.
@@ -156,6 +160,7 @@ export component QueueRowItem inherits Rectangle {
                                                    Queue.covers-generation);
                         tile-size: 36px;
                         tile-radius: Theme.radius-sm;
+                        fade: root.fade;
                     }
                 }
 
@@ -169,7 +174,7 @@ export component QueueRowItem inherits Rectangle {
                     padding-right: Theme.pad-md;
                     TrackTitle {
                         title: root.row-data.title;
-                        ink: root.playing ? Theme.accent : Theme.text;
+                        ink: root.ink;
                     }
                 }
 
@@ -186,7 +191,7 @@ export component QueueRowItem inherits Rectangle {
                         cross-axis-alignment: center;
                         if !root.hovered: Text {
                             text: root.row-data.display_duration;
-                            color: Theme.text;
+                            color: Theme.text.transparentize(1.0 - root.fade);
                             font-size: Theme.font-size-sm;
                             horizontal-alignment: right;
                         }
@@ -195,6 +200,7 @@ export component QueueRowItem inherits Rectangle {
                             icon-size: 18px;
                             icon: "close";
                             hover-fg: Theme.danger;
+                            fade: root.fade;
                             clicked => { Queue.remove(root.row-index); }
                         }
                     }

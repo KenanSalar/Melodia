@@ -36,11 +36,13 @@ const MIN_LOOKUPS: usize = 6;
 /// tier's and the grid tier's, so a set of *files* would find it either way and the one that
 /// matters most could go missing in silence. `set_decoded_notifier` is a `OnceLock`, so that
 /// single grid install is what bumps all six grid generations; Radio's logo tier is the one card
-/// tier that stays private — its station tile reads the decoded extent — so it keeps its own.
+/// tier that stays private — its station tile reads the decoded extent — so it keeps its own, and
+/// the queue panel's tier, dropped once the panel hides, keeps one too.
 /// A tier whose notifier goes missing still compiles, still schedules and still decodes — it
 /// simply never tells anyone, so its cards sit on the placeholder until something unrelated
 /// dirties the binding.
-const NOTIFIER_HOMES: [(&str, usize); 2] = [("boot/ui_setup/views.rs", 2), ("ui/radio/mod.rs", 1)];
+const NOTIFIER_HOMES: [(&str, usize); 3] =
+    [("boot/ui_setup/views.rs", 2), ("ui/queue_panel/mod.rs", 1), ("ui/radio/mod.rs", 1)];
 
 /// Every repeated cover surface takes the **scheduling** lookup, and the inline one stays at its
 /// two sanctioned sites.
@@ -175,15 +177,15 @@ fn only_the_named_cover_tiers_are_built() {
 const GENERATION_PROPERTY: &str = "property <int> covers-generation";
 
 /// The two that carry one and are **not** the shared install's to answer for, each holding a tier
-/// of its own: the queue panel's is dropped once hidden and Radio's logo tier is released on leave,
-/// so `0` still means cold on both where a grid's value means nothing at all. Radio's is its own
-/// because `station-card.slint` reads the decoded *extent* for its layout.
+/// of its own: the queue panel's is dropped once hidden and Radio's logo tier is released on leave.
+/// Radio's is its own because `station-card.slint` reads the decoded *extent* for its layout, and
+/// it is the one where `0` still means cold; the queue's value means nothing, as a grid's doesn't.
 const PRIVATE_TIER_GLOBALS: [&str; 2] = ["Queue", "Radio"];
 
 /// The three files allowed to move a `covers-generation` at all: the shared install, and the two
 /// private tiers above.
 const GENERATION_WRITERS: [&str; 3] =
-    ["boot/ui_setup/views.rs", "ui/queue_panel/lifecycle.rs", "ui/radio/covers.rs"];
+    ["boot/ui_setup/views.rs", "ui/queue_panel/mod.rs", "ui/radio/covers.rs"];
 
 /// The grids one notifier answers for, **derived from the globals rather than listed**: a seventh
 /// grid that reaches neither a list here nor the closure would pass a list against itself, and it

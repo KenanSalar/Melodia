@@ -606,13 +606,21 @@ export component AppWindow inherits Window {
 
                     // Where a file let go of over the page lands in an open playlist. The panel
                     // rather than the detail's own list, which unmounts inside the band's morph
-                    // and so can't carry the report's tracker.
+                    // and so can't carry the report's tracker. The width also sizes the grid
+                    // cover tier, and is announced only when it changes rather than on every move
+                    // of the rect.
                     WindowRectReport {
                         x: 0;
                         y: 0;
                         width: 100%;
                         height: 100%;
-                        moved(rect) => { FileDrag.content-rect = rect; }
+                        moved(rect) => {
+                            FileDrag.content-rect = rect;
+                            if (rect.width != WindowChrome.content-panel-width) {
+                                WindowChrome.content-panel-width = rect.width;
+                                WindowChrome.content-panel-resized();
+                            }
+                        }
                     }
 
                     // One branch per nav index, `if` rather than `visible: false` so the

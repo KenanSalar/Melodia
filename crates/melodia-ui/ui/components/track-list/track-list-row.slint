@@ -60,13 +60,16 @@ export component TrackListRowItem inherits Rectangle {
     // Disk-only Browse rows arrive `enabled == false` — dimmed, and swallowing every
     // interaction: row body, # checkbox, favourite button and right-click menu alike.
     property <bool> enabled: root.row-data.enabled;
-    // The dimming, through each brush rather than `opacity`, which would render every dimmed row
-    // into a texture of its own for as long as it stays dimmed.
-    property <float> fade: root.enabled ? 1.0 : Theme.fade-disk-only;
+    // The dimming, a disk-only row's and a lifted one's, through each brush rather than `opacity`,
+    // which would render every dimmed row into a texture of its own for as long as it stays
+    // dimmed: a drag of picks lifts a screenful.
+    property <float> fade: (root.enabled ? 1.0 : Theme.fade-disk-only)
+        * (root.lifted ? Theme.fade-lifted : 1.0);
     // Every cell's colour. The body-copy rung, not the muted one: muted, a cell fell under 4.5:1 on
     // macOS Light and sat exactly on it under two other light variants. The whole list, header
     // included, is on this one rung, and hierarchy comes from size and weight instead.
-    property <brush> ink: (root.playing ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
+    property <brush> unfaded-ink: root.playing ? Theme.accent : Theme.text;
+    property <brush> ink: root.unfaded-ink.transparentize(1.0 - root.fade);
 
     // Drives context-menu entry visibility (no "Go to Album" inside Album Detail, "Remove from
     // Playlist" only in Playlist Detail) and the current-playlist exclusion in the Add-to-Playlist
@@ -151,9 +154,6 @@ export component TrackListRowItem inherits Rectangle {
             // cursor.
             min-height: Theme.track-row-h(root.columns.show_artwork);
             max-height: Theme.track-row-h(root.columns.show_artwork);
-        // Fades so the row reads as lifted out of position, for the length of the drag only.
-        opacity: root.lifted ? Theme.fade-lifted : 1.0;
-        animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
         // No radius here: a clip copies its element's radius, and a rounded one renders the whole
         // row into a texture. Nothing reaches the corners, so a plain clip cuts the same overflow.
         clip: true;
@@ -165,6 +165,7 @@ export component TrackListRowItem inherits Rectangle {
             height: 100%;
             selected: root.selected;
             hovered: root.hovered;
+            fade: root.fade;
             prev-selected: root.prev-selected;
             next-selected: root.next-selected;
         }
@@ -242,8 +243,10 @@ export component TrackListRowItem inherits Rectangle {
                     if root.hovered || root.selected: Checkbox {
                         checked: root.selected;
                         // The rim stands in for the number it replaced, so it takes
-                        // that cell's ink rather than the quieter default.
-                        unchecked-border: root.ink;
+                        // that cell's ink rather than the quieter default, unfaded since
+                        // the box applies the row's fade to its fill and rim alike.
+                        unchecked-border: root.unfaded-ink;
+                        fade: root.fade;
 
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;

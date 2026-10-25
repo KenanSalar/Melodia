@@ -662,10 +662,11 @@ this file is what builds, looks right, and is wrong.
     *fade* therefore crops the marks for its whole duration and hands them back on the settling
     frame. **The union decides who bleeds** — the block's first and last children, not every
     `Text` under the fade.
-    **A dimmed state is the long case**: a disabled button or a row outside the library holds its
-    texture for as long as it stays dimmed, not for the length of a fade. The dimmed row, card,
-    button and menu row carry a `fade` float into every brush instead, the track row folding it
-    into one `ink` its cells share.
+    **A dimmed state is the long case**: a disabled button, a row outside the library or a row
+    lifted by a drag holds its texture for as long as it stays dimmed, not for the length of a
+    fade, and a drag of picks lifts a screenful. The dimmed row, card, button and menu row carry a
+    `fade` float into every brush instead, the track row folding it into one `ink` its cells share
+    and the leaves a row mounts (`SelectionPill`, `Checkbox`, `ArtworkImage`) each taking it.
     Three cures, in order of preference. **Fold the alpha into the brush**
     (`Theme.text.with-alpha(t)`): pixel-identical where elements don't overlap, no texture.
     **Where there is no brush, pass a `fade` float into the component** (`ArtworkImage` spends it

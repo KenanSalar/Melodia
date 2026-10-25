@@ -715,7 +715,9 @@ three components that answer it, and each argues its geometry at its own file.
   copy-allowed: the other eight track surfaces' `TrackList`s and the five card grids. The row
   reports its press, `src.arm(idx)` where the drag only reorders and `src.arm-items(…)` where it
   carries something out, and a reorderable row reads `lifted: src.lifts(idx)`, dimming by
-  `Theme.fade-lifted`; the target owns the slot, the line, the edge scroll and the no-op slots,
+  `Theme.fade-lifted` through its brushes and never `opacity`, since a drag of picks lifts a
+  screenful of rows and `opacity` renders each into a texture of its own (`slint-pitfalls.md`'s
+  text-crop entry); the target owns the slot, the line, the edge scroll and the no-op slots,
   handing the host `reorder(from, to)`, `move-picks(slot)` and `scroll-by(dy)`. A host whose rows
   fall into two runs that a move may not cross names the second's first row in `split-row`, and
   the slots across it draw no line and drop nothing.
@@ -1121,14 +1123,16 @@ three components that answer it, and each argues its geometry at its own file.
   - **The bounded strips and one-shot slots were never on this path and stay inline** — Search's
     two card strips, Now Playing's up-next list, and `Playlists.request-row-cover` behind the three
     picker dialogs. Each draws a capped set against a tier its own fetch warmed, so "never on the
-    calling thread" is a rule about the *uncapped* surfaces: grids, and the shared row tier.
+    calling thread" is a rule about the *uncapped* surfaces: grids, the shared row tier, and the
+    queue panel's tier over it.
 
 - **`QueueRow` goes through two globals rather than `RowCovers`**, each wanting a different tier:
   the queue panel's *private* `CoverThumbs` (so hiding it drops every buffer without yanking
   covers the track lists still need) and the shared row tier. **The private one is
-  `CoverThumbs::backed_by` the shared one**: a miss borrows the row tier's buffer before decoding,
-  and its size is the row tier's, retunes included, so a cover both draw is one allocation. That
-  is what makes a queue the size of the library affordable.
+  `CoverThumbs::backed_by` the shared one**: a miss borrows the row tier's buffer before
+  scheduling a decode, and its size is the row tier's, retunes included, so a cover both draw is
+  one allocation. That is what makes a queue the size of the library affordable. Its notifier,
+  installed in `ui::queue_panel`, bumps `Queue.covers-generation` as each scheduled batch lands.
 
 - **`covers-generation` is the repaint token, and on a card grid that is all it is.** A `pure`
   callback's result is cached until a dependency is dirtied, so an `int` the binding also reads is
@@ -1145,10 +1149,11 @@ three components that answer it, and each argues its geometry at its own file.
     prewarm's announce. With it went `should_announce_warm`, the `warmed_tab` plumbing through both
     curated pages' fetch-and-apply, the `mark_covers_warm` / `repaint_covers` split, and the `bool`
     every `prewarm_tab_covers` returned.
-  - **Two surfaces still gate on the value, and both hold a tier that really is released**: the
-    queue panel's **show**, whose private tier is dropped once it hides, and Radio's leave.
+  - **One surface still gates on the value: Radio's leave**, whose tier is released outright.
     There `0` still means cold, the lookup still answers cache-only, and the rewind still sits
-    beside the clear. `radio::covers::logo_cover` is that branch's one remaining home.
+    beside the clear. `radio::covers::logo_cover` is that branch's one remaining home. The queue
+    panel's tier is released on hide too, but its rows borrow or schedule from the first frame, so
+    its generation is a repaint token like a grid's and nothing rewinds it.
   - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from
     the UI thread, and a redraw winning that race paints an empty grid. It keeps its card model
     across the leave, which is why the covers under it are shrunk rather than dropped and why it
@@ -1158,8 +1163,8 @@ three components that answer it, and each argues its geometry at its own file.
     for it at a new surface: a copy that grew a **decoding** arm reads correctly and puts the
     UI-thread decode straight back, which is the one thing it will not do.
 
-- **Cache cap via `grid_prewarm::cover_cap_for_window(app)`** — one band for every grid, they all
-  draw the same card. Derives its cap from the **window's** own logical size against
+- **Cache cap via `grid_prewarm::cover_cap_for_window(app, size)`** — one band for every grid, they
+  all draw the same card. Derives its cap from the **window's** own logical size against
   `GridGeometry`'s pitches, deliberately not the monitor's: the monitor caps against a screen the
   window may occupy a corner of, and asking costs a `with_winit_window` round trip that answers
   `None` for the whole window-less boot. A zero extent lands on `GRID_COVER_CAP_FALLBACK`, which
@@ -1178,11 +1183,12 @@ three components that answer it, and each argues its geometry at its own file.
     one entry per path, and a section leave shrinks every entry to `PROXY_COVER_DIM` rather than
     dropping it, so the idle case is that side length squared per cover and not the tier's.
   - **Read after `app.show()` and again on every resize**, through `WindowChrome.display-changed`
-    off the winit `Resized` filter. Read once, a cap sized for the launch window is one a later
+    off the winit `Resized` filter, and through `content-panel-resized` whenever the panel's width
+    moves without the window's. Read once, a cap sized for the launch window is one a later
     maximize overruns. It sets the cap exactly rather than growing it: a smaller window really
     does draw fewer cards.
 
-- **Decode size via `grid_prewarm::cover_size_for_window(app)`, and it is derived from the card,
+- **Decode size via `grid_prewarm::cover_size_for_content(app)`, and it is derived from the card,
   not stepped off the scale factor.** `GridGeometry` packs toward `min-card-w`, so a card is
   *smallest* on the panels mounting the most of them: the two constants this replaced sized the
   wide case generously and doubled it for `HiDPI`, which made the displays paying for the most
@@ -1191,17 +1197,21 @@ three components that answer it, and each argues its geometry at its own file.
   being what caps a single-column panel's sharpness once a scale factor is on it.
   - **The bound, never the card itself.** `card-w` sweeps `min-card-w` up to
     `min-card-w + pitch/cols` inside *every* column band, so a tier tracking it crosses a step
-    boundary twice a band — and `display-changed` re-derives on every winit `Resized`, so each
-    crossing re-decodes every grid's visible covers mid-drag, on one pool every tier shares.
+    boundary twice a band — and the retune re-derives on every winit `Resized` and every content
+    panel resize, so each crossing re-decodes every grid's visible covers mid-drag, on one pool
+    every tier shares.
     Sizing to the band's upper bound is what makes the answer flat across a drag rather than
     merely close, and the step is what collapses the column counts a desktop passes through into
     a handful of sizes. What a crossing does not cost is the covers themselves; that half is the
     release/retune asymmetry above.
-  - **The window is not the body, and `BODY_CHROME_W` is the gap.** The sidebar and the queue
-    panel either side of the body are the user's to drag, and the panel to open, a range no window
-    measurement sees, so the estimate assumes both at their *widest*: over-subtracting costs a tier one
-    step too large, under-subtracting puts every card on an upscale, and `FemtoVG` minifies
-    bilinear with no mipmaps.
+  - **The size is read off the content panel, never the window.** The sidebar and the queue panel
+    either side of it are the user's to drag and to open, so no window measurement can say how
+    wide a card is drawn, and a guess sized for both at their widest over-sizes the tier wherever
+    they aren't, which with the panel closed is most installs. The panel reports its own width
+    into `WindowChrome.content-panel-width` through the `WindowRectReport` the file drop already
+    mounts on it (`desktop-shell.md`). `PAGE_INSET_W` takes off the most any grid page insets,
+    which is Browse's: over-subtracting costs a tier one step too large, under-subtracting puts
+    every card on an upscale, and `FemtoVG` minifies bilinear with no mipmaps.
   - `GRID_COVER_FALLBACK` is what a tier is *built* at, before any geometry exists. A fallback,
     not a tier size, but sized for the run where the deferred retune never schedules and it stays
     the live tier.
@@ -1212,7 +1222,8 @@ three components that answer it, and each argues its geometry at its own file.
   cards "run well past 260 px". They don't: `GridGeometry` packs toward `min-card-w`, so a card
   is **largest in a narrow panel**, where `max-card-w` is now what stops it, and lands near 190 px
   on a wide one. A tier spelling its own size is the thing to reach for this instead of. Needs no
-  winit round trip, the scale factor being Slint's own, and shares the cap's zero-extent bail.
+  winit round trip, the scale factor being Slint's own, and answers `GRID_COVER_FALLBACK` until
+  the panel has reported a width.
   `cover_thumbs::row_cover_size` is the row tier's twin, applied in the same `display-changed`
   retune. The queue panel's tier takes the row tier's size through its backing rather than being
   wired a second time.

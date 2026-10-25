@@ -224,25 +224,21 @@ fn the_tier_holds_still_through_a_resize_drag() {
     }
 }
 
-/// **The tier may not land under the card a packed row draws.** Rust measures the *window*
-/// while the grid gets the body, and the sidebar between them is the user's to drag across a
-/// range no window measurement sees. `BODY_CHROME_W` assumes the widest of them so the estimate
-/// can only run wide; the other way round every card is upscaled from a tier too small for it,
-/// and `FemtoVG` minifies bilinear with no mipmaps.
+/// **The tier may not land under the card a packed row draws.** Rust is handed the content
+/// panel's width while each grid lays out in its own body, which is the whole panel on four pages
+/// and the panel less Browse's `page-inset` at both edges on the fifth. The tier has to cover both,
+/// or every card is upscaled from a tier too small for it, and `FemtoVG` minifies bilinear with no
+/// mipmaps.
 #[test]
-fn the_tier_covers_the_card_at_every_sidebar_width() {
-    // `Theme.sidebar-collapsed-w` through `sidebar-max-w`, plus the page's `pad-lg` at both edges.
-    const SIDEBAR_WIDTHS: [u32; 5] = [46, 105, 180, 240, 400];
-    const PAGE_PAD: u32 = 32;
+fn the_tier_covers_the_card_in_every_grid_body() {
+    /// Browse's `page-inset` (`pad-lg`) at both edges.
+    const BROWSE_INSET: u32 = 32;
 
-    for sidebar in SIDEBAR_WIDTHS {
-        for logical_w in (800_u32..=3840).step_by(7) {
-            let Some(body) = logical_w.checked_sub(sidebar + PAGE_PAD) else {
-                continue;
-            };
+    for panel_w in (300_u32..=3840).step_by(7) {
+        for body in [panel_w, panel_w - BROWSE_INSET] {
             for scale in [1.0, 1.5, 2.0] {
                 let drawn = f64::from(drawn_card_width(body)) * scale;
-                let tier = super::cover_size(logical_w, scale);
+                let tier = super::cover_size(panel_w, scale);
                 // The store's own cap is the one honest exception — past it there is no sharper
                 // source left to decode.
                 if tier == melodia_artwork::media::image::artwork::STORE_MAX_DIM {
@@ -250,8 +246,8 @@ fn the_tier_covers_the_card_at_every_sidebar_width() {
                 }
                 assert!(
                     f64::from(tier) >= drawn,
-                    "a {logical_w}px window beside a {sidebar}px sidebar draws {drawn} px of card \
-                     at {scale}× against a {tier}px tier — the covers upscale"
+                    "a {panel_w}px content panel draws {drawn} px of card in a {body}px body at \
+                     {scale}× against a {tier}px tier, so the covers upscale"
                 );
             }
         }

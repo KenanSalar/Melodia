@@ -1,7 +1,6 @@
 //! The queue panel's lifecycle: the toggle, the queue shown as the panel comes on screen, and its
 //! rows and covers handed back once it has gone.
 
-use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -11,22 +10,12 @@ use async_compat::Compat;
 use slint::{ComponentHandle, Weak};
 
 use super::rows::{read_queue, show_queue};
-use crate::ui::grid_prewarm::unique_artwork_paths;
 use crate::ui::nav_transition;
-use crate::ui::paged_rows::Keyset;
 use crate::ui::paged_rows::queue_rows::{self, QueueRows};
 use melodia_app::state::AppState;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, Nav, NavEnterFrom, Queue, QueueRow};
-
-/// Covers decoded ahead of first paint when the panel is shown.
-///
-/// Rows resolve their own covers lazily, so this only has to cover what
-/// the panel first reveals; everything scrolled to afterwards decodes on
-/// demand, the same way the track lists behave past their own prewarmed
-/// prefix.
-const QUEUE_PREWARM_AHEAD: usize = 24;
+use melodia_ui::{AppWindow, Nav, NavEnterFrom, Queue};
 
 /// How long a hidden panel keeps its rows and covers: past its ease out, so they don't vanish
 /// from a panel still on screen.
@@ -116,19 +105,14 @@ struct Showing {
 }
 
 impl Showing {
-    /// Show the queue in three steps:
+    /// Show the queue in two steps:
     ///
     /// 1. **The ids, on this thread**, so the panel has the queue's length and its current row
-    ///    from frame one, its rows reading as placeholders until text lands. `covers-generation`
-    ///    is still 0 here, which holds `Queue.request-cover` to a cache-only lookup, so the rows
-    ///    the `ListView` instantiates on that first frame can't drag a decode onto the UI thread.
-    ///    They still paint every cover the row tier holds.
+    ///    from frame one, its rows reading as placeholders until text lands. Each row asks for its
+    ///    own cover, which borrows from the row tier or is scheduled, so the rows the `ListView`
+    ///    builds on that frame can't drag a decode onto the UI thread.
     /// 2. **The rows around the current one**, fetched off-thread and shown as they land, the
     ///    screenful the panel seats itself on.
-    /// 3. **That screenful's covers warmed, then `covers-generation` bumped**: each row pulls its
-    ///    own cover through `Queue.request-cover`, and a `pure` callback's result is cached until
-    ///    a dependency is dirtied, so the bump both re-runs the lookup and switches it to the
-    ///    decoding one.
     fn show(&self) {
         let Some(ui) = self.weak.upgrade() else { return };
         let read = read_queue(&self.state, &self.rows);
@@ -140,39 +124,21 @@ impl Showing {
             let state = self.state.clone();
             self.state.runtime.spawn(async move { queue_rows::seed(&state, ids, at).await })
         };
-        let (weak, rows) = (self.weak.clone(), self.rows.clone());
-        let (queue_covers, shown) = (self.queue_covers.clone(), self.shown.clone());
+        let (rows, shown) = (self.rows.clone(), self.shown.clone());
         let spawned = slint::spawn_local(Compat::new(async move {
             let keyset = match seeded.await {
-                Ok(Ok(keyset)) => Some(keyset),
+                Ok(Ok(keyset)) => keyset,
                 Ok(Err(e)) => {
                     log::warn!("queue panel: seed fetch failed: {}", describe(&e));
-                    None
+                    return;
                 }
                 Err(e) => {
                     log::warn!("queue panel: seed task failed: {}", describe(&e));
-                    None
+                    return;
                 }
             };
-            if !shown.load(Ordering::Relaxed) {
-                return; // hidden while it fetched
-            }
-            let paths = keyset.as_ref().map(|keyset| prewarm_paths(keyset, at)).unwrap_or_default();
-            if let Some(keyset) = keyset {
+            if shown.load(Ordering::Relaxed) {
                 rows.land_seed(keyset);
-            }
-            // No early return on an empty `paths`, even though there is then nothing to decode:
-            // the bump is also what takes the lookup off `get_cached_opt`, so skipping it would
-            // park a queue whose tracks all lack artwork at generation 0 for as long as it is
-            // shown, and rows added afterwards would show a placeholder that never resolves.
-            let covers = queue_covers.clone();
-            let _ = tokio::task::spawn_blocking(move || covers.prewarm(&paths)).await;
-            if !shown.load(Ordering::Relaxed) {
-                return; // hidden during warmup
-            }
-            if let Some(ui) = weak.upgrade() {
-                let queue = ui.global::<Queue>();
-                queue.set_covers_generation(queue.get_covers_generation().wrapping_add(1));
             }
         }));
         if let Err(e) = spawned {
@@ -200,32 +166,15 @@ impl Showing {
                 if shown.load(Ordering::Relaxed) || hide_epoch.load(Ordering::Acquire) != my_epoch {
                     return;
                 }
-                let queue = ui.global::<Queue>();
-                if let Some(rows) = QueueRows::installed(&queue.get_rows(), "queue panel teardown")
-                {
+                let rows = ui.global::<Queue>().get_rows();
+                if let Some(rows) = QueueRows::installed(&rows, "queue panel teardown") {
                     rows.clear();
                 }
-                // Drop the cache's buffer refs too. A cover the
-                // panel decoded is freed once both are gone; one it
-                // borrowed stays with the row tier. Rewinding the
-                // generation alongside it is what keeps 0 meaning
-                // "this tier is cold" rather than "first show of
-                // the session": the next show faces the same empty
-                // cache, so it owes the same cache-only first frame.
-                queue.set_covers_generation(0);
+                // Drop the cache's buffer refs too. A cover the panel decoded is freed once both
+                // are gone; one it borrowed stays with the row tier.
                 queue_covers.clear();
                 runtime.spawn_blocking(melodia_platform::services::platform::allocator::trim);
             });
         });
     }
-}
-
-/// The covers of the seed's rows from the current one on, which is what the panel seats on screen.
-fn prewarm_paths(keyset: &Keyset<QueueRow>, at: usize) -> Vec<PathBuf> {
-    let current = keyset.ids.get(at).copied();
-    let from = keyset.seed.iter().position(|(id, _)| Some(*id) == current).unwrap_or(0);
-    unique_artwork_paths(
-        keyset.seed[from..].iter().map(|(_, row)| Some(row.artwork_path.as_str())),
-        QUEUE_PREWARM_AHEAD,
-    )
 }

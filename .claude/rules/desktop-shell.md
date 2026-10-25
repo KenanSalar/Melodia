@@ -219,7 +219,9 @@ the OS owns has to be attached late or not at all on at least one platform.
 
 - **Where a file drop lands is decided in Rust, against rects Slint publishes**, Slint having no
   pointer during an OS drag. `WindowRectReport` writes the queue panel's body and the content
-  panel into `FileDrag`, and `window_chrome::file_drop::route` hit-tests every move and the release
+  panel into `FileDrag`, the content panel's report also carrying its width into
+  `WindowChrome.content-panel-width` for the grid cover tier (`ui-patterns.md`'s Covers), and
+  `window_chrome::file_drop::route` hit-tests every move and the release
   against whichever can take a drop: the queue while `Queue.shown`, the content panel while
   `playlists::detail_on_screen` names a playlist and the overlay isn't up. The filter writes the
   answer to `FileDrag.target`, the one thing both banners read, so a banner always names where the
