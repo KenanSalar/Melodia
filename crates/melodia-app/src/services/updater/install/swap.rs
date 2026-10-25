@@ -329,12 +329,12 @@ const PKEXEC_REFUSED: i32 = 127;
 /// `command`'s, and one of `command`'s landing on those two can't be told apart from them.
 #[cfg(target_os = "linux")]
 fn pkexec_failure(command: &str, code: i32, stderr: &[u8]) -> AppResult<InstallOutcome> {
+    if code == PKEXEC_DISMISSED {
+        log::info!("updater: {command} cancelled at the polkit prompt");
+        return Ok(InstallOutcome::Cancelled);
+    }
     let stderr = String::from_utf8_lossy(stderr);
     let reason = match code {
-        PKEXEC_DISMISSED => {
-            log::info!("updater: {command} cancelled at the polkit prompt");
-            return Ok(InstallOutcome::Cancelled);
-        }
         PKEXEC_REFUSED => format!(
             "authorization was refused (the prompt was cancelled or failed, or no polkit agent \
              is running): {}",
