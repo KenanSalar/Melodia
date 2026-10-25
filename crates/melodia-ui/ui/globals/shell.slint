@@ -104,10 +104,10 @@ export global WindowChrome {
     // The same retune for the content panel, fired whenever `content-panel-width` moves: a panel
     // toggle or a sidebar drag changes how wide a card is without resizing the window.
     callback content-panel-resized();
-    // Windows only, the same Rust-to-Rust shape: fired by the winit `ThemeChanged` and focus-gain
-    // arms, handled in `ui::appearance`, which re-reads the default app mode and repaints a System
-    // variant painted for the other one. Focus gain too, as the border colour's refresh does, so an
-    // event winit never sent costs no more than a click back into the window.
+    // Windows only, Rust to Rust like `display-changed`: fired by the winit `ThemeChanged` and
+    // focus-gain arms, handled in `ui::appearance`, which re-reads the default app mode and repaints
+    // a System variant painted for the other one. Focus gain too, as the border colour's refresh
+    // does, so an event winit never sent costs no more than a click back into the window.
     callback recheck-system-theme();
 }
 

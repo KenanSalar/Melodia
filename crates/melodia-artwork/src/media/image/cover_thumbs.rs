@@ -341,7 +341,7 @@ impl CoverThumbs {
     }
 
     /// The size a lookup asks for.
-    fn thumb_size(&self) -> u32 {
+    pub fn thumb_size(&self) -> u32 {
         match &self.size {
             TierSize::Own(size) => size.load(Ordering::Relaxed),
             TierSize::Backed(backing) => backing.thumb_size(),

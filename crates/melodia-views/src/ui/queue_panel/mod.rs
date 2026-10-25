@@ -15,6 +15,7 @@ use std::sync::atomic::AtomicBool;
 
 use slint::{ComponentHandle, ModelRc, VecModel};
 
+use crate::ui::grid_prewarm::nonempty_artwork_path;
 use crate::ui::list_selection::write_selection_ids;
 use crate::ui::paged_rows::queue_rows::{self, QueueRows};
 use melodia_app::state::AppState;
@@ -49,7 +50,7 @@ pub fn install(
     {
         let covers = queue_covers.clone();
         ui.global::<Queue>().on_request_cover(move |path, _generation| {
-            covers.get_or_schedule_opt(Some(path.as_str()))
+            covers.get_or_schedule_opt(nonempty_artwork_path(path.as_str()))
         });
     }
     crate::ui::cover_generation::notify_on_decode(&queue_covers, ui, |app| {

@@ -6,9 +6,10 @@
 //! was a section leave releasing its own. That is what [`hand_back_covers`] replaces: the leave
 //! hands back the bytes without handing back the picture.
 //!
-//! Search's two card strips and the queue panel keep private tiers, theirs decoding at sizes of
-//! their own. Radio's logo tier is private for a different reason and argues it at
-//! `ui::radio::covers`: its card reads the decoded extent, so a proxy would move the layout.
+//! Search's two card strips keep private tiers, decoding at sizes of their own. The queue panel's
+//! is private on lifetime, drawn at the row tier's size and handed back when the panel hides.
+//! Radio's logo tier is private for a different reason and argues it at `ui::radio::covers`: its
+//! card reads the decoded extent, so a proxy would move the layout.
 //!
 //! Beside the tier, the three things every grid needs and none should own: turning an iterator of
 //! optional artwork paths into a deduplicated, display-ordered `Vec<PathBuf>` for
@@ -101,8 +102,13 @@ pub fn shrink_covers() {
 pub fn tune_for_display(app: &AppWindow) {
     let size = cover_size_for_content(app);
     let cap = cover_cap_for_window(app, size);
-    tier().resize(cap);
-    tier().set_thumb_size(size);
+    let grid_tier = tier();
+    // A sidebar or queue panel ease calls this every frame, nearly always to the same answer.
+    if grid_tier.capacity() == cap.get() && grid_tier.thumb_size() == size {
+        return;
+    }
+    grid_tier.resize(cap);
+    grid_tier.set_thumb_size(size);
     log::debug!("ui::grid_prewarm cover tier tuned to cap {cap}, {size} px");
 }
 
@@ -196,12 +202,12 @@ pub fn cover_cap(
     NonZeroUsize::new(cap).unwrap_or(fallback)
 }
 
-/// `GridGeometry`'s four length defaults. Every one of its five mounts binds
-/// `avail-width: body.width` and the shared gap and takes the width pitch as declared, so there is
-/// one answer to what a card measures and this is what derives it. Radio is the one mount that
-/// moves `card-text-h`, its station card carrying a third line, and that can only make its rows
-/// taller than [`cover_cap`]'s `ROW_PITCH_H` assumes: fewer rows on screen than counted, which is
-/// the safe direction for a cap.
+/// `GridGeometry`'s four length defaults. Every one of its five mounts binds the shared gap and
+/// takes the width pitch as declared, so there is one answer to what a card measures and this is
+/// what derives it. Four bind `avail-width: body.width`, and Browse binds its body less
+/// [`PAGE_INSET_W`]. Radio is the one mount that moves `card-text-h`, its station card carrying a
+/// third line, and that can only make its rows taller than [`cover_cap`]'s `ROW_PITCH_H` assumes:
+/// fewer rows on screen than counted, which is the safe direction for a cap.
 const MIN_CARD_W: u32 = 180;
 const GAP: u32 = 20;
 const CARD_TEXT_H: u32 = 46;
