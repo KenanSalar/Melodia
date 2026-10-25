@@ -74,10 +74,10 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Favorites and Recently Played, each a hero banner over sortable lists and browsable card grids
 - Browse by folder, as a detailed list or a grid of cards
 - Star ratings, play and skip counts, natural sort, resizable and toggleable columns
-- Multi-selection on every library list and card grid: tick one to start, then a click anywhere on a row or card adds the next and shift-click takes a range. Right-click acts on the whole set, from queueing it to editing its tags; `Esc` clears it
+- Multi-selection on every library list and card grid: tick one to start, then a click anywhere on a row or card adds the next and shift-click takes a range. Right-click acts on the whole set, from queueing it to rating it or editing its tags; `Esc` clears it
 - Copy from any right-click menu: a song's title, artist, album, "Artist - Title" or file path, an album's name and artist, or a station's name, stream URL or website. A selection copies one line per item, in the order it was picked, and the queue's in queue order
 - Tag editing for one track or many at once, cover art included, written straight back to the files. A track's artists, its genres and the ten studio credits (composer, lyricist, conductor, performer, producer and the rest) are each an editable list rather than one text box, beside the rest of what a file can carry: work and movement, key, mood, ISRC, and the release's own label, catalog number, barcode and medium
-- Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as a single `.zip` that imports back without extracting, drag-and-drop import and reordering
+- Manual and smart playlists, the latter rule-based and resolved live; `.m3u8` import and export, several at once as a single `.zip` that imports back without extracting, drag-and-drop import, and reordering that moves a whole selection at once
 - A database backup before every schema migration, three kept
 
 ### Playback
@@ -85,7 +85,7 @@ Shrink the window past a threshold and the full UI collapses into a compact mini
 - Crossfade (1–12 s) across two decks with a clip-safe ramp, optionally skipped between same-album tracks, and under exclusive output too wherever the next track needs no change of device format
 - 10-band equalizer (31 Hz – 16 kHz) with preamp, presets, and a soft-knee limiter, adjusted from the player bar's overflow menu without leaving the page you're on, or under Settings ▸ Effects
 - ReplayGain in track or album mode, with preamp and peak-based clip prevention, reached the same two ways
-- Queue with shuffle and repeat; playing from any list queues that list behind your pick
+- Queue with shuffle and repeat, in a resizable panel beside whatever page is open that reopens as you left it and makes room on a narrow window, opening over the page once there's no room left to dock it; playing from any list queues that list behind your pick. Drag tracks, albums, artists, genres or playlists in from any list or grid to place them where you let go, or onto the player bar's queue button to add them at the end; files dragged in from your file manager go to the queue or the open playlist, whichever you let go over. Drag a track to reorder it, in the panel or in Up Next, in Now Playing or the mini-player, and Now Playing's Up Next takes the same right-click menu; in the panel a selection moves together, gathered where you let go
 - Hold Previous or Next to scan through a track in short audible jumps that grow the longer you hold, and hold Play/Pause to stop, which takes the track back to its start
 - Full-screen Now Playing with an up-next list and a spectrum, mirrored, or waveform visualizer tinted to the album's own colors
 - Right-click the playing song in the player bar for the menu its row has in a list: copy its details, add it to a playlist or your favorites, edit its tags, open its folder, or go to its album, artist or genre
@@ -280,14 +280,15 @@ Windows keeps no PSS, so **Commit** is the figure to compare: the private memory
 | Favorite current track | `L` |
 | Shuffle | `S` |
 | Repeat mode | `R` |
-| Queue sheet | `Q` |
-| Select all (queue sheet) | `Ctrl+A` |
+| Queue panel | `Q` |
+| Select all in the queue, after clicking it | `Ctrl+A` |
+| Remove the queue's selected tracks, after clicking it | `Delete` or `Backspace` |
 | Now Playing view | `F` |
 | Maximize | `F11` |
 | Toggle sidebar | `Ctrl+B` |
 | Settings | `Ctrl+,` |
 | New playlist | `Ctrl+N` |
-| Close dialog / close Now Playing / clear selection | `Esc` |
+| Close dialog / close Now Playing or the queue overlay / clear selection | `Esc` |
 | Navigate back / forward through history | `Mouse-4` / `Mouse-5` |
 
 OS media keys (play/pause, next, previous, stop) are also handled. Stop takes the track back to its start, as holding the Play/Pause button does.
@@ -344,8 +345,9 @@ open its database, and the two can run at once. `MELODIA_DATA_DIR` points either
 directory of your choosing.
 
 `winit/` is a checked-in copy of winit 0.30.13 plus an unmerged Wayland file drag-and-drop fix
-([winit#1881]), wired by `Cargo.toml`'s `[patch.crates-io]`. A fresh clone builds with no setup;
-dropping the patch costs only that drag-and-drop.
+([winit#1881]) and drag events that say where the pointer is, which is how a dropped file finds
+the queue or the open playlist. It is wired by `Cargo.toml`'s `[patch.crates-io]`, so a fresh clone
+builds with no setup.
 
 Last.fm scrobbling needs an [API application](https://www.last.fm/api/account/create)'s key and
 shared secret, which identify the app rather than any account. They are read at compile time from
@@ -442,5 +444,6 @@ License 1.1), with its Greek, Russian, Ukrainian and Vietnamese letters taken fr
 [Roboto](https://github.com/googlefonts/roboto-3-classic) (Apache License 2.0), and draws its icons
 from [Material Symbols Rounded](https://github.com/google/material-design-icons) (Apache License
 2.0). All three are modified, as is the vendored [winit](https://github.com/rust-windowing/winit) fork
-(Apache License 2.0) that gives Wayland its drag-and-drop events. What changed in each ships in
+(Apache License 2.0) that gives Wayland its drag-and-drop events and says where a drag is on every
+platform Melodia ships for. What changed in each ships in
 [`licenses/`](licenses/).

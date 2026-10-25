@@ -1,0 +1,138 @@
+import { Theme } from "../theme.slint";
+import { Drag, DragOrigin } from "../globals/drag.slint";
+import { LiftedRun } from "../models.slint";
+
+// Takes a list's own rows back as a reorder, and where the host says so, what another list's drag
+// carries as an insert: a `DropArea` mounted over the list's viewport, so a drop's position is a
+// position in the list as drawn. Clicks and the wheel pass through it to the rows.
+//
+// Slots, not rows: slot K is the gap above row K, `[0, row-count]`, so below the last row and the
+// whole of an empty list are the end. For its own rows the slots inside and either side of the
+// lifted run leave it where it is, so they draw no line and move nothing. Picks scattered through
+// the list have no such slot, every drop gathering them.
+export component ListDropTarget inherits DropArea {
+    in property <DragOrigin> origin;
+    // Whether it takes what other lists carry out, as a copy landing at the slot.
+    in property <bool> takes-items: false;
+    // The list's pitch, which every row has.
+    in property <length> row-height;
+    in property <int> row-count;
+    // The list's `content-y`, 0 at the top and negative scrolled down.
+    in property <length> content-y;
+    in property <brush> line-color: Theme.accent;
+    // -1, or the first row of a second run. A row moves only within its own, so a slot across the
+    // break draws no line and drops nothing.
+    in property <int> split-row: -1;
+
+    // `to` is where the row lands once it has left `from`.
+    callback reorder(int /*from*/, int /*to*/);
+    // The list's picks, gathered in front of row `slot`, as `Drag.payload.picks` says the drag
+    // lifted them.
+    callback move-picks(int /*slot*/);
+    // Another list's items, landing in front of row `slot`. They are `Drag.payload.items`.
+    callback dropped-items(int /*slot*/);
+    // Positive scrolls down; the host clamps.
+    callback scroll-by(length /*delta-y*/);
+
+    // A drag of another list's items is over the list, for the host to say what letting go does.
+    out property <bool> holds-items: root.has-drag && root.items-drag;
+
+    // How near an edge the pointer scrolls the list, and how far one tick takes it. A quarter of a
+    // short list, so the two bands leave it a middle to drop in.
+    property <length> edge-band: min(40px, root.height / 4);
+    property <length> scroll-step: 6px;
+
+    property <bool> own-drag: Drag.payload.origin == root.origin;
+    property <bool> items-drag: root.takes-items && !root.own-drag
+        && Drag.payload.items.kind != "";
+    property <int> lifted: Drag.payload.index;
+
+    // Written by the two callbacks, the only places a position arrives, and kept so the slot follows
+    // the content scrolling under a pointer at rest.
+    property <length> pointer-y;
+    // -1 in the top band, 1 in the bottom one. Set alongside the pointer rather than bound to the
+    // height: the timer reading it sits inside an `if` on every host, where a binding reaching a
+    // layout property is evaluated inside the layout pass.
+    property <int> edge;
+
+    property <length> list-y: root.pointer-y - root.content-y;
+    property <int> row-under: clamp(
+        Math.floor(root.list-y / root.row-height),
+        0,
+        max(0, root.row-count - 1),
+    );
+    property <bool> upper-half:
+        root.list-y - root.row-under * root.row-height < root.row-height / 2;
+    property <int> slot: clamp(
+        root.upper-half ? root.row-under : root.row-under + 1,
+        0,
+        root.row-count,
+    );
+    property <int> landing: root.slot <= root.lifted ? root.slot : root.slot - 1;
+    property <bool> same-run: root.split-row < 0
+        || (root.lifted < root.split-row) == (root.landing < root.split-row);
+    property <LiftedRun> run: Drag.payload.run;
+    property <bool> still: root.run.count > 0 && root.slot >= root.run.first
+        && root.slot <= root.run.first + root.run.count;
+    property <bool> moves: root.own-drag && !root.still && root.same-run;
+
+    function follow(y: length) {
+        root.pointer-y = y;
+        root.edge = y < root.edge-band ? -1 : (y > root.height - root.edge-band ? 1 : 0);
+    }
+
+    can-drop(event) => {
+        if (!root.own-drag && !root.items-drag) {
+            return DragAction.none;
+        }
+        root.follow(event.position.y);
+        // Over its own rows the lifted row and the line say where it lands, so no chip.
+        Drag.follow(self.absolute-position.x + event.position.x,
+            self.absolute-position.y + event.position.y, !root.own-drag);
+        // Never `proposed-action`, which a held Ctrl or Shift turns into the other one.
+        return root.own-drag ? DragAction.move : DragAction.copy;
+    }
+
+    dropped(event) => {
+        root.follow(event.position.y);
+        if (root.items-drag) {
+            root.dropped-items(root.slot);
+            return DragAction.copy;
+        }
+        // Asked again: a payload revoked under a pointer at rest is still dropped where it was
+        // accepted.
+        if (!root.moves) {
+            return DragAction.none;
+        }
+        if (Drag.payload.picks) {
+            root.move-picks(root.slot);
+        } else {
+            root.reorder(root.lifted, root.landing);
+        }
+        return DragAction.move;
+    }
+
+    Timer {
+        interval: 16ms;
+        running: root.has-drag && (root.own-drag || root.items-drag) && root.edge != 0;
+        triggered => {
+            root.scroll-by(root.edge * root.scroll-step);
+        }
+    }
+
+    // Pinned inside the band: the slot after the last row sits on the content's bottom edge, which
+    // is off the viewport once the list is scrolled to its end, and the top end mirrors it.
+    if root.has-drag && (root.moves || root.items-drag): Rectangle {
+        x: 0;
+        y: max(
+            0px,
+            min(
+                root.height - self.height,
+                root.slot * root.row-height + root.content-y - self.height / 2,
+            ),
+        );
+        width: 100%;
+        height: 2px;
+        background: root.line-color;
+    }
+}

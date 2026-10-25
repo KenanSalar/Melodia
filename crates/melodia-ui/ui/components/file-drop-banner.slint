@@ -1,0 +1,30 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+
+// Where a file dragged in from the file manager would land. A dark scrim rather than an accent
+// tint, so its label reads over whatever rows sit under it; the host places it and gates it on
+// `FileDrag.target`.
+export component FileDropBanner inherits Rectangle {
+    in property <string> icon;
+    in property <string> label;
+
+    background: Theme.crust.with-alpha(0.85);
+
+    VerticalLayout {
+        alignment: center;
+        cross-axis-alignment: center;
+        spacing: Theme.pad-md;
+        MaterialIcon {
+            name: root.icon;
+            icon-size: 40px;
+            icon-color: Theme.accent;
+        }
+        Text {
+            text: root.label;
+            color: Theme.text;
+            font-size: Theme.font-size-md;
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+    }
+}

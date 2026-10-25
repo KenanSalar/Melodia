@@ -151,7 +151,7 @@ msgstr "Adicionar"
 #: ui/components/dialog/export-playlist-picker.slint
 #: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
 #: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
+#: ui/globals/search.slint ui/views/queue-panel/queue-panel.slint
 msgid "{n} track"
 msgid_plural "{n} tracks"
 msgstr[0] "{n} faixa"
@@ -206,7 +206,8 @@ msgstr "Sem capa"
 msgid "{} / 4 selected"
 msgstr "{} / 4 selecionadas"
 
-#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+#: ui/components/dialog/playlist-mosaic-picker.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear"
 msgstr "Limpar"
 
@@ -362,7 +363,7 @@ msgid "Bitrate (kbps)"
 msgstr "Taxa de bits (kbps)"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+#: ui/components/rating-menu-row.slint ui/settings.slint
 msgid "Rating"
 msgstr "Avaliação"
 
@@ -1108,7 +1109,8 @@ msgid "Repeat"
 msgstr "Repetir"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Fila"
@@ -1282,6 +1284,11 @@ msgstr "Voltar"
 msgid "Next"
 msgstr "Próxima"
 
+#. Translators: `{}` is how many items are selected
+#: ui/components/rating-menu-row.slint
+msgid "Rating for {}"
+msgstr "Avaliação de {}"
+
 #: ui/components/search-bar.slint
 msgid "Search…"
 msgstr "Buscar…"
@@ -1399,7 +1406,7 @@ msgid "{} / {} files"
 msgstr "{} / {} arquivos"
 
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
-#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
@@ -1485,10 +1492,25 @@ msgstr "Colunas"
 msgid "Artwork"
 msgstr "Capa"
 
+#. Translators: the heart shown beside a favourite track's title
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite mark"
+msgstr "Marca de favorito"
+
+#. Translators: the stars beside a track's title while its row is hovered
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Rating on hover"
+msgstr "Avaliação ao passar o mouse"
+
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint
 msgid "Length"
 msgstr "Duração"
+
+#. Translators: the heart shown in place of a track's length on hover
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite on hover"
+msgstr "Favorito ao passar o mouse"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/track-list/track-context-menu.slint
@@ -2298,27 +2320,63 @@ msgstr "A seguir"
 msgid "Coming soon"
 msgstr "Em breve"
 
-#: ui/views/queue-sheet.slint
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "Adicionar {n} faixa à fila"
+msgstr[1] "Adicionar {n} faixas à fila"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "Adicionar “{}” à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "Adicionar {n} álbum à fila"
+msgstr[1] "Adicionar {n} álbuns à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "Adicionar {n} artista à fila"
+msgstr[1] "Adicionar {n} artistas à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "Adicionar {n} gênero à fila"
+msgstr[1] "Adicionar {n} gêneros à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "Adicionar {n} playlist à fila"
+msgstr[1] "Adicionar {n} playlists à fila"
+
+#: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"
 msgstr "Nenhuma faixa"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear queue"
 msgstr "Limpar fila"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear queue?"
 msgstr "Limpar a fila?"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "Remover todas as faixas da fila? A reprodução vai parar."
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"
 msgstr "A fila está vazia"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Drop to add to queue"
 msgstr "Solte para adicionar à fila"
 

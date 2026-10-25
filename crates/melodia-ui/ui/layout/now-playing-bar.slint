@@ -1,7 +1,6 @@
 import { Theme } from "../theme.slint";
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { Player } from "../globals/player.slint";
-import { Queue } from "../globals/queue.slint";
 import { WindowChrome } from "../globals/shell.slint";
 import { Settings } from "../settings.slint";
 import { ContextClick } from "../components/context-menu.slint";
@@ -13,6 +12,7 @@ import { SeekRow } from "../components/now-playing/seek-row.slint";
 import { VolumePopup } from "../components/now-playing/volume-popup.slint";
 import { OverflowMenu } from "../components/now-playing/overflow-menu.slint";
 import { PlayButton } from "../components/now-playing/play-button.slint";
+import { QueueButton } from "../components/now-playing/queue-button.slint";
 import { QualityChip } from "../components/quality-chip.slint";
 import { SignalPathUi } from "../globals/signal-path.slint";
 
@@ -198,12 +198,15 @@ export component NowPlayingBar inherits Rectangle {
             track-menu := TrackContextMenu {
                 row-id: Player.vm.track.id;
                 row-is-favorite: Player.vm.track.is_favorite;
+                row-rating: Player.vm.track.rating;
                 album-id: Player.track-album-id;
                 artist-id: Player.track-artist-id;
                 genre-id: Player.track-genre-id;
                 view-context: "now-playing";
-                // The heart's path, which also repaints every list showing this track.
+                // The heart's path and the overflow menu's stars', each of which also repaints
+                // every list showing this track.
                 toggle-favorite(ids, on) => { Player.toggle-favorite(); }
+                rate(ids, n) => { Player.set-current-rating(n); }
             }
         }
 
@@ -360,14 +363,10 @@ export component NowPlayingBar inherits Rectangle {
                     tooltip-text: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
                     clicked => { WindowChrome.toggle-always-on-top(); }
                 }
-                if !Settings.overflow-queue: IconButton {
-                    icon: "queue_music";
-                    press-shrink: true;
+                // In the overflow menu it takes no drop: the press a drag starts with shuts the menu.
+                if !Settings.overflow-queue: QueueButton {
                     diameter: root.btn-d;
                     icon-size: root.btn-icon-d;
-                    active: Queue.open;
-                    tooltip-text: @tr("Queue");
-                    clicked => { Queue.open = !Queue.open; }
                 }
                 VolumePopup {
                     diameter: root.btn-d;

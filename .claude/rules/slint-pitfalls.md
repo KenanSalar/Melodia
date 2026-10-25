@@ -117,6 +117,8 @@ this file is what builds, looks right, and is wrong.
 - **Drag handles inside resized element need absolute coords.** Snapshot
   `start_abs = self.absolute-position.x + self.pressed-x` on `down`, then
   `parent.width = clamp(start_w + (self.absolute-position.x + self.mouse-x - start_abs), ...)`.
+  `components/edge-resize-handle.slint` is the one that does it, mounted by the sidebar and the
+  queue panel; a new resizable edge mounts it too.
 
 - **Material Symbols glyphs need a collapsed line-box.** `Text` defaults to ~1.2× `font-size`;
   pin inside fixed `icon-size × icon-size` Rectangle. `MaterialIcon` does this.
@@ -181,37 +183,36 @@ this file is what builds, looks right, and is wrong.
   the upper section is a header the list belongs under, not a peer view: `browse-view.slint` and
   `ArtistDetailBody`.
 
-- **The same `Flickable` steals a *mouse* drag wherever it is interactive, and there the cure is
+- **The same `Flickable` steals a *mouse* drag wherever its drag-pan is on, and there the cure is
   per-list: `mouse-drag-pan-enabled`.** A row drag and a drag-pan are one gesture and only one
-  element can own it. **Which one wins is the *style's* answer rather than Slint's**, and the
-  property is the styled widget's, not the item's: `ScrollView` publishes
-  `mouse-drag-pan-enabled <=> flickable.interactive`, and while the bare `Flickable.interactive`
-  does default **`true`**, fluent, cupertino, cosmic and qt each pin `interactive: false` inside
-  their own `ScrollView`. Material is the one that doesn't, which is what the Slint docs mean by
-  "defaults to `true` for the Material style and `false` for all other styles".
+  element can own it. **Which one wins is the *style's* answer rather than Slint's**: the bare
+  `Flickable.mouse-drag-pan-enabled` defaults **`true`**, and every style's `ScrollView` binds its
+  own `mouse-drag-pan-enabled` to its flickable's and pins it `false`, Material included.
+  `interactive` is a separate property left at `true`, and it alone decides a touch, so a
+  touchscreen pans every list whatever `mouse-drag-pan-enabled` says.
   `ListView inherits ScrollView`, so it takes the same answer, and the tree declares no bare
   `Flickable` at all. Melodia sets no style and `i-slint-compiler`'s `typeloader.rs` resolves it to
   **fluent**, so the live default here is *off* and every scroller binding nothing already
   compiles to `false`. What the opt-outs buy is therefore a pin rather than an override: no
-  click-to-act list depends on which style compiled. **Verify in the generated file, never in the
+  click-to-act list depends on a style's default. **Verify in the generated file, never in the
   `.slint`** — the value is inlined per instance, so a source binding and an inherited default are
   the same line.
   Where the pan *is* on, a press inside one returns `DelayForwarding`, and `handle_mouse_grab`
   (`input.rs`) re-consults exactly those ancestors *during* the inner grab; past
   `DISTANCE_THRESHOLD` (8 px) inside `DURATION_THRESHOLD` (500 ms) on a scrollable axis it returns
   `Intercept`, and every item below is sent `MouseEvent::Exit`, delivered by `TouchArea` as
-  `PointerEventKind::Cancel`. The row's drag state is wiped and the committing pointer-up never
-  arrives. **The row arms at 4 px, i.e. inside that window**, so the failure is total rather than
-  occasional, and at 4–8 px of travel the computed slot is still the source's own, so no drop
-  indicator paints either. It still reads as intermittent, both escapes being real: a list shorter
-  than its viewport can't flick, and a press held past 500 ms before moving is never intercepted.
-  Both draggable lists opt out outright, `draggable-track-list.slint`'s `inner-list` and
-  `queue-sheet.slint`'s, pinned by
+  `PointerEventKind::Cancel`. A list's `DragSource` takes the press at that same 8 px, so on a list
+  that pans the two compete for one gesture. It reads as intermittent, both escapes being real: a
+  list shorter than its viewport can't flick, and a press held past 500 ms before moving is never
+  intercepted. A touch pans every list, so there every `DragSource` stands down instead
+  (`Drag.touching`, `globals/drag.slint`). Under a mouse the draggable lists opt out outright,
+  `track-list.slint`'s `inner-list` and
+  `queue-panel.slint`'s, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
   under a pointer; the click-to-act grids and lists are pinned by `crates/melodia/tests/scrollbars.rs`.
   **`!reorder-enabled` is what that binding used to say, and is the trap worth keeping**: it reads
   as leaving a `true` default alone and instead *enables* the pan on every sort that retires the
-  drag. `!interactive` still forwards wheel events, so only drag-to-pan goes.
+  drag. The wheel scrolls either way, so only the mouse drag-pan goes.
 
 - **A grabbing item that unmounts mid-gesture hands its release to the ancestor, as a fresh
   event.** `handle_mouse_grab` walks the `item_stack` upgrading each weak ref, and a grabber whose
@@ -304,7 +305,7 @@ this file is what builds, looks right, and is wrong.
     row stops at whatever max its contents report. Self-align only where every stretched sibling's
     max is unbounded: a `Text` or `TextInput`, a `Rectangle` whose children are all `if`s, a layout
     of such cells. Otherwise the row stays on the plain path and keeps its wrappers
-    (`queue-row-item.slint`, whose duration cell reports the hover heart's 26 px).
+    (`queue-row.slint`, whose duration cell reports the remove button's 26 px while it shows).
   - **An explicit `x`/`y` on a cell is a build error**, the solve owning every position.
   - **A removed wrapper can cap the row.** A row's cross-axis info ignores `cross-axis-alignment`
     and takes the least of its cells' maxes, and a wrapper whose own `alignment` wasn't `stretch`
@@ -455,7 +456,10 @@ this file is what builds, looks right, and is wrong.
   never evaluate it. What every mount keeps is the `min-width` floor: below it the bar compresses
   and the placeholder elides. That floor is **published as `out property min-w`**, the
   `TabBar.compact-w` contract — a host budgeting its row reserves against it rather than restating
-  the number. `ui::placeholder_tests` pins both ends.
+  the number. **A host with no room for the floor folds the bar instead**, easing `fold-t` while
+  the slot narrows onto a `bar-height` square around the glyph and the floor gives way to it; the
+  input stays mounted at zero width, so it keeps its focus target and its `blur-trigger` tracker.
+  `ui::placeholder_tests` pins both ends.
 
 - **`has-hover` is not continuous, so a *translucent* fill may not read it raw.** Slint clears the
   flag from two places the pointer never left: `input_items.rs` drops it on a wheel event the
@@ -476,7 +480,9 @@ this file is what builds, looks right, and is wrong.
   **Where nothing underneath takes the wheel, the flag stays down until the pointer moves**, opaque
   fill or not: Slint re-sends the pointer's position only after a wheel event something accepted. A
   control that takes the wheel itself answers `accept` on every event, an empty one included, and
-  keeps its hover (`Player.wheel-volume`).
+  keeps its hover (`Player.wheel-volume`). So does a hover sentinel something reads at a press,
+  its children taking the wheel first: the queue panel's `hover-catch`, whose hover decides whose
+  keys a click in place after a wheel tick hands over.
 
 - **Reusable filter SearchBar pattern.** (1) `text <=> SomeGlobal.filter`,
   `blur-trigger: SomeGlobal.blur-search-tick`; (2) backdrop
@@ -531,6 +537,18 @@ this file is what builds, looks right, and is wrong.
   `Dropdown`'s `about-to-open` returns the revision its refresh will publish and shows the popup
   once that lands, the output device picker being the host that needed it
   (`components/settings/dropdown.slint`).
+
+- **A `PopupWindow` taller than the window is drawn past its edge.** `place_popup` does shrink an
+  oversized rect to the window, but its two callers in `i-slint-core/window.rs`,
+  `WindowInner::show_popup` and `update_popup_properties`, keep only the origin it hands back. The
+  popup is parked at the window's top at its full height and the rows past the bottom are cut off,
+  with nothing reporting it, and only on a window short enough to show it. Cure: place it yourself
+  through `components/popup-fit.slint`'s `PopupFit`, which slides a popup raised at a point
+  (`fit-y`) and opens one hanging off a control on the side with room, capped at it
+  (`opens-above`, `side-h`), and list its rows in a `PopupColumn`, which scrolls what that box
+  can't hold. Every popup whose rows can outgrow the full UI's shortest window places itself that
+  way and lists its rows in a `PopupColumn`, but for `FacetChip`, whose virtualized list scrolls
+  itself; the rest are short enough that Slint's own slide never cuts them.
 
 - **A press outside an open `PopupWindow` closes it and reaches nothing else.**
   `WindowInner::process_mouse_input` closes the popup on that press and, the pointer being outside
@@ -644,10 +662,11 @@ this file is what builds, looks right, and is wrong.
     *fade* therefore crops the marks for its whole duration and hands them back on the settling
     frame. **The union decides who bleeds** — the block's first and last children, not every
     `Text` under the fade.
-    **A dimmed state is the long case**: a disabled button or a row outside the library holds its
-    texture for as long as it stays dimmed, not for the length of a fade. The dimmed row, card,
-    button and menu row carry a `fade` float into every brush instead, the track row folding it
-    into one `ink` its cells share.
+    **A dimmed state is the long case**: a disabled button, a row outside the library or a row
+    lifted by a drag holds its texture for as long as it stays dimmed, not for the length of a
+    fade, and a drag of picks lifts a screenful. The dimmed row, card, button and menu row carry a
+    `fade` float into every brush instead, the track row folding it into one `ink` its cells share
+    and the leaves a row mounts (`SelectionPill`, `Checkbox`, `ArtworkImage`) each taking it.
     Three cures, in order of preference. **Fold the alpha into the brush**
     (`Theme.text.with-alpha(t)`): pixel-identical where elements don't overlap, no texture.
     **Where there is no brush, pass a `fade` float into the component** (`ArtworkImage` spends it
@@ -816,10 +835,38 @@ this file is what builds, looks right, and is wrong.
   (empty parens included): 2 `link_two_way` hits, every other one a read, a write, or the pin a
   `ListView`'s repeater is handed.
 
-- **Stock Slint 1.18 + winit 0.30 have zero OS file-drop on Wayland.** `DragArea`/`DropArea` is
-  in-process only, with no `PathBuf`. Vendored winit PR #4009. Fix
-  merged upstream but unreleased: winit **#4571**, a new `DataTransfer` DnD API superseding
-  #1881/#4009.
+- **Slint's in-window drag goes round a list, never in a row, and a `DropArea` drawn over another
+  takes its drops.** Each trap below builds, passes a quick drag, and is wrong.
+  - **A `DragArea` in a row never hears its drag end.** The runtime holds the source weakly and a
+    `ListView` destroys rows rather than recycling them, so a row scrolled out, rebuilt under the
+    drag or moved by the reorder itself misses `drag-finished`. `components/drag-source.slint` is
+    the one spelling.
+  - **It drags from any left press it contains**, a row's own button and the gap between rows
+    included, so what a drag carries can't be "the row last pressed" without every press clearing
+    it first. A touch is a left press to it as well, so a clear that watches only `MouseInput`
+    misses one. `globals/drag.slint` argues the arming.
+  - **It accepts every left press none of its children takes**, so the empty space round a list's
+    rows stops reaching the page behind it, and a click there blurs nothing. `DragSource` puts a
+    `TouchArea` behind the list and hands the click back as `background-clicked`. Where something
+    behind the list still wants the press, size the source to its rows rather than switching it
+    off: Up Next's stops at them, so the space under a short queue stays the miniplayer's window
+    grab, and its `ListDropTarget` spans the list, a `DropArea` passing presses through.
+  - **A release over no accepting `DropArea` ends as an `Exit`, not a `Drop`** (`window.rs`), so
+    the leaf behind the targets never sees one and can't be what ends the chip. The one end every
+    drag reaches is its source's `dragging` falling, which `DragSource` mirrors into `Drag.live`; a
+    source unmounted mid-drag never hears it, and the next press's disarm is the backstop.
+  - **A `Drop` goes to whatever the hit test finds, not to the area that accepted the hover**, and
+    a `DropArea` takes any `Drop` it receives (`i-slint-core/window.rs`, `items/drag_n_drop.rs`).
+    So one drawn in front of a target eats that target's drops even while it answers `none` to
+    every move, which passes the moves on and never a drop. Behind the targets, a window-sized one
+    sees exactly the moves none of them took.
+
+- **Stock Slint 1.18 + winit 0.30 have zero OS file-drop on Wayland, and no pointer during one
+  anywhere.** `DragArea`/`DropArea` is in-process only, with no `PathBuf`, so no OS drag reaches a
+  `DropArea`, and no hover moves under one: a file target can't tell it is being hovered. The
+  vendored fork reports the pointer and Rust routes the drop against rects the targets publish
+  (`desktop-shell.md`). Fix merged upstream but unreleased: winit **#4571**, a new `DataTransfer`
+  DnD API superseding #1881/#4009 and the positioned events the fork copies from its betas.
 
 - **`changed <local-prop>` doesn't fire when first layout settles directly on final value.**
   Native-titlebar reaches final grid width in one pass — derived counts never *transition*. Fix:

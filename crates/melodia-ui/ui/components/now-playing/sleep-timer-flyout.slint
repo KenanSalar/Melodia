@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { PopupColumn } from "../popup-column.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FlyoutOption } from "flyout-option.slint";
 import { FlyoutMetrics, SleepPresets } from "flyout-presets.slint";
@@ -58,6 +59,8 @@ export component SleepTimerFlyout inherits PopupSurface {
     in property <bool> track-end-active;
     // True while the source has no track end to stop at, which today means a station.
     in property <bool> track-end-unavailable;
+    // What the host widens this by while the rows scroll, so the bar takes no width from a row.
+    out property <length> gutter: col.gutter;
     callback pick(int);          // preset value: 0 off / minutes / -1 end-of-track
     callback start-custom(int);  // custom duration in seconds
 
@@ -100,9 +103,9 @@ export component SleepTimerFlyout inherits PopupSurface {
         }
     }
 
-    VerticalLayout {
-        padding: Theme.pad-xs;
-        spacing: 0;
+    col := PopupColumn {
+        width: 100%;
+        height: 100%;
 
         // The height the host sizes this flyout at reads the same list's length.
         for p in SleepPresets.list: FlyoutOption {

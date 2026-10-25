@@ -1,6 +1,6 @@
 //! Playlist Detail's own half: the header and hero fetch, the artwork pair decode, open, refresh,
-//! the startup seed, and the drag that moves one id in the keyset. What the four details share is
-//! [`crate::ui::track_detail`].
+//! the startup seed, the drag that moves ids in the keyset, and whether a file dropped on the page
+//! lands in it. What the four details share is [`crate::ui::track_detail`].
 
 use std::sync::Arc;
 
@@ -22,11 +22,14 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::{AppResult, describe};
-use melodia_ui::{AppWindow, NavEnterFrom, PlaylistDetail};
+use melodia_ui::{AppWindow, DragOrigin, MiniPlayer, Nav, NavEnterFrom, PlaylistDetail};
 
 /// The playlist's own curated order. Synthetic — no column header asks for it,
 /// which is why the sort cycle has to hand it back (`next_sort_with_natural`).
 pub const POSITION_FIELD: &str = "position";
+
+/// What a miss on the page's row model is logged under.
+const TRACKS_LABEL: &str = "PlaylistDetail.tracks";
 
 impl TrackDetail for PlaylistsUi {
     type Global = PlaylistDetail<'static>;
@@ -50,24 +53,51 @@ impl TrackDetail for PlaylistsUi {
         TrackListScope::Playlist(id, self.draw())
     }
 
-    /// Abort any in-flight drag-reorder: the row indices it was computed against no longer
-    /// describe the playlist, and the reset destroys the row instance holding the pointer grab, so
-    /// it can never clear this state itself. Left set, the source row stays ghosted and the drop
-    /// line stranded.
-    fn rows_moving(&self, g: &Self::Global) {
-        g.set_drag_source(-1);
-        g.set_drop_slot(-1);
+    /// A drag still in flight goes on, the list's source surviving the rows it holds, but the
+    /// index it lifted no longer names the same track.
+    fn rows_moving(&self) {
+        if let Some(drag) = self.drag.upgrade() {
+            drag.invoke_revoke(DragOrigin::Playlist);
+        }
     }
+}
 
-    fn clear_detail(&self) {
-        self.detail.clear();
-        crate::ui::window_chrome::set_current_playlist_id(-1);
+/// The playlist a file let go of over the page lands in ([`DetailPage::drop_target`]).
+pub fn detail_on_screen(ui: &AppWindow) -> Option<i64> {
+    let detail = ui.global::<PlaylistDetail>();
+    let page = DetailPage {
+        covered: ui.global::<Nav>().get_now_playing_open()
+            || ui.global::<MiniPlayer>().get_active(),
+        tab_mounted: tab_is_mounted(ui, MyLibraryTab::Playlists),
+        playlist_id: detail.get_playlist_id(),
+        is_smart: detail.get_playlist().is_smart,
+    };
+    page.drop_target()
+}
+
+/// Playlist Detail as the window has it, which is all a file drop asks of the page.
+pub(super) struct DetailPage {
+    /// Now Playing or the miniplayer is drawn over it.
+    pub(super) covered: bool,
+    pub(super) tab_mounted: bool,
+    pub(super) playlist_id: i32,
+    pub(super) is_smart: bool,
+}
+
+impl DetailPage {
+    /// The detail open on screen, and only one whose membership is its own, a smart playlist's
+    /// following its rules.
+    pub(super) fn drop_target(&self) -> Option<i64> {
+        if self.covered || !self.tab_mounted {
+            return None;
+        }
+        (self.playlist_id >= 0 && !self.is_smart).then_some(i64::from(self.playlist_id))
     }
 }
 
 /// Whether the rows on screen are in the playlist's own order, ascending.
 ///
-/// The drag hands over *display* indices and [`apply_optimistic_reorder`] moves them in the
+/// The drag hands over *display* indices and [`apply_optimistic_move`] moves them in the
 /// keyset, so this is the whole precondition for a display index being a position. The direction
 /// half is the easy one to miss: a descending position sort shows the list reversed, which would
 /// make every drag move the mirrored row.
@@ -146,15 +176,6 @@ where
     // already see it.
     playlists_ui.detail.set_id(playlist_id);
 
-    // Inform the OS file-drop coalescer that this playlist is the current drop target — used only
-    // when the Queue Sheet is closed, the queue taking priority when both are open. A smart
-    // playlist's membership is derived, so it registers none and drops fall through to import.
-    crate::ui::window_chrome::set_current_playlist_id(if detail.is_smart {
-        -1
-    } else {
-        playlist_id
-    });
-
     let state = state.clone();
     let playlists_ui = playlists_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -196,6 +217,17 @@ pub async fn refresh_detail(
     playlist_id: i64,
 ) -> AppResult<()> {
     track_rows::reload(state, playlists_ui).await?;
+    refresh_header(state, playlists_ui, weak, playlist_id).await
+}
+
+/// Re-read an open playlist's header and cover alone, for a write that left every row reading
+/// the same: a move hands an automatic cover to whichever track now leads.
+pub async fn refresh_header(
+    state: &AppState,
+    playlists_ui: &Arc<PlaylistsUi>,
+    weak: Weak<AppWindow>,
+    playlist_id: i64,
+) -> AppResult<()> {
     let (detail, fold) = fetch_playlist_header(state, playlists_ui, playlist_id).await?;
 
     let pair = decode_detail_pair(
@@ -219,13 +251,13 @@ pub async fn refresh_detail(
     Ok(())
 }
 
-/// Optimistically move the dragged row in the keyset, *before* the DB write lands, returning
-/// whether anything moved. Whatever the write answers, the caller asks the database for the order
-/// it holds once it returns.
-pub fn apply_optimistic_reorder(
+/// Optimistically move the dragged rows together in the keyset, *before* the DB write lands,
+/// returning whether anything moved. Whatever the write answers, the caller asks the database for
+/// the order it holds once it returns.
+pub fn apply_optimistic_move(
     ui: &AppWindow,
     playlists_ui: &PlaylistsUi,
-    from: usize,
+    rows: &[usize],
     to: usize,
 ) -> bool {
     let g = ui.global::<PlaylistDetail>();
@@ -233,18 +265,30 @@ pub fn apply_optimistic_reorder(
     let dir = g.get_sort_dir();
     // Asked here as well as in `reorder-enabled`, this being where the display indices reach the
     // keyset. The filter term is the sharp one: filtered, the list is a subset of the playlist, so
-    // `from` names a different track — and the write still lands, a filtered index being in range.
-    // The list on show is asked too: it takes a sort or a needle a query after the page does, and
-    // an overtaken open can leave another playlist's rows up under this one's id.
+    // `to` lands among rows the playlist doesn't hold there — and the write still lands, a filtered
+    // index being in range. The list on show is asked too: it takes a sort or a needle a query
+    // after the page does, and an overtaken open can leave another playlist's rows up under this
+    // one's id.
     if !is_manual_order(&field, &dir)
         || playlists_ui.detail.is_filtered()
         || !playlists_ui.detail.shows_own_order()
     {
         return false;
     }
-    let rows = g.get_tracks();
-    TrackRows::installed(&rows, "PlaylistDetail.tracks")
-        .is_some_and(|model| model.move_row(from, to))
+    let tracks = g.get_tracks();
+    TrackRows::installed(&tracks, TRACKS_LABEL).is_some_and(|model| model.move_rows(rows, to))
+}
+
+/// Where the rows the page's picks name sit on show, in order.
+pub fn picked_rows(ui: &AppWindow) -> Vec<usize> {
+    let tracks = ui.global::<PlaylistDetail>().get_tracks();
+    TrackRows::installed(&tracks, TRACKS_LABEL).map(TrackRows::picked_rows).unwrap_or_default()
+}
+
+/// The track ids on show at `rows`, read before a move renumbers them.
+pub fn track_ids_at(ui: &AppWindow, rows: &[usize]) -> Vec<i64> {
+    let ids = TrackRows::ids_of(&ui.global::<PlaylistDetail>().get_tracks(), TRACKS_LABEL);
+    rows.iter().filter_map(|&row| ids.get(row).copied()).collect()
 }
 
 /// Reopen the playlist that was visible at the last shutdown, if any: now if the launch shows the

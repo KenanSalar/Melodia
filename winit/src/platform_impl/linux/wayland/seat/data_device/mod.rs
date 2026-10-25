@@ -1,8 +1,10 @@
+use std::cell::RefCell;
 use std::io::{BufRead, BufReader};
 use std::os::fd::AsFd;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use ahash::AHashMap;
 use calloop::{LoopHandle, PostAction, RegistrationToken};
 use rustix::pipe::{pipe_with, PipeFlags};
 use sctk::data_device_manager::data_source::DataSourceData;
@@ -19,9 +21,12 @@ use sctk::reexports::client::{
 };
 use tracing::warn;
 
+use crate::dpi::{LogicalPosition, PhysicalPosition};
 use crate::event::WindowEvent;
 use crate::platform_impl::wayland;
+use crate::platform_impl::wayland::event_loop::sink::EventSink;
 use crate::platform_impl::wayland::state::WinitState;
+use crate::platform_impl::wayland::window::WindowState;
 // v0.30 has two `WindowId` types: the public `crate::window::WindowId` and
 // the platform-internal `crate::platform_impl::linux::WindowId`. The
 // internal type is what `wayland::make_wid()` returns and what the
@@ -95,7 +100,7 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
         };
 
         match event {
-            WlDataDeviceEvent::Enter { serial, surface, x: _, y: _, id } => {
+            WlDataDeviceEvent::Enter { serial, surface, x, y, id } => {
                 let Some(wl_data_offer) = id else {
                     warn!("Received data device enter event without id");
                     return;
@@ -140,13 +145,14 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                 wl_data_offer.receive(mime_type, write_fd.as_fd());
                 let read_pipe = ReadPipe::from(read_fd);
 
-                if let Some(token) = data_device_state.read_token.take() {
+                if data_device_state.read_token.is_some() {
                     warn!("Cancelling previous data device enter read");
-                    data_device_state.loop_handle.remove(token);
                 }
+                data_device_state.release_offer();
 
                 let window_id = wayland::make_wid(&surface);
                 data_device_state.hovered_window = Some(window_id);
+                data_device_state.position = physical_position(&state.windows, window_id, x, y);
                 data_device_state.offer = Some(wl_data_offer);
                 data_device_state.read_buffer.clear();
 
@@ -173,18 +179,9 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                         let consumed = match reader.fill_buf() {
                             Ok(buf) => {
                                 if buf.is_empty() {
-                                    if let Some(hovered) = data_device_state.hovered_window {
-                                        data_device_state.with_file_paths(|paths| {
-                                            for path in paths {
-                                                state.events_sink.push_window_event(
-                                                    WindowEvent::HoveredFile(path),
-                                                    hovered,
-                                                );
-                                            }
-                                        });
-                                    } else {
-                                        warn!("No window specified to push HoveredFile to");
-                                    }
+                                    // Removed by the return below, so the teardown mustn't.
+                                    data_device_state.read_token = None;
+                                    data_device_state.read_finished(&mut state.events_sink);
                                     return PostAction::Remove;
                                 } else {
                                     data_device_state.read_buffer.extend_from_slice(buf);
@@ -201,6 +198,11 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                                 return PostAction::Continue;
                             },
                             Err(_) => {
+                                data_device_state.read_token = None;
+                                // A drop waiting on this read has nothing coming.
+                                if data_device_state.dropped {
+                                    data_device_state.release_offer();
+                                }
                                 return PostAction::Remove;
                             },
                         };
@@ -210,24 +212,48 @@ impl Dispatch<WlDataDevice, DataDeviceData, WinitState> for DataDeviceState {
                     })
                     .ok();
             },
-            WlDataDeviceEvent::Motion { time: _, x: _, y: _ } => {},
+            WlDataDeviceEvent::Motion { time: _, x, y } => {
+                if let Some(hovered_window) = data_device_state.hovered_window {
+                    let position = physical_position(&state.windows, hovered_window, x, y);
+                    data_device_state.position = position;
+                    if data_device_state.entered {
+                        state
+                            .events_sink
+                            .push_window_event(WindowEvent::DragMoved { position }, hovered_window);
+                    }
+                }
+            },
             WlDataDeviceEvent::Drop => {
                 if let Some(hovered_window) = data_device_state.hovered_window {
-                    data_device_state.with_file_paths(|paths| {
-                        for path in paths {
-                            state
-                                .events_sink
-                                .push_window_event(WindowEvent::DroppedFile(path), hovered_window);
-                        }
-                    });
-                    data_device_state.finish_offer();
+                    if data_device_state.entered {
+                        let event = WindowEvent::DragDropped {
+                            paths: data_device_state.file_paths(),
+                            position: data_device_state.position,
+                        };
+                        state.events_sink.push_window_event(event, hovered_window);
+                        data_device_state.finish_offer();
+                    } else if data_device_state.read_token.is_some() {
+                        // The path list is still arriving, and sending what has come so far would
+                        // drop the rest; the read finishes the drop once it has it all.
+                        data_device_state.dropped = true;
+                    } else {
+                        // The read is over without entering: it named no file, or it failed.
+                        data_device_state.release_offer();
+                    }
                 }
             },
             WlDataDeviceEvent::Leave => {
+                // A drop waiting on its read is over as far as the compositor is concerned, and
+                // the read still owns the offer.
+                if data_device_state.dropped {
+                    return;
+                }
                 if let Some(hovered_window) = data_device_state.hovered_window {
-                    state
-                        .events_sink
-                        .push_window_event(WindowEvent::HoveredFileCancelled, hovered_window);
+                    if data_device_state.entered {
+                        let event =
+                            WindowEvent::DragLeft { position: Some(data_device_state.position) };
+                        state.events_sink.push_window_event(event, hovered_window);
+                    }
                     data_device_state.release_offer();
                 }
             },
@@ -305,6 +331,12 @@ pub struct DataDeviceState {
     pub offer: Option<WlDataOffer>,
     pub read_token: Option<RegistrationToken>,
     pub read_buffer: Vec<u8>,
+    /// The pointer as of the last `Enter` or `Motion`, in the window's physical pixels.
+    pub position: PhysicalPosition<f64>,
+    /// `DragEntered` has been sent, which waits for the whole path list.
+    pub entered: bool,
+    /// A `Drop` arrived before the path list did.
+    pub dropped: bool,
 }
 
 impl DataDeviceState {
@@ -315,12 +347,43 @@ impl DataDeviceState {
             offer: None,
             read_token: None,
             read_buffer: Vec::new(),
+            position: PhysicalPosition::default(),
+            entered: false,
+            dropped: false,
         }
     }
 
-    fn with_file_paths(&mut self, mut callback: impl FnMut(Vec<PathBuf>)) {
+    /// The path list is in: the drag enters, and a drop that was waiting on it lands. A list naming
+    /// no file, such as a browser's link, enters nothing, as X11's parse and Windows' `CF_HDROP`
+    /// already refuse one.
+    fn read_finished(&mut self, events_sink: &mut EventSink) {
+        let Some(hovered_window) = self.hovered_window else {
+            warn!("No window specified to push DragEntered to");
+            return;
+        };
+        let paths = self.file_paths();
+        if paths.is_empty() {
+            if self.dropped {
+                self.release_offer();
+            }
+            return;
+        }
+        let position = self.position;
+        self.entered = true;
+        events_sink.push_window_event(
+            WindowEvent::DragEntered { paths: paths.clone(), position },
+            hovered_window,
+        );
+        if self.dropped {
+            events_sink
+                .push_window_event(WindowEvent::DragDropped { paths, position }, hovered_window);
+            self.finish_offer();
+        }
+    }
+
+    fn file_paths(&self) -> Vec<PathBuf> {
         let mut paths = Vec::new();
-        if let Ok(uri_list) = String::from_utf8(self.read_buffer.clone()) {
+        if let Ok(uri_list) = std::str::from_utf8(&self.read_buffer) {
             for line in uri_list.lines() {
                 // RFC 2483: comments start with `#`; entries are CRLF-terminated
                 // URIs. Trim any trailing `\r` left by `String::lines` (which
@@ -337,7 +400,7 @@ impl DataDeviceState {
                     // (`%C3%A9` for `é`), etc. `PathBuf::from(file)` would
                     // store the literal `%XX` characters, so subsequent
                     // `File::open` would fail with NotFound. Decode here
-                    // before handing the path off as `WindowEvent::DroppedFile`.
+                    // before handing the path off in `WindowEvent::DragDropped`.
                     paths.push(PathBuf::from(percent_decode_path(file)));
                 } else {
                     warn!("Non-comment line in URI list missing prefix: '{line}'");
@@ -346,7 +409,7 @@ impl DataDeviceState {
         } else {
             warn!("Failed to parse URI list from hovered file");
         }
-        callback(paths);
+        paths
     }
 
     /// Tear down after a *completed* drop: tell the source the drag finished,
@@ -372,6 +435,8 @@ impl DataDeviceState {
     /// cancel path, and the only correct teardown when no drop was received.
     fn release_offer(&mut self) {
         self.hovered_window = None;
+        self.entered = false;
+        self.dropped = false;
         if let Some(offer) = self.offer.take() {
             offer.destroy();
         }
@@ -379,6 +444,22 @@ impl DataDeviceState {
             self.loop_handle.remove(token);
         }
     }
+}
+
+/// Scales a surface-local logical point as the pointer does. A surface that isn't a window's own,
+/// such as a decoration, has no scale to read and takes 1, as upstream does.
+fn physical_position(
+    windows: &RefCell<AHashMap<WindowId, Arc<Mutex<WindowState>>>>,
+    window_id: WindowId,
+    x: f64,
+    y: f64,
+) -> PhysicalPosition<f64> {
+    let scale_factor = windows
+        .borrow()
+        .get(&window_id)
+        .map(|window| window.lock().unwrap().scale_factor())
+        .unwrap_or(1.);
+    LogicalPosition::new(x, y).to_physical(scale_factor)
 }
 
 const FILE_TRANSFER_MIME_TYPE: &str = "text/uri-list";

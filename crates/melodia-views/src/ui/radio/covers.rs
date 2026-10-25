@@ -33,10 +33,10 @@ pub fn new_tier() -> CoverThumbs {
 }
 
 /// Size the logo cache against the display it will be drawn on. Called after `app.show()` and
-/// again on every resize, off `WindowChrome.display-changed`.
+/// again on every resize, off `WindowChrome.display-changed` and `content-panel-resized`.
 pub fn tune_cache_for_display(app: &AppWindow, radio_ui: &RadioUi) {
-    let cap = grid_prewarm::cover_cap_for_window(app);
-    radio_ui.covers.resize(cap);
+    let thumb_size = grid_prewarm::cover_size_for_content(app);
+    radio_ui.covers.resize(grid_prewarm::cover_cap_for_window(app, thumb_size));
 
     // **The decode size moves only over an empty tier**, which is what sets this retune apart from
     // the shared one. The size is published as well as set, the card dividing `cover.width` by it
@@ -47,7 +47,6 @@ pub fn tune_cache_for_display(app: &AppWindow, radio_ui: &RadioUi) {
     if !radio_ui.covers.is_empty() {
         return;
     }
-    let thumb_size = grid_prewarm::cover_size_for_window(app);
     radio_ui.covers.set_thumb_size(thumb_size);
     app.global::<Radio>().set_logo_decode_size(i32::try_from(thumb_size).unwrap_or(i32::MAX));
 }

@@ -176,8 +176,8 @@ impl Default for CoverThumbs {
 }
 
 impl CoverThumbs {
-    /// The shared row tier, behind every track table and the now-playing bar. The queue sheet
-    /// keeps a [`Self::backed_by`] tier over it, released on close.
+    /// The shared row tier, behind every track table and the now-playing bar. The queue panel
+    /// keeps a [`Self::backed_by`] tier over it, released once hidden.
     pub fn new() -> Self {
         Self::default()
     }
@@ -305,8 +305,18 @@ impl CoverThumbs {
     /// strand a card: an entry a shrink evicted is a miss again, and `schedule` refuses any path
     /// the last batch already handed to the pool. Left standing, that card keeps its fallback
     /// glyph with nothing queued to replace it until some path outside the batch misses.
+    ///
+    /// An unchanged cap changes nothing, `settled` included: the retune behind this runs on every
+    /// frame of a sidebar or queue panel ease, and clearing it there would undo the thrash guard
+    /// at frame rate.
     pub fn resize(&self, cache_cap: NonZeroUsize) {
-        self.cache.lock().resize(cache_cap);
+        {
+            let mut cache = self.cache.lock();
+            if cache.cap() == cache_cap {
+                return;
+            }
+            cache.resize(cache_cap);
+        }
         self.pending.lock().settled.clear();
     }
 
@@ -331,7 +341,7 @@ impl CoverThumbs {
     }
 
     /// The size a lookup asks for.
-    fn thumb_size(&self) -> u32 {
+    pub fn thumb_size(&self) -> u32 {
         match &self.size {
             TierSize::Own(size) => size.load(Ordering::Relaxed),
             TierSize::Backed(backing) => backing.thumb_size(),
@@ -393,28 +403,20 @@ impl CoverThumbs {
 
     /// Cache-only lookup — **never** decodes synchronously, serving the placeholder on a miss.
     /// The one lookup that takes whatever size the tier holds, having neither of the two ways to
-    /// improve on it: it may not decode and it may not schedule. A backed tier still borrows on a
-    /// miss, which is neither.
+    /// improve on it: it may not decode and it may not schedule.
     ///
-    /// For a surface that mounts rows *before* its tier is warm, which here is the queue sheet
-    /// alone: its rows must land in the model before `on_open_changed` returns so the slide-up has
-    /// text on frame one, and a per-row [`Self::get_or_load_opt`] there would block the UI thread
-    /// on a screenful of decodes, freezing the very animation the synchronous build exists to
-    /// feed. The sheet swaps to the decoding lookup once its off-thread [`Self::prewarm`] lands.
+    /// For a caller with no generation to come back on when a scheduled decode lands, and nothing
+    /// to gain from one: the now-playing bridge, whose slot a warm-up fills a moment later, and a
+    /// Radio logo tier its leave has emptied, which paints the station's monogram until its prewarm
+    /// announces.
     pub fn get_cached_opt(&self, path: Option<&str>) -> Image {
         let Some(p) = path.filter(|p| !p.is_empty()) else {
             return Image::default();
         };
-        let path = Path::new(p);
-        if let Some(held) = self.cache.lock().get(path) {
+        if let Some(held) = self.cache.lock().get(Path::new(p)) {
             return buf_to_image(&held.buf);
         }
-        let Some(borrowed) = self.borrow_from_backing(path, self.thumb_size()) else {
-            return Image::default();
-        };
-        let img = buf_to_image(&borrowed.buf);
-        self.cache.lock().put(path.to_path_buf(), borrowed);
-        img
+        Image::default()
     }
 
     /// Register what to call when a scheduled batch lands. First caller wins.
@@ -437,6 +439,9 @@ impl CoverThumbs {
     /// An entry a retune left at the wrong size is served *and* re-queued: it is the right picture
     /// at a stale resolution, so painting it beats a placeholder for however long the replacement
     /// takes, and a resize never blanks a card whose cover the tier already holds.
+    ///
+    /// A backed tier borrows on a miss before scheduling one, a borrow being a refcount rather
+    /// than a decode, so a cover the backing already holds paints on the frame that asked.
     pub fn get_or_schedule_opt(self: &Arc<Self>, path: Option<&str>) -> Image {
         let Some(path) = path.filter(|p| !p.is_empty()) else {
             return Image::default();
@@ -462,6 +467,11 @@ impl CoverThumbs {
                 img
             }
             None => {
+                if let Some(borrowed) = self.borrow_from_backing(path, thumb_size) {
+                    let img = buf_to_image(&borrowed.buf);
+                    self.cache.lock().put(path.to_path_buf(), borrowed);
+                    return img;
+                }
                 self.schedule(path.to_path_buf());
                 Image::default()
             }

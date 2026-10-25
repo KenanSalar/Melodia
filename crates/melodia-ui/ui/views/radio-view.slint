@@ -197,7 +197,10 @@ export component RadioView inherits Rectangle {
             use-a: Radio.blur-use-a;
             has-blur: Radio.has-blur;
 
-            pills := RadioTabPills { }
+            pill-natural-w: pill-ruler.preferred-width;
+            pills := RadioTabPills {
+                compact-t: band.pills-compact-t;
+            }
         }
 
         body := Rectangle {
@@ -288,6 +291,14 @@ export component RadioView inherits Rectangle {
                 }
             }
         }
+    }
+
+    // The pill row with every label shown, measured and never drawn: the band weighs the room
+    // beside the cover against it, the drawn row no longer reporting it once its labels drop.
+    pill-ruler := RadioTabPills {
+        x: 0px;
+        y: 0px;
+        visible: false;
     }
 
     // On a layer of its own: the bar and the pills sit in the band, and Slint paints in

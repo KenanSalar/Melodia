@@ -1,5 +1,7 @@
 import { RadioStationRow } from "../../models.slint";
 import { CardSelection } from "../../globals/card-selection.slint";
+import { Selection } from "../../globals/selection.slint";
+import { DragItems } from "../../globals/drag.slint";
 import { CardContextMenu } from "card-context-menu.slint";
 import { StationContextMenu } from "station-context-menu.slint";
 
@@ -74,6 +76,18 @@ export component CardCell inherits Rectangle {
         } else {
             ctx-menu.show-at(x, y);
         }
+    }
+
+    // What a drag from this card carries: the set its menu acts on, under the title and cover the
+    // mount draws, which only the mount knows.
+    public pure function drag-items(title: string, cover: image) -> DragItems {
+        return {
+            kind: root.card-kind,
+            ids: Selection.effective-ids(root.card-id, root.selected, root.scope-count,
+                root.scope-selection),
+            title: title,
+            cover: cover,
+        };
     }
 
     width: root.card-width;

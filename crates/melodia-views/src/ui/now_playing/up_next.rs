@@ -22,7 +22,7 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_engine::player::engine::state::QueueViewModel;
-use melodia_ui::{AppWindow, Nav, NowPlaying, QueueRow};
+use melodia_ui::{AppWindow, Drag, DragOrigin, Nav, NowPlaying, QueueRow};
 
 /// Follow `sinks.queue` and `library_changed`. Closed, the subscriber only stashes the latest
 /// snapshot into `NowPlayingState::latest_qvm`; open, it rebuilds the Up Next list when the visible
@@ -358,6 +358,10 @@ async fn fetch_slice(
 ///
 /// A row the fetch didn't return, its track deleted since the queue was read, shows as a
 /// placeholder rather than closing up, which would point every click below it one track off.
+///
+/// A slice that moved revokes a drag still in flight: it goes on, the list's source surviving its
+/// rows, but the index it lifted no longer names the same track. A library tick reseeds the same
+/// slice, which leaves it be.
 fn show_slice(
     ui: &AppWindow,
     up_next_model: &VecModel<QueueRow>,
@@ -366,6 +370,13 @@ fn show_slice(
     ids: Vec<i64>,
     fetched: Vec<(i64, QueueRow)>,
 ) {
+    let (_, base) = upcoming_indices(qvm);
+    let base = i32::try_from(base).unwrap_or(i32::MAX);
+    let np = ui.global::<NowPlaying>();
+    if *np_state.rendered_ids.borrow() != ids || np.get_base_index() != base {
+        ui.global::<Drag>().invoke_revoke(DragOrigin::UpNext);
+    }
+
     let by_id: HashMap<i64, QueueRow> = fetched.into_iter().collect();
     let rows: Vec<QueueRow> = ids
         .iter()
@@ -373,11 +384,76 @@ fn show_slice(
         .collect();
     crate::ui::model_diff::apply_rows_keyed(up_next_model, rows, |r| r.id);
 
-    let (_, base) = upcoming_indices(qvm);
-    let np = ui.global::<NowPlaying>();
-    np.set_base_index(i32::try_from(base).unwrap_or(i32::MAX));
+    np.set_base_index(base);
     np.set_queue_length(len_as_i32(qvm.ids.len()));
     *np_state.rendered_ids.borrow_mut() = ids;
+}
+
+/// Maps a move between two Up Next rows onto play order, the inverse of [`upcoming_indices`].
+///
+/// `None` for a move across the repeat-all wrap, which would carry the track from one end of the
+/// queue to the other, past the one playing.
+fn play_order_move(
+    base: usize,
+    len: usize,
+    from_row: usize,
+    to_row: usize,
+) -> Option<(usize, usize)> {
+    if len == 0 {
+        return None;
+    }
+    let past_wrap = |row: usize| base + row >= len;
+    if past_wrap(from_row) != past_wrap(to_row) {
+        return None;
+    }
+    Some(((base + from_row) % len, (base + to_row) % len))
+}
+
+/// Wire `NowPlaying.reorder`. The row moves on show first, as the queue panel's does, so the
+/// publish that follows finds the slice already rendered and repaints nothing.
+pub(super) fn wire_reorder(
+    ui: &AppWindow,
+    state: &AppState,
+    up_next_model: Rc<VecModel<QueueRow>>,
+    np_state: Rc<NowPlayingState>,
+) {
+    let weak = ui.as_weak();
+    let state = state.clone();
+    ui.global::<NowPlaying>().on_reorder(move |from_row, to_row| {
+        let Some(ui) = weak.upgrade() else { return };
+        let np = ui.global::<NowPlaying>();
+        let (Ok(base), Ok(len), Ok(from_row), Ok(to_row)) = (
+            usize::try_from(np.get_base_index()),
+            usize::try_from(np.get_queue_length()),
+            usize::try_from(from_row),
+            usize::try_from(to_row),
+        ) else {
+            return;
+        };
+        let Some((from, to)) = play_order_move(base, len, from_row, to_row) else {
+            return;
+        };
+        move_shown_row(&up_next_model, &np_state, from_row, to_row);
+        let s = state.clone();
+        state.runtime.clone().spawn(async move {
+            if let Err(e) = library::queue::queue_move(&s, &[from], to) {
+                log::warn!("queue_move({from},{to}): {}", describe(&e));
+            }
+        });
+    });
+}
+
+/// Moves a shown row, and the id it stands for, from `from` to `to`.
+fn move_shown_row(model: &VecModel<QueueRow>, np_state: &NowPlayingState, from: usize, to: usize) {
+    let mut ids = np_state.rendered_ids.borrow_mut();
+    let shown = ids.len();
+    if from >= shown || to >= shown || model.row_count() != shown {
+        return;
+    }
+    let row = model.remove(from);
+    model.insert(to, row);
+    let id = ids.remove(from);
+    ids.insert(to, id);
 }
 
 #[cfg(test)]

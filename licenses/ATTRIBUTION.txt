@@ -109,20 +109,24 @@ https://github.com/rust-windowing/winit
 Licensed under the Apache License, Version 2.0 -- full text in Apache-2.0.txt,
 the same copy Material Symbols above is under. Upstream ships no NOTICE file.
 
-MODIFIED. The fork carries three commits on top of the v0.30.13 tag: PR #4009
-("wayland: register drag & drop events", by PeakKS), a WindowId fixup and URI
-percent-decoding. Together they give Wayland the DroppedFile / HoveredFile
-events winit has only ever delivered on X11, macOS and Windows
-(rust-windowing/winit#1881). The additions are cfg-gated to Linux. Applied
-through Cargo's [patch.crates-io], so this is what every platform builds
-against; see winit/README.md.
+MODIFIED. The fork carries four commits on top of the v0.30.13 tag. The first
+three are PR #4009 ("wayland: register drag & drop events", by PeakKS), a
+WindowId fixup and URI percent-decoding, which together give Wayland the file
+drag-and-drop events winit has only ever delivered on X11, macOS and Windows
+(rust-windowing/winit#1881). The fourth replaces the per-file DroppedFile /
+HoveredFile / HoveredFileCancelled events on Wayland, X11 and Windows with
+DragEntered / DragMoved / DragDropped / DragLeft, which carry the pointer's
+position, in the shape upstream shipped in its 0.31.0 betas (PR #4079). Its
+Windows half also corrects the IDropTarget vtable, which declared the drag
+point as a pointer. Applied through Cargo's [patch.crates-io], so this is what
+every platform builds against; see winit/README.md.
 
 Files:
   winit/*
 
 Vendored in-tree rather than fetched, so a fresh clone and every CI runner build
-identically. The whole directory retires once upstream lands native Wayland
-drag-and-drop.
+identically. The whole directory retires once a release of Slint builds on an
+upstream winit whose drag-and-drop reports where the pointer is.
 
 
 Ko-fi logo

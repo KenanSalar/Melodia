@@ -503,13 +503,14 @@ fn land_pending(pending: Option<PendingNav>, weak: &Weak<AppWindow>) {
     }
 }
 
-/// Whether Now Playing, the queue sheet or a modal dialog is up. Mouse-4/5 gate on it:
-/// overlays have their own input contexts, Esc and F closing them, and absorbing
-/// browser-style nav while one is up would surprise the user.
+/// Whether Now Playing, a modal dialog or the floating queue is up. Mouse-4/5 gate on it:
+/// overlays have their own input contexts, Esc and F closing them, and absorbing browser-style
+/// nav while one is up would surprise the user. The docked queue panel is not one, sitting
+/// beside the page it would navigate.
 pub fn overlay_open(ui: &AppWindow) -> bool {
     ui.global::<Nav>().get_now_playing_open()
-        || ui.global::<Queue>().get_open()
         || ui.global::<Dialog>().get_open()
+        || ui.global::<Queue>().get_floating()
 }
 
 /// Per-section UI-handle registry, filled at startup by each `wire_*` once its

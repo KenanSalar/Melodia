@@ -21,6 +21,7 @@ use std::sync::Arc;
 use slint::{Model, ModelNotify, ModelRc, ModelTracker};
 
 use super::{Keyset, PagedRow, PagedRows, RowNotify, RowRequest, ScrollPoint};
+use crate::ui::util;
 
 /// One grid row: up to a row's worth of cards in a nested model, the shape every `*GridRow`
 /// struct in `models.slint` has.
@@ -114,11 +115,7 @@ impl<G: GridRow> PagedGrid<G> {
 
     /// [`Self::of`] for a grid installed with one, logging a miss under `label`.
     pub fn installed<'a>(rows: &'a ModelRc<G>, label: &str) -> Option<&'a Self> {
-        let found = Self::of(rows);
-        if found.is_none() {
-            log::warn!("{label}: PagedGrid downcast failed, cards left as they were");
-        }
-        found
+        util::installed(rows, label)
     }
 
     /// Chunk the cards `columns` to a row, floored at one: a grid mid-layout can report zero. A

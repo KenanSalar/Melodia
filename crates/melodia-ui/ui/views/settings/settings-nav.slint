@@ -102,7 +102,9 @@ export component SettingsNav inherits Rectangle {
     property <int> hovered-row: !list-hover.has-hover ? -1
         : clamp(Math.floor(list-hover.mouse-y / (root.row-h + root.row-gap)),
                 0, root.labels.length - 1);
-    out property <bool> tip-visible: root.compact && (rail-search.has-hover || root.hovered-row >= 0);
+    // Not on the search button while its field is open: the pill would cover the field.
+    out property <bool> tip-visible: root.compact
+        && ((rail-search.has-hover && !root.search-active) || root.hovered-row >= 0);
     out property <string> tip-label: rail-search.has-hover ? rail-search.label
         : root.hovered-row >= 0 ? root.labels[root.hovered-row] : "";
     out property <length> tip-x: 0px;

@@ -239,7 +239,7 @@ async fn react(
     }
 
     // Reuse the RGB8 thumbnail `CoverThumbs` already decoded for the
-    // now-playing-bar / queue-sheet rows rather than opening the artwork a
+    // now-playing-bar / queue-panel rows rather than opening the artwork a
     // second time — on large embedded covers the duplicate decode produced a
     // multi-MB transient that glibc didn't fully return to the OS, surfacing
     // as a ~30 MiB residual RSS bump whenever the current track was

@@ -1,5 +1,7 @@
 import { Theme } from "../../theme.slint";
 import { MaterialIcon } from "../material-icon.slint";
+import { PopupColumn } from "../popup-column.slint";
+import { PopupFit } from "../popup-fit.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { FocusLossWatcher } from "../focus-loss-watcher.slint";
 
@@ -10,7 +12,6 @@ component DropdownOption inherits Rectangle {
 
     callback clicked();
 
-    height: 32px;
     border-radius: Theme.radius-sm;
     background: touch.has-hover ? Theme.surface2 : transparent;
     animate background { duration: 100ms; easing: ease-in-out; enabled: !Theme.recoloring; }
@@ -90,6 +91,14 @@ export component Dropdown inherits Rectangle {
     property <duration> refresh-poll: 16ms;
     property <duration> refresh-timeout: 500ms;
 
+    // An option row's height, which the cap and the opening scroll below count in.
+    property <length> option-h: 32px;
+    // Past this many the list scrolls: a dropdown is read a few rows at a time, and a taller list
+    // covers the form it was opened over.
+    property <int> shown-options: 10;
+    // Between the trigger and its list, on whichever side the list opens.
+    property <length> popup-gap: 4px;
+
     width: root.trigger-width;
     height: trigger.height;
 
@@ -163,13 +172,21 @@ export component Dropdown inherits Rectangle {
     }
 
     popup := PopupWindow {
-        // Always under the trigger; flipping above near the viewport's bottom
-        // edge is polish nobody has asked for yet.
+        // Under the trigger, or above it where below is short and above has more room, so a
+        // trigger near the window's foot never opens its list over itself (`PopupFit`).
+        property <length> above-y: root.absolute-position.y - root.popup-gap;
+        property <length> below-y: root.absolute-position.y + trigger.height + root.popup-gap;
+        property <length> wanted-h: min(col.rows-h,
+            root.shown-options * root.option-h + 2 * PopupFit.column-inset);
+        property <bool> opens-above:
+            PopupFit.opens-above(self.above-y, self.below-y, self.wanted-h);
+
         x: root.popup-align-end ? root.trigger-width - self.width : 0;
-        y: trigger.height + 4px;
+        y: self.opens-above ? -root.popup-gap - self.height : trigger.height + root.popup-gap;
         // Bound on the popup, the only scope that may read its descendant's
         // `preferred-width`.
-        width: max(root.trigger-width, rows.preferred-width);
+        width: max(root.trigger-width, col.rows-w + col.gutter);
+        height: PopupFit.side-h(self.above-y, self.below-y, self.wanted-h);
         // See above — the rows need their handlers to run before it closes.
         close-policy: close-on-click-outside;
 
@@ -180,11 +197,18 @@ export component Dropdown inherits Rectangle {
         }
 
         PopupSurface {
-            rows := VerticalLayout {
-                padding: Theme.pad-xs;
-                spacing: 0;
+            width: 100%;
+            height: 100%;
+
+            col := PopupColumn {
+                width: 100%;
+                height: 100%;
+                // Opens on the current choice, which a long list would otherwise scroll away.
+                reveal-y: PopupFit.column-inset + max(0, root.selected-index) * root.option-h;
+                reveal-h: root.option-h;
 
                 for option[i] in root.options: DropdownOption {
+                    height: root.option-h;
                     label: option;
                     active: i == root.selected-index;
                     clicked => {

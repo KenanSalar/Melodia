@@ -5,13 +5,14 @@ use std::cell::RefCell;
 
 use super::*;
 
-/// A track-list global without a window, hiding `#` and Genre on a first launch and locking Album.
+/// A track-list global without a window, hiding `#`, Genre and the favourite's heart on a first
+/// launch, as Favorites hides its heart, and locking Album.
 #[derive(Default)]
 struct FakeList(RefCell<TrackColumns>);
 
 impl TrackListColumnState for FakeList {
     const VIEW_ID: &'static str = "fake";
-    const HIDDEN_BY_DEFAULT: &'static [&'static str] = &["number", "genre"];
+    const HIDDEN_BY_DEFAULT: &'static [&'static str] = &["number", "genre", "favorite_mark"];
     const LOCKED: Option<&'static str> = Some("album");
 
     fn read_columns(&self) -> TrackColumns {
@@ -28,6 +29,12 @@ impl TrackListColumnState for FakeList {
 fn shown(list: &FakeList) -> [bool; 6] {
     let c = list.read_columns();
     [c.show_number, c.show_artwork, c.show_artist, c.show_album, c.show_genre, c.show_year]
+}
+
+/// The row marks in [`MARKS`] order: the favourite's heart, the hover heart, the star strip.
+fn marks(list: &FakeList) -> [bool; 3] {
+    let c = list.read_columns();
+    [c.show_favorite_mark, c.show_favorite_button, c.show_rating_strip]
 }
 
 fn saved(visible: &[&str]) -> ViewStateData {
@@ -103,14 +110,53 @@ fn a_snapshot_leaves_every_other_views_entries_alone() {
     assert_eq!(vs.view_columns.get(view_id::TRACKS), Some(&vec!["genre".to_owned()]));
 }
 
+/// Every install that ran before the marks saved its columns and no marks, so each mark takes the
+/// view's own default rather than falling back with the columns, a hidden one included.
+#[test]
+fn columns_saved_without_marks_give_each_mark_the_views_default() {
+    let list = hydrated(&saved(&["artist", "year"]));
+    assert_eq!(marks(&list), [false, true, true]);
+}
+
+/// A mark added after an install saved the others takes its own default and leaves theirs alone.
+#[test]
+fn a_mark_the_saved_map_lacks_takes_its_default_beside_the_saved_ones() {
+    let mut vs = saved(&["artist"]);
+    let saved_marks = [("favorite_mark", true), ("favorite_button", false)];
+    vs.view_marks.insert(
+        FakeList::VIEW_ID.to_owned(),
+        saved_marks.map(|(id, shown)| (id.to_owned(), shown)).into(),
+    );
+
+    let list = hydrated(&vs);
+
+    assert_eq!(marks(&list), [true, false, true]);
+}
+
+#[test]
+fn what_a_snapshot_saves_hydrates_back_into_the_same_marks() {
+    let list = FakeList(RefCell::new(TrackColumns {
+        show_favorite_mark: true,
+        show_favorite_button: false,
+        show_rating_strip: false,
+        ..TrackColumns::default()
+    }));
+    let mut vs = ViewStateData::default();
+
+    snapshot(&mut vs, &list);
+
+    assert_eq!(marks(&hydrated(&vs)), [true, false, false]);
+}
+
 type ShippedRow = (&'static str, &'static [&'static str], Option<&'static str>);
 
 fn shipped<T: TrackListColumnState>() -> ShippedRow {
     (T::VIEW_ID, T::HIDDEN_BY_DEFAULT, T::LOCKED)
 }
 
-/// The first-launch columns every view ships with. The ids are spelled as bare identifiers in
-/// `track_list_views!`, so a misspelled one compiles and quietly shows the column it meant to hide.
+/// The first-launch columns and marks every view ships with. The ids are spelled as bare
+/// identifiers in `track_list_views!`, so a misspelled one compiles and quietly shows the column it
+/// meant to hide.
 #[test]
 fn every_view_hides_and_locks_the_columns_it_shipped_with() {
     let rows = [
@@ -132,7 +178,7 @@ fn every_view_hides_and_locks_the_columns_it_shipped_with() {
         ("artist_detail", &["number"], Some("artist")),
         ("genre_detail", &["number"], Some("genre")),
         ("playlist_detail", &["genre"], None),
-        ("favorites", &["number", "genre", "year"], None),
+        ("favorites", &["number", "genre", "year", "favorite_mark"], None),
         ("recently_played", &["number", "genre", "year"], None),
         ("search", &["genre", "year"], None),
     ];

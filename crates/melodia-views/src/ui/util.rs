@@ -1,10 +1,10 @@
 //! Small shared helpers and artwork constants for the UI glue layer: one source of truth
-//! for the row conversions, the technical-metadata display strings and the cover-decode
-//! sizes, rather than a comment in each copy asserting they match.
+//! for the row conversions, the logged model downcast, the technical-metadata display strings and
+//! the cover-decode sizes, rather than a comment in each copy asserting they match.
 
 use std::collections::HashSet;
 
-use slint::{Rgb8Pixel, SharedPixelBuffer, SharedString};
+use slint::{Model, ModelRc, Rgb8Pixel, SharedPixelBuffer, SharedString};
 
 /// Side length (px) a sharp cover tile is downscaled to. Matches the 384 px maximum on-screen
 /// tile in Now Playing, the largest cover the app paints, so it neither upscales nor pays for a
@@ -34,6 +34,16 @@ pub fn buffer_from_rgb(img: &image::RgbImage) -> SharedPixelBuffer<Rgb8Pixel> {
     let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(w, h);
     buf.make_mut_bytes().copy_from_slice(img.as_raw());
     buf
+}
+
+/// The `M` behind `rows`, logged under `label` rather than passed over when it isn't one: the
+/// model and whatever the caller has in hand disagree from there on, and nothing else says so.
+pub fn installed<'a, M: 'static, T>(rows: &'a ModelRc<T>, label: &str) -> Option<&'a M> {
+    let found = rows.as_any().downcast_ref::<M>();
+    if found.is_none() {
+        log::warn!("{label}: {} downcast failed, left as it was", std::any::type_name::<M>());
+    }
+    found
 }
 
 /// An optional field as the empty string Slint gates on when it is absent. `default()` allocates

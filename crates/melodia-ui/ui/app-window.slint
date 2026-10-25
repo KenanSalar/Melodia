@@ -32,6 +32,7 @@ import { Selection } from "globals/selection.slint";
 import { CardActions } from "globals/card-actions.slint";
 import { CopyActions } from "globals/copy-actions.slint";
 import { Queue, NowPlaying } from "globals/queue.slint";
+import { Drag, DragOrigin, FileDrag, FileDropTarget, WindowRect } from "globals/drag.slint";
 import { Radio } from "globals/radio.slint";
 import { Search } from "globals/search.slint";
 import { SettingsPage } from "globals/settings-page.slint";
@@ -45,7 +46,7 @@ import { TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListR
          BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
          AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
          GenreRow, GenreGridRow,
-         PlaylistRow, PlaylistGridRow, SmartRuleRow, LyricRow,
+         PlaylistRow, PlaylistGridRow, SmartRuleRow, LyricRow, LiftedRun,
          TrackColumns, TrackColumnLayout, TrackColumn } from "models.slint";
 import { Sidebar } from "layout/sidebar.slint";
 import { NowPlayingBar } from "layout/now-playing-bar.slint";
@@ -61,13 +62,16 @@ import { SearchView } from "views/search-view.slint";
 import { SettingsView } from "views/settings-view.slint";
 import { NowPlayingView } from "views/now-playing-view.slint";
 import { MiniPlayerView } from "views/mini-player.slint";
-import { QueueSheet } from "views/queue-sheet.slint";
+import { QueuePanel } from "views/queue-panel/queue-panel.slint";
+import { QueueScrim } from "views/queue-panel/queue-scrim.slint";
 import { DialogOverlay } from "components/dialog/dialog.slint";
 import { OnboardingOverlay } from "components/onboarding/onboarding-overlay.slint";
 import { CustomTitleBar } from "components/custom-titlebar.slint";
 import { EdgeOutline } from "components/edge-outline.slint";
 import { RoundedFrame } from "components/rounded-frame.slint";
 import { NotificationStack } from "components/dialog/notification-stack.slint";
+import { DragGhost } from "components/drag-ghost.slint";
+import { WindowRectReport } from "components/window-rect-report.slint";
 import { MiniPlayerSwitch } from "components/mini-player-switch.slint";
 import { SectionActiveGate } from "components/section-active-gate.slint";
 import { Tooltip, TooltipSide } from "components/tooltip.slint";
@@ -75,8 +79,8 @@ import { ViewTransition } from "components/view-transition.slint";
 
 // Re-export so Rust can mention these from `slint::include_modules!`.
 export {
-    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, TrackColumnSizing, CardSelection, CardActions, CopyActions, Selection,
-    TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow,
+    Theme, Settings, SettingsPage, Player, HeroBackdrop, HeroChips, Equalizer, ReplayGain, Visualizer, SignalPathUi, ScrobbleUi, SmartEditor, TagEditor, Nav, CompositeScroll, MiniPlayer, MyLibrary, Tracks, Browse, LibrarySettings, Dialog, WindowChrome, Queue, Notifications, NowPlaying, Favorites, RecentlyPlayed, Albums, AlbumDetail, Artists, ArtistDetail, Genres, GenreDetail, Playlists, PlaylistDetail, Search, MelodiaUpdater, RowCovers, Radio, RadioForm, Onboarding, Lyrics, TrackColumnSizing, CardSelection, CardActions, CopyActions, Selection, Drag, DragOrigin, FileDrag, FileDropTarget, WindowRect,
+    TrackSummaryRow, TrackListRow, PlayerVm, QueueVm, QueueRow, FolderListRow, LyricRow, LiftedRun,
     TrackColumns, TrackColumnLayout, TrackColumn,
     BrowseFolderRow, BreadcrumbRow, NotificationRow, TrackMetaRow,
     AlbumRow, AlbumGridRow, ArtistRow, ArtistGridRow,
@@ -274,12 +278,85 @@ export component AppWindow inherits Window {
         shortcut-scope.grab-focus();
     }
 
-    // The sheet is the odd one out: permanent, mounting nothing, only animating in. But its Esc /
-    // Ctrl+A live in the scope and nothing moves focus when it opens — the bar button and the
-    // overflow entry are both TouchArea clicks — so a filter SearchBar swallows the `a`.
-    property <bool> watched-queue-open: Queue.open;
-    changed watched-queue-open => {
-        shortcut-scope.grab-focus();
+    // The row the sidebar, the content panel and the queue panel share, less its gutter. A
+    // narrowing window takes room back from it in a fixed order, so the content keeps
+    // `Theme.content-min-w`: the sidebar folds to its rail, the queue panel narrows to its minimum,
+    // and then the panel steps aside, opening as an overlay from then on.
+    property <length> row-w: root.content-width - Theme.pad-xs;
+    // 0 is the default, so the default is spelled once, in `Theme`.
+    property <length> queue-chosen-w: clamp(
+        Queue.panel-width > 0px ? Queue.panel-width : Theme.queue-panel-default-w,
+        Theme.queue-panel-min-w,
+        Theme.queue-panel-max-w);
+    // What the row leaves an expanded sidebar beside the content's floor, and beside the panel at
+    // its chosen width as well. Folded or not, a sidebar wider than the second has nothing to
+    // expand into while the panel is up.
+    property <length> bare-sidebar-room: root.row-w - Theme.content-min-w;
+    property <length> sidebar-room: root.bare-sidebar-room - root.queue-chosen-w;
+    property <bool> sidebar-would-yield: Nav.sidebar-expanded-w > root.sidebar-room;
+    // Whether or not the panel is shown, so it keeps its width while it eases out from under Now
+    // Playing rather than narrowing as the sidebar comes back.
+    property <length> queue-room: root.row-w - Theme.content-min-w
+        - (Nav.sidebar-collapsed || root.sidebar-would-yield
+            ? Theme.sidebar-collapsed-w
+            : Nav.sidebar-expanded-w);
+    property <bool> queue-fits: !mini-switch.render-active
+        && root.queue-room >= Theme.queue-panel-min-w;
+    // A window gaining the room docks an open overlay, so the queue the user had up stays up.
+    // `shown` holds through it, the overlay still counting until `open` takes over.
+    changed queue-fits => {
+        Queue.fits = self.queue-fits;
+        if (self.queue-fits && Queue.overlay-open) {
+            Queue.open = true;
+            Queue.overlay-open = false;
+        }
+    }
+
+    // Here rather than in the panel, which the miniplayer unmounts: a mirror there would miss the
+    // change, and Rust would keep rows nobody can see. Only the overlay's own `open` floats the
+    // panel, so a narrowing window hides a docked one rather than turning it into an overlay
+    // mid-resize.
+    property <bool> queue-shown: !mini-switch.render-active && !Nav.now-playing-open
+        && (Queue.overlay-open || (Queue.open && root.queue-fits));
+    property <bool> queue-docked: root.queue-shown && root.queue-fits;
+    property <bool> queue-floating: root.queue-shown && !root.queue-fits;
+    // `floating` is written with `shown`, so the two never describe different panels for a frame,
+    // and `shown` before `shown-changed` fires, which the panel's own seat counts on.
+    changed queue-shown => {
+        Queue.floating = root.queue-floating;
+        Queue.shown = self.queue-shown;
+        Queue.shown-changed(self.queue-shown);
+    }
+    // The dock hand-off, which changes the mode under a `shown` that holds.
+    changed queue-floating => {
+        Queue.floating = self.queue-floating;
+    }
+
+    // Forced wherever an expanded sidebar would leave the content under its floor: by the window
+    // alone, or beside the docked panel. The panel's half is keyed on the docked panel rather than
+    // `open`, so the sidebar comes back once the panel has stepped aside: with both fold controls
+    // standing down under a forced rail, a panel too wide to show would otherwise hold the sidebar
+    // folded with nothing the user could press to free it. An overlay takes no room in the row, so
+    // it folds nothing. The window's half waits for a row: there is none at construction, where
+    // the tracker below takes its baseline, and one read as narrow there leaves a narrow launch
+    // with no edge to write.
+    property <bool> sidebar-yields:
+        (root.row-w > 0px && Nav.sidebar-expanded-w > root.bare-sidebar-room)
+        || (root.queue-docked && root.sidebar-would-yield);
+    changed sidebar-yields => {
+        Nav.sidebar-yields = self.sidebar-yields;
+    }
+
+    // The panel is the odd one out: it unmounts nothing, but nothing moves focus onto the scope
+    // when a press makes the queue's keys live — a row is a TouchArea — so a filter SearchBar
+    // would swallow the `a`. An overlay owns the keys from the moment it opens, a field focused or
+    // not. **On the rising edge only**: the press that takes the keys away is one Slint is about
+    // to hand a field, and a grab here would land after it.
+    property <bool> watched-queue-keys: Queue.keys-owned || Queue.floating;
+    changed watched-queue-keys => {
+        if (self.watched-queue-keys) {
+            shortcut-scope.grab-focus();
+        }
     }
 
     // The welcome card's buttons can hold focus, and Slint doesn't hand it back to an ancestor
@@ -467,6 +544,19 @@ export component AppWindow inherits Window {
             background: WindowChrome.mantle;
         }
 
+        // **Behind everything**, where it hears exactly the moves no target took and keeps the
+        // drag's chip on the pointer between them. In front it would take their drops, a drop going
+        // to whatever `DropArea` the pointer is over.
+        DropArea {
+            width: 100%;
+            height: 100%;
+            can-drop(event) => {
+                Drag.follow(self.absolute-position.x + event.position.x,
+                    self.absolute-position.y + event.position.y, true);
+                return DragAction.none;
+            }
+        }
+
         // The only FocusScope in the tree, wrapping the whole main layout — every key a focused
         // TextInput doesn't consume lands here directly. Bindings, the volume-commit debounce and
         // the focus contract are in the component.
@@ -494,7 +584,9 @@ export component AppWindow inherits Window {
                 vertical-stretch: 1;
                 padding-right: Theme.pad-xs;
 
-                sidebar := Sidebar {}
+                sidebar := Sidebar {
+                    room: root.queue-docked ? root.sidebar-room : root.bare-sidebar-room;
+                }
 
                 // Content panel. **Rounded by `RoundedFrame`, not by a rounded clip**: that clip
                 // would hold the whole view as a texture and render it again on every change inside,
@@ -510,6 +602,25 @@ export component AppWindow inherits Window {
                         width: 100%;
                         height: 100%;
                         background: Theme.base;
+                    }
+
+                    // Where a file let go of over the page lands in an open playlist. The panel
+                    // rather than the detail's own list, which unmounts inside the band's morph
+                    // and so can't carry the report's tracker. The width also sizes the grid
+                    // cover tier, and is announced only when it changes rather than on every move
+                    // of the rect.
+                    WindowRectReport {
+                        x: 0;
+                        y: 0;
+                        width: 100%;
+                        height: 100%;
+                        moved(rect) => {
+                            FileDrag.content-rect = rect;
+                            if (rect.width != WindowChrome.content-panel-width) {
+                                WindowChrome.content-panel-width = rect.width;
+                                WindowChrome.content-panel-resized();
+                            }
+                        }
                     }
 
                     // One branch per nav index, `if` rather than `visible: false` so the
@@ -593,18 +704,17 @@ export component AppWindow inherits Window {
                         NowPlayingView { width: 100%; height: 100%; }
                     }
 
-                    // Inside the content panel so its backdrop and slide stay off the sidebar
-                    // and the bar, after the view branches so it stacks above them. Always
-                    // rendered so the close animation can play; the panel's clip hides it.
-                    QueueSheet {
+                    // Under the floating queue, which the row draws over the content panel, and
+                    // ahead of the frame, so the corners and the border stay drawn over the dim.
+                    QueueScrim {
                         x: 0;
                         y: 0;
-                        width: parent.width;
-                        height: parent.height;
+                        width: 100%;
+                        height: 100%;
                     }
 
-                    // Last, so the corners and the border sit over every view and the sheet. The
-                    // shell's ground is all that shows around the panel, so it's the mask colour.
+                    // Last, so the corners and the border sit over every view. The shell's
+                    // ground is all that shows around the panel, so it's the mask colour.
                     // The radius is the one the mantle shell rounds with when frameless:
                     // concentric arcs under the custom titlebar, the host's corners under the
                     // native one.
@@ -618,6 +728,20 @@ export component AppWindow inherits Window {
                         stroke-color: Theme.border;
                         ground: WindowChrome.mantle;
                     }
+                }
+
+                // Mounted whether shown or not, so it can ease out; hidden or floating, it takes no
+                // width. Floating, it draws over the content panel, whose width here is the row's
+                // less the sidebar, which an overlay never folds.
+                QueuePanel {
+                    open-w: clamp(root.queue-room, Theme.queue-panel-min-w, root.queue-chosen-w);
+                    room: root.queue-room;
+                    float-w: min(
+                        root.queue-chosen-w,
+                        root.row-w - 2 * self.float-inset
+                            - (Nav.sidebar-rail
+                                ? Theme.sidebar-collapsed-w
+                                : Nav.sidebar-expanded-w));
                 }
             }
 
@@ -661,7 +785,7 @@ export component AppWindow inherits Window {
                 Tooltip {
                     text: Nav.sidebar-tip-label;
                     hovered: (sidebar-tip.row-hovered || sidebar-tip.held)
-                        && Nav.sidebar-collapsed;
+                        && Nav.sidebar-rail;
                     host-width: sidebar-tip.width;
                     host-height: sidebar-tip.height;
                     side: TooltipSide.right;
@@ -716,6 +840,13 @@ export component AppWindow inherits Window {
         NotificationStack {
             width: 100%;
             height: 100%;
+        }
+
+        // Over everything the window draws but its outline. `Drag` keeps the pointer in window
+        // coordinates, which the shell sits inside its margins from.
+        if Drag.live && Drag.ghost-shown && Drag.payload.items.kind != "": DragGhost {
+            x: Drag.x - parent.absolute-position.x;
+            y: Drag.y - parent.absolute-position.y;
         }
 
         // The outline an OS draws round its own frames, which a frameless window has to draw for

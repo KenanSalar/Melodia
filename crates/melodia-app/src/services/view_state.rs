@@ -26,6 +26,12 @@ pub struct ViewStateData {
     /// Keyed by view-id (`melodia-views`' `ui/track_list_view.rs::view_id`); one map each
     /// covers every list or grid view.
     pub view_columns: BTreeMap<String, Vec<String>>,
+    /// Whether a track list shows each row mark (the two hearts and the hover star strip), keyed
+    /// like `view_columns` and then by mark. **A flag per mark, under a key of its own, rather
+    /// than more ids in `view_columns`**: every exit saves that list for every track list, so an
+    /// id added to it later reads as unticked on every install that has run once, where a mark
+    /// missing here takes the view's default.
+    pub view_marks: BTreeMap<String, BTreeMap<String, bool>>,
     pub view_column_widths: BTreeMap<String, ColumnWidths>,
     pub view_sort: BTreeMap<String, ViewSort>,
     /// Browse's folder at last shutdown. `None` lands at the library root.
@@ -68,6 +74,7 @@ impl Default for ViewStateData {
     fn default() -> Self {
         Self {
             view_columns: BTreeMap::new(),
+            view_marks: BTreeMap::new(),
             view_column_widths: BTreeMap::new(),
             view_sort: BTreeMap::new(),
             browse_path: None,

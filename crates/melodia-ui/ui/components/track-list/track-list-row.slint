@@ -1,6 +1,8 @@
 import { Theme } from "../../theme.slint";
 import { TrackListRow, TrackColumns, TrackColumnLayout } from "../../models.slint";
 import { RowCovers } from "../../globals/tracks.slint";
+import { Selection } from "../../globals/selection.slint";
+import { DragItems } from "../../globals/drag.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 import { TrackTitle } from "track-title.slint";
@@ -49,6 +51,7 @@ export component TrackListRowItem inherits Rectangle {
     property <bool> selected: root.row-data.selected;
     // What every hover-driven binding reads, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
+    property <bool> favorite-button-shown: root.hovered && root.columns.show_favorite_button;
     // Once the view holds a selection the row body picks too. The first pick stays the box's,
     // which is what keeps an idle list from selecting by accident.
     property <bool> selecting: root.view-selected-ids.length > 0;
@@ -57,13 +60,16 @@ export component TrackListRowItem inherits Rectangle {
     // Disk-only Browse rows arrive `enabled == false` — dimmed, and swallowing every
     // interaction: row body, # checkbox, favourite button and right-click menu alike.
     property <bool> enabled: root.row-data.enabled;
-    // The dimming, through each brush rather than `opacity`, which would render every dimmed row
-    // into a texture of its own for as long as it stays dimmed.
-    property <float> fade: root.enabled ? 1.0 : Theme.fade-disk-only;
+    // The dimming, a disk-only row's and a lifted one's, through each brush rather than `opacity`,
+    // which would render every dimmed row into a texture of its own for as long as it stays
+    // dimmed: a drag of picks lifts a screenful.
+    property <float> fade: (root.enabled ? 1.0 : Theme.fade-disk-only)
+        * (root.lifted ? Theme.fade-lifted : 1.0);
     // Every cell's colour. The body-copy rung, not the muted one: muted, a cell fell under 4.5:1 on
     // macOS Light and sat exactly on it under two other light variants. The whole list, header
     // included, is on this one rung, and hierarchy comes from size and weight instead.
-    property <brush> ink: (root.playing ? Theme.accent : Theme.text).transparentize(1.0 - root.fade);
+    property <brush> unfaded-ink: root.playing ? Theme.accent : Theme.text;
+    property <brush> ink: root.unfaded-ink.transparentize(1.0 - root.fade);
 
     // Drives context-menu entry visibility (no "Go to Album" inside Album Detail, "Remove from
     // Playlist" only in Playlist Detail) and the current-playlist exclusion in the Add-to-Playlist
@@ -76,42 +82,11 @@ export component TrackListRowItem inherits Rectangle {
     // right-clicked row and the whole selection. Multi-mode needs this row selected *and* more
     // than one entry — right-clicking an unselected row falls back to that row alone.
     in property <[int]> view-selected-ids;
-
-    // Drag-reorder, opt-in via `enable-drag`; `TrackList` and every other consumer leave it off and
-    // pay nothing. On, the row's own `touch` also tracks press → move → release — a wrapping or
-    // sibling TouchArea can't, Slint's deepest-wins routing delivering press/up exclusively to
-    // `touch` while the outer one sees only `moved`, so a drag started and never cleaned up. The
-    // shared state lives on `DraggableTrackList` through two-way `drag-source` / `drop-slot`.
-    in property <bool> enable-drag: false;
+    // The list's length, which the `index` number mode counts down from.
     in property <int> row-count: 0;
-    in property <length> list-y0: 0px;
-    in property <length> list-height: 0px;
-    in property <length> list-viewport-y: 0px;
-    in-out property <int> drag-source: -1;
-    in-out property <int> drop-slot: -1;
-    // Per-row drag state — meaningful only while `enable-drag` is on and this row is
-    // pressed.
-    property <length> drag-press-abs-y;
-    property <bool> drag-started: false;
-    property <length> drag-cur-abs-y: 0px;
+    // The row the list's drag picked up. Only a list with a `DragSource` sets it.
+    in property <bool> lifted: false;
     property <length> pitch: Theme.track-row-pitch(root.columns.show_artwork);
-    // Slot math: list-relative pointer Y → row index → upper/lower half → slot in
-    // `0..=row-count`.
-    property <length> drag-cur-list-y:
-        root.drag-cur-abs-y - root.list-y0 - root.list-viewport-y;
-    property <int> drag-cur-row: clamp(
-        Math.floor(root.drag-cur-list-y / root.pitch),
-        0,
-        max(0, root.row-count - 1),
-    );
-    property <bool> drag-upper-half:
-        (root.drag-cur-list-y - root.drag-cur-row * root.pitch)
-            < root.pitch / 2;
-    property <int> drag-computed-slot: clamp(
-        root.drag-upper-half ? root.drag-cur-row : root.drag-cur-row + 1,
-        0,
-        root.row-count,
-    );
 
     callback double-clicked-row();
     callback toggle-favorite();
@@ -141,12 +116,20 @@ export component TrackListRowItem inherits Rectangle {
     // clicks, checkbox clicks, right-click. Slint doesn't blur a TextInput on an outside click, so
     // the host watches this counter and clears focus itself.
     callback request-blur-search();
-    // Fires on pointer-up only when a drag really started (4 px threshold) and the slot would move
-    // this row. `DraggableTrackList` routes it to `reorder_playlist`.
-    callback drag-reorder(int /*from*/, int /*to*/);
-    // Requested viewport delta while dragging near a list edge, negative being up; the host
-    // re-clamps and applies it.
-    callback request-scroll-by(length /*delta-y*/);
+    // A left press on the row body, which is what a drag from it would carry.
+    callback pressed();
+
+    // What a drag from this row carries: the set this row's menu acts on, under its own title and
+    // cover. A disk-only Browse row never reports a press, its body being disabled.
+    public pure function drag-items() -> DragItems {
+        return {
+            kind: "track",
+            ids: Selection.effective-ids(root.row-data.id, root.selected,
+                root.view-selected-ids.length, root.view-selected-ids),
+            title: root.row-data.title,
+            cover: RowCovers.request(root.row-data.artwork_path, RowCovers.generation),
+        };
+    }
 
     // No width of its own: the list sets every row to its own width, which is the width `layout`
     // was resolved for.
@@ -171,10 +154,6 @@ export component TrackListRowItem inherits Rectangle {
             // cursor.
             min-height: Theme.track-row-h(root.columns.show_artwork);
             max-height: Theme.track-row-h(root.columns.show_artwork);
-        // A drag source fades so it reads as lifted out of position, for the length of the drag
-        // only. Inert without `enable-drag`, `drag-source` staying -1.
-        opacity: root.enable-drag && root.drag-source == root.row-index ? 0.4 : 1.0;
-        animate opacity { duration: Theme.dur-fast; easing: ease-in-out; }
         // No radius here: a clip copies its element's radius, and a rounded one renders the whole
         // row into a texture. Nothing reaches the corners, so a plain clip cuts the same overflow.
         clip: true;
@@ -186,6 +165,7 @@ export component TrackListRowItem inherits Rectangle {
             height: 100%;
             selected: root.selected;
             hovered: root.hovered;
+            fade: root.fade;
             prev-selected: root.prev-selected;
             next-selected: root.next-selected;
         }
@@ -199,19 +179,13 @@ export component TrackListRowItem inherits Rectangle {
             // A disabled TouchArea processes nothing, so disk-only rows get no hover background,
             // no checkbox swap-in and no double-click.
             enabled: root.enabled;
-            // Grabbing only once a real drag is in flight; hover and idle press stay
-            // `default` so inner cell cursors aren't overridden when drag is off.
-            mouse-cursor:
-                root.enable-drag && self.pressed && root.drag-started
-                    ? grabbing
-                    : default;
             // A row-body click picks only once the view holds a selection, so the first pick is
             // the box's and an idle list can't select by accident. **On `clicked`** rather than
             // the release: this row's favourite toggle and star strip are the worked example in
-            // `slint-pitfalls.md`'s grab-invalidation entry. It runs before `pointer-event`, so
-            // `drag-started` still holds the value the block below is about to reset.
+            // `slint-pitfalls.md`'s grab-invalidation entry. A drag sends this area a cancel, so
+            // it lands no pick.
             clicked => {
-                if (root.enabled && root.selecting && !root.drag-started) {
+                if (root.enabled && root.selecting) {
                     root.pick(root.press-shift);
                 }
             }
@@ -219,13 +193,13 @@ export component TrackListRowItem inherits Rectangle {
             // comes out where it started.
             double-clicked => { root.double-clicked-row(); }
             // The blur request is every left release, so clicking anywhere on a row drops filter
-            // focus. Drag press/up tracking shares this handler, `touch` being where Slint
-            // delivers them.
+            // focus.
             pointer-event(ev) => {
                 // `clicked` carries no modifiers, so the shift a range-pick needs is taken off
                 // the press that armed it.
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                     root.press-shift = ev.modifiers.shift;
+                    root.pressed();
                 }
                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
                     root.request-blur-search();
@@ -234,67 +208,6 @@ export component TrackListRowItem inherits Rectangle {
                     && ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
                     ctx-menu.show-at(self.mouse-x, self.mouse-y);
                     root.request-blur-search();
-                }
-                // Drag-reorder tracking — opt-in via `enable-drag`.
-                if (root.enable-drag) {
-                    if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
-                        root.drag-press-abs-y = self.absolute-position.y + self.pressed-y;
-                        root.drag-started = false;
-                        root.drop-slot = -1;
-                    }
-                    if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left) {
-                        // Slot → `to` index; removing the source shifts higher indices down by
-                        // one. `drag-source == row-index` ties the commit to state nobody reset
-                        // behind our back — that pair lives on a global outliving this view, where
-                        // `drag-started` is per-row. `queue-row-item.slint` carries the same guard.
-                        if (root.drag-started
-                            && root.drag-source == root.row-index
-                            && root.drop-slot >= 0
-                            && root.drop-slot != root.row-index
-                            && root.drop-slot != root.row-index + 1) {
-                            root.drag-reorder(
-                                root.row-index,
-                                root.drop-slot <= root.row-index
-                                    ? root.drop-slot
-                                    : root.drop-slot - 1,
-                            );
-                        }
-                        root.drag-source = -1;
-                        root.drop-slot = -1;
-                        root.drag-started = false;
-                    }
-                    if (ev.kind == PointerEventKind.cancel) {
-                        root.drag-source = -1;
-                        root.drop-slot = -1;
-                        root.drag-started = false;
-                    }
-                }
-            }
-            moved => {
-                if (!root.enable-drag) {
-                    return;
-                }
-                if (self.pressed) {
-                    if (!root.drag-started
-                        && Math.abs((self.absolute-position.y + self.mouse-y) - root.drag-press-abs-y) > 4px) {
-                        root.drag-started = true;
-                        root.drag-source = root.row-index;
-                    }
-                    // Only the row holding `drag-source` drives `drop-slot` — the
-                    // `queue-row-item.slint` ownership rule.
-                    if (root.drag-started && root.drag-source == root.row-index) {
-                        root.drag-cur-abs-y = self.absolute-position.y + self.mouse-y;
-                        root.drop-slot = root.drag-computed-slot;
-                        // Edge auto-scroll — the band and nudge `queue-row-item.slint` uses.
-                        if (root.list-height > 0px) {
-                            if ((self.absolute-position.y + self.mouse-y) - root.list-y0 < 40px) {
-                                root.request-scroll-by(-6px);
-                            } else if (((root.list-y0 + root.list-height)
-                                        - (self.absolute-position.y + self.mouse-y)) < 40px) {
-                                root.request-scroll-by(6px);
-                            }
-                        }
-                    }
                 }
             }
 
@@ -330,8 +243,10 @@ export component TrackListRowItem inherits Rectangle {
                     if root.hovered || root.selected: Checkbox {
                         checked: root.selected;
                         // The rim stands in for the number it replaced, so it takes
-                        // that cell's ink rather than the quieter default.
-                        unchecked-border: root.ink;
+                        // that cell's ink rather than the quieter default, unfaded since
+                        // the box applies the row's fade to its fill and rim alike.
+                        unchecked-border: root.unfaded-ink;
+                        fade: root.fade;
 
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;
@@ -373,10 +288,12 @@ export component TrackListRowItem inherits Rectangle {
                     TrackTitle {
                         title: root.row-data.title;
                         ink: root.ink;
-                        is-favorite: root.row-data.is_favorite;
+                        favorite-shown: root.columns.show_favorite_mark
+                            && root.row-data.is_favorite;
                         rating: root.row-data.rating;
                         // Disk-only Browse rows can't be rated.
-                        rating-shown: root.hovered && root.enabled;
+                        rating-shown: root.columns.show_rating_strip
+                            && root.hovered && root.enabled;
                         fade: root.fade;
                         rated(n) => { root.set-row-rating([root.row-data.id], n); }
                     }
@@ -434,9 +351,8 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // The duration is fully replaced by the favourite toggle on hover. The
-            // persistent "this is a favorite" indicator lives beside the title; this
-            // swap is only the action button.
+            // The duration gives way to the favourite toggle on hover, where the view shows one.
+            // The persistent mark lives beside the title; this swap is only the action button.
             Rectangle {
                 x: root.layout.length_x;
                 y: 0;
@@ -447,7 +363,7 @@ export component TrackListRowItem inherits Rectangle {
                     spacing: Theme.pad-xs;
                     alignment: start;
                     cross-axis-alignment: center;
-                    if !root.hovered: Text {
+                    if !root.favorite-button-shown: Text {
                         // Precomputed in Rust at row build, so this binding doesn't
                         // re-run a Slint pure function on every invalidation.
                         text: root.row-data.display_duration;
@@ -455,7 +371,7 @@ export component TrackListRowItem inherits Rectangle {
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
                     }
-                    if root.hovered: Rectangle {
+                    if root.favorite-button-shown: Rectangle {
                         width: 26px;
                         height: 26px;
                         border-radius: self.height / 2;
@@ -477,11 +393,12 @@ export component TrackListRowItem inherits Rectangle {
             }
         }
 
-        // The menu itself is `TrackContextMenu`, shared with the queue sheet's row. What stays
+        // The menu itself is `TrackContextMenu`, shared with the queue panel's row. What stays
         // here is the pointer position, the one thing it deliberately doesn't own.
         ctx-menu := TrackContextMenu {
             row-id: root.row-data.id;
             row-is-favorite: root.row-data.is_favorite;
+            row-rating: root.row-data.rating;
             row-selected: root.row-data.selected;
             album-id: root.row-data.album_id;
             artist-id: root.row-data.artist_id;
@@ -495,6 +412,7 @@ export component TrackListRowItem inherits Rectangle {
             play-next(ids) => { root.play-next(ids); }
             add-to-queue(ids) => { root.add-to-queue(ids); }
             toggle-favorite(ids, on) => { root.toggle-row-favorite(ids, on); }
+            rate(ids, n) => { root.set-row-rating(ids, n); }
             request-remove(ids) => { root.request-remove-from-playlist(ids); }
             select-all => { root.select-all(); }
             clear-selection => { root.clear-selection(); }

@@ -107,7 +107,7 @@ async fn a_station_is_not_stopped_by_a_row_going_missing_under_it() -> Result<()
 }
 
 /// The pass runs on every `library_changed` bump — a favourite toggle, an import, any scan. With
-/// nothing missing it must publish nothing, or the queue sheet rebuilds its rows for every one.
+/// nothing missing it must publish nothing, or the queue panel rebuilds its rows for every one.
 #[tokio::test]
 async fn a_queue_with_nothing_missing_publishes_nothing() -> Result<(), AppError> {
     let (fx, _ids) = playing(3).await?;

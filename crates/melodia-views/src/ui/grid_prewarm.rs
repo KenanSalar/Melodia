@@ -6,9 +6,10 @@
 //! was a section leave releasing its own. That is what [`hand_back_covers`] replaces: the leave
 //! hands back the bytes without handing back the picture.
 //!
-//! Search's two card strips and the queue sheet keep private tiers, theirs decoding at sizes of
-//! their own. Radio's logo tier is private for a different reason and argues it at
-//! `ui::radio::covers`: its card reads the decoded extent, so a proxy would move the layout.
+//! Search's two card strips keep private tiers, decoding at sizes of their own. The queue panel's
+//! is private on lifetime, drawn at the row tier's size and handed back when the panel hides.
+//! Radio's logo tier is private for a different reason and argues it at `ui::radio::covers`: its
+//! card reads the decoded extent, so a proxy would move the layout.
 //!
 //! Beside the tier, the three things every grid needs and none should own: turning an iterator of
 //! optional artwork paths into a deduplicated, display-ordered `Vec<PathBuf>` for
@@ -25,7 +26,7 @@ use slint::{ComponentHandle, Image};
 
 use melodia_artwork::media::image::artwork::STORE_MAX_DIM;
 use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
-use melodia_ui::AppWindow;
+use melodia_ui::{AppWindow, WindowChrome};
 
 /// LRU capacity a freshly built tier carries until [`tune_for_display`] measures the window.
 /// A construction default only — six view handles spelled this same number before they shared a
@@ -95,14 +96,19 @@ pub fn shrink_covers() {
 
 /// Retune the tier to the display the window is on.
 ///
-/// Called after `app.show()` and again on every resize, off `WindowChrome.display-changed`. The
-/// cap and the size are read together because they are two halves of one budget and both are
-/// answers about the display.
+/// Called after `app.show()` and again on every resize, off `WindowChrome.display-changed` and
+/// `content-panel-resized`. The cap and the size are read together because they are two halves of
+/// one budget and both are answers about the display.
 pub fn tune_for_display(app: &AppWindow) {
-    let cap = cover_cap_for_window(app);
-    let size = cover_size_for_window(app);
-    tier().resize(cap);
-    tier().set_thumb_size(size);
+    let size = cover_size_for_content(app);
+    let cap = cover_cap_for_window(app, size);
+    let grid_tier = tier();
+    // A sidebar or queue panel ease calls this every frame, nearly always to the same answer.
+    if grid_tier.capacity() == cap.get() && grid_tier.thumb_size() == size {
+        return;
+    }
+    grid_tier.resize(cap);
+    grid_tier.set_thumb_size(size);
     log::debug!("ui::grid_prewarm cover tier tuned to cap {cap}, {size} px");
 }
 
@@ -196,12 +202,12 @@ pub fn cover_cap(
     NonZeroUsize::new(cap).unwrap_or(fallback)
 }
 
-/// `GridGeometry`'s four length defaults. Every one of its five mounts binds
-/// `avail-width: body.width` and the shared gap and takes the width pitch as declared, so there is
-/// one answer to what a card measures and this is what derives it. Radio is the one mount that
-/// moves `card-text-h`, its station card carrying a third line, and that can only make its rows
-/// taller than [`cover_cap`]'s `ROW_PITCH_H` assumes: fewer rows on screen than counted, which is
-/// the safe direction for a cap.
+/// `GridGeometry`'s four length defaults. Every one of its five mounts binds the shared gap and
+/// takes the width pitch as declared, so there is one answer to what a card measures and this is
+/// what derives it. Four bind `avail-width: body.width`, and Browse binds its body less
+/// [`PAGE_INSET_W`]. Radio is the one mount that moves `card-text-h`, its station card carrying a
+/// third line, and that can only make its rows taller than [`cover_cap`]'s `ROW_PITCH_H` assumes:
+/// fewer rows on screen than counted, which is the safe direction for a cap.
 const MIN_CARD_W: u32 = 180;
 const GAP: u32 = 20;
 const CARD_TEXT_H: u32 = 46;
@@ -211,31 +217,29 @@ const MAX_CARD_W: u32 = 224;
 /// The pitch `GridGeometry` packs columns at.
 const CARD_PITCH_W: u32 = MIN_CARD_W + GAP;
 
-/// What the window keeps before the grid's body starts: the widest the sidebar can be dragged
-/// (`Theme.sidebar-max-w`) plus the page's `pad-lg` at both edges.
-///
-/// Subtracted rather than ignored, the sidebar being the user's to drag while only the window is
-/// measurable from here. Assuming the *widest* one is the safe direction: over-subtracting costs
-/// a tier one step too large, under-subtracting puts the cards on an upscale.
-const BODY_CHROME_W: u32 = 400 + 2 * 16;
+/// The most any grid page insets its `GridGeometry` from the content panel: Browse's `page-inset`
+/// (`pad-lg`) at both edges. The other four grids take the panel's full width, so for them this
+/// over-subtracts, which only ever costs a tier one step too large. The other way round the cards
+/// would upscale.
+const PAGE_INSET_W: u32 = 2 * 16;
 
 /// The size a tier is built at, before any geometry is known.
 ///
 /// A **fallback, not a tier size**: a cover decoded at it is re-decoded at the size
-/// [`cover_size_for_window`] retunes to when its card next draws. Sized for the run where that
+/// [`cover_size_for_content`] retunes to when its card next draws. Sized for the run where that
 /// retune never happens — the deferred retune in `boot::ui_setup` can fail to schedule — so it
 /// covers a wide panel's card rather than taking the cheap end.
 pub const GRID_COVER_FALLBACK: u32 = 256;
 
 /// Steps the derived size falls on. Quantized because a size that genuinely moves costs
 /// [`melodia_artwork::media::image::cover_thumbs::CoverThumbs`] a re-decode of every cover the
-/// grid is drawing, and `WindowChrome.display-changed` re-derives it on every winit `Resized`:
-/// the answer has to be flat across a resize drag, not merely close. [`widest_card`] is what
-/// makes it flat; the step is what collapses the column counts a desktop drags through into a
-/// handful of tiers.
+/// grid is drawing, and it is re-derived on every winit `Resized` and every move of the content
+/// panel's width: the answer has to be flat across a resize drag, not merely close.
+/// [`widest_card`] is what makes it flat; the step is what collapses the column counts a desktop
+/// drags through into a handful of tiers.
 const SIZE_STEP: u32 = 32;
 
-/// The widest card `GridGeometry` will draw into the body of a window this wide.
+/// The widest card `GridGeometry` will draw into a content panel this wide.
 ///
 /// The bound rather than the card itself: `card-w` climbs from `min-card-w` to this as a column
 /// band fills, so sizing to the bound holds the tier flat across the band and steps only where
@@ -248,13 +252,13 @@ const SIZE_STEP: u32 = 32;
 /// bound can land *under* the draw, an under-filled row holding the ceiling where the packing has
 /// stepped below it. That takes a 4K-wide desktop at 1x and the emptiest grid there is, where
 /// flooring the tier instead would cost entries on the displays that mount the most cards.
-fn widest_card(logical_w: u32) -> u32 {
-    let body = logical_w.saturating_sub(BODY_CHROME_W).max(CARD_PITCH_W);
+fn widest_card(panel_w: u32) -> u32 {
+    let body = panel_w.saturating_sub(PAGE_INSET_W).max(CARD_PITCH_W);
     let cols = (body.saturating_sub(GAP) / CARD_PITCH_W).max(1);
     (MIN_CARD_W + CARD_PITCH_W / cols).min(MAX_CARD_W)
 }
 
-/// Square decode size (px) for a grid-card tile on this window.
+/// Square decode size (px) for a grid-card tile in a content panel `panel_w` logical px wide.
 ///
 /// **Derived from the card the grid draws**, rather than stepped off the scale factor alone. The
 /// two constants this replaced were a tier size for the wide case and twice it for `HiDPI`, which
@@ -272,24 +276,34 @@ fn widest_card(logical_w: u32) -> u32 {
     clippy::cast_sign_loss,
     reason = "clamped into `[MIN_CARD_W, STORE_MAX_DIM]` ahead of the cast"
 )]
-pub fn cover_size(logical_w: u32, scale: f64) -> u32 {
+pub fn cover_size(panel_w: u32, scale: f64) -> u32 {
     let scale = if scale > 0.0 { scale } else { 1.0 };
-    let physical = (f64::from(widest_card(logical_w)) * scale)
+    let physical = (f64::from(widest_card(panel_w)) * scale)
         .clamp(f64::from(MIN_CARD_W), f64::from(STORE_MAX_DIM)) as u32;
     physical.div_ceil(SIZE_STEP).saturating_mul(SIZE_STEP).min(STORE_MAX_DIM)
 }
 
-/// Grid decode size for the display this window is on. Unlike [`cover_cap_for_window`]
-/// this needs no winit round trip, the scale factor being Slint's own; it shares that
-/// function's zero-extent bail, a window with no size having no card to measure.
-pub fn cover_size_for_window(app: &AppWindow) -> u32 {
-    let window = app.window();
-    let scale = f64::from(window.scale_factor());
-    let physical_w = window.size().width;
-    if physical_w == 0 {
+/// Grid decode size for the content panel at the window's scale.
+///
+/// The width is the last one the panel reported, which the miniplayer leaves standing, there being
+/// no grid under it to size. Before the first report there is none, and the tier keeps the size it
+/// was built at.
+pub fn cover_size_for_content(app: &AppWindow) -> u32 {
+    let panel_w = f64::from(app.global::<WindowChrome>().get_content_panel_width());
+    if panel_w.is_nan() || panel_w < 1.0 {
         return GRID_COVER_FALLBACK;
     }
-    cover_size(logical_dim(physical_w, scale), scale)
+    cover_size(whole_px(panel_w), f64::from(app.window().scale_factor()))
+}
+
+/// A laid-out logical width in whole pixels, saturating at `u32::MAX`.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "rounded and clamped into `u32`'s range ahead of the cast"
+)]
+fn whole_px(logical: f64) -> u32 {
+    logical.round().clamp(0.0, f64::from(u32::MAX)) as u32
 }
 
 /// A physical pixel extent and DPI scale as a logical extent. The saturating boundary
@@ -311,25 +325,27 @@ fn logical_dim(physical: u32, scale: f64) -> u32 {
     }
 }
 
-/// Derive a grid-cover cap from the window's own logical size. **Must run after
-/// `app.show()`** — see the deferred call in `boot::ui_setup::views::install_views`; a zero
-/// extent means it ran early anyway and falls back rather than clamping to the floor.
+/// Derive a grid-cover cap from the window's own logical size, each entry costed at `thumb_size`.
+/// **Must run after `app.show()`** — see the deferred call in
+/// `boot::ui_setup::views::install_views`; a zero extent means it ran early anyway and falls back
+/// rather than clamping to the floor.
 ///
 /// Slint's window rather than winit's monitor: the monitor caps against a screen the
 /// window may occupy a corner of, and asking it cost a `with_winit_window` round trip that
-/// answered `None` for the whole window-less boot.
-pub fn cover_cap_for_window(app: &AppWindow) -> NonZeroUsize {
+/// answered `None` for the whole window-less boot. The window rather than the content panel the
+/// size is read off: the count has to come out at or above what is mounted, and what the window
+/// holds beside the grid is headroom.
+pub fn cover_cap_for_window(app: &AppWindow, thumb_size: u32) -> NonZeroUsize {
     let window = app.window();
     let physical = window.size();
     if physical.width == 0 || physical.height == 0 {
         return GRID_COVER_CAP_FALLBACK;
     }
     let scale = f64::from(window.scale_factor());
-    let logical_w = logical_dim(physical.width, scale);
     cover_cap(
-        logical_w,
+        logical_dim(physical.width, scale),
         logical_dim(physical.height, scale),
-        cover_size(logical_w, scale),
+        thumb_size,
         GRID_COVER_CAP_FALLBACK,
     )
 }

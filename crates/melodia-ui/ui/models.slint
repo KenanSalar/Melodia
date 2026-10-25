@@ -54,8 +54,10 @@ export struct TrackListRow {
 
 // One page's track list columns, and what `views.json` keeps of them. `w_number`, `w_year` and
 // `w_length` are pixels; the other four are weights, read against whatever room the list has.
-// `ui::track_columns` is the only reader of either meaning. Title and Length are always shown, and
-// `show_artwork` is the thumbnail inside the title cell rather than a column.
+// `ui::track_columns` is the only reader of either meaning. Title and Length are always shown.
+// `show_artwork` and the three marks switch what a row draws inside its cells rather than a
+// column: the thumbnail, the heart beside a favourite's title, the heart its duration gives way to
+// on hover, and the hover star strip.
 export struct TrackColumns {
     w_number: length,
     w_title: length,
@@ -70,6 +72,9 @@ export struct TrackColumns {
     show_album: bool,
     show_genre: bool,
     show_year: bool,
+    show_favorite_mark: bool,
+    show_favorite_button: bool,
+    show_rating_strip: bool,
 }
 
 // Where each column sits across one list width, for the header and every row to share. A hidden
@@ -299,7 +304,7 @@ export struct QueueVm {
     has_previous: bool,
 }
 
-// Fetched by id as the sheet scrolls (`ui::paged_rows::queue_rows`). **`is_current` is deliberately
+// Fetched by id as the panel scrolls (`ui::paged_rows::queue_rows`). **`is_current` is deliberately
 // not a field** — the highlight comes off `Queue.current-index`, so one integer write repaints the
 // two affected rows instead of rewriting the whole model. `selected` rides on the row for the
 // `TrackListRow` reason: the model stamps it on every row it hands out, placeholders included, so
@@ -322,6 +327,13 @@ export struct QueueRow {
     album_id: int,
     artist_id: int,
     genre_id: int,
+}
+
+// Where a list's picks sit, as Rust finds them in a list it pages (`ui::drag::lifted_run`): `count`
+// rows together from `first`, or a `count` of 0 for picks scattered through the list.
+export struct LiftedRun {
+    first: int,
+    count: int,
 }
 
 // The Now Playing chip row's technical metadata, async-fetched on track change through

@@ -100,11 +100,15 @@ pub fn wire_cross_tab_nav(
 }
 
 /// Moves to the drill's tab once it has landed, uncovering the content panel first: the
-/// player bar stays reachable over Now Playing and the queue sheet, and a detail opened under
-/// either is one nobody sees.
+/// player bar stays reachable over Now Playing, and a detail opened under it is one nobody
+/// sees. The floating queue closes for the same reason. The docked panel stays as it is,
+/// beside the page rather than over it.
 fn land(ui: &AppWindow, tab: i32) {
     ui.global::<Nav>().set_now_playing_open(false);
-    ui.global::<Queue>().invoke_dismiss();
+    let queue = ui.global::<Queue>();
+    if queue.get_floating() {
+        queue.invoke_close();
+    }
     go_to_tab(ui, tab);
 }
 

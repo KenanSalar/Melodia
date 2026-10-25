@@ -140,11 +140,12 @@ fn wire_edit_tags(ui: &AppWindow, state: &AppState) {
 }
 
 /// Parse the kind, resolve `entity_ids` to track ids on the runtime, and hand them to `act`,
-/// logging a failure under `label`.
+/// logging a failure under `label`. The queue panel's drop resolves through it too, so a drop
+/// queues what Add to Queue on the same card or row would.
 ///
 /// Bails on an unknown kind rather than guessing one, and on an empty result rather than asking
 /// the transport to play nothing — an entity whose tracks were removed under the open grid.
-fn spawn_with_track_ids<Fut>(
+pub(in crate::ui) fn spawn_with_track_ids<Fut>(
     state: &AppState,
     label: &'static str,
     kind: &SharedString,

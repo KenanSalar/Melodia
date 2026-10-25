@@ -151,7 +151,7 @@ msgstr "Thêm"
 #: ui/components/dialog/export-playlist-picker.slint
 #: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
 #: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
+#: ui/globals/search.slint ui/views/queue-panel/queue-panel.slint
 msgid "{n} track"
 msgid_plural "{n} tracks"
 msgstr[0] "{n} bản nhạc"
@@ -205,7 +205,8 @@ msgstr "Không có ảnh bìa"
 msgid "{} / 4 selected"
 msgstr "Đã chọn {} / 4"
 
-#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+#: ui/components/dialog/playlist-mosaic-picker.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear"
 msgstr "Xóa"
 
@@ -361,7 +362,7 @@ msgid "Bitrate (kbps)"
 msgstr "Tốc độ bit (kbps)"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+#: ui/components/rating-menu-row.slint ui/settings.slint
 msgid "Rating"
 msgstr "Đánh giá"
 
@@ -1106,7 +1107,8 @@ msgid "Repeat"
 msgstr "Lặp lại"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Hàng đợi"
@@ -1279,6 +1281,11 @@ msgstr "Quay lại"
 msgid "Next"
 msgstr "Tiếp theo"
 
+#. Translators: `{}` is how many items are selected
+#: ui/components/rating-menu-row.slint
+msgid "Rating for {}"
+msgstr "Đánh giá cho {} mục"
+
 #: ui/components/search-bar.slint
 msgid "Search…"
 msgstr "Tìm kiếm…"
@@ -1395,7 +1402,7 @@ msgid "{} / {} files"
 msgstr "{} / {} tệp"
 
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
-#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
@@ -1479,10 +1486,25 @@ msgstr "Cột"
 msgid "Artwork"
 msgstr "Ảnh bìa"
 
+#. Translators: the heart shown beside a favourite track's title
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite mark"
+msgstr "Dấu yêu thích"
+
+#. Translators: the stars beside a track's title while its row is hovered
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Rating on hover"
+msgstr "Đánh giá khi di chuột"
+
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint
 msgid "Length"
 msgstr "Độ dài"
+
+#. Translators: the heart shown in place of a track's length on hover
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite on hover"
+msgstr "Yêu thích khi di chuột"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/track-list/track-context-menu.slint
@@ -2273,27 +2295,58 @@ msgstr "Tiếp theo"
 msgid "Coming soon"
 msgstr "Sắp ra mắt"
 
-#: ui/views/queue-sheet.slint
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "Thêm {n} bản nhạc vào hàng đợi"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "Thêm \"{}\" vào hàng đợi"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "Thêm {n} album vào hàng đợi"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "Thêm {n} nghệ sĩ vào hàng đợi"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "Thêm {n} thể loại vào hàng đợi"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "Thêm {n} danh sách phát vào hàng đợi"
+
+#: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"
 msgstr "Không có bản nhạc"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear queue"
 msgstr "Xóa hàng đợi"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear queue?"
 msgstr "Xóa hàng đợi?"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "Xóa tất cả bản nhạc khỏi hàng đợi? Nhạc sẽ dừng phát."
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"
 msgstr "Hàng đợi trống"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Drop to add to queue"
 msgstr "Thả để thêm vào hàng đợi"
 

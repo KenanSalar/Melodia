@@ -2,6 +2,7 @@ import { ListView } from "std-widgets.slint";
 import { AlbumGridRow } from "../../models.slint";
 import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
+import { DragSource } from "../drag-source.slint";
 
 // Virtualized album-card grid. Rust hands it rows of `columns` cards, so the inner `ListView`
 // virtualizes by row and only on-screen rows build their cards. Covers come lazily off
@@ -26,6 +27,7 @@ export component AlbumGrid inherits Rectangle {
     in property <int> covers-generation: 0;
 
     callback open-album(int /*album_id*/);
+    callback request-blur-search();
     // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
@@ -38,58 +40,71 @@ export component AlbumGrid inherits Rectangle {
     callback set-v-offset(length);
     set-v-offset(o) => { list.content-y = -o; }
 
-    list := ListView {
-        vertical-scrollbar-policy: always-off;
-        horizontal-scrollbar-policy: always-off;
-        // A card click and a drag-pan are one gesture, and the default is the style's to pick;
-        // argument on `views/radio/station-grid.slint`.
-        mouse-drag-pan-enabled: false;
+    // Cards drag out as what Add to Queue on them would take.
+    src := DragSource {
+        width: 100%;
+        height: 100%;
+        allow-copy: true;
+        background-clicked => { root.request-blur-search(); }
 
-        for grid-row in root.rows: Rectangle {
-            // A `ListView` delegate needs a fixed height or the virtualization
-            // math breaks.
-            min-height: root.row-height;
-            max-height: root.row-height;
+        list := ListView {
+            width: 100%;
+            height: 100%;
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            // A card click and a drag-pan are one gesture, and the default is the style's to
+            // pick; argument on `views/radio/station-grid.slint`.
+            mouse-drag-pan-enabled: false;
 
-            HorizontalLayout {
-                padding-left: root.gap;
-                padding-right: root.gap;
-                spacing: root.gap;
-                alignment: start;
+            for grid-row in root.rows: Rectangle {
+                // A `ListView` delegate needs a fixed height or the virtualization
+                // math breaks.
+                min-height: root.row-height;
+                max-height: root.row-height;
 
-                for album in grid-row.albums: cell := CardCell {
-                    card-width: root.card-width;
-                    card-height: root.card-height;
-                    scope: "albums";
-                    card-kind: "album";
-                    card-id: album.id;
-                    card-artist-id: album.artist_id;
+                HorizontalLayout {
+                    padding-left: root.gap;
+                    padding-right: root.gap;
+                    spacing: root.gap;
+                    alignment: start;
 
-                    EntityCard {
+                    for album in grid-row.albums: cell := CardCell {
                         card-width: root.card-width;
                         card-height: root.card-height;
-                        artwork-path: album.artwork_path;
-                        cover: root.request-cover(album.artwork_path, root.covers-generation);
-                        fallback-icon: "album";
-                        // A pronounced zoom on the placeholder, as on the other
-                        // grids; real artwork stays gentle so a cover doesn't
-                        // jitter inside the tile clip on hover.
-                        cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
-                        title: album.name;
-                        // The separator is punctuation; only the fallback is
-                        // translated.
-                        subtitle: (album.artist_name == ""
-                            ? @tr("Unknown artist")
-                            : album.artist_name)
-                            + (album.year > 0 ? " · \{album.year}" : "");
-                        clicked => { root.open-album(album.id); }
+                        scope: "albums";
+                        card-kind: "album";
+                        card-id: album.id;
+                        card-artist-id: album.artist_id;
 
-                        selectable: true;
-                        selected: cell.selected;
-                        selection-live: cell.selection-live;
-                        select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
-                        context-requested(x, y) => { cell.open-menu(x, y); }
-                        menu-open: cell.menu-open;
+                        EntityCard {
+                            card-width: root.card-width;
+                            card-height: root.card-height;
+                            artwork-path: album.artwork_path;
+                            cover: root.request-cover(album.artwork_path, root.covers-generation);
+                            fallback-icon: "album";
+                            // A pronounced zoom on the placeholder, as on the other
+                            // grids; real artwork stays gentle so a cover doesn't
+                            // jitter inside the tile clip on hover.
+                            cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
+                            title: album.name;
+                            // The separator is punctuation; only the fallback is
+                            // translated.
+                            subtitle: (album.artist_name == ""
+                                ? @tr("Unknown artist")
+                                : album.artist_name)
+                                + (album.year > 0 ? " · \{album.year}" : "");
+                            clicked => { root.open-album(album.id); }
+
+                            selectable: true;
+                            selected: cell.selected;
+                            selection-live: cell.selection-live;
+                            select-clicked(shift, ctrl) => { cell.pick(shift, ctrl); }
+                            context-requested(x, y) => { cell.open-menu(x, y); }
+                            menu-open: cell.menu-open;
+                            pressed => {
+                                src.arm-items(-1, cell.drag-items(album.name, self.cover));
+                            }
+                        }
                     }
                 }
             }

@@ -2,6 +2,7 @@ import { CardActions } from "../../globals/card-actions.slint";
 import { CopyActions } from "../../globals/copy-actions.slint";
 import { Dialog } from "../../globals/dialog.slint";
 import { Nav } from "../../globals/nav.slint";
+import { Selection } from "../../globals/selection.slint";
 import { ContextMenuPopup, CopyField, FavoriteMenuItem, MenuItem, MenuSeparator } from "../context-menu.slint";
 import { TrackCopyFields } from "../track-copy-items.slint";
 
@@ -39,10 +40,8 @@ export component CardContextMenu inherits Rectangle {
     in property <[int]> effective-selection;
     in property <int> selection-count;
 
-    // Read by the host to route a batch action. Multi mode needs this card selected *and* more
-    // than one selected — a right-click on an unselected card falls back to that card alone and
-    // leaves the selection untouched.
-    out property <bool> multi-active: root.card-selected && root.selection-count > 1;
+    // Read by the host to route a batch action.
+    out property <bool> multi-active: Selection.acts-on-set(root.card-selected, root.selection-count);
     out property <bool> is-open: pop.is-open;
 
     property <int> multi-count: root.selection-count;
@@ -115,6 +114,7 @@ export component CardContextMenu inherits Rectangle {
         anchor-y: root.at-y;
         // Off the root's position, which sits outside the popup and so still means the window.
         anchor-window-x: root.absolute-position.x + root.at-x;
+        anchor-window-y: root.absolute-position.y + root.at-y;
         has-copy-flyout: root.has-flyout;
         copy-open: root.copy-open;
         copy-fields: root.is-track ? TrackCopyFields.list : root.album-copy-fields;
@@ -129,10 +129,9 @@ export component CardContextMenu inherits Rectangle {
             root.dismiss();
         }
 
-        // This card alone in single mode, the whole selection in multi. Computed once so every
-        // handler reads the same list.
-        property <[int]> effective-ids:
-            root.multi-active ? root.effective-selection : [root.card-id];
+        // Computed once so every handler reads the same list.
+        property <[int]> effective-ids: Selection.effective-ids(
+            root.card-id, root.card-selected, root.selection-count, root.effective-selection);
 
         // **Play stays in multi mode here, unlike the row menu.** There it is dropped
         // because "play a selection" is ambiguous against "queue it"; on the entity grids

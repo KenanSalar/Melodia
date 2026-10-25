@@ -21,20 +21,11 @@ use melodia_ui::{
 /// The anchor of a list nothing has been clicked in since its selection was last cleared.
 pub const NO_ANCHOR: i32 = -1;
 
-/// Compute the new `(selected_ids, anchor)` for a row click.
+/// Compute the new `(selected_ids, anchor)` for a row click on a list picking by id.
 ///
-/// The anchor is the **id** of the row last clicked rather than its position, so a range runs from
-/// that row wherever a re-sort or a refilter has since moved it.
-///
-/// * plain click → single-row selection, the anchor moving to the clicked row
-/// * Ctrl-click  → toggle this row in or out of the set, the anchor moving to it
-/// * Shift-click → the displayed rows from the anchor's to this one, the anchor staying put; with
-///   no anchor, or the anchor's row filtered out, it is a plain click
-///
-/// `visible_ids` supplies the displayed-order id list and is only invoked in the Shift branch, so
-/// callers with an expensive projection don't pay it on plain clicks. `idx` is the clicked row's
-/// position, trusted where it names `id` and looked up by id otherwise. A row listed as `0` keeps
-/// its place in that list and stays out of a range, which is how Browse's disk-only rows ride it.
+/// [`click_selection`] with the id lists' two conventions: [`NO_ANCHOR`] for no anchor, and no
+/// row listed as `0` ever picked, which is how Browse's disk-only rows keep their place in the
+/// displayed order without joining a range. Browse refuses a click on one of those itself.
 pub fn compute_click_selection(
     anchor: i32,
     cur_selected: Vec<i32>,
@@ -44,29 +35,55 @@ pub fn compute_click_selection(
     shift: bool,
     ctrl: bool,
 ) -> (Vec<i32>, i32) {
-    if shift && anchor != NO_ANCHOR {
-        let ids = visible_ids();
-        let from = ids.iter().position(|&shown| shown == anchor);
+    let anchor = (anchor != NO_ANCHOR).then_some(anchor);
+    let (picked, anchor) = click_selection(anchor, cur_selected, visible_ids, idx, id, shift, ctrl);
+    (picked.into_iter().filter(|&picked| picked != 0).collect(), anchor)
+}
+
+/// Compute the new `(picked, anchor)` for a row click, over whatever key the list picks rows by.
+///
+/// The anchor is the **key** of the row last clicked rather than its position, so a range runs
+/// from that row wherever a re-sort, a refilter or a reorder has since moved it.
+///
+/// * plain click → single-row selection, the anchor moving to the clicked row
+/// * Ctrl-click  → toggle this row in or out of the set, the anchor moving to it
+/// * Shift-click → the displayed rows from the anchor's to this one, the anchor staying put; with
+///   no anchor, or the anchor's row filtered out, it is a plain click
+///
+/// `visible_keys` supplies the displayed-order key list and is only invoked in the Shift branch,
+/// so callers with an expensive projection don't pay it on plain clicks. `idx` is the clicked
+/// row's position, trusted where it names `key` and looked up by key otherwise.
+pub fn click_selection<K: Copy + PartialEq>(
+    anchor: Option<K>,
+    cur_selected: Vec<K>,
+    visible_keys: impl FnOnce() -> Vec<K>,
+    idx: i32,
+    key: K,
+    shift: bool,
+    ctrl: bool,
+) -> (Vec<K>, K) {
+    if shift && let Some(anchor) = anchor {
+        let keys = visible_keys();
+        let from = keys.iter().position(|&shown| shown == anchor);
         let to = usize::try_from(idx)
             .ok()
-            .filter(|&at| ids.get(at) == Some(&id))
-            .or_else(|| ids.iter().position(|&shown| shown == id));
+            .filter(|&at| keys.get(at) == Some(&key))
+            .or_else(|| keys.iter().position(|&shown| shown == key));
         if let (Some(from), Some(to)) = (from, to) {
-            let range = ids[from.min(to)..=from.max(to)].iter().copied();
-            return (range.filter(|&shown| shown != 0).collect(), anchor);
+            return (keys[from.min(to)..=from.max(to)].to_vec(), anchor);
         }
-        return (vec![id], id);
+        return (vec![key], key);
     }
     if ctrl {
         let mut next = cur_selected;
-        if let Some(pos) = next.iter().position(|&v| v == id) {
+        if let Some(pos) = next.iter().position(|&picked| picked == key) {
             next.remove(pos);
         } else {
-            next.push(id);
+            next.push(key);
         }
-        return (next, id);
+        return (next, key);
     }
-    (vec![id], id)
+    (vec![key], key)
 }
 
 /// Re-stamp `selected: bool` on every visible row to match `desired`. Rows

@@ -36,6 +36,7 @@ export component FavoritesMostPlayedTab inherits Rectangle {
         covers-generation: Favorites.covers-generation;
         request-cover(p, gen) => { Favorites.request-most-played-cover(p, gen) }
         row-clicked(id) => { Favorites.play-track(id); }
+        request-blur-search => { Favorites.blur-search-tick += 1; }
     }
 
     if Favorites.most-played-count == 0: GridEmptyState {

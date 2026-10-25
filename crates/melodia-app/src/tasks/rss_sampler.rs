@@ -3,7 +3,7 @@
 //! Enabled by setting `MELODIA_RSS_SAMPLE=1` (any non-empty value) before
 //! launch. Logs the process's `/proc/self/status` resident-memory breakdown
 //! plus the current view tag (which Nav section, whether a detail page is
-//! open, whether Now Playing / the queue sheet are overlaid) every 500 ms so
+//! open, whether Now Playing is overlaid or the queue panel shown) every 500 ms so
 //! leave/enter/scroll memory transitions can be correlated with user
 //! actions in the log timeline.
 //!
@@ -20,11 +20,11 @@
 //! ```text
 //! [MEM view=Albums VmRSS=147924 RssAnon=98112 RssFile=46500 RssShmem=3312 VmData=120480 (KiB)]
 //! [MEM view=AlbumDetail(42)+NP VmRSS=… …]
-//! [MEM view=Tracks+QS VmRSS=… …]
+//! [MEM view=Tracks+QP VmRSS=… …]
 //! ```
 //!
 //! Tags after the view name: `+NP` = Now Playing full-screen open;
-//! `+QS` = queue-sheet open. The breakdown fields let you see *which*
+//! `+QP` = queue panel shown. The breakdown fields let you see *which*
 //! metric your external monitor is tracking — system monitors often display
 //! PSS or anon-only, which can move while total `VmRSS` stays flat.
 

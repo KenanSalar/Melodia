@@ -44,8 +44,9 @@ use parking_lot::Mutex;
 use slint::{Model, ModelNotify, ModelRc, ModelTracker};
 use tokio::runtime::Handle;
 
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{self, clamp_i64_to_i32};
 use melodia_core::error::{AppResult, describe};
+use melodia_core::utils::block_move;
 use melodia_core::utils::needle::Needle;
 
 /// The step the window moves by. A list asks for more only when Slint reads onto another page, so
@@ -215,14 +216,10 @@ impl<R: PagedRow> PagedRows<R> {
         rows.as_any().downcast_ref()
     }
 
-    /// [`Self::of`] for a list installed with one, logging a miss under `label` rather than
-    /// passing over it: the list and its keyset disagree from there on, and nothing else says so.
+    /// [`Self::of`] for a list installed with one, logging a miss under `label`
+    /// ([`util::installed`]).
     pub fn installed<'a>(rows: &'a ModelRc<R>, label: &str) -> Option<&'a Self> {
-        let found = Self::of(rows);
-        if found.is_none() {
-            log::warn!("{label}: PagedRows downcast failed, rows left as they were");
-        }
-        found
+        util::installed(rows, label)
     }
 
     /// The ids `rows` shows, in order, for a play or a shuffle. None where it isn't one.
@@ -259,6 +256,9 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
     /// the same order, only the rows that read differently are repainted, so a library tick that
     /// moved nothing on screen rebuilds no `ListView` delegate; anything else resets.
     ///
+    /// The incoming ids are kept either way, so a list that built its own copy of an order (a
+    /// reorder shown ahead of the write) shares the publisher's again once that lands.
+    ///
     /// The anchor survives the reset, Slint keeping the scroll offset: the rows it reads next sit
     /// where the old ones did, which is the span the seed was fetched for.
     pub fn show(&self, keyset: Keyset<R>) {
@@ -267,11 +267,11 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
         self.absent.borrow_mut().clear();
         let changed = self.store(seed, read);
         let same = **self.keyset.borrow() == *ids;
+        *self.keyset.borrow_mut() = ids;
         if same {
             self.repaint(&changed);
             return;
         }
-        *self.keyset.borrow_mut() = ids;
         self.notify.reset();
     }
 
@@ -323,23 +323,19 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
         }
     }
 
-    /// Move the row at `from` to `to`, counted once it has left, which is where a drag drops it.
-    /// One row leaves and one arrives, so every other row keeps its delegate. Answers whether it
-    /// moved: `from` past the end, or `to` past the slot after the last row, moves nothing.
-    pub fn move_row(&self, from: usize, to: usize) -> bool {
-        let moved = {
-            let keyset = self.keyset.borrow();
-            if from >= keyset.len() || to >= keyset.len() {
-                return false;
-            }
-            let mut ids = keyset.to_vec();
-            let id = ids.remove(from);
-            ids.insert(to, id);
-            Arc::<[i64]>::from(ids)
-        };
-        *self.keyset.borrow_mut() = moved;
-        self.notify.row_removed(from, 1);
-        self.notify.row_added(to, 1);
+    /// Move the rows at `rows` together to `to`, counted once they have left, which is where a
+    /// drag drops them ([`block_move::move_block`]). Only those rows leave and arrive, so every
+    /// other row keeps its delegate. Answers whether anything moved.
+    pub fn move_rows(&self, rows: &[usize], to: usize) -> bool {
+        let mut ids = self.keyset.borrow().to_vec();
+        if !block_move::move_block(&mut ids, rows, to) {
+            return false;
+        }
+        *self.keyset.borrow_mut() = Arc::from(ids);
+        for &row in rows.iter().rev() {
+            self.notify.row_removed(row, 1);
+        }
+        self.notify.row_added(to, rows.len());
         true
     }
 
@@ -393,6 +389,18 @@ impl<R: PagedRow, N: RowNotify> PagedRows<R, N> {
         for pos in moved {
             self.notify.row_changed(pos);
         }
+    }
+
+    /// Where the selected rows sit, in order.
+    pub fn picked_rows(&self) -> Vec<usize> {
+        let selected = self.selected.borrow();
+        self.keyset
+            .borrow()
+            .iter()
+            .enumerate()
+            .filter(|&(_, &id)| selected.contains(&clamp_i64_to_i32(id)))
+            .map(|(row, _)| row)
+            .collect()
     }
 
     /// Select every row, returning their ids in order.

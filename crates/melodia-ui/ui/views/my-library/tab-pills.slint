@@ -28,6 +28,9 @@ export component MyLibraryTabPills inherits Rectangle {
     in property <bool> artist-open;
     in property <bool> genre-open;
     in property <bool> playlist-open;
+    // The band's eased verdict that the row is short of room, handed to every labelled pill with a
+    // glyph to fall back to. The sort rows have none and keep their labels.
+    in property <float> compact-t: 0.0;
 
     HorizontalLayout {
         alignment: end;
@@ -40,6 +43,7 @@ export component MyLibraryTabPills inherits Rectangle {
         if MyLibrary.tab-idx == MyLibrary.tab-songs: ActionPill {
             ColumnTogglePopup {
                 columns <=> Tracks.track-columns;
+                compact-t: root.compact-t;
                 toggled(id) => { Tracks.toggle-column(id); }
             }
         }
@@ -91,11 +95,13 @@ export component MyLibraryTabPills inherits Rectangle {
             PillButton {
                 icon: "shuffle";
                 text: @tr("Shuffle");
+                compact-t: root.compact-t;
                 clicked => { AlbumDetail.shuffle-album(); }
             }
             PillDivider { }
             ColumnTogglePopup {
                 columns <=> AlbumDetail.track-columns;
+                compact-t: root.compact-t;
                 // Meaningless here: every row is the same album.
                 hide-album: true;
                 toggled(id) => { AlbumDetail.toggle-column(id); }
@@ -106,11 +112,13 @@ export component MyLibraryTabPills inherits Rectangle {
             PillButton {
                 icon: "shuffle";
                 text: @tr("Shuffle");
+                compact-t: root.compact-t;
                 clicked => { ArtistDetail.shuffle-artist(); }
             }
             PillDivider { }
             ColumnTogglePopup {
                 columns <=> ArtistDetail.track-columns;
+                compact-t: root.compact-t;
                 // Meaningless here: every row is the same artist.
                 hide-artist: true;
                 toggled(id) => { ArtistDetail.toggle-column(id); }
@@ -121,11 +129,13 @@ export component MyLibraryTabPills inherits Rectangle {
             PillButton {
                 icon: "shuffle";
                 text: @tr("Shuffle");
+                compact-t: root.compact-t;
                 clicked => { GenreDetail.shuffle-genre(); }
             }
             PillDivider { }
             ColumnTogglePopup {
                 columns <=> GenreDetail.track-columns;
+                compact-t: root.compact-t;
                 // Meaningless here: every row is the same genre.
                 hide-genre: true;
                 toggled(id) => { GenreDetail.toggle-column(id); }
@@ -136,6 +146,7 @@ export component MyLibraryTabPills inherits Rectangle {
             PillButton {
                 icon: "shuffle";
                 text: @tr("Shuffle");
+                compact-t: root.compact-t;
                 clicked => { PlaylistDetail.shuffle-all(); }
             }
             PillDivider { }
@@ -181,6 +192,7 @@ export component MyLibraryTabPills inherits Rectangle {
             PillDivider { }
             ColumnTogglePopup {
                 columns <=> PlaylistDetail.track-columns;
+                compact-t: root.compact-t;
                 toggled(id) => { PlaylistDetail.toggle-column(id); }
             }
         }
@@ -207,6 +219,7 @@ export component MyLibraryTabPills inherits Rectangle {
                 np := PillButton {
                     icon: "add";
                     text: @tr("New Playlist");
+                    compact-t: root.compact-t;
                     tooltip-text: @tr("Create an empty playlist");
                     // Drawn by the host's top-layer frame, out of the grid's way.
                     tooltip-overlay: true;
@@ -221,6 +234,7 @@ export component MyLibraryTabPills inherits Rectangle {
                     icon: "auto_awesome";
                     icon-filled: true;
                     text: @tr("New Smart Playlist");
+                    compact-t: root.compact-t;
                     tooltip-text: @tr("Create a playlist from rules");
                     tooltip-overlay: true;
                     clicked => {
@@ -280,8 +294,8 @@ export component MyLibraryTabPills inherits Rectangle {
         : sp.hovered ? sp.height
         : om.hovered ? om.height
         : 0px;
-    out property <string> tip-label: np.hovered ? np.tooltip-text
-        : sp.hovered ? sp.tooltip-text
+    out property <string> tip-label: np.hovered ? np.tip-text
+        : sp.hovered ? sp.tip-text
         : om.hovered ? om.tooltip-text
         : "";
     out property <bool> tip-visible: np.hovered || sp.hovered || om.hovered;

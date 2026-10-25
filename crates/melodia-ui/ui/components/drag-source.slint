@@ -1,0 +1,53 @@
+import { Drag, DragItems, DragOrigin } from "../globals/drag.slint";
+import { LiftedRun } from "../models.slint";
+
+// A list's drag: a `DragArea` round its `ListView`, one per list.
+//
+// **Never inside a row.** The runtime holds the source weakly and reports `drag-finished` only to
+// one that still exists, and a `ListView` destroys a row rather than recycling it, so a row that
+// scrolled out, was rebuilt under the drag or was moved by the reorder itself would never hear its
+// drag end. Round the list it outlives all of those.
+//
+// It takes the press at 8 px and sends the rows a cancel, so a drag lands no click. The rows report
+// their press through `arm` or `arm-items`, which `Drag.payload` argues, and a press that carries
+// the list's picks adds `lift-picks`.
+export component DragSource inherits DragArea {
+    in property <DragOrigin> origin;
+
+    // This list's drag lifted every picked row, each of which dims as `lifts` dims the pressed one.
+    out property <bool> lifting-picks: root.dragging && Drag.payload.origin == root.origin
+        && Drag.payload.picks;
+
+    callback background-clicked();
+
+    data: Drag.token;
+    // The touch gate, which a mount binding `enabled` would override.
+    enabled: !Drag.touching;
+
+    changed dragging => {
+        Drag.live = self.dragging;
+    }
+
+    // Behind the list. A `DragArea` takes every left press its children don't, so without this a
+    // click on the empty space reaches nothing behind it.
+    TouchArea {
+        clicked => { root.background-clicked(); }
+    }
+
+    public function arm(index: int) {
+        Drag.arm(root.origin, index);
+    }
+
+    public function arm-items(index: int, items: DragItems) {
+        Drag.arm-items(root.origin, index, items);
+    }
+
+    public function lift-picks(run: LiftedRun) {
+        Drag.lift-picks(run);
+    }
+
+    // Whether row `index` is the one this list's drag lifted, for the row to dim.
+    public pure function lifts(index: int) -> bool {
+        return root.dragging && Drag.payload.origin == root.origin && Drag.payload.index == index;
+    }
+}

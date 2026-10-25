@@ -1,0 +1,55 @@
+import { Theme } from "../theme.slint";
+
+// The way the panel's width grows as the handle moves: rightward for a panel on the left of what
+// it sizes against, leftward for one on the right.
+export enum GrowEdge { right, left }
+
+// The drag on a side panel's inner edge, with a double-click back to the host's default. The host
+// positions it and states the width it draws, a component root having no `parent` to read.
+export component EdgeResizeHandle inherits Rectangle {
+    in property <GrowEdge> grows;
+    // Where a drag starts: the width drawn, not a stored one that may sit outside the clamp.
+    in property <length> drawn-width;
+    in property <length> min-w;
+    in property <length> max-w;
+    // Raised for the whole press, for the host to switch its width ease off: the drag writes on
+    // every move, and an eased width would restart each time and trail the pointer.
+    in-out property <bool> dragging;
+
+    callback resized(length);
+    callback reset();
+
+    width: 4px;
+    background: touch.pressed ? Theme.accent : transparent;
+    animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+
+    touch := TouchArea {
+        mouse-cursor: ew-resize;
+        // **The handle's own coordinate frame moves with the panel as it resizes**, so a local
+        // `mouse-x - pressed-x` underestimates the cursor's travel: the panel grows by half the
+        // delta and the handle lags the pointer. Tracking in window-absolute coordinates keeps it
+        // glued.
+        property <length> start-w;
+        property <length> press-abs-x;
+        pointer-event(ev) => {
+            if (ev.kind == PointerEventKind.down) {
+                self.start-w = root.drawn-width;
+                self.press-abs-x = self.absolute-position.x + self.pressed-x;
+                root.dragging = true;
+            }
+            if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
+                root.dragging = false;
+            }
+        }
+        moved => {
+            if (self.pressed) {
+                let travel = self.absolute-position.x + self.mouse-x - self.press-abs-x;
+                let growth = root.grows == GrowEdge.right ? travel : -travel;
+                root.resized(clamp(self.start-w + growth, root.min-w, root.max-w));
+            }
+        }
+        double-clicked => {
+            root.reset();
+        }
+    }
+}

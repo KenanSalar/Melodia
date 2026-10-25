@@ -1,0 +1,59 @@
+import { CardActions } from "../../globals/card-actions.slint";
+import { Drag } from "../../globals/drag.slint";
+import { Queue } from "../../globals/queue.slint";
+import { IconButton } from "../icon-button.slint";
+
+// The bar's queue button, which also takes a drag. A drop on it is Add to Queue on what was
+// dragged, the whole pick included. A drag held over it opens the panel, docked or as the overlay,
+// so the drop can be placed at a slot instead.
+export component QueueButton inherits Rectangle {
+    in property <length> diameter;
+    in property <length> icon-size;
+
+    // How long a drag rests on the button before the panel opens: GTK's own hover-to-switch delay.
+    private property <duration> open-delay: 500ms;
+
+    // Sized to the button, a `DropArea` asking for the stretch the bar's row would hand it.
+    width: root.diameter;
+    height: root.diameter;
+
+    drop := DropArea {
+        width: 100%;
+        height: 100%;
+
+        can-drop(event) => {
+            if (Drag.payload.items.kind == "") {
+                return DragAction.none;
+            }
+            Drag.follow(self.absolute-position.x + event.position.x,
+                self.absolute-position.y + event.position.y, true);
+            return DragAction.copy;
+        }
+        // A drop goes to whatever the pointer is over, even where another target took the last
+        // move, so it asks again.
+        dropped(event) => {
+            if (Drag.payload.items.kind == "") {
+                return DragAction.none;
+            }
+            CardActions.add-to-queue(Drag.payload.items.kind, Drag.payload.items.ids);
+            return DragAction.copy;
+        }
+
+        IconButton {
+            icon: "queue_music";
+            press-shrink: true;
+            diameter: root.diameter;
+            icon-size: root.icon-size;
+            active: Queue.shown;
+            force-bg: drop.has-drag;
+            tooltip-text: @tr("Queue");
+            clicked => { Queue.toggle(); }
+        }
+    }
+
+    Timer {
+        interval: root.open-delay;
+        running: drop.has-drag && !Queue.shown;
+        triggered => { Queue.toggle(); }
+    }
+}

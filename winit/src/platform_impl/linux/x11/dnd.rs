@@ -10,6 +10,7 @@ use x11rb::protocol::xproto::{self, ConnectionExt};
 use super::atoms::AtomName::None as DndNone;
 use super::atoms::*;
 use super::{util, CookieResultExt, X11Error, XConnection};
+use crate::dpi::PhysicalPosition;
 
 #[derive(Debug, Clone, Copy)]
 pub enum DndState {
@@ -47,11 +48,23 @@ pub struct Dnd {
     pub source_window: Option<xproto::Window>,
     // Populated by SelectionNotify event handler (triggered by XdndPosition event handler)
     pub result: Option<Result<Vec<PathBuf>, DndDataParseError>>,
+    // The pointer as of the last XdndPosition, in window coordinates
+    pub position: Option<PhysicalPosition<f64>>,
+    // `DragEntered` has been sent, so moves, the drop and the leave are reported
+    pub entered: bool,
 }
 
 impl Dnd {
     pub fn new(xconn: Arc<XConnection>) -> Result<Self, X11Error> {
-        Ok(Dnd { xconn, version: None, type_list: None, source_window: None, result: None })
+        Ok(Dnd {
+            xconn,
+            version: None,
+            type_list: None,
+            source_window: None,
+            result: None,
+            position: None,
+            entered: false,
+        })
     }
 
     pub fn reset(&mut self) {
@@ -59,6 +72,8 @@ impl Dnd {
         self.type_list = None;
         self.source_window = None;
         self.result = None;
+        self.position = None;
+        self.entered = false;
     }
 
     pub unsafe fn send_status(

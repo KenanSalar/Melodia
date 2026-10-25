@@ -129,18 +129,22 @@ fn the_multiline_placeholder_is_bounded_and_wraps() {
 
 /// The bar sizes its slot to the placeholder it was handed, and a bound `width` on a
 /// component root is reported as both `min` and `max` — so one here puts the window's
-/// resize floor on the running locale. Same split `tab-bar.slint` carries.
+/// resize floor on the running locale. Same split `tab-bar.slint` carries. Folding, the
+/// slot eases onto the glyph's square and the floor gives way to it.
 #[test]
 fn the_search_bar_negotiates_its_width() {
     let src = normalized(SEARCH_BAR);
-    for constraint in
-        ["min-width: root.min-w;", "preferred-width: input-width;", "max-width: input-width;"]
-    {
+    for constraint in [
+        "property <length> slot-w: input-width + (root.bar-height - input-width) * root.fold-t;",
+        "min-width: root.fold-t > 0.0 ? root.bar-height : root.min-w;",
+        "preferred-width: root.slot-w;",
+        "max-width: root.slot-w;",
+    ] {
         assert!(src.contains(constraint), "search-bar.slint's root is missing `{constraint}`");
     }
-    // Leading space so this doesn't read the tail of `max-width: input-width;`.
+    // Leading space so this doesn't read the tail of `max-width: root.slot-w;`.
     assert!(
-        !src.contains(" width: input-width;"),
+        !src.contains(" width: root.slot-w;") && !src.contains(" width: input-width;"),
         "search-bar.slint's root binds `width` again — that is reported as both \
          min and max, and drags the window's resize floor with the locale"
     );

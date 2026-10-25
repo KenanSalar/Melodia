@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Dialog } from "../../globals/dialog.slint";
+import { MyLibrary } from "../../globals/my-library.slint";
 import { Playlists } from "../../globals/playlists.slint";
 import { PlaylistGrid } from "../../components/grid/playlist-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
@@ -24,6 +25,7 @@ export component MyLibraryPlaylistsTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         open-playlist(id) => { Playlists.open-playlist(id); }
+        request-blur-search => { MyLibrary.blur-search-tick += 1; }
         // Delete and rename open the Dialog through its own openers, as the detail
         // view's pills do; edit-artwork routes to Rust, which has to fetch the track
         // artwork pool and seed the preview before opening.

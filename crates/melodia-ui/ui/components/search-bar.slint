@@ -28,6 +28,12 @@ export component SearchBar inherits Rectangle {
     // For a host with two boxes on one filter, handing the focus across when it swaps them.
     out property <bool> has-focus: input.has-focus;
 
+    // 0 the bar, 1 the glyph alone in a `bar-height` square, for a host short of room. A scalar so
+    // the host can ease the fold, as a compact tab closes onto its icon. The input stays mounted at
+    // zero width, so a click on the square focuses it like any other and the host unfolds the bar
+    // on that focus.
+    in property <float> fold-t: 0.0;
+
     // Named because `chrome-overhead` has to add the same number the layout does.
     property <length> icon-size: 16px;
     // Everything in the pill that isn't the text. The clear button stays out: it only mounts
@@ -61,6 +67,8 @@ export component SearchBar inherits Rectangle {
     changed blur-trigger => { input.clear-input-focus(); }
 
     callback edited(string);
+    // The ✕ alone, where `edited("")` also follows a backspace to empty.
+    callback cleared();
 
     // Most consumers don't wire this, their `edited` already refiltering per keystroke. **The
     // Search view does**: it skips the debounce and commits synchronously, so a user can re-trigger
@@ -113,9 +121,12 @@ export component SearchBar inherits Rectangle {
     // handed exactly `input-width` and the focus swell happens *inside* it. **What the split buys
     // over a bound `width` is the other end**: Slint reports a root's bound `width` as both `min`
     // and `max`, so a locale-sized default would drag the window's own resize floor out with it.
-    min-width: root.min-w;
-    preferred-width: input-width;
-    max-width: input-width;
+    // The slot narrows onto the glyph's square as the fold closes, and gives up its floor the
+    // moment the fold begins.
+    property <length> slot-w: input-width + (root.bar-height - input-width) * root.fold-t;
+    min-width: root.fold-t > 0.0 ? root.bar-height : root.min-w;
+    preferred-width: root.slot-w;
+    max-width: root.slot-w;
     height: root.bar-height;
     background: transparent;
 
@@ -170,9 +181,12 @@ export component SearchBar inherits Rectangle {
             clicked => { input.focus-input(); }
 
         HorizontalLayout {
-            padding-left: Theme.pad-sm;
-            padding-right: Theme.pad-xs;
-            spacing: Theme.pad-xs;
+            // Folded, the glyph is centred with nothing left over for the input. Padding and
+            // spacing travel with the fold, so the glyph glides to the middle rather than jumping.
+            property <length> fold-inset: (root.bar-height - root.icon-size) / 2;
+            padding-left: Theme.pad-sm + (self.fold-inset - Theme.pad-sm) * root.fold-t;
+            padding-right: Theme.pad-xs + (self.fold-inset - Theme.pad-xs) * root.fold-t;
+            spacing: Theme.pad-xs * (1.0 - root.fold-t);
             alignment: stretch;
 
             MaterialIcon {
@@ -194,8 +208,10 @@ export component SearchBar inherits Rectangle {
                 text <=> root.text;
                 placeholder: root.placeholder;
                 // `PillButton`'s label brush, so a bar and the pills beside it read as one family,
-                // dimmed just enough to stay a hint rather than typed text.
-                placeholder-color: Theme.text.transparentize(0.3);
+                // dimmed just enough to stay a hint rather than typed text. Gone by the time the
+                // fold is half closed, as a compact pill's label is.
+                placeholder-color: Theme.text.transparentize(0.3)
+                    .transparentize(1.0 - clamp(1.0 - root.fold-t * 2.0, 0.0, 1.0));
                 edited(t) => { root.edited(t); }
                 accepted => { root.accepted(); }
             }
@@ -219,6 +235,7 @@ export component SearchBar inherits Rectangle {
                     clicked => {
                         root.text = "";
                         root.edited("");
+                        root.cleared();
                     }
                 }
             }

@@ -136,11 +136,16 @@ fn mounted_cards(logical_w: u32, logical_h: u32) -> u32 {
 /// The margin is that `cover_cap` measures the *window* while the grid gets what's left of it
 /// after the sidebar and the bands. Above the byte ceiling the guarantee stops, deliberately.
 ///
-/// Each size is paired with the tier [`super::cover_size`] really derives for it, the two being
-/// read together at the one call site: the cap is what the grid can hold, and the size is what
-/// each entry costs, so checking either against a spelled-out constant would check the wrong pair.
+/// The one call site reads the cap off the window and the size off the content panel, which sits
+/// between the window's own width and `Theme.content-min-w`; a wide window's sidebar and queue
+/// panel can't take it that narrow, so the range is a superset. A narrower panel mounts fewer
+/// cards but can step up to a larger tier, and with it a tighter byte ceiling, so every width in
+/// that range is paired with the tier it derives. Checking either half against a spelled-out
+/// constant would check the wrong pair.
 #[test]
 fn the_cap_covers_the_cards_the_grid_mounts() {
+    /// `Theme.content-min-w`, the narrowest the shell lets the content panel get.
+    const CONTENT_MIN_W: u32 = 452;
     let fallback = NonZeroUsize::new(48).unwrap_or(NonZeroUsize::MIN);
 
     for (w, h, scale) in [
@@ -155,14 +160,18 @@ fn the_cap_covers_the_cards_the_grid_mounts() {
         (1920, 1080, 2.0),
         (2560, 1440, 1.5),
     ] {
-        let tier = super::cover_size(w, scale);
-        let cap = super::cover_cap(w, h, tier, fallback).get();
-        let mounted = usize::try_from(mounted_cards(w, h)).unwrap_or(usize::MAX);
-        assert!(
-            cap >= mounted,
-            "{w}x{h} at {scale}× derives a {tier}px tier and mounts {mounted} cards against a \
-             cap of {cap} — the overflow can only paint placeholders"
-        );
+        // Walked down from the window's own width, so the widest panel is always among them.
+        for panel_w in (CONTENT_MIN_W..=w).rev().step_by(7) {
+            let tier = super::cover_size(panel_w, scale);
+            let cap = super::cover_cap(w, h, tier, fallback).get();
+            let mounted = usize::try_from(mounted_cards(panel_w, h)).unwrap_or(usize::MAX);
+            assert!(
+                cap >= mounted,
+                "a {panel_w}px panel in a {w}x{h} window at {scale}× derives a {tier}px tier and \
+                 mounts {mounted} cards against a cap of {cap}, so the overflow can only paint \
+                 placeholders"
+            );
+        }
     }
 }
 
@@ -193,10 +202,10 @@ fn the_tier_follows_the_card_it_draws() {
     assert_eq!(super::cover_size(400, 4.0), melodia_artwork::media::image::artwork::STORE_MAX_DIM);
 }
 
-/// **The tier has to hold still through a resize drag.** `WindowChrome.display-changed` re-derives
-/// it on every winit `Resized` and a genuine `set_thumb_size` re-decodes every cover the grid is
-/// drawing, so a size that flips between two steps as the window moves re-decodes the visible set
-/// over and over, under the drag, on a pool two to four threads wide.
+/// **The tier has to hold still through a resize drag.** It is re-derived on every winit `Resized`
+/// and every move of the content panel's width, and a genuine `set_thumb_size` re-decodes every
+/// cover the grid is drawing, so a size that flips between two steps as the window moves
+/// re-decodes the visible set over and over, under the drag, on a pool two to four threads wide.
 ///
 /// Sizing to the widest card a column count can pack is what holds it flat. The card itself
 /// sweeps `min-card-w` up to that bound inside *every* column band, so a tier tracking it crosses
@@ -224,25 +233,21 @@ fn the_tier_holds_still_through_a_resize_drag() {
     }
 }
 
-/// **The tier may not land under the card a packed row draws.** Rust measures the *window*
-/// while the grid gets the body, and the sidebar between them is the user's to drag across a
-/// range no window measurement sees. `BODY_CHROME_W` assumes the widest of them so the estimate
-/// can only run wide; the other way round every card is upscaled from a tier too small for it,
-/// and `FemtoVG` minifies bilinear with no mipmaps.
+/// **The tier may not land under the card a packed row draws.** Rust is handed the content
+/// panel's width while each grid lays out in its own body, which is the whole panel on four pages
+/// and the panel less Browse's `page-inset` at both edges on the fifth. The tier has to cover both,
+/// or every card is upscaled from a tier too small for it, and `FemtoVG` minifies bilinear with no
+/// mipmaps.
 #[test]
-fn the_tier_covers_the_card_at_every_sidebar_width() {
-    // `Theme.sidebar-collapsed-w` through `sidebar-max-w`, plus the page's `pad-lg` at both edges.
-    const SIDEBAR_WIDTHS: [u32; 5] = [46, 105, 180, 240, 400];
-    const PAGE_PAD: u32 = 32;
+fn the_tier_covers_the_card_in_every_grid_body() {
+    /// Browse's `page-inset` (`pad-lg`) at both edges.
+    const BROWSE_INSET: u32 = 32;
 
-    for sidebar in SIDEBAR_WIDTHS {
-        for logical_w in (800_u32..=3840).step_by(7) {
-            let Some(body) = logical_w.checked_sub(sidebar + PAGE_PAD) else {
-                continue;
-            };
+    for panel_w in (300_u32..=3840).step_by(7) {
+        for body in [panel_w, panel_w - BROWSE_INSET] {
             for scale in [1.0, 1.5, 2.0] {
                 let drawn = f64::from(drawn_card_width(body)) * scale;
-                let tier = super::cover_size(logical_w, scale);
+                let tier = super::cover_size(panel_w, scale);
                 // The store's own cap is the one honest exception — past it there is no sharper
                 // source left to decode.
                 if tier == melodia_artwork::media::image::artwork::STORE_MAX_DIM {
@@ -250,8 +255,8 @@ fn the_tier_covers_the_card_at_every_sidebar_width() {
                 }
                 assert!(
                     f64::from(tier) >= drawn,
-                    "a {logical_w}px window beside a {sidebar}px sidebar draws {drawn} px of card \
-                     at {scale}× against a {tier}px tier — the covers upscale"
+                    "a {panel_w}px content panel draws {drawn} px of card in a {body}px body at \
+                     {scale}× against a {tier}px tier, so the covers upscale"
                 );
             }
         }

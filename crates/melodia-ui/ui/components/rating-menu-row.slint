@@ -1,0 +1,70 @@
+import { Theme } from "../theme.slint";
+import { MaterialIcon } from "material-icon.slint";
+import { StarRating } from "star-rating.slint";
+
+// A menu's rating row: a star glyph, the label and the strip, a star applying as it is clicked. The
+// bar's overflow menu mounts it over the playing track and the row menu over its row or selection,
+// each sized to its own rows. Neither closes on a star, so a pick can be corrected in place.
+//
+// **Over a selection it shows the clicked row's stars and the host applies the pick to the whole
+// set**, so the lit star clears every track in it. That is `FavoriteMenuItem`'s rule, the direction
+// taken from the item the menu was raised on: a selection has no one rating to show.
+export component RatingMenuRow inherits Rectangle {
+    in property <int> rating;
+    in property <bool> enabled: true;
+    in property <bool> multi-active;
+    in property <int> multi-count;
+    in property <length> row-height;
+    in property <length> icon-size;
+    in property <length> star-size;
+    // The glyph's ink while unrated, which is the host's own row icon colour.
+    in property <brush> idle-icon-color;
+
+    callback rated(int /*new_rating*/);
+
+    // Dimmed through the brushes rather than `opacity`, which would hold a texture for as long as
+    // the menu is open with nothing to rate.
+    property <float> fade: root.enabled ? 1.0 : 0.5;
+
+    height: root.row-height;
+
+    // Takes every press the strip doesn't, which would otherwise fall through to the host's
+    // `PopupDismissCatcher` and close the menu on a near miss. First, so the strip stays on top.
+    TouchArea {}
+
+    HorizontalLayout {
+        padding-left: Theme.pad-sm;
+        padding-right: Theme.pad-sm;
+        spacing: Theme.pad-sm;
+        alignment: stretch;
+        cross-axis-alignment: center;
+
+        MaterialIcon {
+            name: "star";
+            icon-size: root.icon-size;
+            icon-color: root.rating > 0 ? Theme.accent : root.idle-icon-color;
+            filled: root.rating > 0;
+            fade: root.fade;
+        }
+        // Elided, so a long translation shortens inside a menu at its width ceiling. The preferred
+        // width stays the whole label, which is what a menu sizes itself off.
+        Text {
+            horizontal-stretch: 1;
+            text: root.multi-active
+                // Translators: `{}` is how many items are selected
+                ? @tr("Rating for {}", root.multi-count)
+                : @tr("Rating");
+            color: Theme.text.transparentize(1.0 - root.fade);
+            font-size: Theme.font-size-md;
+            overflow: elide;
+        }
+        StarRating {
+            rating: root.rating;
+            star-size: root.star-size;
+            enabled: root.enabled;
+            filled-color: Theme.yellow.transparentize(1.0 - root.fade);
+            empty-color: Theme.subtext0.transparentize(1.0 - root.fade);
+            rated(n) => { root.rated(n); }
+        }
+    }
+}

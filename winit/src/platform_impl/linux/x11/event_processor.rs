@@ -472,23 +472,17 @@ impl EventProcessor {
 
         if xev.message_type == atoms[XdndPosition] as c_ulong {
             // This event occurs every time the mouse moves while a file's being dragged
-            // over our window. We emit HoveredFile in response; while the macOS backend
-            // does that upon a drag entering, XDND doesn't have access to the actual drop
-            // data until this event. For parity with other platforms, we only emit
-            // `HoveredFile` the first time, though if winit's API is later extended to
-            // supply position updates with `HoveredFile` or another event, implementing
-            // that here would be trivial.
+            // over our window. XDND has no access to the drop data until this event, so the
+            // first one asks for it and `DragEntered` waits for the `SelectionNotify` below;
+            // every later one is a `DragMoved`.
 
             let source_window = xev.data.get_long(0) as xproto::Window;
 
-            // Equivalent to `(x << shift) | y`
-            // where `shift = mem::size_of::<c_short>() * 8`
-            // Note that coordinates are in "desktop space", not "window space"
-            // (in X11 parlance, they're root window coordinates)
-            // let packed_coordinates = xev.data.get_long(2);
-            // let shift = mem::size_of::<libc::c_short>() * 8;
-            // let x = packed_coordinates >> shift;
-            // let y = packed_coordinates & !(x << shift);
+            // `(x << 16) | y`, in "desktop space" rather than "window space" (in X11 parlance,
+            // they're root window coordinates).
+            let packed_coordinates = xev.data.get_long(2);
+            let root_x = (packed_coordinates >> 16) as i16;
+            let root_y = (packed_coordinates & 0xffff) as i16;
 
             // By our own state flow, `version` should never be `None` at this point.
             let version = self.dnd.version.unwrap_or(5);
@@ -510,6 +504,20 @@ impl EventProcessor {
                 }
                 self.dnd.reset();
                 return;
+            }
+
+            if let Ok(reply) = wt.xconn.translate_point(wt.root, window, root_x, root_y) {
+                self.dnd.position =
+                    Some(PhysicalPosition::new(reply.dst_x as f64, reply.dst_y as f64));
+            }
+            if self.dnd.entered {
+                if let Some(position) = self.dnd.position {
+                    let event = Event::WindowEvent {
+                        window_id,
+                        event: WindowEvent::DragMoved { position },
+                    };
+                    callback(&self.target, event);
+                }
             }
 
             self.dnd.source_window = Some(source_window);
@@ -540,14 +548,13 @@ impl EventProcessor {
 
         if xev.message_type == atoms[XdndDrop] as c_ulong {
             let (source_window, state) = if let Some(source_window) = self.dnd.source_window {
-                if let Some(Ok(ref path_list)) = self.dnd.result {
-                    for path in path_list {
-                        let event = Event::WindowEvent {
-                            window_id,
-                            event: WindowEvent::DroppedFile(path.clone()),
-                        };
-                        callback(&self.target, event);
-                    }
+                if let Some(Ok(paths)) = self.dnd.result.take() {
+                    let position = self.dnd.position.unwrap_or_default();
+                    let event = Event::WindowEvent {
+                        window_id,
+                        event: WindowEvent::DragDropped { paths, position },
+                    };
+                    callback(&self.target, event);
                 }
                 (source_window, DndState::Accepted)
             } else {
@@ -568,9 +575,14 @@ impl EventProcessor {
         }
 
         if xev.message_type == atoms[XdndLeave] as c_ulong {
+            if self.dnd.entered {
+                let event = Event::WindowEvent {
+                    window_id,
+                    event: WindowEvent::DragLeft { position: self.dnd.position },
+                };
+                callback(&self.target, event);
+            }
             self.dnd.reset();
-            let event = Event::WindowEvent { window_id, event: WindowEvent::HoveredFileCancelled };
-            callback(&self.target, event);
         }
     }
 
@@ -595,11 +607,13 @@ impl EventProcessor {
         self.dnd.result = None;
         if let Ok(mut data) = unsafe { self.dnd.read_data(window) } {
             let parse_result = self.dnd.parse_data(&mut data);
-            if let Ok(ref path_list) = parse_result {
-                for path in path_list {
+            if let Ok(ref paths) = parse_result {
+                if !self.dnd.entered {
+                    self.dnd.entered = true;
+                    let position = self.dnd.position.unwrap_or_default();
                     let event = Event::WindowEvent {
                         window_id,
-                        event: WindowEvent::HoveredFile(path.clone()),
+                        event: WindowEvent::DragEntered { paths: paths.clone(), position },
                     };
                     callback(&self.target, event);
                 }

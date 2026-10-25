@@ -7,13 +7,13 @@
 //! of those per view and generates each `TrackListColumnState` impl plus [`hydrate_all`] and
 //! [`snapshot_all`], so a new view is a global, a `view_id::*` const and one row.
 //!
-//! Persistence rides on `views.json`'s `view_column_widths` and `view_columns`, both keyed by an
-//! arbitrary view-id, so a new view needs no schema change. **The defaults are Rust's**, each
-//! view's visible set here and the widths in `ColumnWidths::default()`: the globals declare none,
-//! so a view left out of [`hydrate_all`] would have no columns at all. One table feeding both
-//! passes is what keeps that from happening.
+//! Persistence rides on `views.json`'s `view_column_widths`, `view_columns` and `view_marks`, all
+//! keyed by an arbitrary view-id, so a new view needs no schema change. **The defaults are
+//! Rust's**, each view's visible set here and the widths in `ColumnWidths::default()`: the globals
+//! declare none, so a view left out of [`hydrate_all`] would have no columns at all. One table
+//! feeding both passes is what keeps that from happening.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use slint::{ComponentHandle, ModelRc, SharedString};
 
@@ -33,13 +33,19 @@ use melodia_ui::{AppWindow, TrackColumns};
 /// the `show_*` fields in this order.
 const TOGGLEABLE: [&str; 6] = ["number", "artwork", "artist", "album", "genre", "year"];
 
+/// The row marks the popup toggles beside the columns, by the id `view_marks` stores: the heart
+/// beside a favourite's title, the one its duration gives way to on hover, and the hover star
+/// strip. Their own map rather than more `view_columns` ids, which `ViewStateData::view_marks`
+/// argues. [`columns_from`] and [`TrackListColumnState::snapshot_marks`] walk them in this order.
+const MARKS: [&str; 3] = ["favorite_mark", "favorite_button", "rating_strip"];
+
 /// The Slint-side surface of a per-view track-list global, so the hydrate, snapshot and toggle
 /// paths drive any number of views down one path. Each generated global gets its own `impl` from
 /// `track_list_views!`, routing through the accessors.
 pub trait TrackListColumnState {
-    /// The key both `views.json` maps hold this view under.
+    /// The key every `views.json` map holds this view under.
     const VIEW_ID: &'static str;
-    /// The toggleable column ids a first launch hides.
+    /// The toggleable ids, columns or marks, a view hides until it has saved its own choice.
     const HIDDEN_BY_DEFAULT: &'static [&'static str];
     /// The column a detail view hides for good, every row sharing its value.
     const LOCKED: Option<&'static str>;
@@ -68,6 +74,14 @@ pub trait TrackListColumnState {
             .map(|(id, _)| (*id).to_owned())
             .collect()
     }
+
+    /// Every row mark against whether it is shown, for `view_marks[view_id]`.
+    fn snapshot_marks(&self) -> BTreeMap<String, bool> {
+        let columns = self.read_columns();
+        let shown =
+            [columns.show_favorite_mark, columns.show_favorite_button, columns.show_rating_strip];
+        MARKS.into_iter().zip(shown).map(|(id, shown)| (id.to_owned(), shown)).collect()
+    }
 }
 
 /// The callbacks every track list's global declares alike, for the wiring
@@ -79,41 +93,58 @@ pub trait TrackListActions {
     fn bind_toggle_column(&self, f: impl FnMut(SharedString) + 'static);
 }
 
-/// Persist the visible columns after the toggle popup flipped one. The popup has already
-/// repainted, so what is left is the write.
-pub fn persist_visible<T: TrackListColumnState>(state: &AppState, h: &T) {
-    let view_id = T::VIEW_ID;
-    let columns = h.snapshot_visible();
+/// Persist the set the toggle popup's `toggled` id belongs to, the marks or the columns. The popup
+/// has already repainted, so what is left is the write.
+pub fn persist_toggled<T: TrackListColumnState>(state: &AppState, h: &T, toggled: &str) {
+    let view_id = T::VIEW_ID.to_owned();
     let s = state.clone();
-    spawn_blocking_logged!(
-        s,
-        "track_list_view::persist_visible",
-        library::settings::update_view_columns(&s.paths, view_id.to_owned(), columns)
-    );
+    if MARKS.contains(&toggled) {
+        let marks = h.snapshot_marks();
+        spawn_blocking_logged!(
+            s,
+            "track_list_view::persist_marks",
+            library::settings::update_view_marks(&s.paths, view_id, marks)
+        );
+    } else {
+        let columns = h.snapshot_visible();
+        spawn_blocking_logged!(
+            s,
+            "track_list_view::persist_columns",
+            library::settings::update_view_columns(&s.paths, view_id, columns)
+        );
+    }
 }
 
 /// Write the view's columns to the handle: `views.json`'s widths and visibility where it has
-/// them, the defaults where it doesn't.
+/// them, the defaults where it doesn't. The columns fall back as one set and each mark on its own,
+/// an install having saved its columns before it had marks, and its marks before any added since.
 fn hydrate<T: TrackListColumnState>(vs: &ViewStateData, h: &T) {
     let widths = vs.view_column_widths.get(T::VIEW_ID).cloned().unwrap_or_default();
-    let saved: Option<HashSet<&str>> =
+    let saved_columns: Option<HashSet<&str>> =
         vs.view_columns.get(T::VIEW_ID).map(|ids| ids.iter().map(String::as_str).collect());
-    let shown = |id: &str| match &saved {
-        Some(visible) => visible.contains(id),
-        None => !T::HIDDEN_BY_DEFAULT.contains(&id),
+    let saved_marks = vs.view_marks.get(T::VIEW_ID);
+    let shown = |id: &str| {
+        let saved = if MARKS.contains(&id) {
+            saved_marks.and_then(|marks| marks.get(id)).copied()
+        } else {
+            saved_columns.as_ref().map(|visible| visible.contains(id))
+        };
+        saved.unwrap_or_else(|| !T::HIDDEN_BY_DEFAULT.contains(&id))
     };
     h.write_columns(columns_from(&widths, shown, T::LOCKED));
 }
 
-/// Snapshot both widths and visibility into the view's `views.json` entries, mutating `vs` in
-/// place. The caller writes it back to disk.
+/// Snapshot widths, visible columns and marks into the view's `views.json` entries, mutating `vs`
+/// in place. The caller writes it back to disk.
 fn snapshot<T: TrackListColumnState>(vs: &mut ViewStateData, h: &T) {
     vs.view_column_widths.insert(T::VIEW_ID.to_owned(), widths_from(&h.read_columns()));
     vs.view_columns.insert(T::VIEW_ID.to_owned(), h.snapshot_visible());
+    vs.view_marks.insert(T::VIEW_ID.to_owned(), h.snapshot_marks());
 }
 
-/// The columns for `widths`, each toggleable one shown as `shown` answers for its id. A locked
-/// column is off whatever `shown` says, against a hand-edit naming one the UI no longer offers.
+/// The columns for `widths`, each toggleable column and mark shown as `shown` answers for its id.
+/// A locked column is off whatever `shown` says, against a hand-edit naming one the UI no longer
+/// offers.
 fn columns_from(
     widths: &ColumnWidths,
     shown: impl Fn(&str) -> bool,
@@ -121,6 +152,7 @@ fn columns_from(
 ) -> TrackColumns {
     let [show_number, show_artwork, show_artist, show_album, show_genre, show_year] =
         TOGGLEABLE.map(|id| shown(id) && locked != Some(id));
+    let [show_favorite_mark, show_favorite_button, show_rating_strip] = MARKS.map(shown);
     TrackColumns {
         w_number: px_to_slint(widths.number),
         w_title: px_to_slint(widths.title),
@@ -135,6 +167,9 @@ fn columns_from(
         show_album,
         show_genre,
         show_year,
+        show_favorite_mark,
+        show_favorite_button,
+        show_rating_strip,
     }
 }
 
@@ -190,8 +225,8 @@ macro_rules! locked_column {
 
 /// Generate the [`TrackListColumnState`] and [`TrackListActions`] impls for every listed Slint
 /// global, plus [`hydrate_all`] and [`snapshot_all`] over the same list. `hidden` names the
-/// toggleable columns a first launch hides, and a detail view's `locked = <column>` is excluded
-/// from the persisted set and forced off on hydrate.
+/// toggleable columns and marks a first launch hides, and a detail view's `locked = <column>` is
+/// excluded from the persisted set and forced off on hydrate.
 macro_rules! track_list_views {
     ($(
         $global:ident => $view_id:ident, hidden = [$($hidden:ident),*] $(, locked = $locked:ident)?;
@@ -248,7 +283,8 @@ track_list_views! {
     ArtistDetail => ARTIST_DETAIL, hidden = [number], locked = artist;
     GenreDetail => GENRE_DETAIL, hidden = [number], locked = genre;
     PlaylistDetail => PLAYLIST_DETAIL, hidden = [genre];
-    Favorites => FAVORITES, hidden = [number, genre, year];
+    // Every row there is a favourite, so the mark says nothing; the hover heart still unfavourites.
+    Favorites => FAVORITES, hidden = [number, genre, year, favorite_mark];
     RecentlyPlayed => RECENTLY_PLAYED, hidden = [number, genre, year];
     Search => SEARCH, hidden = [genre, year];
 }

@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Genres } from "../../globals/genres.slint";
+import { MyLibrary } from "../../globals/my-library.slint";
 import { GenreGrid } from "../../components/grid/genre-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
@@ -22,6 +23,7 @@ export component MyLibraryGenresTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         open-genre(id) => { Genres.open-genre(id); }
+        request-blur-search => { MyLibrary.blur-search-tick += 1; }
     }
 
     if Genres.total-count == 0: GridEmptyState {

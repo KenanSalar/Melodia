@@ -6,7 +6,7 @@ use melodia_app::services;
 use melodia_app::state::AppState;
 use melodia_artwork::media::image;
 use melodia_core::error::describe;
-use melodia_ui::{AppWindow, ArtistDetail, MiniPlayer, Nav, Player};
+use melodia_ui::{AppWindow, ArtistDetail, MiniPlayer, Nav, Player, Queue};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
@@ -51,8 +51,8 @@ pub fn seed_initial_view_model(
     );
 }
 
-/// Apply every UI-visible persisted section to the Slint globals — sidebar
-/// geometry from `settings.json`, per-view columns and collapse state from
+/// Apply every UI-visible persisted section to the Slint globals — sidebar and
+/// queue panel geometry from `settings.json`, per-view columns and collapse state from
 /// `views.json`. Missing entries leave the defaults, which is first-launch
 /// behaviour. A `None` snapshot re-reads from disk; boot passes what `main()`
 /// already read to avoid a second parse.
@@ -93,24 +93,36 @@ pub fn hydrate_ui_from_settings(
     };
     apply_sidebar_width(app, settings);
     apply_sidebar_collapsed(app, settings);
+    apply_queue_panel(app, settings);
     apply_mini_backdrop(app, settings);
     app.global::<ArtistDetail>().set_albums_collapsed(vs.artist_albums_collapsed);
     ui::settings::settings_page::seed_category(app, vs.settings_category);
 }
 
-/// `sidebar.slint` already clamps `Nav.sidebar-width` at the use site, so no
-/// Rust-side clamp is needed.
+/// `Nav.sidebar-expanded-w` clamps the width where it is drawn, so no Rust-side clamp is needed.
 fn apply_sidebar_width(app: &AppWindow, settings: &services::settings::SettingsData) {
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "sidebar widths are small pixel counts; f32 precision is sufficient"
-    )]
-    let width = settings.sidebar_width as f32;
-    app.global::<Nav>().set_sidebar_width(width);
+    app.global::<Nav>().set_sidebar_width(logical_px(settings.sidebar_width));
 }
 
 fn apply_sidebar_collapsed(app: &AppWindow, settings: &services::settings::SettingsData) {
     app.global::<Nav>().set_sidebar_collapsed(settings.layout.sidebar_collapsed);
+}
+
+/// `app-window.slint` clamps the width where it is drawn, as the sidebar's is. An open panel needs
+/// nothing more: `AppWindow`'s `queue-shown` took its baseline at construction, before this, so the
+/// first change-handler pass reads the seeded open as an edge and shows it.
+fn apply_queue_panel(app: &AppWindow, settings: &services::settings::SettingsData) {
+    let queue = app.global::<Queue>();
+    queue.set_open(settings.queue_panel.queue_panel_open);
+    queue.set_panel_width(settings.queue_panel.queue_panel_width.map_or(0.0, logical_px));
+}
+
+#[expect(
+    clippy::cast_possible_truncation,
+    reason = "sidebar and panel widths are small pixel counts; f32 precision is sufficient"
+)]
+fn logical_px(width: f64) -> f32 {
+    width as f32
 }
 
 /// Seed the miniplayer's backdrop switch. Ordinary hydration, unlike its restart-gated neighbour

@@ -8,7 +8,7 @@ use melodia_core::entities::track::TrackSummary;
 use melodia_core::error::{AppError, AppResult};
 use melodia_engine::player::engine::actions::emit_and_execute;
 use melodia_engine::player::engine::event_sink::PlayerSinks;
-use melodia_engine::player::engine::queue::{QueueState, current_index_from_i32};
+use melodia_engine::player::engine::queue::{QueueEntry, QueueState, current_index_from_i32};
 use melodia_engine::player::engine::state::{
     PlayerAction, PlayerState, PlayerStateHandle, lock_state, restore_queue, restore_station,
     with_state_emit,
@@ -111,6 +111,23 @@ pub async fn queue_add_tracks(state: &AppState, track_ids: Vec<i64>) -> Result<(
     Ok(())
 }
 
+/// A drop into the queue panel: splice `track_ids` in ahead of the row `before`, or at the end,
+/// in the order they came. The drop names a row rather than a slot because the resolve awaits the
+/// database, and the queue can move under a slot meanwhile.
+pub async fn queue_insert_before(
+    state: &AppState,
+    before: Option<QueueEntry>,
+    track_ids: Vec<i64>,
+) -> Result<(), AppError> {
+    let ids = existing_in_order(&state.db, &track_ids).await?;
+
+    log::debug!("queue: insert {} track(s) before {before:?}", ids.len());
+    with_state_emit(&state.player_state, &state.sinks, |s| {
+        s.queue.insert_before(before, &ids);
+    });
+    Ok(())
+}
+
 /// The context menu's "Play Next": insert after `current_index` in input order,
 /// so the queue reads `[current, id_0, …, id_n, …]`. One DB round-trip and one
 /// `with_state_emit` for the batch.
@@ -133,11 +150,7 @@ async fn play_next_many(
 
     log::debug!("queue: play next, {} track(s)", ids.len());
     with_state_emit(player_state, sinks, |s| {
-        // `insert_next` always lands at `current_index + 1`, so walking the
-        // input backwards is what produces forward order.
-        for &id in ids.iter().rev() {
-            s.queue.insert_next(id);
-        }
+        s.queue.insert_next(&ids);
     });
     Ok(())
 }
@@ -150,11 +163,13 @@ pub fn queue_remove(state: &AppState, index: usize) -> Result<(), AppError> {
     Ok(())
 }
 
-pub fn queue_move(state: &AppState, from: usize, to: usize) -> Result<(), AppError> {
+/// Moves the play-order slots `rows` together to `to`, counted once they have left: one dragged
+/// row, or every row the panel holds picked.
+pub fn queue_move(state: &AppState, rows: &[usize], to: usize) -> Result<(), AppError> {
     // Once per drop, not per drag frame — Slint only emits on the drop gesture.
-    log::debug!("queue: move {from} → {to}");
+    log::debug!("queue: move {} row(s) → {to}", rows.len());
     with_state_emit(&state.player_state, &state.sinks, |s| {
-        s.queue.move_track(from, to);
+        s.queue.move_rows(rows, to);
     });
     Ok(())
 }
@@ -179,19 +194,25 @@ pub fn queue_clear(state: &AppState) -> Result<(), AppError> {
 
 /// Play the queue's track at `index`. Its record is fetched first unless the window holds it, a
 /// double-click being able to land anywhere in a queue the size of the library.
+///
+/// The row is carried across the fetch as its entry, the queue being free to move under an index
+/// meanwhile, and one that has left by then plays nothing.
 pub async fn queue_skip_to_index(state: &AppState, index: usize) -> Result<(), AppError> {
     // The `play` line this produces names the file; only this names why.
     log::debug!("queue: skip to index {index}");
-    let unheld = {
+    let (entry, unheld) = {
         let s = lock_state(&state.player_state);
-        s.queue.id_at(index).filter(|&id| s.record(id).is_none())
+        let Some(entry) = s.queue.entry_at(index) else {
+            return Ok(());
+        };
+        (entry, s.queue.id_at(index).filter(|&id| s.record(id).is_none()))
     };
     let fetched = match unheld {
         Some(id) => queries::track::get_track_summaries_by_ids(&state.db, &[id]).await?,
         None => Vec::new(),
     };
     emit_and_execute(&*state.engine, &state.player_state, &state.sinks, |s| {
-        let Some(id) = s.queue.skip_to_index(index) else {
+        let Some(id) = s.queue.skip_to_entry(entry) else {
             return vec![];
         };
         s.window.seat(&s.queue.window_ids(), fetched.into_iter().map(Arc::new));

@@ -13,6 +13,8 @@
 
 use slint::{Model, ModelRc, VecModel};
 
+use crate::ui::util;
+
 /// Apply `new_rows` to `vec_model`, preferring per-row `set_row_data` when the two
 /// describe the same row identities in the same positions and falling back to `set_vec` on
 /// any structural change. `id_of` extracts the identity that decision rests on.
@@ -56,8 +58,7 @@ where
 /// Swap `rows` into a `VecModel<T>`-backed model, or log under `label` and leave the model alone
 /// if the downcast fails. Generic over the row type, every grid and list holding its own.
 pub fn replace_rows<T: Clone + 'static>(model: &ModelRc<T>, rows: Vec<T>, label: &str) {
-    let Some(vm) = model.as_any().downcast_ref::<VecModel<T>>() else {
-        log::warn!("{label}: VecModel<{}> downcast failed", std::any::type_name::<T>());
+    let Some(vm) = util::installed::<VecModel<T>, _>(model, label) else {
         return;
     };
     vm.set_vec(rows);

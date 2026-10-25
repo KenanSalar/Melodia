@@ -44,6 +44,13 @@ export global WindowChrome {
     in-out property <length> shell-x;
     in-out property <length> shell-width;
     in-out property <length> shell-height;
+    // What a tooltip or menu fitted to that rect keeps clear of its edges.
+    out property <length> edge-clearance: Theme.pad-xs;
+
+    // The content panel's width, which the card grids are laid out in. Read by Rust, which sizes
+    // the grid cover tier off it: the sidebar and the queue panel beside it are the user's to
+    // drag and to open, so the window alone can't say how wide a card is drawn.
+    in-out property <length> content-panel-width;
 
     // The frameless outline's colour, resolved from the Window Border Color pick. Unfocused is its
     // own brush because Windows' accent borders go neutral on an inactive window; for any other pick
@@ -94,10 +101,13 @@ export global WindowChrome {
     // read once after `app.show()` — so a window maximized afterwards mounted more cards than
     // its tier could hold and left the overflow on placeholders.
     callback display-changed();
-    // Windows only, the same Rust-to-Rust shape: fired by the winit `ThemeChanged` and focus-gain
-    // arms, handled in `ui::appearance`, which re-reads the default app mode and repaints a System
-    // variant painted for the other one. Focus gain too, as the border colour's refresh does, so an
-    // event winit never sent costs no more than a click back into the window.
+    // The same retune for the content panel, fired whenever `content-panel-width` moves: a panel
+    // toggle or a sidebar drag changes how wide a card is without resizing the window.
+    callback content-panel-resized();
+    // Windows only, Rust to Rust like `display-changed`: fired by the winit `ThemeChanged` and
+    // focus-gain arms, handled in `ui::appearance`, which re-reads the default app mode and repaints
+    // a System variant painted for the other one. Focus gain too, as the border colour's refresh
+    // does, so an event winit never sent costs no more than a click back into the window.
     callback recheck-system-theme();
 }
 

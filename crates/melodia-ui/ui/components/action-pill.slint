@@ -56,6 +56,10 @@ export component PillButton inherits Rectangle {
     in property <bool> reserve-sort-slot: false;
     in property <string> sort-direction: "";
     in property <string> tooltip-text: "";
+    // 0 labelled, 1 the glyph alone with the label moved to the tooltip, for a row short of room.
+    // A scalar rather than a bool, so the label closes onto its glyph the way a compact tab's
+    // does. A text-only pill has nothing to stand in and ignores it.
+    in property <float> compact-t: 0.0;
     // Suppresses the in-tree tooltip so a host can paint one on a higher layer, needed
     // wherever later-painted sibling content would occlude it. `hovered` is exposed so
     // the host can drive that overlay.
@@ -66,29 +70,50 @@ export component PillButton inherits Rectangle {
     in property <bool> force-bg: false;
     callback clicked();
 
+    // What the label keeps of its slot. Its ink is gone by the time the slot is half closed, so
+    // the clip never shows a half-eaten word: `TabBarCell`'s bias, off the same source rather than
+    // eased on its own, which would phase-lag.
+    property <float> open: root.icon == "" ? 1.0 : 1.0 - root.compact-t;
+    property <float> label-alpha: clamp(1.0 - (1.0 - root.open) * 2.0, 0.0, 1.0);
+
     // `out` so a host drawing the pill on a higher layer asks this rather than restating the
     // test beside its own frame. The alignment below is the same rule on the other mount.
-    out property <bool> icon-only: root.text == "" && root.icon != "";
+    out property <bool> icon-only:
+        root.icon != "" && (root.text == "" || root.label-alpha == 0.0);
+    // The same for the text: a dropped label is the tooltip unless the pill names one of its own.
+    out property <string> tip-text: root.tooltip-text != ""
+        ? root.tooltip-text
+        : (root.icon-only ? root.text : "");
+
+    // One ink for the glyph and the label. Danger tints red only on hover; otherwise accent when
+    // active. **Eased here and faded downstream**: folding the label's fade into an eased brush
+    // would restart the ease on every frame of a compact morph.
+    property <brush> ink: root.danger
+        ? (touch.has-hover ? Theme.danger : Theme.text)
+        : (root.active ? Theme.accent : Theme.text);
+    animate ink { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
     height: 32px;
     width: chrome.width;
 
     chrome := Rectangle {
         height: 28px;
-        // Icon-only chips are square so the hover reads as a round button; the
-        // others grow to fit their content.
-        width: root.icon-only ? 28px : layout.preferred-width;
+        // Square once only the glyph is left, so the hover reads as a round button; otherwise it
+        // grows to fit its content, and a closing label shrinks it onto the square.
+        width: max(self.height, layout.preferred-width);
         border-radius: self.height / 2;
-        // One chrome for both; danger only re-tints on hover, below.
+        // One chrome for both; danger only re-tints on hover, through `ink`.
         background: (touch.has-hover || root.force-bg)
             ? Theme.surface1
             : transparent;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
 
+        // Padding and spacing close with the label, so the glyph glides to the middle with no
+        // arithmetic of its own.
         layout := HorizontalLayout {
-            padding-left: root.icon-only ? 0px : 10px;
-            padding-right: root.icon-only ? 0px : 10px;
-            spacing: 4px;
+            padding-left: root.text == "" ? 0px : 10px * root.open;
+            padding-right: root.text == "" ? 0px : 10px * root.open;
+            spacing: 4px * root.open;
             alignment: center;
             cross-axis-alignment: center;
 
@@ -103,23 +128,28 @@ export component PillButton inherits Rectangle {
                 name: root.icon;
                 icon-size: root.icon-size;
                 filled: root.icon-filled;
-                // Danger tints red only on hover; otherwise accent when active.
-                icon-color: root.danger
-                    ? (touch.has-hover ? Theme.danger : Theme.text)
-                    : (root.active ? Theme.accent : Theme.text);
-                animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
+                icon-color: root.ink;
             }
-            // The patched Vazirmatn metrics land the glyph mass at the line-box
-            // centre, so centring the line box is enough.
-            if root.text != "": Text {
-                text: root.text;
-                color: root.danger
-                    ? (touch.has-hover ? Theme.danger : Theme.text)
-                    : (root.active ? Theme.accent : Theme.text);
-                animate color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
-                font-size: Theme.font-size-sm;
-                font-weight: 500;
-                vertical-alignment: center;
+            // **Always mounted** with a label, and closed by shrinking its slot to nothing, as a
+            // compact tab's is. Rectangular so it lowers to a scissor, as tall as the chrome so
+            // marks reaching past the line box keep their slack, the label eliding so its own line
+            // box doesn't cut them first, and pinned left so the clip eats the tail. The patched
+            // Vazirmatn metrics land the glyph mass at the line-box centre, so centring the line
+            // box is enough.
+            if root.text != "": Rectangle {
+                clip: true;
+                width: lbl.preferred-width * root.open;
+                height: chrome.height;
+
+                lbl := Text {
+                    x: 0px;
+                    text: root.text;
+                    color: root.ink.transparentize(1.0 - root.label-alpha);
+                    font-size: Theme.font-size-sm;
+                    font-weight: 500;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
             }
             // Always rendered when reserved, so the chrome's width doesn't depend on
             // whether the pill is active; transparent with no direction.
@@ -135,7 +165,7 @@ export component PillButton inherits Rectangle {
         }
 
         Tooltip {
-            text: root.tooltip-text;
+            text: root.tip-text;
             hovered: touch.has-hover && !root.tooltip-overlay;
             host-width: chrome.width;
             host-height: chrome.height;

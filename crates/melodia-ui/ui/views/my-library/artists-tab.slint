@@ -1,5 +1,6 @@
 import { Theme } from "../../theme.slint";
 import { Artists } from "../../globals/artists.slint";
+import { MyLibrary } from "../../globals/my-library.slint";
 import { ArtistGrid } from "../../components/grid/artist-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
@@ -21,6 +22,7 @@ export component MyLibraryArtistsTab inherits Rectangle {
         row-height: root.row-h;
         gap: root.gap;
         open-artist(id) => { Artists.open-artist(id); }
+        request-blur-search => { MyLibrary.blur-search-tick += 1; }
         covers-generation: Artists.covers-generation;
         request-cover(p, g) => { Artists.request-cover(p, g) }
     }

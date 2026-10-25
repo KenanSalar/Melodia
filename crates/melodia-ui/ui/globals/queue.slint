@@ -1,18 +1,10 @@
-import { QueueRow } from "../models.slint";
+import { LiftedRun, QueueRow } from "../models.slint";
 
-// The two surfaces rendering the play queue — the bottom-sheet inspector and the Up Next
+// The two surfaces rendering the play queue — the panel beside the content and the Up Next
 // list inside Now Playing. Same rows, deliberately separate lifecycles.
 
-// The bottom-sheet inspector. Rust owns the `rows` model and writes both it and
-// `current-index` from a subscriber on the same `sinks.queue` watch `Player.queue` reads.
-//
-// **The drag plumbing is bespoke rather than `DragArea` / `DropArea`** — `queue-row-item.slint`
-// says why. The sheet flips `drag-source`/`drop-slot` from row-level `pointer-event` handlers and
-// fires `reorder` on pointer-up only; both clear out from under a drag the pressed row can no
-// longer finish — Rust on a `rows` rebuild, the sheet on either `open` transition and at mount.
-//
-// `open` is mirrored to a Rust atomic through `open-changed`, which the winit `DroppedFile` filter
-// consults before forwarding paths; a global can't watch its own property.
+// The queue panel. Rust owns the `rows` model and writes both it and `current-index` from a
+// subscriber on the same `sinks.queue` watch `Player.queue` reads.
 export global Queue {
     in-out property <[QueueRow]> rows;
     // -1 when nothing is playing. Rows derive `playing: idx == current-index`, so the
@@ -22,46 +14,70 @@ export global Queue {
     in property <int> selected-count: 0;
     // The same selection as a batch payload for the row context menu, **deduped by track id and
     // in display order**. Deliberately not `selected-count`'s length: a queue may hold one track
-    // twice and picks are by track, so selecting either instance marks both — an
-    // undeduped list would add that track to a playlist twice. The menu counts rows and acts on
-    // ids, which is why both properties exist.
+    // twice, each copy picked on its own, and with both picked an undeduped list would add that
+    // track to a playlist twice. The menu counts rows and acts on ids, which is why both
+    // properties exist.
     in property <[int]> selected-ids;
-    // The close animation outlives `open == false`, so the sheet never gates on `if Queue.open`.
+    // What the user asked of the docked panel, and what persists. Whether the panel is on screen
+    // is `shown`.
     in-out property <bool> open;
-    // -1 when idle, else the play-order index being dragged.
-    in-out property <int> drag-source: -1;
-    // Where the dragged row would land, in `[0, rows.length]`. **Slot semantics, not row-index**:
-    // slot K is the *gap* between rows K-1 and K, which is what makes the two neighbouring slots
-    // recognisable no-ops the sheet hides. -1 is no candidate.
-    in-out property <int> drop-slot: -1;
-    // Mirrored from Rust on an OS file-hover for the drop banner, gated in markup on
-    // `is-drop-hovered && open`. Wayland needs the vendored winit patch.
-    in property <bool> is-drop-hovered: false;
+    // The overlay's `open`, for a window with no room to dock. Session-only, so a narrow launch
+    // with the panel saved open shows nothing until it is asked for.
+    in-out property <bool> overlay-open;
+    // The docked panel open with room for it, or the overlay open, less what covers either: Now
+    // Playing, and the miniplayer, which unmounts it. Written only by `AppWindow`, a global being
+    // unable to watch its own properties; the rows and the covers follow it through
+    // `shown-changed`.
+    in-out property <bool> shown;
+    // `shown` as the overlay. Written only by `AppWindow`, beside `shown`.
+    in-out property <bool> floating;
+    // Whether the window has room to dock the panel, which the miniplayer and a narrow window
+    // don't. Written only by `AppWindow`.
+    in-out property <bool> fits;
+    // 0 is the default width, so changing `Theme.queue-panel-default-w` reaches everyone who never
+    // dragged the edge.
+    in-out property <length> panel-width: 0px;
+    // Whether the pointer is over the panel, for the winit filter to read at a press.
+    in-out property <bool> pointer-in;
+    // The panel was the last thing pressed, so Escape, Ctrl+A and Delete are its. Written by the
+    // winit filter, which sees a press before any element can take it, and handed back by a row's
+    // menu as it closes, its popup having hidden that press from `pointer-in`.
+    in-out property <bool> keys-owned;
 
-    // Lazy row cover against the sheet's *own* tier, so closing releases every buffer. That tier
-    // borrows what the row tier already holds, so a cover the track lists draw is one buffer.
-    // **`generation` does two jobs**: reading it makes the binding depend on the counter, a `pure`
-    // callback's result being cached until a dependency is dirtied; its *value* is whether the tier
-    // is warm. The sheet can't prewarm-then-set, its rows landing before the prewarm does, so at 0
-    // the lookup is cache-only. Closing rewinds to 0.
+    // Lazy row cover against the panel's *own* tier, so hiding it releases every buffer. That tier
+    // borrows what the row tier already holds, so a cover the track lists draw is one buffer, and
+    // schedules any other miss off the UI thread. `generation` is the repaint token: reading it
+    // makes the binding depend on the counter Rust bumps as each scheduled batch lands, a `pure`
+    // callback's result being cached until a dependency is dirtied.
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 
-    // Fires on pointer-up only once the drag passed the 4 px click threshold.
+    // A drag of one row dropped somewhere that moves it, in play order.
     callback reorder(int /*from*/, int /*to*/);
+    // A drag of the picks, gathering every picked row in front of play-order slot `slot`.
+    callback move-picks(int /*slot*/);
+    // Where the picked rows sit, asked by a press on one of them. Only Rust holds the whole list.
+    callback picked-run() -> LiftedRun;
+    // Another list's drag let go over the rows: what Add to Queue on it would queue, landing in
+    // front of play-order slot `slot`.
+    callback drop-in(string /*kind*/, [int] /*ids*/, int /*slot*/);
     callback remove(int /*play_order_index*/);
-    // Removes every row Rust holds picked, both copies of a track queued twice.
+    // Removes every row Rust holds picked, and no other copy of their tracks.
     callback remove-selected();
     callback skip-to(int /*play_order_index*/);
     callback clear-queue();
-    // Close-side effects, so the sheet can close without coupling to the `open-changed` atomic.
-    callback close();
-    // The close triple every dismiss site spells. A `public function` rather than a body on
-    // `close()`: that callback has a single handler slot, which Rust's `on_close` claims, so a
-    // default body here would be installed at construction and then silently replaced.
-    public function dismiss() {
-        self.close();
-        self.open = false;
+    // The bar's button, its overflow entry and Q. Rust's, since a press under Now Playing closes
+    // it to bring the panel up, and `Nav` is not this file's to import.
+    callback toggle();
+    // Closes the overlay, and the docked panel too where the window has room for it: a narrow
+    // window's ✕ leaves the docked panel to come back when the room does. Picks and the keys go
+    // with it, so neither is waiting on a panel nobody can see.
+    public function close() {
+        if (self.fits) {
+            self.open = false;
+        }
+        self.overlay-open = false;
+        self.keys-owned = false;
         self.clear-selection();
     }
     // Plain replaces, ctrl toggles, shift extends; the anchor lives in Rust.
@@ -70,12 +86,11 @@ export global Queue {
     callback select-all();
 
     // The track lists' contracts, batch-shaped like them: Rust persists, then patches the rows
-    // holding those ids. The hover heart and the star strip pass one id; the context menu passes
-    // the selection.
+    // holding those ids. The row menu passes the clicked row or the selection.
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
 
-    callback open-changed(bool);
+    callback shown-changed(bool);
 }
 
 // The "Up Next" list inside Now Playing. Its own global rather than more fields on the
@@ -94,6 +109,10 @@ export global NowPlaying {
     // Under repeat-all the list wraps past the end of the queue, so a row's real play-order
     // index is `mod(base-index + idx, queue-length)`.
     in property <int> queue-length: 0;
+
+    // A drag of one row dropped somewhere that moves it, in the list's own rows. Rust maps the two
+    // onto play order, refusing a move across the repeat-all wrap.
+    callback reorder(int /*from-row*/, int /*to-row*/);
 
     // Drives the one-shot Up Next slide; anything at or past `slide-frames` is at rest. Reset to 0
     // **only** on a real current-track change, not on a reorder keeping the same track. On the

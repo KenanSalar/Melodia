@@ -1,41 +1,41 @@
 //! What drag-to-reorder and the row menu's removal need to stay alive, none of
 //! which any other pin can see go missing.
 
-use super::detail::{POSITION_FIELD, is_manual_order};
+use super::detail::{DetailPage, POSITION_FIELD, is_manual_order};
 use melodia_testkit::code_tokens;
 
-const DRAGGABLE_LIST: &str =
-    include_str!("../../../../../melodia-ui/ui/components/track-list/draggable-track-list.slint");
-const QUEUE_SHEET: &str = include_str!("../../../../../melodia-ui/ui/views/queue-sheet.slint");
+const TRACK_LIST: &str =
+    include_str!("../../../../../melodia-ui/ui/components/track-list/track-list.slint");
+const QUEUE_PANEL: &str =
+    include_str!("../../../../../melodia-ui/ui/views/queue-panel/queue-panel.slint");
 const DETAIL_VIEW: &str =
     include_str!("../../../../../melodia-ui/ui/views/my-library/playlist-detail.slint");
 const SHARED_DETAIL_WIRING: &str = include_str!("../../callbacks/track_detail.rs");
 const DETAIL: &str = include_str!("../detail.rs");
 const DETAIL_CALLBACKS: &str = include_str!("../callbacks/detail.rs");
 
-/// A row drag and the list's own drag-pan are one gesture, and whichever element
-/// owns it the other gets nothing: a pan intercepts the row's grab mid-drag, so
-/// the drop never commits. The list around the rows opts out, and so does the
-/// queue sheet's. Nothing else catches a regression here — it compiles,
+/// A list's drag and its own drag-pan are one gesture, and whichever element owns
+/// it the other gets nothing. The list around the rows opts out, and so does the
+/// queue panel's. Nothing else catches a regression here — it compiles,
 /// reads clean, and only misbehaves on a list long enough to scroll.
 ///
 /// The value was `!reorder-enabled`, which reads as leaving a `true` default alone
-/// and is not one: every style but Material publishes this off, so that spelling
+/// and is not one: every style publishes this off, so that spelling
 /// *enabled* the pan on every sort that retires the drag.
 #[test]
 fn every_draggable_list_opts_out_of_drag_panning() {
     // The binding rather than the token: the property reads as an *enable*, so
     // `mouse-drag-pan-enabled: true` is the likeliest wrong edit and a bare
     // occurrence count can't fail on it.
-    let list = code_tokens(DRAGGABLE_LIST);
+    let list = code_tokens(TRACK_LIST);
     assert_eq!(
         list.matches("mouse-drag-pan-enabled: false").count(),
         1,
         "`inner-list` must opt out, the only scroller the rows sit in"
     );
     assert!(
-        code_tokens(QUEUE_SHEET).contains("mouse-drag-pan-enabled: false"),
-        "every row in the queue sheet is draggable, so its ListView never gets the gesture"
+        code_tokens(QUEUE_PANEL).contains("mouse-drag-pan-enabled: false"),
+        "the queue panel's list drags, so its ListView never gets the gesture"
     );
 }
 
@@ -45,7 +45,7 @@ fn every_draggable_list_opts_out_of_drag_panning() {
 /// every drop at the mirrored slot; a filter makes those indices name a
 /// different track entirely; and a smart playlist has no curated order to
 /// reorder into. Dropping one of the last three costs no wrong write —
-/// `apply_optimistic_reorder` refuses the filtered case and the query the empty
+/// `apply_optimistic_move` refuses the filtered case and the query the empty
 /// item set — but the drag then starts, paints a ghost and a drop line, and does
 /// nothing on release, which is worse than a list that never armed.
 #[test]
@@ -121,10 +121,10 @@ fn the_optimistic_reorder_refuses_a_list_not_shown_in_the_playlists_own_order() 
     );
 }
 
-/// `apply_optimistic_reorder` up to where the display indices reach the keyset.
+/// `apply_optimistic_move` up to where the display indices reach the keyset.
 fn reorder_guard(src: &str) -> &str {
-    let body = src.split_once("pub fn apply_optimistic_reorder").map_or("", |(_, rest)| rest);
-    body.split_once("let rows =").map_or("", |(head, _)| head)
+    let body = src.split_once("pub fn apply_optimistic_move").map_or("", |(_, rest)| rest);
+    body.split_once("let tracks =").map_or("", |(head, _)| head)
 }
 
 /// The reload a removal brings prunes nothing under a filter, so the removal drops its own rows
@@ -150,4 +150,22 @@ fn only_an_ascending_position_sort_is_the_manual_order() {
     assert!(!is_manual_order("title", "desc"));
     // `SortDir::from_token`'s rule — only `"desc"` is descending.
     assert!(is_manual_order(POSITION_FIELD, "sideways"));
+}
+
+/// A detail left open on a tab out of sight keeps its id, so the id alone would take files nobody
+/// saw go in. A smart playlist's members are its rules', so a drop has nothing to write to.
+#[test]
+fn a_file_drop_lands_only_in_a_curated_playlist_on_screen() {
+    let open = DetailPage { covered: false, tab_mounted: true, playlist_id: 5, is_smart: false };
+    let cases = [
+        (DetailPage { ..open }, Some(5), "every term permitting"),
+        (DetailPage { playlist_id: 0, ..open }, Some(0), "the lowest id"),
+        (DetailPage { covered: true, ..open }, None, "under Now Playing or the miniplayer"),
+        (DetailPage { tab_mounted: false, ..open }, None, "a valid id behind another tab"),
+        (DetailPage { playlist_id: -1, ..open }, None, "no detail open"),
+        (DetailPage { is_smart: true, ..open }, None, "a smart playlist, the rest open"),
+    ];
+    for (page, expected, case) in cases {
+        assert_eq!(page.drop_target(), expected, "{case}");
+    }
 }

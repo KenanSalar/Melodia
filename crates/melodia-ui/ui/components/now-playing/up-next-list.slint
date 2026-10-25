@@ -2,8 +2,14 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { Queue, NowPlaying } from "../../globals/queue.slint";
+import { ListTravel } from "../../globals/list-travel.slint";
+import { DragOrigin } from "../../globals/drag.slint";
 import { QueueRow } from "../../models.slint";
 import { ArtworkImage } from "../artwork-image.slint";
+import { ContextClick } from "../context-menu.slint";
+import { DragSource } from "../drag-source.slint";
+import { ListDropTarget } from "../list-drop-target.slint";
+import { TrackContextMenu } from "../track-list/track-context-menu.slint";
 import { NpOverlayScrollbar } from "np-overlay-scrollbar.slint";
 import { NpEmptyState } from "np-empty-state.slint";
 
@@ -26,14 +32,28 @@ component UpNextRow inherits Rectangle {
     // Owned by the host so the row and the slide animation can't disagree
     // about how tall a row is.
     in property <length> row-height;
-    callback clicked();
+    // Where the row sits in play order. The outgoing row names none, the place it showed being one
+    // it can no longer skip to, so nothing on it acts.
+    in property <int> play-index: -1;
+    // Whether the row raises the queue's menu.
+    in property <bool> menu-enabled;
+    // The row the list's drag picked up.
+    in property <bool> lifted;
+
+    // A left press, which is what a drag from the row would carry.
+    callback pressed();
 
     height: row-height;
 
     property <length> pad-v: compact ? Theme.pad-xs : Theme.pad-sm;
+    // What every hover-driven binding reads, so the row stays lit under its own menu.
+    property <bool> hovered: touch.has-hover || ctx-menu.is-open;
+    // The lifted row dims through its brushes rather than `opacity`, which would render it into a
+    // layer for the length of the drag.
+    property <float> fade: root.lifted ? Theme.fade-lifted : 1.0;
 
     Rectangle {
-        background: touch.has-hover ? root.row-hover : transparent;
+        background: root.hovered ? root.row-hover.transparentize(1.0 - root.fade) : transparent;
         border-radius: Theme.radius-md;
 
         HorizontalLayout {
@@ -50,6 +70,7 @@ component UpNextRow inherits Rectangle {
                 cover: NowPlaying.request-cover(root.data.artwork_path);
                 tile-size: compact ? 34px : 38px;
                 tile-radius: Theme.radius-md;
+                fade: root.fade;
             }
 
             // Clips bidi overflow so elide fires — the bar's track-info pattern.
@@ -61,13 +82,13 @@ component UpNextRow inherits Rectangle {
                     spacing: 2px;
                     Text {
                         text: "‎" + root.data.title;
-                        color: root.ink;
+                        color: root.ink.transparentize(1.0 - root.fade);
                         font-size: Theme.font-size-row;
                         overflow: elide;
                     }
                     Text {
                         text: "‎" + root.data.artist;
-                        color: root.ink-muted;
+                        color: root.ink-muted.transparentize(1.0 - root.fade);
                         font-size: Theme.font-size-sm;
                         overflow: elide;
                         visible: root.data.artist != "";
@@ -77,7 +98,7 @@ component UpNextRow inherits Rectangle {
 
             Text {
                 text: root.data.display_duration;
-                color: root.ink-muted;
+                color: root.ink-muted.transparentize(1.0 - root.fade);
                 font-size: Theme.font-size-sm;
                 vertical-alignment: center;
             }
@@ -85,7 +106,39 @@ component UpNextRow inherits Rectangle {
 
         touch := TouchArea {
             mouse-cursor: pointer;
-            clicked => { root.clicked(); }
+            clicked => {
+                if (root.play-index >= 0) {
+                    Queue.skip-to(root.play-index);
+                }
+            }
+            pointer-event(ev) => {
+                if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
+                    root.pressed();
+                }
+                if (root.menu-enabled
+                    && ContextClick.raises-menu(ev, self.mouse-x, self.mouse-y, self.width, self.height)) {
+                    ctx-menu.show-at(self.mouse-x, self.mouse-y);
+                }
+            }
+        }
+
+        // The queue panel's menu without its picks, Up Next selecting nothing; `"up-next"` drops
+        // the selection group with Play Next and Add to Queue.
+        ctx-menu := TrackContextMenu {
+            row-id: root.data.id;
+            row-is-favorite: root.data.is_favorite;
+            row-rating: root.data.rating;
+            row-selected: false;
+            album-id: root.data.album_id;
+            artist-id: root.data.artist_id;
+            genre-id: root.data.genre_id;
+            view-context: "up-next";
+            selection-count: 0;
+
+            play-single => { Queue.skip-to(root.play-index); }
+            toggle-favorite(ids, on) => { Queue.toggle-row-favorite(ids, on); }
+            rate(ids, n) => { Queue.set-row-rating(ids, n); }
+            request-remove(ids) => { Queue.remove(root.play-index); }
         }
     }
 }
@@ -106,6 +159,8 @@ component UpNextRow inherits Rectangle {
 // theme's mantle is no hover indication at all.
 export component UpNextList inherits Rectangle {
     in property <bool> compact;
+    // Whether the rows raise the queue's menu, which the miniplayer's sheet has no room for.
+    in property <bool> menu-enabled: true;
     in property <brush> ink: Player.np-on-backdrop;
     // The artist and the duration. Off a backdrop a host takes `Theme.text` here like every other
     // row list; on one the muted tier is what holds the hierarchy against the artwork.
@@ -151,40 +206,48 @@ export component UpNextList inherits Rectangle {
     // An **absolute** child of this wrapper, not a layout child, so its `y` can carry
     // the one-shot slide without fighting a layout; the clip above hides the row height
     // it is offset by mid-slide.
-    up-next-list := ListView {
-        // The `OverlayScrollbar` below is the only scrollbar.
-        vertical-scrollbar-policy: always-off;
-        horizontal-scrollbar-policy: always-off;
-        // A row click jumps the queue, so it answers the way a card does; argument on
-        // `views/radio/station-grid.slint`.
-        mouse-drag-pan-enabled: false;
+    src := DragSource {
+        origin: DragOrigin.up-next;
+        allow-move: true;
         x: 0;
         // Starts one row-height off rest on a track change and slides in. The sign
         // comes from `slide-direction`: forward slides up, rewound slides down.
         y: NowPlaying.slide-direction * (1.0 - root.slide-p) * root.row-h;
         width: parent.width - root.list-inset-right;
-        height: 100%;
-        for row[idx] in NowPlaying.up-next-rows: UpNextRow {
-            data: row;
-            compact: root.compact;
-            ink: root.ink;
-            ink-muted: root.ink-muted;
-            row-hover: root.row-hover;
-            row-height: root.row-h;
-            clicked => {
-                // Under repeat-all the list wraps past the end, so the play-order
-                // index is taken modulo the queue length.
-                Queue.skip-to(Math.mod(
-                    NowPlaying.base-index + idx,
-                    NowPlaying.queue-length));
+        // Only as tall as its rows: a `DragArea` takes every left press its children leave, and the
+        // space under a short queue is the miniplayer's window grab.
+        height: min(parent.height, NowPlaying.up-next-rows.length * root.row-h);
+
+        up-next-list := ListView {
+            // The `OverlayScrollbar` below is the only scrollbar.
+            vertical-scrollbar-policy: always-off;
+            horizontal-scrollbar-policy: always-off;
+            // A row click jumps the queue and a drag reorders it, so it answers the way a card
+            // does; argument on `views/radio/station-grid.slint`.
+            mouse-drag-pan-enabled: false;
+            width: 100%;
+            height: 100%;
+            for row[idx] in NowPlaying.up-next-rows: UpNextRow {
+                data: row;
+                compact: root.compact;
+                ink: root.ink;
+                ink-muted: root.ink-muted;
+                row-hover: root.row-hover;
+                row-height: root.row-h;
+                // Under repeat-all the list wraps past the end, so the play-order index is
+                // taken modulo the queue length.
+                play-index: Math.mod(NowPlaying.base-index + idx, NowPlaying.queue-length);
+                menu-enabled: root.menu-enabled;
+                lifted: src.lifts(idx);
+                pressed => { src.arm(idx); }
             }
         }
     }
 
     // The row that just left the list. Forward, it is the track that became current and
     // slides off the top; backward, the one that fell off the bottom and slides off
-    // there. The wrapper clips both ends. **Clicks are deliberately not wired**: it
-    // lasts a few hundred ms and names a position this row can no longer skip to.
+    // there. The wrapper clips both ends. **It names no play index**, so nothing on it acts:
+    // it lasts a few hundred ms and shows a position it can no longer skip to.
     UpNextRow {
         visible: NowPlaying.outgoing-visible
                  && NowPlaying.slide-phase < root.slide-frames;
@@ -199,6 +262,30 @@ export component UpNextList inherits Rectangle {
             ? -root.slide-p * root.row-h
             : parent.height - (1.0 - root.slide-p) * root.row-h;
         data: NowPlaying.outgoing-row;
+    }
+
+    ListDropTarget {
+        x: src.x;
+        y: src.y;
+        width: src.width;
+        // The full height where the source stops at its rows, so a drop below them lands at the end;
+        // a `DropArea` passes presses through to the window grab.
+        height: parent.height;
+        origin: DragOrigin.up-next;
+        row-height: root.row-h;
+        row-count: NowPlaying.up-next-rows.length;
+        content-y: up-next-list.content-y;
+        // Where the rows past the repeat-all wrap begin, `up_next::play_order_move` refusing a
+        // move across it. With no wrap it falls past the last row.
+        split-row: NowPlaying.queue-length - NowPlaying.base-index;
+        line-color: root.ink;
+        reorder(from, to) => { NowPlaying.reorder(from, to); }
+        scroll-by(dy) => {
+            up-next-list.content-y = ListTravel.pin(
+                up-next-list.content-y - dy,
+                up-next-list.visible-height,
+                up-next-list.content-height);
+        }
     }
 
     NpOverlayScrollbar {

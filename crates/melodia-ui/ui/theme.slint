@@ -40,6 +40,10 @@ export global Theme {
     // the database. One value, since the list row and the card draw the same file.
     out property <float> fade-disk-only: 0.45;
 
+    // How much of its weight a row being dragged keeps: dim enough not to read as a live row, but
+    // still there, the silhouette being what says which track was picked up.
+    out property <float> fade-lifted: 0.4;
+
     // Where a lit control rests while nothing is pointing at it, as an alpha. Full weight belongs
     // to the pointer, so a control already at it has nothing left to answer a hover with. Shared
     // rather than spelled per component because the Now-Playing star row and the glyph family
@@ -102,6 +106,14 @@ export global Theme {
     out property <length> sidebar-default-w: 180px;
     out property <length> sidebar-min-w: 105px;
     out property <length> sidebar-max-w: 400px;
+    // The minimum has to seat a queue row's fixed cells with room left for its title.
+    out property <length> queue-panel-min-w: 300px;
+    out property <length> queue-panel-default-w: 360px;
+    out property <length> queue-panel-max-w: 560px;
+    // What a narrow window keeps for the content while the queue panel is up: the sidebar folds
+    // to its rail and the panel narrows and then steps aside before the content goes below it.
+    // Two grid columns and the page's insets.
+    out property <length> content-min-w: 452px;
     out property <length> now-playing-h: 72px;
     // Track-row content height.
     out property <length> row-h: 46px;

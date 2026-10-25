@@ -6,27 +6,24 @@ import { WindowChrome } from "../globals/shell.slint";
 import { MaterialIcon } from "../components/material-icon.slint";
 import { NavRow } from "../components/nav-row.slint";
 import { OverlayScrollbar } from "../components/overlay-scrollbar.slint";
+import { EdgeResizeHandle, GrowEdge } from "../components/edge-resize-handle.slint";
 
 // Single nav row. Reads selected state from Nav, fires `select` on click.
 component SidebarItem inherits NavRow {
     in property <int> index;
 
     selected: Nav.selected-index == root.index;
-    show-label: !Nav.sidebar-collapsed;
-    // Collapsed, it centres the icon in the content row; expanded, it tracks a fraction of the
-    // sidebar width so icons drift outward as the user resizes. **Mirrors the clamp the Sidebar
-    // applies to its own `width`**, so this follows the *rendered* width rather than the raw
-    // stored value.
-    pad-left: Nav.sidebar-collapsed
-        ? 4px
-        : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
-    pad-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
+    show-label: !Nav.sidebar-rail;
+    // On the rail, it centres the icon in the content row; expanded, it tracks a fraction of the
+    // sidebar width so icons drift outward as the user resizes.
+    pad-left: Nav.sidebar-rail ? 4px : Nav.sidebar-expanded-w * 10%;
+    pad-right: Nav.sidebar-rail ? 4px : Theme.pad-md;
     ease-padding: !Nav.sidebar-dragging;
 
-    // The collapsed rail hides the label, so the row hands `Nav` its identity and rect
-    // and `app-window.slint` paints the pill beside the rail — the global says why it
-    // can't be mounted here. **Published in both states**, so the tooltip is already
-    // armed when Ctrl+B collapses the rail under a parked pointer.
+    // The rail hides the label, so the row hands `Nav` its identity and rect and
+    // `app-window.slint` paints the pill beside the rail — the global says why it can't be
+    // mounted here. **Published in both states**, so the tooltip is already armed when the
+    // sidebar folds to its rail under a parked pointer.
     private property <bool> hover-mirror: root.has-hover;
     changed hover-mirror => {
         if (self.hover-mirror) {
@@ -61,9 +58,11 @@ component Divider inherits Rectangle {
 }
 
 export component Sidebar inherits Rectangle {
-    width: Nav.sidebar-collapsed
-        ? Theme.sidebar-collapsed-w
-        : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
+    // What the row leaves the sidebar beside the content's floor and any docked queue panel, the
+    // furthest its edge drags.
+    in property <length> room;
+
+    width: Nav.sidebar-rail ? Theme.sidebar-collapsed-w : Nav.sidebar-expanded-w;
     animate width { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
 
     background: WindowChrome.mantle;
@@ -113,21 +112,20 @@ export component Sidebar inherits Rectangle {
                 HorizontalLayout {
                     // `SidebarItem`'s padding, so this icon stays on the same vertical
                     // line as the nav icons below it.
-                    padding-left: Nav.sidebar-collapsed
-                        ? 4px
-                        : clamp(Nav.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w) * 10%;
-                    padding-right: Nav.sidebar-collapsed ? 4px : Theme.pad-md;
+                    padding-left: Nav.sidebar-rail ? 4px : Nav.sidebar-expanded-w * 10%;
+                    padding-right: Nav.sidebar-rail ? 4px : Theme.pad-md;
                     spacing: Theme.pad-md;
                     alignment: start;
                     cross-axis-alignment: center;
                     animate padding-left, padding-right { duration: Theme.dur-med; easing: ease-in-out; enabled: !Nav.sidebar-dragging; }
                     MaterialIcon {
-                        name: Nav.sidebar-collapsed ? "dock_to_right" : "dock_to_left";
+                        name: Nav.sidebar-rail ? "dock_to_right" : "dock_to_left";
                         icon-size: 22px;
                         icon-color: Theme.text;
                         filled: true;
+                        fade: Nav.sidebar-yields ? 0.5 : 1.0;
                     }
-                    if !Nav.sidebar-collapsed: Text {
+                    if !Nav.sidebar-rail: Text {
                         text: @tr("Collapse");
                         color: Theme.subtext0;
                         font-size: Theme.font-size-md;
@@ -136,7 +134,10 @@ export component Sidebar inherits Rectangle {
                     }
                 }
             }
+            // Off while a narrow window forces the rail: there is no room to expand into, and a
+            // click would flip the user's own fold with nothing on screen to show for it.
             collapse-touch := TouchArea {
+                enabled: !Nav.sidebar-yields;
                 mouse-cursor: pointer;
                 clicked => { Nav.sidebar-collapsed = !Nav.sidebar-collapsed; }
             }
@@ -192,44 +193,23 @@ export component Sidebar inherits Rectangle {
         SidebarItem { index: 9; label: @tr("Settings"); icon: "settings"; }
     }
 
-    // Drag-resize handle on the right edge — only meaningful when expanded.
-    if !Nav.sidebar-collapsed: Rectangle {
-        x: parent.width - 4px;
+    // Only meaningful when expanded.
+    if !Nav.sidebar-rail: EdgeResizeHandle {
+        x: parent.width - self.width;
         y: 0;
-        width: 4px;
         height: parent.height;
-        background: resize-touch.pressed ? Theme.accent : transparent;
-        animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
-
-        resize-touch := TouchArea {
-            mouse-cursor: ew-resize;
-            // **The handle's own coordinate frame moves with the sidebar as it
-            // resizes**, so a local `mouse-x - pressed-x` underestimates the cursor's
-            // travel: the sidebar grows by half the delta and the handle lags the
-            // pointer. Tracking in window-absolute coordinates keeps it glued.
-            property <length> start-w;
-            property <length> press-abs-x;
-            pointer-event(ev) => {
-                if (ev.kind == PointerEventKind.down) {
-                    self.start-w = Nav.sidebar-width;
-                    self.press-abs-x = self.absolute-position.x + self.pressed-x;
-                    Nav.sidebar-dragging = true;
-                }
-                if (ev.kind == PointerEventKind.up || ev.kind == PointerEventKind.cancel) {
-                    Nav.sidebar-dragging = false;
-                }
-            }
-            moved => {
-                if (self.pressed) {
-                    Nav.sidebar-width = clamp(
-                        self.start-w + (self.absolute-position.x + self.mouse-x - self.press-abs-x),
-                        Theme.sidebar-min-w,
-                        Theme.sidebar-max-w);
-                }
-            }
-            double-clicked => {
-                Nav.sidebar-width = Theme.sidebar-default-w;
-            }
+        grows: GrowEdge.right;
+        drawn-width: Nav.sidebar-expanded-w;
+        min-w: Theme.sidebar-min-w;
+        // Past the room the sidebar would yield to its rail mid-drag, unmounting the handle under
+        // the pointer and stranding `dragging`.
+        max-w: clamp(root.room, Theme.sidebar-min-w, Theme.sidebar-max-w);
+        dragging <=> Nav.sidebar-dragging;
+        resized(width) => {
+            Nav.sidebar-width = width;
+        }
+        reset => {
+            Nav.sidebar-width = Theme.sidebar-default-w;
         }
     }
 
@@ -237,18 +217,18 @@ export component Sidebar inherits Rectangle {
     // than stealing column space inside the padded layout, and aligned vertically with
     // `nav-scroll` so it doesn't run through the Collapse toggle or the Settings row.
     // Expanded, it insets by the resize handle's width to leave that hit-area on the
-    // very edge; collapsed, with no handle, it takes the edge itself.
+    // very edge; on the rail, with no handle, it takes the edge itself.
     OverlayScrollbar {
         x: parent.width - self.width
-            - (Nav.sidebar-collapsed ? 0px : 4px);
+            - (Nav.sidebar-rail ? 0px : 4px);
         y: nav-scroll.absolute-position.y - root.absolute-position.y;
-        // Slimmer on the collapsed rail so the bar doesn't crowd the icons; the shared slot
-        // expanded, like every other view's.
-        width: Nav.sidebar-collapsed ? 6px : Theme.scrollbar-slot;
+        // Slimmer on the rail so the bar doesn't crowd the icons; the shared slot expanded,
+        // like every other view's.
+        width: Nav.sidebar-rail ? 6px : Theme.scrollbar-slot;
         height: nav-scroll.height;
-        bar-thickness: Nav.sidebar-collapsed ? 4px : 8px;
-        bar-radius: Nav.sidebar-collapsed ? 2px : 4px;
-        min-thumb: Nav.sidebar-collapsed ? 20px : 28px;
+        bar-thickness: Nav.sidebar-rail ? 4px : 8px;
+        bar-radius: Nav.sidebar-rail ? 2px : 4px;
+        min-thumb: Nav.sidebar-rail ? 20px : 28px;
         visible-size: nav-scroll.visible-height;
         content-size: nav-scroll.content-height;
         offset: -nav-scroll.content-y;

@@ -5,6 +5,7 @@ import { FilledChip } from "../../components/filled-chip.slint";
 import { FocusLossWatcher } from "../../components/focus-loss-watcher.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
+import { PopupFit } from "../../components/popup-fit.slint";
 import { PopupSurface } from "../../components/popup-surface.slint";
 import { SearchBar } from "../../components/search-bar.slint";
 
@@ -84,6 +85,10 @@ export component FacetChip inherits Rectangle {
     // Spelled once because the filter box's slot is this number less the surface's padding, and a
     // hand-derived second copy is what left the box floating in a gutter.
     property <length> popup-w: 320px;
+    // The picker's height wherever the window has room for it; the list scrolls inside either way.
+    property <length> popup-h: 380px;
+    // Between the chip and its picker, on whichever side the picker opens.
+    property <length> popup-gap: 4px;
 
     height: 32px;
     // **Never a bound `width`** — a root's is reported as both `min` and `max`, so five chips of
@@ -128,18 +133,23 @@ export component FacetChip inherits Rectangle {
     }
 
     popup := PopupWindow {
-        // Always under the chip; flipping above near the viewport's bottom edge is polish nobody
-        // has asked for yet. Both dimensions are spelled because the body scrolls — a popup sized
-        // by its content would grow to the whole list.
+        // Under the chip, or above it where below is short and above has more room, capped at that
+        // side's room (`PopupFit`). Both dimensions are spelled because the body scrolls — a popup
+        // sized by its content would grow to the whole list.
         //
         // **Trailing edges aligned rather than leading ones.** The strip sits at the band's right,
         // where a left-anchored picker runs past the window and `place_popup` clamps it flush to
         // that edge, gutterless and no longer under the chip that opened it. The room is to the
         // left, and `ColumnTogglePopup` answers the same clamp the same way.
+        property <length> above-y: root.absolute-position.y - root.popup-gap;
+        property <length> below-y: root.absolute-position.y + chip.height + root.popup-gap;
+        property <bool> opens-above:
+            PopupFit.opens-above(self.above-y, self.below-y, root.popup-h);
+
         x: root.width - self.width;
-        y: chip.height + 4px;
+        y: self.opens-above ? -root.popup-gap - self.height : chip.height + root.popup-gap;
         width: root.popup-w;
-        height: 380px;
+        height: PopupFit.side-h(self.above-y, self.below-y, root.popup-h);
         // The rows need their own handlers to run before it closes, so they close it themselves.
         close-policy: close-on-click-outside;
 

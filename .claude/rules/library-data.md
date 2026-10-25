@@ -134,7 +134,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **Track projections by use case**, each with a column list in `queries::track::columns`:
   `TrackSummary` (17 cols; the player's window of records and NP, incl. 4 ReplayGain + `rating`);
-  `TrackListRow` (17; every list incl. the queue sheet and Browse, whose directory fetch selects
+  `TrackListRow` (17; every list incl. the queue panel and Browse, whose directory fetch selects
   `file_path` beside it as the key it matches files on disk by; incl. `rating`); `TrackMeta` (8; NP chips); `TagEditRow` (36;
   Edit-Tags dialog — the only production by-id multi-fetch, every single-valued tag column + the
   technical Summary cols); `PlaylistExportRow` (5;
@@ -155,7 +155,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
     keeps only its ids and fetches the rows near the viewport by id
     (`get_track_list_rows_by_ids`), converted as they land (`ui::paged_rows`), so no list holds a
     row per track. **The queue is the same shape one layer down**: the engine holds its ids and
-    only a window of full records around the current slot (`audio-stack.md`), and the queue sheet
+    only a window of full records around the current slot (`audio-stack.md`), and the queue panel
     and Up Next fetch their rows by id. A detail's hero facts come off the same membership in SQL
     (`queries::track::scope_facts`, `genre_lines`), the page holding no rows to fold them from.
     **Recently Played's Songs tab retains a list and deliberately stays off it**:
@@ -233,8 +233,11 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
 
 - **Star ratings mirror the favorite path.** Inert `tracks.rating` (0–5) surfaced via a
   **hover-revealed** `StarRating` (`crates/melodia-ui/ui/components/star-rating.slint`) inside the
-  title cell track rows and queue rows share (`components/track-list/track-title.slint`) — no
-  rating column, no in-table sort. Rides on `TrackListRow` +
+  track rows' title cell (`components/track-list/track-title.slint`, switched per list from its
+  columns pill; the queue rows mount it without one), and via `components/rating-menu-row.slint`,
+  which leaves its menu up, in the row menu, over a row or a selection, and in the bar's overflow
+  menu. No rating column, no in-table sort. Rides on
+  `TrackListRow` +
   `TrackSummary`. Writes via `library::ratings::{set_rating, set_current_rating}` (clamped 0–5),
   mirroring `favorites::{set_favorite, toggle_current_favorite}` down to the `sync_current_track_*`
   helper (over `player::state::sync_current_track_if_in`) that flips the playing track's cached

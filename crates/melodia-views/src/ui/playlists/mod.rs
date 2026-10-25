@@ -44,8 +44,8 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::playlist::PlaylistStats;
 use melodia_core::entities::smart_criteria::Draw;
 use melodia_ui::{
-    AppWindow, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow, PlaylistRow as UiPlaylistRow,
-    Playlists,
+    AppWindow, Drag, PlaylistDetail, PlaylistGridRow as UiPlaylistGridRow,
+    PlaylistRow as UiPlaylistRow, Playlists,
 };
 
 use grid::PlaylistsGrid;
@@ -54,12 +54,15 @@ use grid::PlaylistsGrid;
 // detail, `boot::ui_setup` seeds the persisted one, and its
 // `initial_grid_fetch!` kicks the first load after the window is shown
 // — which is why `reload_grid` can't fold into `install` with the rest.
-pub use detail::{open_playlist_with, seed_detail_from_settings};
+pub use detail::{detail_on_screen, open_playlist_with, seed_detail_from_settings};
 pub use grid::reload_grid;
 
 // Reached from this slice's own `callbacks/`. `pub(super)` is `pub(in crate::ui)`
 // here, one notch wider than that.
-pub(super) use detail::{apply_optimistic_reorder, open_playlist, refresh_detail, restore_detail};
+pub(super) use detail::{
+    apply_optimistic_move, open_playlist, picked_rows, refresh_detail, refresh_header,
+    restore_detail, track_ids_at,
+};
 pub(super) use grid::{refresh_after_write, refresh_play_stats, shown_card};
 
 /// The M3U8 import / export and Add-to-Playlist wiring, kept out of [`install`] because each
@@ -78,6 +81,7 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<PlaylistsUi> {
         detail,
         cx.cover_thumbs.clone(),
         detail_artwork::blur_spec(cx.app),
+        cx.app.global::<Drag>().as_weak(),
     ));
     callbacks::wire(cx.app, cx.state, &playlists_ui);
     // From launch, so the row menus offer Add to Playlist before the tab is ever opened.
@@ -104,6 +108,8 @@ pub struct PlaylistsUi {
     /// The pick a random-capped smart playlist's detail lists, drawn once per open so its sorts,
     /// filters, reloads and hero all describe the same tracks.
     draw: Mutex<Draw>,
+    /// What the detail's rows moving revokes, the hook being handed nothing to reach it through.
+    drag: slint::Weak<Drag<'static>>,
 }
 
 impl PlaylistsUi {
@@ -112,6 +118,7 @@ impl PlaylistsUi {
         detail: DetailCache<PlaylistDetail<'static>>,
         cover_thumbs: Arc<CoverThumbs>,
         hero_blur: Option<BlurSpec>,
+        drag: slint::Weak<Drag<'static>>,
     ) -> Self {
         Self {
             grid,
@@ -120,6 +127,7 @@ impl PlaylistsUi {
             detail_artwork: Arc::new(DetailArtwork::new(hero_blur)),
             section: SectionState::new(),
             draw: Mutex::new(Draw::default()),
+            drag,
         }
     }
 

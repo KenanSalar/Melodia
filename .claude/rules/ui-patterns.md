@@ -35,9 +35,9 @@ silently miss the other.
   host's edge to stay inside the shell rect `AppWindow` mirrors into `WindowChrome.shell-*`. So no
   host picks a side to dodge the window. What a host still owns is the two things the pill can't
   see: **a clip between it and the window**, and **a sibling painted after it**. **The rect it
-  fits is the client's, not the panel's**: `edge-clearance` is `Theme.pad-xs` and so is the
-  panel's own right gutter, so a pill wide enough to reach the clamp parks its trailing border on
-  the clip line rather than inside it. Publishing the panel rect instead is not the fix,
+  fits is the client's, not the panel's**: `WindowChrome.edge-clearance` is `Theme.pad-xs` and so
+  is the panel's own right gutter, so a pill wide enough to reach the clamp parks its trailing
+  border on the clip line rather than inside it. Publishing the panel rect instead is not the fix,
   `globals/shell.slint` sizing the miniplayer's artwork off the same two properties. Keep a wide
   pill off the limit, which is what the alignment below does for the hosts that reach it.
 
@@ -49,10 +49,12 @@ silently miss the other.
   answer for a host whose pill is drawn on the top layer. **An unlabelled `PillButton` takes it
   on its own**, and that one is not a knob: the chrome collapses to 28 px while the label stays
   several times that, so the centred arm has nothing left to centre against, and the chips these
-  sit in are right-aligned. `PillButton.icon-only` is the single statement of it, and **both
-  mount shapes read that property rather than restating the test** (in-tree binds it directly; a
-  top-layer host publishes it beside the rect, as `tab-pills`' `tip-align-end` and Browse's
-  `view-toggle.icon-only` do).
+  sit in are right-aligned. `PillButton.icon-only` is the single statement of it, a pill whose
+  label `compact-t` closed included, and **both mount shapes read that property rather than
+  restating the test** (in-tree binds it directly; a top-layer host publishes it beside the rect,
+  as `tab-pills`' `tip-align-end` and Browse's `view-toggle.icon-only` do). The text has its own
+  single statement, `PillButton.tip-text`, which is the dropped label wherever the pill names no
+  tooltip of its own, and the top-layer `tip-label`s read that.
 
 - **A pill landing on a later-declared sibling is lifted with a constant `z`**, on the host's
   branch at the level where it and the occluder are siblings, where lifting it overlaps nothing
@@ -106,7 +108,9 @@ silently miss the other.
 - **`PillButton`** (`components/action-pill.slint`) — `danger: true` tints icon **and** label
   only; the filled destructive treatment is `SectionButton`'s, and the two are not one pattern.
   Compose inside `ActionPill`, separated by `PillDivider`; `IconButton` for round controls
-  *outside* chips.
+  *outside* chips. **`compact-t` closes the label onto the glyph and moves it to the tooltip**, a
+  compact tab's morph, and a text-only pill ignores it. Only the band decides when and eases it
+  (`LibraryTabBand`, below), and a pill bound to it needs a tooltip something actually draws.
 
 - **A multi-selection grows no pill.** The count, every batch action and both ends of the set are
   the right-click menu's, on rows and cards alike: "Select all" ungated wherever the host has a set,
@@ -179,6 +183,15 @@ silently miss the other.
 
 - **`PopupSurface`** — every `PopupWindow` body wraps it. `pill: true` for vertical-pill.
 
+- **A popup whose rows can outgrow the window places itself through `PopupFit` and lists them in a
+  `PopupColumn`** (`components/popup-fit.slint`, `components/popup-column.slint`), never a
+  hand-rolled scroller. `PopupFit` holds the two placement rules: raised at a point, a popup slides
+  to stay in the shell; hanging off a control, it opens on the side with room so it never covers
+  the control. The column scrolls whatever its own box can't hold and publishes what its host
+  sizes off. Its hosts are `ContextMenuPopup`, `Dropdown`, `ColumnTogglePopup` and the bar's
+  overflow menu with both its flyouts; `FacetChip` takes `PopupFit` alone, its virtualized list
+  scrolling itself. `slint-pitfalls.md`'s oversized-popup entry is why.
+
 - **A surface that floats over the app edges with `Theme.surface2`, never `Theme.border`.** All
   four Catppuccin variants define `border` as the same hex as `surface0`, so a `surface0` card
   bordered with it has no rim at all. The test is the fill underneath, not the element's kind:
@@ -247,7 +260,9 @@ three components that answer it, and each argues its geometry at its own file.
 - **Every grid is `EntityCard` in a virtualized chunked-row `ListView`**: Rust hands it grid-row
   structs of N cards, and **`GridColumnsSync`** computes N from the width and fires
   `columns-changed`, so a resize re-chunks without touching the database. Detail views own
-  no header — the four under My Library are bodies, the banner being the page's own band.
+  no header — the four under My Library are bodies, the banner being the page's own band. The
+  `ListView` sits in a copy-only `DragSource`, so a card drags out as what Add to Queue on it would
+  take (the drag entry under Lists and playback).
 
 - **The seven library grids are paged, and `ui::card_grid` is their one load path.** My Library's
   four, Favorites' Most Played and Favorite Artists, and Recently Played's Most Played each install
@@ -605,26 +620,38 @@ three components that answer it, and each argues its geometry at its own file.
 ### Lists and playback
 
 - **The row right-click menu is `components/track-list/track-context-menu.slint`, and the only
-  place its entries are mounted.** Three hosts: `TrackListRowItem`, the queue sheet's
-  `QueueRowItem` and the now-playing bar's track card. It owns the entries, the `multi-active` gate
-  (this row selected *and* more than one selected, so a right-click on an unselected row falls back
-  to that row alone) and the `effective-ids` every handler reads; the host only says where, through
-  `show-at`.
+  place its entries are mounted.** Four hosts: `TrackListRowItem`, the queue panel's
+  `QueueRowItem`, Up Next's row (Now Playing's only, through `menu-enabled`, the miniplayer's sheet
+  having no room for a menu) and the now-playing bar's track card. It owns the entries, the
+  `multi-active` gate and the `effective-ids` every handler reads; the host only says where, through
+  `show-at`. **The gate's rule is `Selection.acts-on-set` and `effective-ids`**, the item selected
+  *and* more than one selected, so a right-click on an unselected item falls back to that item
+  alone; the card and station menus read the same two, and a menu spelling the rule again is the
+  copy those replaced.
   **`view-context` is most of what a host configures** — it suppresses the entry naming the
   surface you are already on and picks the remove arm, and `"queue"` drops Play Next and Add to
-  Queue outright, the queue being what they name. `"now-playing"` drops those two and Play as well,
+  Queue outright, the queue being what they name. `"up-next"` is the queue's arm less the selection
+  group, Up Next picking nothing. `"now-playing"` drops those two and Play as well,
   its row being the track already playing out of a queue that holds it, and the selection group
   with them, the bar having no set. A remove label handed over by the host would ship
   untranslated, `@tr` resolving literals at codegen, so a third list's arm is one more `if` here
   rather than a property.
+  **Its rating entry is `components/rating-menu-row.slint`'s `RatingMenuRow`, which the bar's
+  overflow menu mounts too**, each host sizing it to its own rows. **A star leaves either menu
+  up**, so a pick can be corrected in place: no host dismisses on one, and the row takes every
+  press its strip misses, which would otherwise reach the host's `PopupDismissCatcher`. Over a
+  selection it shows the clicked row's stars and the host applies the pick to the whole set,
+  `FavoriteMenuItem`'s rule. The two are the queue rows' only way to rate and favourite, their
+  title carrying no marks.
   **The bar, the one host with no list row, reads the "Go to" ids through `ui::track_links`**,
   `TrackSummary` carrying no foreign keys: onto `Player.track-{album,artist,genre}-id` per track
-  change and again per library tick, a retag keeping the id. The queue sheet's rows carry theirs
+  change and again per library tick, a retag keeping the id. The queue panel's rows carry theirs
   from the track-list projection, as a list row does.
   **"Go to" calls `Nav.go-to-*` straight, as Open Containing Folder calls `Nav`**, with no host
   forwarding: the origin a drill records is read off where the user stands, so there was nothing
-  per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands, closing
-  Now Playing and dismissing the queue sheet, the bar staying reachable over both.
+  per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands by closing
+  Now Playing, the bar staying reachable over it, and the floating queue with it. The docked queue
+  panel stays open, sitting beside the page rather than over it.
 
 - **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
@@ -656,17 +683,22 @@ three components that answer it, and each argues its geometry at its own file.
     the popup grows by it while it is open, leftward it holds the room from the start, an open
     popup moving its origin a frame late (`slint-pitfalls.md`). A second `PopupWindow` is not an
     option (same file).
-  - **`ContextMenuPopup` takes `close-on-click-outside`, and every entry calls the menu's
-    `dismiss()` after acting.** `close-on-click` closes on any release inside the popup, the click
-    that opens the flyout included. After, because `pop.effective-ids` goes with the popup. The
-    history list's menu and `TextEditMenu` are flat and keep `close-on-click`.
+  - **`ContextMenuPopup` takes `close-on-click-outside`, and every entry but the rating row calls
+    the menu's `dismiss()` after acting.** `close-on-click` closes on any release inside the
+    popup, the click that opens the flyout included. After, because `pop.effective-ids` goes with
+    the popup. The history list's menu and `TextEditMenu` are flat and keep `close-on-click`.
   - **The width follows the rows**, `ContextMenuMetrics.menu-w` over the rows' `preferred-width`,
     declared on the popup since only it can read its descendants. Labels elide past the ceiling. A
     fixed width is what clipped a long Remove label; the chevron sits in a fixed box, its glyph
     being picked by a side the width decides.
+  - **A menu taller than the window scrolls** (`slint-pitfalls.md`'s oversized-popup entry). The
+    column caps at `PopupFit.max-h` in a `PopupColumn` and the popup places its own `y` through
+    `PopupFit.fit-y`, which is why each menu passes `anchor-window-y` beside `anchor-window-x`. A
+    scrolling menu widens by the bar's gutter rather than taking it from a row, and the Copy flyout
+    follows its row through the scroll.
   - **An item menu's Copy acts on the effective set, one line per item, in the order handed over**, never
     re-sorted: on a list or grid that is the selection's pick order (a range in display order, a
-    ctrl-click appended), so it matches what Play queues, and on the queue sheet it is queue order,
+    ctrl-click appended), so it matches what Play queues, and on the queue panel it is queue order,
     the set being read back off its rows. An item without the field adds no line. Why line breaks
     and never a space is `library::clipboard`'s. Menus pass ids to `CopyActions` and Rust resolves
     the text there; stations copy through `Radio.copy-stations` by `select_key`, resolving against
@@ -676,13 +708,78 @@ three components that answer it, and each argues its geometry at its own file.
     where a clipboard crate would land on XWayland. `ui::clipboard::write` is its one Rust caller,
     raises the confirmation, and never logs the text, a stream URL being able to carry a token.
 
+- **A list drags through `components/drag-source.slint`'s `DragSource` round its `ListView`, and
+  reorders through `components/list-drop-target.slint`'s `ListDropTarget` over it, never a gesture
+  of its own.** Three lists reorder: the queue panel, Playlist Detail's `TrackList` (the one mount
+  naming an `origin`) and Up Next, in Now Playing and the miniplayer alike. The rest drag out only,
+  copy-allowed: the other eight track surfaces' `TrackList`s and the five card grids. The row
+  reports its press, `src.arm(idx)` where the drag only reorders and `src.arm-items(…)` where it
+  carries something out, and a reorderable row reads `lifted: src.lifts(idx)`, dimming by
+  `Theme.fade-lifted` through its brushes and never `opacity`, since a drag of picks lifts a
+  screenful of rows and `opacity` renders each into a texture of its own (`slint-pitfalls.md`'s
+  text-crop entry); the target owns the slot, the line, the edge scroll and the no-op slots,
+  handing the host `reorder(from, to)`, `move-picks(slot)` and `scroll-by(dy)`. A host whose rows
+  fall into two runs that a move may not cross names the second's first row in `split-row`, and
+  the slots across it draw no line and drop nothing.
+  - **A press on a picked row while others are picked lifts them all**, the menu's rule
+    (`Selection.acts-on-set`). The row arms as usual, then `src.lift-picks(…)` with the host
+    global's `picked-run()`, Rust being the only side that can find the picks in a list it pages
+    (`picked_rows` on `PagedRows` and on `QueueRows`, `ui::drag::lifted_run`). Each picked row adds
+    `|| (row.selected && src.lifting-picks)` to its `lifted`, the no-op slots widen to the run
+    (scattered picks have none, any drop gathering them), and the drop arrives as
+    `move-picks(slot)`. The queue panel and Playlist Detail take it; Up Next has no picks.
+    **Every tier moves through `melodia_core::utils::block_move`**, one row being a block of one,
+    so the play order, the shown keyset and `playlist_items` can't land one drop three ways.
+  - **What a drag carries is `Drag.payload`, written from two trees** (`ui::drag` names the three
+    writes): the pressed row arms it, every press disarms it first in
+    `winit_filter::disarm_drag`, a touch's start included, and a list whose rows move under a drag
+    revokes its own origin (`queue_panel::rows::show_queue`, `PlaylistsUi::rows_moving`, Up Next's
+    `show_slice`). **A new reorderable list owes the revoke**: without it the drag goes on over the
+    rebuilt rows, and the index it lifted lands on another track. A revoke
+    keeps the items, which are ids and survive the rebuild, so the drag can still copy out.
+  - **What another list takes is `Drag.payload.items`, Add to Queue's `(kind, ids)`.** A track row
+    builds it in `TrackListRowItem.drag-items()` and a card in `CardCell.drag-items(title, cover)`,
+    both through `Selection.effective-ids`, so a drag carries what the item's menu acts on.
+    `EntityCard.pressed` is a left press on the card body; one on its box or a hover control arms
+    nothing. The queue panel's target `takes-items` and lands them as a copy ahead of the row they
+    were let go above through `Queue.drop-in`, which names that row by its `QueueEntry` before
+    resolving as Add to Queue does (`card_actions::spawn_with_track_ids`) into
+    `queue_insert_before`; its header gives way to what letting go would do while `holds-items`. The
+    bar's `components/now-playing/queue-button.slint` takes a drop as `CardActions.add-to-queue`
+    verbatim and opens the panel after a 500 ms hover, so a drop can still be placed at a slot.
+  - **The chip under the pointer is `components/drag-ghost.slint`'s `DragGhost`**, for a drag that
+    carries items and not over its own list's reorder target (`Drag.follow`'s third argument). A
+    target positions it from its `can-drop`, and elsewhere a window-sized `DropArea` at the back of
+    the root's stack does, which can't move to the front (`slint-pitfalls.md`'s in-window drag
+    entry). `Drag.live` mirrors the source's `dragging`, the one end every drag reaches.
+  - **A touch never starts a drag**: every `DragSource` stands down while `Drag.touching`, which is
+    its `enabled`, so no mount binds `enabled`.
+  - **A `DragSource` hands back the click its rows don't take**, as `background-clicked`. A list or
+    grid on a page with a filter box forwards it as `request-blur-search`; the queue panel and Up
+    Next have no box and leave it unbound.
+  - **Up Next's rows are play order only modulo the repeat-all wrap**, so its target hands
+    `NowPlaying.reorder` row indices and `up_next::play_order_move` maps them, refusing a move
+    across the wrap. Up Next's `split-row` sits on that wrap, so no line promises a move Rust then
+    refuses, and Rust's refusal stays the one that holds. The queue panel and the playlist reorder
+    in their own rows.
+
+- **A file dragged in from the file manager is not that drag, and no `DropArea` sees it.** Its
+  banners read `FileDrag.target`, which the winit filter writes from a hit test in Rust, and a
+  target says where it is drawn through `components/window-rect-report.slint`'s
+  `WindowRectReport`. A new file target mounts a report outside any `if` but the full-UI branch
+  and gains an arm in `window_chrome::file_drop`; `desktop-shell.md` has the flow. **Its banner
+  is `components/file-drop-banner.slint`'s `FileDropBanner`**, never one drawn by hand.
+
 - **A list that can hold the whole library shows it through `ui::paged_rows::PagedRows`, never a
   `VecModel` copy.** It keeps the ids in their SQL order and only the rows near the viewport, and
   its module doc argues the window, the one fetch in flight and the seed a load fetches where the
   list is scrolled. Both Songs tabs and the four details are six of them, all
-  `track_rows::TrackRows`. The queue sheet is the seventh, a `queue_rows::QueueRows` over the ids
-  the engine publishes, and its picks are by track as every other list's are, so a track queued
-  twice is picked, counted and removed as both rows. A favourite or rating change patches the
+  `track_rows::TrackRows`. The queue panel is the seventh, a `queue_rows::QueueRows` built over one
+  as `PagedGrid` is, and it is the one list that **picks by row rather than by track**: a track
+  queued twice is two rows, and the picks name the engine's `QueueEntry`s, so each copy is picked,
+  dragged and removed on its own, and the menu counts rows and acts on each track once. The
+  entries come off the state through `queue_panel::rows::read_queue`, never off `QueueViewModel`,
+  whose doc says why. A favourite or rating change patches the
   cached row, where the `VecModel` lists go through `model_patch`; the `list_selection` helpers
   take either model. A list over another row type implements `PagedRow` for it rather than growing
   a second model.
@@ -691,10 +788,62 @@ three components that answer it, and each argues its geometry at its own file.
   writes beside the rows, and the four details do it through one impl over `TrackDetail`. A track
   list over another scope implements `PagedTrackList` rather than growing a second load path.
 
+- **The queue panel sits after the content panel in the shell's row**, and five things about it
+  reach across files.
+  - **`Queue.shown` is the docked panel open with room for it, or the overlay open, less what
+    covers either**: Now Playing, and the miniplayer, which unmounts it. It is computed and written
+    on the `AppWindow` root alone, a global being unable to watch its own properties and a mirror
+    inside the panel missing the miniplayer swap. Rust's rows and the private cover tier follow
+    it through `shown-changed`, so a hidden panel holds nothing past `lifecycle::TEARDOWN_DELAY`,
+    whatever hid it, and the file-drop route reads it at every move. The root writes `shown` before it fires
+    `shown-changed`, which is what lets the panel's seat read the playing index Rust has just
+    written, and `Queue.floating` in the same handler, so the two never describe different panels
+    for a frame.
+  - **`Queue.toggle()` is Rust's** (`ui::queue_panel::lifecycle`), the one path the bar, its
+    overflow entry and Q share. Under Now Playing the panel is open but stepped aside, so a press
+    closes Now Playing to bring it back, and `globals/queue.slint` importing `Nav` would break the
+    rule that only the dispatchers import sibling globals. It opens whichever mode the window has
+    room for. `Queue.close()` needs nothing outside the global and stays a Slint function.
+  - **Its inner edge is `components/edge-resize-handle.slint`'s `EdgeResizeHandle`, and so is the
+    sidebar's.** A third resizable side mounts it with its own `grows` rather than copying the
+    absolute-coordinate drag.
+  - **A narrow window takes room back in a fixed order, so the content keeps
+    `Theme.content-min-w`**: the sidebar draws its rail, the panel narrows to its minimum, and then
+    it steps aside through `shown`. **The floor holds without the panel too**: the sidebar folds
+    once the window alone would leave the content under it, which makes the floor the narrowest
+    content panel any page has to seat. The shared header and the band answer to it rather than
+    to the window (`TabBar` and `LibraryTabBand`, below). The `AppWindow` root works the steps
+    out, being the one element that sees the row, and argues them there. The flags carrying them
+    out of that file (`Nav.sidebar-yields`, `Queue.fits`, `Queue.floating`) are each written from
+    a `changed` mirror rather than bound, since a binding over the window's width restarts the
+    sidebar's width ease on every resize move (`slint-pitfalls.md`'s structural-dirt entry).
+    **`Nav.sidebar-yields` feeds `Nav.sidebar-rail`, and every part of the sidebar draws from the
+    rail.** `sidebar-collapsed` is the user's own fold and the only one persisted, so a renderer
+    reading it draws an expanded sidebar over a forced rail. The fold toggle and Ctrl+B stand down
+    on `sidebar-yields`. The panel's half of the fold is keyed on the docked panel rather than
+    `open`, so the sidebar comes back once the panel has stepped aside: keyed on `open`, a panel
+    too wide to show would hold the sidebar folded with both fold controls standing down.
+  - **Past that last step the panel opens as an overlay, and its controls stay live.** Two states
+    carry it: `Queue.open` is the docked panel's and the persisted one, `Queue.overlay-open` the
+    overlay's and session-only, so a narrow launch with the panel saved open shows nothing.
+    **Narrowing hides a docked panel rather than floating it** (Kenan): the overlay dims the page
+    and takes the keys, which a resize should never raise unasked. Widening with the overlay open
+    docks it, in `changed queue-fits`, with `shown` held through the hand-off. **It is the same
+    `QueuePanel`**: a second would share the rows' fetch anchor, the drag state and `pointer-in`,
+    and couldn't sit behind an `if`. Floating, the root takes no width, stops clipping (a
+    clipping item takes every press outside its own box) and draws its body to its own left, inset
+    by `float-inset` off the content panel's edges so `RoundedFrame`'s corners stay clear.
+    `QueueScrim` dims the page from inside the content panel, ahead of `RoundedFrame`, and closes
+    the overlay on a click. An overlay folds no sidebar, taking no room in the row, and owns the
+    queue's keys while it is up.
+
 - **A track's title and its marks are `components/track-list/track-title.slint`'s `TrackTitle`**:
-  the heart a favourite keeps up, and the star strip the row reveals on hover. Track rows and queue
-  rows both mount it, so the two can't come to mark a track differently; a third row showing a
-  track's title mounts it too.
+  the heart a favourite keeps up, and the star strip a track list row reveals on hover, each
+  switched by the host. A track list switches both per view from its columns pill, beside the
+  heart its Length cell swaps in on hover, and keeps all three in `views.json`'s `view_marks`
+  rather than `view_columns`, which `ViewStateData` argues. The queue rows mount it for the title
+  alone, their favourite and rating being the row menu's, so the title keeps that room. A third
+  row showing a track's title mounts it too, for the elide and the LTR base its `Text` carries.
 
 - **The four track-list details share one wiring, `callbacks::track_detail`**, driven through
   `track_detail::DetailGlobal` (the generated global) and `TrackDetail` (the view handle). Each
@@ -724,7 +873,9 @@ three components that answer it, and each argues its geometry at its own file.
   shared there too, by the four flat list views and the four details**: `wire_row_selection` over
   `list_selection::RowSelectionView`, ranging over the rows on screen. Browse keeps its own
   wiring for its disk-only rows, over the same `compute_click_selection`, whose anchor is the id
-  of the row last clicked.
+  of the row last clicked. **So is the drag out**: `TrackList` mounts a `DragSource` round its
+  `ListView` (the drag entry above), and a disk-only Browse row arms nothing, its body being
+  disabled.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
@@ -746,16 +897,15 @@ three components that answer it, and each argues its geometry at its own file.
   (`card_grid::shown_ids`), so the cards and the queue can't disagree about what's on screen,
   the filter included.
 
-- **Track-list insets belong to the list, not the page.** `TrackList` and `DraggableTrackList`
-  take `inset-left` and `inset-right`, defaulting to `Theme.track-list-inset` and
-  `Theme.scrollbar-slot`, and resolve their columns inside them. So the Songs tabs and the four
-  detail bodies mount the list at full width with no side padding of their own, a detail's header
-  sitting flush under its band, and the right edge stops at the bar's slot so a row's pill never
-  runs under the track. Two hosts differ: Browse keeps a `page-inset` for its header strip and card
-  grid, its folder rows following the list's column, and Search's Songs section passes `0px` on
-  both sides, being a column inside the page's own inset beside the Top Result. Overlay scrollbars
-  stay at `parent.width - self.width`, and bottom padding is never on the root (the dead-strip
-  pitfall).
+- **Track-list insets belong to the list, not the page.** `TrackList` takes `inset-left` and
+  `inset-right`, defaulting to `Theme.track-list-inset` and `Theme.scrollbar-slot`, and resolves
+  its columns inside them. So the Songs tabs and the four detail bodies mount the list at full
+  width with no side padding of their own, a detail's header sitting flush under its band, and the
+  right edge stops at the bar's slot so a row's pill never runs under the track. Two hosts differ:
+  Browse keeps a `page-inset` for its header strip and card grid, its folder rows following the
+  list's column, and Search's Songs section passes `0px` on both sides, being a column inside the
+  page's own inset beside the Top Result. Overlay scrollbars stay at `parent.width - self.width`,
+  and bottom padding is never on the root (the dead-strip pitfall).
   **Three hosts size a list to what it holds** through `TrackList.content-height`: Browse's and
   Artist Detail's capped at the viewport, Search's Songs section outright. The sum lives there, so
   a change to the list's own chrome is one edit.
@@ -901,7 +1051,7 @@ three components that answer it, and each argues its geometry at its own file.
   bought nothing but a section leave releasing its own, which is what made every re-entry cold. A module singleton rather than a
   `ViewCtx` field, there being exactly one of it and no view owning it — the shape
   `ui::nav_history::nav()` takes. **The tiers that stay private are private on decode size**:
-  Search's two card strips and the row tier. Two are private on other grounds: the queue sheet's,
+  Search's two card strips and the row tier. Two are private on other grounds: the queue panel's,
   on lifetime (the `QueueRow` entry below), and Radio's logo tier, below.
 
 - **A leave hands the pixels back and keeps the picture.** `grid_prewarm::hand_back_covers` shrinks
@@ -973,14 +1123,16 @@ three components that answer it, and each argues its geometry at its own file.
   - **The bounded strips and one-shot slots were never on this path and stay inline** — Search's
     two card strips, Now Playing's up-next list, and `Playlists.request-row-cover` behind the three
     picker dialogs. Each draws a capped set against a tier its own fetch warmed, so "never on the
-    calling thread" is a rule about the *uncapped* surfaces: grids, and the shared row tier.
+    calling thread" is a rule about the *uncapped* surfaces: grids, the shared row tier, and the
+    queue panel's tier over it.
 
 - **`QueueRow` goes through two globals rather than `RowCovers`**, each wanting a different tier:
-  the queue sheet's *private* `CoverThumbs` (so closing it drops every buffer without yanking
+  the queue panel's *private* `CoverThumbs` (so hiding it drops every buffer without yanking
   covers the track lists still need) and the shared row tier. **The private one is
-  `CoverThumbs::backed_by` the shared one**: a miss borrows the row tier's buffer before decoding,
-  and its size is the row tier's, retunes included, so a cover both draw is one allocation. That
-  is what makes a queue the size of the library affordable.
+  `CoverThumbs::backed_by` the shared one**: a miss borrows the row tier's buffer before
+  scheduling a decode, and its size is the row tier's, retunes included, so a cover both draw is
+  one allocation. That is what makes a queue the size of the library affordable. Its notifier,
+  installed in `ui::queue_panel`, bumps `Queue.covers-generation` as each scheduled batch lands.
 
 - **`covers-generation` is the repaint token, and on a card grid that is all it is.** A `pure`
   callback's result is cached until a dependency is dirtied, so an `int` the binding also reads is
@@ -997,10 +1149,11 @@ three components that answer it, and each argues its geometry at its own file.
     prewarm's announce. With it went `should_announce_warm`, the `warmed_tab` plumbing through both
     curated pages' fetch-and-apply, the `mark_covers_warm` / `repaint_covers` split, and the `bool`
     every `prewarm_tab_covers` returned.
-  - **Two surfaces still gate on the value, and both hold a tier that really is released**: the
-    queue sheet's **open**, whose private tier is dropped on close, and Radio's leave.
+  - **One surface still gates on the value: Radio's leave**, whose tier is released outright.
     There `0` still means cold, the lookup still answers cache-only, and the rewind still sits
-    beside the clear. `radio::covers::logo_cover` is that branch's one remaining home.
+    beside the clear. `radio::covers::logo_cover` is that branch's one remaining home. The queue
+    panel's tier is released on hide too, but its rows borrow or schedule from the first frame, so
+    its generation is a repaint token like a grid's and nothing rewinds it.
   - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from
     the UI thread, and a redraw winning that race paints an empty grid. It keeps its card model
     across the leave, which is why the covers under it are shrunk rather than dropped and why it
@@ -1010,8 +1163,8 @@ three components that answer it, and each argues its geometry at its own file.
     for it at a new surface: a copy that grew a **decoding** arm reads correctly and puts the
     UI-thread decode straight back, which is the one thing it will not do.
 
-- **Cache cap via `grid_prewarm::cover_cap_for_window(app)`** — one band for every grid, they all
-  draw the same card. Derives its cap from the **window's** own logical size against
+- **Cache cap via `grid_prewarm::cover_cap_for_window(app, size)`** — one band for every grid, they
+  all draw the same card. Derives its cap from the **window's** own logical size against
   `GridGeometry`'s pitches, deliberately not the monitor's: the monitor caps against a screen the
   window may occupy a corner of, and asking costs a `with_winit_window` round trip that answers
   `None` for the whole window-less boot. A zero extent lands on `GRID_COVER_CAP_FALLBACK`, which
@@ -1030,11 +1183,12 @@ three components that answer it, and each argues its geometry at its own file.
     one entry per path, and a section leave shrinks every entry to `PROXY_COVER_DIM` rather than
     dropping it, so the idle case is that side length squared per cover and not the tier's.
   - **Read after `app.show()` and again on every resize**, through `WindowChrome.display-changed`
-    off the winit `Resized` filter. Read once, a cap sized for the launch window is one a later
+    off the winit `Resized` filter, and through `content-panel-resized` whenever the panel's width
+    moves without the window's. Read once, a cap sized for the launch window is one a later
     maximize overruns. It sets the cap exactly rather than growing it: a smaller window really
     does draw fewer cards.
 
-- **Decode size via `grid_prewarm::cover_size_for_window(app)`, and it is derived from the card,
+- **Decode size via `grid_prewarm::cover_size_for_content(app)`, and it is derived from the card,
   not stepped off the scale factor.** `GridGeometry` packs toward `min-card-w`, so a card is
   *smallest* on the panels mounting the most of them: the two constants this replaced sized the
   wide case generously and doubled it for `HiDPI`, which made the displays paying for the most
@@ -1043,17 +1197,21 @@ three components that answer it, and each argues its geometry at its own file.
   being what caps a single-column panel's sharpness once a scale factor is on it.
   - **The bound, never the card itself.** `card-w` sweeps `min-card-w` up to
     `min-card-w + pitch/cols` inside *every* column band, so a tier tracking it crosses a step
-    boundary twice a band — and `display-changed` re-derives on every winit `Resized`, so each
-    crossing re-decodes every grid's visible covers mid-drag, on one pool every tier shares.
+    boundary twice a band — and the retune re-derives on every winit `Resized` and every content
+    panel resize, so each crossing re-decodes every grid's visible covers mid-drag, on one pool
+    every tier shares.
     Sizing to the band's upper bound is what makes the answer flat across a drag rather than
     merely close, and the step is what collapses the column counts a desktop passes through into
     a handful of sizes. What a crossing does not cost is the covers themselves; that half is the
     release/retune asymmetry above.
-  - **The window is not the body, and `BODY_CHROME_W` is the gap.** The sidebar between them is
-    the user's to drag from `sidebar-collapsed-w` to `sidebar-max-w`, a range no window
-    measurement sees, so the estimate assumes the *widest* one: over-subtracting costs a tier one
-    step too large, under-subtracting puts every card on an upscale, and `FemtoVG` minifies
-    bilinear with no mipmaps.
+  - **The size is read off the content panel, never the window.** The sidebar and the queue panel
+    either side of it are the user's to drag and to open, so no window measurement can say how
+    wide a card is drawn, and a guess sized for both at their widest over-sizes the tier wherever
+    they aren't, which with the panel closed is most installs. The panel reports its own width
+    into `WindowChrome.content-panel-width` through the `WindowRectReport` the file drop already
+    mounts on it (`desktop-shell.md`). `PAGE_INSET_W` takes off the most any grid page insets,
+    which is Browse's: over-subtracting costs a tier one step too large, under-subtracting puts
+    every card on an upscale, and `FemtoVG` minifies bilinear with no mipmaps.
   - `GRID_COVER_FALLBACK` is what a tier is *built* at, before any geometry exists. A fallback,
     not a tier size, but sized for the run where the deferred retune never schedules and it stays
     the live tier.
@@ -1064,9 +1222,10 @@ three components that answer it, and each argues its geometry at its own file.
   cards "run well past 260 px". They don't: `GridGeometry` packs toward `min-card-w`, so a card
   is **largest in a narrow panel**, where `max-card-w` is now what stops it, and lands near 190 px
   on a wide one. A tier spelling its own size is the thing to reach for this instead of. Needs no
-  winit round trip, the scale factor being Slint's own, and shares the cap's zero-extent bail.
+  winit round trip, the scale factor being Slint's own, and answers `GRID_COVER_FALLBACK` until
+  the panel has reported a width.
   `cover_thumbs::row_cover_size` is the row tier's twin, applied in the same `display-changed`
-  retune. The queue sheet's tier takes the row tier's size through its backing rather than being
+  retune. The queue panel's tier takes the row tier's size through its backing rather than being
   wired a second time.
 
 - **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
@@ -1143,18 +1302,35 @@ three components that answer it, and each argues its geometry at its own file.
     the focused item is destroyed, so a view unmounting with focus inside it leaves shortcuts dead
     until the next click. Nine are one per branch selector of an `if` chain that mounts a view —
     the same reason `CompositeScroll.reset()` needs its five, so a new always-mounted mirror
-    unmounting a *composite* view owes both (this set is the wider). The tenth, `Queue.open`, is
-    not about destruction: the sheet is permanent and mounts nothing, but *nothing else moves focus
-    onto it*, so without the grab a filter `SearchBar` keeps the keyboard and eats the `a`.
-  - Non-Esc gates on `!Dialog.open`; typed keys in TextInputs never reach root. The three queue
-    bindings are mini-gated — the sheet doesn't exist in miniplayer mode, and arming `Queue.open`
-    with no mounted mirror to fire `open-changed` remounts it rows-less.
-  - **`ShortcutScope` is the only `FocusScope` in the tree, and the queue sheet is why that's worth
-    stating.** A `FocusScope` takes focus on **mouse press**, never on mount, so the sheet's own
-    nested scope left Esc and Ctrl+A dead on a sheet opened with `Q`. Both sit at the root now,
-    gated on `queue-sheet-up` (`Queue.open && !MiniPlayer.active`, the flag alone surviving the
-    miniplayer swap), which also fixes the priority — Esc reaches the *dialog* first. A second
-    scope reintroduces all three problems; put new key handling here.
+    unmounting a *composite* view owes both (this set is the wider). The tenth,
+    `Queue.keys-owned || Queue.floating`, is not about destruction: the queue panel mounts nothing,
+    but *nothing moves focus onto the scope* when a press hands the queue its keys or the overlay
+    opens, so without the grab a filter `SearchBar` keeps the keyboard and eats the `a`. **It grabs
+    on the rising edge only**: the press that takes the keys away is one Slint is about to hand a
+    field, and a grab there lands after it.
+  - Non-Esc gates on `!Dialog.open`; typed keys in TextInputs never reach root. Q is gated on
+    `!MiniPlayer.active`, the miniplayer having no panel to open and a narrow window opening the
+    overlay, and Ctrl+B on `!Nav.sidebar-yields`, a forced rail having nothing to expand into.
+  - **`ShortcutScope` is the only `FocusScope` in the tree, and the queue is why that's worth
+    stating.** A `FocusScope` takes focus on **mouse press**, never on mount, so the old sheet's
+    nested scope left Esc and Ctrl+A dead on a sheet opened with `Q`. Esc, Ctrl+A and Delete (with
+    Backspace, the key a Mac labels delete) sit at the root, gated on `queue-keys`
+    (`Queue.shown && (Queue.keys-owned || Queue.floating)`), which also fixes the priority: Esc
+    reaches the *dialog* first. A second scope reintroduces all three problems; put new key
+    handling here.
+  - **Whether the docked panel's keys are the queue's is decided at the press, in the winit
+    filter.** The panel sits beside the page, so its keys are live only while it was the last thing
+    pressed. A hover sentinel round its content publishes `Queue.pointer-in`, and
+    `winit_filter::claim_queue_keys` copies that into `Queue.keys-owned` on every press, ahead of
+    Slint's dispatch, and only a shown panel can claim them. Slint alone can't answer it: a
+    `TouchArea` never sees a press a child took, and a nested `FocusScope` is the bullet above.
+    **The sentinel takes the wheel its children leave**, or a tick nothing under it scrolled would
+    clear its hover until the pointer moved, and a click in place after it would claim nothing
+    (`slint-pitfalls.md`'s `has-hover` entry).
+    **A row's menu hands the keys back as it closes**, its popup having taken the sentinel's hover,
+    so the press on an entry read as one elsewhere. The overlay owns the keys while it is up, a
+    press or not. With the keys, Esc clears the queue's picks first; then the overlay closes, and
+    the docked panel never does, the press falling through to the arms below.
 
 - **Animated view transitions** — content branches mount via `ViewTransition`: enter-only fade +
   32 px axis slide, no exit anim, Slint `if` destroying the outgoing branch instantly. Direction on
@@ -1336,7 +1512,12 @@ Data-agnostic: parallel `labels`/`icons`, `avail-width`, `selected-index`, `sele
 - **Sharing the row means the two widths are budgeted, not independent**, and **the filter yields
   before the tabs do** — tabs are navigation, search only refines what a tab already shows. Both
   ends of the clamp read a published floor (`compact-w`, `min-w`) rather than a restated literal,
-  which keeps each from drifting and makes the row's minimum a sum the page can check.
+  which keeps each from drifting and makes the row's minimum a sum the page can check. **Past that
+  sum the box folds to its glyph** rather than drawing past its cell, and opens across the row
+  over the bar while it holds focus or text, a tab pick clearing the filter anyway. Both ease on
+  the bar's own morph, written from `changed` for the bar's reason. It is one `SearchBar`
+  throughout, so a resize hands no focus across, which is where it parts from Settings' two boxes.
+  The fold and the open state are `tab-search-header.slint`'s.
   **`tip-x`/`tip-y` carry the bar's own `absolute-position` offset inside the row**, the half a
   host cannot supply — dropped, the pill lands a whole `lead-w` left of the tab it names, on the
   one mount with a leading slot.
@@ -1363,9 +1544,9 @@ siblings, not one parameterised component**, differing in which artwork square t
 `ArtworkImage`, whose fallback is an SVG asset) and in fixed-height-versus-morph, neither of which
 Slint can abstract over — so the header-row fixes are *ported
 verbatim* and `ui::library_tab_band_tests` holds the copy to a contract a copy is exactly how you
-lose. **Two things stay at each host**: the per-tab `ActionPill` rows (`@children`, placed after the
-trailing spacer, which is also the slack the chip strip's two-row cap is measured against) and the
-tooltip frame.
+lose. **Two things stay at each host**: the per-tab `ActionPill` rows (`@children`, in a slot
+floating over the foot of the meta column, which reserves the row's height so the chip strip's
+two-row cap is measured against the same slack) and the tooltip frame.
 
 - **The height is a `min`/`preferred`/`max-height` split with `clip: true`**, never a bound
   `height` — the animated-root-dimension pitfall one axis over. **`hero-t` is *written* from
@@ -1383,6 +1564,17 @@ tooltip frame.
   multiplies alpha — never `with-alpha`, which sets it**; where the element has brushes feeding its
   own `animate` blocks, make it satisfy `need_layer`'s second bail rather than folding the fade in.
   Full argument in `slint-pitfalls.md`.
+
+- **The pill row's fit is the band's, and the width it weighs is the host's.** The slot spans
+  only the room beside the cover, so a row that can't fit runs off under the clip rather than over
+  the artwork, and short of that room `pills-compact-t` closes every labelled pill onto its glyph,
+  eased on the tab bar's curve and landed while the band morphs. The labelled width can't come off
+  the drawn row, which stops reporting it once its labels close, so each host mounts a hidden
+  second copy of its pill row outside every layout (`pill-ruler`) and hands the band its
+  `preferred-width`: `TabBar`'s ruler, one level up. **A pill in a clipping
+  cell keeps its label unless its tooltip is drawn from the top layer**, an in-tree one landing
+  under the clip. My Library's Playlists row publishes its anchors and compacts; Radio's Favorites
+  row doesn't, and keeps its label.
 
 - **Everything else here is one file's internals** — the two morph curves, the count line's anchor
   and axis flip, the back disc's doubled bias. `library-tab-band.slint` and

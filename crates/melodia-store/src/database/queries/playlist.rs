@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use sqlx::AssertSqlSafe;
 
@@ -7,6 +7,7 @@ use crate::database::queries::track::columns;
 use crate::database::{DbPool, select_in_id_order};
 use melodia_core::entities::{playlist, track};
 use melodia_core::error::AppError;
+use melodia_core::utils::block_move;
 
 pub async fn create_playlist(
     db: &DbPool,
@@ -169,11 +170,8 @@ pub async fn update_playlist(
     let now = melodia_core::utils::now_rfc3339();
 
     if clear_thumbnail {
-        // Clear thumbnail entirely so the placeholder icon is shown.
-        // custom_thumbnail = TRUE marks this as an explicit user choice so that
-        // subsequent add/remove track operations do not auto-repopulate the
-        // thumbnail from the first track's artwork in
-        // update_playlist_thumbnail_and_timestamp_tx().
+        // custom_thumbnail = TRUE records the cleared cover as the user's choice, so a later add,
+        // removal or reorder leaves the placeholder rather than filling it from the first track.
         let result = sqlx::query_as::<_, playlist::Playlist>(
             "UPDATE playlists SET name = ?, description = ?,
                 thumbnail_path = NULL,
@@ -359,32 +357,44 @@ pub async fn remove_tracks_from_playlist_batch(
     Ok(())
 }
 
-pub async fn reorder_playlist_track(
+/// Moves `track_ids` together to `to`, counted once they have left, in the order the playlist
+/// holds them. A track sits in a playlist once (`idx_playlist_items_unique`), so the ids say which
+/// rows move even where the list a drag started on has fallen behind the database.
+///
+/// An automatic cover is the first track's with one, so a move can hand it to another track, and
+/// it is refreshed here as an add or a removal refreshes it.
+pub async fn move_playlist_tracks(
     db: &DbPool,
     playlist_id: i64,
-    from: i32,
-    to: i32,
+    track_ids: &[i64],
+    to: usize,
 ) -> Result<(), AppError> {
     let mut tx = db.write().begin().await?;
 
-    let mut items: Vec<(i64, i32)> = sqlx::query_as(
-        "SELECT id, position FROM playlist_items WHERE playlist_id = ? ORDER BY position, id",
+    let mut items: Vec<(i64, i64, i32)> = sqlx::query_as(
+        "SELECT id, track_id, position FROM playlist_items WHERE playlist_id = ?
+         ORDER BY position, id",
     )
     .bind(playlist_id)
     .fetch_all(&mut *tx)
     .await?;
 
-    let from_idx = usize::try_from(from)
-        .map_err(|_| AppError::Validation("negative `from` index".to_owned()))?;
-    let to_idx =
-        usize::try_from(to).map_err(|_| AppError::Validation("negative `to` index".to_owned()))?;
-
-    if from_idx >= items.len() || to_idx >= items.len() {
+    let moving: HashSet<i64> = track_ids.iter().copied().collect();
+    let rows: Vec<usize> = items
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, track_id, _))| moving.contains(track_id))
+        .map(|(row, _)| row)
+        .collect();
+    if rows.len() != moving.len() {
+        return Err(AppError::NotFound("Track not in the playlist".to_owned()));
+    }
+    if to + rows.len() > items.len() {
         return Err(AppError::NotFound("Invalid position index".to_owned()));
     }
-
-    let moved = items.remove(from_idx);
-    items.insert(to_idx, moved);
+    if !block_move::move_block(&mut items, &rows, to) {
+        return Ok(());
+    }
 
     // Only the rows whose index moved, so a drag writes the span it crossed rather than the whole
     // playlist. A gap left under a hard-deleted track makes every row after it differ, and the
@@ -392,12 +402,13 @@ pub async fn reorder_playlist_track(
     let changed: Vec<(i64, i32)> = items
         .iter()
         .enumerate()
-        .filter_map(|(index, &(id, position))| {
+        .filter_map(|(index, &(id, _, position))| {
             let index = i32::try_from(index).unwrap_or(i32::MAX);
             (position != index).then_some((id, index))
         })
         .collect();
     batch_update_positions_pairs(&mut tx, &changed).await?;
+    update_playlist_thumbnail_and_timestamp_tx(&mut tx, playlist_id).await?;
 
     tx.commit().await?;
     Ok(())
@@ -521,7 +532,8 @@ macro_rules! first_track_cover {
     };
 }
 
-/// Updates thumbnail and timestamp within an existing transaction.
+/// Stamps an add, removal or reorder, and points an automatic cover at the first track with one.
+/// A cover the user picked or cleared stays, but the edit still lifts the playlist in the grid.
 async fn update_playlist_thumbnail_and_timestamp_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     playlist_id: i64,
@@ -529,9 +541,9 @@ async fn update_playlist_thumbnail_and_timestamp_tx(
     let now = melodia_core::utils::now_rfc3339();
 
     sqlx::query(concat!(
-        "UPDATE playlists SET thumbnail_path = ",
+        "UPDATE playlists SET thumbnail_path = CASE WHEN custom_thumbnail = FALSE THEN ",
         first_track_cover!(),
-        ", updated_at = ? WHERE id = ? AND custom_thumbnail = FALSE"
+        " ELSE thumbnail_path END, updated_at = ? WHERE id = ?"
     ))
     .bind(&now)
     .bind(playlist_id)

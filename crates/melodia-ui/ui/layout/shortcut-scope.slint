@@ -80,17 +80,16 @@ export component ShortcutScope inherits FocusScope {
         }
     }
 
-    // **`Queue.open` alone doesn't mean the sheet is on screen**: the miniplayer swap unmounts the
-    // whole full-UI branch, sheet included, without touching the flag — so both queue bindings take
-    // the mini state too. `MiniPlayer.active` leads the mount's own flag by a beat, so the keys go
-    // dead slightly early during the fade, the harmless direction.
-    property <bool> queue-sheet-up: Queue.open && !MiniPlayer.active;
+    // The docked panel sits beside the page rather than over it, so its keys are live only while
+    // it is what the user last pressed. The overlay sits over the page and owns them while it is
+    // up.
+    property <bool> queue-keys: Queue.shown && (Queue.keys-owned || Queue.floating);
 
     key-pressed(ev) => {
-        // Priority: dialog cancel, the welcome card, the queue sheet, closing Now Playing, then
-        // a live selection. A nested `FocusScope` can't own the sheet's Esc — Slint focuses a
-        // scope on mouse press, never on mount — so owning both keys at the root is what makes
-        // the priority explicit.
+        // Priority: dialog cancel, the welcome card, the queue's picks, the floating queue,
+        // closing Now Playing, then a live selection. A nested `FocusScope` can't own the panel's
+        // Esc — Slint focuses a scope on mouse press, never on mount — so owning both keys at the
+        // root is what makes the priority explicit.
         if (ev.text == Key.Escape) {
             if (Dialog.open) {
                 Dialog.cancelled();
@@ -103,13 +102,15 @@ export component ShortcutScope inherits FocusScope {
                 Onboarding.dismiss();
                 return accept;
             }
-            if (root.queue-sheet-up) {
-                // Clear a selection first; close only on the second press.
-                if (Queue.selected-count > 0) {
-                    Queue.clear-selection();
-                } else {
-                    Queue.dismiss();
-                }
+            // Picks first: the docked panel is a place, not a popup, so Escape never closes it,
+            // and with nothing picked the press falls through to the arms below.
+            if (root.queue-keys && Queue.selected-count > 0) {
+                Queue.clear-selection();
+                return accept;
+            }
+            // The overlay is the popup, so with its picks gone the next press closes it.
+            if (Queue.floating) {
+                Queue.close();
                 return accept;
             }
             if (Nav.now-playing-open) {
@@ -121,7 +122,7 @@ export component ShortcutScope inherits FocusScope {
             // and that is the whole of what keeps the arm honest: `any-live()` asks ten globals
             // and none of them knows whether its surface is the one on screen, so above the
             // arm before it a set held by the page *under* Now Playing would swallow the press
-            // that was meant to close it. Below the sheet too, which answers for its own.
+            // that was meant to close it. Below the queue too, which answers for its own.
             if (Selection.any-live()) {
                 Selection.clear-live();
                 return accept;
@@ -134,6 +135,13 @@ export component ShortcutScope inherits FocusScope {
         // through the backdrop. The welcome card has no input at all and owes it twice over.
         if (Dialog.open || Onboarding.open) {
             return reject;
+        }
+
+        // Removes the queue's picks. Backspace too, being the key a Mac labels delete.
+        if ((ev.text == Key.Delete || ev.text == Key.Backspace)
+            && root.queue-keys && Queue.selected-count > 0) {
+            Queue.remove-selected();
+            return accept;
         }
 
         // Bare seeks or steps the volume, Shift takes a bigger seek, Ctrl skips tracks
@@ -184,13 +192,14 @@ export component ShortcutScope inherits FocusScope {
 
         // **Before the bare letters**, so Ctrl+N wins over N.
         if (ev.modifiers.control) {
-            // Only meaningful while the sheet is up, and the guard above keeps it
-            // from firing behind a modal — which the old nested scope got wrong.
-            if (ev.text == "a" && root.queue-sheet-up) {
+            // Every other surface rejects it, and the guard above keeps it from firing behind
+            // a modal.
+            if (ev.text == "a" && root.queue-keys) {
                 Queue.select-all();
                 return accept;
             }
-            if (ev.text == "b") {
+            // Not under a forced rail, where the sidebar's own toggle stands down too.
+            if (ev.text == "b" && !Nav.sidebar-yields) {
                 Nav.sidebar-collapsed = !Nav.sidebar-collapsed;
                 return accept;
             }
@@ -221,11 +230,10 @@ export component ShortcutScope inherits FocusScope {
         if (ev.text == "s") { Player.toggle-shuffle();  return accept; }
         if (ev.text == "r") { Player.cycle-repeat();    return accept; }
 
-        // Mini-gated for a sharper reason than the two above: **arming `Queue.open` while the
-        // sheet is unmounted leaves nothing to fire `open-changed`**, so the remount seeds its
-        // mirror already-true, Rust never builds the rows, and the sheet slides up empty.
+        // The miniplayer has no panel to open, so Q there would flip one nobody sees. A narrow
+        // window opens the overlay.
         if (ev.text == "q" && !MiniPlayer.active) {
-            Queue.open = !Queue.open;
+            Queue.toggle();
             return accept;
         }
         if (ev.text == "f") {

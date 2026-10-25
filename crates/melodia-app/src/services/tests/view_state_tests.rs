@@ -78,6 +78,19 @@ fn test_view_state_ignores_the_retired_collapse_flags() -> Result<(), AppError> 
     Ok(())
 }
 
+/// A `views.json` from before the marks holds columns and no `view_marks`, and has to keep the
+/// columns rather than fail the whole file.
+#[test]
+fn a_views_file_from_before_the_marks_keeps_its_columns() -> Result<(), AppError> {
+    let legacy = r#"{"view_columns": {"tracks": ["artist", "year"]}}"#;
+
+    let vs: ViewStateData = serde_json::from_str(legacy).map_err(|e| json_err(&e))?;
+
+    let columns = vec!["artist".to_owned(), "year".to_owned()];
+    assert_eq!((vs.view_columns.get("tracks"), vs.view_marks.len()), (Some(&columns), 0));
+    Ok(())
+}
+
 /// The five tabs' numbers overlap the categories' (3 was Services, it is Appearance now), so a
 /// `views.json` from before the panel has to open Settings on the first category rather than on
 /// whichever one its old tab's number lands on. An alias for the old key is the fold this refuses.

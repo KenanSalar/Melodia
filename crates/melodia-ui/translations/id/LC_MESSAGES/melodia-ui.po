@@ -151,7 +151,7 @@ msgstr "Tambah"
 #: ui/components/dialog/export-playlist-picker.slint
 #: ui/components/grid/artist-grid.slint ui/components/grid/genre-grid.slint
 #: ui/components/grid/playlist-grid.slint ui/globals/hero-chips.slint
-#: ui/globals/search.slint ui/views/queue-sheet.slint
+#: ui/globals/search.slint ui/views/queue-panel/queue-panel.slint
 msgid "{n} track"
 msgid_plural "{n} tracks"
 msgstr[0] "{n} lagu"
@@ -205,7 +205,8 @@ msgstr "Tanpa sampul"
 msgid "{} / 4 selected"
 msgstr "{} / 4 dipilih"
 
-#: ui/components/dialog/playlist-mosaic-picker.slint ui/views/queue-sheet.slint
+#: ui/components/dialog/playlist-mosaic-picker.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear"
 msgstr "Bersihkan"
 
@@ -361,7 +362,7 @@ msgid "Bitrate (kbps)"
 msgstr "Bitrate (kbps)"
 
 #: ui/components/dialog/smart-playlist-editor-body.slint
-#: ui/components/now-playing/overflow-menu.slint ui/settings.slint
+#: ui/components/rating-menu-row.slint ui/settings.slint
 msgid "Rating"
 msgstr "Rating"
 
@@ -1106,7 +1107,8 @@ msgid "Repeat"
 msgstr "Ulangi"
 
 #: ui/components/now-playing/overflow-menu.slint
-#: ui/layout/now-playing-bar.slint ui/views/queue-sheet.slint
+#: ui/components/now-playing/queue-button.slint
+#: ui/views/queue-panel/queue-panel.slint
 #: ui/views/settings/overflow-menu-section.slint
 msgid "Queue"
 msgstr "Antrean"
@@ -1279,6 +1281,11 @@ msgstr "Kembali"
 msgid "Next"
 msgstr "Berikutnya"
 
+#. Translators: `{}` is how many items are selected
+#: ui/components/rating-menu-row.slint
+msgid "Rating for {}"
+msgstr "Rating untuk {}"
+
 #: ui/components/search-bar.slint
 msgid "Search…"
 msgstr "Cari…"
@@ -1395,7 +1402,7 @@ msgid "{} / {} files"
 msgstr "{} / {} berkas"
 
 #: ui/components/settings/scan-progress.slint ui/globals/dialog-forms.slint
-#: ui/globals/dialog.slint ui/views/queue-sheet.slint
+#: ui/globals/dialog.slint ui/views/queue-panel/queue-panel.slint
 #: ui/views/radio/tab-pills.slint ui/views/settings/appearance-section.slint
 #: ui/views/settings/library-section.slint
 #: ui/views/settings/output-section.slint
@@ -1479,10 +1486,25 @@ msgstr "Kolom"
 msgid "Artwork"
 msgstr "Sampul"
 
+#. Translators: the heart shown beside a favourite track's title
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite mark"
+msgstr "Tanda favorit"
+
+#. Translators: the stars beside a track's title while its row is hovered
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Rating on hover"
+msgstr "Rating saat disorot"
+
 #: ui/components/track-list/column-toggle-popup.slint
 #: ui/components/track-list/track-list-header.slint
 msgid "Length"
 msgstr "Durasi"
+
+#. Translators: the heart shown in place of a track's length on hover
+#: ui/components/track-list/column-toggle-popup.slint
+msgid "Favorite on hover"
+msgstr "Favorit saat disorot"
 
 #. Translators: `{}` is how many items are selected
 #: ui/components/track-list/track-context-menu.slint
@@ -2273,27 +2295,58 @@ msgstr "Berikutnya"
 msgid "Coming soon"
 msgstr "Segera hadir"
 
-#: ui/views/queue-sheet.slint
+#. Translators: `{n}` is how many tracks are being dragged into the queue
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} track to the queue"
+msgid_plural "Add {n} tracks to the queue"
+msgstr[0] "Tambahkan {n} lagu ke antrean"
+
+#. Translators: `{}` names the dragged album, artist, genre or playlist
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add \"{}\" to the queue"
+msgstr "Tambahkan \"{}\" ke antrean"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} album to the queue"
+msgid_plural "Add {n} albums to the queue"
+msgstr[0] "Tambahkan {n} album ke antrean"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} artist to the queue"
+msgid_plural "Add {n} artists to the queue"
+msgstr[0] "Tambahkan {n} artis ke antrean"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} genre to the queue"
+msgid_plural "Add {n} genres to the queue"
+msgstr[0] "Tambahkan {n} genre ke antrean"
+
+#: ui/views/queue-panel/queue-panel.slint
+msgid "Add {n} playlist to the queue"
+msgid_plural "Add {n} playlists to the queue"
+msgstr[0] "Tambahkan {n} playlist ke antrean"
+
+#: ui/views/queue-panel/queue-panel.slint
 msgid "No tracks"
 msgstr "Tidak ada lagu"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear queue"
 msgstr "Kosongkan antrean"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Clear queue?"
 msgstr "Kosongkan antrean?"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Remove all tracks from the queue? Playback will stop."
 msgstr "Hapus semua lagu dari antrean? Pemutaran akan berhenti."
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Queue is empty"
 msgstr "Antrean kosong"
 
-#: ui/views/queue-sheet.slint
+#: ui/views/queue-panel/queue-panel.slint
 msgid "Drop to add to queue"
 msgstr "Lepaskan untuk menambahkan ke antrean"
 

@@ -1,5 +1,5 @@
-//! What a paged list asks the database for, what it tells Slint to read again, how a drag moves a
-//! row, and the order its keyset loads show in.
+//! What a paged list asks the database for, what it tells Slint to read again, how a drag moves its
+//! rows, and the order its keyset loads show in.
 //!
 //! Two doubles stand in for what surrounds a list. The fetcher is the one the model takes as a
 //! parameter, recording each request until a test lands it or drops it, which is a fetch failing.
@@ -295,6 +295,16 @@ fn a_row_not_fetched_yet_still_carries_its_selection_flag() {
     assert_eq!(row.map(|row| (row.title.is_empty(), row.selected)), Some((true, true)));
 }
 
+/// What a drag of the picks lifts, so it reads the rows as shown, and a pick a filter hid is not
+/// among them.
+#[test]
+fn the_picked_rows_are_where_the_picks_sit_on_screen() {
+    let watched = Watched::new();
+    watched.rows.select(&HashSet::from([1, 2, 99]));
+
+    assert_eq!(watched.rows.picked_rows(), [0, 3]);
+}
+
 /// What a load running off the event loop seeds its rows around.
 #[test]
 fn the_scroll_point_follows_the_row_read_last() {
@@ -359,6 +369,19 @@ fn showing_the_same_ids_with_one_row_changed_rereads_only_that_row() {
     assert_eq!(watched.seen(), [3]);
 }
 
+/// The queue panel tells a publish that moved only the current row by the allocation alone
+/// (`QueueRows::shows`), so once a drag has shown its own copy of an order, the publisher's equal
+/// one has to take its place.
+#[test]
+fn showing_an_equal_keyset_keeps_the_incoming_allocation() {
+    let list = Fetching::over(4);
+    let equal: Arc<[i64]> = Arc::from([1, 2, 3, 4]);
+
+    list.rows.show(unseeded(Arc::clone(&equal)));
+
+    assert!(Arc::ptr_eq(&list.rows.ids(), &equal));
+}
+
 /// A star clicked while a re-read is out: the fetch was sent first and lands last, carrying the
 /// rating from before the click. Track 3 sits third in title order, and the one fetch counted is
 /// the re-read's, without which nothing landed late at all.
@@ -413,7 +436,7 @@ fn a_move_lands_the_row_where_the_drag_drops_it() {
     for (from, to, expected, case) in CASES {
         let watched = Watched::new();
 
-        let moved = watched.rows.move_row(from, to);
+        let moved = watched.rows.move_rows(&[from], to);
 
         assert_eq!((moved, &watched.rows.ids()[..]), (true, &expected[..]), "{case}");
     }
@@ -424,9 +447,20 @@ fn a_move_lands_the_row_where_the_drag_drops_it() {
 fn a_move_rereads_only_the_row_it_moved() {
     let watched = Watched::new();
 
-    watched.rows.move_row(0, 3);
+    watched.rows.move_rows(&[0], 3);
 
     assert_eq!((watched.list.row_count(), watched.seen()), (4, vec![2]));
+}
+
+/// A drag of picks moves a block, and the rows it passes keep their delegates as they do under a
+/// single row's move.
+#[test]
+fn a_block_move_rereads_only_the_rows_it_moved() {
+    let watched = Watched::new();
+
+    watched.rows.move_rows(&[0, 1], 2);
+
+    assert_eq!((watched.list.row_count(), watched.seen()), (4, vec![2, 4]));
 }
 
 #[test]
@@ -436,7 +470,7 @@ fn a_move_from_or_to_outside_the_list_moves_nothing() {
     for (from, to, case) in CASES {
         let watched = Watched::new();
 
-        let moved = watched.rows.move_row(from, to);
+        let moved = watched.rows.move_rows(&[from], to);
 
         let unmoved = (false, &[2, 4, 3, 1][..], Vec::<i32>::new());
         assert_eq!((moved, &watched.rows.ids()[..], watched.seen()), unmoved, "{case}");
@@ -447,7 +481,7 @@ fn a_move_from_or_to_outside_the_list_moves_nothing() {
 fn an_empty_list_moves_nothing() {
     let list = Fetching::over(0);
 
-    let moved = list.rows.move_row(0, 0);
+    let moved = list.rows.move_rows(&[0], 0);
 
     assert!(!moved);
 }

@@ -13,12 +13,14 @@ export component SelectionPill inherits Rectangle {
     in property <bool> hovered;
     in property <bool> prev-selected;
     in property <bool> next-selected;
+    // A dimmed host's fade, handed down so the host needs no `opacity`.
+    in property <float> fade: 1.0;
 
     border-top-left-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
     border-top-right-radius: (root.selected && root.prev-selected) ? 0 : Theme.radius-md;
     border-bottom-left-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
     border-bottom-right-radius: (root.selected && root.next-selected) ? 0 : Theme.radius-md;
-    background: root.selected
+    background: (root.selected
         ? (root.hovered ? Theme.accent.with-alpha(0.14) : Theme.accent.with-alpha(0.08))
-        : Theme.surface0;
+        : Theme.surface0).transparentize(1.0 - root.fade);
 }

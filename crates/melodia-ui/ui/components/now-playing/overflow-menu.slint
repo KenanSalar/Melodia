@@ -8,10 +8,11 @@ import { Queue } from "../../globals/queue.slint";
 import { SignalPathUi } from "../../globals/signal-path.slint";
 import { WindowChrome } from "../../globals/shell.slint";
 import { IconButton } from "../icon-button.slint";
-import { MaterialIcon } from "../material-icon.slint";
-import { StarRating } from "../star-rating.slint";
+import { RatingMenuRow } from "../rating-menu-row.slint";
 import { MenuSurface } from "./menu-surface.slint";
+import { PopupColumn } from "../popup-column.slint";
 import { PopupDismissCatcher } from "../popup-dismiss-catcher.slint";
+import { PopupFit } from "../popup-fit.slint";
 import { OverflowRow } from "./overflow-row.slint";
 import { SpeedFlyout } from "./speed-flyout.slint";
 import { SleepTimerFlyout } from "./sleep-timer-flyout.slint";
@@ -26,7 +27,8 @@ import { ReplayGainText } from "../settings/replaygain-controls.slint";
 // widest flyout, with a transparent catcher over the empty regions. A flyout may not move the
 // popup's origin: Slint re-lays an open popup's content at once but moves the popup a loop pass
 // later, so the column would draw a frame out of place on every toggle. It opens upward, the bar
-// living at the window's bottom, and the menu column right-aligns under the trigger.
+// living at the window's bottom, and the menu column right-aligns under the trigger. The reserve
+// is cut to the room above the trigger, and each column scrolls whatever the cut takes from it.
 //
 // The speed control is **always** here rather than configurable — it is never shown
 // inline — which is why the trigger itself is always mounted.
@@ -91,8 +93,9 @@ export component OverflowMenu inherits Rectangle {
     property <length> sleep-flyout-h:
         FlyoutMetrics.option-row-h * (SleepPresets.list.length + 2) + 9px
         + FlyoutMetrics.chrome-h;
-    // Reserve the wider one, so the popup keeps its box on a switch.
-    property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w);
+    // Reserve the wider one plus the gutter either takes while it scrolls, so the popup keeps its
+    // box on a switch.
+    property <length> left-col-w: max(root.flyout-w, root.sleep-flyout-w) + PopupFit.scroll-gutter;
     // Keeps the two columns reading as separate floating chromes.
     property <length> gap: 8px;
 
@@ -127,14 +130,17 @@ export component OverflowMenu inherits Rectangle {
     pop := PopupWindow {
         // **Declared here, on the popup**, so it can read its own descendant's
         // `preferred-width` — the enclosing component may not. The widest row sets the
-        // floor, plus the surface border; the minimum preserves the English look.
-        property <length> menu-w: max(156px, menu-vl.preferred-width + 2px);
+        // floor, plus the surface border and the gutter while it scrolls; the minimum
+        // preserves the English look.
+        property <length> menu-w: max(156px, col.rows-w + 2px) + col.gutter;
 
         // The menu column's on-screen position is independent of the popup's size —
         // both offsets cancel `self.width` — so it stays pinned under the trigger
         // whether or not a flyout is open.
         width: root.left-col-w + root.gap + self.menu-w;
-        height: max(root.menu-h, max(root.flyout-h, root.sleep-flyout-h));
+        // The bar is the window's foot, so the room is all above the trigger (`PopupFit`).
+        height: min(max(root.menu-h, max(root.flyout-h, root.sleep-flyout-h)),
+            PopupFit.room-above(root.absolute-position.y - Theme.popup-gap));
         x: btn.width - self.width;
         y: -self.height - Theme.popup-gap;
         close-policy: close-on-click-outside;
@@ -152,10 +158,10 @@ export component OverflowMenu inherits Rectangle {
         // while open** so its rows aren't built when collapsed. Right-aligned inside the
         // shared left column, so the gap holds whichever flyout is wider.
         if root.speed-flyout-open: SpeedFlyout {
-            x: root.left-col-w - root.flyout-w;
-            y: parent.height - root.flyout-h;
-            width: root.flyout-w;
-            height: root.flyout-h;
+            x: root.left-col-w - self.width;
+            y: parent.height - self.height;
+            width: root.flyout-w + self.gutter;
+            height: min(root.flyout-h, parent.height);
             current-speed: Player.vm.playback_speed;
             pick(v) => {
                 Player.set-playback-speed(v);
@@ -166,10 +172,10 @@ export component OverflowMenu inherits Rectangle {
         // The same left column. A preset applies and closes; the stepper's Start pill
         // arms a custom duration and closes.
         if root.sleep-flyout-open: SleepTimerFlyout {
-            x: root.left-col-w - root.sleep-flyout-w;
-            y: parent.height - root.sleep-flyout-h;
-            width: root.sleep-flyout-w;
-            height: root.sleep-flyout-h;
+            x: root.left-col-w - self.width;
+            y: parent.height - self.height;
+            width: root.sleep-flyout-w + self.gutter;
+            height: min(root.sleep-flyout-h, parent.height);
             active-total-seconds: Player.sleep-timer-total-seconds;
             track-end-active: Player.vm.sleep_at_track_end;
             track-end-unavailable: Player.vm.has_station;
@@ -186,16 +192,16 @@ export component OverflowMenu inherits Rectangle {
         // Menu column — right, bottom-anchored under the trigger.
         MenuSurface {
             x: parent.width - pop.menu-w;
-            y: parent.height - root.menu-h;
+            y: parent.height - self.height;
             width: pop.menu-w;
-            height: root.menu-h;
+            height: min(root.menu-h, parent.height);
             close-requested => {
                 root.dismiss();
             }
 
-            menu-vl := VerticalLayout {
-                padding: Theme.pad-xs;
-                spacing: 0;
+            col := PopupColumn {
+                width: 100%;
+                height: 100%;
 
                 // **Doesn't close the popup.**
                 OverflowRow {
@@ -256,44 +262,18 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // Inline, so unlike the dialog rows above it neither closes the popup nor
-                // opens a flyout: a star applies immediately.
-                rating-row := Rectangle {
-                    // Not an `OverflowRow`, so it has to take the shared row
-                    // height itself — `menu-h` above reserves one for it.
-                    height: FlyoutMetrics.menu-row-h;
-                    // `OverflowRow`'s dimming, through the brushes rather than `opacity`, which
-                    // would hold a texture for as long as the menu is open with nothing to rate.
-                    property <float> fade: Player.vm.has_track ? 1.0 : 0.5;
-                    HorizontalLayout {
-                        padding-left: Theme.pad-sm;
-                        padding-right: Theme.pad-sm;
-                        spacing: Theme.pad-sm;
-                        alignment: stretch;
-                        cross-axis-alignment: center;
-                        MaterialIcon {
-                            name: "star";
-                            icon-size: 20px;
-                            icon-color: Player.vm.track.rating > 0 ? Theme.accent : Theme.text;
-                            filled: Player.vm.track.rating > 0;
-                            fade: rating-row.fade;
-                        }
-                        Text {
-                            horizontal-stretch: 1;
-                            text: @tr("Rating");
-                            color: Theme.text.transparentize(1.0 - rating-row.fade);
-                            font-size: Theme.font-size-md;
-                        }
-                        StarRating {
-                            rating: Player.vm.track.rating;
-                            star-size: 18px;
-                            enabled: Player.vm.has_track;
-                            filled-color: Theme.yellow.transparentize(1.0 - rating-row.fade);
-                            empty-color: Theme.subtext0.transparentize(1.0 - rating-row.fade);
-                            rated(n) => {
-                                Player.set-current-rating(n);
-                            }
-                        }
+                // Unlike the dialog rows above it neither closes the popup nor opens a flyout:
+                // a star applies immediately. Not an `OverflowRow`, so it takes the shared row
+                // height and that row's icon treatment itself; `menu-h` above reserves one row.
+                RatingMenuRow {
+                    row-height: FlyoutMetrics.menu-row-h;
+                    icon-size: 20px;
+                    star-size: 18px;
+                    idle-icon-color: Theme.text;
+                    rating: Player.vm.track.rating;
+                    enabled: Player.vm.has_track;
+                    rated(n) => {
+                        Player.set-current-rating(n);
                     }
                 }
 
@@ -327,8 +307,8 @@ export component OverflowMenu inherits Rectangle {
                 if Settings.overflow-queue: OverflowRow {
                     icon: "queue_music";
                     label: @tr("Queue");
-                    active: Queue.open;
-                    clicked => { Queue.open = !Queue.open; root.dismiss(); }
+                    active: Queue.shown;
+                    clicked => { Queue.toggle(); root.dismiss(); }
                 }
                 // The chip's words without its dot, which a menu row has no slot for.
                 if SignalPathUi.chip-shown && Settings.overflow-quality: OverflowRow {

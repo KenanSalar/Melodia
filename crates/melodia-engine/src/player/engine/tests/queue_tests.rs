@@ -47,7 +47,7 @@ fn add_tracks_increments_version() {
 fn insert_next_after_current() {
     let mut q = make_queue(3);
     q.current_index = Some(1);
-    q.insert_next(10);
+    q.insert_next(&[10]);
 
     // Should insert at position 2 in play_order
     assert_eq!(q.play_order[2], 3); // new track index
@@ -58,7 +58,7 @@ fn insert_next_after_current() {
 fn insert_next_when_no_current() {
     let mut q = make_queue(2);
     q.current_index = None;
-    q.insert_next(10);
+    q.insert_next(&[10]);
 
     // Should insert at position 0
     assert_eq!(q.play_order[0], 2); // new track index
@@ -68,7 +68,7 @@ fn insert_next_when_no_current() {
 fn insert_next_clamps_to_end() -> Result<(), AppError> {
     let mut q = make_queue(2);
     q.current_index = Some(10); // way past end
-    q.insert_next(10);
+    q.insert_next(&[10]);
 
     // Should clamp insert position to play_order.len()
     let last =
@@ -152,32 +152,30 @@ fn remove_batch_empty_is_noop() {
     assert_eq!(q.play_order.len(), 3);
 }
 
-// ── move_track ──────────────────────────────────────────────────────
+// ── move_rows ───────────────────────────────────────────────────────
 
 #[test]
-fn move_track_out_of_bounds() {
+fn move_rows_out_of_bounds() {
     let mut q = make_queue(3);
-    assert!(!q.move_track(0, 10));
-    assert!(!q.move_track(10, 0));
+    assert!(!q.move_rows(&[0], 10));
+    assert!(!q.move_rows(&[10], 0));
 }
 
 #[test]
-fn move_track_forward_adjusts_current() {
+fn move_rows_forward_adjusts_current() {
     let mut q = make_queue(4);
     q.current_index = Some(1);
-    // Move track at 0 to position 2 (moving past current)
-    q.move_track(0, 2);
-    // from < current && to >= current → current -= 1
+    // The row ahead of the current one moves past it, so the current one steps up.
+    q.move_rows(&[0], 2);
     assert_eq!(q.current_index, Some(0));
 }
 
 #[test]
-fn move_track_backward_adjusts_current() {
+fn move_rows_backward_adjusts_current() {
     let mut q = make_queue(4);
     q.current_index = Some(1);
-    // Move track at 3 to position 0 (moving before current)
-    q.move_track(3, 0);
-    // from > current && to <= current → current += 1
+    // A row from behind lands ahead of the current one, so the current one steps down.
+    q.move_rows(&[3], 0);
     assert_eq!(q.current_index, Some(2));
 }
 
@@ -185,7 +183,7 @@ fn move_track_backward_adjusts_current() {
 fn move_current_track() {
     let mut q = make_queue(4);
     q.current_index = Some(1);
-    q.move_track(1, 3);
+    q.move_rows(&[1], 3);
     assert_eq!(q.current_index, Some(3));
 }
 
@@ -511,12 +509,12 @@ fn on_the_second_of_two() -> QueueState {
 }
 
 /// The ids are cached until the order moves, so a mutator that kept them would publish an order
-/// the queue no longer holds, to the sheet, Up Next and `queue.json` alike.
+/// the queue no longer holds, to the queue panel, Up Next and `queue.json` alike.
 #[test]
 fn every_change_to_the_order_publishes_the_new_order() {
     let rows: [(&str, QueueState, Edit, &[i64]); 10] = [
         ("add_tracks", make_queue(3), |q| q.add_tracks(&[4]), &[1, 2, 3, 4]),
-        ("insert_next", make_queue(3), |q| q.insert_next(4), &[4, 1, 2, 3]),
+        ("insert_next", make_queue(3), |q| q.insert_next(&[4]), &[4, 1, 2, 3]),
         (
             "remove_at",
             make_queue(3),
@@ -527,10 +525,10 @@ fn every_change_to_the_order_publishes_the_new_order() {
         ),
         ("remove_batch", make_queue(3), |q| q.remove_batch(&[0, 2]), &[2]),
         (
-            "move_track",
+            "move_rows",
             make_queue(3),
             |q| {
-                q.move_track(0, 2);
+                q.move_rows(&[0], 2);
             },
             &[2, 3, 1],
         ),
@@ -614,7 +612,7 @@ fn prune_missing_empty_set_is_noop() {
 
     assert_eq!(outcome.removed, 0);
     assert!(!outcome.current_was_removed);
-    assert_eq!(q.tracks.len(), 3);
+    assert_eq!(q.play_order, vec![0, 1, 2]);
     assert_eq!(q.current_index, Some(1));
     assert_eq!(q.version, v0);
 }
@@ -626,15 +624,15 @@ fn prune_missing_no_matches_is_noop() {
     let outcome = q.prune_missing(&HashSet::from([99, 100]));
 
     assert_eq!(outcome.removed, 0);
-    assert_eq!(q.tracks.len(), 3);
+    assert_eq!(q.play_order, vec![0, 1, 2]);
     assert_eq!(q.version, v0);
 }
 
 #[test]
 fn prune_missing_keeps_current_when_other_removed() -> Result<(), AppError> {
     // tracks 1..=5, current = play_order[2] = track id 3. Prune ids {1, 5}.
-    // Expected: surviving tracks [2, 3, 4], current_index remapped to 1
-    // (still pointing at id 3), `current_was_removed = false`.
+    // Expected: the rows of 2, 3 and 4 survive in their own slots, current_index
+    // moves to 1 (still pointing at id 3), `current_was_removed = false`.
     let mut q = make_queue(5);
     q.current_index = Some(2);
 
@@ -642,9 +640,8 @@ fn prune_missing_keeps_current_when_other_removed() -> Result<(), AppError> {
 
     assert_eq!(outcome.removed, 2);
     assert!(!outcome.current_was_removed);
-    assert_eq!(q.tracks, vec![2, 3, 4]);
-    assert_eq!(q.play_order, vec![0, 1, 2]);
-    assert_eq!(q.original_order, vec![0, 1, 2]);
+    assert_eq!(q.play_order, vec![1, 2, 3]);
+    assert_eq!(q.original_order, vec![1, 2, 3]);
     let current =
         q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
     assert_eq!(current, 3);
@@ -654,7 +651,7 @@ fn prune_missing_keeps_current_when_other_removed() -> Result<(), AppError> {
 #[test]
 fn prune_missing_advances_when_current_removed() -> Result<(), AppError> {
     // tracks 1..=3, current = play_order[1] = id 2. Prune {2}.
-    // Expected: surviving tracks [1, 3], current_index = 1 (next survivor,
+    // Expected: rows [1, 3] survive, current_index = 1 (next survivor,
     // which is id 3), `current_was_removed = true`.
     let mut q = make_queue(3);
     q.current_index = Some(1);
@@ -663,7 +660,7 @@ fn prune_missing_advances_when_current_removed() -> Result<(), AppError> {
 
     assert!(outcome.current_was_removed);
     assert_eq!(outcome.removed, 1);
-    assert_eq!(q.tracks, vec![1, 3]);
+    assert_eq!(*q.play_ids(), [1, 3]);
     let current =
         q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
     assert_eq!(current, 3);
@@ -698,17 +695,15 @@ fn prune_missing_everything_empties_queue() {
 
     assert_eq!(outcome.removed, 3);
     assert!(outcome.current_was_removed);
-    assert!(q.tracks.is_empty());
     assert!(q.play_order.is_empty());
     assert!(q.original_order.is_empty());
     assert_eq!(q.current_index, None);
 }
 
 #[test]
-fn prune_missing_remaps_shuffled_order() {
+fn prune_missing_keeps_the_shuffled_order_of_the_survivors() {
     // tracks 1..=4 with a shuffled play_order. Pruning id 1 must drop the
-    // play_order entry that pointed at it and remap every remaining entry
-    // to the new tracks-vec position.
+    // play_order entry that pointed at it and leave every other one where it was.
     let mut q = make_queue(4);
     // Hand-craft a shuffle: [t3, t1, t4, t2] in play order.
     q.play_order = vec![2, 0, 3, 1];
@@ -719,13 +714,8 @@ fn prune_missing_remaps_shuffled_order() {
 
     assert_eq!(outcome.removed, 1);
     assert!(!outcome.current_was_removed);
-    // tracks after prune: [t2, t3, t4] → t3 at new idx 1, t4 at new idx 2, t2 at new idx 0.
-    // Old play_order [2,0,3,1] -> drop entry 1 (was t1), remap remaining:
-    //   2→1 (t3), 3→2 (t4), 1→0 (t2). New: [1, 2, 0].
-    assert_eq!(q.play_order, vec![1, 2, 0]);
-    // original_order had [0,1,2,3] → drop t1 (idx 0), remap survivors:
-    //   1→0 (t2), 2→1 (t3), 3→2 (t4). New: [0, 1, 2].
-    assert_eq!(q.original_order, vec![0, 1, 2]);
+    assert_eq!(q.play_order, vec![2, 3, 1]);
+    assert_eq!(q.original_order, vec![1, 2, 3]);
 }
 
 // ── current_id ──────────────────────────────────────────────────────

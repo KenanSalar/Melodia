@@ -6,7 +6,7 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_core::utils;
 use melodia_platform::services::platform::single_instance::RESPAWN_ENV;
-use melodia_ui::{AppWindow, Nav};
+use melodia_ui::{AppWindow, Nav, Queue};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
@@ -30,14 +30,22 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
         (td, s.to_persisted(), s.volume, s.is_muted)
     };
 
-    // `Nav.sidebar-width` always holds the expanded-mode width; collapsed
-    // mode renders `Theme.sidebar-collapsed-w` separately and does not
-    // mutate this property (drag handle is gated on `!sidebar-collapsed`).
+    // `Nav.sidebar-width` always holds the expanded-mode width; the rail
+    // renders `Theme.sidebar-collapsed-w` separately and does not mutate
+    // this property (drag handle is gated on `!sidebar-rail`). Collapsed is
+    // the user's own fold, never the rail a narrow window forces.
     let sidebar_width = f64::from(app.global::<Nav>().get_sidebar_width());
     let sidebar_collapsed = app.global::<Nav>().get_sidebar_collapsed();
 
-    // Volume, mute, sidebar width and window geometry live only in
-    // UI/PlayerState during a session, so they need flushing to survive one.
+    // `open` rather than `shown`, so a panel stepped aside comes back with the room. A width of 0
+    // is the default, which stays `Theme`'s to change.
+    let queue = app.global::<Queue>();
+    let queue_panel_open = queue.get_open();
+    let panel_width = f64::from(queue.get_panel_width());
+    let queue_panel_width = (panel_width > 0.0).then_some(panel_width);
+
+    // Volume, mute, the sidebar, the queue panel and window geometry live only
+    // in UI/PlayerState during a session, so they need flushing to survive one.
     // Under the settings lock, so a toggle still persisting as the window
     // closed isn't written back over.
     let flushed = services::settings::mutate_settings(&state.paths, |settings| {
@@ -45,6 +53,8 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
         settings.playback.is_muted = is_muted;
         settings.sidebar_width = sidebar_width;
         settings.layout.sidebar_collapsed = sidebar_collapsed;
+        settings.queue_panel.queue_panel_open = queue_panel_open;
+        settings.queue_panel.queue_panel_width = queue_panel_width;
         // For the next launch's `BackendSelector` attributes hook and
         // `geometry::restore`. Size and position are skipped while maximized, so
         // the user's real restore geometry survives.

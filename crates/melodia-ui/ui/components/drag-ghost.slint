@@ -1,0 +1,61 @@
+import { Theme } from "../theme.slint";
+import { Drag } from "../globals/drag.slint";
+import { ArtworkImage } from "artwork-image.slint";
+
+// The chip that follows the pointer while a drag carries something: the pressed item's cover and
+// title, and how many ride with it. The root is a point on the pointer, and nothing in it takes
+// input, so every move still reaches what is under it.
+export component DragGhost inherits Rectangle {
+    // Off the pointer, so the chip never covers the line it is being aimed at.
+    private property <length> offset: 8px;
+    private property <length> max-w: 240px;
+    private property <int> count: Drag.payload.items.ids.length;
+
+    width: 0px;
+    height: 0px;
+
+    // Fill and rim on one element, so the renderer tucks the one under the other.
+    Rectangle {
+        x: root.offset;
+        y: root.offset;
+        width: min(root.max-w, row.preferred-width);
+        height: 32px;
+        background: Theme.surface0;
+        border-width: 1px;
+        border-color: Theme.surface2;
+        border-radius: Theme.radius-md;
+
+        row := HorizontalLayout {
+            padding-left: 6px;
+            padding-right: Theme.pad-sm;
+            spacing: Theme.pad-sm;
+            cross-axis-alignment: center;
+
+            ArtworkImage {
+                cover: Drag.payload.items.cover;
+                tile-size: 20px;
+                tile-radius: Theme.radius-sm;
+            }
+            // Bounded by the chip and elided, so a long title stops at the chip's edge.
+            Text {
+                text: Drag.payload.items.title;
+                color: Theme.text;
+                font-size: Theme.font-size-row;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+            if root.count > 1: Rectangle {
+                width: max(18px, count-text.preferred-width + 2 * Theme.pad-xs);
+                height: 18px;
+                border-radius: self.height / 2;
+                background: Theme.accent;
+                count-text := Text {
+                    text: root.count;
+                    color: Theme.accent-text;
+                    font-size: Theme.font-size-sm;
+                    font-weight: 600;
+                }
+            }
+        }
+    }
+}
