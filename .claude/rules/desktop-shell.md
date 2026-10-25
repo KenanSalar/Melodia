@@ -314,7 +314,8 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 - **Close-to-tray** (`TrayFlags.close_to_tray`, default off) — Slint `Window::hide/show` on
   `should_hide_to_tray()`, gated on the setting **and** a live tray (`SettingRow.disabled` when
-  `Settings.tray-active` false), and off while an MSI update runs (argued there). Hide snapshots
+  `Settings.tray-active` false), and off while an MSI update runs (argued at
+  `updater::install::INSTALLER_RUNNING`). Hide snapshots
   `SAVED_WINDOW_GEOM`; re-show re-asserts it from a self-rescheduling 16 ms timer
   (`reschedule_geometry_restore`, cap `RESTORE_ATTEMPTS`).
   `WINDOW_VISIBLE` shadows visibility — `is_visible()` is `None` on Wayland.

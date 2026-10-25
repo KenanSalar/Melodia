@@ -91,10 +91,7 @@ pub(super) fn spawn_install(
             Ok(InstallOutcome::Installed) => finish_installed(&weak, &event_tx, &install_target),
             // The user's own answer to the elevation prompt, so it earns no toast: the panel
             // simply offers the same version again.
-            Ok(InstallOutcome::Cancelled) => {
-                log::info!("updater: install cancelled at the elevation prompt");
-                set_is_installing(&weak, false);
-            }
+            Ok(InstallOutcome::Cancelled) => set_is_installing(&weak, false),
             Err(e) => {
                 let kind = FailureKind::classify(&e);
                 log::warn!("updater: install failed ({kind:?}): {}", describe(&e));

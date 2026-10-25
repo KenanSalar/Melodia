@@ -154,7 +154,8 @@ const RELAUNCH_PROPERTY: &str = "MELODIA_RELAUNCH=1";
 /// **Normally this never returns**: Restart Manager closes Melodia once the
 /// install starts replacing files, and the MSI reopens the new build. It returns
 /// only when msiexec exits with this process still up, which is a dismissed UAC
-/// prompt, a failure, or an install that never needed to close it. The child is
+/// prompt, a failure, an install that never needed to close it, or one that
+/// couldn't and moved the running binary aside instead. The child is
 /// deliberately not `kill_on_drop`, since the dropped wait is the ordinary end.
 ///
 /// `/qb!` is basic UI with **no** cancel button. The user already confirmed the
@@ -164,8 +165,6 @@ const RELAUNCH_PROPERTY: &str = "MELODIA_RELAUNCH=1";
 /// it says what Windows Installer did; the staging pruner reaps both.
 #[cfg(target_os = "windows")]
 pub(super) async fn install_via_msiexec(staged: &Path) -> AppResult<InstallOutcome> {
-    use windows_sys::Win32::Foundation::ERROR_INSTALL_USEREXIT;
-
     let mut log_name = staged.as_os_str().to_owned();
     log_name.push(".log");
     let log = PathBuf::from(log_name);
@@ -183,15 +182,41 @@ pub(super) async fn install_via_msiexec(staged: &Path) -> AppResult<InstallOutco
 
     let _running = super::InstallerRunning::raise();
     let status = child.wait().await.map_err(|e| AppError::io("waiting on msiexec", e))?;
-    if status.success() {
-        return Ok(InstallOutcome::Installed);
-    }
-    if status.code().and_then(|code| u32::try_from(code).ok()) == Some(ERROR_INSTALL_USEREXIT) {
+    let outcome = status.code().and_then(|code| u32::try_from(code).ok()).and_then(msiexec_outcome);
+    let Some(outcome) = outcome else {
+        log::warn!("updater: msiexec exited with {status}; its log is {}", log.display());
+        return Err(AppError::Settings(format!("Windows Installer exited with {status}")));
+    };
+    if outcome == InstallOutcome::Cancelled {
         log::info!("updater: msiexec cancelled; keeping {} for a retry", staged.display());
-        return Ok(InstallOutcome::Cancelled);
+    } else if !status.success() {
+        log::info!(
+            "updater: msiexec exited with {status}, a success pending a Windows restart; its log \
+             is {}",
+            log.display()
+        );
     }
-    log::warn!("updater: msiexec exited with {status}; its log is {}", log.display());
-    Err(AppError::Settings(format!("Windows Installer exited with {status}")))
+    Ok(outcome)
+}
+
+/// What msiexec's exit code says the install came to, `None` being a failure. Both reboot codes
+/// are success to Windows Installer: an in-use file it couldn't close is moved aside and the new
+/// one put in its place, so restarting Melodia runs the new build and the Windows restart only
+/// deletes the old copy. A file locked against that move is the exception, replaced at the restart.
+#[cfg(target_os = "windows")]
+fn msiexec_outcome(code: u32) -> Option<InstallOutcome> {
+    use windows_sys::Win32::Foundation::{
+        ERROR_INSTALL_USEREXIT, ERROR_SUCCESS, ERROR_SUCCESS_REBOOT_INITIATED,
+        ERROR_SUCCESS_REBOOT_REQUIRED,
+    };
+
+    match code {
+        ERROR_SUCCESS | ERROR_SUCCESS_REBOOT_REQUIRED | ERROR_SUCCESS_REBOOT_INITIATED => {
+            Some(InstallOutcome::Installed)
+        }
+        ERROR_INSTALL_USEREXIT => Some(InstallOutcome::Cancelled),
+        _ => None,
+    }
 }
 
 #[cfg(not(target_os = "windows"))]

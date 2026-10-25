@@ -69,9 +69,8 @@ pub fn set_close_to_tray(on: bool) {
 }
 
 /// `true` when a window-close should hide to tray rather than quit: the user
-/// enabled the setting *and* a tray icon is actually active. Never while an update
-/// installs: Restart Manager closes the window like a user would, and a hidden
-/// window keeps the binary in use, pushing the replace to the next reboot.
+/// enabled the setting *and* a tray icon is actually active, and no update is
+/// installing ([`updater::installer_running`]).
 pub fn should_hide_to_tray() -> bool {
     CLOSE_TO_TRAY.load(Ordering::Relaxed)
         && TRAY_ACTIVE.load(Ordering::Relaxed)
