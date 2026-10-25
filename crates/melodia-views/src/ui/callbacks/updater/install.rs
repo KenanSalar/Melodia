@@ -1,4 +1,4 @@
-//! `Updater.install()` — download + atomic-swap install backend.
+//! `Updater.install()` — download, verify and install backend.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,7 +7,8 @@ use slint::{ComponentHandle, Weak};
 use tokio::sync::watch;
 
 use melodia_app::services::updater::{
-    self, Checked, FailureKind, UpdaterEvent, Verdict, asset_cache, check_for_update,
+    self, Checked, FailureKind, InstallOutcome, UpdaterEvent, Verdict, asset_cache,
+    check_for_update,
 };
 use melodia_app::state::AppState;
 use melodia_core::error::{AppResult, describe};
@@ -87,7 +88,13 @@ pub(super) fn spawn_install(
         )
         .await
         {
-            Ok(()) => finish_installed(&weak, &event_tx, &install_target),
+            Ok(InstallOutcome::Installed) => finish_installed(&weak, &event_tx, &install_target),
+            // The user's own answer to the elevation prompt, so it earns no toast: the panel
+            // simply offers the same version again.
+            Ok(InstallOutcome::Cancelled) => {
+                log::info!("updater: install cancelled at the elevation prompt");
+                set_is_installing(&weak, false);
+            }
             Err(e) => {
                 let kind = FailureKind::classify(&e);
                 log::warn!("updater: install failed ({kind:?}): {}", describe(&e));

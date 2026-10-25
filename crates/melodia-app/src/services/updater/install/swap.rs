@@ -16,6 +16,12 @@ use melodia_core::error::{AppError, AppResult};
 use melodia_platform::services::platform::install_kind::linux_pkg;
 use melodia_platform::services::platform::install_kind::linux_pkg::LinuxPackageFormat;
 
+use super::InstallOutcome;
+
+/// pkexec's exit when the user dismissed the authentication dialog, per pkexec(1).
+#[cfg(target_os = "linux")]
+const PKEXEC_DISMISSED: i32 = 126;
+
 /// Hand the staged package to the resolved package manager under `pkexec`, so
 /// it validates the file, installs it and updates its own DB.
 ///
@@ -34,7 +40,7 @@ use melodia_platform::services::platform::install_kind::linux_pkg::LinuxPackageF
 pub(super) fn install_via_package_manager(
     format: LinuxPackageFormat,
     staged: &Path,
-) -> AppResult<()> {
+) -> AppResult<InstallOutcome> {
     // The polkit policy registers this path, so the auth dialog reads "Install
     // Melodia update" rather than a raw `dnf install …` command line. Both the
     // RPM spec and the deb assets list ship it; absent (a development build,
@@ -90,9 +96,15 @@ pub(super) fn install_via_package_manager(
 
     if !output.status.success() {
         let code = output.status.code().unwrap_or(-1);
+        if code == PKEXEC_DISMISSED {
+            log::info!(
+                "updater: package install cancelled at the polkit prompt; keeping {} for a retry",
+                staged.display()
+            );
+            return Ok(InstallOutcome::Cancelled);
+        }
         let stderr = String::from_utf8_lossy(&output.stderr);
         let reason = match code {
-            126 => "authentication cancelled".to_string(),
             127 => format!(
                 "authorization unavailable (no polkit agent, missing policy, or auth failed): {}",
                 stderr.trim()
@@ -117,66 +129,78 @@ pub(super) fn install_via_package_manager(
     // The install rewrote the live binary; this process's open fd points at the
     // unlinked inode and stays valid until the respawn.
     let _ = std::fs::remove_file(staged);
-    Ok(())
+    Ok(InstallOutcome::Installed)
 }
 
 #[cfg(not(target_os = "linux"))]
 pub(super) fn install_via_package_manager(
     _format: LinuxPackageFormat,
     _staged: &Path,
-) -> AppResult<()> {
+) -> AppResult<InstallOutcome> {
     // Unreachable — `resolve_install_method` never picks `LinuxPackage` off
     // Linux. The stub keeps the call site compile-clean.
     Err(AppError::Settings("package-manager install is only supported on Linux".into()))
 }
 
+/// The public property `wix/main.wxs` gates its post-install relaunch on, Restart Manager being
+/// unable to reopen the app it closed.
+#[cfg(target_os = "windows")]
+const RELAUNCH_PROPERTY: &str = "MELODIA_RELAUNCH=1";
+
 /// [`install_via_package_manager`]'s Windows twin: elevation comes from the
 /// per-machine MSI's UAC prompt, and `wix/main.wxs`'s `MajorUpgrade` +
 /// `util:RestartResource` replace the running version through Restart Manager.
 ///
-/// **Non-blocking by design** — spawned without `.output()` so this process can
-/// exit cleanly while msiexec works, Restart Manager otherwise `WM_CLOSE`ing us
-/// mid-call and dangling the parent inside `spawn_blocking`. msiexec reads the
-/// staged file lazily and the staging pruner reaps it.
-///
-/// Skips the smoke test for the same reason the Linux package branch does; there
-/// is additionally nothing to run, `--version` after spawning msiexec racing the
-/// live binary's replacement.
+/// **Normally this never returns**: Restart Manager closes Melodia once the
+/// install starts replacing files, and the MSI reopens the new build. It returns
+/// only when msiexec exits with this process still up, which is a dismissed UAC
+/// prompt, a failure, or an install that never needed to close it. The child is
+/// deliberately not `kill_on_drop`, since the dropped wait is the ordinary end.
 ///
 /// `/qb!` is basic UI with **no** cancel button. The user already confirmed the
 /// install, and cancelling mid-write leaves it half-done — Windows Installer's
-/// rollback is not bulletproof with Restart Manager in play.
+/// rollback is not bulletproof with Restart Manager in play. Every exit keeps the
+/// staged file, so a retry reuses the verified bytes, and the verbose log beside
+/// it says what Windows Installer did; the staging pruner reaps both.
 #[cfg(target_os = "windows")]
-pub(super) fn install_via_msiexec(staged: &Path) -> AppResult<()> {
-    use std::process::Command;
+pub(super) async fn install_via_msiexec(staged: &Path) -> AppResult<InstallOutcome> {
+    use windows_sys::Win32::Foundation::ERROR_INSTALL_USEREXIT;
 
-    let path_str = staged.to_str().ok_or_else(|| {
-        AppError::Settings(format!(
-            "staged MSI path {} contains non-UTF-8 bytes — cannot pass to msiexec",
-            staged.display()
-        ))
-    })?;
-    log::info!("updater: launching msiexec /i {path_str} /qb!");
-    // Keep the staged file on failure, so a retry reuses the verified bytes. A
-    // PATH missing System32 is the likeliest cause — stripped containers and
-    // sandboxed dev environments drop it.
-    Command::new("msiexec").args(["/i", path_str, "/qb!"]).spawn().map_err(|e| {
-        AppError::Settings(format!(
-            "failed to spawn msiexec for {}: {e} — install requires \
-                 Windows Installer (msiexec.exe). The staged file is \
-                 retained for retry; the 7d staging pruner reaps it if \
-                 unused.",
-            staged.display()
-        ))
-    })?;
-    Ok(())
+    let mut log_name = staged.as_os_str().to_owned();
+    log_name.push(".log");
+    let log = PathBuf::from(log_name);
+
+    log::info!("updater: launching msiexec /i {} /qb! {RELAUNCH_PROPERTY}", staged.display());
+    // A PATH missing System32 is the likeliest spawn failure: stripped containers
+    // and sandboxed dev environments drop it.
+    let mut child = tokio::process::Command::new("msiexec")
+        .arg("/i")
+        .arg(staged)
+        .args(["/qb!", RELAUNCH_PROPERTY, "/l*v"])
+        .arg(&log)
+        .spawn()
+        .map_err(|e| AppError::io("failed to spawn msiexec (Windows Installer)", e))?;
+
+    let _running = super::InstallerRunning::raise();
+    let status = child.wait().await.map_err(|e| AppError::io("waiting on msiexec", e))?;
+    if status.success() {
+        return Ok(InstallOutcome::Installed);
+    }
+    if status.code().and_then(|code| u32::try_from(code).ok()) == Some(ERROR_INSTALL_USEREXIT) {
+        log::info!("updater: msiexec cancelled; keeping {} for a retry", staged.display());
+        return Ok(InstallOutcome::Cancelled);
+    }
+    log::warn!("updater: msiexec exited with {status}; its log is {}", log.display());
+    Err(AppError::Settings(format!("Windows Installer exited with {status}")))
 }
 
 #[cfg(not(target_os = "windows"))]
-pub(super) fn install_via_msiexec(_staged: &Path) -> AppResult<()> {
+pub(super) fn install_via_msiexec(_staged: &Path) -> std::future::Ready<AppResult<InstallOutcome>> {
     // Unreachable — `resolve_install_method` never picks `WindowsMsi` off
     // Windows. The stub keeps the call site compile-clean.
-    Err(AppError::Settings("msiexec install is only supported on Windows".into()))
+    std::future::ready(Err(AppError::Settings(
+        "msiexec install is only supported on Windows".into(),
+    )))
 }
 
 /// Atomic in-place swap of the live binary at `target` with the
@@ -189,10 +213,11 @@ pub(super) fn install_via_msiexec(_staged: &Path) -> AppResult<()> {
 /// then `.old` scheduled for delete on reboot. That schedule is the cleanup
 /// rather than a fallback: `main()`'s startup reaper is Linux-only, so the only
 /// earlier clear is the best-effort `remove_file` at the top of the next swap.
-pub fn swap_in_place(target: &Path, staged: &Path) -> AppResult<()> {
+pub fn swap_in_place(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
     #[cfg(target_os = "windows")]
     {
-        windows_swap(target, staged)
+        windows_swap(target, staged)?;
+        Ok(InstallOutcome::Installed)
     }
     #[cfg(target_os = "linux")]
     {
@@ -201,12 +226,12 @@ pub fn swap_in_place(target: &Path, staged: &Path) -> AppResult<()> {
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     {
         std::fs::rename(staged, target)?;
-        Ok(())
+        Ok(InstallOutcome::Installed)
     }
 }
 
 #[cfg(target_os = "linux")]
-fn linux_swap(target: &Path, staged: &Path) -> AppResult<()> {
+fn linux_swap(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
     // A same-filesystem two-step rename, mirroring `windows_swap`, so a `.old`
     // snapshot survives for rollback if `verify_swapped_binary` reports the new
     // binary won't boot. Clearing a stale one first is best-effort.
@@ -245,7 +270,7 @@ fn linux_swap(target: &Path, staged: &Path) -> AppResult<()> {
     // `.old` deliberately stays, reaped by `main()`'s startup remove on the
     // first boot of the new binary — which only happens once
     // `verify_swapped_binary` has accepted it.
-    Ok(())
+    Ok(InstallOutcome::Installed)
 }
 
 /// `pkexec mv` is **not atomic** across filesystems — `mv` falls back to
@@ -255,7 +280,7 @@ fn linux_swap(target: &Path, staged: &Path) -> AppResult<()> {
 /// the UI first; what is left is a tarball dropped under a root-owned `/opt/`,
 /// where retry-on-fail is fine.
 #[cfg(target_os = "linux")]
-fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<()> {
+fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<InstallOutcome> {
     log::info!("updater: elevating swap via pkexec ({} → {})", staged.display(), target.display());
     let output =
         std::process::Command::new("pkexec").arg("mv").arg("--").arg(staged).arg(target).output();
@@ -282,9 +307,12 @@ fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<()> {
         // `mv` code overlapping 127, which is unavoidable. Keep `staged` so a
         // retry reuses the verified bytes.
         let code = output.status.code().unwrap_or(-1);
+        if code == PKEXEC_DISMISSED {
+            log::info!("updater: swap cancelled at the polkit prompt; nothing was moved");
+            return Ok(InstallOutcome::Cancelled);
+        }
         let stderr = String::from_utf8_lossy(&output.stderr);
         let reason = match code {
-            126 => "authentication cancelled".to_string(),
             127 => format!(
                 "authorization unavailable (no polkit agent, missing policy, or auth failed): {}",
                 stderr.trim()
@@ -296,7 +324,7 @@ fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<()> {
         )));
     }
 
-    Ok(())
+    Ok(InstallOutcome::Installed)
 }
 
 #[cfg(target_os = "windows")]

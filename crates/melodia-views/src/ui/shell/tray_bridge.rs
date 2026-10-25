@@ -21,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use slint::ComponentHandle;
 
 use crate::ui::shell::event_sink::SlintEventSink;
+use melodia_app::services::updater;
 use melodia_app::state::AppState;
 #[cfg(target_os = "linux")]
 use melodia_app::state::Signal;
@@ -68,9 +69,13 @@ pub fn set_close_to_tray(on: bool) {
 }
 
 /// `true` when a window-close should hide to tray rather than quit: the user
-/// enabled the setting *and* a tray icon is actually active.
+/// enabled the setting *and* a tray icon is actually active. Never while an update
+/// installs: Restart Manager closes the window like a user would, and a hidden
+/// window keeps the binary in use, pushing the replace to the next reboot.
 pub fn should_hide_to_tray() -> bool {
-    CLOSE_TO_TRAY.load(Ordering::Relaxed) && TRAY_ACTIVE.load(Ordering::Relaxed)
+    CLOSE_TO_TRAY.load(Ordering::Relaxed)
+        && TRAY_ACTIVE.load(Ordering::Relaxed)
+        && !updater::installer_running()
 }
 
 /// Update the visibility shadow from outside this module. Three callers keep it honest —

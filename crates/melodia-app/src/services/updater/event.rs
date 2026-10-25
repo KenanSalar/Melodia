@@ -19,7 +19,7 @@ pub enum UpdaterEvent {
     /// the toast still works: it returns at the next daily check, and only the
     /// permanent skip is suppressed.
     Available { version: String, notes_short: String, critical: bool },
-    /// `download_and_install` finished and atomically swapped the live binary.
+    /// `download_and_install` finished and the next launch runs the new version.
     /// Becomes the "Update installed — Restart" toast, of kind `UpdateRestart`.
     Installed,
     /// Any error path. Becomes an "Update failed" toast with a per-category message;

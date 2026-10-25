@@ -31,9 +31,9 @@ pub(crate) enum InstallMethod {
     AtomicSwap,
     /// Elevated `dnf install` / `apt install` of a local package.
     LinuxPackage(LinuxPackageFormat),
-    /// `msiexec /i` — elevation comes from the per-machine MSI's UAC prompt, and
-    /// `wix/main.wxs`'s `MajorUpgrade` + `util:RestartResource` replace the
-    /// running app.
+    /// `msiexec /i` — elevation comes from the per-machine MSI's UAC prompt,
+    /// `wix/main.wxs`'s `MajorUpgrade` + `util:RestartResource` close and replace
+    /// the running app, and its `RelaunchMelodia` action reopens it.
     WindowsMsi,
 }
 

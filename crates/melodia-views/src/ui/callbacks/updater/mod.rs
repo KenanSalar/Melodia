@@ -7,9 +7,12 @@
 //!   and toast when it fails. Backend lives in [`check`].
 //! - `Updater.install()` — fires `services::updater::download_and_install`
 //!   on the tokio runtime. Progress writes flow back through
-//!   `upgrade_in_event_loop`. On success → `Updater.restart-needed=true`
-//!   + Installed event onto the channel. On failure → `Updater.error-message`
-//!   + Failed event. Backend lives in [`install`].
+//!   `upgrade_in_event_loop`. On success → `Updater.restart-needed=true` and
+//!   an Installed event onto the channel; on failure → `Updater.error-message`
+//!   and a Failed event; a dismissed elevation prompt hands the button back
+//!   with neither. On Windows a success rarely reports at all: Windows
+//!   Installer closes the app and reopens the new build. Backend lives in
+//!   [`install`].
 //! - `Updater.restart()` — hands off to
 //!   `ui::window_chrome::request_respawn_and_quit`, which arms the respawn
 //!   flag and quits the event loop (or keeps the app up and toasts, if the
