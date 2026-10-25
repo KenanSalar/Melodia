@@ -7,13 +7,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use slint::{ComponentHandle, Model, VecModel, Weak};
+use slint::{ComponentHandle, VecModel, Weak};
 
 use super::state::SongsTotals;
 use super::{RecentlyPlayedTab, RecentlyPlayedUi};
 use crate::ui::list_selection;
 use crate::ui::row_match;
-use crate::ui::util::{clamp_i64_to_i32, len_as_i32};
+use crate::ui::util::{self, clamp_i64_to_i32, len_as_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::AppResult;
@@ -171,8 +171,8 @@ fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec
     }
     let g = ui.global::<RecentlyPlayed>();
     let model = g.get_tracks();
-    let Some(vec) = model.as_any().downcast_ref::<VecModel<UiTrackListRow>>() else {
-        log::warn!("RecentlyPlayed.tracks: VecModel<TrackListRow> downcast failed");
+    let Some(vec) = util::installed::<VecModel<UiTrackListRow>, _>(&model, "RecentlyPlayed.tracks")
+    else {
         return;
     };
     list_selection::keep_selection_within(&g, || {

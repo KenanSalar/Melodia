@@ -446,6 +446,8 @@ Lands as one commit: a list cannot host both mechanisms.
 - **`rows_moving` takes no global**, its one implementer having stopped reading the one it was handed.
 - **`slint-pitfalls.md`'s drag-pan entry described a binding older than 1.18.** Every 1.18 style binds its flickable's own `mouse-drag-pan-enabled` and pins it off, Material included, and `interactive` stays on, so a touch still pans. Corrected there, in `station-grid.slint` and in `scrollbars.rs`.
 
+**Amended in the refactor pass** (2026-10-25): **`DraggableTrackList` folded into `TrackList`.** Its reason to be a sibling was the drag inside its rows, which this phase removed, and Phase 6's `DragSource` left it a copy of `TrackList` plus a reorder target. `TrackList` takes `origin` and `reorder-enabled`, and only a list naming an origin dims its lifted rows or lifts picks, so the eight drag-out lists are unchanged.
+
 **By hand, after validation:**
 - Up Next under repeat-all: a drag across the wrap draws no line and moves nothing;
 - ~~a touch drag from a gap between rows moves nothing~~, and ~~a touchscreen swipe on each of the three lists~~: superseded by Phase 6, where a touch starts no drag at all.

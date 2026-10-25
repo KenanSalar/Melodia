@@ -40,10 +40,8 @@ const GRID_DIR: &str = "components/grid/";
 
 /// The click-to-act lists outside [`GRID_DIR`], which no directory scope reaches.
 ///
-/// `track-list.slint` is deliberately absent: a row click there is a selection rather than
-/// a navigation, so it takes whatever the style publishes. `draggable-track-list.slint` is
-/// absent for the opposite reason, its two bindings being pinned by an exact count in
-/// `ui::playlists::tests` instead, a drag there being the reorder itself.
+/// `track-list.slint` is deliberately absent, its binding being pinned by an exact count in
+/// `ui::playlists::tests` instead, a drag there being Playlist Detail's reorder itself.
 const CARD_SHAPED_LISTS: [&str; 4] = [
     "views/radio/station-grid.slint",
     "views/browse-view.slint",

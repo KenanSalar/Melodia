@@ -44,7 +44,7 @@ use parking_lot::Mutex;
 use slint::{Model, ModelNotify, ModelRc, ModelTracker};
 use tokio::runtime::Handle;
 
-use crate::ui::util::clamp_i64_to_i32;
+use crate::ui::util::{self, clamp_i64_to_i32};
 use melodia_core::error::{AppResult, describe};
 use melodia_core::utils::block_move;
 use melodia_core::utils::needle::Needle;
@@ -216,14 +216,10 @@ impl<R: PagedRow> PagedRows<R> {
         rows.as_any().downcast_ref()
     }
 
-    /// [`Self::of`] for a list installed with one, logging a miss under `label` rather than
-    /// passing over it: the list and its keyset disagree from there on, and nothing else says so.
+    /// [`Self::of`] for a list installed with one, logging a miss under `label`
+    /// ([`util::installed`]).
     pub fn installed<'a>(rows: &'a ModelRc<R>, label: &str) -> Option<&'a Self> {
-        let found = Self::of(rows);
-        if found.is_none() {
-            log::warn!("{label}: PagedRows downcast failed, rows left as they were");
-        }
-        found
+        util::installed(rows, label)
     }
 
     /// The ids `rows` shows, in order, for a play or a shuffle. None where it isn't one.

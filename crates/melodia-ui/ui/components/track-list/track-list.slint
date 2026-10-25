@@ -1,14 +1,23 @@
 import { ListView } from "std-widgets.slint";
 import { Theme } from "../../theme.slint";
-import { TrackListRow, TrackColumns, TrackColumnLayout } from "../../models.slint";
+import { LiftedRun, TrackListRow, TrackColumns, TrackColumnLayout } from "../../models.slint";
 import { TrackColumnSizing } from "../../globals/track-columns.slint";
+import { ListTravel } from "../../globals/list-travel.slint";
+import { Selection } from "../../globals/selection.slint";
+import { DragOrigin } from "../../globals/drag.slint";
 import { TrackListHeader } from "track-list-header.slint";
 import { TrackListRowItem } from "track-list-row.slint";
 import { DragSource } from "../drag-source.slint";
+import { ListDropTarget } from "../list-drop-target.slint";
 
 // The reusable track table: a column header over a virtualized list body. Every view with a track
 // list embeds it, each owning its own column state and persistence. The columns always fit the
 // width they are given, shrinking rather than dropping out, so nothing here pans sideways.
+//
+// Rows drag out as what Add to Queue on them would take. **A list that takes its own rows back
+// names itself in `origin`**, Playlist Detail being the one that does: a `ListDropTarget` over the
+// rows hands it `reorder` and `move-picks` while `reorder-enabled`, a reorder being ambiguous in
+// any sort but the insertion one, and the copy out carries on either way.
 //
 // **Overlay scrollbars are not mounted inside it.** The viewport metrics are exposed as `out`
 // properties with a clamping setter, so a host can mount its own at its root and have them sit flush
@@ -49,6 +58,19 @@ export component TrackList inherits Rectangle {
     // Now-playing highlight.
     in property <int> playing-track-id;
 
+    in property <DragOrigin> origin: DragOrigin.none;
+    in property <bool> reorder-enabled: false;
+    // Only a list with an origin of its own dims what its drag lifted, a sort that retires the move
+    // included; a drag out of any other leaves its rows as they are.
+    property <bool> reorderable: root.origin != DragOrigin.none;
+    // `none` is also what a disarmed or revoked drag carries, so a list with no origin of its own
+    // would take that payload as its own row.
+    property <bool> moves-rows: root.reorderable && root.reorder-enabled;
+
+    pure function in-travel(y: length) -> length {
+        return ListTravel.pin(y, inner-list.visible-height, inner-list.content-height);
+    }
+
     callback request-sort(string /*field*/);
     callback play-row(int /*track_id*/, int /*index*/);
     // Batch-shaped: one element in single-row mode, the whole selection in multi.
@@ -60,6 +82,11 @@ export component TrackList inherits Rectangle {
     callback select-all();
     callback clear-selection();
     callback request-blur-search();
+    callback reorder(int /*from*/, int /*to*/);
+    callback move-picks(int /*slot*/);
+    // Where the picked rows sit, which only the host's Rust can say of a list it pages.
+    callback picked-run() -> LiftedRun;
+    callback remove-from-playlist([int] /*track_ids*/);
 
     // Plumbed straight through to every row; `TrackListRowItem` has the vocabulary.
     in property <string> view-context;
@@ -104,11 +131,11 @@ export component TrackList inherits Rectangle {
             sort-clicked(f) => { root.request-sort(f); }
         }
 
-        // Rows drag out as what Add to Queue on them would take, and nothing here takes them
-        // back.
         src := DragSource {
             vertical-stretch: 1;
+            origin: root.origin;
             allow-copy: true;
+            allow-move: root.moves-rows;
             background-clicked => { root.request-blur-search(); }
 
             // Both built-in scrollbars are off; the host mounts its own, per the metrics above.
@@ -138,6 +165,16 @@ export component TrackList inherits Rectangle {
                     view-context: root.view-context;
                     current-playlist-id: root.current-playlist-id;
                     view-selected-ids: root.view-selected-ids;
+                    lifted: root.reorderable
+                        && (src.lifts(idx) || (r.selected && src.lifting-picks));
+                    // Lifted under a copy-only sort too, so every row the chip counts dims.
+                    pressed => {
+                        src.arm-items(idx, self.drag-items());
+                        if (root.reorderable
+                            && Selection.acts-on-set(r.selected, root.view-selected-ids.length)) {
+                            src.lift-picks(root.picked-run());
+                        }
+                    }
                     double-clicked-row => { root.play-row(r.id, idx); }
                     toggle-favorite => { root.toggle-row-favorite([r.id], !r.is_favorite); }
                     play-row(id, i) => { root.play-row(id, i); }
@@ -148,10 +185,28 @@ export component TrackList inherits Rectangle {
                     select-row(i, id, sh, ct) => { root.select-row(i, id, sh, ct); }
                     select-all => { root.select-all(); }
                     clear-selection => { root.clear-selection(); }
+                    request-remove-from-playlist(ids) => { root.remove-from-playlist(ids); }
                     request-blur-search => { root.request-blur-search(); }
-                    pressed => { src.arm-items(idx, self.drag-items()); }
                 }
             }
+        }
+    }
+
+    // Over the list's viewport, which the layout above places.
+    ListDropTarget {
+        x: inner-list.absolute-position.x - root.absolute-position.x;
+        y: inner-list.absolute-position.y - root.absolute-position.y;
+        width: inner-list.width;
+        height: inner-list.height;
+        enabled: root.moves-rows;
+        origin: root.origin;
+        row-height: Theme.track-row-pitch(root.columns.show_artwork);
+        row-count: root.rows.length;
+        content-y: inner-list.content-y;
+        reorder(from, to) => { root.reorder(from, to); }
+        move-picks(slot) => { root.move-picks(slot); }
+        scroll-by(dy) => {
+            inner-list.content-y = root.in-travel(inner-list.content-y - dy);
         }
     }
 }

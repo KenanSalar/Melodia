@@ -206,7 +206,7 @@ this file is what builds, looks right, and is wrong.
   list shorter than its viewport can't flick, and a press held past 500 ms before moving is never
   intercepted. A touch pans every list, so there every `DragSource` stands down instead
   (`Drag.touching`, `globals/drag.slint`). Under a mouse the draggable lists opt out outright,
-  `draggable-track-list.slint`'s `inner-list` and
+  `track-list.slint`'s `inner-list` and
   `queue-panel.slint`'s, pinned by
   `ui::playlists::tests::every_draggable_list_opts_out_of_drag_panning`, since it only misbehaves
   under a pointer; the click-to-act grids and lists are pinned by `crates/melodia/tests/scrollbars.rs`.

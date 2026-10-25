@@ -164,8 +164,17 @@ impl QueueState {
 
     /// Where `entry` sits in the play order, `None` once its row has left the queue.
     fn play_index_of(&self, entry: QueueEntry) -> Option<usize> {
-        let slot = entry.0.checked_sub(self.retired)?;
+        self.play_index_of_slot(entry.0.checked_sub(self.retired)?)
+    }
+
+    fn play_index_of_slot(&self, slot: usize) -> Option<usize> {
         self.play_order.iter().position(|&queued| queued == slot)
+    }
+
+    /// The current row's slot in `tracks`, which is how a reorder finds that row again: by id, a
+    /// track queued twice would hand current to whichever copy comes first.
+    fn current_slot(&self) -> Option<usize> {
+        self.current_index.and_then(|ci| self.play_order.get(ci).copied())
     }
 
     /// The tracks a transition can move onto without a fetch, those at [`window_slots`], each id
@@ -316,15 +325,14 @@ impl QueueState {
     /// Move the play-order slots `rows` together to `to`, as [`block_move::move_block`] does.
     /// Answers whether anything moved.
     ///
-    /// The current track stays current wherever the block lands, found again by its entry: each
-    /// names its own slot in `tracks`, a track queued twice included.
+    /// The current track stays current wherever the block lands.
     pub fn move_rows(&mut self, rows: &[usize], to: usize) -> bool {
-        let current = self.current_index.and_then(|ci| self.play_order.get(ci).copied());
+        let current = self.current_slot();
         if !block_move::move_block(&mut self.play_order, rows, to) {
             return false;
         }
-        if let Some(entry) = current {
-            self.current_index = self.play_order.iter().position(|&e| e == entry);
+        if let Some(slot) = current {
+            self.current_index = self.play_index_of_slot(slot);
         }
         self.order_changed();
         true
@@ -483,15 +491,9 @@ impl QueueState {
         if self.play_order.is_empty() {
             return;
         }
-        let pinned_track_idx = if anchor_to_current {
-            self.current_index.and_then(|ci| self.play_order.get(ci).copied())
-        } else {
-            None
-        };
+        let pinned = if anchor_to_current { self.current_slot() } else { None };
         self.play_order.shuffle(rng);
-        if let Some(ti) = pinned_track_idx
-            && let Some(new_pos) = self.play_order.iter().position(|&i| i == ti)
-        {
+        if let Some(new_pos) = pinned.and_then(|slot| self.play_index_of_slot(slot)) {
             self.play_order.swap(0, new_pos);
         }
         self.current_index = Some(0);
@@ -500,16 +502,11 @@ impl QueueState {
     }
 
     /// Restore original track order (unshuffle).
-    ///
-    /// The current row is found again by its slot, as [`Self::move_rows`] does: by id, a track
-    /// queued twice would hand current to whichever copy comes first.
     pub fn unshuffle(&mut self) {
-        let current = self.current_index.and_then(|ci| self.play_order.get(ci).copied());
+        let current = self.current_slot();
         self.play_order.clone_from(&self.original_order);
 
-        if let Some(slot) = current
-            && let Some(pos) = self.play_order.iter().position(|&queued| queued == slot)
-        {
+        if let Some(pos) = current.and_then(|slot| self.play_index_of_slot(slot)) {
             self.current_index = Some(pos);
         }
         self.shuffle_enabled = false;
@@ -550,10 +547,7 @@ impl QueueState {
             return PruneOutcome::default();
         }
 
-        let current_was_removed = self
-            .current_index
-            .and_then(|ci| self.play_order.get(ci))
-            .is_some_and(|&slot| gone(slot));
+        let current_was_removed = self.current_slot().is_some_and(gone);
         // The first survivor at or after the old slot takes the index of the survivors before it.
         let survivors_before_current = self
             .current_index

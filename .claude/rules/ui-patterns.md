@@ -710,15 +710,15 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **A list drags through `components/drag-source.slint`'s `DragSource` round its `ListView`, and
   reorders through `components/list-drop-target.slint`'s `ListDropTarget` over it, never a gesture
-  of its own.** Three lists reorder: the queue panel, Playlist Detail's `DraggableTrackList` and Up
-  Next, in Now Playing and the miniplayer alike. The rest drag out only, copy-allowed: `TrackList`,
-  eight of the nine track surfaces in one file, and the five card grids. The row reports its press,
-  `src.arm(idx)` where the drag only reorders and `src.arm-items(…)` where it carries something
-  out, and a reorderable row reads `lifted: src.lifts(idx)`, dimming by `Theme.fade-lifted`; the
-  target owns the slot, the line, the edge scroll and the no-op slots, handing the host
-  `reorder(from, to)`, `move-picks(slot)` and `scroll-by(dy)`. A host whose rows fall into two runs
-  that a move may not cross names the second's first row in `split-row`, and the slots across it
-  draw no line and drop nothing.
+  of its own.** Three lists reorder: the queue panel, Playlist Detail's `TrackList` (the one mount
+  naming an `origin`) and Up Next, in Now Playing and the miniplayer alike. The rest drag out only,
+  copy-allowed: the other eight track surfaces' `TrackList`s and the five card grids. The row
+  reports its press, `src.arm(idx)` where the drag only reorders and `src.arm-items(…)` where it
+  carries something out, and a reorderable row reads `lifted: src.lifts(idx)`, dimming by
+  `Theme.fade-lifted`; the target owns the slot, the line, the edge scroll and the no-op slots,
+  handing the host `reorder(from, to)`, `move-picks(slot)` and `scroll-by(dy)`. A host whose rows
+  fall into two runs that a move may not cross names the second's first row in `split-row`, and
+  the slots across it draw no line and drop nothing.
   - **A press on a picked row while others are picked lifts them all**, the menu's rule
     (`Selection.acts-on-set`). The row arms as usual, then `src.lift-picks(…)` with the host
     global's `picked-run()`, Rust being the only side that can find the picks in a list it pages
@@ -871,9 +871,9 @@ three components that answer it, and each argues its geometry at its own file.
   shared there too, by the four flat list views and the four details**: `wire_row_selection` over
   `list_selection::RowSelectionView`, ranging over the rows on screen. Browse keeps its own
   wiring for its disk-only rows, over the same `compute_click_selection`, whose anchor is the id
-  of the row last clicked. **So is the drag out**: `TrackList` and `DraggableTrackList` each mount a
-  `DragSource` round their `ListView` (the drag entry above), and a disk-only Browse row arms
-  nothing, its body being disabled.
+  of the row last clicked. **So is the drag out**: `TrackList` mounts a `DragSource` round its
+  `ListView` (the drag entry above), and a disk-only Browse row arms nothing, its body being
+  disabled.
 
 - **`play-row` replaces the queue with the view; there is no single-track play path, and no
   Play-All pill.** Every row activation resolves the view's *displayed* ids and hands them to
@@ -895,16 +895,15 @@ three components that answer it, and each argues its geometry at its own file.
   (`card_grid::shown_ids`), so the cards and the queue can't disagree about what's on screen,
   the filter included.
 
-- **Track-list insets belong to the list, not the page.** `TrackList` and `DraggableTrackList`
-  take `inset-left` and `inset-right`, defaulting to `Theme.track-list-inset` and
-  `Theme.scrollbar-slot`, and resolve their columns inside them. So the Songs tabs and the four
-  detail bodies mount the list at full width with no side padding of their own, a detail's header
-  sitting flush under its band, and the right edge stops at the bar's slot so a row's pill never
-  runs under the track. Two hosts differ: Browse keeps a `page-inset` for its header strip and card
-  grid, its folder rows following the list's column, and Search's Songs section passes `0px` on
-  both sides, being a column inside the page's own inset beside the Top Result. Overlay scrollbars
-  stay at `parent.width - self.width`, and bottom padding is never on the root (the dead-strip
-  pitfall).
+- **Track-list insets belong to the list, not the page.** `TrackList` takes `inset-left` and
+  `inset-right`, defaulting to `Theme.track-list-inset` and `Theme.scrollbar-slot`, and resolves
+  its columns inside them. So the Songs tabs and the four detail bodies mount the list at full
+  width with no side padding of their own, a detail's header sitting flush under its band, and the
+  right edge stops at the bar's slot so a row's pill never runs under the track. Two hosts differ:
+  Browse keeps a `page-inset` for its header strip and card grid, its folder rows following the
+  list's column, and Search's Songs section passes `0px` on both sides, being a column inside the
+  page's own inset beside the Top Result. Overlay scrollbars stay at `parent.width - self.width`,
+  and bottom padding is never on the root (the dead-strip pitfall).
   **Three hosts size a list to what it holds** through `TrackList.content-height`: Browse's and
   Artist Detail's capped at the viewport, Search's Songs section outright. The sum lives there, so
   a change to the list's own chrome is one edit.

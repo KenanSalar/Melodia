@@ -22,7 +22,7 @@ use super::track_rows::fetch_by_id;
 use super::{Keyset, PagedRow, PagedRows, ReadStamp, RowRequest, window};
 use crate::ui::list_selection::click_selection;
 use crate::ui::tracks::format_duration_ms;
-use crate::ui::util::{StringPool, clamp_i64_to_i32};
+use crate::ui::util::{self, StringPool, clamp_i64_to_i32};
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
@@ -57,11 +57,7 @@ impl QueueRows {
 
     /// The model behind `rows`, logging a miss under `label` rather than passing over it.
     pub fn installed<'a>(rows: &'a ModelRc<QueueRow>, label: &str) -> Option<&'a Self> {
-        let found = rows.as_any().downcast_ref();
-        if found.is_none() {
-            log::warn!("{label}: QueueRows downcast failed, rows left as they were");
-        }
-        found
+        util::installed(rows, label)
     }
 
     /// Whether `ids` is the order on show: the same allocation rather than an equal one. The

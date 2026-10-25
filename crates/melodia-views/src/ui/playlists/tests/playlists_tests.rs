@@ -4,8 +4,8 @@
 use super::detail::{POSITION_FIELD, is_manual_order};
 use melodia_testkit::code_tokens;
 
-const DRAGGABLE_LIST: &str =
-    include_str!("../../../../../melodia-ui/ui/components/track-list/draggable-track-list.slint");
+const TRACK_LIST: &str =
+    include_str!("../../../../../melodia-ui/ui/components/track-list/track-list.slint");
 const QUEUE_PANEL: &str =
     include_str!("../../../../../melodia-ui/ui/views/queue-panel/queue-panel.slint");
 const DETAIL_VIEW: &str =
@@ -27,7 +27,7 @@ fn every_draggable_list_opts_out_of_drag_panning() {
     // The binding rather than the token: the property reads as an *enable*, so
     // `mouse-drag-pan-enabled: true` is the likeliest wrong edit and a bare
     // occurrence count can't fail on it.
-    let list = code_tokens(DRAGGABLE_LIST);
+    let list = code_tokens(TRACK_LIST);
     assert_eq!(
         list.matches("mouse-drag-pan-enabled: false").count(),
         1,
@@ -60,6 +60,21 @@ fn the_reorder_gate_reads_every_term_the_drag_depends_on() {
         ),
         "playlist-detail.slint must gate reorder on an *ascending* position sort, \
          an unfiltered list and a playlist with a curated order"
+    );
+}
+
+/// The origin is a binding at the mount and the revoke names it in Rust, so the two can drift
+/// apart with both files reading clean. Once they do, a drag over rows a reload rebuilt keeps its
+/// stale index and drops it on another track.
+#[test]
+fn the_playlist_list_names_the_origin_its_revoke_retires() {
+    assert!(
+        code_tokens(DETAIL_VIEW).contains("origin: DragOrigin.playlist;"),
+        "without its own origin the list moves no rows, `TrackList` gating the reorder on one"
+    );
+    assert!(
+        code_tokens(DETAIL).contains("drag.invoke_revoke(DragOrigin::Playlist);"),
+        "a reload under a live drag has to retire the index the list's own origin armed"
     );
 }
 

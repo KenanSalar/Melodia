@@ -1,15 +1,14 @@
 import { MyLibrary } from "../../globals/my-library.slint";
 import { Player } from "../../globals/player.slint";
 import { PlaylistDetail } from "../../globals/playlists.slint";
-import { FileDrag, FileDropTarget } from "../../globals/drag.slint";
-import { DraggableTrackList } from "../../components/track-list/draggable-track-list.slint";
+import { DragOrigin, FileDrag, FileDropTarget } from "../../globals/drag.slint";
+import { TrackList } from "../../components/track-list/track-list.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
 import { FileDropBanner } from "../../components/file-drop-banner.slint";
 
-// `AlbumDetailBody`'s shape over `DraggableTrackList` — the shared `TrackList` takes no rows
-// back, so only this list reorders — plus the empty state filling `body` and the OS file-drop
-// banner over all of it.
+// `AlbumDetailBody`'s shape over the one `TrackList` that takes its rows back, plus the empty
+// state filling `body` and the OS file-drop banner over all of it.
 export component PlaylistDetailBody inherits Rectangle {
     // Catches clicks no inner TouchArea consumes; the band's SearchBar blurs on the tick.
     TouchArea {
@@ -22,11 +21,12 @@ export component PlaylistDetailBody inherits Rectangle {
         width: 100%;
         height: 100%;
 
-        tl := DraggableTrackList {
+        tl := TrackList {
             width: 100%;
             height: 100%;
 
             rows: PlaylistDetail.tracks;
+            origin: DragOrigin.playlist;
             // Reorder only in insertion order: any other sort makes it ambiguous, a
             // filter breaks the index → position mapping, and a smart playlist has no
             // curated order to reorder into. The direction counts too — a reversed

@@ -8,7 +8,7 @@ use slint::{ComponentHandle, Weak};
 use super::publish_picks;
 use crate::ui::callbacks::card_actions::spawn_with_track_ids;
 use crate::ui::callbacks::collect_track_ids;
-use crate::ui::callbacks::macros::wire_row_flag;
+use crate::ui::callbacks::macros::{wire_row_flag, wire_sync};
 use crate::ui::drag;
 use crate::ui::paged_rows::queue_rows::QueueRows;
 use melodia_app::library;
@@ -79,17 +79,7 @@ fn wire_transport(ui: &AppWindow, state: &AppState, rows: &Rc<QueueRows>) {
         });
     }
 
-    {
-        let s = state.clone();
-        queue.on_clear_queue(move || {
-            let s_inner = s.clone();
-            s.runtime.clone().spawn(async move {
-                if let Err(e) = library::queue::queue_clear(&s_inner) {
-                    log::warn!("queue_clear: {}", describe(&e));
-                }
-            });
-        });
-    }
+    wire_sync!(queue, on_clear_queue, state, "queue_clear", library::queue::queue_clear);
 }
 
 /// The two drags that move rows: one row, or every picked row gathered at a slot.
