@@ -10,13 +10,13 @@ use melodia_core::error::{AppError, AppResult};
 /// Returns `Ok(true)` only when `candidate` parses as a strictly higher
 /// semver than `current`. Equal and older candidates return `Ok(false)`
 /// (no notification, no install). Malformed inputs surface as
-/// `AppError::Validation` rather than silently allowing the upgrade.
+/// `AppError::Updater` rather than silently allowing the upgrade.
 pub fn is_upgrade(current: &str, candidate: &str) -> AppResult<bool> {
     let current = Version::parse(current).map_err(|e| {
-        AppError::Validation(format!("current version '{current}' is not valid semver: {e}"))
+        AppError::updater(format!("current version '{current}' is not valid semver"), e)
     })?;
     let candidate = Version::parse(candidate).map_err(|e| {
-        AppError::Validation(format!("candidate version '{candidate}' is not valid semver: {e}"))
+        AppError::updater(format!("candidate version '{candidate}' is not valid semver"), e)
     })?;
     Ok(candidate > current)
 }

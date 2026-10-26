@@ -152,7 +152,7 @@ async fn no_valid_ids_is_refused_without_touching_the_queue() -> Result<(), AppE
 
     let refused = player_play_tracks(&fx.ctx, vec![9_999], None).await;
 
-    assert!(matches!(refused, Err(AppError::Queue(_))));
+    assert!(matches!(refused, Err(AppError::Queue { .. })));
     let state = lock_state(&fx.ctx.player_state);
     assert_eq!(state.queue.play_ids().to_vec(), ids);
     assert_eq!(state.status, PlaybackStatus::Playing, "and it is still playing");

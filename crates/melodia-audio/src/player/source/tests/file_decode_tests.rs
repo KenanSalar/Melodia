@@ -99,7 +99,7 @@ fn a_seek_past_the_end_saturates_rather_than_failing() -> Result<(), AppError> {
     for fixture in ["silence.wav", "silence.mp3", "silence.m4a", "silence.ogg", "silence.flac"] {
         let mut decoder = FileDecoder::open(&asset(fixture))?;
         let Some(length) = decoder.total_duration() else {
-            return Err(AppError::Player(format!("{fixture} states no length to clamp to")));
+            return Err(AppError::player_msg(format!("{fixture} states no length to clamp to")));
         };
 
         let seeked = decoder.try_seek(length * 4);
@@ -124,7 +124,7 @@ fn a_seek_lands_on_the_frame_it_asked_for() -> Result<(), AppError> {
     // middle of a packet rather than onto its edge.
     assert!(decoder.next().is_some());
     let seek = std::time::Duration::from_millis(SEEK_MS);
-    decoder.try_seek(seek).map_err(|e| AppError::Player(e.to_string()))?;
+    decoder.try_seek(seek).map_err(|e| AppError::player("the seek", e))?;
 
     // What remains has to be the tail of the file from the target onwards, to within the frame
     // the trim rounds to.
@@ -151,15 +151,15 @@ fn a_seek_resumes_on_the_channel_it_was_part_way_through() -> Result<(), AppErro
 
     // One sample leaves the puller owed channel 1.
     let Some(first) = decoder.next() else {
-        return Err(AppError::Player("the fixture decoded nothing".to_owned()));
+        return Err(AppError::player_msg("the fixture decoded nothing"));
     };
     assert!((first - LEFT).abs() < 1e-3, "the fixture opened on {first}, not its left channel");
     decoder
         .try_seek(std::time::Duration::from_millis(500))
-        .map_err(|e| AppError::Player(e.to_string()))?;
+        .map_err(|e| AppError::player("the seek", e))?;
 
     let Some(resumed) = decoder.next() else {
-        return Err(AppError::Player("the seek left nothing to play".to_owned()));
+        return Err(AppError::player_msg("the seek left nothing to play"));
     };
     assert!(
         (resumed - RIGHT).abs() < 1e-3,
@@ -234,7 +234,7 @@ fn itunsmpb_is_read_off_the_file_and_beats_the_edit_list_under_it() -> Result<()
     // nothing here for the tag to have precedence over.
     let edits = aac_trim::edit_lists(&mut File::open(&tagged)?);
     let [edit] = edits.as_slice() else {
-        return Err(AppError::Player("the tag write dropped the edit list".to_owned()));
+        return Err(AppError::player_msg("the tag write dropped the edit list"));
     };
     assert_eq!(edit.delay, 1024);
 
@@ -318,7 +318,7 @@ fn frames_left_after_seeking(decoder: &mut FileDecoder, seek_ms: u64) -> Result<
     let channels = u64::from(decoder.channels().get());
     decoder
         .try_seek(Duration::from_millis(seek_ms))
-        .map_err(|e| AppError::Player(e.to_string()))?;
+        .map_err(|e| AppError::player("the seek", e))?;
     Ok(u64::try_from(decoder.by_ref().count()).unwrap_or(u64::MAX) / channels)
 }
 
@@ -339,7 +339,7 @@ fn write_smpb(path: &Path, value: &str) -> Result<(), AppError> {
         AtomData::UTF8(value.to_owned()),
     ));
     ilst.save_to_path(path, WriteOptions::default())
-        .map_err(|e| AppError::Player(format!("could not write iTunSMPB: {e}")))
+        .map_err(|e| AppError::player("could not write iTunSMPB", e))
 }
 
 /// The window a container's trailing padding is held back in.
@@ -356,7 +356,7 @@ mod tail_window {
     /// regressed to answering `None` would leave the two tests below passing on nothing.
     fn window_of(width: u64) -> Result<TailWindow, AppError> {
         TailWindow::new(width)
-            .ok_or_else(|| AppError::Player(format!("no window {width} samples wide")))
+            .ok_or_else(|| AppError::player_msg(format!("no window {width} samples wide")))
     }
 
     /// `None` rather than an empty window, which is what makes an armed [`super::super::End::Held`]

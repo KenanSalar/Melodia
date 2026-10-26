@@ -24,7 +24,7 @@ fn an_unsupported_locale_is_refused_and_never_written() -> Result<(), AppError> 
 
     let refused = set_locale(&paths, "xx-YZ".to_owned());
 
-    assert!(matches!(refused, Err(AppError::Validation(_))));
+    assert!(matches!(refused, Err(AppError::Validation { .. })));
     assert_eq!(services::settings::read_settings(&paths)?.locale, before);
     Ok(())
 }

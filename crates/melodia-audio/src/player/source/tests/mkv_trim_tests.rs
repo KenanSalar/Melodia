@@ -22,7 +22,7 @@ const TICKS_PER_SECOND: u64 = 1_000_000_000;
 
 fn only_discard(discards: &[Discard]) -> Result<(u32, u64), AppError> {
     let [discard] = discards else {
-        return Err(AppError::Player(format!("expected one discard, got {}", discards.len())));
+        return Err(AppError::player_msg(format!("expected one discard, got {}", discards.len())));
     };
     Ok((discard.track_num, discard.ticks))
 }

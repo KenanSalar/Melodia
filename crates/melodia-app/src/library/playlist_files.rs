@@ -246,7 +246,7 @@ async fn read_archive(db: &DbPool, src: &Path) -> Result<ImportFileResult, AppEr
         .await
         .map_err(AppError::io_source)??;
     if contents.entries.is_empty() && contents.unreadable == 0 {
-        return Err(AppError::Validation("No playlist files found in archive".to_owned()));
+        return Err(AppError::validation_msg("No playlist files found in archive"));
     }
 
     let beside = src.parent().unwrap_or_else(|| Path::new(""));
@@ -282,7 +282,7 @@ async fn import_text(
     let parsed = m3u::parse(content);
 
     if parsed.entries.is_empty() {
-        return Err(AppError::Validation("No playlist entries found in file".to_owned()));
+        return Err(AppError::validation_msg("No playlist entries found in file"));
     }
 
     let name = parsed

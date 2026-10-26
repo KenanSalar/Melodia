@@ -3,8 +3,8 @@ use melodia_core::error::AppError;
 
 use super::*;
 
-fn json_err(e: &serde_json::Error) -> AppError {
-    AppError::Validation(format!("json error: {e}"))
+fn json_err(e: serde_json::Error) -> AppError {
+    AppError::validation("json error", e)
 }
 
 #[test]
@@ -31,9 +31,9 @@ fn repeat_mode_as_str_all_variants() {
 fn repeat_mode_is_read_and_written_by_its_settings_json_token() -> Result<(), AppError> {
     let rows = [(RepeatMode::Off, "off"), (RepeatMode::All, "all"), (RepeatMode::One, "one")];
     for (mode, token) in rows {
-        let written = serde_json::to_value(mode).map_err(|e| json_err(&e))?;
+        let written = serde_json::to_value(mode).map_err(json_err)?;
         let read: RepeatMode =
-            serde_json::from_value(serde_json::json!(token)).map_err(|e| json_err(&e))?;
+            serde_json::from_value(serde_json::json!(token)).map_err(json_err)?;
 
         assert_eq!(
             (written, read),
@@ -47,8 +47,8 @@ fn repeat_mode_is_read_and_written_by_its_settings_json_token() -> Result<(), Ap
 #[test]
 fn persistable_queue_serde_roundtrip() -> Result<(), AppError> {
     let queue = PersistableQueue { track_ids: vec![10, 20, 30], current_index: 1 };
-    let json = serde_json::to_string(&queue).map_err(|e| json_err(&e))?;
-    let deserialized: PersistableQueue = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&queue).map_err(json_err)?;
+    let deserialized: PersistableQueue = serde_json::from_str(&json).map_err(json_err)?;
     assert_eq!(queue, deserialized);
     Ok(())
 }
@@ -56,8 +56,8 @@ fn persistable_queue_serde_roundtrip() -> Result<(), AppError> {
 #[test]
 fn persistable_queue_empty() -> Result<(), AppError> {
     let queue = PersistableQueue { track_ids: vec![], current_index: -1 };
-    let json = serde_json::to_string(&queue).map_err(|e| json_err(&e))?;
-    let deserialized: PersistableQueue = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&queue).map_err(json_err)?;
+    let deserialized: PersistableQueue = serde_json::from_str(&json).map_err(json_err)?;
     assert_eq!(queue, deserialized);
     Ok(())
 }
@@ -77,8 +77,8 @@ fn persisted_playback_serde_roundtrip_with_and_without_a_station() -> Result<(),
             station_id,
         };
 
-        let json = serde_json::to_string(&persisted).map_err(|e| json_err(&e))?;
-        let back: PersistedPlayback = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+        let json = serde_json::to_string(&persisted).map_err(json_err)?;
+        let back: PersistedPlayback = serde_json::from_str(&json).map_err(json_err)?;
 
         assert_eq!(back, persisted);
     }
@@ -93,7 +93,7 @@ fn persisted_playback_serde_roundtrip_with_and_without_a_station() -> Result<(),
 fn a_queue_file_written_before_stations_still_parses() -> Result<(), AppError> {
     let shipped = r#"{"track_ids":[7,8],"current_index":1}"#;
 
-    let back: PersistedPlayback = serde_json::from_str(shipped).map_err(|e| json_err(&e))?;
+    let back: PersistedPlayback = serde_json::from_str(shipped).map_err(json_err)?;
 
     assert_eq!(back.queue.track_ids, vec![7, 8]);
     assert_eq!(back.queue.current_index, 1);

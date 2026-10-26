@@ -49,7 +49,7 @@ async fn boot(data_root: &Path) -> Result<Booted, AppError> {
         .build()
         .map_err(|e| AppError::network("client", e))?;
     if state.http_client_cell().set(client).is_err() {
-        return Err(AppError::Validation("the client was built before it could be routed".into()));
+        return Err(AppError::validation_msg("the client was built before it could be routed"));
     }
     Ok(Booted { state, _channels: channels, _refusing_proxy: proxy })
 }

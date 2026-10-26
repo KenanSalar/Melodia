@@ -1,6 +1,6 @@
 //! Every error a `log::` call prints goes through `error::describe`.
 //!
-//! The four I/O-boundary `AppError` variants print their operation and keep the reason on
+//! The struct `AppError` variants print their operation and keep the reason on
 //! `.source()`, so a bare `{e}` reports a full disk and a permissions failure in the same words,
 //! and any other error loses the chain below it. Nothing fails when the rule is broken, and it can
 //! be broken from any file, so every crate is walked for it.
@@ -9,7 +9,7 @@
 //! nests parentheses and sits beside strings, chars and comments that only look like one, and a
 //! reader that loses its place either flags code that is fine or passes code that is not.
 
-use melodia_testkit::raw_rust_sources;
+use melodia_testkit::{inline_names, is_error_name, raw_rust_sources};
 
 /// Loose on purpose: below it the reader has stopped finding calls, not the tree making them.
 const MIN_LOG_CALLS: usize = 300;
@@ -374,33 +374,6 @@ fn prints_bare(expr: &str) -> bool {
     let value = expr.trim_start_matches(['&', '*']);
     let value = value.strip_suffix(".to_string()").unwrap_or(value);
     is_error_name(value)
-}
-
-fn is_error_name(name: &str) -> bool {
-    matches!(name, "e" | "err" | "error") || name.ends_with("_err") || name.ends_with("_error")
-}
-
-/// The identifiers a format string captures inline, `{name}` or `{name:spec}`.
-fn inline_names(literal: &str) -> Vec<&str> {
-    let bytes = literal.as_bytes();
-    let mut names = Vec::new();
-    let mut at = 0;
-    while at < bytes.len() {
-        match bytes[at] {
-            b'{' if bytes.get(at + 1) == Some(&b'{') => at += 2,
-            b'{' => {
-                let close = literal[at..].find('}').map_or(literal.len(), |offset| at + offset);
-                let spec = &literal[at + 1..close];
-                let name = spec.split(':').next().unwrap_or(spec).trim();
-                if name.starts_with(|first: char| first.is_alphabetic() || first == '_') {
-                    names.push(name);
-                }
-                at = close + 1;
-            }
-            _ => at += 1,
-        }
-    }
-    names
 }
 
 /// Just past the comment or literal opening at `at`, or `None` where none opens there.

@@ -25,13 +25,13 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
 
         let reply = conn
             .call_method(Some(SHELL_SERVICE), WINDOWS_PATH, Some(WINDOWS_INTERFACE), "List", &())
-            .map_err(|e| AppError::io("Failed to list windows", e))?;
+            .map_err(|e| AppError::window("Failed to list windows", e))?;
 
         let windows_json: String =
-            reply.body().deserialize().map_err(|e| AppError::io("Invalid windows list", e))?;
+            reply.body().deserialize().map_err(|e| AppError::window("Invalid windows list", e))?;
 
         let windows: Vec<serde_json::Value> = serde_json::from_str(&windows_json)
-            .map_err(|e| AppError::io("Failed to parse windows JSON", e))?;
+            .map_err(|e| AppError::window("Failed to parse windows JSON", e))?;
 
         let pid_matches: Vec<&serde_json::Value> = windows
             .iter()
@@ -49,13 +49,13 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
                     .is_some_and(|c| c.to_lowercase().contains("melodia"))
             })
             .or(pid_matches.first())
-            .ok_or_else(|| AppError::Window("Could not find Melodia window in GNOME".to_owned()))?;
+            .ok_or_else(|| AppError::window_msg("Could not find Melodia window in GNOME"))?;
 
         let window_id: u32 = window
             .get("id")
             .and_then(serde_json::Value::as_u64)
             .and_then(|id| u32::try_from(id).ok())
-            .ok_or_else(|| AppError::Window("Melodia window has no valid id field".to_owned()))?;
+            .ok_or_else(|| AppError::window_msg("Melodia window has no valid id field"))?;
 
         let method = if pinned { "MakeAbove" } else { "UnmakeAbove" };
 
@@ -66,10 +66,10 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
             method,
             &(window_id,),
         )
-        .map_err(|e| AppError::io(format!("Failed to {method} window"), e))?;
+        .map_err(|e| AppError::window(format!("Failed to {method} window"), e))?;
 
         Ok(())
     })
     .await
-    .map_err(|e| AppError::io("GNOME pin task panicked", e))?
+    .map_err(|e| AppError::window("GNOME pin task panicked", e))?
 }

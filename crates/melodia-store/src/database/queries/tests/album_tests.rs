@@ -54,11 +54,11 @@ async fn an_album_card_counts_its_tracks() -> Result<(), AppError> {
     let one = albums
         .iter()
         .find(|a| a.name == "Album One")
-        .ok_or_else(|| AppError::Validation("Album One missing".into()))?;
+        .ok_or_else(|| AppError::validation_msg("Album One missing"))?;
     let two = albums
         .iter()
         .find(|a| a.name == "Album Two")
-        .ok_or_else(|| AppError::Validation("Album Two missing".into()))?;
+        .ok_or_else(|| AppError::validation_msg("Album Two missing"))?;
     assert_eq!(one.track_count, 2);
     assert_eq!(two.track_count, 1);
     Ok(())
@@ -180,7 +180,7 @@ async fn seed_released_album() -> Result<(DbPool, i64), AppError> {
 }
 
 fn missing(what: &str) -> AppError {
-    AppError::Validation(format!("missing {what}"))
+    AppError::validation_msg(format!("missing {what}"))
 }
 
 /// **`upsert_album` structurally cannot empty one of these.** It coalesces a NULL away so a track

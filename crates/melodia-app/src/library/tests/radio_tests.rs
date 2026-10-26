@@ -107,7 +107,7 @@ fn stored(station_uuid: Option<&str>) -> RadioStation {
 fn only_a_hand_typed_station_can_be_edited() {
     assert!(ensure_editable(&stored(None)).is_ok(), "a station with no uuid is the user's own");
     assert!(
-        matches!(ensure_editable(&stored(Some("uuid-1"))), Err(AppError::Validation(_))),
+        matches!(ensure_editable(&stored(Some("uuid-1"))), Err(AppError::Validation { .. })),
         "a browsed station must be refused, and as a `Validation` — the form maps that arm onto \
          the line that says why rather than onto the generic save failure"
     );
@@ -303,7 +303,7 @@ async fn seed(db: &DbPool, station: &RadioStation) -> Result<i64, AppError> {
 async fn stored_row(db: &DbPool, id: i64) -> Result<Option<RadioStation>, AppError> {
     match queries::radio::get_station_by_id(db, id).await {
         Ok(station) => Ok(Some(station)),
-        Err(AppError::NotFound(_)) => Ok(None),
+        Err(AppError::NotFound { .. }) => Ok(None),
         Err(e) => Err(e),
     }
 }

@@ -197,7 +197,7 @@ impl FileDecoder {
             time_base,
             total_duration,
         } = decode::open(Box::new(FileSource::new(file)), &hint)
-            .map_err(|e| AppError::Player(format!("{} {e}", path.display())))?;
+            .map_err(|e| AppError::player(path.display().to_string(), e))?;
 
         let mut decoded = Self {
             format,
@@ -468,7 +468,7 @@ impl AudioSource for FileDecoder {
             None => Duration::ZERO,
         };
         let time = seek_time(target.saturating_sub(pre_roll))
-            .ok_or_else(|| other(AppError::Player("Seek position out of range".to_owned())))?;
+            .ok_or_else(|| other(AppError::player_msg("Seek position out of range")))?;
 
         let seeked = self
             .format

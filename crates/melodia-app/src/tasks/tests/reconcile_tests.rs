@@ -72,7 +72,7 @@ fn rename_mtime(to: &Path, meta: Option<ExtractedMetadata>) -> Result<Option<Str
     let changes = watched_changes(vec![event], metadata);
 
     let [WatchedChange::Renamed { date_modified, .. }] = changes.as_slice() else {
-        return Err(AppError::Validation("a rename must reach the store as one rename".into()));
+        return Err(AppError::validation_msg("a rename must reach the store as one rename"));
     };
     Ok(date_modified.clone())
 }
@@ -145,7 +145,7 @@ async fn seed_ingested(
     process_batch(&db, paths, cover_cache, vec![FileEvent::Created(track.clone())]).await?;
 
     let Some(id) = track_id_at(&db, &track).await? else {
-        return Err(AppError::Validation("the seed ingest wrote no row".into()));
+        return Err(AppError::validation_msg("the seed ingest wrote no row"));
     };
     sqlx::query("UPDATE tracks SET rating = 4, play_count = 7 WHERE id = ?")
         .bind(id)

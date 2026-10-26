@@ -105,7 +105,7 @@ fn symphonia_refuses_the_config_and_accepts_its_core_layer() -> Result<(), AppEr
 
         params.extra_data = Some(demoted(&asc)?);
         let decoder = make_decoder(&params).map_err(|e| {
-            AppError::Player(format!("{what}: the demoted config should decode: {e}"))
+            AppError::player(format!("{what}: the demoted config should decode"), e)
         })?;
 
         let decoded = decoder.codec_params();
@@ -116,7 +116,7 @@ fn symphonia_refuses_the_config_and_accepts_its_core_layer() -> Result<(), AppEr
 }
 
 fn demoted(asc: &[u8]) -> Result<Box<[u8]>, AppError> {
-    core_layer_config(asc).ok_or_else(|| AppError::Player("an SBR config should demote".to_owned()))
+    core_layer_config(asc).ok_or_else(|| AppError::player_msg("an SBR config should demote"))
 }
 
 /// Upstream's registry rather than `decode`'s, deliberately: the claim under test is about what

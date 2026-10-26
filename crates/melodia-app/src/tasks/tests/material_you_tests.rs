@@ -24,6 +24,10 @@ const STYLE: &str = "tonal_spot";
 /// separates a dark scheme from a light one is `base`.
 type Look = (u32, u32);
 
+/// The cover fixture's own error, which isn't `Send + Sync` and so can't ride as an `AppError`
+/// cause.
+type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
+
 /// One coordinator's worth of state, arranged so `tick` is the whole act.
 struct Coordinator {
     os_state: Arc<RwLock<SystemColorState>>,
@@ -44,9 +48,8 @@ struct Coordinator {
 impl Coordinator {
     /// A coordinator with a real cover on the deck. Real because the generate arm decodes it and
     /// the clear arm asks whether it is still there.
-    fn new(theme_id: &str, style: &str, variant: &str, os_theme: &str) -> Result<Self, AppError> {
-        let (cover_dir, cover) = melodia_testkit::write_test_png(600)
-            .map_err(|e| AppError::Validation(format!("write cover: {e}")))?;
+    fn new(theme_id: &str, style: &str, variant: &str, os_theme: &str) -> TestResult<Self> {
+        let (cover_dir, cover) = melodia_testkit::write_test_png(600)?;
         let mut os = SystemColorState::unknown();
         os.theme = os_theme.to_owned();
         let (repaint_tx, repaint_rx) = watch::channel(os.clone());
@@ -108,7 +111,7 @@ impl Coordinator {
 }
 
 /// The look one wake settles on for a given variant string over a given OS signal.
-async fn look_for(variant: &str, os_theme: &str) -> Result<Option<Look>, AppError> {
+async fn look_for(variant: &str, os_theme: &str) -> TestResult<Option<Look>> {
     let mut coordinator = Coordinator::new("material3", STYLE, variant, os_theme)?;
     coordinator.tick().await;
     Ok(coordinator.look())
@@ -119,7 +122,7 @@ async fn look_for(variant: &str, os_theme: &str) -> Result<Option<Look>, AppErro
 /// and the OS is the only sensible thing left to ask. Falling to a literal instead would paint
 /// every such install in the wrong polarity with nothing to say why.
 #[tokio::test]
-async fn the_variant_string_resolves_three_ways() -> Result<(), AppError> {
+async fn the_variant_string_resolves_three_ways() -> TestResult {
     let dark = look_for("dark", "light").await?;
     let light = look_for("light", "dark").await?;
     assert!(dark.is_some(), "a cover under material3 has to generate something");
@@ -146,7 +149,7 @@ async fn the_variant_string_resolves_three_ways() -> Result<(), AppError> {
 /// is every volume step, seek and position tick — republishing there is a full theme re-apply
 /// several times a second for a track that has not changed.
 #[tokio::test]
-async fn a_second_wake_over_the_same_state_publishes_nothing() -> Result<(), AppError> {
+async fn a_second_wake_over_the_same_state_publishes_nothing() -> TestResult {
     let mut coordinator = Coordinator::new("material3", STYLE, "dark", "dark")?;
 
     coordinator.tick().await;
@@ -162,7 +165,7 @@ async fn a_second_wake_over_the_same_state_publishes_nothing() -> Result<(), App
 /// palette left standing over a file that is gone is one nothing can regenerate or account for.
 /// A deck with nothing on it at all takes the same arm.
 #[tokio::test]
-async fn a_wake_with_nothing_to_generate_from_clears_the_palette() -> Result<(), AppError> {
+async fn a_wake_with_nothing_to_generate_from_clears_the_palette() -> TestResult {
     for (theme_id, style, cover_retired) in
         [("mocha", STYLE, false), ("material3", "none", false), ("material3", STYLE, true)]
     {
@@ -190,7 +193,7 @@ async fn a_wake_with_nothing_to_generate_from_clears_the_palette() -> Result<(),
 /// emit and every kick, and each one would otherwise be a repaint of a palette that is already
 /// unset.
 #[tokio::test]
-async fn a_repeated_clear_does_not_republish() -> Result<(), AppError> {
+async fn a_repeated_clear_does_not_republish() -> TestResult {
     let mut coordinator = Coordinator::new("mocha", STYLE, "dark", "dark")?;
 
     coordinator.tick().await;
@@ -205,7 +208,7 @@ async fn a_repeated_clear_does_not_republish() -> Result<(), AppError> {
 /// spawned, so the very first wake is what decides whether the window opens in the user's colours
 /// or grey until the next track change.
 #[tokio::test]
-async fn the_first_wake_with_a_persisted_style_publishes_a_palette() -> Result<(), AppError> {
+async fn the_first_wake_with_a_persisted_style_publishes_a_palette() -> TestResult {
     let mut coordinator = Coordinator::new("material3", STYLE, "dark", "dark")?;
 
     coordinator.tick().await;

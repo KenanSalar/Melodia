@@ -67,7 +67,7 @@ async fn a_desktop_that_cannot_pin_reports_it_and_persists_nothing() -> Result<(
 
     let refused = apply_then_persist(&paths, AlwaysOnTopMethod::Unsupported, true).await;
 
-    assert!(matches!(refused, Err(AppError::Window(_))));
+    assert!(matches!(refused, Err(AppError::Window { .. })));
     assert!(!services::settings::read_settings(&paths)?.window.always_on_top);
     Ok(())
 }

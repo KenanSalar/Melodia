@@ -274,7 +274,7 @@ fn form_error(form: &RadioForm<'_>, error: &AppError) -> SharedString {
         // Either typed URL's own refusal. `ensure_editable` raises the same variant and its line
         // would read wrong here, but it cannot reach this form: a directory-owned row submits
         // through `set_station_overrides`, which never asks it.
-        AppError::Validation(_) => form.invoke_err_bad_url(),
+        AppError::Validation { .. } => form.invoke_err_bad_url(),
         AppError::Network { .. } => form.invoke_err_unreachable(),
         AppError::Database(_) | AppError::Io(_) => form.invoke_err_save_failed(),
         // `Player` is the decoder's own refusal and is what this arm is for.

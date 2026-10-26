@@ -275,7 +275,7 @@ fn corrupt_first_checksum(bytes: &mut [u8]) -> Result<(), AppError> {
     const END_RECORD_LEN: usize = 22;
     const END_RECORD_DIRECTORY_OFFSET: usize = 16;
 
-    let malformed = || AppError::Validation("crafted archive has an unexpected layout".to_owned());
+    let malformed = || AppError::validation_msg("crafted archive has an unexpected layout");
     let end_record = bytes.len().checked_sub(END_RECORD_LEN).ok_or_else(malformed)?;
     let offset_field = end_record + END_RECORD_DIRECTORY_OFFSET;
     let directory = bytes
@@ -309,6 +309,6 @@ fn an_entry_that_fails_its_checksum_still_spends_the_budget() -> Result<(), AppE
 
     let refused = read(Cursor::new(bytes));
 
-    assert!(matches!(refused, Err(AppError::Validation(_))));
+    assert!(matches!(refused, Err(AppError::Validation { .. })));
     Ok(())
 }

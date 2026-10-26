@@ -14,7 +14,7 @@ fn without_system() -> ThemeDef {
 #[test]
 fn a_variant_chip_names_its_variant() -> Result<(), AppError> {
     let (Some(first), Some(last)) = (MATERIAL3.variants.first(), MATERIAL3.variants.last()) else {
-        return Err(AppError::NotFound("Material 3 ships no variants".to_owned()));
+        return Err(AppError::not_found_msg("Material 3 ships no variants"));
     };
 
     assert_eq!(variant_id_at(&MATERIAL3, 0), Some(first.id));

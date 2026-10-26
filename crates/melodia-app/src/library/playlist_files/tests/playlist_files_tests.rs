@@ -261,9 +261,7 @@ fn names(entries: &[archive::Entry]) -> Vec<&str> {
 fn written(export: ExportOutcome) -> Result<ExportPlaylistsResult, AppError> {
     match export {
         ExportOutcome::Exported(result) => Ok(result),
-        ExportOutcome::TooLarge => {
-            Err(AppError::Validation("export refused as too large".to_owned()))
-        }
+        ExportOutcome::TooLarge => Err(AppError::validation_msg("export refused as too large")),
     }
 }
 
@@ -417,7 +415,7 @@ async fn a_file_with_no_entries_creates_no_playlist() -> Result<(), AppError> {
     std::fs::write(&src, "#EXTM3U\n#PLAYLIST:Empty\n")?;
 
     let refused = read_playlist_file(&db, &src).await;
-    assert!(matches!(refused, Err(AppError::Validation(_))));
+    assert!(matches!(refused, Err(AppError::Validation { .. })));
     assert!(queries::playlist::get_all_playlists(&db).await?.is_empty());
     Ok(())
 }
@@ -574,7 +572,7 @@ async fn an_archive_holding_no_playlist_files_is_refused() -> Result<(), AppErro
 
     let refused = import_playlists_from_file(&db, &src).await;
 
-    assert!(matches!(refused, Err(AppError::Validation(_))));
+    assert!(matches!(refused, Err(AppError::Validation { .. })));
     Ok(())
 }
 

@@ -9,15 +9,21 @@
 //! Linux-only for that reason — the script is the double, and a `.bat` would be a second one to
 //! keep true. The 5 s timeout stays untested on purpose: a test for it either sleeps through the
 //! budget or re-asserts the constant against itself.
+//!
+//! Of the signature check before the rename, only how a refusal is filed is pinned here: no
+//! fixture is signed with the embedded key, so the check itself stops at the key id.
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
+use minisign_verify::Error as MinisignVerifyError;
 use tempfile::{TempDir, tempdir};
 use tokio::sync::Mutex;
 
-use super::{attempt_post_swap_rollback, old_path, verify_swapped_binary};
+use super::{attempt_post_swap_rollback, old_path, verification_failure, verify_swapped_binary};
+use crate::services::updater::FailureKind;
+use crate::services::updater::minisign::MinisignError;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -40,8 +46,8 @@ fn fake_binary(dir: &Path, body: &str) -> std::io::Result<PathBuf> {
 
 fn refusal(outcome: Result<(), AppError>) -> Result<String, Box<dyn std::error::Error>> {
     match outcome {
-        Err(AppError::Validation(msg)) => Ok(msg),
-        other => Err(format!("expected a Validation refusal, got {other:?}").into()),
+        Err(e @ AppError::Updater { .. }) => Ok(describe(&e)),
+        other => Err(format!("expected an Updater refusal, got {other:?}").into()),
     }
 }
 
@@ -144,4 +150,31 @@ fn a_rollback_with_no_snapshot_leaves_the_target_where_it_is() -> TestResult {
     assert!(target.exists(), "a broken binary still beats no binary");
     assert_eq!(std::fs::read(&target)?, b"v0.3.0 BROKEN");
     Ok(())
+}
+
+#[test]
+fn a_failed_read_takes_the_disk_toast() {
+    let read = MinisignError::Io(std::io::Error::other("input/output error"));
+
+    let failure = verification_failure(read);
+
+    assert_eq!(failure.kind, FailureKind::Io, "{failure:?}");
+}
+
+/// The signature toast is the one the threat model reads as an attack, so no refusal of the
+/// signature may fall out of it.
+#[test]
+fn every_refusal_takes_the_signature_toast() {
+    let refusals = [
+        MinisignError::Verify(MinisignVerifyError::InvalidSignature),
+        MinisignError::VersionMismatch("expected version 0.3.0".into()),
+        MinisignError::NotPrehashed,
+        MinisignError::SignatureDecode(MinisignVerifyError::InvalidEncoding),
+        MinisignError::StreamSetup(MinisignVerifyError::UnexpectedKeyId),
+    ];
+
+    for error in refusals {
+        let failure = verification_failure(error);
+        assert_eq!(failure.kind, FailureKind::Signature, "{failure:?}");
+    }
 }

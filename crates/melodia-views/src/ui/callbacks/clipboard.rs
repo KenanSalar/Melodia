@@ -82,7 +82,7 @@ fn spawn_copy<Fut>(
             Err(e) => {
                 log::warn!("{label}: {}", describe(&e));
                 // The menu closed on the click, so a failure owes a sign as much as a copy does.
-                toast::notify(ToastKind::OperationFailed, e.to_string());
+                toast::notify(ToastKind::OperationFailed, describe(&e));
             }
         }
     });

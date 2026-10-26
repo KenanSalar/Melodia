@@ -60,7 +60,7 @@ async fn a_path_already_covered_is_refused_and_deletes_nothing() -> Result<(), A
 
     let refused = insert_validated(&db, &as_str(&child)).await;
 
-    assert!(matches!(refused, Err(AppError::Validation(_))));
+    assert!(matches!(refused, Err(AppError::Validation { .. })));
     assert_eq!(queries::folder::get_all_folders(&db).await?.len(), 1);
     assert_eq!(track_count(&db).await?, 1, "and nothing under the folder it kept was spent");
     Ok(())

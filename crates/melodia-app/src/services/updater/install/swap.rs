@@ -45,7 +45,7 @@ pub(super) fn install_via_package_manager(
     let use_helper = std::path::Path::new(HELPER).is_file();
 
     let program = linux_pkg::resolve_install_program(format).ok_or_else(|| {
-        AppError::Settings(format!(
+        AppError::updater_msg(format!(
             "no supported package manager found for {format:?} install \
              (looked for dnf5/dnf for RPM, apt/apt-get for DEB on $PATH)"
         ))
@@ -81,13 +81,12 @@ pub(super) fn install_via_package_manager(
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // Keep `staged` — a retry with polkit installed reuses the verified
             // bytes.
-            return Err(AppError::Settings(
+            return Err(AppError::updater_msg(
                 "polkit (pkexec) is not installed; install polkit or run \
-                 `dnf update melodia` / `apt install ./melodia.deb` manually"
-                    .into(),
+                 `dnf update melodia` / `apt install ./melodia.deb` manually",
             ));
         }
-        Err(e) => return Err(AppError::Io(e)),
+        Err(e) => return Err(AppError::updater("failed to spawn pkexec", e)),
     };
 
     if !output.status.success() {
@@ -120,7 +119,7 @@ pub(super) fn install_via_package_manager(
 ) -> AppResult<InstallOutcome> {
     // Unreachable — `resolve_install_method` never picks `LinuxPackage` off
     // Linux. The stub keeps the call site compile-clean.
-    Err(AppError::Settings("package-manager install is only supported on Linux".into()))
+    Err(AppError::updater_msg("package-manager install is only supported on Linux"))
 }
 
 /// The public property `wix/main.wxs` gates its post-install relaunch on, Restart Manager being
@@ -159,14 +158,14 @@ pub(super) async fn install_via_msiexec(staged: &Path) -> AppResult<InstallOutco
         .args(["/qb!", RELAUNCH_PROPERTY, "/l*v"])
         .arg(&log)
         .spawn()
-        .map_err(|e| AppError::io("failed to spawn msiexec (Windows Installer)", e))?;
+        .map_err(|e| AppError::updater("failed to spawn msiexec (Windows Installer)", e))?;
 
     let _running = super::InstallerRunning::raise();
-    let status = child.wait().await.map_err(|e| AppError::io("waiting on msiexec", e))?;
+    let status = child.wait().await.map_err(|e| AppError::updater("waiting on msiexec", e))?;
     let outcome = status.code().and_then(|code| u32::try_from(code).ok()).and_then(msiexec_outcome);
     let Some(outcome) = outcome else {
         log::warn!("updater: msiexec exited with {status}; its log is {}", log.display());
-        return Err(AppError::Settings(format!("Windows Installer exited with {status}")));
+        return Err(AppError::updater_msg(format!("Windows Installer exited with {status}")));
     };
     if outcome == InstallOutcome::Cancelled {
         log::info!("updater: msiexec cancelled; keeping {} for a retry", staged.display());
@@ -204,9 +203,7 @@ fn msiexec_outcome(code: u32) -> Option<InstallOutcome> {
 pub(super) fn install_via_msiexec(_staged: &Path) -> std::future::Ready<AppResult<InstallOutcome>> {
     // Unreachable — `resolve_install_method` never picks `WindowsMsi` off
     // Windows. The stub keeps the call site compile-clean.
-    std::future::ready(Err(AppError::Settings(
-        "msiexec install is only supported on Windows".into(),
-    )))
+    std::future::ready(Err(AppError::updater_msg("msiexec install is only supported on Windows")))
 }
 
 /// Atomic in-place swap of the live binary at `target` with the
@@ -297,13 +294,12 @@ fn elevate_swap_via_pkexec(target: &Path, staged: &Path) -> AppResult<InstallOut
             // Drop the staged file rather than leak it — the next action here is
             // to re-install somewhere else.
             let _ = std::fs::remove_file(staged);
-            return Err(AppError::Settings(
+            return Err(AppError::updater_msg(
                 "polkit (pkexec) is not installed; install it or move Melodia to \
-                 a user-writable location like ~/.local/share/Melodia/"
-                    .into(),
+                 a user-writable location like ~/.local/share/Melodia/",
             ));
         }
-        Err(e) => return Err(AppError::Io(e)),
+        Err(e) => return Err(AppError::updater("failed to spawn pkexec", e)),
     };
 
     if !output.status.success() {
@@ -342,7 +338,7 @@ fn pkexec_failure(command: &str, code: i32, stderr: &[u8]) -> AppResult<InstallO
         ),
         other => format!("{command} exited {other}: {}", stderr.trim()),
     };
-    Err(AppError::Settings(format!("update install requires admin privileges and {reason}")))
+    Err(AppError::updater_msg(format!("update install requires admin privileges and {reason}")))
 }
 
 #[cfg(target_os = "windows")]

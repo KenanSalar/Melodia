@@ -80,7 +80,7 @@ async fn discovered_in(db: &DbPool, scope: ScanScope) -> Result<Discovery, AppEr
     let (_control, run) = run();
     discover(db, 1, Arc::new(scope), run)
         .await?
-        .ok_or_else(|| AppError::Validation("a scan nothing cancelled came back stopped".into()))
+        .ok_or_else(|| AppError::validation_msg("a scan nothing cancelled came back stopped"))
 }
 
 /// A launch scans every folder, so this is the common case, and it reads nothing only while the

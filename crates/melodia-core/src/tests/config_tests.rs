@@ -15,7 +15,7 @@ fn override_root(name: &str) -> AppResult<(PathBuf, String)> {
     let path = std::env::current_dir()?.join(name);
     let spelled = path
         .to_str()
-        .ok_or_else(|| AppError::Settings("test needs a UTF-8 working directory".into()))?
+        .ok_or_else(|| AppError::settings_msg("test needs a UTF-8 working directory"))?
         .to_owned();
     Ok((path, spelled))
 }

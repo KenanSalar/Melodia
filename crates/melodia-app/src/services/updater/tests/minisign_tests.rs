@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 use minisign_verify::PublicKey;
 
@@ -82,10 +82,7 @@ fn non_prehashed_signature_is_rejected() -> TestResult {
     // signed without `-H` would silently break the streaming path.
     let pk = PublicKey::decode(TEST_PUBKEY_FILE)?;
     let result = verify_stream(Cursor::new(TEST_NOHASH_DATA), TEST_NOHASH_SIG, &pk, None);
-    let Err(MinisignError::StreamSetup(msg)) = result else {
-        return Err(format!("expected StreamSetup error, got {result:?}").into());
-    };
-    assert!(msg.contains("prehashed"), "rejection message should mention prehashed: {msg}");
+    assert!(matches!(result, Err(MinisignError::NotPrehashed)), "got {result:?}");
     Ok(())
 }
 
@@ -103,6 +100,25 @@ fn modified_data_fails_verification() -> TestResult {
         matches!(result, Err(MinisignError::Verify(_))),
         "modified data must surface as Verify error, got {result:?}",
     );
+    Ok(())
+}
+
+/// A staged file the disk won't hand back.
+struct FailingRead;
+
+impl Read for FailingRead {
+    fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::other("input/output error"))
+    }
+}
+
+/// `verify_staged` tells a read failure from a refusal by this variant, so a read reported as a
+/// failed verify would put a disk error behind the signature toast again.
+#[test]
+fn a_read_failure_is_an_io_error_not_a_failed_verify() -> TestResult {
+    let pk = PublicKey::decode(TEST_PUBKEY_FILE)?;
+    let result = verify_stream(FailingRead, TEST_SIG, &pk, None);
+    assert!(matches!(result, Err(MinisignError::Io(_))), "got {result:?}");
     Ok(())
 }
 
@@ -157,24 +173,16 @@ fn manifest_signature_verifies_with_manifest_tag() -> TestResult {
     // Happy path for verify_manifest_bytes — the fixture's trusted
     // comment carries `manifest=true` and the caller asserts the same.
     let pk = PublicKey::decode(TEST_PUBKEY_MANIFEST)?;
-    verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, None, Some("true"))?;
+    verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, "true")?;
     Ok(())
 }
 
 #[test]
-fn manifest_signature_rejected_when_manifest_tag_missing() -> TestResult {
-    // The versioned artifact fixture's trusted comment carries
-    // `version=0.42.0 target=… file=…` — no `manifest=` token. Cross-
-    // pasting it into the manifest verification slot must fail, even
-    // though the cryptographic signature itself is valid (same key
-    // family, ish — for this test the key id won't match but the
-    // earlier tests assert the missing-tag path on the matching key).
-    // Use a versioned signature against the manifest pubkey: signature
-    // decode succeeds (it's structurally valid) but the manifest-tag
-    // assertion is what we want to test, so we feed the manifest fixture
-    // signed by the manifest key but assert manifest_tag=wrong.
+fn manifest_signature_rejected_when_manifest_tag_differs() -> TestResult {
+    // No fixture is signed with another tag, so the mismatch arm is reached by asking for one the
+    // manifest signature doesn't carry.
     let pk = PublicKey::decode(TEST_PUBKEY_MANIFEST)?;
-    let result = verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, None, Some("wrong"));
+    let result = verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, "wrong");
     let Err(MinisignError::VersionMismatch(msg)) = result else {
         return Err(format!("expected VersionMismatch error, got {result:?}").into());
     };
@@ -189,13 +197,12 @@ fn manifest_signature_rejected_when_manifest_tag_missing() -> TestResult {
 fn manifest_signature_rejects_artifact_sig_cross_paste() -> TestResult {
     // An artifact .minisig (from the versioned fixture) lacks the
     // `manifest=` token entirely. Feeding it into verify_manifest_bytes
-    // with `expected_manifest_tag=Some("true")` must surface the
+    // with `expected_manifest_tag="true"` must surface the
     // "no `manifest=` field" diagnostic — this is the domain-
     // separation check that prevents an attacker from cross-pasting
     // a legitimately-signed artifact .minisig into the manifest slot.
     let pk = PublicKey::decode(TEST_PUBKEY_VERSIONED)?;
-    let result =
-        verify_manifest_bytes(TEST_DATA_VERSIONED, TEST_SIG_VERSIONED, &pk, None, Some("true"));
+    let result = verify_manifest_bytes(TEST_DATA_VERSIONED, TEST_SIG_VERSIONED, &pk, "true");
     let Err(MinisignError::VersionMismatch(msg)) = result else {
         return Err(format!("expected VersionMismatch error, got {result:?}").into());
     };
@@ -213,7 +220,7 @@ fn manifest_signature_rejects_tampered_body() -> TestResult {
     if let Some(b) = tampered.first_mut() {
         *b ^= 0xff;
     }
-    let result = verify_manifest_bytes(&tampered, TEST_SIG_MANIFEST, &pk, None, Some("true"));
+    let result = verify_manifest_bytes(&tampered, TEST_SIG_MANIFEST, &pk, "true");
     assert!(
         matches!(result, Err(MinisignError::Verify(_))),
         "tampered manifest body must surface as Verify error, got {result:?}",

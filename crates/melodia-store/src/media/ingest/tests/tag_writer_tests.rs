@@ -38,7 +38,7 @@ fn stage(tmp: &TempDir, name: &str) -> Result<PathBuf, AppError> {
 }
 
 fn missing(what: &str) -> AppError {
-    AppError::Validation(format!("missing {what}"))
+    AppError::validation_msg(format!("missing {what}"))
 }
 
 /// Re-read a file's **primary** tag through the reader the writer now shares, so a fixture

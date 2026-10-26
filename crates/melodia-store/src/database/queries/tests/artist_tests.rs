@@ -126,7 +126,7 @@ async fn update_artist_image_path() -> Result<(), AppError> {
     let artist = artists
         .iter()
         .find(|a| a.name == "Artist A")
-        .ok_or_else(|| AppError::Validation("Artist A missing".into()))?;
+        .ok_or_else(|| AppError::validation_msg("Artist A missing"))?;
 
     queries::artist::update_artist_image_path(&db, artist.id, "/images/artist_a.jpg").await?;
 
@@ -153,7 +153,7 @@ async fn a_favorited_artist_carries_the_count_of_its_favorited_tracks() -> Resul
     let artist_a = artists
         .iter()
         .find(|a| a.name == "Artist A")
-        .ok_or_else(|| AppError::Validation("Artist A missing".into()))?;
+        .ok_or_else(|| AppError::validation_msg("Artist A missing"))?;
 
     // Both of Artist A's tracks, and neither of Artist B's.
     let ids: Vec<i64> =

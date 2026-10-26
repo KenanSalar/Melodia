@@ -97,13 +97,13 @@ impl Decks {
         let mut decks = Vec::with_capacity(DECK_COUNT);
         for slot in 0..DECK_COUNT {
             let voice = mixer.voice(slot).ok_or_else(|| {
-                AppError::Player(format!("The mixer has no voice {slot} for a deck"))
+                AppError::player_msg(format!("The mixer has no voice {slot} for a deck"))
             })?;
             voice.pause();
             decks.push(Deck { voice, fade: FadeShared::idle(), viz_slot: slot });
         }
         let decks = <[Deck; DECK_COUNT]>::try_from(decks)
-            .map_err(|_| AppError::Player("Wrong number of decks built".to_owned()))?;
+            .map_err(|_| AppError::player_msg("Wrong number of decks built"))?;
         Ok(Self { decks, active: 0 })
     }
 

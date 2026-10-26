@@ -299,9 +299,9 @@ async fn a_station_that_was_deleted_between_render_and_click_is_not_found() -> R
     delete_station(&db, id).await?;
 
     let Err(err) = get_station_by_id(&db, id).await else {
-        return Err(AppError::Validation("expected a deleted station to be NotFound".into()));
+        return Err(AppError::validation_msg("expected a deleted station to be NotFound"));
     };
-    assert!(matches!(err, AppError::NotFound(_)), "got: {err}");
+    assert!(matches!(err, AppError::NotFound { .. }), "got: {err}");
     Ok(())
 }
 
@@ -491,13 +491,13 @@ async fn a_url_comes_back_with_whichever_answer_it_last_gave() -> Result<(), App
 
     let found = |url: &str| answers.iter().find(|a| a.favicon_url == url).cloned();
     let Some(hit) = found(hit) else {
-        return Err(AppError::Validation("the hit did not come back".into()));
+        return Err(AppError::validation_msg("the hit did not come back"));
     };
     assert_eq!(hit.artwork_path.as_deref(), Some("/store/a.png"));
     assert!(hit.retry_after.is_none(), "a hit suppresses nothing");
 
     let Some(miss) = found(miss) else {
-        return Err(AppError::Validation("the miss did not come back".into()));
+        return Err(AppError::validation_msg("the miss did not come back"));
     };
     assert!(miss.artwork_path.is_none());
     assert_eq!(miss.retry_after.as_deref(), Some(NEWER));
@@ -518,7 +518,7 @@ async fn a_hit_clears_the_backoff_the_same_url_earned_while_it_was_down() -> Res
 
     let answers = logo_answers(&db, &[url.to_owned()]).await?;
     let Some(answer) = answers.first() else {
-        return Err(AppError::Validation("the row went missing".into()));
+        return Err(AppError::validation_msg("the row went missing"));
     };
     assert_eq!(answer.artwork_path.as_deref(), Some("/store/a.png"));
     assert!(answer.retry_after.is_none(), "the backoff outlived the recovery");

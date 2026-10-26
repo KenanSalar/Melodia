@@ -98,12 +98,11 @@ fn device_name(device: &cpal::Device) -> Option<String> {
 ///
 /// # Errors
 ///
-/// [`AppError::Player`] when there is no output device, and `Io` when it cannot name its own
-/// default config.
+/// [`AppError::Player`] when there is no output device, or it cannot name its own default config.
 pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
     let device = host
         .default_output_device()
-        .ok_or_else(|| AppError::Player("No audio output device".to_owned()))?;
+        .ok_or_else(|| AppError::player_msg("No audio output device"))?;
     target_of(device)
 }
 
@@ -116,12 +115,13 @@ pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
 ///
 /// # Errors
 ///
-/// `Io` when the devices can't be listed, the device cannot name its own default config, or it
-/// isn't found while a listed device's id couldn't be read.
+/// [`AppError::Player`] when the devices can't be listed, the device cannot name its own default
+/// config, or it isn't found while a listed device's id couldn't be read.
 pub fn named_target(host: &cpal::Host, id: &str) -> Result<Option<Target>, AppError> {
     let wanted = cpal::DeviceId::new(host.id(), id);
-    let devices =
-        host.output_devices().map_err(|e| AppError::io("Failed to list the output devices", e))?;
+    let devices = host
+        .output_devices()
+        .map_err(|e| AppError::player("Failed to list the output devices", e))?;
     let mut unreadable = None;
     for device in devices {
         match device.id() {
@@ -131,7 +131,7 @@ pub fn named_target(host: &cpal::Host, id: &str) -> Result<Option<Target>, AppEr
         }
     }
     match unreadable {
-        Some(e) => Err(AppError::io("Failed to read an output device's id", e)),
+        Some(e) => Err(AppError::player("Failed to read an output device's id", e)),
         None => Ok(None),
     }
 }
@@ -139,7 +139,7 @@ pub fn named_target(host: &cpal::Host, id: &str) -> Result<Option<Target>, AppEr
 fn target_of(device: cpal::Device) -> Result<Target, AppError> {
     let default = device
         .default_output_config()
-        .map_err(|e| AppError::io("Failed to read the output device's config", e))?;
+        .map_err(|e| AppError::player("Failed to read the output device's config", e))?;
     Ok(Target { device, default })
 }
 
@@ -270,8 +270,8 @@ impl Feed {
 ///
 /// # Errors
 ///
-/// The first rung's failure when nothing opens: `Io` where the device refused the stream, and
-/// [`AppError::Player`] where it offered no config the puller can feed.
+/// [`AppError::Player`]: the first rung's failure when nothing opens, or a plain message where the
+/// device offered no config the puller can feed.
 pub fn open(
     target: &Target,
     feed: &Feed,
@@ -304,7 +304,7 @@ pub fn open(
     }
     // The first failure, not the last: it is the one about the config the device itself named at
     // the block we wanted, and the rest are about configs and sizes nobody asked for.
-    Err(first.unwrap_or_else(|| AppError::Player("The output device offered no config".to_owned())))
+    Err(first.unwrap_or_else(|| AppError::player_msg("The output device offered no config")))
 }
 
 /// Every config the device reports, best first by cpal's own ordering, which is what rodio walked.
@@ -313,7 +313,7 @@ fn supported_configs(
 ) -> Result<Vec<cpal::SupportedStreamConfigRange>, AppError> {
     let mut supported: Vec<_> = device
         .supported_output_configs()
-        .map_err(|e| AppError::io("Failed to list the output device's configs", e))?
+        .map_err(|e| AppError::player("Failed to list the output device's configs", e))?
         .collect();
     supported.sort_by(|a, b| b.cmp_default_heuristics(a));
     Ok(supported)
@@ -384,7 +384,7 @@ fn attempt(
     let format = supported.sample_format();
     let staging = staging_samples(supported);
     let stream = build_stream(device, config, format, staging, feed.clone())?;
-    stream.play().map_err(|e| AppError::io("Failed to start the audio stream", e))?;
+    stream.play().map_err(|e| AppError::player("Failed to start the audio stream", e))?;
     // A host with no answer is a log line missing one term, never a rung that fails. The name
     // likewise.
     let period = stream.buffer_size().ok();
@@ -410,7 +410,7 @@ fn shape_of(supported: &cpal::SupportedStreamConfig) -> Result<Shape, AppError> 
     ChannelCount::new(supported.channels())
         .zip(SampleRate::new(supported.sample_rate()))
         .map(|(channels, rate)| Shape { channels, rate })
-        .ok_or_else(|| AppError::Player("Output config has no channels or no rate".to_owned()))
+        .ok_or_else(|| AppError::player_msg("Output config has no channels or no rate"))
 }
 
 /// What one rung asks the host to hand the callback at a time.
@@ -501,7 +501,7 @@ fn build_stream(
                 $(cpal::SampleFormat::$variant => {
                     output_stream::<$ty>(device, config, staging_samples, feed)
                 })+
-                other => Err(AppError::Player(format!("Unsupported sample format {other}"))),
+                other => Err(AppError::player_msg(format!("Unsupported sample format {other}"))),
             }
         };
     }
@@ -578,7 +578,7 @@ impl SampleClock {
 
 /// The one wording for a stream that would not open, so the two builders can't drift.
 fn opened(built: Result<cpal::Stream, cpal::Error>) -> Result<cpal::Stream, AppError> {
-    built.map_err(|e| AppError::io("Failed to open the audio stream", e))
+    built.map_err(|e| AppError::player("Failed to open the audio stream", e))
 }
 
 fn output_stream<T>(

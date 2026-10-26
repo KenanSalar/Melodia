@@ -41,13 +41,15 @@ const EMBEDDED_PUBKEY: &str = include_str!("../../../../../assets/updater-pubkey
 #[derive(Debug, thiserror::Error)]
 pub enum MinisignError {
     #[error("failed to parse public key: {0}")]
-    PubkeyDecode(String),
+    PubkeyDecode(#[source] MinisignVerifyError),
     #[error("failed to parse signature: {0}")]
-    SignatureDecode(String),
-    #[error("verification setup failed (likely a non-prehashed signature): {0}")]
-    StreamSetup(String),
+    SignatureDecode(#[source] MinisignVerifyError),
+    #[error("signature is not prehashed (CI must sign with `minisign -SH …`)")]
+    NotPrehashed,
+    #[error("verification setup failed: {0}")]
+    StreamSetup(#[source] MinisignVerifyError),
     #[error("signature did not verify: {0}")]
-    Verify(String),
+    Verify(#[source] MinisignVerifyError),
     #[error("trusted-comment version cross-check failed: {0}")]
     VersionMismatch(String),
     #[error("I/O error while reading data to verify: {0}")]
@@ -57,7 +59,7 @@ pub enum MinisignError {
 /// Parse the embedded pubkey. Cheap, but called once per verify with no caching, so a swapped
 /// `assets/updater-pubkey.b64` always takes effect on rebuild.
 pub fn embedded_pubkey() -> Result<PublicKey, MinisignError> {
-    PublicKey::decode(EMBEDDED_PUBKEY).map_err(|e| MinisignError::PubkeyDecode(e.to_string()))
+    PublicKey::decode(EMBEDDED_PUBKEY).map_err(MinisignError::PubkeyDecode)
 }
 
 /// Stream-verify `reader`'s contents against `sig_text` (the full multi-line `.minisig` text)
@@ -75,32 +77,12 @@ pub fn embedded_pubkey() -> Result<PublicKey, MinisignError> {
 /// Production callers pass [`embedded_pubkey`]; the parameter exists so tests can inject their own
 /// keypair, the production pubkey being keyed to a placeholder no fixture can match.
 pub fn verify_stream<R: Read>(
-    mut reader: R,
+    reader: R,
     sig_text: &str,
     pubkey: &PublicKey,
     expected_version: Option<&str>,
 ) -> Result<(), MinisignError> {
-    let sig =
-        Signature::decode(sig_text).map_err(|e| MinisignError::SignatureDecode(e.to_string()))?;
-    // Capture the trusted comment up front: `pubkey.verify_stream(&sig)` moves `sig` into the
-    // verifier. Reading before `finalize()` is safe because the global signature covers the
-    // trusted-comment bytes, so a tampered comment fails verification before this is acted on.
-    let trusted_comment = sig.trusted_comment().to_string();
-    let mut verifier = pubkey.verify_stream(&sig).map_err(|e| match e {
-        MinisignVerifyError::UnsupportedLegacyMode => MinisignError::StreamSetup(
-            "signature is not prehashed (CI must sign with `minisign -SH …`)".into(),
-        ),
-        other => MinisignError::StreamSetup(other.to_string()),
-    })?;
-    let mut buf = [0u8; 8192];
-    loop {
-        let n = reader.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        verifier.update(&buf[..n]);
-    }
-    verifier.finalize().map_err(|e| MinisignError::Verify(e.to_string()))?;
+    let trusted_comment = verified_comment(reader, sig_text, pubkey)?;
 
     if let Some(expected) = expected_version {
         match parse_trusted_comment_version(&trusted_comment) {
@@ -137,75 +119,64 @@ pub(crate) fn parse_trusted_comment_field<'a>(comment: &'a str, key: &str) -> Op
     None
 }
 
-/// Verify a small, fully-buffered payload (the `latest.json` manifest body) against `sig_text`
-/// using `pubkey`. Mirrors [`verify_stream`] but takes a `&[u8]` directly — the manifest is ~1 KiB,
-/// so buffering avoids a `Read`-over-bytes adapter.
+/// Verify the `latest.json` body against `sig_text` using `pubkey`, then assert the trusted
+/// comment's `manifest=` field equals `expected_manifest_tag`.
 ///
-/// `expected_manifest_tag` of `Some("true")`, which is what production passes, asserts the trusted
-/// comment carries `manifest=true`. That is **domain separation**: an artifact's `.minisig` is a
-/// valid minisign blob signed with the same key, so the cryptographic verify would pass on one
-/// cross-pasted into this slot.
-///
-/// `expected_version` is cross-checked as in [`verify_stream`]. Production passes `None` here, the
-/// manifest *being* the source of the version string.
+/// Production passes `"true"`. That is **domain separation**: an artifact's `.minisig` is a valid
+/// minisign blob signed with the same key, so the cryptographic verify would pass on one
+/// cross-pasted into this slot. No version is cross-checked, the manifest *being* the source of
+/// the version string.
 pub fn verify_manifest_bytes(
     body: &[u8],
     sig_text: &str,
     pubkey: &PublicKey,
-    expected_version: Option<&str>,
-    expected_manifest_tag: Option<&str>,
+    expected_manifest_tag: &str,
 ) -> Result<(), MinisignError> {
-    let sig =
-        Signature::decode(sig_text).map_err(|e| MinisignError::SignatureDecode(e.to_string()))?;
-    let trusted_comment = sig.trusted_comment().to_string();
-    let mut verifier = pubkey.verify_stream(&sig).map_err(|e| match e {
-        MinisignVerifyError::UnsupportedLegacyMode => MinisignError::StreamSetup(
-            "manifest signature is not prehashed (CI must sign with `minisign -SH …`)".into(),
-        ),
-        other => MinisignError::StreamSetup(other.to_string()),
-    })?;
-    verifier.update(body);
-    verifier.finalize().map_err(|e| MinisignError::Verify(e.to_string()))?;
+    let trusted_comment = verified_comment(body, sig_text, pubkey)?;
 
-    if let Some(expected_tag) = expected_manifest_tag {
-        match parse_trusted_comment_field(&trusted_comment, "manifest") {
-            Some(found) if found == expected_tag => {}
-            Some(found) => {
-                return Err(MinisignError::VersionMismatch(format!(
-                    "manifest-tag mismatch: expected manifest={expected_tag}, signature names \
-                     manifest={found} (trusted comment: {trusted_comment})"
-                )));
-            }
-            None => {
-                return Err(MinisignError::VersionMismatch(format!(
-                    "trusted comment carries no `manifest=` field — the signature may belong to \
-                     an artifact rather than the manifest. Release must sign with \
-                     `minisign -SH -t \"version=$VERSION manifest=true\"` (trusted comment: \
-                     {trusted_comment})"
-                )));
-            }
-        }
+    match parse_trusted_comment_field(&trusted_comment, "manifest") {
+        Some(found) if found == expected_manifest_tag => Ok(()),
+        Some(found) => Err(MinisignError::VersionMismatch(format!(
+            "manifest-tag mismatch: expected manifest={expected_manifest_tag}, signature names \
+             manifest={found} (trusted comment: {trusted_comment})"
+        ))),
+        None => Err(MinisignError::VersionMismatch(format!(
+            "trusted comment carries no `manifest=` field — the signature may belong to \
+             an artifact rather than the manifest. Release must sign with \
+             `minisign -SH -t \"version=$VERSION manifest=true\"` (trusted comment: \
+             {trusted_comment})"
+        ))),
     }
+}
 
-    if let Some(expected) = expected_version {
-        match parse_trusted_comment_version(&trusted_comment) {
-            Some(found) if found == expected => {}
-            Some(found) => {
-                return Err(MinisignError::VersionMismatch(format!(
-                    "expected version {expected}, manifest signature names {found} (trusted \
-                     comment: {trusted_comment})"
-                )));
-            }
-            None => {
-                return Err(MinisignError::VersionMismatch(format!(
-                    "trusted comment carries no `version=` field (trusted comment: \
-                     {trusted_comment})"
-                )));
-            }
+/// `sig_text`'s trusted comment, once `reader`'s contents verify against it. The signature
+/// covers the comment as well, so it is unauthenticated text until `finalize` passes.
+fn verified_comment(
+    mut reader: impl Read,
+    sig_text: &str,
+    pubkey: &PublicKey,
+) -> Result<String, MinisignError> {
+    let sig = Signature::decode(sig_text).map_err(MinisignError::SignatureDecode)?;
+    let mut verifier = pubkey.verify_stream(&sig).map_err(setup_failure)?;
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            break;
         }
+        verifier.update(&buf[..n]);
     }
+    verifier.finalize().map_err(MinisignError::Verify)?;
+    Ok(sig.trusted_comment().to_owned())
+}
 
-    Ok(())
+/// A verifier that wouldn't start, the legacy (non-prehashed) mode named on its own since it is
+/// the one a release can be cut with by mistake.
+fn setup_failure(e: MinisignVerifyError) -> MinisignError {
+    match e {
+        MinisignVerifyError::UnsupportedLegacyMode => MinisignError::NotPrehashed,
+        other => MinisignError::StreamSetup(other),
+    }
 }
 
 #[cfg(test)]

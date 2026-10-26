@@ -13,14 +13,12 @@ fn solid(width: u32, height: u32, rgb: [u8; 3]) -> RgbImage {
 fn a_composed_collage_carries_both_halves_and_a_hue_to_seed_from() -> Result<(), AppError> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("tile.png");
-    solid(8, 8, [10, 200, 30])
-        .save(&path)
-        .map_err(|e| AppError::Validation(format!("write png: {e}")))?;
+    solid(8, 8, [10, 200, 30]).save(&path).map_err(|e| AppError::validation("write png", e))?;
 
     let pair = compose_hero_pair(&[path.to_string_lossy().into_owned()], Some(DETAIL_BLUR));
 
-    let cover = pair.cover.ok_or_else(|| AppError::Validation("no cover half".into()))?;
-    let blur = pair.blur.ok_or_else(|| AppError::Validation("no blur half".into()))?;
+    let cover = pair.cover.ok_or_else(|| AppError::validation_msg("no cover half"))?;
+    let blur = pair.blur.ok_or_else(|| AppError::validation_msg("no blur half"))?;
     assert_eq!(cover.width(), COVER_SIZE);
     assert_eq!(blur.width(), BLUR_TARGET);
     assert_eq!(blur.height(), DETAIL_BLUR.height);
@@ -50,9 +48,7 @@ fn nothing_to_compose_gives_an_empty_pair() {
 fn a_specless_collage_keeps_its_seeds_and_builds_no_blur() -> Result<(), AppError> {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("tile.png");
-    solid(8, 8, [10, 200, 30])
-        .save(&path)
-        .map_err(|e| AppError::Validation(format!("write png: {e}")))?;
+    solid(8, 8, [10, 200, 30]).save(&path).map_err(|e| AppError::validation("write png", e))?;
 
     let pair = compose_hero_pair(&[path.to_string_lossy().into_owned()], None);
 

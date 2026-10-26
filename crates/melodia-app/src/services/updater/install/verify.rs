@@ -6,7 +6,8 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use crate::services::updater::minisign;
+use crate::services::updater::event::{UpdateFailure, UpdateResult};
+use crate::services::updater::minisign::{self, MinisignError};
 use melodia_core::error::{AppError, AppResult};
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -16,13 +17,21 @@ pub(super) fn verify_staged(
     staged: &Path,
     signature: &str,
     expected_version: &str,
-) -> AppResult<()> {
-    let f = File::open(staged)?;
+) -> UpdateResult<()> {
+    let f = File::open(staged).map_err(|e| AppError::io("opening the staged update failed", e))?;
     let reader = BufReader::new(f);
     let pubkey = minisign::embedded_pubkey()
-        .map_err(|e| AppError::Validation(format!("embedded updater pubkey is invalid: {e}")))?;
+        .map_err(|e| AppError::updater("embedded updater pubkey is invalid", e))?;
     minisign::verify_stream(reader, signature, &pubkey, Some(expected_version))
-        .map_err(|e| AppError::Validation(format!("update signature verification failed: {e}")))
+        .map_err(verification_failure)
+}
+
+fn verification_failure(e: MinisignError) -> UpdateFailure {
+    match e {
+        // Failing to read the staged file says nothing about its signature.
+        MinisignError::Io(e) => AppError::io("reading the staged update failed", e).into(),
+        e => UpdateFailure::signature(AppError::updater("update signature verification failed", e)),
+    }
 }
 
 /// Spawn `target --version` and assert it (a) exits 0 within 5 s and
@@ -59,13 +68,16 @@ pub(super) async fn verify_swapped_binary(target: &Path, expected_version: &str)
     let output = match timeout(Duration::from_secs(5), cmd).await {
         Ok(Ok(output)) => output,
         Ok(Err(e)) => {
-            return Err(AppError::Validation(format!(
-                "post-swap launch verification: failed to spawn {} --version: {e}",
-                target.display()
-            )));
+            return Err(AppError::updater(
+                format!(
+                    "post-swap launch verification: failed to spawn {} --version",
+                    target.display()
+                ),
+                e,
+            ));
         }
         Err(_elapsed) => {
-            return Err(AppError::Validation(format!(
+            return Err(AppError::updater_msg(format!(
                 "post-swap launch verification timed out: {} --version did not reply within 5s",
                 target.display()
             )));
@@ -73,7 +85,7 @@ pub(super) async fn verify_swapped_binary(target: &Path, expected_version: &str)
     };
 
     if !output.status.success() {
-        return Err(AppError::Validation(format!(
+        return Err(AppError::updater_msg(format!(
             "post-swap launch verification: binary exited {} ({})",
             output.status.code().unwrap_or(-1),
             String::from_utf8_lossy(&output.stderr).trim()
@@ -83,7 +95,7 @@ pub(super) async fn verify_swapped_binary(target: &Path, expected_version: &str)
     let stdout = String::from_utf8_lossy(&output.stdout);
     let trimmed = stdout.trim();
     if !trimmed.starts_with("Melodia ") || !trimmed.contains(expected_version) {
-        return Err(AppError::Validation(format!(
+        return Err(AppError::updater_msg(format!(
             "post-swap launch verification: expected `Melodia <version>` containing \
              {expected_version}, got: {trimmed}"
         )));

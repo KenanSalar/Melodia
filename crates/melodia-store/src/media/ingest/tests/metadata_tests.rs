@@ -152,9 +152,9 @@ fn extract_metadata_wav_basic_properties() -> Result<(), AppError> {
     let meta = extract_metadata(&wav_path, &artwork_dir, &test_cover_cache(), false)?;
 
     let sample_rate =
-        meta.sample_rate.ok_or_else(|| AppError::Validation("missing sample_rate".into()))?;
+        meta.sample_rate.ok_or_else(|| AppError::validation_msg("missing sample_rate"))?;
     assert_eq!(sample_rate, 44_100);
-    let channels = meta.channels.ok_or_else(|| AppError::Validation("missing channels".into()))?;
+    let channels = meta.channels.ok_or_else(|| AppError::validation_msg("missing channels"))?;
     assert_eq!(channels, 1);
     assert!(meta.codec.is_some());
     assert!(meta.file_size > 0);
@@ -231,7 +231,7 @@ fn extract_metadata_file_size_recorded() -> Result<(), AppError> {
     std::fs::create_dir(&artwork_dir)?;
 
     let actual_size = i64::try_from(std::fs::metadata(&wav_path)?.len())
-        .map_err(|_| AppError::Validation("file size exceeds i64".into()))?;
+        .map_err(|_| AppError::validation_msg("file size exceeds i64"))?;
     let meta = extract_metadata(&wav_path, &artwork_dir, &test_cover_cache(), false)?;
 
     assert_eq!(meta.file_size, actual_size);
@@ -364,7 +364,7 @@ fn a_musicbrainz_recording_id_is_read_back_on_every_primary_tag_type() -> Result
         tagged.insert_tag(Tag::new(tagged.primary_tag_type()));
         let tag = tagged
             .primary_tag_mut()
-            .ok_or_else(|| AppError::Validation(format!("{fixture}: no primary tag")))?;
+            .ok_or_else(|| AppError::validation_msg(format!("{fixture}: no primary tag")))?;
         assert!(
             tag.insert_text(ItemKey::MusicBrainzRecordingId, recording.to_owned()),
             "{fixture}: the primary tag type has to take a recording id",
@@ -620,7 +620,7 @@ fn tag_vorbis(path: &std::path::Path, items: &[(ItemKey, &str)]) -> Result<(), A
     let mut tag = Tag::new(lofty::tag::TagType::VorbisComments);
     for (key, value) in items {
         if !tag.insert_text(*key, (*value).to_owned()) {
-            return Err(AppError::Validation(format!("{key:?} has no Vorbis mapping")));
+            return Err(AppError::validation_msg(format!("{key:?} has no Vorbis mapping")));
         }
     }
     tag.save_to_path(path, lofty::config::WriteOptions::default())

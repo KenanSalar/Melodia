@@ -74,7 +74,7 @@ fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
     if is_enabled(state) {
         return Ok(());
     }
-    Err(AppError::Settings("Lyrics are switched off".to_owned()))
+    Err(AppError::settings_msg("Lyrics are switched off"))
 }
 
 /// The romanization drawn under each line, filled in off the UI thread.

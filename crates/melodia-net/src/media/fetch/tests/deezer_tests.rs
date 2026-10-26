@@ -149,9 +149,7 @@ async fn an_artist_search_answers_with_the_first_result_picture() -> TestResult 
     .await?;
 
     let DeezerAnswer::Body(picture) = answered else {
-        return Err(AppError::Validation(
-            "a decoded search must answer on the body arm".to_owned(),
-        ));
+        return Err(AppError::validation_msg("a decoded search must answer on the body arm"));
     };
     assert_eq!(picture.as_deref(), Some("https://cdn.example/a/medium.jpg"));
     Ok(())
@@ -165,7 +163,7 @@ async fn a_quota_answer_reaches_the_batch_as_the_code_that_halts_it() -> TestRes
     let answered = artist_image_from(TestResponse::ok(QUOTA_BODY)).await?;
 
     let DeezerAnswer::ApiError { code, .. } = answered else {
-        return Err(AppError::Validation("a 200 carrying `error` is not a body".to_owned()));
+        return Err(AppError::validation_msg("a 200 carrying `error` is not a body"));
     };
     assert!(halts_a_batch(code), "code {code} came back off the wire and must stop the pass");
     Ok(())
@@ -222,7 +220,7 @@ async fn an_image_url_off_a_host_deezer_does_not_own_is_refused() -> TestResult 
         let refused = download_artist_image(&client, elsewhere).await;
 
         let Err(AppError::Network { msg, .. }) = refused else {
-            return Err(AppError::Validation(format!("{elsewhere} was accepted")));
+            return Err(AppError::validation_msg(format!("{elsewhere} was accepted")));
         };
         assert!(msg.contains("untrusted domain"), "{elsewhere} was refused for {msg} instead");
     }
@@ -236,7 +234,7 @@ async fn an_image_url_that_is_not_https_is_refused() -> TestResult {
             .await;
 
     let Err(AppError::Network { msg, .. }) = refused else {
-        return Err(AppError::Validation(format!("a plaintext URL was accepted: {refused:?}")));
+        return Err(AppError::validation_msg(format!("a plaintext URL was accepted: {refused:?}")));
     };
     assert!(msg.contains("HTTPS"), "refused for {msg} rather than for its scheme");
     Ok(())

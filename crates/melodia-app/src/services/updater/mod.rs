@@ -34,7 +34,7 @@ pub mod version;
 use melodia_platform::services::platform::install_kind::install_target;
 
 pub use check::{Checked, Verdict, check_for_update};
-pub use event::{FailureKind, UpdaterEvent};
+pub use event::{FailureKind, UpdateFailure, UpdateResult, UpdaterEvent};
 pub use github::RELEASES_BASE;
 pub use install::{
     InstallOutcome, download_and_install, installed_version, installer_running, prune_stale_staging,

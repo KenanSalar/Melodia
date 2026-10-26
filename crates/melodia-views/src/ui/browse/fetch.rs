@@ -17,7 +17,7 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::entities::browse::{BrowseFile, BrowseFolder, BrowseResult};
 use melodia_core::entities::folder::Folder;
-use melodia_core::error::AppResult;
+use melodia_core::error::{AppResult, describe};
 use melodia_ui::{
     AppWindow, BreadcrumbRow as UiBreadcrumbRow, Browse, BrowseFolderRow as UiBrowseFolderRow,
     TrackListRow as UiTrackListRow,
@@ -76,7 +76,7 @@ pub async fn fetch_and_apply(
                 current_path: path,
                 has_library_folders: true,
                 can_go_back: !browse_ui.history.lock().is_empty(),
-                error_message: e.to_string(),
+                error_message: describe(&e),
             },
         ),
     }

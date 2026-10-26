@@ -1,4 +1,4 @@
-/// Boxed underlying cause for the I/O-boundary variants. `Option` because some
+/// Boxed underlying cause for the variants that carry one. `Option` because some
 /// of these errors are constructed from a plain message with no wrapped error
 /// (e.g. an HTTP status check that "fails" without an underlying transport
 /// error). thiserror's `#[source]` returns `None` for a `None` here, so the
@@ -30,20 +30,36 @@ pub enum AppError {
         source: Option<BoxedSource>,
     },
 
-    #[error("Not found: {0}")]
-    NotFound(String),
+    #[error("Not found: {msg}")]
+    NotFound { msg: String },
 
-    #[error("Player error: {0}")]
-    Player(String),
+    #[error("Player error: {msg}")]
+    Player {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
-    #[error("Queue error: {0}")]
-    Queue(String),
+    #[error("Queue error: {msg}")]
+    Queue {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
-    #[error("Settings error: {0}")]
-    Settings(String),
+    #[error("Settings error: {msg}")]
+    Settings {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
-    #[error("Window error: {0}")]
-    Window(String),
+    #[error("Window error: {msg}")]
+    Window {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
     #[error("Watcher error: {msg}")]
     Watcher {
@@ -59,8 +75,19 @@ pub enum AppError {
         source: Option<BoxedSource>,
     },
 
-    #[error("Validation error: {0}")]
-    Validation(String),
+    #[error("Updater error: {msg}")]
+    Updater {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
+
+    #[error("Validation error: {msg}")]
+    Validation {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 }
 
 /// What [`AppError::io`] hands `io::Error`: the operation and the error that failed it.
@@ -73,7 +100,12 @@ struct Context {
 
 impl AppError {
     pub fn not_found(entity: &str, id: i64) -> Self {
-        Self::NotFound(format!("{entity} not found: {id}"))
+        Self::not_found_msg(format!("{entity} not found: {id}"))
+    }
+
+    /// Not found from a message only. A lookup miss has no cause, so there is no source form.
+    pub fn not_found_msg(msg: impl Into<String>) -> Self {
+        Self::NotFound { msg: msg.into() }
     }
 
     pub fn io_other(msg: impl Into<String>) -> Self {
@@ -86,57 +118,46 @@ impl AppError {
         Self::Io(std::io::Error::other(source))
     }
 
-    /// `Io` naming the operation that failed beside its typed cause. The home for a cause whose
-    /// category has no struct variant to carry it: a D-Bus call, a task join, a device open.
+    /// `Io` naming the operation that failed beside its typed cause. The home for a cause no
+    /// category fits, such as a task join.
     ///
-    /// Both halves are printed, so text built from `{e}`, such as a toast's detail, still says
-    /// why, and [`describe`] skips the repeat on its way down the chain.
+    /// Both halves are printed, so a bare `{e}` still says why, and [`describe`] skips the repeat
+    /// on its way down the chain.
     pub fn io(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
         Self::Io(std::io::Error::other(Context { msg: msg.into(), source: source.into() }))
     }
+}
 
-    /// Metadata error wrapping an underlying cause (Lofty, hashing I/O, …).
-    /// `msg` is the operation context (`"Failed to open <path>"`); the typed cause
-    /// rides on `.source()` so logs can walk the chain.
-    pub fn metadata(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Metadata { msg: msg.into(), source: Some(source.into()) }
-    }
+/// The two constructors every cause-carrying variant gets: `$cause(msg, source)`, with `msg`
+/// naming the operation and the typed cause kept on `.source()` for [`describe`] to walk, and
+/// `$message(msg)` for a failure with no error underneath it.
+macro_rules! constructor_pairs {
+    ($($variant:ident => $cause:ident, $message:ident;)+) => {
+        impl AppError {
+            $(
+                pub fn $cause(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+                    Self::$variant { msg: msg.into(), source: Some(source.into()) }
+                }
 
-    /// Metadata error from a message only (no underlying cause to preserve).
-    pub fn metadata_msg(msg: impl Into<String>) -> Self {
-        Self::Metadata { msg: msg.into(), source: None }
-    }
+                pub fn $message(msg: impl Into<String>) -> Self {
+                    Self::$variant { msg: msg.into(), source: None }
+                }
+            )+
+        }
+    };
+}
 
-    /// Scanner error wrapping an underlying cause (usually a tokio `JoinError`).
-    pub fn scanner(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Scanner { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Scanner error from a message only.
-    pub fn scanner_msg(msg: impl Into<String>) -> Self {
-        Self::Scanner { msg: msg.into(), source: None }
-    }
-
-    /// Watcher error wrapping an underlying cause (notify).
-    pub fn watcher(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Watcher { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Watcher error from a message only.
-    pub fn watcher_msg(msg: impl Into<String>) -> Self {
-        Self::Watcher { msg: msg.into(), source: None }
-    }
-
-    /// Network error wrapping an underlying cause (reqwest / URL parse).
-    pub fn network(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Network { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Network error from a message only (e.g. an HTTP status or scheme check
-    /// that has no underlying transport error).
-    pub fn network_msg(msg: impl Into<String>) -> Self {
-        Self::Network { msg: msg.into(), source: None }
-    }
+constructor_pairs! {
+    Metadata => metadata, metadata_msg;
+    Scanner => scanner, scanner_msg;
+    Player => player, player_msg;
+    Queue => queue, queue_msg;
+    Settings => settings, settings_msg;
+    Window => window, window_msg;
+    Watcher => watcher, watcher_msg;
+    Network => network, network_msg;
+    Updater => updater, updater_msg;
+    Validation => validation, validation_msg;
 }
 
 pub type AppResult<T> = Result<T, AppError>;

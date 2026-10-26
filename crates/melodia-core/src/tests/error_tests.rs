@@ -116,17 +116,18 @@ fn display_metadata() {
 }
 
 #[test]
-fn display_all_string_variants() {
+fn display_every_message_only_variant() {
     let cases: Vec<(AppError, &str)> = vec![
         (AppError::scanner_msg("s"), "Scanner error: s"),
-        (AppError::NotFound("n".into()), "Not found: n"),
-        (AppError::Player("p".into()), "Player error: p"),
-        (AppError::Queue("q".into()), "Queue error: q"),
-        (AppError::Settings("st".into()), "Settings error: st"),
-        (AppError::Window("w".into()), "Window error: w"),
+        (AppError::not_found_msg("n"), "Not found: n"),
+        (AppError::player_msg("p"), "Player error: p"),
+        (AppError::queue_msg("q"), "Queue error: q"),
+        (AppError::settings_msg("st"), "Settings error: st"),
+        (AppError::window_msg("w"), "Window error: w"),
         (AppError::watcher_msg("wa"), "Watcher error: wa"),
         (AppError::network_msg("ne"), "Network error: ne"),
-        (AppError::Validation("v".into()), "Validation error: v"),
+        (AppError::updater_msg("u"), "Updater error: u"),
+        (AppError::validation_msg("v"), "Validation error: v"),
     ];
     for (err, expected) in cases {
         assert_eq!(format!("{err}"), expected);
@@ -191,19 +192,18 @@ fn io_other_helper_wraps_message() {
     assert!(matches!(err, AppError::Io(_)));
 }
 
-/// The four struct variants exist so a context message and a typed cause both survive, and
-/// `describe` is what puts them back together. Only `network` had a case for it, so
-/// `AppError::scanner` and `AppError::watcher` had never been built with a source at all: a
-/// constructor that dropped one satisfies every other test in this file, and the failure it
-/// hides is a permissions error and a full disk reading identically in a bug report.
+/// The message-and-cause variants exist so a context message and a typed cause both survive, and
+/// `describe` is what puts them back together. One row per `constructor_pairs!` entry, since
+/// `display_every_message_only_variant` can't see an entry whose cause constructor names the
+/// wrong variant.
 ///
 /// Expectations written out rather than composed from the parts, so the table cannot restate
 /// `describe`'s own append rule back at it.
 #[test]
-fn every_io_boundary_variant_keeps_its_context_and_its_cause() {
+fn every_message_and_cause_variant_keeps_both() {
     let cause = || std::io::Error::other("no space left on device");
 
-    let cases: [(AppError, &str); 4] = [
+    let cases: [(AppError, &str); 10] = [
         (
             AppError::metadata("Failed to read tags", cause()),
             "Metadata error: Failed to read tags: no space left on device",
@@ -219,6 +219,30 @@ fn every_io_boundary_variant_keeps_its_context_and_its_cause() {
         (
             AppError::network("Failed to reach the directory", cause()),
             "Network error: Failed to reach the directory: no space left on device",
+        ),
+        (
+            AppError::player("Failed to open the audio stream", cause()),
+            "Player error: Failed to open the audio stream: no space left on device",
+        ),
+        (
+            AppError::updater("Failed to stage the update", cause()),
+            "Updater error: Failed to stage the update: no space left on device",
+        ),
+        (
+            AppError::queue("Failed to restore the queue", cause()),
+            "Queue error: Failed to restore the queue: no space left on device",
+        ),
+        (
+            AppError::settings("Failed to save the settings", cause()),
+            "Settings error: Failed to save the settings: no space left on device",
+        ),
+        (
+            AppError::window("Failed to pin the window", cause()),
+            "Window error: Failed to pin the window: no space left on device",
+        ),
+        (
+            AppError::validation("Cannot resolve the path", cause()),
+            "Validation error: Cannot resolve the path: no space left on device",
         ),
     ];
 

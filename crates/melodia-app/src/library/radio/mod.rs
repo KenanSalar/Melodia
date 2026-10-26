@@ -66,7 +66,7 @@ pub(super) fn ensure_enabled(state: &AppState) -> Result<(), AppError> {
     if state.radio_enabled.get() {
         return Ok(());
     }
-    Err(AppError::Settings("Radio is switched off".to_owned()))
+    Err(AppError::settings_msg("Radio is switched off"))
 }
 
 /// The shared client, reachable only past [`ensure_enabled`] — which is the point of

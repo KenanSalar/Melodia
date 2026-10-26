@@ -6,12 +6,12 @@
 use tokio::sync::watch;
 
 use melodia_core::config::Paths;
-use melodia_core::error::{AppResult, describe};
+use melodia_core::error::describe;
 use melodia_core::utils::now_unix;
 
 use super::asset_cache;
 use super::check::{Checked, Verdict, check_for_update, recheck_for_update};
-use super::event::UpdaterEvent;
+use super::event::{UpdateResult, UpdaterEvent};
 use super::github::RELEASES_BASE;
 use super::install::installed_version;
 use super::manifest::LatestManifest;
@@ -78,7 +78,7 @@ impl Finding {
 /// The fetch's or the manifest's failure, recorded first as a failed check so the daily backoff
 /// counts it. Failing to *record* a check is logged rather than returned: what it found is still
 /// true.
-pub async fn run_check(http: &reqwest::Client, paths: &Paths) -> AppResult<Finding> {
+pub async fn run_check(http: &reqwest::Client, paths: &Paths) -> UpdateResult<Finding> {
     let flags = match settings::read_settings(paths) {
         Ok(settings) => settings.updates,
         Err(e) => {

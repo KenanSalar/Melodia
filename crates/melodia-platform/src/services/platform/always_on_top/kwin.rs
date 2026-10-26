@@ -45,7 +45,7 @@ for (var i = 0; i < clients.length; i++) {{
         );
 
         std::fs::write(&script_path, &script_content)
-            .map_err(|e| AppError::io("Failed to write KWin script", e))?;
+            .map_err(|e| AppError::window("Failed to write KWin script", e))?;
 
         let conn = session_connection()?;
         let script_obj_path = load_and_run(&conn, &script_path, PIN_PLUGIN)?;
@@ -67,7 +67,7 @@ for (var i = 0; i < clients.length; i++) {{
         Ok(())
     })
     .await
-    .map_err(|e| AppError::io("KWin pin task panicked", e))?
+    .map_err(|e| AppError::window("KWin pin task panicked", e))?
 }
 
 /// Leave a script running in `KWin` that sends every change to our window's `keepAbove` to
@@ -83,22 +83,22 @@ pub async fn watch_keep_above(
         let conn = session_connection()?;
         let bus_name = conn
             .unique_name()
-            .ok_or_else(|| AppError::Window("D-Bus connection has no unique name".to_owned()))?
+            .ok_or_else(|| AppError::window_msg("D-Bus connection has no unique name"))?
             .to_string();
 
         conn.object_server()
             .at(REPORT_PATH, KeepAboveReports { reports })
-            .map_err(|e| AppError::io("Failed to serve keep-above reports", e))?;
+            .map_err(|e| AppError::window("Failed to serve keep-above reports", e))?;
 
         // The file stays: `KWin` reads it on a worker thread after `run` returns, and this script
         // is never stopped to make the wait worth it.
         std::fs::write(&script_path, keep_above_script(std::process::id(), &bus_name))
-            .map_err(|e| AppError::io("Failed to write KWin script", e))?;
+            .map_err(|e| AppError::window("Failed to write KWin script", e))?;
 
         load_and_run(&conn, &script_path, &plugin).map(drop)
     })
     .await
-    .map_err(|e| AppError::io("KWin keep-above watch task panicked", e))?
+    .map_err(|e| AppError::window("KWin keep-above watch task panicked", e))?
 }
 
 /// The receiving end of the watcher script's `callDBus`.
@@ -163,16 +163,18 @@ fn load_and_run(
             "loadScript",
             &(&script_path_str, plugin),
         )
-        .map_err(|e| AppError::io("Failed to load KWin script", e))?;
+        .map_err(|e| AppError::window("Failed to load KWin script", e))?;
 
-    let script_id: i32 =
-        reply.body().deserialize().map_err(|e| AppError::io("Invalid script ID from KWin", e))?;
+    let script_id: i32 = reply
+        .body()
+        .deserialize()
+        .map_err(|e| AppError::window("Invalid script ID from KWin", e))?;
 
     let script_obj_path = ObjectPath::try_from(format!("/Scripting/Script{script_id}"))
-        .map_err(|e| AppError::io("Invalid script path", e))?;
+        .map_err(|e| AppError::window("Invalid script path", e))?;
 
     conn.call_method(Some(KWIN_SERVICE), &script_obj_path, Some(SCRIPT_INTERFACE), "run", &())
-        .map_err(|e| AppError::io("Failed to run KWin script", e))?;
+        .map_err(|e| AppError::window("Failed to run KWin script", e))?;
 
     Ok(script_obj_path)
 }

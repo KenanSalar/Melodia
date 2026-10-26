@@ -81,7 +81,7 @@ async fn a_refused_search_is_an_error_rather_than_a_definitive_miss() -> TestRes
     let refused = cover_from(TestResponse::status(403)).await;
 
     let Err(AppError::Network { msg, .. }) = refused else {
-        return Err(AppError::Validation(format!(
+        return Err(AppError::validation_msg(format!(
             "a non-success status must not answer as a miss, got {refused:?}"
         )));
     };

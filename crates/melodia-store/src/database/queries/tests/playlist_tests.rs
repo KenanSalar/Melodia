@@ -310,7 +310,7 @@ async fn rewriting_the_criteria_of_a_missing_playlist_is_reported() -> Result<()
 
     let missing = queries::playlist::update_smart_criteria(&db, 9_999, r#"{"v":1}"#).await;
 
-    assert!(matches!(missing, Err(AppError::NotFound(_))), "{missing:?}");
+    assert!(matches!(missing, Err(AppError::NotFound { .. })), "{missing:?}");
     Ok(())
 }
 
@@ -512,8 +512,8 @@ async fn a_track_outside_the_playlist_or_a_slot_past_its_end_is_refused_as_missi
     let from = queries::playlist::move_playlist_tracks(&db, playlist, &[-1], 0).await;
     let to = queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0]], 3).await;
 
-    assert!(matches!(from, Err(AppError::NotFound(_))), "{from:?}");
-    assert!(matches!(to, Err(AppError::NotFound(_))), "{to:?}");
+    assert!(matches!(from, Err(AppError::NotFound { .. })), "{from:?}");
+    assert!(matches!(to, Err(AppError::NotFound { .. })), "{to:?}");
     Ok(())
 }
 
@@ -610,7 +610,7 @@ async fn a_block_running_one_past_the_end_is_refused() -> Result<(), AppError> {
 
     let refused = queries::playlist::move_playlist_tracks(&db, playlist, &ids[1..3], 4).await;
 
-    assert!(matches!(refused, Err(AppError::NotFound(_))), "{refused:?}");
+    assert!(matches!(refused, Err(AppError::NotFound { .. })), "{refused:?}");
     assert_eq!(order(&db, playlist).await?, ids);
     Ok(())
 }
@@ -637,7 +637,7 @@ async fn one_track_outside_the_playlist_refuses_the_whole_move() -> Result<(), A
     let refused =
         queries::playlist::move_playlist_tracks(&db, playlist, &[ids[0], ids[5]], 2).await;
 
-    assert!(matches!(refused, Err(AppError::NotFound(_))), "{refused:?}");
+    assert!(matches!(refused, Err(AppError::NotFound { .. })), "{refused:?}");
     assert_eq!(
         (order(&db, playlist).await?, updated_at(&db, playlist).await?),
         (held.to_vec(), EARLIER.to_owned()),

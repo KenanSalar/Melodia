@@ -72,7 +72,7 @@ fn parsed(text: &str) -> Option<Lyrics> {
 /// [`parsed`] where the case is about what wins rather than about the parse, so a parser that
 /// stopped reading the fixture fails loudly instead of leaving the comparison unrun.
 fn fixture(text: &str) -> Result<Lyrics, AppError> {
-    parsed(text).ok_or_else(|| AppError::Validation("the fixture must parse".into()))
+    parsed(text).ok_or_else(|| AppError::validation_msg("the fixture must parse"))
 }
 
 /// The first line of whichever sheet came back, which is what the cases tell two apart by.

@@ -231,8 +231,7 @@ impl AudioOutput {
     ///
     /// # Errors
     ///
-    /// [`AppError::Player`] when there is no device, and `Io` when it cannot name its own default
-    /// config.
+    /// [`AppError::Player`] when there is no device, or it cannot name its own default config.
     pub fn open_parked(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
         let (mut output, _) = Self::unopened(voices, health)?;
         output.park();

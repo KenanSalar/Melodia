@@ -95,7 +95,7 @@ impl PlayerBackend for MockBackend {
     ) -> Result<(), AppError> {
         let mut inner = self.inner();
         if inner.play_media_should_fail {
-            return Err(AppError::Player("mock failure".to_owned()));
+            return Err(AppError::player_msg("mock failure"));
         }
         inner.play_media_calls.push((file_path.to_owned(), volume, speed, start_position_ms));
         Ok(())
@@ -111,7 +111,7 @@ impl PlayerBackend for MockBackend {
     ) -> Result<(), AppError> {
         let mut inner = self.inner();
         if inner.begin_crossfade_should_fail {
-            return Err(AppError::Player("mock crossfade failure".to_owned()));
+            return Err(AppError::player_msg("mock crossfade failure"));
         }
         inner.begin_crossfade_calls.push((file_path.to_owned(), fade_ms, volume, speed));
         Ok(())
@@ -146,7 +146,7 @@ impl PlayerBackend for MockBackend {
     fn play_stream(&self, generation: u64, volume: f64) -> Result<(), AppError> {
         let mut inner = self.inner();
         if inner.play_stream_should_fail {
-            return Err(AppError::Player("mock stream failure".to_owned()));
+            return Err(AppError::player_msg("mock stream failure"));
         }
         inner.play_stream_calls.push((generation, volume));
         Ok(())
@@ -619,7 +619,7 @@ fn land_every_record(fx: &ActionsFixture, paths: &[&str]) {
 /// The start the transition last owed, as the window task finds it.
 fn owed(fx: &ActionsFixture) -> Result<AwaitedStart, AppError> {
     (*fx.sinks.awaited_start.borrow())
-        .ok_or_else(|| AppError::Validation("no transition owed a start".into()))
+        .ok_or_else(|| AppError::validation_msg("no transition owed a start"))
 }
 
 /// The fixture's two files queued and the first playing, then a Next onto the second, whose record

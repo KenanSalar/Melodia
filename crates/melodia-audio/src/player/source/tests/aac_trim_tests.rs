@@ -23,7 +23,7 @@ const ITUNES: &str = " 00000000 00000840 000001DC 0000000000AC44E4 00000000 0000
 #[test]
 fn itunsmpb_yields_the_priming_and_the_original_sample_count() -> Result<(), AppError> {
     let Some(smpb) = parse_smpb(ITUNES) else {
-        return Err(AppError::Player("a well-formed iTunSMPB did not parse".to_owned()));
+        return Err(AppError::player_msg("a well-formed iTunSMPB did not parse"));
     };
     assert_eq!(smpb.priming, 2112);
     assert_eq!(smpb.frames, 0x00AC_44E4);
@@ -35,7 +35,7 @@ fn itunsmpb_yields_the_priming_and_the_original_sample_count() -> Result<(), App
 #[test]
 fn the_remainder_field_is_stepped_over_rather_than_read() -> Result<(), AppError> {
     let Some(smpb) = parse_smpb(" 00000000 00000840 000001DC 0000000000009C40") else {
-        return Err(AppError::Player("a four-field iTunSMPB did not parse".to_owned()));
+        return Err(AppError::player_msg("a four-field iTunSMPB did not parse"));
     };
     assert_eq!(smpb.frames, 40000, "the count was read from the remainder's field");
     Ok(())
@@ -78,7 +78,7 @@ fn the_walk_reads_the_edit_list_the_fixtures_carry() -> Result<(), AppError> {
         let edits = edit_lists(&mut file);
 
         let [edit] = edits.as_slice() else {
-            return Err(AppError::Player(format!("{fixture}: expected one edit list")));
+            return Err(AppError::player_msg(format!("{fixture}: expected one edit list")));
         };
         assert_eq!(edit.track_id, 1, "{fixture}");
         assert_eq!(edit.delay, 1024, "{fixture}");
@@ -150,7 +150,7 @@ fn a_malformed_box_tree_is_given_up_on() -> Result<(), AppError> {
 #[test]
 fn the_edit_lists_own_length_wins_over_the_one_derived_from_the_duration() -> Result<(), AppError> {
     let Some(trim) = resolved(Some(222_208), 1600, Some(220_502)) else {
-        return Err(AppError::Player("an edit list stating both resolved to nothing".to_owned()));
+        return Err(AppError::player_msg("an edit list stating both resolved to nothing"));
     };
     assert_eq!(trim.head, 1600);
     assert_eq!(trim.playable, Some(220_502), "the derived length overruled the stated one");
@@ -162,7 +162,7 @@ fn the_edit_lists_own_length_wins_over_the_one_derived_from_the_duration() -> Re
 #[test]
 fn an_edit_list_may_not_present_more_than_the_track_holds() -> Result<(), AppError> {
     let Some(trim) = resolved(Some(222_208), 1600, Some(999_999)) else {
-        return Err(AppError::Player("an overlong edit list resolved to nothing".to_owned()));
+        return Err(AppError::player_msg("an overlong edit list resolved to nothing"));
     };
     assert_eq!(trim.playable, Some(220_608), "an overlong edit was taken at its word");
     Ok(())
@@ -172,7 +172,7 @@ fn an_edit_list_may_not_present_more_than_the_track_holds() -> Result<(), AppErr
 #[test]
 fn the_duration_answers_where_the_edit_lists_own_length_cannot() -> Result<(), AppError> {
     let Some(trim) = resolved(Some(45_124), 1024, None) else {
-        return Err(AppError::Player("an edit list with no length resolved to nothing".to_owned()));
+        return Err(AppError::player_msg("an edit list with no length resolved to nothing"));
     };
     assert_eq!(trim.playable, Some(44_100));
     Ok(())
@@ -285,7 +285,7 @@ mod synthetic {
     fn single(bytes: &[u8]) -> Result<super::super::Edit, AppError> {
         let edits = walked(bytes)?;
         let [edit] = edits.as_slice() else {
-            return Err(AppError::Player(format!("expected one edit, got {}", edits.len())));
+            return Err(AppError::player_msg(format!("expected one edit, got {}", edits.len())));
         };
         Ok(super::super::Edit {
             track_id: edit.track_id,
@@ -388,7 +388,7 @@ mod synthetic {
         let built = walked(&mp4(1_000, &[trak(1, 44_100, Some(&elst), 24)]))?;
 
         let ([real], [built]) = (real.as_slice(), built.as_slice()) else {
-            return Err(AppError::Player("expected one edit from each".to_owned()));
+            return Err(AppError::player_msg("expected one edit from each"));
         };
         assert_eq!(
             (built.track_id, built.delay, built.playable),

@@ -19,6 +19,7 @@ use parking_lot::Mutex;
 
 use melodia_core::error::{AppError, AppResult};
 
+use super::event::UpdateResult;
 use super::manifest::PlatformAsset;
 use melodia_platform::services::platform::install_kind::install_target;
 
@@ -98,7 +99,7 @@ pub async fn download_and_install(
     asset: &PlatformAsset,
     expected_version: &str,
     on_progress: impl Fn(u8) + Send + Sync,
-) -> AppResult<InstallOutcome> {
+) -> UpdateResult<InstallOutcome> {
     let target = install_target()?;
     // Housekeeping rather than a step of this install: it collects whatever a *previous* attempt
     // left behind once the retention window closed, and runs here because an install attempt is
@@ -121,7 +122,7 @@ async fn download_and_install_to(
     expected_version: &str,
     target: std::path::PathBuf,
     on_progress: impl Fn(u8) + Send + Sync,
-) -> AppResult<InstallOutcome> {
+) -> UpdateResult<InstallOutcome> {
     let method = resolve_install_method();
     let staged = match method {
         InstallMethod::LinuxPackage(format) => staged_package_path(&asset.url, format)?,
@@ -140,7 +141,7 @@ async fn download_and_install_to(
         verify_staged(&verify_staged_path, &verify_signature, &verify_version)
     })
     .await
-    .map_err(|e| AppError::Settings(format!("update verify task join error: {e}")))?;
+    .map_err(|e| AppError::updater("update verify task join error", e))?;
     if let Err(e) = verify_result {
         let _ = std::fs::remove_file(&staged);
         let _ = std::fs::remove_file(sidecar_meta_path(&staged));
@@ -189,7 +190,7 @@ async fn download_and_install_to(
         InstallMethod::AtomicSwap => {
             if let Err(e) = verify_swapped_binary(&target, expected_version).await {
                 attempt_post_swap_rollback(&target);
-                return Err(e);
+                return Err(e.into());
             }
         }
         InstallMethod::LinuxPackage(_) => log::info!(
@@ -211,7 +212,7 @@ async fn install_blocking(
 ) -> AppResult<InstallOutcome> {
     tokio::task::spawn_blocking(install)
         .await
-        .map_err(|e| AppError::Settings(format!("update install task join error: {e}")))?
+        .map_err(|e| AppError::updater("update install task join error", e))?
 }
 
 // Linux-only: every assertion is about the atomic-swap path, which is the method a cargo-built

@@ -138,7 +138,7 @@ pub fn set_resume_on_startup(paths: &Paths, on: bool) -> Result<(), AppError> {
 /// every setting they have. `clamp_preamp` and `clamp_rg_preamp` each carry the same arm.
 pub fn set_playback_speed(paths: &Paths, speed: f64) -> Result<(), AppError> {
     if speed.is_nan() {
-        return Err(AppError::Validation("Playback speed is not a number".to_owned()));
+        return Err(AppError::validation_msg("Playback speed is not a number"));
     }
     let speed = speed.clamp(MIN_SPEED, MAX_SPEED);
     services::settings::mutate_settings(paths, move |settings| {

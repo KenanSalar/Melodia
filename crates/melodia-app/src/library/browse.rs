@@ -74,17 +74,15 @@ pub async fn browse_directory(
 
     let scan = tokio::task::spawn_blocking(move || -> Result<DirScanResult, AppError> {
         let canonical = melodia_core::utils::canonicalize_path(&path)
-            .map_err(|_| AppError::Validation(format!("Path does not exist: {path}")))?;
+            .map_err(|e| AppError::io(format!("Cannot resolve path {path}"), e))?;
 
         if !canonical.is_dir() {
-            return Err(AppError::Validation(format!("Path is not a directory: {path}")));
+            return Err(AppError::validation_msg(format!("Path is not a directory: {path}")));
         }
 
         let in_library = enabled_canonical.iter().any(|cp| canonical.starts_with(cp));
         if !in_library {
-            return Err(AppError::Validation(
-                "Path is not within an enabled library folder".to_owned(),
-            ));
+            return Err(AppError::validation_msg("Path is not within an enabled library folder"));
         }
 
         let (folders, audio_paths) = classify_dir_entries(&canonical)?;

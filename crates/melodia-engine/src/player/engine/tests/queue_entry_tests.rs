@@ -30,14 +30,14 @@ fn reversed_five() -> QueueState {
 /// The entry on `row`, failing where there is none so a fixture can't hand a test a `None` it
 /// would pass on.
 fn entry_on(q: &QueueState, row: usize) -> Result<QueueEntry, AppError> {
-    q.entry_at(row).ok_or_else(|| AppError::Validation(format!("no entry on row {row}")))
+    q.entry_at(row).ok_or_else(|| AppError::validation_msg(format!("no entry on row {row}")))
 }
 
 /// The entry on the row holding `id`, for a queue holding it once.
 fn entry_holding(q: &QueueState, id: i64) -> Result<QueueEntry, AppError> {
     let row = q.play_ids().iter().position(|&queued| queued == id);
     row.and_then(|row| q.entry_at(row))
-        .ok_or_else(|| AppError::Validation(format!("track {id} is not queued")))
+        .ok_or_else(|| AppError::validation_msg(format!("track {id} is not queued")))
 }
 
 /// The row `entry` sits on, `None` once it has left.

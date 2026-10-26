@@ -4,8 +4,9 @@
 //! gate + platform-asset resolution. Recording the answer and notifying the user are
 //! [`run_check`](super::run_check)'s, so this stays a pure query.
 
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::AppError;
 
+use super::event::{UpdateFailure, UpdateResult};
 use super::github::{FetchOutcome, fetch_latest_manifest};
 use super::manifest::{self, LatestManifest, PlatformAsset};
 use super::version::is_upgrade;
@@ -43,11 +44,12 @@ pub async fn check_for_update(
     http: &reqwest::Client,
     base_url: &str,
     current_version: &str,
-) -> AppResult<Checked> {
+) -> UpdateResult<Checked> {
     match fetch_latest_manifest(http, base_url, None).await? {
         FetchOutcome::Fresh { manifest, etag } => judge(manifest, etag, current_version),
         FetchOutcome::NotModified => {
-            Err(AppError::network_msg("latest.json answered 304 to a request that sent no ETag"))
+            Err(AppError::network_msg("latest.json answered 304 to a request that sent no ETag")
+                .into())
         }
     }
 }
@@ -59,7 +61,7 @@ pub async fn recheck_for_update(
     base_url: &str,
     etag: &str,
     current_version: &str,
-) -> AppResult<Option<Checked>> {
+) -> UpdateResult<Option<Checked>> {
     match fetch_latest_manifest(http, base_url, Some(etag)).await? {
         FetchOutcome::Fresh { manifest, etag } => judge(manifest, etag, current_version).map(Some),
         FetchOutcome::NotModified => Ok(None),
@@ -70,7 +72,7 @@ fn judge(
     manifest: LatestManifest,
     etag: Option<String>,
     current_version: &str,
-) -> AppResult<Checked> {
+) -> UpdateResult<Checked> {
     let verdict = classify_manifest(&manifest, current_version, current_target_key())?;
     Ok(Checked { manifest, etag, verdict })
 }
@@ -82,7 +84,7 @@ fn classify_manifest(
     manifest: &LatestManifest,
     current_version: &str,
     target_key: Option<&str>,
-) -> AppResult<Verdict> {
+) -> UpdateResult<Verdict> {
     // Forward-compat gate: a future schema revision (renamed platform
     // keys, restructured PlatformAsset, etc.) bumps the manifest's
     // `manifest_schema_version` past our compiled-in `SUPPORTED_*` value.
@@ -101,7 +103,9 @@ fn classify_manifest(
         return Ok(Verdict::UnsupportedSchema);
     }
 
-    if !is_upgrade(current_version, &manifest.version)? {
+    // Only the manifest's version can fail to parse: the running one is this build's, or one it
+    // installed from an earlier manifest.
+    if !is_upgrade(current_version, &manifest.version).map_err(UpdateFailure::parse)? {
         return Ok(Verdict::UpToDate);
     }
 
@@ -109,10 +113,10 @@ fn classify_manifest(
         return Ok(Verdict::NoAssetForTarget);
     };
     let Some(asset) = manifest.platforms.get(key).cloned() else {
-        return Err(AppError::Validation(format!(
+        return Err(UpdateFailure::parse(AppError::updater_msg(format!(
             "manifest reports version {} but has no platform asset for '{key}'",
             manifest.version
-        )));
+        ))));
     };
 
     Ok(Verdict::Available(asset))

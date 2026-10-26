@@ -84,7 +84,7 @@ fn test_play_track_inner_with_resume_position() -> Result<(), AppError> {
     let track = state
         .current_track()
         .cloned()
-        .ok_or_else(|| AppError::Validation("current_track None".into()))?;
+        .ok_or_else(|| AppError::validation_msg("current_track None"))?;
     let resume_pos = state.position_ms;
     let actions =
         play_track_inner(&mut state, track, if resume_pos > 0 { Some(resume_pos) } else { None });
@@ -111,7 +111,7 @@ fn test_resume_from_stopped_at_zero_starts_fresh() -> Result<(), AppError> {
     let track = state
         .current_track()
         .cloned()
-        .ok_or_else(|| AppError::Validation("current_track None".into()))?;
+        .ok_or_else(|| AppError::validation_msg("current_track None"))?;
     let resume_pos = state.position_ms;
     let actions =
         play_track_inner(&mut state, track, if resume_pos > 0 { Some(resume_pos) } else { None });
@@ -273,9 +273,9 @@ fn test_stop_at_end_of_queue_preserves_track() -> Result<(), AppError> {
 
     queue_up(&mut state, vec![track1, track2]);
 
-    let t = state.queue.advance().ok_or_else(|| AppError::Validation("advance None #1".into()))?;
+    let t = state.queue.advance().ok_or_else(|| AppError::validation_msg("advance None #1"))?;
     state.start_queued(t, false, 0);
-    let t = state.queue.advance().ok_or_else(|| AppError::Validation("advance None #2".into()))?;
+    let t = state.queue.advance().ok_or_else(|| AppError::validation_msg("advance None #2"))?;
     state.start_queued(t, false, 0);
 
     // End of queue — no more tracks to advance to
@@ -1882,10 +1882,10 @@ fn the_station_replaces_the_restored_track_and_not_the_queue_under_it() {
 fn a_restart_puts_the_queue_back_under_the_station() -> Result<(), AppError> {
     let before = tuned_over_a_queue();
     let written = serde_json::to_string(&before.to_persisted())
-        .map_err(|e| AppError::Validation(format!("serialize queue.json: {e}")))?;
+        .map_err(|e| AppError::validation("serialize queue.json", e))?;
 
-    let read: PersistedPlayback = serde_json::from_str(&written)
-        .map_err(|e| AppError::Validation(format!("parse queue.json: {e}")))?;
+    let read: PersistedPlayback =
+        serde_json::from_str(&written).map_err(|e| AppError::validation("parse queue.json", e))?;
     let mut after = PlayerState::default();
     restore(
         &mut after,
@@ -2057,7 +2057,7 @@ fn awaiting_track_two(count: i64) -> Result<(PlayerState, AwaitedStart), AppErro
     let mut state = holding(playing_first_of(count), &[1]);
     let actions = state.build_next_actions();
     let owed = owed_start(&actions)
-        .ok_or_else(|| AppError::Validation(format!("the Next owed no start: {actions:?}")))?;
+        .ok_or_else(|| AppError::validation_msg(format!("the Next owed no start: {actions:?}")))?;
     Ok((state, owed))
 }
 
@@ -2150,7 +2150,7 @@ fn a_skip_made_while_paused_comes_back_paused_once_its_record_lands() -> Result<
     let mut state = holding(playing_first_of(3), &[1]);
     state.status = PlaybackStatus::Paused;
     let owed = owed_start(&state.build_next_actions())
-        .ok_or_else(|| AppError::Validation("the paused Next owed no start".into()))?;
+        .ok_or_else(|| AppError::validation_msg("the paused Next owed no start"))?;
     land_records(&mut state, &[2]);
 
     let actions = state.resume_awaited(owed);

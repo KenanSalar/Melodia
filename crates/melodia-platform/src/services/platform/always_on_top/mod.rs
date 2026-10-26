@@ -132,7 +132,7 @@ pub async fn apply(
         #[cfg(target_os = "linux")]
         AlwaysOnTopMethod::GnomeExtension => gnome::set_always_on_top(pinned).await,
         AlwaysOnTopMethod::Unsupported => {
-            Err(AppError::Window("Always-on-top is not supported on this desktop".to_owned()))
+            Err(AppError::window_msg("Always-on-top is not supported on this desktop"))
         }
     }
 }
@@ -171,7 +171,7 @@ pub(crate) fn session_connection() -> Result<zbus::blocking::Connection, AppErro
         return Ok(c.clone());
     }
     let conn = zbus::blocking::Connection::session()
-        .map_err(|e| AppError::io("D-Bus connection failed", e))?;
+        .map_err(|e| AppError::window("D-Bus connection failed", e))?;
     *guard = Some(conn.clone());
     Ok(conn)
 }
