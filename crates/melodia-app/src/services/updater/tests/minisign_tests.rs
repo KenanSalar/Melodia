@@ -159,17 +159,9 @@ fn manifest_signature_verifies_with_manifest_tag() -> TestResult {
 }
 
 #[test]
-fn manifest_signature_rejected_when_manifest_tag_missing() -> TestResult {
-    // The versioned artifact fixture's trusted comment carries
-    // `version=0.42.0 target=… file=…` — no `manifest=` token. Cross-
-    // pasting it into the manifest verification slot must fail, even
-    // though the cryptographic signature itself is valid (same key
-    // family, ish — for this test the key id won't match but the
-    // earlier tests assert the missing-tag path on the matching key).
-    // Use a versioned signature against the manifest pubkey: signature
-    // decode succeeds (it's structurally valid) but the manifest-tag
-    // assertion is what we want to test, so we feed the manifest fixture
-    // signed by the manifest key but assert manifest_tag=wrong.
+fn manifest_signature_rejected_when_manifest_tag_differs() -> TestResult {
+    // No fixture is signed with another tag, so the mismatch arm is reached by asking for one the
+    // manifest signature doesn't carry.
     let pk = PublicKey::decode(TEST_PUBKEY_MANIFEST)?;
     let result = verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, "wrong");
     let Err(MinisignError::VersionMismatch(msg)) = result else {

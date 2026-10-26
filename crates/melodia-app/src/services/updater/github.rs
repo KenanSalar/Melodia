@@ -88,7 +88,7 @@ pub async fn fetch_latest_manifest(
     // doctored manifest. The same release that started signing the
     // manifest also ships this verification, so there's no transition
     // gap where a signed-manifest server would serve a pre-signing
-    // client (or vice versa) — see the rollout note in the plan.
+    // client (or vice versa).
     let sig_resp = http
         .get(&signature_url)
         .send()
@@ -110,10 +110,6 @@ pub async fn fetch_latest_manifest(
 
     let pubkey = minisign::embedded_pubkey()
         .map_err(|e| AppError::updater("embedded updater pubkey is invalid", e))?;
-    // Cross-check `manifest=true` to keep an artifact .minisig from
-    // being swapped into this slot (both are valid minisign blobs signed
-    // with the same key; only the trusted-comment domain separates
-    // them).
     minisign::verify_manifest_bytes(&body, &sig_text, &pubkey, "true").map_err(|e| {
         UpdateFailure::signature(AppError::updater("manifest signature verification failed", e))
     })?;

@@ -193,10 +193,9 @@ fn io_other_helper_wraps_message() {
 }
 
 /// The message-and-cause variants exist so a context message and a typed cause both survive, and
-/// `describe` is what puts them back together. Only `network` had a case for it, so
-/// `AppError::scanner` and `AppError::watcher` had never been built with a source at all: a
-/// constructor that dropped one satisfies every other test in this file, and the failure it
-/// hides is a permissions error and a full disk reading identically in a bug report.
+/// `describe` is what puts them back together. One row per `constructor_pairs!` entry, since
+/// `display_every_message_only_variant` can't see an entry whose cause constructor names the
+/// wrong variant.
 ///
 /// Expectations written out rather than composed from the parts, so the table cannot restate
 /// `describe`'s own append rule back at it.
