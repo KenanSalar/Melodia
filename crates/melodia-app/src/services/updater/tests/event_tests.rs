@@ -1,4 +1,4 @@
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 
 use super::{FailureKind, UpdateFailure};
 
@@ -22,6 +22,21 @@ fn a_failure_no_updater_site_named_keeps_its_layers_category() {
 fn the_updaters_own_errors_take_the_generic_toast() {
     let join = UpdateFailure::from(AppError::updater_msg("update install task join error"));
     assert_eq!(join.kind, FailureKind::Other);
+}
+
+/// The panel's reason is `describe` over the failure, so a failure that stopped at its own text
+/// would tell the user what failed and never why.
+#[test]
+fn a_failure_describes_as_its_error_does() {
+    let failure = UpdateFailure::signature(AppError::updater(
+        "update signature verification failed",
+        std::io::Error::other("signature did not verify"),
+    ));
+
+    assert_eq!(
+        describe(&failure),
+        "Updater error: update signature verification failed: signature did not verify"
+    );
 }
 
 /// Read by the `Settings.update-failed-reason(kind)` switch in `settings.slint`; a value

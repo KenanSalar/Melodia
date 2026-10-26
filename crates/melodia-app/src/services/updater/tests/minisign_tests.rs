@@ -1,4 +1,4 @@
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 
 use minisign_verify::PublicKey;
 
@@ -100,6 +100,25 @@ fn modified_data_fails_verification() -> TestResult {
         matches!(result, Err(MinisignError::Verify(_))),
         "modified data must surface as Verify error, got {result:?}",
     );
+    Ok(())
+}
+
+/// A staged file the disk won't hand back.
+struct FailingRead;
+
+impl Read for FailingRead {
+    fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::other("input/output error"))
+    }
+}
+
+/// `verify_staged` tells a read failure from a refusal by this variant, so a read reported as a
+/// failed verify would put a disk error behind the signature toast again.
+#[test]
+fn a_read_failure_is_an_io_error_not_a_failed_verify() -> TestResult {
+    let pk = PublicKey::decode(TEST_PUBKEY_FILE)?;
+    let result = verify_stream(FailingRead, TEST_SIG, &pk, None);
+    assert!(matches!(result, Err(MinisignError::Io(_))), "got {result:?}");
     Ok(())
 }
 

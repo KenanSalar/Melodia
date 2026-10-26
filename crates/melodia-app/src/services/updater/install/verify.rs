@@ -22,12 +22,16 @@ pub(super) fn verify_staged(
     let reader = BufReader::new(f);
     let pubkey = minisign::embedded_pubkey()
         .map_err(|e| AppError::updater("embedded updater pubkey is invalid", e))?;
-    let verified = minisign::verify_stream(reader, signature, &pubkey, Some(expected_version));
-    verified.map_err(|e| match e {
+    minisign::verify_stream(reader, signature, &pubkey, Some(expected_version))
+        .map_err(verification_failure)
+}
+
+fn verification_failure(e: MinisignError) -> UpdateFailure {
+    match e {
         // Failing to read the staged file says nothing about its signature.
         MinisignError::Io(e) => AppError::io("reading the staged update failed", e).into(),
         e => UpdateFailure::signature(AppError::updater("update signature verification failed", e)),
-    })
+    }
 }
 
 /// Spawn `target --version` and assert it (a) exits 0 within 5 s and
