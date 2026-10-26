@@ -192,7 +192,7 @@ fn io_other_helper_wraps_message() {
     assert!(matches!(err, AppError::Io(_)));
 }
 
-/// The struct variants exist so a context message and a typed cause both survive, and
+/// The message-and-cause variants exist so a context message and a typed cause both survive, and
 /// `describe` is what puts them back together. Only `network` had a case for it, so
 /// `AppError::scanner` and `AppError::watcher` had never been built with a source at all: a
 /// constructor that dropped one satisfies every other test in this file, and the failure it
@@ -201,7 +201,7 @@ fn io_other_helper_wraps_message() {
 /// Expectations written out rather than composed from the parts, so the table cannot restate
 /// `describe`'s own append rule back at it.
 #[test]
-fn every_struct_variant_keeps_its_context_and_its_cause() {
+fn every_message_and_cause_variant_keeps_both() {
     let cause = || std::io::Error::other("no space left on device");
 
     let cases: [(AppError, &str); 10] = [

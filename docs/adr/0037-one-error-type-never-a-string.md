@@ -41,3 +41,9 @@ price of the boundary being one type wide.
 
 This ADR was written in September 2026. The type dates from the repository's first commit; the
 source-walking helper that recovers a cause for a log line arrived on 2026-08-09.
+
+**Amendment, 2026-10-26:** the split no longer stops at the I/O boundary. Every variant but the
+three `#[from]` ones and `NotFound` now carries a context message and a typed cause, because a
+cause formatted into a message-only variant is the same loss one category over;
+`crates/melodia/tests/error_as_string.rs` walks every crate for one. A lookup miss has no cause, so
+`NotFound` carries its message alone.

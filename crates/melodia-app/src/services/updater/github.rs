@@ -113,14 +113,10 @@ pub async fn fetch_latest_manifest(
     // Cross-check `manifest=true` to keep an artifact .minisig from
     // being swapped into this slot (both are valid minisign blobs signed
     // with the same key; only the trusted-comment domain separates
-    // them). `expected_version` stays None — the manifest *is* the source
-    // of the version string, so there's nothing meaningful to assert
-    // here until after we parse it.
-    minisign::verify_manifest_bytes(&body, &sig_text, &pubkey, None, Some("true")).map_err(
-        |e| {
-            UpdateFailure::signature(AppError::updater("manifest signature verification failed", e))
-        },
-    )?;
+    // them).
+    minisign::verify_manifest_bytes(&body, &sig_text, &pubkey, "true").map_err(|e| {
+        UpdateFailure::signature(AppError::updater("manifest signature verification failed", e))
+    })?;
 
     // The body stays out of the error: having verified, it is a manifest we published, and the
     // release it came from still carries it.

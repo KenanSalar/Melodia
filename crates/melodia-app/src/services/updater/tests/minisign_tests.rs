@@ -154,7 +154,7 @@ fn manifest_signature_verifies_with_manifest_tag() -> TestResult {
     // Happy path for verify_manifest_bytes — the fixture's trusted
     // comment carries `manifest=true` and the caller asserts the same.
     let pk = PublicKey::decode(TEST_PUBKEY_MANIFEST)?;
-    verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, None, Some("true"))?;
+    verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, "true")?;
     Ok(())
 }
 
@@ -171,7 +171,7 @@ fn manifest_signature_rejected_when_manifest_tag_missing() -> TestResult {
     // assertion is what we want to test, so we feed the manifest fixture
     // signed by the manifest key but assert manifest_tag=wrong.
     let pk = PublicKey::decode(TEST_PUBKEY_MANIFEST)?;
-    let result = verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, None, Some("wrong"));
+    let result = verify_manifest_bytes(TEST_MANIFEST, TEST_SIG_MANIFEST, &pk, "wrong");
     let Err(MinisignError::VersionMismatch(msg)) = result else {
         return Err(format!("expected VersionMismatch error, got {result:?}").into());
     };
@@ -186,13 +186,12 @@ fn manifest_signature_rejected_when_manifest_tag_missing() -> TestResult {
 fn manifest_signature_rejects_artifact_sig_cross_paste() -> TestResult {
     // An artifact .minisig (from the versioned fixture) lacks the
     // `manifest=` token entirely. Feeding it into verify_manifest_bytes
-    // with `expected_manifest_tag=Some("true")` must surface the
+    // with `expected_manifest_tag="true"` must surface the
     // "no `manifest=` field" diagnostic — this is the domain-
     // separation check that prevents an attacker from cross-pasting
     // a legitimately-signed artifact .minisig into the manifest slot.
     let pk = PublicKey::decode(TEST_PUBKEY_VERSIONED)?;
-    let result =
-        verify_manifest_bytes(TEST_DATA_VERSIONED, TEST_SIG_VERSIONED, &pk, None, Some("true"));
+    let result = verify_manifest_bytes(TEST_DATA_VERSIONED, TEST_SIG_VERSIONED, &pk, "true");
     let Err(MinisignError::VersionMismatch(msg)) = result else {
         return Err(format!("expected VersionMismatch error, got {result:?}").into());
     };
@@ -210,7 +209,7 @@ fn manifest_signature_rejects_tampered_body() -> TestResult {
     if let Some(b) = tampered.first_mut() {
         *b ^= 0xff;
     }
-    let result = verify_manifest_bytes(&tampered, TEST_SIG_MANIFEST, &pk, None, Some("true"));
+    let result = verify_manifest_bytes(&tampered, TEST_SIG_MANIFEST, &pk, "true");
     assert!(
         matches!(result, Err(MinisignError::Verify(_))),
         "tampered manifest body must surface as Verify error, got {result:?}",

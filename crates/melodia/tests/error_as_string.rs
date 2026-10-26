@@ -6,8 +6,8 @@
 //! be a walk over every crate, no one of them being able to answer for the others.
 //!
 //! The same loss has a second spelling: an error interpolated into a message-only `AppError`
-//! constructor. Every variant but the three `#[from]` ones takes a typed cause, so that call is
-//! the one place left to flatten one.
+//! constructor. Every variant but the three `#[from]` ones and `NotFound` takes a typed cause, so
+//! that call is the one place left to flatten one.
 
 use melodia_testkit::{inline_names, is_error_name, rust_sources};
 

@@ -1,4 +1,4 @@
-/// Boxed underlying cause for the struct variants. `Option` because some
+/// Boxed underlying cause for the variants that carry one. `Option` because some
 /// of these errors are constructed from a plain message with no wrapped error
 /// (e.g. an HTTP status check that "fails" without an underlying transport
 /// error). thiserror's `#[source]` returns `None` for a `None` here, so the
@@ -31,11 +31,7 @@ pub enum AppError {
     },
 
     #[error("Not found: {msg}")]
-    NotFound {
-        msg: String,
-        #[source]
-        source: Option<BoxedSource>,
-    },
+    NotFound { msg: String },
 
     #[error("Player error: {msg}")]
     Player {
@@ -109,7 +105,7 @@ impl AppError {
 
     /// Not found from a message only. A lookup miss has no cause, so there is no source form.
     pub fn not_found_msg(msg: impl Into<String>) -> Self {
-        Self::NotFound { msg: msg.into(), source: None }
+        Self::NotFound { msg: msg.into() }
     }
 
     pub fn io_other(msg: impl Into<String>) -> Self {
@@ -130,109 +126,38 @@ impl AppError {
     pub fn io(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
         Self::Io(std::io::Error::other(Context { msg: msg.into(), source: source.into() }))
     }
+}
 
-    /// Metadata error wrapping an underlying cause (Lofty, hashing I/O, …).
-    /// `msg` is the operation context (`"Failed to open <path>"`); the typed cause
-    /// rides on `.source()` so logs can walk the chain.
-    pub fn metadata(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Metadata { msg: msg.into(), source: Some(source.into()) }
-    }
+/// The two constructors every cause-carrying variant gets: `$cause(msg, source)`, with `msg`
+/// naming the operation and the typed cause kept on `.source()` for [`describe`] to walk, and
+/// `$message(msg)` for a failure with no error underneath it.
+macro_rules! constructor_pairs {
+    ($($variant:ident => $cause:ident, $message:ident;)+) => {
+        impl AppError {
+            $(
+                pub fn $cause(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+                    Self::$variant { msg: msg.into(), source: Some(source.into()) }
+                }
 
-    /// Metadata error from a message only (no underlying cause to preserve).
-    pub fn metadata_msg(msg: impl Into<String>) -> Self {
-        Self::Metadata { msg: msg.into(), source: None }
-    }
+                pub fn $message(msg: impl Into<String>) -> Self {
+                    Self::$variant { msg: msg.into(), source: None }
+                }
+            )+
+        }
+    };
+}
 
-    /// Scanner error wrapping an underlying cause (usually a tokio `JoinError`).
-    pub fn scanner(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Scanner { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Scanner error from a message only.
-    pub fn scanner_msg(msg: impl Into<String>) -> Self {
-        Self::Scanner { msg: msg.into(), source: None }
-    }
-
-    /// Watcher error wrapping an underlying cause (notify).
-    pub fn watcher(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Watcher { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Watcher error from a message only.
-    pub fn watcher_msg(msg: impl Into<String>) -> Self {
-        Self::Watcher { msg: msg.into(), source: None }
-    }
-
-    /// Network error wrapping an underlying cause (reqwest / URL parse).
-    pub fn network(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Network { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Network error from a message only (e.g. an HTTP status or scheme check
-    /// that has no underlying transport error).
-    pub fn network_msg(msg: impl Into<String>) -> Self {
-        Self::Network { msg: msg.into(), source: None }
-    }
-
-    /// Player error wrapping an underlying cause (a decoder that refused the source).
-    pub fn player(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Player { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Player error from a message only.
-    pub fn player_msg(msg: impl Into<String>) -> Self {
-        Self::Player { msg: msg.into(), source: None }
-    }
-
-    /// Updater error wrapping an underlying cause (minisign, serde, semver, a task join).
-    pub fn updater(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Updater { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Updater error from a message only, such as an installer's exit code.
-    pub fn updater_msg(msg: impl Into<String>) -> Self {
-        Self::Updater { msg: msg.into(), source: None }
-    }
-
-    /// Queue error wrapping an underlying cause.
-    pub fn queue(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Queue { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Queue error from a message only.
-    pub fn queue_msg(msg: impl Into<String>) -> Self {
-        Self::Queue { msg: msg.into(), source: None }
-    }
-
-    /// Settings error wrapping an underlying cause.
-    pub fn settings(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Settings { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Settings error from a message only.
-    pub fn settings_msg(msg: impl Into<String>) -> Self {
-        Self::Settings { msg: msg.into(), source: None }
-    }
-
-    /// Window error wrapping an underlying cause.
-    pub fn window(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Window { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Window error from a message only.
-    pub fn window_msg(msg: impl Into<String>) -> Self {
-        Self::Window { msg: msg.into(), source: None }
-    }
-
-    /// Validation error wrapping an underlying cause.
-    pub fn validation(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
-        Self::Validation { msg: msg.into(), source: Some(source.into()) }
-    }
-
-    /// Validation error from a message only.
-    pub fn validation_msg(msg: impl Into<String>) -> Self {
-        Self::Validation { msg: msg.into(), source: None }
-    }
+constructor_pairs! {
+    Metadata => metadata, metadata_msg;
+    Scanner => scanner, scanner_msg;
+    Player => player, player_msg;
+    Queue => queue, queue_msg;
+    Settings => settings, settings_msg;
+    Window => window, window_msg;
+    Watcher => watcher, watcher_msg;
+    Network => network, network_msg;
+    Updater => updater, updater_msg;
+    Validation => validation, validation_msg;
 }
 
 pub type AppResult<T> = Result<T, AppError>;
