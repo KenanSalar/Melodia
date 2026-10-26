@@ -154,7 +154,7 @@ pub fn serve_file_opens(
         state.runtime.clone().spawn(async move {
             if let Err(e) = library::queue::open_files(&state, paths).await {
                 log::warn!("Failed to open forwarded files: {}", describe(&e));
-                utils::toast::notify(utils::toast::ToastKind::OperationFailed, e.to_string());
+                utils::toast::notify(utils::toast::ToastKind::OperationFailed, describe(&e));
             }
         });
     });

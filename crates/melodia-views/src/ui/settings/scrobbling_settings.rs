@@ -131,7 +131,7 @@ where
         rt.spawn(async move {
             if let Err(e) = disconnect(scrobble).await {
                 log::warn!("{provider} disconnect: {}", describe(&e));
-                toast::notify(ToastKind::OperationFailed, format!("{provider}: {e}"));
+                toast::notify(ToastKind::OperationFailed, format!("{provider}: {}", describe(&e)));
             }
         });
     }
@@ -375,7 +375,7 @@ fn connected_or_save_failed(
 /// service" line, clear busy, keep the dialog open.
 fn network_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::error::Error) {
     log::info!("{provider} connect failed: {}", describe(error));
-    toast::notify(ToastKind::OperationFailed, format!("{provider}: {error}"));
+    toast::notify(ToastKind::OperationFailed, format!("{provider}: {}", describe(error)));
     show_inline_error(weak, InlineError::Network);
 }
 
@@ -383,7 +383,7 @@ fn network_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl st
 /// "couldn't save" line, clear busy, keep the dialog open.
 fn save_failed(weak: &slint::Weak<AppWindow>, provider: &str, error: &impl std::error::Error) {
     log::warn!("{provider} connect: save failed: {}", describe(error));
-    toast::notify(ToastKind::OperationFailed, format!("{provider}: {error}"));
+    toast::notify(ToastKind::OperationFailed, format!("{provider}: {}", describe(error)));
     show_inline_error(weak, InlineError::SaveFailed);
 }
 

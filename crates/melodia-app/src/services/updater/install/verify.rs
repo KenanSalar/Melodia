@@ -18,7 +18,7 @@ pub(super) fn verify_staged(
     signature: &str,
     expected_version: &str,
 ) -> UpdateResult<()> {
-    let f = File::open(staged).map_err(AppError::from)?;
+    let f = File::open(staged).map_err(|e| AppError::io("opening the staged update failed", e))?;
     let reader = BufReader::new(f);
     let pubkey = minisign::embedded_pubkey()
         .map_err(|e| AppError::updater("embedded updater pubkey is invalid", e))?;

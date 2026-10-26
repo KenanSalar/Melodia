@@ -133,7 +133,7 @@ pub fn start(state: &AppState, folder_id: i64, on_stop: OnStop) {
     spawner.spawn(async move {
         if let Err(e) = scan_folder(&state, folder_id, on_stop).await {
             log::warn!("Scan of folder {folder_id} failed: {}", describe(&e));
-            toast::notify(ToastKind::OperationFailed, e.to_string());
+            toast::notify(ToastKind::OperationFailed, describe(&e));
         }
     });
 }

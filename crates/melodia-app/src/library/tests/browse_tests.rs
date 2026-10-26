@@ -39,10 +39,14 @@ async fn a_path_that_does_not_exist_is_refused() -> Result<(), AppError> {
     let Err(err) = browse(&db, &missing, &folders).await else {
         return Err(AppError::validation_msg("a missing path must not browse"));
     };
-    let cause = err.source().and_then(|source| source.downcast_ref::<std::io::Error>());
-    assert_eq!(
-        cause.map(std::io::Error::kind),
-        Some(std::io::ErrorKind::NotFound),
+    // The first link is the `io::Error` naming the operation; why it failed sits below it.
+    let io_kinds: Vec<std::io::ErrorKind> =
+        std::iter::successors(err.source(), |&cause| cause.source())
+            .filter_map(|cause| cause.downcast_ref::<std::io::Error>())
+            .map(std::io::Error::kind)
+            .collect();
+    assert!(
+        io_kinds.contains(&std::io::ErrorKind::NotFound),
         "the refusal has to carry why the path didn't resolve, got: {err:?}"
     );
     Ok(())

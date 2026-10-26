@@ -74,7 +74,7 @@ pub async fn browse_directory(
 
     let scan = tokio::task::spawn_blocking(move || -> Result<DirScanResult, AppError> {
         let canonical = melodia_core::utils::canonicalize_path(&path)
-            .map_err(|e| AppError::validation(format!("Cannot resolve path {path}"), e))?;
+            .map_err(|e| AppError::io(format!("Cannot resolve path {path}"), e))?;
 
         if !canonical.is_dir() {
             return Err(AppError::validation_msg(format!("Path is not a directory: {path}")));

@@ -110,7 +110,7 @@ async fn import_to_queue(state: &AppState, paths: Vec<String>) {
         Ok(_) => state.library_changed.bump(),
         Err(e) => {
             log::warn!("queue_import_files (drop): {}", describe(&e));
-            toast::notify(ToastKind::OperationFailed, e.to_string());
+            toast::notify(ToastKind::OperationFailed, describe(&e));
         }
     }
 }
