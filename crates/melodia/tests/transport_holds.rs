@@ -6,7 +6,7 @@
 //! file over: its timer and the windows counted in its ticks sit in different sheets.
 
 use melodia_testkit::{
-    MIN_SLINT_SOURCES, UI_DIR, binding_value, block_after, block_body, normalize_ws,
+    MIN_SLINT_SOURCES, UI_DIR, binding_value, block_after, block_body, normalize_ws, open_braces,
     strip_line_comments, stripped_sources,
 };
 
@@ -57,23 +57,7 @@ const MIN_MOUNTS: usize = 2;
 /// The body of the innermost block open at `at`, braces excluded. Quote-aware for
 /// [`block_body`]'s reason; pair it with [`strip_line_comments`] as that does.
 fn enclosing_block(src: &str, at: usize) -> Option<&str> {
-    let bytes = src.as_bytes();
-    let mut open = Vec::new();
-    let mut in_string = false;
-    let mut i = 0;
-    while i < at {
-        match bytes[i] {
-            b'\\' if in_string => i += 1,
-            b'"' => in_string = !in_string,
-            b'{' if !in_string => open.push(i),
-            b'}' if !in_string => {
-                open.pop();
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-    block_body(src, *open.last()?)
+    block_body(src, *open_braces(src, at).last()?)
 }
 
 /// Every element in `src` whose own `clicked` handler calls `click`, by its body.

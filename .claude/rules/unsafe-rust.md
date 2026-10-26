@@ -88,7 +88,7 @@ process state, and `cargo test` runs in parallel by default. There is one shape:
 **lock → snapshot → clear → set → `catch_unwind(body)` → restore → `resume_unwind`**
 
 and it is written once, in **`melodia_testkit::with_env_set`**
-(`crates/melodia-testkit/src/lib.rs`).
+(`crates/melodia-testkit/src/env.rs`).
 Call it. Don't re-roll it — each of those seven steps has been missing from a hand-rolled
 copy at some point, and the restore is the one that goes first.
 

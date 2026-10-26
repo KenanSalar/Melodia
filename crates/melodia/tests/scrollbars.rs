@@ -15,7 +15,8 @@
 //! is exactly the arrangement both composite views have.
 
 use melodia_testkit::{
-    MIN_SLINT_SOURCES, UI_DIR, blocks_named, normalize_ws as normalized, stripped_sources,
+    MIN_SLINT_SOURCES, UI_DIR, blocks_named, normalize_ws as normalized, outside_strings,
+    stripped_sources,
 };
 
 /// The elements both block walks recognise. `Flickable` is deliberately absent, and
@@ -94,24 +95,19 @@ fn own_property<'a>(body: &'a str, key: &str) -> Vec<&'a str> {
     let bytes = body.as_bytes();
     let mut out = Vec::new();
     let mut depth = 0usize;
-    let mut in_string = false;
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\\' if in_string => i += 1,
-            b'"' => in_string = !in_string,
-            b'{' if !in_string => depth += 1,
-            b'}' if !in_string => depth = depth.saturating_sub(1),
-            _ if depth == 0 && !in_string => {
-                if bytes[i..].starts_with(key.as_bytes())
-                    && let Some(end) = body[i..].find(';').map(|rel| rel + i)
+    for (at, byte) in outside_strings(bytes) {
+        match byte {
+            b'{' => depth += 1,
+            b'}' => depth = depth.saturating_sub(1),
+            _ if depth == 0 => {
+                if bytes[at..].starts_with(key.as_bytes())
+                    && let Some(end) = body[at..].find(';').map(|rel| rel + at)
                 {
-                    out.push(body[i + key.len()..end].trim());
+                    out.push(body[at + key.len()..end].trim());
                 }
             }
             _ => {}
         }
-        i += 1;
     }
     out
 }
