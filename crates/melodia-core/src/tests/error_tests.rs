@@ -204,7 +204,7 @@ fn io_other_helper_wraps_message() {
 fn every_struct_variant_keeps_its_context_and_its_cause() {
     let cause = || std::io::Error::other("no space left on device");
 
-    let cases: [(AppError, &str); 6] = [
+    let cases: [(AppError, &str); 10] = [
         (
             AppError::metadata("Failed to read tags", cause()),
             "Metadata error: Failed to read tags: no space left on device",
@@ -228,6 +228,22 @@ fn every_struct_variant_keeps_its_context_and_its_cause() {
         (
             AppError::updater("Failed to stage the update", cause()),
             "Updater error: Failed to stage the update: no space left on device",
+        ),
+        (
+            AppError::queue("Failed to restore the queue", cause()),
+            "Queue error: Failed to restore the queue: no space left on device",
+        ),
+        (
+            AppError::settings("Failed to save the settings", cause()),
+            "Settings error: Failed to save the settings: no space left on device",
+        ),
+        (
+            AppError::window("Failed to pin the window", cause()),
+            "Window error: Failed to pin the window: no space left on device",
+        ),
+        (
+            AppError::validation("Cannot resolve the path", cause()),
+            "Validation error: Cannot resolve the path: no space left on device",
         ),
     ];
 

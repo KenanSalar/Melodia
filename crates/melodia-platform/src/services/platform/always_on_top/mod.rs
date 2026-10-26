@@ -171,7 +171,7 @@ pub(crate) fn session_connection() -> Result<zbus::blocking::Connection, AppErro
         return Ok(c.clone());
     }
     let conn = zbus::blocking::Connection::session()
-        .map_err(|e| AppError::io("D-Bus connection failed", e))?;
+        .map_err(|e| AppError::window("D-Bus connection failed", e))?;
     *guard = Some(conn.clone());
     Ok(conn)
 }
