@@ -98,7 +98,7 @@ impl AppError {
     }
 
     /// `Io` naming the operation that failed beside its typed cause. The home for a cause whose
-    /// category has no struct variant to carry it: a D-Bus call, a task join, a device open.
+    /// category has no struct variant to carry it: a D-Bus call, a task join.
     ///
     /// Both halves are printed, so text built from `{e}`, such as a toast's detail, still says
     /// why, and [`describe`] skips the repeat on its way down the chain.

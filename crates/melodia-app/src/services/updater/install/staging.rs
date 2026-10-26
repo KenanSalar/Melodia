@@ -69,11 +69,7 @@ pub(super) fn staged_package_path(
     asset_url: &str,
     format: LinuxPackageFormat,
 ) -> AppResult<PathBuf> {
-    let cache = dirs::cache_dir().ok_or_else(|| {
-        AppError::updater_msg("could not resolve user cache dir for update staging")
-    })?;
-    let dir = cache.join("Melodia").join("update-staging");
-    std::fs::create_dir_all(&dir)?;
+    let dir = staging_dir()?;
     let fallback = match format {
         LinuxPackageFormat::Rpm => "melodia-update.rpm",
         LinuxPackageFormat::Deb => "melodia-update.deb",
@@ -91,11 +87,7 @@ pub(super) fn staged_package_path(
 /// [`staged_package_path`]'s Windows twin. msiexec dispatches on the extension,
 /// so a file renamed to `.new` fails with error 1620, "invalid package".
 pub(crate) fn staged_msi_path(asset_url: &str) -> AppResult<PathBuf> {
-    let cache = dirs::cache_dir().ok_or_else(|| {
-        AppError::updater_msg("could not resolve user cache dir for update staging")
-    })?;
-    let dir = cache.join("Melodia").join("update-staging");
-    std::fs::create_dir_all(&dir)?;
+    let dir = staging_dir()?;
     let name = asset_basename(asset_url)
         .filter(|n| {
             // Case-insensitively: Windows filesystems are, and a CDN redirect
@@ -116,13 +108,13 @@ pub(crate) fn staged_msi_path(asset_url: &str) -> AppResult<PathBuf> {
 /// space. Filesystem work goes on the blocking pool.
 pub async fn prune_stale_staging() {
     let _ = tokio::task::spawn_blocking(|| {
-        let Some(cache) = dirs::cache_dir() else {
+        let Some(dir) = staging_root() else {
             return;
         };
         let Some(cutoff) = std::time::SystemTime::now().checked_sub(STAGING_TTL) else {
             return;
         };
-        prune_dir(&cache.join("Melodia").join("update-staging"), cutoff);
+        prune_dir(&dir, cutoff);
     })
     .await;
 }
@@ -190,14 +182,25 @@ pub(super) fn resolve_staged_path(target: &Path) -> AppResult<PathBuf> {
     if primary.parent().is_some_and(dir_is_writable) {
         return Ok(primary);
     }
-    let cache = dirs::cache_dir().ok_or_else(|| {
-        AppError::updater_msg("could not resolve user cache dir for update staging")
-    })?;
-    let dir = cache.join("Melodia").join("update-staging");
-    std::fs::create_dir_all(&dir)?;
+    let dir = staging_dir()?;
     let mut name = target.file_name().map(std::ffi::OsStr::to_os_string).unwrap_or_default();
     name.push(".new");
     Ok(dir.join(name))
+}
+
+/// The cache-dir staging folder: the package methods' always, a swap's when it can't stage beside
+/// its target.
+fn staging_root() -> Option<PathBuf> {
+    dirs::cache_dir().map(|cache| cache.join("Melodia").join("update-staging"))
+}
+
+/// [`staging_root`], created for a download about to land in it.
+fn staging_dir() -> AppResult<PathBuf> {
+    let dir = staging_root().ok_or_else(|| {
+        AppError::updater_msg("could not resolve user cache dir for update staging")
+    })?;
+    std::fs::create_dir_all(&dir)?;
+    Ok(dir)
 }
 
 /// Metadata sidecar that fingerprints a staged file so a partial download
