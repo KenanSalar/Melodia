@@ -33,9 +33,8 @@ fn validate_folder_path(
         )));
     }
 
-    let canonical_new = melodia_core::utils::canonicalize_path(new_path).map_err(|e| {
-        AppError::Validation(format!("Cannot resolve path {}: {}", new_path.display(), e))
-    })?;
+    let canonical_new = melodia_core::utils::canonicalize_path(new_path)
+        .map_err(|e| AppError::io(format!("Cannot resolve path {}", new_path.display()), e))?;
 
     for folder in existing_folders {
         let existing_path = Path::new(&folder.path);

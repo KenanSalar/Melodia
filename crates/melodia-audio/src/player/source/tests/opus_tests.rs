@@ -95,7 +95,7 @@ fn the_length_leaves_out_the_priming_the_container_still_counts() -> Result<(), 
 #[test]
 fn a_seek_lands_where_it_asked_once_the_two_timelines_agree() -> Result<(), AppError> {
     let mut decoder = FileDecoder::open(&asset("silence.opus"))?;
-    decoder.try_seek(Duration::from_millis(500)).map_err(|e| AppError::Player(e.to_string()))?;
+    decoder.try_seek(Duration::from_millis(500)).map_err(|e| AppError::player("the seek", e))?;
 
     let channels = usize::from(decoder.channels().get());
     assert_eq!(decoder.count() / channels, 24_000);
@@ -172,7 +172,7 @@ fn the_seek_pre_roll_is_opus_and_nothing_else() {
 #[test]
 fn a_seek_inside_the_pre_roll_window_still_lands_where_it_asked() -> Result<(), AppError> {
     let mut decoder = FileDecoder::open(&asset("silence.opus"))?;
-    decoder.try_seek(Duration::from_millis(20)).map_err(|e| AppError::Player(e.to_string()))?;
+    decoder.try_seek(Duration::from_millis(20)).map_err(|e| AppError::player("the seek", e))?;
 
     let channels = usize::from(decoder.channels().get());
     assert_eq!(decoder.count() / channels, 47_040);
@@ -212,7 +212,7 @@ mod layout {
     -> Result<(), AppError> {
         for count in 1..=8 {
             let Some((channels, sources)) = positioned_layout(count) else {
-                return Err(AppError::Player(format!("{count} channels states no layout")));
+                return Err(AppError::player_msg(format!("{count} channels states no layout")));
             };
 
             assert_eq!(channels.count(), count, "{count} channels");
@@ -230,11 +230,11 @@ mod layout {
     #[test]
     fn the_low_frequency_channel_arrives_last_and_is_wanted_fourth() -> Result<(), AppError> {
         let Some((channels, sources)) = positioned_layout(6) else {
-            return Err(AppError::Player("5.1 states no layout".to_owned()));
+            return Err(AppError::player_msg("5.1 states no layout"));
         };
         let Some(plane) = channels.get_canonical_index_for_positioned_channel(Position::LFE1)
         else {
-            return Err(AppError::Player("5.1 names no low-frequency channel".to_owned()));
+            return Err(AppError::player_msg("5.1 names no low-frequency channel"));
         };
 
         assert_eq!(plane, 3, "the buffer sorts LFE fourth");
@@ -300,7 +300,7 @@ mod layout {
     #[test]
     fn a_family_0_header_states_no_layout_to_disagree_with() -> Result<(), AppError> {
         let stereo = OpusMSDecoder::new(DECODE_RATE.cast_signed(), 2, 0)
-            .map_err(|_| AppError::Player("stereo is not a layout opus_pure builds".to_owned()))?;
+            .map_err(|_| AppError::player_msg("stereo is not a layout opus_pure builds"))?;
 
         assert!(check_stated_layout(None, stereo.layout()).is_ok());
         Ok(())
@@ -312,7 +312,7 @@ mod layout {
     #[test]
     fn a_family_1_header_with_no_mapping_table_is_refused() -> Result<(), AppError> {
         let surround = OpusMSDecoder::new(DECODE_RATE.cast_signed(), 6, 1)
-            .map_err(|_| AppError::Player("5.1 is not a layout opus_pure builds".to_owned()))?;
+            .map_err(|_| AppError::player_msg("5.1 is not a layout opus_pure builds"))?;
         let stops_at_the_family = [0u8; 19];
 
         assert!(check_stated_layout(Some(&stops_at_the_family), surround.layout()).is_err());

@@ -50,5 +50,5 @@ fn an_opened_mount_reports_the_shape_the_deck_converts_from() -> Result<(), AppE
 fn a_mount_serving_something_else_fails_the_open() {
     let opened = StreamDecoder::open(mount(b"<html>not audio</html>".to_vec()), Some("text/html"));
 
-    assert!(matches!(opened, Err(AppError::Player(_))));
+    assert!(matches!(opened, Err(AppError::Player { .. })));
 }

@@ -127,7 +127,7 @@ impl PlaybackEngine {
         let mut output = self.output.device.lock();
         let output = output
             .as_mut()
-            .ok_or_else(|| AppError::Player("There is no audio output to reopen".to_owned()))?;
+            .ok_or_else(|| AppError::player_msg("There is no audio output to reopen"))?;
         if output.is_parked() {
             return Ok(None);
         }

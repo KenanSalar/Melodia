@@ -108,8 +108,9 @@ from `main.rs` without ever opening this file.
 - **`latest.json` is minisign-signed and the client verifies before parse.** Same key as the
   per-artifact sigs (`assets/updater-pubkey.b64`): `fetch_latest_manifest` fetches
   `latest.json.minisig` and calls `minisign::verify_manifest_bytes`, where the `manifest=true`
-  trusted comment is a **domain-separation tag**. Fail-closed — missing or invalid sig →
-  `AppError::Validation`. CI: `minisign -SHm latest.json -t "version=$VERSION manifest=true"`.
+  trusted comment is a **domain-separation tag**. Fail-closed: a missing or invalid sig refuses
+  the manifest, and `github.rs` names each refusal's `FailureKind` where it makes the error. CI:
+  `minisign -SHm latest.json -t "version=$VERSION manifest=true"`.
 
 - **The manifest is built twice, and the second build is the one users read.** `release-publish.yml`
   builds `latest.json` while the release is still a draft, so its `notes_short` is GitHub's

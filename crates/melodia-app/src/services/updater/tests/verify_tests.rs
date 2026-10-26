@@ -13,7 +13,7 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use melodia_core::error::AppError;
+use melodia_core::error::{AppError, describe};
 use tempfile::{TempDir, tempdir};
 use tokio::sync::Mutex;
 
@@ -40,8 +40,8 @@ fn fake_binary(dir: &Path, body: &str) -> std::io::Result<PathBuf> {
 
 fn refusal(outcome: Result<(), AppError>) -> Result<String, Box<dyn std::error::Error>> {
     match outcome {
-        Err(AppError::Validation(msg)) => Ok(msg),
-        other => Err(format!("expected a Validation refusal, got {other:?}").into()),
+        Err(e @ AppError::Updater { .. }) => Ok(describe(&e)),
+        other => Err(format!("expected an Updater refusal, got {other:?}").into()),
     }
 }
 

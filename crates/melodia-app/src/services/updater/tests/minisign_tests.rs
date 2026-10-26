@@ -82,10 +82,7 @@ fn non_prehashed_signature_is_rejected() -> TestResult {
     // signed without `-H` would silently break the streaming path.
     let pk = PublicKey::decode(TEST_PUBKEY_FILE)?;
     let result = verify_stream(Cursor::new(TEST_NOHASH_DATA), TEST_NOHASH_SIG, &pk, None);
-    let Err(MinisignError::StreamSetup(msg)) = result else {
-        return Err(format!("expected StreamSetup error, got {result:?}").into());
-    };
-    assert!(msg.contains("prehashed"), "rejection message should mention prehashed: {msg}");
+    assert!(matches!(result, Err(MinisignError::NotPrehashed)), "got {result:?}");
     Ok(())
 }
 

@@ -70,7 +70,7 @@ pub(super) fn staged_package_path(
     format: LinuxPackageFormat,
 ) -> AppResult<PathBuf> {
     let cache = dirs::cache_dir().ok_or_else(|| {
-        AppError::Settings("could not resolve user cache dir for update staging".into())
+        AppError::updater_msg("could not resolve user cache dir for update staging")
     })?;
     let dir = cache.join("Melodia").join("update-staging");
     std::fs::create_dir_all(&dir)?;
@@ -92,7 +92,7 @@ pub(super) fn staged_package_path(
 /// so a file renamed to `.new` fails with error 1620, "invalid package".
 pub(crate) fn staged_msi_path(asset_url: &str) -> AppResult<PathBuf> {
     let cache = dirs::cache_dir().ok_or_else(|| {
-        AppError::Settings("could not resolve user cache dir for update staging".into())
+        AppError::updater_msg("could not resolve user cache dir for update staging")
     })?;
     let dir = cache.join("Melodia").join("update-staging");
     std::fs::create_dir_all(&dir)?;
@@ -191,7 +191,7 @@ pub(super) fn resolve_staged_path(target: &Path) -> AppResult<PathBuf> {
         return Ok(primary);
     }
     let cache = dirs::cache_dir().ok_or_else(|| {
-        AppError::Settings("could not resolve user cache dir for update staging".into())
+        AppError::updater_msg("could not resolve user cache dir for update staging")
     })?;
     let dir = cache.join("Melodia").join("update-staging");
     std::fs::create_dir_all(&dir)?;
@@ -255,7 +255,7 @@ pub(crate) fn read_staged_meta(path: &Path) -> Option<StagedMeta> {
 
 pub(crate) fn write_staged_meta(path: &Path, meta: &StagedMeta) -> AppResult<()> {
     let bytes = serde_json::to_vec(meta)
-        .map_err(|e| AppError::Settings(format!("failed to serialise staging sidecar: {e}")))?;
+        .map_err(|e| AppError::updater("failed to serialise staging sidecar", e))?;
     std::fs::write(path, bytes)?;
     Ok(())
 }

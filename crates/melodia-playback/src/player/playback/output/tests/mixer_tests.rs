@@ -23,7 +23,7 @@ fn device(channels: u16) -> Shape {
 fn voice_at(mixer: &Mixer, index: usize) -> Result<Arc<Voice>, AppError> {
     mixer
         .voice(index)
-        .ok_or_else(|| AppError::Player(format!("a {VOICES}-voice mixer has no voice {index}")))
+        .ok_or_else(|| AppError::player_msg(format!("a {VOICES}-voice mixer has no voice {index}")))
 }
 
 fn tone(level: f32, frames: usize, channels: u16) -> TestSource {
@@ -222,7 +222,7 @@ fn a_clear_issued_during_a_hold_still_lands() -> Result<(), AppError> {
     while !clearing.is_finished() {
         pull.fill(&mut out);
     }
-    clearing.join().map_err(|_| AppError::Player("the clearing thread panicked".to_owned()))?;
+    clearing.join().map_err(|_| AppError::player_msg("the clearing thread panicked"))?;
 
     assert!(voice.is_empty(), "the clear was not serviced during the hold");
     Ok(())

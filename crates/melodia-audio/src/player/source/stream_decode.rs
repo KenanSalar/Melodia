@@ -86,8 +86,8 @@ impl StreamDecoder {
 
         // The length and timebase [`decode::open`] also answers are a file's; a mount states
         // neither, so they come back empty and are dropped here.
-        let opened = decode::open(source, &hint)
-            .map_err(|e| AppError::Player(format!("The station's stream {e}")))?;
+        let opened =
+            decode::open(source, &hint).map_err(|e| AppError::player("The station's stream", e))?;
 
         Ok(Self {
             format: opened.format,

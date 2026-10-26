@@ -95,9 +95,8 @@ pub(super) fn spawn_install(
             // simply offers the same version again.
             Ok(InstallOutcome::Cancelled) => hand_install_back(&weak),
             Err(e) => {
-                let kind = FailureKind::classify(&e);
-                log::warn!("updater: install failed ({kind:?}): {}", describe(&e));
-                abort_install(&weak, &event_tx, format!("{e}"), kind);
+                log::warn!("updater: install failed ({:?}): {}", e.kind, describe(&e));
+                abort_install(&weak, &event_tx, describe(&e), e.kind);
             }
         }
     });
@@ -164,19 +163,21 @@ async fn resolve_asset(
             // Fall back to the cached asset if any — the user
             // already saw an Available toast, so they expect this
             // click to act on whatever they were told about.
-            let kind = FailureKind::classify(&e);
             let Some(cached) = asset_cache::snapshot() else {
                 log::warn!(
-                    "updater: re-fetch before install failed ({kind:?}) and \
+                    "updater: re-fetch before install failed ({:?}) and \
                      no cached asset available: {}",
+                    e.kind,
                     describe(&e)
                 );
-                abort_install(weak, event_tx, format!("re-fetch before install failed: {e}"), kind);
+                let reason = format!("re-fetch before install failed: {}", describe(&e));
+                abort_install(weak, event_tx, reason, e.kind);
                 return None;
             };
             log::warn!(
-                "updater: re-fetch before install failed ({kind:?}); \
+                "updater: re-fetch before install failed ({:?}); \
                  falling back to cached asset: {}",
+                e.kind,
                 describe(&e)
             );
             Some(cached)

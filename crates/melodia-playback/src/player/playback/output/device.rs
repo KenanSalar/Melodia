@@ -103,7 +103,7 @@ fn device_name(device: &cpal::Device) -> Option<String> {
 pub fn default_target(host: &cpal::Host) -> Result<Target, AppError> {
     let device = host
         .default_output_device()
-        .ok_or_else(|| AppError::Player("No audio output device".to_owned()))?;
+        .ok_or_else(|| AppError::player_msg("No audio output device"))?;
     target_of(device)
 }
 
@@ -304,7 +304,7 @@ pub fn open(
     }
     // The first failure, not the last: it is the one about the config the device itself named at
     // the block we wanted, and the rest are about configs and sizes nobody asked for.
-    Err(first.unwrap_or_else(|| AppError::Player("The output device offered no config".to_owned())))
+    Err(first.unwrap_or_else(|| AppError::player_msg("The output device offered no config")))
 }
 
 /// Every config the device reports, best first by cpal's own ordering, which is what rodio walked.
@@ -410,7 +410,7 @@ fn shape_of(supported: &cpal::SupportedStreamConfig) -> Result<Shape, AppError> 
     ChannelCount::new(supported.channels())
         .zip(SampleRate::new(supported.sample_rate()))
         .map(|(channels, rate)| Shape { channels, rate })
-        .ok_or_else(|| AppError::Player("Output config has no channels or no rate".to_owned()))
+        .ok_or_else(|| AppError::player_msg("Output config has no channels or no rate"))
 }
 
 /// What one rung asks the host to hand the callback at a time.
@@ -501,7 +501,7 @@ fn build_stream(
                 $(cpal::SampleFormat::$variant => {
                     output_stream::<$ty>(device, config, staging_samples, feed)
                 })+
-                other => Err(AppError::Player(format!("Unsupported sample format {other}"))),
+                other => Err(AppError::player_msg(format!("Unsupported sample format {other}"))),
             }
         };
     }

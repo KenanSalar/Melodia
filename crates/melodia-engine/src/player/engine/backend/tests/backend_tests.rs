@@ -120,7 +120,7 @@ async fn a_play_for_the_wrong_session_refuses_without_taking_the_stage() -> Resu
 
     let refused = engine.play_stream(ABANDONED, 1.0);
 
-    assert!(matches!(refused, Err(AppError::Player(_))), "got {refused:?}");
+    assert!(matches!(refused, Err(AppError::Player { .. })), "got {refused:?}");
     assert!(watching.upgrade().is_some(), "the refusal took the stage down with it");
     Ok(())
 }

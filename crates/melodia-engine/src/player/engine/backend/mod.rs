@@ -412,7 +412,7 @@ impl PlaybackEngine {
         drop(staged);
 
         let Some(prepared) = claimed else {
-            return Err(AppError::Player("No radio stream is staged for this station".to_owned()));
+            return Err(AppError::player_msg("No radio stream is staged for this station"));
         };
         let (source, shared) = prepared.into_parts();
 

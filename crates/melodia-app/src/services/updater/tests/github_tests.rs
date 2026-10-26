@@ -9,10 +9,11 @@
 //! the cross-key refusal below establishes, since a manifest bearing a perfectly valid signature
 //! from the wrong key is refused exactly because the check runs.
 
-use melodia_core::error::AppError;
+use melodia_core::error::describe;
 use melodia_testkit::http::{TestResponse, TestServer};
 
 use super::{FetchOutcome, fetch_latest_manifest};
+use crate::services::updater::{FailureKind, UpdateResult};
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -40,14 +41,14 @@ fn server_with_signature(
     })
 }
 
-async fn fetch(server: &TestServer) -> Result<FetchOutcome, AppError> {
+async fn fetch(server: &TestServer) -> UpdateResult<FetchOutcome> {
     fetch_latest_manifest(&reqwest::Client::new(), &server.base_url(), None).await
 }
 
-fn refusal(outcome: Result<FetchOutcome, AppError>) -> Result<String, Box<dyn std::error::Error>> {
+fn refusal(outcome: UpdateResult<FetchOutcome>) -> Result<String, Box<dyn std::error::Error>> {
     match outcome {
-        Err(AppError::Validation(msg)) => Ok(msg),
-        other => Err(format!("expected a Validation refusal, got {other:?}").into()),
+        Err(failure) if failure.kind == FailureKind::Signature => Ok(describe(&failure)),
+        other => Err(format!("expected a signature refusal, got {other:?}").into()),
     }
 }
 
@@ -104,7 +105,10 @@ async fn an_unsigned_malformed_body_reports_the_signature_not_the_parse() -> Tes
 async fn a_failed_manifest_response_is_a_network_error() -> TestResult {
     let server = TestServer::start(|_| TestResponse::status(503))?;
     let outcome = fetch(&server).await;
-    assert!(matches!(outcome, Err(AppError::Network { .. })), "got {outcome:?}");
+    assert!(
+        matches!(&outcome, Err(failure) if failure.kind == FailureKind::Network),
+        "got {outcome:?}"
+    );
     Ok(())
 }
 

@@ -3,7 +3,7 @@
 use slint::Weak;
 use tokio::sync::watch;
 
-use melodia_app::services::updater::{FailureKind, PanelPaint, UpdaterEvent, run_check};
+use melodia_app::services::updater::{PanelPaint, UpdaterEvent, run_check};
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::AppWindow;
@@ -27,9 +27,8 @@ pub(super) fn spawn_manual_check(
         match checked {
             Ok(finding) => finding.deliver(&paint, &event_tx),
             Err(e) => {
-                let kind = FailureKind::classify(&e);
-                log::warn!("updater: manual check failed ({kind:?}): {}", describe(&e));
-                report_failure(&weak, &event_tx, format!("{e}"), kind);
+                log::warn!("updater: manual check failed ({:?}): {}", e.kind, describe(&e));
+                report_failure(&weak, &event_tx, describe(&e), e.kind);
             }
         }
     });

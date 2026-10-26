@@ -29,9 +29,9 @@ use melodia_app::state::AppState;
 use melodia_platform::services::platform::install_kind::is_system_install;
 use melodia_ui::{AppWindow, MelodiaUpdater, NotificationKind, NotificationVariant, Settings};
 
-// (FailureKind classification is performed at the send site in
-// `ui::callbacks::updater`; here we just hand the discriminator string
-// to Slint so the @tr() table can pick the right friendly message.)
+// (The updater decides a failure's `FailureKind` where it makes the error;
+// here we just hand the discriminator string to Slint so the @tr() table
+// can pick the right friendly message.)
 
 /// Seed the `Updater` global at startup. Idempotent — safe to call
 /// before any user interaction.

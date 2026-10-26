@@ -1,4 +1,4 @@
-/// Boxed underlying cause for the I/O-boundary variants. `Option` because some
+/// Boxed underlying cause for the struct variants. `Option` because some
 /// of these errors are constructed from a plain message with no wrapped error
 /// (e.g. an HTTP status check that "fails" without an underlying transport
 /// error). thiserror's `#[source]` returns `None` for a `None` here, so the
@@ -33,8 +33,12 @@ pub enum AppError {
     #[error("Not found: {0}")]
     NotFound(String),
 
-    #[error("Player error: {0}")]
-    Player(String),
+    #[error("Player error: {msg}")]
+    Player {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
     #[error("Queue error: {0}")]
     Queue(String),
@@ -54,6 +58,13 @@ pub enum AppError {
 
     #[error("Network error: {msg}")]
     Network {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
+
+    #[error("Updater error: {msg}")]
+    Updater {
         msg: String,
         #[source]
         source: Option<BoxedSource>,
@@ -136,6 +147,26 @@ impl AppError {
     /// that has no underlying transport error).
     pub fn network_msg(msg: impl Into<String>) -> Self {
         Self::Network { msg: msg.into(), source: None }
+    }
+
+    /// Player error wrapping an underlying cause (a decoder that refused the source).
+    pub fn player(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+        Self::Player { msg: msg.into(), source: Some(source.into()) }
+    }
+
+    /// Player error from a message only.
+    pub fn player_msg(msg: impl Into<String>) -> Self {
+        Self::Player { msg: msg.into(), source: None }
+    }
+
+    /// Updater error wrapping an underlying cause (minisign, serde, semver, a task join).
+    pub fn updater(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+        Self::Updater { msg: msg.into(), source: Some(source.into()) }
+    }
+
+    /// Updater error from a message only, such as an installer's exit code.
+    pub fn updater_msg(msg: impl Into<String>) -> Self {
+        Self::Updater { msg: msg.into(), source: None }
     }
 }
 

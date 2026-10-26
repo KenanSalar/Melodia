@@ -174,26 +174,20 @@ pub(super) struct Opened {
     pub total_duration: Option<Duration>,
 }
 
-/// Why a source could not be opened, phrased as the tail of a sentence naming it — so a caller
-/// says "`/music/x.flac` has no audio" or "The station's stream has no audio" over one message.
+/// Why a source could not be opened, phrased to follow the source's name, so a caller reports
+/// "`/music/x.flac`: has no audio" or "The station's stream: has no audio" over one message.
+#[derive(Debug, thiserror::Error)]
 pub(super) enum OpenError {
-    Unreadable(SymphoniaError),
+    #[error("could not be read: {0}")]
+    Unreadable(#[source] SymphoniaError),
+    #[error("has no audio")]
     NoAudio,
+    #[error("names no audio codec")]
     NoCodec,
-    Undecodable(SymphoniaError),
+    #[error("could not be decoded: {0}")]
+    Undecodable(#[source] SymphoniaError),
+    #[error("decoded to nothing")]
     Empty,
-}
-
-impl std::fmt::Display for OpenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unreadable(e) => write!(f, "could not be read: {e}"),
-            Self::NoAudio => f.write_str("has no audio"),
-            Self::NoCodec => f.write_str("names no audio codec"),
-            Self::Undecodable(e) => write!(f, "could not be decoded: {e}"),
-            Self::Empty => f.write_str("decoded to nothing"),
-        }
-    }
 }
 
 /// Probe `source`, build a decoder for its audio track, and decode enough of it to know the shape

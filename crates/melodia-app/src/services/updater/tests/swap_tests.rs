@@ -121,7 +121,7 @@ fn a_failed_second_rename_puts_the_live_binary_back() -> TestResult {
 }
 
 /// The restore is best-effort and logged; the error the caller sees has to stay the one that
-/// actually stopped the install, since that is what `FailureKind::classify` reads.
+/// actually stopped the install, since its variant is what picks the toast.
 #[cfg(target_os = "linux")]
 #[test]
 fn the_reported_error_is_the_rename_failure_not_the_rollback() -> TestResult {
@@ -155,7 +155,7 @@ fn a_dismissed_polkit_prompt_is_a_cancel() {
 fn a_polkit_refusal_is_a_failure_carrying_pkexecs_reason() -> TestResult {
     let outcome = pkexec_failure("pkexec mv", 127, b"Not authorized\n");
 
-    let Err(melodia_core::error::AppError::Settings(msg)) = outcome else {
+    let Err(melodia_core::error::AppError::Updater { msg, .. }) = outcome else {
         return Err(format!("expected a refusal, got {outcome:?}").into());
     };
     assert!(msg.contains("authorization was refused"), "{msg}");
@@ -168,7 +168,7 @@ fn a_polkit_refusal_is_a_failure_carrying_pkexecs_reason() -> TestResult {
 fn any_other_exit_is_the_commands_own_failure() -> TestResult {
     let outcome = pkexec_failure("dnf5 install", 1, b"No match for argument\n");
 
-    let Err(melodia_core::error::AppError::Settings(msg)) = outcome else {
+    let Err(melodia_core::error::AppError::Updater { msg, .. }) = outcome else {
         return Err(format!("expected the command's failure, got {outcome:?}").into());
     };
     assert!(msg.contains("dnf5 install exited 1"), "{msg}");

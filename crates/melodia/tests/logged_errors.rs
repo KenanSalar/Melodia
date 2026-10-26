@@ -1,6 +1,6 @@
 //! Every error a `log::` call prints goes through `error::describe`.
 //!
-//! The four I/O-boundary `AppError` variants print their operation and keep the reason on
+//! The struct `AppError` variants print their operation and keep the reason on
 //! `.source()`, so a bare `{e}` reports a full disk and a permissions failure in the same words,
 //! and any other error loses the chain below it. Nothing fails when the rule is broken, and it can
 //! be broken from any file, so every crate is walked for it.

@@ -11,6 +11,7 @@ use tempfile::tempdir;
 
 use super::staging::{InstallMethod, resolve_install_method, sidecar_meta_path, staged_path};
 use super::{download_and_install_to, old_path};
+use crate::services::updater::FailureKind;
 use crate::services::updater::manifest::PlatformAsset;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -47,9 +48,11 @@ async fn a_signature_that_does_not_verify_leaves_the_live_binary_untouched() -> 
         download_and_install_to(&reqwest::Client::new(), &asset, "0.3.0", target.clone(), |_| {})
             .await;
 
-    let Err(melodia_core::error::AppError::Validation(msg)) = outcome else {
+    let Err(failure) = outcome else {
         return Err(format!("expected a signature refusal, got {outcome:?}").into());
     };
+    assert_eq!(failure.kind, FailureKind::Signature, "{failure:?}");
+    let msg = melodia_core::error::describe(&failure);
     assert!(msg.contains("signature verification failed"), "{msg}");
 
     assert_eq!(std::fs::read(&target)?, LIVE, "the live binary must not have been replaced");

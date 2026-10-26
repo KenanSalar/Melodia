@@ -9,17 +9,21 @@
 //! Verification ordering: minisign signature over the manifest body
 //! is checked **before** `serde_json::from_str`. A missing `.minisig`,
 //! an invalid signature, or a trusted-comment lacking `manifest=true`
-//! all return [`AppError::Validation`] from this layer — the caller
-//! treats them the same way as a malformed JSON body. Failing closed is
-//! the only way the signature is a real security boundary; a fail-open
-//! posture would let a network attacker strip the `.minisig` to bypass
-//! verification.
+//! all refuse the manifest as a signature failure, and a body that verifies
+//! but won't parse is refused as a parse failure, each naming its
+//! [`FailureKind`] here rather than leaving the caller to guess it. Failing
+//! closed is the only way the signature is a real security boundary; a
+//! fail-open posture would let a network attacker strip the `.minisig` to
+//! bypass verification.
+//!
+//! [`FailureKind`]: super::FailureKind
 
 use reqwest::StatusCode;
 use reqwest::header::{ETAG, HeaderValue, IF_NONE_MATCH};
 
-use melodia_core::error::{AppError, AppResult};
+use melodia_core::error::AppError;
 
+use super::event::{UpdateFailure, UpdateResult};
 use super::manifest::LatestManifest;
 use super::minisign;
 
@@ -49,7 +53,7 @@ pub async fn fetch_latest_manifest(
     http: &reqwest::Client,
     base_url: &str,
     cached_etag: Option<&str>,
-) -> AppResult<FetchOutcome> {
+) -> UpdateResult<FetchOutcome> {
     let manifest_url = format!("{base_url}/latest.json");
     let signature_url = format!("{manifest_url}.minisig");
 
@@ -70,7 +74,8 @@ pub async fn fetch_latest_manifest(
         return Err(AppError::network_msg(format!(
             "fetch latest.json returned HTTP {}",
             resp.status()
-        )));
+        ))
+        .into());
     }
 
     let etag = resp.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(str::to_owned);
@@ -90,10 +95,10 @@ pub async fn fetch_latest_manifest(
         .await
         .map_err(|e| AppError::network("fetch latest.json.minisig failed", e))?;
     if !sig_resp.status().is_success() {
-        return Err(AppError::Validation(format!(
+        return Err(UpdateFailure::signature(AppError::updater_msg(format!(
             "manifest signature missing or unreachable: HTTP {} on latest.json.minisig",
             sig_resp.status()
-        )));
+        ))));
     }
     let sig_bytes = melodia_net::services::net::read_capped(
         sig_resp,
@@ -104,7 +109,7 @@ pub async fn fetch_latest_manifest(
     let sig_text = String::from_utf8_lossy(&sig_bytes);
 
     let pubkey = minisign::embedded_pubkey()
-        .map_err(|e| AppError::Validation(format!("embedded updater pubkey is invalid: {e}")))?;
+        .map_err(|e| AppError::updater("embedded updater pubkey is invalid", e))?;
     // Cross-check `manifest=true` to keep an artifact .minisig from
     // being swapped into this slot (both are valid minisign blobs signed
     // with the same key; only the trusted-comment domain separates
@@ -112,15 +117,15 @@ pub async fn fetch_latest_manifest(
     // of the version string, so there's nothing meaningful to assert
     // here until after we parse it.
     minisign::verify_manifest_bytes(&body, &sig_text, &pubkey, None, Some("true")).map_err(
-        |e| AppError::Validation(format!("manifest signature verification failed: {e}")),
+        |e| {
+            UpdateFailure::signature(AppError::updater("manifest signature verification failed", e))
+        },
     )?;
 
-    let manifest: LatestManifest = serde_json::from_slice(&body).map_err(|e| {
-        AppError::Validation(format!(
-            "parse latest.json failed: {e}; body: {}",
-            String::from_utf8_lossy(&body)
-        ))
-    })?;
+    // The body stays out of the error: having verified, it is a manifest we published, and the
+    // release it came from still carries it.
+    let manifest: LatestManifest = serde_json::from_slice(&body)
+        .map_err(|e| UpdateFailure::parse(AppError::updater("parse latest.json failed", e)))?;
 
     Ok(FetchOutcome::Fresh { manifest, etag })
 }

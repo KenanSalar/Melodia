@@ -120,7 +120,7 @@ fn display_all_string_variants() {
     let cases: Vec<(AppError, &str)> = vec![
         (AppError::scanner_msg("s"), "Scanner error: s"),
         (AppError::NotFound("n".into()), "Not found: n"),
-        (AppError::Player("p".into()), "Player error: p"),
+        (AppError::player_msg("p"), "Player error: p"),
         (AppError::Queue("q".into()), "Queue error: q"),
         (AppError::Settings("st".into()), "Settings error: st"),
         (AppError::Window("w".into()), "Window error: w"),
