@@ -125,8 +125,8 @@ impl AppError {
     /// `Io` naming the operation that failed beside its typed cause. The home for a cause no
     /// category fits, such as a task join.
     ///
-    /// Both halves are printed, so text built from `{e}`, such as a toast's detail, still says
-    /// why, and [`describe`] skips the repeat on its way down the chain.
+    /// Both halves are printed, so a bare `{e}` still says why, and [`describe`] skips the repeat
+    /// on its way down the chain.
     pub fn io(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
         Self::Io(std::io::Error::other(Context { msg: msg.into(), source: source.into() }))
     }
@@ -224,7 +224,7 @@ impl AppError {
         Self::Window { msg: msg.into(), source: None }
     }
 
-    /// Validation error wrapping an underlying cause (a path that won't resolve).
+    /// Validation error wrapping an underlying cause.
     pub fn validation(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
         Self::Validation { msg: msg.into(), source: Some(source.into()) }
     }

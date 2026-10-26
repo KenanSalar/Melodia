@@ -128,7 +128,7 @@ pub async fn add_folder_and_scan(state: &AppState, ui: &Weak<AppWindow>, path: S
         // is on screen by the time the scan starts.
         Ok(folder) => library::scan::start(state, folder.id, OnStop::Withdraw),
         Err(AppError::Validation { msg, .. }) => show_error(ui, "Cannot add folder", msg),
-        Err(AppError::Io(io_error)) => show_error(ui, "Cannot add folder", io_error.to_string()),
+        Err(AppError::Io(io_error)) => show_error(ui, "Cannot add folder", describe(&io_error)),
         Err(e) => show_error(ui, "Cannot add folder", describe(&e)),
     }
 }
