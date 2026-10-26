@@ -82,7 +82,7 @@ pub async fn add_custom_station(
         codec: "",
         tags: "",
     }) {
-        return Err(AppError::Validation("This station can't be added".to_owned()));
+        return Err(AppError::validation_msg("This station can't be added"));
     }
 
     if let Some(id) = merged_onto_existing(&state.db, stream_url).await? {
@@ -191,7 +191,7 @@ pub(super) fn website_url(website: &str) -> Result<Option<String>, AppError> {
         return Ok(None);
     }
     melodia_net::services::net::http_url(website).map(|url| Some(url.to_string())).ok_or_else(
-        || AppError::Validation("A station website must be an http:// or https:// address".into()),
+        || AppError::validation_msg("A station website must be an http:// or https:// address"),
     )
 }
 
@@ -207,7 +207,7 @@ pub(super) fn ensure_editable(station: &radio::RadioStation) -> Result<(), AppEr
     if station.station_uuid.is_none() {
         return Ok(());
     }
-    Err(AppError::Validation("Only a station you added by URL can be edited".to_owned()))
+    Err(AppError::validation_msg("Only a station you added by URL can be edited"))
 }
 
 /// Rewrite a hand-typed station's name and URL.

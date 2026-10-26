@@ -619,7 +619,7 @@ fn land_every_record(fx: &ActionsFixture, paths: &[&str]) {
 /// The start the transition last owed, as the window task finds it.
 fn owed(fx: &ActionsFixture) -> Result<AwaitedStart, AppError> {
     (*fx.sinks.awaited_start.borrow())
-        .ok_or_else(|| AppError::Validation("no transition owed a start".into()))
+        .ok_or_else(|| AppError::validation_msg("no transition owed a start"))
 }
 
 /// The fixture's two files queued and the first playing, then a Next onto the second, whose record

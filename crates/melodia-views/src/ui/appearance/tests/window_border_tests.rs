@@ -92,7 +92,7 @@ fn an_id_the_theme_does_not_have_reads_as_system() {
 #[test]
 fn the_accents_sit_in_the_themes_order() -> Result<(), AppError> {
     let (Some(first), Some(last)) = (theme().accents.first(), theme().accents.last()) else {
-        return Err(AppError::NotFound("the fixture theme ships no accents".to_owned()));
+        return Err(AppError::not_found_msg("the fixture theme ships no accents"));
     };
 
     assert_eq!(accent_slot(theme(), first.id), Some(0));
@@ -103,7 +103,7 @@ fn the_accents_sit_in_the_themes_order() -> Result<(), AppError> {
 #[test]
 fn clicking_an_accent_slot_picks_that_accent() -> Result<(), AppError> {
     let (Some(first), Some(last)) = (theme().accents.first(), theme().accents.last()) else {
-        return Err(AppError::NotFound("the fixture theme ships no accents".to_owned()));
+        return Err(AppError::not_found_msg("the fixture theme ships no accents"));
     };
 
     assert_eq!(accent_at(theme(), 0), Some(first.id));
@@ -128,8 +128,8 @@ fn no_border_row_greys_out_under_the_native_titlebar() -> Result<(), AppError> {
         row_body(&section, TINT_ROW),
         row_body(&section, COLOR_ROW),
     ) else {
-        return Err(AppError::NotFound(
-            "a window border row is no longer mounted where this pin looks".to_owned(),
+        return Err(AppError::not_found_msg(
+            "a window border row is no longer mounted where this pin looks",
         ));
     };
 

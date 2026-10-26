@@ -25,7 +25,7 @@ fn create_test_files(dir: &Path, names: &[&str]) -> Result<(), AppError> {
 fn walk(dir: &Path) -> Result<Vec<PathBuf>, AppError> {
     collect_media_files(dir, &Unobserved)
         .map(|walk| walk.files)
-        .ok_or_else(|| AppError::Validation("a walk nothing cancelled came back stopped".into()))
+        .ok_or_else(|| AppError::validation_msg("a walk nothing cancelled came back stopped"))
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn scan_files_parallel_keeps_a_filename_row_for_unparseable_tags() -> Result<(),
     let result = scan_files_parallel(&files, &artwork_dir, &test_cover_cache(), &Unobserved);
 
     let [scanned] = result.as_slice() else {
-        return Err(AppError::Validation("the unparseable file produced no row".into()));
+        return Err(AppError::validation_msg("the unparseable file produced no row"));
     };
     assert_eq!(scanned.metadata.title, "bad");
     assert_eq!(scanned.metadata.duration_ms, 0);
@@ -260,7 +260,7 @@ fn the_walk_counts_the_audio_files_it_finds_and_nothing_else() -> Result<(), App
 
     collect_media_files(tmp.path(), &log);
 
-    let counts = log.0.into_inner().map_err(|_| AppError::Validation("log poisoned".into()))?;
+    let counts = log.0.into_inner().map_err(|_| AppError::validation_msg("log poisoned"))?;
     assert_eq!(counts, [1, 2, 3]);
     Ok(())
 }

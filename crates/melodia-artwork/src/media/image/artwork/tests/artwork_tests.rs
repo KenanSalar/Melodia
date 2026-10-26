@@ -32,7 +32,7 @@ fn solid_source(
     let path = dir.join(name);
     image::RgbImage::from_pixel(width, height, image::Rgb(rgb))
         .save(&path)
-        .map_err(|e| AppError::Validation(format!("write {name}: {e}")))?;
+        .map_err(|e| AppError::validation(format!("write {name}"), e))?;
     Ok(path)
 }
 
@@ -84,7 +84,7 @@ fn a_source_inside_the_bounds_is_stored_byte_identical() -> Result<(), AppError>
     let bytes = std::fs::read(&source)?;
 
     let stored = store_image(&bytes, "png", tmp.path())
-        .ok_or_else(|| AppError::Validation("store_image returned None".into()))?;
+        .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
 
     assert_eq!(std::fs::read(&stored)?, bytes, "an in-bounds source must not be re-encoded");
     Ok(())
@@ -117,15 +117,15 @@ fn an_oversized_source_is_shrunk_and_named_after_what_was_written() -> Result<()
         image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
     })
     .save(&source)
-    .map_err(|e| AppError::Validation(format!("write big.png: {e}")))?;
+    .map_err(|e| AppError::validation("write big.png", e))?;
     let bytes = std::fs::read(&source)?;
 
     let stored = store_image(&bytes, "png", tmp.path())
-        .ok_or_else(|| AppError::Validation("store_image returned None".into()))?;
+        .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
     let written = std::fs::read(&stored)?;
 
     let (width, height) = image_decode::memory_dimensions(&written, MAX_SOURCE_DIM)
-        .ok_or_else(|| AppError::Validation("stored file will not decode".into()))?;
+        .ok_or_else(|| AppError::validation_msg("stored file will not decode"))?;
     assert!(
         width <= STORE_MAX_DIM && height <= STORE_MAX_DIM,
         "stored at {width}x{height}, past the cap"
@@ -135,7 +135,7 @@ fn an_oversized_source_is_shrunk_and_named_after_what_was_written() -> Result<()
     let name = std::path::Path::new(&stored)
         .file_name()
         .and_then(|n| n.to_str())
-        .ok_or_else(|| AppError::Validation("stored path has no file name".into()))?;
+        .ok_or_else(|| AppError::validation_msg("stored path has no file name"))?;
     assert_eq!(
         name,
         stored_name(&compute_hash(&written), "jpg"),
@@ -161,10 +161,10 @@ fn a_source_that_would_grow_under_re_encode_is_left_alone() -> Result<(), AppErr
     let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cheap, 20);
     image::DynamicImage::ImageRgb8(noisy)
         .write_with_encoder(encoder)
-        .map_err(|e| AppError::Validation(format!("encode cheap jpeg: {e}")))?;
+        .map_err(|e| AppError::validation("encode cheap jpeg", e))?;
 
     let stored = store_image(&cheap, "jpg", tmp.path())
-        .ok_or_else(|| AppError::Validation("store_image returned None".into()))?;
+        .ok_or_else(|| AppError::validation_msg("store_image returned None"))?;
 
     assert_eq!(
         std::fs::read(&stored)?,
@@ -202,7 +202,7 @@ fn find_external_cover_found() -> Result<(), AppError> {
     let track_path = album_dir.join("track.mp3");
 
     let cover = find_external_cover(&track_path, &cache)
-        .ok_or_else(|| AppError::Validation("expected cover.jpg to be found".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected cover.jpg to be found"))?;
     assert!(cover.ends_with("cover.jpg"));
     Ok(())
 }
@@ -245,14 +245,14 @@ fn cache_image_file_basic() -> Result<(), AppError> {
     let source = solid_source(tmp.path(), "cover.jpg", [12, 34, 56], 64, 64)?;
 
     let cached = cache_image_file(&source, &artwork_dir)
-        .ok_or_else(|| AppError::Validation("cache_image_file returned None".into()))?;
+        .ok_or_else(|| AppError::validation_msg("cache_image_file returned None"))?;
     let cached_path = std::path::Path::new(&cached);
     assert!(cached_path.exists());
     // Filename should be hash.jpg
     let name = cached_path
         .file_name()
         .and_then(|n| n.to_str())
-        .ok_or_else(|| AppError::Validation("cached path missing file name".into()))?;
+        .ok_or_else(|| AppError::validation_msg("cached path missing file name"))?;
     assert!(
         std::path::Path::new(name).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("jpg"))
     );
@@ -270,9 +270,9 @@ fn cache_image_file_dedup() -> Result<(), AppError> {
     let source2 = solid_source(tmp.path(), "b.png", [7, 8, 9], 64, 64)?;
 
     let r1 = cache_image_file(&source1, &artwork_dir)
-        .ok_or_else(|| AppError::Validation("expected cached path 1".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected cached path 1"))?;
     let r2 = cache_image_file(&source2, &artwork_dir)
-        .ok_or_else(|| AppError::Validation("expected cached path 2".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected cached path 2"))?;
     assert_eq!(r1, r2); // same content → same cached file
     Ok(())
 }
@@ -324,9 +324,9 @@ fn find_and_cache_artwork_memoizes_per_cover() -> Result<(), AppError> {
     // Two tracks in the same directory resolve to the same cover file and
     // must share one memo entry (one read+hash, not one per track).
     let first = find_and_cache_artwork(&album_dir.join("a.mp3"), None, &artwork_dir, &cache)
-        .ok_or_else(|| AppError::Validation("expected cached artwork path".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected cached artwork path"))?;
     let second = find_and_cache_artwork(&album_dir.join("b.mp3"), None, &artwork_dir, &cache)
-        .ok_or_else(|| AppError::Validation("expected cached artwork path".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected cached artwork path"))?;
 
     assert_eq!(first, second);
     assert_eq!(cache.cover_to_cached.lock().len(), 1);
@@ -362,7 +362,7 @@ fn find_external_cover_alternate_names() -> Result<(), AppError> {
     let track_path = album_dir.join("track.flac");
 
     let cover = find_external_cover(&track_path, &cache)
-        .ok_or_else(|| AppError::Validation("expected folder.jpg to be found".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected folder.jpg to be found"))?;
     let path_str = cover.to_string_lossy().to_string();
     assert!(path_str.contains("folder.jpg"));
     Ok(())
@@ -389,10 +389,10 @@ fn tag_with_oversized_cover() -> Result<lofty::tag::Tag, AppError> {
         image::Rgb([(x % 251) as u8, (y % 241) as u8, ((x * y) % 239) as u8])
     }))
     .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
-    .map_err(|e| AppError::Validation(format!("encode png: {e}")))?;
+    .map_err(|e| AppError::validation("encode png", e))?;
 
     let picture = lofty::picture::Picture::from_reader(&mut std::io::Cursor::new(&png))
-        .map_err(|e| AppError::Validation(format!("read picture: {e}")))?;
+        .map_err(|e| AppError::validation("read picture", e))?;
     let mut tag = lofty::tag::Tag::new(lofty::tag::TagType::Id3v2);
     tag.push_picture(picture);
     Ok(tag)
@@ -417,9 +417,9 @@ fn an_embedded_cover_is_stored_once_however_many_tracks_carry_it() -> Result<(),
     let tag = tag_with_oversized_cover()?;
     let cache: CoverCache = new_cover_cache();
     let first = extract_and_cache_artwork(&tag, &artwork_dir, &cache)
-        .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected a stored cover"))?;
     let second = extract_and_cache_artwork(&tag, &unused_dir, &cache)
-        .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected a stored cover"))?;
 
     assert_eq!(second, first);
     assert!(
@@ -441,11 +441,11 @@ fn a_hit_whose_file_the_sweep_retired_is_stored_again() -> Result<(), AppError> 
     let tag = tag_with_oversized_cover()?;
     let cache: CoverCache = new_cover_cache();
     let first = extract_and_cache_artwork(&tag, &artwork_dir, &cache)
-        .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected a stored cover"))?;
 
     std::fs::remove_file(&first)?;
     let second = extract_and_cache_artwork(&tag, &artwork_dir, &cache)
-        .ok_or_else(|| AppError::Validation("expected a stored cover".into()))?;
+        .ok_or_else(|| AppError::validation_msg("expected a stored cover"))?;
 
     assert_eq!(second, first);
     assert!(Path::new(&second).exists(), "the memo handed back a path the sweep had unlinked");
@@ -487,7 +487,7 @@ fn each_layout_puts_every_source_in_its_own_rect() -> Result<(), AppError> {
 
     for (count, points) in (1..=4).zip(SAMPLES) {
         let canvas = compose_cover(&sources[..count], TEST_SIDE)
-            .ok_or_else(|| AppError::Validation(format!("compose of {count} returned None")))?;
+            .ok_or_else(|| AppError::validation_msg(format!("compose of {count} returned None")))?;
         assert_eq!((canvas.width(), canvas.height()), (TEST_SIDE, TEST_SIDE));
 
         for (slot, &(x, y)) in points.iter().enumerate() {
@@ -536,7 +536,7 @@ fn an_unreadable_source_drops_out_of_the_collage() -> Result<(), AppError> {
     std::fs::write(&broken, b"not an image")?;
 
     let canvas = compose_cover(&[good, broken.clone()], TEST_SIDE)
-        .ok_or_else(|| AppError::Validation("a readable source must still compose".into()))?;
+        .ok_or_else(|| AppError::validation_msg("a readable source must still compose"))?;
     // The 1-up layout rather than the 2-up: the survivor takes the half the broken source would
     // have had, which is what separates this from painting a blank quarter.
     for x in [TEST_SIDE / 4, TEST_SIDE * 3 / 4] {
@@ -561,7 +561,7 @@ fn a_source_past_the_decode_cap_is_refused() -> Result<(), AppError> {
     // Beside a readable source the refusal is just a source that won't decode, so it drops out
     // like any other — the guard still holds, the green never reaching the canvas.
     let canvas = compose_cover(&[ok, over], TEST_SIDE)
-        .ok_or_else(|| AppError::Validation("the readable source must still compose".into()))?;
+        .ok_or_else(|| AppError::validation_msg("the readable source must still compose"))?;
     for x in [TEST_SIDE / 4, TEST_SIDE * 3 / 4] {
         assert_eq!(canvas.get_pixel(x, TEST_SIDE / 2).0, [255, 0, 0], "at x={x}");
     }

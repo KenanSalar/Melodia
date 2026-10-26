@@ -9,7 +9,7 @@ const TRACK: &str = "/music/Artist/Album/01 Song.mp3";
 fn backdate(path: &Path, by: Duration) -> Result<(), AppError> {
     let when = SystemTime::now()
         .checked_sub(by)
-        .ok_or_else(|| AppError::Validation("clock predates the window".into()))?;
+        .ok_or_else(|| AppError::validation_msg("clock predates the window"))?;
     std::fs::File::options().write(true).open(path)?.set_modified(when)?;
     Ok(())
 }
@@ -28,7 +28,7 @@ fn a_sheet_round_trips_with_its_timings() -> Result<(), AppError> {
 
     let found = read(tmp.path(), TRACK);
     let Some(LyricsOutcome::Sheet(sheet)) = found else {
-        return Err(AppError::Validation("expected a sheet".into()));
+        return Err(AppError::validation_msg("expected a sheet"));
     };
     assert_eq!(sheet.lines.len(), 2);
     assert!(sheet.is_synced(), "a timed sheet must come back timed, or the panel stops following");
@@ -42,7 +42,7 @@ fn a_stored_sheet_is_marked_as_having_come_from_the_directory() -> Result<(), Ap
 
     let found = read(tmp.path(), TRACK);
     let Some(LyricsOutcome::Sheet(sheet)) = found else {
-        return Err(AppError::Validation("expected a sheet".into()));
+        return Err(AppError::validation_msg("expected a sheet"));
     };
     assert_eq!(sheet.source, LyricsSource::Online);
     Ok(())
@@ -265,7 +265,7 @@ fn a_miss_stamped_in_the_future_is_treated_as_spent() -> Result<(), AppError> {
     let marker = entry(tmp.path(), &key(TRACK), ABSENT_EXT);
     let ahead = SystemTime::now()
         .checked_add(Duration::from_hours(24))
-        .ok_or_else(|| AppError::Validation("clock cannot reach forward".into()))?;
+        .ok_or_else(|| AppError::validation_msg("clock cannot reach forward"))?;
     std::fs::File::options().write(true).open(&marker)?.set_modified(ahead)?;
 
     assert!(read(tmp.path(), TRACK).is_none());

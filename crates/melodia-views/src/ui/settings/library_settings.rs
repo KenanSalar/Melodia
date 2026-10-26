@@ -127,7 +127,7 @@ pub async fn add_folder_and_scan(state: &AppState, ui: &Weak<AppWindow>, path: S
         // The bump inside `add_folder` already drove the folder-list subscriber, so the new row
         // is on screen by the time the scan starts.
         Ok(folder) => library::scan::start(state, folder.id, OnStop::Withdraw),
-        Err(AppError::Validation(msg)) => show_error(ui, "Cannot add folder", msg),
+        Err(AppError::Validation { msg, .. }) => show_error(ui, "Cannot add folder", msg),
         Err(AppError::Io(io_error)) => show_error(ui, "Cannot add folder", io_error.to_string()),
         Err(e) => show_error(ui, "Cannot add folder", e.to_string()),
     }

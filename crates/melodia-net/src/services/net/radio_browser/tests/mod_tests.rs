@@ -150,11 +150,11 @@ async fn an_id_that_is_not_a_uuid_never_reaches_the_directory() {
 
     for crafted in ["../../json/servers", "uuid/../vote", "a b", ""] {
         assert!(
-            matches!(station_by_uuid(&client, crafted).await, Err(AppError::Validation(_))),
+            matches!(station_by_uuid(&client, crafted).await, Err(AppError::Validation { .. })),
             "station lookup accepted {crafted:?}",
         );
         assert!(
-            matches!(cast_vote(&client, crafted).await, Err(AppError::Validation(_))),
+            matches!(cast_vote(&client, crafted).await, Err(AppError::Validation { .. })),
             "vote accepted {crafted:?}",
         );
     }

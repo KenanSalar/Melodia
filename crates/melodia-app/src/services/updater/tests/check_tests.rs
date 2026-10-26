@@ -101,7 +101,7 @@ fn a_known_key_missing_from_the_manifest_is_an_error() -> UpdateResult<()> {
     );
 
     let Err(failure) = verdict else {
-        return Err(AppError::Validation(format!("expected an error, got {verdict:?}")).into());
+        return Err(AppError::validation_msg(format!("expected an error, got {verdict:?}")).into());
     };
     assert_eq!(failure.kind, FailureKind::Parse, "the manifest is what lacks the entry");
     let msg = describe(&failure);
@@ -120,7 +120,7 @@ fn an_upgrade_resolves_the_asset_for_the_running_target() -> UpdateResult<()> {
     let verdict = classify_manifest(&with_two, "0.2.0", Some(TARGET))?;
 
     let Verdict::Available(picked) = verdict else {
-        return Err(AppError::Validation(format!("expected Available, got {verdict:?}")).into());
+        return Err(AppError::validation_msg(format!("expected Available, got {verdict:?}")).into());
     };
     assert_eq!(picked.url, asset().url, "the asset must be the running target's, not the first");
     Ok(())

@@ -17,14 +17,14 @@ use crate::services::settings::{
     WindowBorder,
 };
 
-fn json_err(e: &serde_json::Error) -> AppError {
-    AppError::Validation(format!("json error: {e}"))
+fn json_err(e: serde_json::Error) -> AppError {
+    AppError::validation("json error", e)
 }
 
 #[test]
 fn test_settings_default_for_missing_volume_fields() -> Result<(), AppError> {
     let json = r#"{"theme_id": "catppuccin"}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert_eq!(settings.volume, 100);
     assert!(!settings.playback.is_muted);
     Ok(())
@@ -33,7 +33,7 @@ fn test_settings_default_for_missing_volume_fields() -> Result<(), AppError> {
 #[test]
 fn test_settings_deserializes_volume_fields() -> Result<(), AppError> {
     let json = r#"{"volume": 42, "is_muted": true}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert_eq!(settings.volume, 42);
     assert!(settings.playback.is_muted);
     Ok(())
@@ -42,8 +42,7 @@ fn test_settings_deserializes_volume_fields() -> Result<(), AppError> {
 #[test]
 fn test_empty_json_uses_defaults() -> Result<(), AppError> {
     let json = "{}";
-    let settings: SettingsData =
-        reading_env(|| serde_json::from_str(json)).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = reading_env(|| serde_json::from_str(json)).map_err(json_err)?;
     assert_eq!(settings.volume, 100);
     assert!(!settings.playback.is_muted);
     assert!(settings.playback.gapless_playback);
@@ -170,7 +169,7 @@ fn a_kde_settings_file_without_the_titlebar_key_keeps_the_custom_titlebar() -> R
     let settings: SettingsData = with_env_var("XDG_CURRENT_DESKTOP", Some("KDE"), || {
         serde_json::from_str(r#"{"volume": 80}"#)
     })
-    .map_err(|e| json_err(&e))?;
+    .map_err(json_err)?;
 
     assert!(!settings.window.use_native_titlebar);
     Ok(())
@@ -181,7 +180,7 @@ fn a_kde_settings_file_without_the_titlebar_key_keeps_the_custom_titlebar() -> R
 #[test]
 fn a_saved_native_titlebar_reads_back() -> Result<(), AppError> {
     let window: WindowFlags =
-        serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(|e| json_err(&e))?;
+        serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(json_err)?;
 
     assert!(window.use_native_titlebar);
     Ok(())
@@ -202,7 +201,7 @@ fn a_fresh_install_draws_the_window_border_in_the_system_color() {
 #[test]
 fn a_settings_file_from_before_the_border_draws_it() -> Result<(), AppError> {
     let window: WindowFlags =
-        serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(|e| json_err(&e))?;
+        serde_json::from_str(r#"{"use_native_titlebar": true}"#).map_err(json_err)?;
 
     assert_eq!(window.window_border, WindowBorder::Shown);
     Ok(())
@@ -212,7 +211,7 @@ fn a_settings_file_from_before_the_border_draws_it() -> Result<(), AppError> {
 /// change and a hand-edited file reads the way it is spelled.
 #[test]
 fn the_window_border_persists_as_a_token() -> Result<(), AppError> {
-    let hidden = serde_json::to_string(&WindowBorder::Hidden).map_err(|e| json_err(&e))?;
+    let hidden = serde_json::to_string(&WindowBorder::Hidden).map_err(json_err)?;
 
     assert_eq!(hidden, r#""hidden""#);
     Ok(())
@@ -220,7 +219,7 @@ fn the_window_border_persists_as_a_token() -> Result<(), AppError> {
 
 #[test]
 fn a_hidden_window_border_reads_back_from_its_token() -> Result<(), AppError> {
-    let border: WindowBorder = serde_json::from_str(r#""hidden""#).map_err(|e| json_err(&e))?;
+    let border: WindowBorder = serde_json::from_str(r#""hidden""#).map_err(json_err)?;
 
     assert_eq!(border, WindowBorder::Hidden);
     Ok(())
@@ -232,7 +231,7 @@ fn a_hidden_window_border_reads_back_from_its_token() -> Result<(), AppError> {
 fn a_settings_file_from_before_the_tint_mixes_the_border_from_the_artwork() -> Result<(), AppError>
 {
     let window: WindowFlags =
-        serde_json::from_str(r#"{"window_border_color": "system"}"#).map_err(|e| json_err(&e))?;
+        serde_json::from_str(r#"{"window_border_color": "system"}"#).map_err(json_err)?;
 
     assert_eq!(window.window_border_tint, BorderTint::Artwork);
     Ok(())
@@ -247,7 +246,7 @@ fn every_border_tint_persists_as_its_token() -> Result<(), AppError> {
         .iter()
         .map(|(tint, _)| serde_json::to_string(tint))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| json_err(&e))?;
+        .map_err(json_err)?;
 
     assert_eq!(written, BORDER_TINT_TOKENS.map(|(_, token)| token));
     Ok(())
@@ -259,7 +258,7 @@ fn every_border_tint_reads_back_from_its_token() -> Result<(), AppError> {
         .iter()
         .map(|(_, token)| serde_json::from_str::<BorderTint>(token))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| json_err(&e))?;
+        .map_err(json_err)?;
 
     assert_eq!(read, BORDER_TINT_TOKENS.map(|(tint, _)| tint));
     Ok(())
@@ -270,7 +269,7 @@ fn every_border_tint_reads_back_from_its_token() -> Result<(), AppError> {
 #[test]
 fn the_miniplayer_captions_do_not_inherit_the_titlebar_style() -> Result<(), AppError> {
     let window: WindowFlags =
-        serde_json::from_str(r#"{"titlebar_button_style": "macos"}"#).map_err(|e| json_err(&e))?;
+        serde_json::from_str(r#"{"titlebar_button_style": "macos"}"#).map_err(json_err)?;
 
     assert_eq!(window.mini_player_button_style, TitlebarButtonStyle::Standard);
     Ok(())
@@ -290,7 +289,7 @@ fn every_caption_style_persists_as_its_token() -> Result<(), AppError> {
         .iter()
         .map(|(style, _)| serde_json::to_string(style))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| json_err(&e))?;
+        .map_err(json_err)?;
 
     assert_eq!(written, CAPTION_STYLE_TOKENS.map(|(_, token)| token));
     Ok(())
@@ -302,7 +301,7 @@ fn every_caption_style_reads_back_from_its_token() -> Result<(), AppError> {
         .iter()
         .map(|(_, token)| serde_json::from_str::<TitlebarButtonStyle>(token))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| json_err(&e))?;
+        .map_err(json_err)?;
 
     assert_eq!(read, CAPTION_STYLE_TOKENS.map(|(style, _)| style));
     Ok(())
@@ -318,7 +317,7 @@ fn a_fresh_install_keeps_the_miniplayer_on_flat_chrome() {
 #[test]
 fn a_settings_file_from_before_the_mini_backdrop_keeps_it_off() -> Result<(), AppError> {
     let backdrop: BackdropFlags =
-        serde_json::from_str(r#"{"aurora_backdrop": false}"#).map_err(|e| json_err(&e))?;
+        serde_json::from_str(r#"{"aurora_backdrop": false}"#).map_err(json_err)?;
 
     assert!(!backdrop.mini_backdrop);
     Ok(())
@@ -330,7 +329,7 @@ fn a_settings_file_from_before_the_mini_backdrop_keeps_it_off() -> Result<(), Ap
 fn a_settings_file_from_before_the_queue_panel_opens_it_closed_at_the_default_width()
 -> Result<(), AppError> {
     let settings: SettingsData =
-        reading_env(|| serde_json::from_str(r#"{"volume": 80}"#)).map_err(|e| json_err(&e))?;
+        reading_env(|| serde_json::from_str(r#"{"volume": 80}"#)).map_err(json_err)?;
 
     let layout = settings.queue_panel;
     assert!(!layout.queue_panel_open && layout.queue_panel_width.is_none(), "read as {layout:?}");
@@ -346,7 +345,7 @@ fn the_queue_panel_is_saved_under_two_top_level_keys() -> Result<(), AppError> {
         ..reading_env(SettingsData::default)
     };
 
-    let written = serde_json::to_value(&settings).map_err(|e| json_err(&e))?;
+    let written = serde_json::to_value(&settings).map_err(json_err)?;
 
     let keys =
         (written.get("queue_panel_open").is_some(), written.get("queue_panel_width").is_some());
@@ -362,10 +361,9 @@ fn the_queue_panel_reads_back_as_it_closed() -> Result<(), AppError> {
         queue_panel: QueuePanelLayout { queue_panel_open: true, queue_panel_width: Some(360.0) },
         ..reading_env(SettingsData::default)
     };
-    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&settings).map_err(json_err)?;
 
-    let back: SettingsData =
-        reading_env(|| serde_json::from_str(&json)).map_err(|e| json_err(&e))?;
+    let back: SettingsData = reading_env(|| serde_json::from_str(&json)).map_err(json_err)?;
 
     let layout = back.queue_panel;
     assert!(
@@ -379,7 +377,7 @@ fn the_queue_panel_reads_back_as_it_closed() -> Result<(), AppError> {
 #[test]
 fn a_settings_file_from_before_the_hold_restores_no_full_player() -> Result<(), AppError> {
     let settings: SettingsData =
-        reading_env(|| serde_json::from_str(r#"{"volume": 80}"#)).map_err(|e| json_err(&e))?;
+        reading_env(|| serde_json::from_str(r#"{"volume": 80}"#)).map_err(json_err)?;
 
     assert_eq!(settings.full_player_geometry, None);
     Ok(())
@@ -393,10 +391,10 @@ fn a_held_full_player_reads_back_under_its_persisted_names() -> Result<(), AppEr
     const TOLERANCE: f64 = 1e-9;
     let json = r#"{"width": 1200, "height": 800, "position": {"x": -1920, "y": 40}}"#;
 
-    let held: FullPlayerGeometry = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let held: FullPlayerGeometry = serde_json::from_str(json).map_err(json_err)?;
 
     let Some(position) = held.position else {
-        return Err(AppError::Validation("the hold lost its position".to_owned()));
+        return Err(AppError::validation_msg("the hold lost its position"));
     };
     assert!(
         (held.width - 1200.0).abs() < TOLERANCE
@@ -413,7 +411,7 @@ fn a_held_full_player_reads_back_under_its_persisted_names() -> Result<(), AppEr
 fn a_held_full_player_with_a_null_position_reads_back_unplaced() -> Result<(), AppError> {
     let json = r#"{"width": 1200, "height": 800, "position": null}"#;
 
-    let held: FullPlayerGeometry = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let held: FullPlayerGeometry = serde_json::from_str(json).map_err(json_err)?;
 
     assert_eq!(held.position, None);
     Ok(())
@@ -424,7 +422,7 @@ fn test_unknown_fields_silently_ignored() -> Result<(), AppError> {
     // Forward compatibility: future settings versions may add new fields.
     // Without deny_unknown_fields, old code should deserialize them fine.
     let json = r#"{"volume": 80, "some_future_field": true, "another_new_thing": 42}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert_eq!(settings.volume, 80);
     Ok(())
 }
@@ -432,7 +430,7 @@ fn test_unknown_fields_silently_ignored() -> Result<(), AppError> {
 #[test]
 fn test_volume_clamped_to_max() -> Result<(), AppError> {
     let json = r#"{"volume": 999}"#;
-    let mut settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let mut settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     // Simulate the clamping that read_settings performs
     settings.volume = settings.volume.min(melodia_engine::player::engine::state::MAX_VOLUME);
     assert_eq!(settings.volume, melodia_engine::player::engine::state::MAX_VOLUME);
@@ -448,8 +446,8 @@ fn test_settings_roundtrip_volume_mute() -> Result<(), AppError> {
         // defaults, so it takes the same lock the mutating tests below do.
         ..reading_env(SettingsData::default)
     };
-    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
-    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&settings).map_err(json_err)?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(json_err)?;
     assert_eq!(deserialized.volume, 42);
     assert!(deserialized.playback.is_muted);
     Ok(())
@@ -461,8 +459,8 @@ fn test_settings_roundtrip_playback_speed() -> Result<(), AppError> {
         playback: PlaybackFlags { playback_speed: 1.5, ..PlaybackFlags::default() },
         ..reading_env(SettingsData::default)
     };
-    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
-    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&settings).map_err(json_err)?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(json_err)?;
     assert!((deserialized.playback.playback_speed - 1.5).abs() < f64::EPSILON);
     Ok(())
 }
@@ -472,7 +470,7 @@ fn test_playback_speed_defaults_when_missing() -> Result<(), AppError> {
     // Settings files written before this field existed must still load,
     // defaulting the speed to 1.0 (the `#[serde(default)]` on PlaybackFlags).
     let json = r#"{"volume": 80}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert!((settings.playback.playback_speed - 1.0).abs() < f64::EPSILON);
     Ok(())
 }
@@ -480,7 +478,7 @@ fn test_playback_speed_defaults_when_missing() -> Result<(), AppError> {
 #[test]
 fn test_corner_radius_clamped_to_max() -> Result<(), AppError> {
     let json = r#"{"corner_radius": 999}"#;
-    let mut settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let mut settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     settings.corner_radius = settings.corner_radius.min(MAX_CORNER_RADIUS);
     assert_eq!(settings.corner_radius, 15);
     Ok(())
@@ -491,7 +489,7 @@ fn test_corner_radius_default_is_an_os_preset() -> Result<(), AppError> {
     // Set membership rather than one value, so the test holds on every host OS; which desktop
     // gets which preset is `desktop`'s own test.
     let json = "{}";
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert!(
         matches!(settings.corner_radius, 6 | 8 | 10 | 15),
         "corner_radius default {} is not one of the OS-aware presets {{6, 8, 10, 15}}",
@@ -503,7 +501,7 @@ fn test_corner_radius_default_is_an_os_preset() -> Result<(), AppError> {
 #[test]
 fn test_resume_on_startup_defaults_false() -> Result<(), AppError> {
     let json = "{}";
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert!(!settings.playback.resume_on_startup);
     Ok(())
 }
@@ -515,10 +513,10 @@ fn test_resume_on_startup_defaults_false() -> Result<(), AppError> {
 fn a_file_carrying_the_retired_startup_animation_key_still_loads() -> Result<(), AppError> {
     let json = r#"{"volume": 80, "skip_startup_animation": true}"#;
 
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert_eq!(settings.volume, 80);
-    let written = serde_json::to_value(&settings).map_err(|e| json_err(&e))?;
+    let written = serde_json::to_value(&settings).map_err(json_err)?;
     assert!(
         written.get("skip_startup_animation").is_none(),
         "the retired key is written back, so it outlives the switch that read it"
@@ -531,7 +529,7 @@ fn a_file_carrying_the_retired_startup_animation_key_still_loads() -> Result<(),
 fn a_retired_startup_animation_key_of_any_type_is_ignored() -> Result<(), AppError> {
     let json = r#"{"volume": 80, "skip_startup_animation": "yes"}"#;
 
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert_eq!(settings.volume, 80);
     Ok(())
@@ -549,8 +547,7 @@ fn a_settings_write_leaves_the_retired_key_behind() -> Result<(), AppError> {
     reading_env(|| crate::services::settings::mutate_settings(&paths, |_| {}))?;
 
     let written: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&paths.settings_path)?)
-            .map_err(|e| json_err(&e))?;
+        serde_json::from_str(&std::fs::read_to_string(&paths.settings_path)?).map_err(json_err)?;
     assert_eq!(
         (written.get("skip_startup_animation"), written.get("volume")),
         (None, Some(&serde_json::json!(80))),
@@ -588,8 +585,8 @@ fn a_save_that_changes_nothing_leaves_settings_json_as_it_was() -> Result<(), Ap
 #[test]
 fn test_view_sort_roundtrip() -> Result<(), AppError> {
     let sort = ViewSort { field: "title".to_owned(), dir: SortDir::Desc };
-    let json = serde_json::to_string(&sort).map_err(|e| json_err(&e))?;
-    let deserialized: ViewSort = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&sort).map_err(json_err)?;
+    let deserialized: ViewSort = serde_json::from_str(&json).map_err(json_err)?;
     assert_eq!(deserialized.field, "title");
     assert!(matches!(deserialized.dir, SortDir::Desc));
     Ok(())
@@ -626,7 +623,7 @@ fn test_sort_dir_requires_explicit_value() -> Result<(), AppError> {
 
     // With explicit dir it works
     let json = r#"{"field": "artist", "dir": "asc"}"#;
-    let sort: ViewSort = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let sort: ViewSort = serde_json::from_str(json).map_err(json_err)?;
     assert!(matches!(sort.dir, SortDir::Asc));
     Ok(())
 }
@@ -646,7 +643,7 @@ fn test_column_widths_defaults() {
 #[test]
 fn test_column_widths_partial_json() -> Result<(), AppError> {
     let json = r#"{"artist": 300.0}"#;
-    let cw: ColumnWidths = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let cw: ColumnWidths = serde_json::from_str(json).map_err(json_err)?;
     assert!((cw.artist - 300.0).abs() < f64::EPSILON);
     // Other fields should use defaults
     assert!((cw.number - 56.0).abs() < f64::EPSILON);
@@ -662,14 +659,14 @@ fn test_theme_preference_roundtrip() -> Result<(), AppError> {
         accent: "mauve".to_owned(),
         last_static_accent: Some("mauve".to_owned()),
     };
-    let json = serde_json::to_string(&pref).map_err(|e| json_err(&e))?;
-    let deserialized: ThemePreference = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&pref).map_err(json_err)?;
+    let deserialized: ThemePreference = serde_json::from_str(&json).map_err(json_err)?;
     assert_eq!(deserialized.variant, "mocha");
     assert_eq!(deserialized.accent, "mauve");
     assert_eq!(deserialized.last_static_accent.as_deref(), Some("mauve"));
     // Backward compat: older settings.json without `last_static_accent` deserializes to None.
-    let legacy: ThemePreference = serde_json::from_str(r#"{"variant":"mocha","accent":"mauve"}"#)
-        .map_err(|e| json_err(&e))?;
+    let legacy: ThemePreference =
+        serde_json::from_str(r#"{"variant":"mocha","accent":"mauve"}"#).map_err(json_err)?;
     assert!(legacy.last_static_accent.is_none());
     Ok(())
 }
@@ -677,7 +674,7 @@ fn test_theme_preference_roundtrip() -> Result<(), AppError> {
 #[test]
 fn test_locale_default_is_nonempty() -> Result<(), AppError> {
     let json = "{}";
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert!(!settings.locale.is_empty(), "default locale must not be empty");
     Ok(())
 }
@@ -834,8 +831,8 @@ fn test_locale_roundtrip() -> Result<(), AppError> {
         // `default_locale()` consults, so this read has to be under the lock too.
         ..reading_env(SettingsData::default)
     };
-    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
-    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&settings).map_err(json_err)?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(json_err)?;
     assert_eq!(deserialized.locale, "fr");
     Ok(())
 }
@@ -845,7 +842,7 @@ fn test_replaygain_defaults_when_absent() -> Result<(), AppError> {
     // An older settings.json (written before ReplayGain existed) deserializes to
     // the inert defaults: off, "album" mode, 0 dB preamp, prevent-clipping on.
     let json = r#"{"theme_id": "catppuccin"}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert!(!settings.replaygain.rg_enabled);
     assert_eq!(settings.replaygain.rg_mode, "album");
     assert!((settings.replaygain.rg_preamp - 0.0).abs() < f32::EPSILON);
@@ -864,8 +861,8 @@ fn test_replaygain_roundtrip() -> Result<(), AppError> {
         },
         ..reading_env(SettingsData::default)
     };
-    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
-    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&settings).map_err(json_err)?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(json_err)?;
     assert!(deserialized.replaygain.rg_enabled);
     assert_eq!(deserialized.replaygain.rg_mode, "track");
     assert!((deserialized.replaygain.rg_preamp - (-3.0)).abs() < f32::EPSILON);
@@ -879,7 +876,7 @@ fn test_replaygain_roundtrip() -> Result<(), AppError> {
 #[test]
 fn test_radio_defaults_when_absent() -> Result<(), AppError> {
     let json = r#"{"theme_id": "catppuccin"}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert!(!settings.radio.radio_enabled);
     assert!(!settings.radio.radio_hide_segmented);
@@ -893,7 +890,7 @@ fn test_radio_defaults_when_absent() -> Result<(), AppError> {
 #[test]
 fn test_the_retired_hls_key_does_not_carry_forward() -> Result<(), AppError> {
     let json = r#"{"theme_id": "catppuccin", "radio_enabled": true, "radio_hide_hls": true}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert!(!settings.radio.radio_hide_segmented);
     Ok(())
@@ -910,8 +907,8 @@ fn test_radio_roundtrip() -> Result<(), AppError> {
         },
         ..reading_env(SettingsData::default)
     };
-    let json = serde_json::to_string(&settings).map_err(|e| json_err(&e))?;
-    let deserialized: SettingsData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&settings).map_err(json_err)?;
+    let deserialized: SettingsData = serde_json::from_str(&json).map_err(json_err)?;
 
     assert!(deserialized.radio.radio_enabled);
     assert!(deserialized.radio.radio_hide_segmented);
@@ -924,7 +921,7 @@ fn test_radio_roundtrip() -> Result<(), AppError> {
 #[test]
 fn test_radio_sub_toggles_survive_an_older_settings_file() -> Result<(), AppError> {
     let json = r#"{"theme_id": "catppuccin", "radio_enabled": true}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert!(settings.radio.radio_enabled);
     assert!(settings.radio.radio_send_clicks);
@@ -947,7 +944,7 @@ fn the_welcome_card_is_owed_only_below_the_current_revision() {
 #[test]
 fn an_older_settings_file_is_owed_the_welcome_card() -> Result<(), AppError> {
     let json = r#"{"theme_id": "catppuccin"}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert_eq!(settings.onboarding.onboarding_version, 0);
     assert!(settings.onboarding.needs_onboarding());
@@ -962,7 +959,7 @@ fn the_tray_ships_on_but_never_overrides_a_saved_answer() -> Result<(), AppError
     assert!(reading_env(SettingsData::default).tray.tray_enabled);
 
     let json = r#"{"theme_id": "catppuccin", "tray_enabled": false}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
     assert!(!settings.tray.tray_enabled);
 
     // The window still closes to a quit unless asked otherwise, tray or no tray.
@@ -988,7 +985,7 @@ fn the_lyrics_switches_take_their_defaults_from_a_file_that_predates_them() -> R
     // They are flattened into the same object as every other key, so an older `settings.json` is
     // missing all three rather than carrying an empty section.
     let json = r#"{"theme_id": "catppuccin"}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert!(!settings.lyrics.lyrics_enabled);
     assert!(!settings.lyrics.lyrics_online_enabled);
@@ -1001,8 +998,7 @@ fn the_lyrics_switches_take_their_defaults_from_a_file_that_predates_them() -> R
 #[test]
 fn a_settings_file_from_0_13_keeps_lyrics_switched_on() -> Result<(), AppError> {
     let json = r#"{"theme_id": "catppuccin", "lyrics_panel_shown": true}"#;
-    let settings: SettingsData =
-        reading_env(|| serde_json::from_str(json)).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = reading_env(|| serde_json::from_str(json)).map_err(json_err)?;
 
     assert!(settings.lyrics.lyrics_enabled);
     Ok(())
@@ -1012,7 +1008,7 @@ fn a_settings_file_from_0_13_keeps_lyrics_switched_on() -> Result<(), AppError> 
 fn the_lyrics_switch_is_saved_under_its_current_name() -> Result<(), AppError> {
     let flags = LyricsFlags { lyrics_enabled: true, ..LyricsFlags::default() };
 
-    let saved = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+    let saved = serde_json::to_value(&flags).map_err(json_err)?;
 
     assert_eq!(saved.get("lyrics_enabled"), Some(&serde_json::Value::Bool(true)));
     assert_eq!(saved.get("lyrics_panel_shown"), None);
@@ -1024,7 +1020,7 @@ fn the_romanization_ships_on_but_never_overrides_a_saved_answer() -> Result<(), 
     // The direction a default-on field goes wrong: a reader that fills the default in over a
     // saved `false` turns the row back on at every launch.
     let json = r#"{"theme_id": "catppuccin", "lyrics_romanization_shown": false}"#;
-    let settings: SettingsData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(json).map_err(json_err)?;
 
     assert!(!settings.lyrics.lyrics_romanization_shown);
     Ok(())
@@ -1038,11 +1034,11 @@ fn the_tag_backfill_marker_ships_unset_and_survives_being_set() -> Result<(), Ap
     assert!(!reading_env(SettingsData::default).library.tags_backfilled);
 
     let predating = r#"{"theme_id": "catppuccin"}"#;
-    let settings: SettingsData = serde_json::from_str(predating).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(predating).map_err(json_err)?;
     assert!(!settings.library.tags_backfilled, "an older file has never had the pass");
 
     let recorded = r#"{"theme_id": "catppuccin", "tags_backfilled": true}"#;
-    let settings: SettingsData = serde_json::from_str(recorded).map_err(|e| json_err(&e))?;
+    let settings: SettingsData = serde_json::from_str(recorded).map_err(json_err)?;
     assert!(settings.library.tags_backfilled);
     Ok(())
 }
@@ -1062,8 +1058,8 @@ fn an_output_choice_comes_back_from_settings_json_whole() -> Result<(), AppError
     let mut flags = OutputFlags::default();
     flags.set_output_choice(&choice);
 
-    let json = serde_json::to_string(&flags).map_err(|e| json_err(&e))?;
-    let read: OutputFlags = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&flags).map_err(json_err)?;
+    let read: OutputFlags = serde_json::from_str(&json).map_err(json_err)?;
 
     assert_eq!(read.output_choice(), choice);
     Ok(())
@@ -1079,7 +1075,7 @@ fn a_hand_edited_period_is_held_to_the_claims_range() -> Result<(), AppError> {
         (r#"{"output_period_ms": 5000}"#, ExclusiveTuning::MAX_PERIOD),
     ];
     for (json, expected) in rows {
-        let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+        let flags: OutputFlags = serde_json::from_str(json).map_err(json_err)?;
 
         assert_eq!(flags.output_choice().tuning.period, expected, "{json}");
     }
@@ -1091,7 +1087,7 @@ fn a_hand_edited_period_is_held_to_the_claims_range() -> Result<(), AppError> {
 #[test]
 fn a_settings_file_from_before_hardware_volume_leaves_it_off() -> Result<(), AppError> {
     let json = r#"{"output_mode": "exclusive"}"#;
-    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(json_err)?;
 
     assert!(!flags.output_choice().hardware_volume);
     Ok(())
@@ -1102,7 +1098,7 @@ fn a_settings_file_from_before_hardware_volume_leaves_it_off() -> Result<(), App
 #[test]
 fn a_settings_file_from_before_the_rate_fallback_plays_through_the_mixer() -> Result<(), AppError> {
     let json = r#"{"output_mode": "exclusive"}"#;
-    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(json_err)?;
 
     assert_eq!(flags.output_choice().rate_fallback, RateFallback::Shared);
     Ok(())
@@ -1112,7 +1108,7 @@ fn a_settings_file_from_before_the_rate_fallback_plays_through_the_mixer() -> Re
 #[test]
 fn a_settings_file_from_before_the_paused_device_keeps_it() -> Result<(), AppError> {
     let json = r#"{"output_mode": "exclusive"}"#;
-    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(json_err)?;
 
     assert_eq!(flags.output_paused_device, PausedDevice::Keep);
     Ok(())
@@ -1125,10 +1121,10 @@ fn the_rate_fallback_is_written_and_read_by_its_token() -> Result<(), AppError> 
     let rows = [(RateFallback::Shared, "shared"), (RateFallback::Resample, "resample")];
     for (fallback, token) in rows {
         let flags = OutputFlags { output_rate_fallback: fallback, ..OutputFlags::default() };
-        let written = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+        let written = serde_json::to_value(&flags).map_err(json_err)?;
         let read: OutputFlags =
             serde_json::from_value(serde_json::json!({ "output_rate_fallback": token }))
-                .map_err(|e| json_err(&e))?;
+                .map_err(json_err)?;
 
         assert_eq!(
             (written["output_rate_fallback"].clone(), read.output_rate_fallback),
@@ -1146,9 +1142,9 @@ fn the_output_mode_is_written_and_read_by_its_token() -> Result<(), AppError> {
     let rows = [(OutputMode::Shared, "shared"), (OutputMode::Exclusive, "exclusive")];
     for (mode, token) in rows {
         let flags = OutputFlags { output_mode: mode, ..OutputFlags::default() };
-        let written = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+        let written = serde_json::to_value(&flags).map_err(json_err)?;
         let read: OutputFlags = serde_json::from_value(serde_json::json!({ "output_mode": token }))
-            .map_err(|e| json_err(&e))?;
+            .map_err(json_err)?;
 
         assert_eq!(
             (written["output_mode"].clone(), read.output_mode),
@@ -1164,9 +1160,9 @@ fn the_output_mode_is_written_and_read_by_its_token() -> Result<(), AppError> {
 fn the_paused_device_is_written_and_read_by_its_token() -> Result<(), AppError> {
     let rows = [(PausedDevice::Keep, "keep"), (PausedDevice::Release, "release")];
     for (key, token) in rows {
-        let written = serde_json::to_value(key).map_err(|e| json_err(&e))?;
+        let written = serde_json::to_value(key).map_err(json_err)?;
         let read: PausedDevice =
-            serde_json::from_value(serde_json::json!(token)).map_err(|e| json_err(&e))?;
+            serde_json::from_value(serde_json::json!(token)).map_err(json_err)?;
 
         assert_eq!((written, read), (serde_json::json!(token), key), "{token}");
     }
@@ -1180,7 +1176,7 @@ fn the_paused_device_is_written_and_read_by_its_token() -> Result<(), AppError> 
 fn a_settings_file_from_before_the_resampler_keeps_band_limited_off_windows() -> Result<(), AppError>
 {
     let json = r#"{"output_mode": "exclusive"}"#;
-    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(json_err)?;
 
     assert_eq!(flags.output_resampler, Resampler::BandLimited);
     Ok(())
@@ -1193,7 +1189,7 @@ fn a_settings_file_from_before_the_resampler_keeps_band_limited_off_windows() ->
 fn a_settings_file_from_before_the_resampler_converts_linearly_on_windows() -> Result<(), AppError>
 {
     let json = r#"{"output_mode": "exclusive"}"#;
-    let flags: OutputFlags = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let flags: OutputFlags = serde_json::from_str(json).map_err(json_err)?;
 
     assert_eq!(flags.output_resampler, Resampler::Linear);
     Ok(())
@@ -1205,10 +1201,10 @@ fn the_resampler_is_written_and_read_by_its_token() -> Result<(), AppError> {
     let rows = [(Resampler::Linear, "linear"), (Resampler::BandLimited, "band_limited")];
     for (resampler, token) in rows {
         let flags = OutputFlags { output_resampler: resampler, ..OutputFlags::default() };
-        let written = serde_json::to_value(&flags).map_err(|e| json_err(&e))?;
+        let written = serde_json::to_value(&flags).map_err(json_err)?;
         let read: OutputFlags =
             serde_json::from_value(serde_json::json!({ "output_resampler": token }))
-                .map_err(|e| json_err(&e))?;
+                .map_err(json_err)?;
 
         assert_eq!(
             (written["output_resampler"].clone(), read.output_resampler),

@@ -225,7 +225,7 @@ async fn ingest_updates_artwork_on_existing_when_flag_set() -> Result<(), AppErr
             .fetch_optional(db.read())
             .await?;
     assert_eq!(
-        artwork.ok_or_else(|| AppError::Validation("track missing".into()))?.0.as_deref(),
+        artwork.ok_or_else(|| AppError::validation_msg("track missing"))?.0.as_deref(),
         Some("/art/cover.jpg")
     );
     Ok(())

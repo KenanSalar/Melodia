@@ -1,5 +1,6 @@
 //! Tests for the shipped browse walk, driven through [`browse_directory`] itself.
 
+use std::error::Error;
 use std::path::Path;
 
 use tempfile::TempDir;
@@ -22,7 +23,7 @@ fn library_folder(dir: &Path, is_enabled: bool) -> Folder {
 /// often a symlink, so the path a test seeds has to be the resolved one.
 fn resolved(dir: &Path) -> Result<PathBuf, AppError> {
     melodia_core::utils::canonicalize_path(dir)
-        .map_err(|e| AppError::Validation(format!("resolve {}: {e}", dir.display())))
+        .map_err(|e| AppError::validation(format!("resolve {}", dir.display()), e))
 }
 
 async fn browse(db: &DbPool, dir: &Path, folders: &[Folder]) -> Result<BrowseResult, AppError> {
@@ -36,9 +37,14 @@ async fn a_path_that_does_not_exist_is_refused() -> Result<(), AppError> {
     let folders = [library_folder(&missing, true)];
 
     let Err(err) = browse(&db, &missing, &folders).await else {
-        return Err(AppError::Validation("a missing path must not browse".into()));
+        return Err(AppError::validation_msg("a missing path must not browse"));
     };
-    assert!(err.to_string().contains("does not exist"), "got: {err}");
+    let cause = err.source().and_then(|source| source.downcast_ref::<std::io::Error>());
+    assert_eq!(
+        cause.map(std::io::Error::kind),
+        Some(std::io::ErrorKind::NotFound),
+        "the refusal has to carry why the path didn't resolve, got: {err:?}"
+    );
     Ok(())
 }
 
@@ -51,7 +57,7 @@ async fn a_file_is_not_a_directory_to_browse() -> Result<(), AppError> {
     let folders = [library_folder(tmp.path(), true)];
 
     let Err(err) = browse(&db, &file, &folders).await else {
-        return Err(AppError::Validation("a file must not browse".into()));
+        return Err(AppError::validation_msg("a file must not browse"));
     };
     assert!(err.to_string().contains("not a directory"), "got: {err}");
     Ok(())
@@ -67,7 +73,7 @@ async fn a_path_outside_every_library_folder_is_refused() -> Result<(), AppError
     let folders = [library_folder(tmp.path(), true)];
 
     let Err(err) = browse(&db, outside.path(), &folders).await else {
-        return Err(AppError::Validation("a path outside the library must not browse".into()));
+        return Err(AppError::validation_msg("a path outside the library must not browse"));
     };
     assert!(err.to_string().contains("enabled library folder"), "got: {err}");
     Ok(())
@@ -82,7 +88,7 @@ async fn a_path_inside_a_disabled_library_folder_is_refused() -> Result<(), AppE
     let folders = [library_folder(tmp.path(), false)];
 
     let Err(err) = browse(&db, tmp.path(), &folders).await else {
-        return Err(AppError::Validation("a disabled folder must not browse".into()));
+        return Err(AppError::validation_msg("a disabled folder must not browse"));
     };
     assert!(err.to_string().contains("enabled library folder"), "got: {err}");
     Ok(())

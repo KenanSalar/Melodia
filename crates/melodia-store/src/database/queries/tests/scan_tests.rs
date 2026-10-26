@@ -200,7 +200,7 @@ async fn upsert_album_updates_year_on_conflict() -> Result<(), AppError> {
     )
     .await?;
     assert_eq!(id, same);
-    let album_id = id.ok_or_else(|| AppError::Validation("no album id".into()))?;
+    let album_id = id.ok_or_else(|| AppError::validation_msg("no album id"))?;
 
     let year: Option<i32> = sqlx::query_scalar("SELECT year FROM albums WHERE id = ?")
         .bind(album_id)

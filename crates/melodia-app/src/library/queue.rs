@@ -88,7 +88,7 @@ async fn open_as_queue(
         import_and_summarize(&ctx.db, &ctx.paths.artwork_dir, cover_cache, file_paths).await?;
 
     if result.summaries.is_empty() {
-        return Err(AppError::Queue(format!(
+        return Err(AppError::queue_msg(format!(
             "none of the {} opened file(s) could be read",
             file_paths.len()
         )));

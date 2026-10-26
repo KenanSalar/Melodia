@@ -107,7 +107,7 @@ async fn a_row_that_already_has_a_hash_is_left_alone() -> Result<(), AppError> {
     hash_unhashed_tracks(&db).await?;
 
     let row = rows(&db).await?;
-    let (hash, mtime) = row.get("song.mp3").ok_or_else(|| AppError::NotFound("song.mp3".into()))?;
+    let (hash, mtime) = row.get("song.mp3").ok_or_else(|| AppError::not_found_msg("song.mp3"))?;
     assert_eq!(hash.as_deref(), Some("from an earlier pass"), "a hashed row is not on the list");
     assert_eq!(mtime.as_deref(), Some(STALE_MTIME), "and its mtime is not rewritten either");
     Ok(())

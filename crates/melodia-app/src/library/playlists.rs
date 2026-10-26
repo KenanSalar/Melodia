@@ -124,7 +124,7 @@ async fn compose_thumbnail(
     image_paths: &[String],
 ) -> Result<playlist::Playlist, AppError> {
     if image_paths.is_empty() || image_paths.len() > 4 {
-        return Err(AppError::Validation("Must provide 1-4 image paths".to_owned()));
+        return Err(AppError::validation_msg("Must provide 1-4 image paths"));
     }
 
     let source_paths: Vec<PathBuf> = image_paths.iter().map(PathBuf::from).collect();

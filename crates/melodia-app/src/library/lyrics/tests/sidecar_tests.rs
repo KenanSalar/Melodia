@@ -48,7 +48,7 @@ fn the_appended_shape_is_read() -> Result<(), AppError> {
     let audio = staged_track(&tmp)?;
     std::fs::write(tmp.path().join("song.mp3.lrc"), "[00:01.00]appended shape\n")?;
 
-    let found = read(&audio)?.ok_or_else(|| AppError::Validation("no sheet".into()))?;
+    let found = read(&audio)?.ok_or_else(|| AppError::validation_msg("no sheet"))?;
     assert_eq!(found.lines[0].text, "appended shape");
     Ok(())
 }
@@ -61,7 +61,7 @@ fn the_stem_shape_outranks_the_appended_one() -> Result<(), AppError> {
     std::fs::write(tmp.path().join("song.mp3.lrc"), "[00:01.00]appended\n")?;
     std::fs::write(tmp.path().join("song.lrc"), "[00:01.00]stem\n")?;
 
-    let found = read(&audio)?.ok_or_else(|| AppError::Validation("no sheet".into()))?;
+    let found = read(&audio)?.ok_or_else(|| AppError::validation_msg("no sheet"))?;
     assert_eq!(found.lines[0].text, "stem");
     Ok(())
 }
@@ -72,7 +72,7 @@ fn a_sidecar_is_marked_as_one() -> Result<(), AppError> {
     let audio = staged_track(&tmp)?;
     std::fs::write(tmp.path().join("song.lrc"), "plain words\n")?;
 
-    let found = read(&audio)?.ok_or_else(|| AppError::Validation("no sheet".into()))?;
+    let found = read(&audio)?.ok_or_else(|| AppError::validation_msg("no sheet"))?;
     assert_eq!(found.source, LyricsSource::Sidecar);
     assert!(!found.is_synced(), "an untimed sidecar is still a sidecar");
     Ok(())

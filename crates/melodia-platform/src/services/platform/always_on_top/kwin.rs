@@ -83,7 +83,7 @@ pub async fn watch_keep_above(
         let conn = session_connection()?;
         let bus_name = conn
             .unique_name()
-            .ok_or_else(|| AppError::Window("D-Bus connection has no unique name".to_owned()))?
+            .ok_or_else(|| AppError::window_msg("D-Bus connection has no unique name"))?
             .to_string();
 
         conn.object_server()

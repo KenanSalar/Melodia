@@ -384,7 +384,7 @@ async fn resolve(
     }
     browse::resolve(radio_ui, &station.uuid)
         .map(|(found, logo)| StationSource::Browsed(found, logo))
-        .ok_or_else(|| AppError::NotFound("Station is no longer in the browse results".to_owned()))
+        .ok_or_else(|| AppError::not_found_msg("Station is no longer in the browse results"))
 }
 
 /// A kept station from either local tab's cache — the row lives in both when it is starred *and*

@@ -44,11 +44,11 @@ async fn genre_stats_track_count() -> Result<(), AppError> {
     let rock = genres
         .iter()
         .find(|g| g.name == "Rock")
-        .ok_or_else(|| AppError::Validation("Rock genre missing".into()))?;
+        .ok_or_else(|| AppError::validation_msg("Rock genre missing"))?;
     let pop = genres
         .iter()
         .find(|g| g.name == "Pop")
-        .ok_or_else(|| AppError::Validation("Pop genre missing".into()))?;
+        .ok_or_else(|| AppError::validation_msg("Pop genre missing"))?;
     // Seeded: track1 (Rock), track2 (Pop), track3 (Rock)
     assert_eq!(rock.track_count, 2);
     assert_eq!(pop.track_count, 1);

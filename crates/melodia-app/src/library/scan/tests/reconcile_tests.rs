@@ -46,7 +46,7 @@ fn idle() -> Mutex<PassState> {
 /// A claim on an idle lock, which nothing refuses.
 fn claim(pass: &Mutex<PassState>, reach: Reach) -> Result<PassClaim<'_>, AppError> {
     PassClaim::take(pass, reach)
-        .ok_or_else(|| AppError::Validation("an idle pass refused its first claim".into()))
+        .ok_or_else(|| AppError::validation_msg("an idle pass refused its first claim"))
 }
 
 /// A second pass beside the first would walk and stat every file again, and the two would

@@ -81,7 +81,7 @@ fn shuffle_inline_all_indices_present() -> Result<(), AppError> {
 
     let play_order = state.queue.play_ids();
     let expected_len =
-        usize::try_from(count).map_err(|_| AppError::Validation("count negative".into()))?;
+        usize::try_from(count).map_err(|_| AppError::validation_msg("count negative"))?;
     assert_eq!(play_order.len(), expected_len);
 
     let mut ids: Vec<i64> = play_order.to_vec();
@@ -643,7 +643,7 @@ async fn opening_files_that_cannot_be_read_is_an_error_rather_than_an_empty_queu
 
     let refused = open_as_queue(&fx.ctx, &new_cover_cache(), &[missing]).await;
 
-    assert!(matches!(refused, Err(AppError::Queue(_))), "got {refused:?}");
+    assert!(matches!(refused, Err(AppError::Queue { .. })), "got {refused:?}");
     assert!(lock_state(&fx.ctx.player_state).queue.is_empty());
     Ok(())
 }

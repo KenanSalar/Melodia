@@ -22,7 +22,7 @@ fn solid_png(dir: &Path, name: &str) -> Result<String, AppError> {
     let path = dir.join(name);
     image::RgbImage::from_pixel(64, 64, image::Rgb([200, 60, 120]))
         .save(&path)
-        .map_err(|e| AppError::Validation(format!("write {name}: {e}")))?;
+        .map_err(|e| AppError::validation(format!("write {name}"), e))?;
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -48,7 +48,7 @@ async fn a_thumbnail_pick_outside_one_to_four_images_is_refused() -> Result<(), 
         let picks = vec![pick.clone(); count];
         let refused = compose_thumbnail(&db, &artwork_dir, playlist.id, &picks).await;
         assert!(
-            matches!(refused, Err(AppError::Validation(_))),
+            matches!(refused, Err(AppError::Validation { .. })),
             "{count} images must not reach the compositor"
         );
     }

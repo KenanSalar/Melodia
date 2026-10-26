@@ -53,7 +53,7 @@ pub async fn player_play_tracks(
 ) -> Result<(), AppError> {
     let queued = crate::library::keyset::existing_in_order(&ctx.db, &track_ids).await?;
     if queued.is_empty() {
-        return Err(AppError::Queue("No valid tracks provided".to_owned()));
+        return Err(AppError::queue_msg("No valid tracks provided"));
     }
 
     let start = resolve_start_slot(&track_ids, &queued, start_index).unwrap_or_else(|| {

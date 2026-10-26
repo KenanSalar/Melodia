@@ -85,9 +85,7 @@ pub fn refresh_user_install() -> AppResult<()> {
     }
 
     let data_home = dirs::data_dir().ok_or_else(|| {
-        AppError::Settings(
-            "could not resolve $XDG_DATA_HOME for .desktop / icon self-install".into(),
-        )
+        AppError::settings_msg("could not resolve $XDG_DATA_HOME for .desktop / icon self-install")
     })?;
 
     let exec_path = install_target()?;

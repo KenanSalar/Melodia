@@ -116,7 +116,9 @@ pub fn read<R: Read + Seek>(reader: R) -> Result<Contents, AppError> {
         // Charged before the result is looked at: an entry that inflates and then fails its
         // checksum has cost the work all the same.
         budget.charge(bytes.len()).map_err(|TooLarge| {
-            AppError::Validation(format!("Playlist archive expands past {MAX_TEXT_BYTES} bytes"))
+            AppError::validation_msg(format!(
+                "Playlist archive expands past {MAX_TEXT_BYTES} bytes"
+            ))
         })?;
 
         let name = match entry {
@@ -163,7 +165,9 @@ fn read_entry<R: Read + Seek>(
         return Ok(None);
     }
     let Some(name) = file.enclosed_name() else {
-        return Err(AppError::Validation(format!("Entry {index} is named outside the archive")));
+        return Err(AppError::validation_msg(format!(
+            "Entry {index} is named outside the archive"
+        )));
     };
 
     file.take(limit.saturating_add(1)).read_to_end(bytes)?;

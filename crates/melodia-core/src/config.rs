@@ -88,7 +88,7 @@ impl Paths {
         }
         let name = if is_dev { DEV_DATA_DIR_NAME } else { DATA_DIR_NAME };
         Ok(dirs::data_dir()
-            .ok_or_else(|| AppError::Settings("could not resolve user data directory".into()))?
+            .ok_or_else(|| AppError::settings_msg("could not resolve user data directory"))?
             .join(name))
     }
 

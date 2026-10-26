@@ -5,8 +5,8 @@ use melodia_core::error::AppError;
 
 use super::*;
 
-fn json_err(e: &serde_json::Error) -> AppError {
-    AppError::Validation(format!("json error: {e}"))
+fn json_err(e: serde_json::Error) -> AppError {
+    AppError::validation("json error", e)
 }
 
 /// Enough keys that a map saving in an order of its own rarely lands back on the same one.
@@ -47,7 +47,7 @@ fn test_view_state_default() {
 fn test_view_state_missing_fields_default() -> Result<(), AppError> {
     // An empty object must deserialize to all-defaults — mirrors a fresh
     // `views.json` or a partial file written by an older client.
-    let vs: ViewStateData = serde_json::from_str("{}").map_err(|e| json_err(&e))?;
+    let vs: ViewStateData = serde_json::from_str("{}").map_err(json_err)?;
     assert_eq!(vs.last_nav_index, 3);
     assert!(vs.view_sort.is_empty());
     // Written before either page had tabs — must read back as the first tab,
@@ -72,7 +72,7 @@ fn test_view_state_ignores_the_retired_collapse_flags() -> Result<(), AppError> 
         "favorites_artists_collapsed": true,
         "favorites_most_played_collapsed": true
     }"#;
-    let vs: ViewStateData = serde_json::from_str(legacy).map_err(|e| json_err(&e))?;
+    let vs: ViewStateData = serde_json::from_str(legacy).map_err(json_err)?;
     assert_eq!(vs.last_nav_index, 2);
     assert_eq!(vs.favorites_tab, 0);
     Ok(())
@@ -84,7 +84,7 @@ fn test_view_state_ignores_the_retired_collapse_flags() -> Result<(), AppError> 
 fn a_views_file_from_before_the_marks_keeps_its_columns() -> Result<(), AppError> {
     let legacy = r#"{"view_columns": {"tracks": ["artist", "year"]}}"#;
 
-    let vs: ViewStateData = serde_json::from_str(legacy).map_err(|e| json_err(&e))?;
+    let vs: ViewStateData = serde_json::from_str(legacy).map_err(json_err)?;
 
     let columns = vec!["artist".to_owned(), "year".to_owned()];
     assert_eq!((vs.view_columns.get("tracks"), vs.view_marks.len()), (Some(&columns), 0));
@@ -98,7 +98,7 @@ fn a_views_file_from_before_the_marks_keeps_its_columns() -> Result<(), AppError
 fn the_retired_settings_tab_is_not_read_as_a_category() -> Result<(), AppError> {
     let legacy = r#"{"settings_tab": 3}"#;
 
-    let vs: ViewStateData = serde_json::from_str(legacy).map_err(|e| json_err(&e))?;
+    let vs: ViewStateData = serde_json::from_str(legacy).map_err(json_err)?;
 
     assert_eq!(vs.settings_category, 0);
     Ok(())
@@ -117,8 +117,8 @@ fn test_view_state_roundtrip() -> Result<(), AppError> {
         my_library_tab: 2,
         ..ViewStateData::default()
     };
-    let json = serde_json::to_string(&vs).map_err(|e| json_err(&e))?;
-    let back: ViewStateData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&vs).map_err(json_err)?;
+    let back: ViewStateData = serde_json::from_str(&json).map_err(json_err)?;
     assert_eq!(back.browse_path.as_deref(), Some("/music/rock"));
     assert_eq!(back.browse_view_mode, 1);
     assert_eq!(back.last_nav_index, 5);
@@ -152,18 +152,18 @@ fn a_save_that_changes_nothing_leaves_views_json_as_it_was() -> Result<(), AppEr
 #[test]
 fn test_view_sort_in_view_state() -> Result<(), AppError> {
     let json = r#"{"view_sort": {"tracks": {"field": "title", "dir": "desc"}, "albums": {"field": "year", "dir": "asc"}}}"#;
-    let vs: ViewStateData = serde_json::from_str(json).map_err(|e| json_err(&e))?;
+    let vs: ViewStateData = serde_json::from_str(json).map_err(json_err)?;
     assert_eq!(vs.view_sort.len(), 2);
     let tracks_sort = vs
         .view_sort
         .get("tracks")
-        .ok_or_else(|| AppError::Validation("missing tracks sort".into()))?;
+        .ok_or_else(|| AppError::validation_msg("missing tracks sort"))?;
     assert_eq!(tracks_sort.field, "title");
     assert!(matches!(tracks_sort.dir, SortDir::Desc));
     let albums_sort = vs
         .view_sort
         .get("albums")
-        .ok_or_else(|| AppError::Validation("missing albums sort".into()))?;
+        .ok_or_else(|| AppError::validation_msg("missing albums sort"))?;
     assert_eq!(albums_sort.field, "year");
     assert!(matches!(albums_sort.dir, SortDir::Asc));
     Ok(())
@@ -178,8 +178,8 @@ fn test_view_sort_in_view_state() -> Result<(), AppError> {
 fn the_top_of_the_range_survives_a_views_json_round_trip() -> Result<(), AppError> {
     let vs =
         ViewStateData { last_nav_index: MAX_NAV_INDEX, radio_tab: 2, ..ViewStateData::default() };
-    let json = serde_json::to_string(&vs).map_err(|e| json_err(&e))?;
-    let back: ViewStateData = serde_json::from_str(&json).map_err(|e| json_err(&e))?;
+    let json = serde_json::to_string(&vs).map_err(json_err)?;
+    let back: ViewStateData = serde_json::from_str(&json).map_err(json_err)?;
     assert_eq!(back.last_nav_index, MAX_NAV_INDEX);
     assert_eq!(back.radio_tab, 2);
     Ok(())

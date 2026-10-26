@@ -146,7 +146,7 @@ pub async fn station_by_uuid(
     station_uuid: &str,
 ) -> Result<Option<DirectoryStation>, AppError> {
     if !model::is_path_safe_uuid(station_uuid) {
-        return Err(AppError::Validation("Not a radio directory station id".to_owned()));
+        return Err(AppError::validation_msg("Not a radio directory station id"));
     }
     let url = endpoint(client, &format!("stations/byuuid/{station_uuid}")).await;
     station_by_uuid_at(client, &url).await
@@ -176,7 +176,7 @@ async fn station_by_uuid_at(
 /// report, not an error to swallow.
 pub async fn cast_vote(client: &reqwest::Client, station_uuid: &str) -> Result<(), AppError> {
     if !model::is_path_safe_uuid(station_uuid) {
-        return Err(AppError::Validation("Not a radio directory station id".to_owned()));
+        return Err(AppError::validation_msg("Not a radio directory station id"));
     }
     let url = endpoint(client, &format!("vote/{station_uuid}")).await;
     cast_vote_at(client, &url).await

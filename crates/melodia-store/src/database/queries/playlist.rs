@@ -309,10 +309,11 @@ async fn insert_items_tx(
     let mut inserted: u64 = 0;
     for (chunk_idx, chunk) in track_ids.chunks(CHUNK_SIZE).enumerate() {
         let chunk_offset = start_position
-            .checked_add(i32::try_from(chunk_idx * CHUNK_SIZE).map_err(|_| {
-                AppError::Validation("playlist chunk offset overflows i32".to_owned())
-            })?)
-            .ok_or_else(|| AppError::Validation("playlist position overflows i32".to_owned()))?;
+            .checked_add(
+                i32::try_from(chunk_idx * CHUNK_SIZE)
+                    .map_err(|_| AppError::validation_msg("playlist chunk offset overflows i32"))?,
+            )
+            .ok_or_else(|| AppError::validation_msg("playlist position overflows i32"))?;
         let mut query_builder = sqlx::QueryBuilder::new(
             "INSERT OR IGNORE INTO playlist_items (playlist_id, track_id, position, added_at) ",
         );
@@ -387,10 +388,10 @@ pub async fn move_playlist_tracks(
         .map(|(row, _)| row)
         .collect();
     if rows.len() != moving.len() {
-        return Err(AppError::NotFound("Track not in the playlist".to_owned()));
+        return Err(AppError::not_found_msg("Track not in the playlist"));
     }
     if to + rows.len() > items.len() {
-        return Err(AppError::NotFound("Invalid position index".to_owned()));
+        return Err(AppError::not_found_msg("Invalid position index"));
     }
     if !block_move::move_block(&mut items, &rows, to) {
         return Ok(());

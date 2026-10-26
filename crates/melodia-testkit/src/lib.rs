@@ -376,6 +376,35 @@ pub fn strip_line_comments(src: &str) -> String {
     out
 }
 
+/// Whether `name` is how the tree spells a binding holding an error. One definition for every
+/// walk that reads for one, so two walks can't disagree about which names count.
+pub fn is_error_name(name: &str) -> bool {
+    matches!(name, "e" | "err" | "error") || name.ends_with("_err") || name.ends_with("_error")
+}
+
+/// The identifiers a format string captures inline, `{name}` or `{name:spec}`.
+pub fn inline_names(literal: &str) -> Vec<&str> {
+    let bytes = literal.as_bytes();
+    let mut names = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'{' if bytes.get(at + 1) == Some(&b'{') => at += 2,
+            b'{' => {
+                let close = literal[at..].find('}').map_or(literal.len(), |offset| at + offset);
+                let spec = &literal[at + 1..close];
+                let name = spec.split(':').next().unwrap_or(spec).trim();
+                if name.starts_with(|first: char| first.is_alphabetic() || first == '_') {
+                    names.push(name);
+                }
+                at = close + 1;
+            }
+            _ => at += 1,
+        }
+    }
+    names
+}
+
 /// The body of every `component { … }` block in `src`, braces excluded.
 ///
 /// A declaration is the name followed by `{`, which is what separates `sv := ScrollView {` from

@@ -71,8 +71,7 @@ fn insert_next_clamps_to_end() -> Result<(), AppError> {
     q.insert_next(&[10]);
 
     // Should clamp insert position to play_order.len()
-    let last =
-        q.play_order.last().ok_or_else(|| AppError::Validation("play_order empty".into()))?;
+    let last = q.play_order.last().ok_or_else(|| AppError::validation_msg("play_order empty"))?;
     assert_eq!(*last, 2);
     Ok(())
 }
@@ -386,7 +385,7 @@ fn peek_next_all_at_end_returns_first() -> Result<(), AppError> {
     let mut q = make_queue(3);
     q.current_index = Some(2);
     q.repeat_mode = RepeatMode::All;
-    let track = q.peek_next().ok_or_else(|| AppError::Validation("peek_next None".into()))?;
+    let track = q.peek_next().ok_or_else(|| AppError::validation_msg("peek_next None"))?;
     assert_eq!(track, 1);
     Ok(())
 }
@@ -396,7 +395,7 @@ fn peek_next_one_returns_current() -> Result<(), AppError> {
     let mut q = make_queue(3);
     q.current_index = Some(1);
     q.repeat_mode = RepeatMode::One;
-    let track = q.peek_next().ok_or_else(|| AppError::Validation("peek_next None".into()))?;
+    let track = q.peek_next().ok_or_else(|| AppError::validation_msg("peek_next None"))?;
     assert_eq!(track, 2); // tracks[play_order[1]] = tracks[1], id=2
     Ok(())
 }
@@ -643,7 +642,7 @@ fn prune_missing_keeps_current_when_other_removed() -> Result<(), AppError> {
     assert_eq!(q.play_order, vec![1, 2, 3]);
     assert_eq!(q.original_order, vec![1, 2, 3]);
     let current =
-        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+        q.current_id().ok_or_else(|| AppError::validation_msg("current_id None after prune"))?;
     assert_eq!(current, 3);
     Ok(())
 }
@@ -662,7 +661,7 @@ fn prune_missing_advances_when_current_removed() -> Result<(), AppError> {
     assert_eq!(outcome.removed, 1);
     assert_eq!(*q.play_ids(), [1, 3]);
     let current =
-        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+        q.current_id().ok_or_else(|| AppError::validation_msg("current_id None after prune"))?;
     assert_eq!(current, 3);
     Ok(())
 }
@@ -681,7 +680,7 @@ fn prune_missing_clamps_to_last_survivor_when_tail_removed() -> Result<(), AppEr
     assert!(outcome.current_was_removed);
     assert_eq!(q.current_index, Some(1));
     let current =
-        q.current_id().ok_or_else(|| AppError::Validation("current_id None after prune".into()))?;
+        q.current_id().ok_or_else(|| AppError::validation_msg("current_id None after prune"))?;
     assert_eq!(current, 2);
     Ok(())
 }
@@ -724,7 +723,7 @@ fn prune_missing_keeps_the_shuffled_order_of_the_survivors() {
 fn current_id_returns_track() -> Result<(), AppError> {
     let mut q = make_queue(3);
     q.current_index = Some(1);
-    let track = q.current_id().ok_or_else(|| AppError::Validation("current_id None".into()))?;
+    let track = q.current_id().ok_or_else(|| AppError::validation_msg("current_id None"))?;
     assert_eq!(track, 2);
     Ok(())
 }

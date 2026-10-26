@@ -116,18 +116,18 @@ fn display_metadata() {
 }
 
 #[test]
-fn display_all_string_variants() {
+fn display_every_message_only_variant() {
     let cases: Vec<(AppError, &str)> = vec![
         (AppError::scanner_msg("s"), "Scanner error: s"),
-        (AppError::NotFound("n".into()), "Not found: n"),
+        (AppError::not_found_msg("n"), "Not found: n"),
         (AppError::player_msg("p"), "Player error: p"),
-        (AppError::Queue("q".into()), "Queue error: q"),
-        (AppError::Settings("st".into()), "Settings error: st"),
-        (AppError::Window("w".into()), "Window error: w"),
+        (AppError::queue_msg("q"), "Queue error: q"),
+        (AppError::settings_msg("st"), "Settings error: st"),
+        (AppError::window_msg("w"), "Window error: w"),
         (AppError::watcher_msg("wa"), "Watcher error: wa"),
         (AppError::network_msg("ne"), "Network error: ne"),
         (AppError::updater_msg("u"), "Updater error: u"),
-        (AppError::Validation("v".into()), "Validation error: v"),
+        (AppError::validation_msg("v"), "Validation error: v"),
     ];
     for (err, expected) in cases {
         assert_eq!(format!("{err}"), expected);

@@ -132,7 +132,7 @@ pub async fn apply(
         #[cfg(target_os = "linux")]
         AlwaysOnTopMethod::GnomeExtension => gnome::set_always_on_top(pinned).await,
         AlwaysOnTopMethod::Unsupported => {
-            Err(AppError::Window("Always-on-top is not supported on this desktop".to_owned()))
+            Err(AppError::window_msg("Always-on-top is not supported on this desktop"))
         }
     }
 }

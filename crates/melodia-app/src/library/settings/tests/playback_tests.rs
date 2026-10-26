@@ -94,7 +94,7 @@ fn a_speed_that_is_not_a_number_is_refused_and_never_written() -> Result<(), App
 
     let refused = set_playback_speed(&paths, f64::NAN);
 
-    assert!(matches!(refused, Err(AppError::Validation(_))));
+    assert!(matches!(refused, Err(AppError::Validation { .. })));
     assert!((stored_speed(&paths)? - before).abs() < f64::EPSILON);
     Ok(())
 }

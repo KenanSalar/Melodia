@@ -159,7 +159,7 @@ async fn genre_named(db: &DbPool, name: &str) -> Result<genre::GenreStats, AppEr
     let all = listed_genres(db).await?;
     all.into_iter()
         .find(|g| g.name == name)
-        .ok_or_else(|| AppError::Validation(format!("no genre named {name}")))
+        .ok_or_else(|| AppError::validation_msg(format!("no genre named {name}")))
 }
 
 /// A genre's count straight off the table, for the rows `genre_stats` filters out at zero.
@@ -175,7 +175,7 @@ async fn artist_named(db: &DbPool, name: &str) -> Result<artist::ArtistStats, Ap
     let all = listed_artists(db).await?;
     all.into_iter()
         .find(|a| a.name == name)
-        .ok_or_else(|| AppError::Validation(format!("no artist named {name}")))
+        .ok_or_else(|| AppError::validation_msg(format!("no artist named {name}")))
 }
 
 /// **A count and the page under it have to describe the same set.** `genres.track_count` is

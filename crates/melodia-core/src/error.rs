@@ -30,8 +30,12 @@ pub enum AppError {
         source: Option<BoxedSource>,
     },
 
-    #[error("Not found: {0}")]
-    NotFound(String),
+    #[error("Not found: {msg}")]
+    NotFound {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
     #[error("Player error: {msg}")]
     Player {
@@ -40,14 +44,26 @@ pub enum AppError {
         source: Option<BoxedSource>,
     },
 
-    #[error("Queue error: {0}")]
-    Queue(String),
+    #[error("Queue error: {msg}")]
+    Queue {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
-    #[error("Settings error: {0}")]
-    Settings(String),
+    #[error("Settings error: {msg}")]
+    Settings {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
-    #[error("Window error: {0}")]
-    Window(String),
+    #[error("Window error: {msg}")]
+    Window {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 
     #[error("Watcher error: {msg}")]
     Watcher {
@@ -70,8 +86,12 @@ pub enum AppError {
         source: Option<BoxedSource>,
     },
 
-    #[error("Validation error: {0}")]
-    Validation(String),
+    #[error("Validation error: {msg}")]
+    Validation {
+        msg: String,
+        #[source]
+        source: Option<BoxedSource>,
+    },
 }
 
 /// What [`AppError::io`] hands `io::Error`: the operation and the error that failed it.
@@ -84,7 +104,12 @@ struct Context {
 
 impl AppError {
     pub fn not_found(entity: &str, id: i64) -> Self {
-        Self::NotFound(format!("{entity} not found: {id}"))
+        Self::not_found_msg(format!("{entity} not found: {id}"))
+    }
+
+    /// Not found from a message only. A lookup miss has no cause, so there is no source form.
+    pub fn not_found_msg(msg: impl Into<String>) -> Self {
+        Self::NotFound { msg: msg.into(), source: None }
     }
 
     pub fn io_other(msg: impl Into<String>) -> Self {
@@ -97,8 +122,8 @@ impl AppError {
         Self::Io(std::io::Error::other(source))
     }
 
-    /// `Io` naming the operation that failed beside its typed cause. The home for a cause whose
-    /// category has no struct variant to carry it: a D-Bus call, a task join.
+    /// `Io` naming the operation that failed beside its typed cause. The home for a cause no
+    /// category fits: a D-Bus call, a task join.
     ///
     /// Both halves are printed, so text built from `{e}`, such as a toast's detail, still says
     /// why, and [`describe`] skips the repeat on its way down the chain.
@@ -167,6 +192,46 @@ impl AppError {
     /// Updater error from a message only, such as an installer's exit code.
     pub fn updater_msg(msg: impl Into<String>) -> Self {
         Self::Updater { msg: msg.into(), source: None }
+    }
+
+    /// Queue error wrapping an underlying cause.
+    pub fn queue(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+        Self::Queue { msg: msg.into(), source: Some(source.into()) }
+    }
+
+    /// Queue error from a message only.
+    pub fn queue_msg(msg: impl Into<String>) -> Self {
+        Self::Queue { msg: msg.into(), source: None }
+    }
+
+    /// Settings error wrapping an underlying cause.
+    pub fn settings(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+        Self::Settings { msg: msg.into(), source: Some(source.into()) }
+    }
+
+    /// Settings error from a message only.
+    pub fn settings_msg(msg: impl Into<String>) -> Self {
+        Self::Settings { msg: msg.into(), source: None }
+    }
+
+    /// Window error wrapping an underlying cause.
+    pub fn window(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+        Self::Window { msg: msg.into(), source: Some(source.into()) }
+    }
+
+    /// Window error from a message only.
+    pub fn window_msg(msg: impl Into<String>) -> Self {
+        Self::Window { msg: msg.into(), source: None }
+    }
+
+    /// Validation error wrapping an underlying cause (a path that won't resolve).
+    pub fn validation(msg: impl Into<String>, source: impl Into<BoxedSource>) -> Self {
+        Self::Validation { msg: msg.into(), source: Some(source.into()) }
+    }
+
+    /// Validation error from a message only.
+    pub fn validation_msg(msg: impl Into<String>) -> Self {
+        Self::Validation { msg: msg.into(), source: None }
     }
 }
 

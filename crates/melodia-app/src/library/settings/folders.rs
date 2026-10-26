@@ -24,10 +24,13 @@ fn validate_folder_path(
     existing_folders: &[folder::Folder],
 ) -> Result<PathBuf, AppError> {
     if !new_path.exists() {
-        return Err(AppError::Validation(format!("Path does not exist: {}", new_path.display())));
+        return Err(AppError::validation_msg(format!(
+            "Path does not exist: {}",
+            new_path.display()
+        )));
     }
     if !new_path.is_dir() {
-        return Err(AppError::Validation(format!(
+        return Err(AppError::validation_msg(format!(
             "Path is not a directory: {}",
             new_path.display()
         )));
@@ -43,14 +46,14 @@ fn validate_folder_path(
         };
 
         if canonical_new == canonical_existing {
-            return Err(AppError::Validation(format!(
+            return Err(AppError::validation_msg(format!(
                 "This folder is already in your library: {}",
                 folder.path
             )));
         }
 
         if canonical_new.starts_with(&canonical_existing) {
-            return Err(AppError::Validation(format!(
+            return Err(AppError::validation_msg(format!(
                 "This folder is already covered by: {}",
                 folder.path
             )));

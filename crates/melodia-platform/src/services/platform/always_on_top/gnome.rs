@@ -49,13 +49,13 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
                     .is_some_and(|c| c.to_lowercase().contains("melodia"))
             })
             .or(pid_matches.first())
-            .ok_or_else(|| AppError::Window("Could not find Melodia window in GNOME".to_owned()))?;
+            .ok_or_else(|| AppError::window_msg("Could not find Melodia window in GNOME"))?;
 
         let window_id: u32 = window
             .get("id")
             .and_then(serde_json::Value::as_u64)
             .and_then(|id| u32::try_from(id).ok())
-            .ok_or_else(|| AppError::Window("Melodia window has no valid id field".to_owned()))?;
+            .ok_or_else(|| AppError::window_msg("Melodia window has no valid id field"))?;
 
         let method = if pinned { "MakeAbove" } else { "UnmakeAbove" };
 

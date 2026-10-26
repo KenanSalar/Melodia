@@ -23,7 +23,7 @@ fn stored_preference(paths: &Paths) -> Result<ThemePreference, AppError> {
     services::settings::read_settings(paths)?
         .theme_preferences
         .remove(THEME)
-        .ok_or_else(|| AppError::Validation(format!("no preference stored for {THEME}")))
+        .ok_or_else(|| AppError::validation_msg(format!("no preference stored for {THEME}")))
 }
 
 /// A root seeded for `THEME`, with `accent` as the accent an earlier build left at the top level.

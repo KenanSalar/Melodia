@@ -15,7 +15,7 @@ use melodia_core::error::AppError;
 /// immediately, and this write only carries the choice across the next boot.
 pub fn set_locale(paths: &Paths, code: String) -> Result<(), AppError> {
     if !SUPPORTED_LOCALES.contains(&code.as_str()) {
-        return Err(AppError::Validation(format!("Unsupported locale: {code}")));
+        return Err(AppError::validation_msg(format!("Unsupported locale: {code}")));
     }
     services::settings::mutate_settings(paths, move |settings| {
         settings.locale = code;

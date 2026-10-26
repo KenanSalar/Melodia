@@ -23,7 +23,7 @@ fn make_folder(id: i64, path: &str) -> Folder {
 
 fn err_msg<T>(result: Result<T, AppError>) -> Result<String, AppError> {
     let Err(e) = result else {
-        return Err(AppError::Validation("expected error".into()));
+        return Err(AppError::validation_msg("expected error"));
     };
     Ok(e.to_string())
 }
@@ -56,7 +56,7 @@ fn validate_duplicate_folder_returns_error() -> Result<(), AppError> {
 
     let canonical = melodia_core::utils::canonicalize_path(&dir)?;
     let canonical_str =
-        canonical.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
+        canonical.to_str().ok_or_else(|| AppError::validation_msg("non-utf8 path"))?;
     let existing = make_folder(1, canonical_str);
 
     let result = validate_folder_path(&dir, &[existing]);
@@ -74,7 +74,7 @@ fn validate_child_of_existing_returns_error() -> Result<(), AppError> {
 
     let canonical_parent = melodia_core::utils::canonicalize_path(&parent)?;
     let canonical_str =
-        canonical_parent.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
+        canonical_parent.to_str().ok_or_else(|| AppError::validation_msg("non-utf8 path"))?;
     let existing = make_folder(1, canonical_str);
 
     let result = validate_folder_path(&child, &[existing]);
@@ -95,8 +95,8 @@ fn folders_inside_finds_every_folder_under_the_path() -> Result<(), AppError> {
     let c1 = melodia_core::utils::canonicalize_path(&child1)?;
     let c2 = melodia_core::utils::canonicalize_path(&child2)?;
     let existing = vec![
-        make_folder(10, c1.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?),
-        make_folder(20, c2.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?),
+        make_folder(10, c1.to_str().ok_or_else(|| AppError::validation_msg("non-utf8 path"))?),
+        make_folder(20, c2.to_str().ok_or_else(|| AppError::validation_msg("non-utf8 path"))?),
     ];
 
     let canonical_parent = melodia_core::utils::canonicalize_path(&parent)?;
@@ -118,7 +118,7 @@ fn folders_inside_leaves_out_an_unrelated_folder() -> Result<(), AppError> {
     let canonical_a = melodia_core::utils::canonicalize_path(&dir_a)?;
     let existing = make_folder(
         1,
-        canonical_a.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
+        canonical_a.to_str().ok_or_else(|| AppError::validation_msg("non-utf8 path"))?,
     );
 
     let canonical_b = melodia_core::utils::canonicalize_path(&dir_b)?;
@@ -136,7 +136,7 @@ fn folders_inside_leaves_out_the_folder_itself() -> Result<(), AppError> {
     let canonical = melodia_core::utils::canonicalize_path(&music)?;
     let own_row = make_folder(
         1,
-        canonical.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
+        canonical.to_str().ok_or_else(|| AppError::validation_msg("non-utf8 path"))?,
     );
 
     assert!(folders_inside(&canonical, &[own_row]).is_empty());
@@ -154,7 +154,7 @@ fn folders_inside_leaves_out_a_folder_whose_directory_is_gone() -> Result<(), Ap
     let unmounted = canonical.join("external");
     let row = make_folder(
         2,
-        unmounted.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?,
+        unmounted.to_str().ok_or_else(|| AppError::validation_msg("non-utf8 path"))?,
     );
 
     assert!(folders_inside(&canonical, &[row]).is_empty());
@@ -206,7 +206,7 @@ fn validate_canonicalizes_symlinks() -> Result<(), AppError> {
 
     let canonical = melodia_core::utils::canonicalize_path(&real_dir)?;
     let canonical_str =
-        canonical.to_str().ok_or_else(|| AppError::Validation("non-utf8 path".into()))?;
+        canonical.to_str().ok_or_else(|| AppError::validation_msg("non-utf8 path"))?;
     let existing = make_folder(1, canonical_str);
 
     let result = validate_folder_path(&link_path, &[existing]);
