@@ -22,21 +22,17 @@ pub enum FileEvent {
         from: PathBuf,
         to: PathBuf,
     },
-    /// Kernel queue overflow (Linux inotify `IN_Q_OVERFLOW` or platform
-    /// equivalent) — surfaced by `notify` via `event.need_rescan()`. The
-    /// per-file event stream is no longer trustworthy; consumer should
-    /// trigger a full library reconcile instead of acting on individual
-    /// events in the same batch.
+    /// The kernel's queue overflowed, so the batch's per-file events can't be trusted and the
+    /// library is reconciled whole.
     RescanNeeded,
 }
 
 /// The recommended watcher, minus the access events nothing here reads.
 ///
-/// notify's inotify backend watches `IN_OPEN` with no way to leave it out, so every folder a walk
-/// reads and every file a scan, hash or playback opens raises an event on each watch that sees it.
-/// [`classify_event`] would drop them anyway; dropping them here keeps them out of the debouncer's
-/// queues as well. notify-rs/notify#736 moves the filter into the kernel's watch mask, and this
-/// wrapper goes once a stable notify carries it.
+/// notify's inotify backend watches `IN_OPEN` unconditionally, so every walk, scan, hash and
+/// playback open raises an event on each watch that sees it; dropped here, they stay out of the
+/// debouncer's queues too. Goes once a stable notify carries notify-rs/notify#736's kernel-side
+/// filter.
 struct ChangeWatcher(RecommendedWatcher);
 
 /// Hands every event but an access on to the debouncer, rescan flags and errors included.
@@ -100,10 +96,8 @@ impl FolderWatcher {
             move |result: DebounceEventResult| {
                 match result {
                     Ok(events) => {
-                        // Any rescan flag in the batch means the kernel dropped events
-                        // somewhere — the per-file events around it can't be trusted.
-                        // Send a single RescanNeeded and skip classification; the
-                        // processor reconciles the whole library against disk.
+                        // A rescan flag means the kernel dropped events, so none around it can
+                        // be trusted.
                         if events.iter().any(|e| e.need_rescan()) {
                             log::warn!(
                                 "Watcher queue overflow flag set — requesting full library rescan"
@@ -118,9 +112,8 @@ impl FolderWatcher {
                         }
                         for event in events {
                             for file_event in classify_event(event.kind, &event.paths) {
-                                // blocking_send back-pressures the debouncer thread when the
-                                // consumer is slow rather than silently dropping events;
-                                // failure means the receiver was dropped (i.e. shutdown).
+                                // Back-pressures the debouncer rather than dropping events, and
+                                // fails only once the receiver is gone at shutdown.
                                 if let Err(e) = tx.blocking_send(file_event) {
                                     log::warn!(
                                         "File event channel closed (shutdown?): {}",
@@ -190,8 +183,7 @@ impl FolderWatcher {
     }
 }
 
-/// Classify a notify event into zero or more `FileEvent`s.
-/// Filters out non-audio files.
+/// The `FileEvent`s a notify event means for audio files.
 fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
     let mut events = Vec::new();
 
@@ -224,10 +216,8 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
                 if from_audio && to_audio {
                     events.push(FileEvent::Renamed { from: from.clone(), to: to.clone() });
                 } else if from_audio {
-                    // audio → non-audio: treat as removal
                     events.push(FileEvent::Removed(from.clone()));
                 } else if to_audio {
-                    // non-audio → audio: treat as creation
                     events.push(FileEvent::Created(to.clone()));
                 }
             }
@@ -241,7 +231,6 @@ fn classify_event(kind: EventKind, paths: &[PathBuf]) -> Vec<FileEvent> {
                 }
             }
         }
-        // Access, Metadata, Other — skip
         _ => {}
     }
 

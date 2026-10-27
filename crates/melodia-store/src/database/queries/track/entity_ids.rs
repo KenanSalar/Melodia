@@ -1,24 +1,18 @@
-//! The track ids behind a set of entities, for the card grids' right-click actions.
-//!
-//! Batched, where a page's keyset is one entity's: queueing five albums is one statement rather
-//! than five.
+//! The track ids behind a set of entities, for the card grids' right-click actions, batched so
+//! queueing five albums is one statement.
 //!
 //! **Each returns `(entity_id, track_id)` pairs, per-entity order preserved, grouping left to the
-//! caller.** `chunked_in_query` splits on the *entity* ids, so every one of an entity's rows lands
-//! in a single chunk and its `ORDER BY` survives; the order the entities themselves come back in
-//! does not, and is the caller's to restore from the ids it asked with.
+//! caller.** `chunked_in_query` splits on the entity ids, so each entity's rows share a chunk and
+//! its `ORDER BY`; the entities' own order is the caller's to restore.
 
 use super::keyset::detail_order;
 use crate::database::{DbPool, chunked_in_query};
 use melodia_core::entities::track_list::TrackSortField;
 use melodia_core::error::AppError;
 
-/// Album tracks in the order Album Detail defaults to: `ui::track_sort`'s `"track_number"` arm,
-/// not the bare disc and track columns.
-///
-/// The two disagree on NULL, which both columns allow: `SQLite` sorts it first and the comparator
-/// sorts an untagged track last, which the arm closes. It gives up the ordering half of
-/// `idx_tracks_album_disc_track` to sort sets one album wide; the `album_id` lookup still uses it.
+/// Album tracks in Album Detail's default order, `ui::track_sort`'s `"track_number"` arm rather
+/// than the bare columns, which sort a NULL first where the comparator puts an untagged track
+/// last. `idx_tracks_album_disc_track` still answers the lookup, if no longer the order.
 pub async fn track_ids_by_albums(
     db: &DbPool,
     album_ids: &[i64],
@@ -34,14 +28,11 @@ pub async fn track_ids_by_albums(
     .await
 }
 
-/// Artist tracks in the order Artist Detail defaults to: by album, then title, which is
-/// `ui::track_sort`'s `"album"` arm. **Not `sort_key`**, which queues a catalogue alphabetically
-/// by title under a page that shows it by album.
+/// Artist tracks in Artist Detail's default, `ui::track_sort`'s `"album"` arm. **Not `sort_key`**,
+/// which queues by title under a page showing the catalogue by album.
 ///
-/// **Joins where the page's keyset deliberately doesn't**, the artist id having to be in the
-/// projection for the caller to group on. So a row repeats both across selected artists and inside
-/// one that credits the same artist twice, and the caller's dedupe is what covers the second case
-/// here.
+/// **Joins where the page's keyset doesn't**, to project the artist id, so a row repeats across
+/// selected artists and inside one crediting the same artist twice; the caller dedupes.
 pub async fn track_ids_by_artists(
     db: &DbPool,
     artist_ids: &[i64],
@@ -93,22 +84,13 @@ pub async fn track_ids_by_playlists(
     .await
 }
 
-/// Every track under `dir_path`, subdirectories included, in path order.
+/// Every track under `dir_path`, subdirectories included, in path order: what "play this folder"
+/// means for a card, where [`super::get_tracks_in_directory`] is the one level Browse lists. An
+/// artist folder of album folders would otherwise play nothing.
 ///
-/// Recursive where [`super::get_tracks_in_directory`] deliberately isn't: that one answers what
-/// Browse *lists* for a directory it has navigated into, this one answers what "play this folder"
-/// means for a card, and an artist folder holding only album subfolders would otherwise play
-/// nothing at all.
-///
-/// Shares that function's platform invariant through `list::directory_like_prefix`: `file_path`
-/// is stored with the platform's native separator, so the pattern carries it too.
-///
-/// `COLLATE NOCASE` because `library::browse` lists a directory's files through
-/// `to_lowercase()`, and the default BINARY collation would play `Zebra.flac` before
-/// `apple.flac` under a listing that shows the reverse. ASCII-only against a Unicode fold, so
-/// the two still part on a non-ASCII case pair. **Case is the whole of the agreement**: this
-/// reads the subtree where the listing is one level, and keys on the path where it keys on the
-/// name, so a folder holding folders queues in an order no page shows.
+/// `COLLATE NOCASE` because Browse lists through `to_lowercase()`, and BINARY would play
+/// `Zebra.flac` before `apple.flac`. ASCII against a Unicode fold, and a subtree against one level,
+/// so **case is the whole of the agreement**.
 pub async fn track_ids_under_directory(db: &DbPool, dir_path: &str) -> Result<Vec<i64>, AppError> {
     let pattern = format!("{}%", super::list::directory_like_prefix(dir_path));
     let ids = sqlx::query_scalar::<_, i64>(

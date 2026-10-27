@@ -22,10 +22,7 @@ pub async fn commit_scan(
     ingested: &Ingested,
 ) -> Result<(), AppError> {
     let mut tx = db.write().begin().await?;
-    // On the bulk path a full recalc follows anyway, so a large orphan
-    // purge shouldn't pay per-row delete triggers on top — drop them for
-    // the delete. Small deltas keep the triggers on (per-row maintenance
-    // is the whole point of the `!is_bulk` branch).
+    // On the bulk path the recalc below covers the purge, so its deletes skip the triggers.
     let is_bulk = ingested.is_bulk();
     let bulk_orphan_purge = is_bulk && !orphans.is_empty();
     if bulk_orphan_purge {
@@ -36,18 +33,14 @@ pub async fn commit_scan(
         delete_tracks_by_paths_batch(&mut tx, orphans).await?;
     }
 
-    // No-op rescans (every file unchanged, no orphans, no inserts) skip the
-    // artwork roll-ups and the full stats recalc, O(rows) sweeps that produce
-    // identical values when nothing changed.
+    // A rescan that changed nothing skips the sweeps, which would only rewrite the same values.
     let any_changes = ingested.any() || !orphans.is_empty();
 
     if any_changes {
         roll_up_covers(&mut tx).await?;
-        // Purged orphan tracks can leave their album/artist/genre empty; sweep those.
         prune_orphans(&mut tx).await?;
     }
-    // Small deltas (`!is_bulk`) never dropped the triggers, so per-row
-    // maintenance already kept the stats correct — no recalc needed at all.
+    // A small delta kept its triggers, so its counts are already right.
     if is_bulk {
         if any_changes {
             stats::recalculate_all_stats(&mut tx).await?;

@@ -10,9 +10,7 @@ use crate::database::{DbPool, MAX_BINDS_PER_STATEMENT, chunked_in_query, select_
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
-/// Technical-metadata projection for the full-screen Now Playing view's chip row — reads only the
-/// columns `TrackMetaRow` consumes, against `get_track_by_id`'s full `SELECT *`. Returns `None`
-/// for a missing id; the caller renders empty chips.
+/// The Now Playing view's technical chips, `None` for a missing id.
 pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackMeta>, AppError> {
     let cols = columns::TRACK_META.joined();
     let sql = format!("SELECT {cols} FROM tracks WHERE id = ? LIMIT 1");
@@ -23,8 +21,7 @@ pub async fn get_track_meta(db: &DbPool, id: i64) -> Result<Option<track::TrackM
     Ok(row)
 }
 
-/// Single-id fetch of the columns a scrobble needs, for the detector's per-track-start enrichment.
-/// Sibling of `get_track_meta`; returns `None` for a missing id, and the detector then skips it.
+/// The columns a scrobble needs, for the detector's per-track enrichment; `None` for a missing id.
 pub async fn get_scrobble_row(
     db: &DbPool,
     id: i64,
@@ -39,9 +36,8 @@ pub async fn get_scrobble_row(
     Ok(row)
 }
 
-/// Every favorited track's scrobble projection — the bulk source for the retroactive love
-/// backfill, so connecting a service syncs existing favorites without re-toggling each heart.
-/// Carries the `MusicBrainz` ids `ScrobbleRow` needs for the `ListenBrainz` love path.
+/// Every favorite's scrobble row, so connecting a service backfills its loves without re-toggling
+/// each heart.
 pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::ScrobbleRow>, AppError> {
     let cols = columns::SCROBBLE_ROW.joined();
     let sql = format!("SELECT {cols} FROM tracks WHERE is_favorite = TRUE");
@@ -50,9 +46,8 @@ pub async fn get_favorite_scrobble_rows(db: &DbPool) -> Result<Vec<track::Scrobb
     Ok(rows)
 }
 
-/// Bulk sibling of [`get_scrobble_row`]: the scrobble projection for an arbitrary id set in one
-/// chunked `IN (…)` query, so the favorite→love sync enriches a multi-selection without a per-id
-/// round-trip. Love order is irrelevant, so rows come back in query order.
+/// [`get_scrobble_row`] for a multi-selection's favorite-to-love sync, in query order, the order of
+/// loves not mattering.
 pub async fn get_scrobble_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -64,8 +59,6 @@ pub async fn get_scrobble_rows_by_ids(
     .await
 }
 
-/// Fetch just the `file_path` column for a single track id — the leanest projection, for the "Open
-/// Containing Folder" action. Returns `None` for a missing id.
 pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>, AppError> {
     let path: Option<String> =
         sqlx::query_scalar("SELECT file_path FROM tracks WHERE id = ? LIMIT 1")
@@ -75,16 +68,13 @@ pub async fn get_track_file_path(db: &DbPool, id: i64) -> Result<Option<String>,
     Ok(path)
 }
 
-/// How many tracks the library holds. The diagnostics bundle reports it as library shape — a bug
-/// that only shows up at scale is a different bug — and a filtered Songs list as its total.
+/// How many tracks the library holds, for the diagnostics bundle and a filtered Songs list's total.
 pub async fn count_tracks(db: &DbPool) -> Result<i64, AppError> {
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tracks").fetch_one(db.read()).await?;
     Ok(count)
 }
 
-/// Fetch `TrackSummary` projections by IDs, preserving the input order. Reads only the columns the
-/// queue / now-playing / playback paths consume, against `get_tracks_by_ids`' full row — a caller
-/// that would immediately collect into `TrackSummary` wants this instead.
+/// `TrackSummary` rows for `ids`, in order: what the queue, Now Playing and playback read.
 pub async fn get_track_summaries_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -92,8 +82,7 @@ pub async fn get_track_summaries_by_ids(
     rows_in_id_order(db, columns::TRACK_SUMMARY.joined(), ids, |t: &track::TrackSummary| t.id).await
 }
 
-/// Fetch `TrackListRow` projections by IDs, preserving the input order: the page of rows a list
-/// holding only its ids draws.
+/// `TrackListRow` rows for `ids`, in order: the page a list holding only its ids draws.
 pub async fn get_track_list_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -101,8 +90,7 @@ pub async fn get_track_list_rows_by_ids(
     rows_in_id_order(db, columns::TRACK_LIST.joined(), ids, |t: &track::TrackListRow| t.id).await
 }
 
-/// Fetch `MostPlayedFavorite` cards by IDs, preserving the input order, for a Most Played grid
-/// holding only its ranked ids.
+/// Most Played cards for `ids`, in order.
 pub async fn get_most_played_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -124,15 +112,12 @@ where
     select_in_id_order(db, &format!("SELECT {cols} FROM tracks"), ids, id_of).await
 }
 
-/// Fetch `TagEditRow` projections by IDs for the Edit-Track-Information dialog, preserving the
-/// input order. Reads the editable **single-valued** tag columns plus the read-only technical ones
-/// the Summary tab shows, and joins nothing.
+/// `TagEditRow`s for `ids`, in order, for the Edit Track Information dialog: the editable
+/// single-valued columns and the Summary tab's technical ones.
 ///
-/// The multi-valued fields are deliberately absent: the dialog reads artists, genres and role
-/// credits as rows, through `get_track_{credits,role_credits,genres}_by_ids`. Widening this
-/// projection to carry one of their rendered columns instead is the regression — an editor
-/// populated from `tracks.genre` splits `Chanson, Francaise` into two genres and saving makes that
-/// permanent.
+/// **No multi-valued field**: the dialog reads artists, genres and role credits as rows through
+/// `get_track_{credits,role_credits,genres}_by_ids`. An editor filled from the rendered
+/// `tracks.genre` splits `Chanson, Francaise` into two genres, and saving makes that permanent.
 pub async fn get_tag_edit_rows_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -140,9 +125,8 @@ pub async fn get_tag_edit_rows_by_ids(
     rows_in_id_order(db, columns::TRACK_TAG_EDIT.joined(), ids, |t: &track::TagEditRow| t.id).await
 }
 
-/// Fetch `(id, file_path)` pairs by IDs, preserving the input order. The tag writer marks each
-/// `file_path` in the self-write suppression set before rewriting it, so a stable order keeps the
-/// marking deterministic.
+/// `(id, file_path)` for `ids`, in order, so the tag writer's self-write marks land
+/// deterministically.
 pub async fn get_track_paths_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -150,9 +134,8 @@ pub async fn get_track_paths_by_ids(
     rows_in_id_order(db, "id, file_path", ids, |&(id, _): &(i64, String)| id).await
 }
 
-/// Fetch `TrackLinks` projections by IDs, preserving the input order. The now-playing bar renders
-/// from `TrackSummary`, which carries no foreign keys, so its context menu resolves them here
-/// rather than widening the projection the player and `queue.json` share.
+/// `TrackLinks` for `ids`, in order: the foreign keys the now-playing bar's menu needs, which
+/// `TrackSummary` doesn't carry.
 pub async fn get_track_links_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -172,7 +155,7 @@ pub async fn missing_ids(db: &DbPool, ids: &[i64]) -> Result<HashSet<i64>, AppEr
     Ok(fetch_packed_ids(db, qb).await?.into_iter().collect())
 }
 
-/// Look up track IDs by file paths. Returns a map from `file_path` → track ID.
+/// `file_path → id` for each of `paths` that has a row.
 pub async fn get_track_ids_by_paths(
     db: &DbPool,
     paths: &[String],
@@ -187,10 +170,8 @@ pub async fn get_track_ids_by_paths(
     Ok(map)
 }
 
-/// Look up track IDs by BLAKE3 `file_hash`, through the partial index `idx_tracks_file_hash`.
-/// Hashes with no match are absent from the map. Where two tracks share a hash — true content
-/// duplicates — one arbitrary id wins, acceptable for playlist re-matching since either copy
-/// plays identical audio.
+/// `file_hash → id` for each of `hashes` that has a row. Where duplicates share a hash any one wins,
+/// either playing the same audio for a playlist re-match.
 pub async fn get_track_ids_by_hashes(
     db: &DbPool,
     hashes: &[String],
@@ -218,7 +199,6 @@ pub(crate) async fn lowest_id_by_hash_on(
     hashes: &[&str],
 ) -> Result<HashMap<String, (i64, String)>, AppError> {
     let mut out: HashMap<String, (i64, String)> = HashMap::new();
-    // Dedup so the bind list isn't quadratic on large duplicate-content sets.
     let unique: HashSet<&str> = hashes.iter().copied().collect();
     let unique: Vec<&str> = unique.into_iter().collect();
 
@@ -242,7 +222,7 @@ pub(crate) async fn lowest_id_by_hash_on(
     Ok(out)
 }
 
-/// Get all file paths of tracks that have no `file_hash` (for retroactive hashing).
+/// The tracks with no `file_hash` yet, for the retroactive hash.
 pub async fn get_unhashed_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>, AppError> {
     let rows: Vec<(i64, String)> =
         sqlx::query_as("SELECT id, file_path FROM tracks WHERE file_hash IS NULL")
@@ -251,18 +231,12 @@ pub async fn get_unhashed_track_paths(db: &DbPool) -> Result<Vec<(i64, String)>,
     Ok(rows)
 }
 
-/// One page of unrated track paths, by ascending id and starting past `after_id`. The work-list
-/// for the one-shot rating import.
+/// One page of unrated tracks past `after_id`, the one-shot rating import's work list.
 ///
-/// `rating = 0` is the only marker there is: the column is `NOT NULL DEFAULT 0`, so an untouched
-/// row and a deliberately cleared one look identical. That is why the sweep this feeds runs once
-/// and records the fact in `settings.json` rather than re-deriving it from the table.
-///
-/// Paged by keyset rather than `OFFSET`, and rated in whole pages rather than in one pass, because
-/// on the first run after ratings shipped the predicate selects the entire library: a `String` per
-/// track, resident at once. Keyset is also the only form that stays correct here, since the import
-/// writes ratings back as it goes, so rows leave `rating = 0` between pages and an offset would
-/// step over their neighbours.
+/// `rating = 0` can't tell an untouched row from a cleared one, so the import runs once and
+/// records that in `settings.json`. Keyset-paged because a first run selects the whole library,
+/// and because the import rates as it goes, so rows leave the predicate and an `OFFSET` would skip
+/// their neighbours.
 pub async fn get_unrated_track_paths_after(
     db: &DbPool,
     after_id: i64,

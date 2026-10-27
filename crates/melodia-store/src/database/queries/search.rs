@@ -1,19 +1,12 @@
-//! Search: one FTS5 match over `tracks_fts`, plus a name lookup per strip, all
-//! run together.
+//! Search: one FTS5 match over `tracks_fts`, plus a name lookup per strip, run together.
 //!
-//! **The diacritic folding stops at the index**, which is worth knowing before
-//! promising accent-insensitive search anywhere. `tracks_fts` tokenizes under
-//! `remove_diacritics 2`, so an unaccented query reaches an accented *track*.
-//! The `name LIKE` arms here are not folded: the same query reaches an accented
-//! album or artist only through their tracks, landing in a Top Result
-//! fall-through tier rather than an exact-name one, and an accented genre, whose
-//! only arm is that `LIKE`, never surfaces as a genre result at all.
+//! **The diacritic folding stops at the index.** `tracks_fts` tokenizes under
+//! `remove_diacritics 2`, so an unaccented query reaches an accented *track*, but the `name LIKE`
+//! arms aren't folded: an accented album or artist is reached only through its tracks, in a Top
+//! Result fall-through tier, and an accented genre, whose only arm is that `LIKE`, never surfaces.
 //!
-//! The two FTS subqueries are deliberately unbounded. fts5 scores every match
-//! either way, and where the tracks arm pulls only its 50 ranked rows through
-//! the join, each subquery costs a `tracks` rowid lookup per match: two more
-//! walks rather than a doubling of one, and all four futures ride the same
-//! `try_join!`.
+//! The two FTS subqueries are unbounded: fts5 scores every match either way, and each costs a
+//! `tracks` rowid lookup per match, two more walks rather than a doubling of one.
 
 use sqlx::AssertSqlSafe;
 
@@ -23,18 +16,14 @@ use melodia_core::entities::search::SearchResults;
 use melodia_core::entities::{album, artist, genre, track};
 use melodia_core::error::AppError;
 
-/// Build an FTS5 MATCH expression from a raw query string.
-/// Each whitespace-separated word is quoted and suffixed with `*` for prefix matching.
-/// Returns an empty string if the input is empty/whitespace-only.
+/// An FTS5 `MATCH` expression from a raw query, each word quoted and `*`-suffixed for a prefix
+/// match; empty for a blank query.
 pub(crate) fn build_fts_query(query: &str) -> String {
     let trimmed = query.trim();
     if trimmed.is_empty() {
         return String::new();
     }
 
-    // Pre-size for the common case (no embedded `"`): each word adds `""*`
-    // around its content plus a separating space. `len() * 2` covers the
-    // rare double-up from `fts5_escape` without a realloc.
     let mut fts_query = String::with_capacity(trimmed.len() * 2 + 4);
     for (i, word) in trimmed.split_whitespace().enumerate() {
         if i > 0 {
@@ -52,9 +41,7 @@ pub(crate) fn build_fts_query(query: &str) -> String {
     fts_query
 }
 
-/// Wrap `s` in `%…%` and escape `\`, `%`, `_` for a `LIKE … ESCAPE '\'`
-/// pattern in a single pass into a pre-allocated `String`. Replaces three
-/// chained `.replace()` calls (3 passes, 3 allocs) with one.
+/// `s` wrapped in `%…%`, with `\`, `%` and `_` escaped for `LIKE … ESCAPE '\'`.
 fn like_pattern_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 4);
     out.push('%');
@@ -82,17 +69,12 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     let fts_query = build_fts_query(trimmed);
     let cols = columns::TRACK_LIST.prefixed("t");
 
-    // Name matching for albums / artists / genres is LIKE against their
-    // `*_stats` views — small tables, no index to gain. One pattern serves
-    // every name `?` below; the FTS expression is reused for the
-    // track-derived arms.
+    // `LIKE` over the `*_stats` views: small tables, no index to gain.
     let pattern = like_pattern_escape(trimmed);
 
-    // `tracks_fts MATCH`, never `fts MATCH`: fts5's match column is named after
-    // the *table*, so an alias doesn't reach it and the aliased spelling fails
-    // to prepare with `no such column: fts`. Same in the two subqueries below.
-    // `rank` is bm25 under the column weights migration 20260802000001 pins, so
-    // the weights pick which 50 rows survive the LIMIT, not only their order.
+    // `tracks_fts MATCH`, never the alias: fts5 names the match column after the table, so
+    // `fts MATCH` fails to prepare. `rank` is bm25 under the weights the newest `tracks_fts`
+    // rebuild pins, which pick the 50 rows that survive the `LIMIT`, not only their order.
     let sql = format!(
         "SELECT {cols} FROM tracks t
          JOIN tracks_fts fts ON fts.rowid = t.id
@@ -103,30 +85,11 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
         .bind(&fts_query)
         .fetch_all(db.read());
 
-    // Both strips also match through *their own tracks*, reusing the same
-    // FTS expression the Songs list runs. Without it a query that only
-    // reaches track metadata — a song title, a year, a composer, a genre —
-    // left both strips empty and, because the Top Result ranks over these
-    // two lists, left the page with no Top Result card at all beside a
-    // full list of songs.
-    //
-    // Deriving it from the FTS match rather than from `genre_id` is what
-    // keeps the two halves of the page agreeing about what "matched":
-    // whatever the index covers, the strips cover. It also subsumes the
-    // genre-only lookup this replaces, since `genre` is one of the indexed
-    // columns.
-    //
-    // The name arms are ordered first because all three lists share 20
-    // slots: a broad query can turn up more track-derived rows than that,
-    // and without the sort an album named for the query could be pushed
-    // out of its own search. Tiers 1-6 of the Top Result scan the whole
-    // list for a name match, so only the fall-through tiers and the
-    // strips' display order depend on this.
-    //
-    // Both `IS NOT NULL` guards are insurance, not corrections: under
-    // `OR … IN` a NULL from the subquery yields NULL, which drops the row
-    // exactly as FALSE does. They earn their place the moment either arm
-    // is spelled `NOT IN`, where one NULL swallows every row instead.
+    // Both strips also match through their own tracks, so a query reaching only track metadata
+    // still fills them and the Top Result ranked over them: whatever the index covers, the
+    // strips cover. The name arms sort first so an album named for the query isn't pushed out of
+    // its 20 slots by track-derived rows. The `IS NOT NULL` guards cost nothing under `IN`, and
+    // spelled `NOT IN` one NULL would swallow every row.
     let albums_fut = sqlx::query_as::<_, album::AlbumStats>(
         "SELECT * FROM album_stats
          WHERE name LIKE ? ESCAPE '\\' OR artist_name LIKE ? ESCAPE '\\'
@@ -164,7 +127,6 @@ pub async fn search_all(db: &DbPool, query: &str) -> Result<SearchResults, AppEr
     .bind(&pattern)
     .fetch_all(db.read());
 
-    // All four run concurrently — the read pool supports concurrent readers.
     let (tracks, albums, artists, genres) =
         tokio::try_join!(tracks_fut, albums_fut, artists_fut, genres_fut)?;
 

@@ -8,14 +8,9 @@ use melodia_core::entities::credits::{CreditRole, RoleCredit, RoleCredits};
 use melodia_core::entities::genre::GenreList;
 use melodia_core::error::AppError;
 
-/// Each track's ordered artist credit, plus the credit its album carries.
-///
-/// Two queries rather than one join: the two credits hang off different parents, so a single
-/// statement would multiply each track's rows by its album's. The `ORDER BY` is what makes the
-/// credit an *ordered* thing rather than a set.
-///
-/// Used by the Edit-Tags dialog over a multi-track selection. A single track reads its credit off
-/// the file instead, that being the authority and already open for the lyrics tab.
+/// Each track's ordered artist credit, plus the credit its album carries, for Edit-Tags over a
+/// selection; a single track reads its credit off the file. Two queries, the credits hanging off
+/// different parents that one join would multiply.
 pub async fn get_track_credits_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -52,13 +47,8 @@ pub async fn get_track_credits_by_ids(
 
 /// Every track's role credits, keyed by track id.
 ///
-/// A sibling of [`get_track_credits_by_ids`] rather than a third query inside it: the Edit-Tags
-/// dialog is the only caller that needs both, and a track with no role credits is the common case
-/// — most files name nobody but their artist, so the join returns nothing for them and they get a
-/// `RoleCredits::default()` from the `or_default` rather than a row.
-///
-/// A role this build doesn't know is skipped: the column is a string, so a database written by a
-/// newer version can hold one, and dropping it beats inventing a variant for it.
+/// A role this build doesn't know is skipped: a newer version's database can hold one, and
+/// dropping it beats inventing a variant.
 pub async fn get_track_role_credits_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -83,12 +73,7 @@ pub async fn get_track_role_credits_by_ids(
     Ok(grouped.into_iter().map(|(id, credits)| (id, RoleCredits::new(credits))).collect())
 }
 
-/// Every track's genres, keyed by track id.
-///
-/// Read as rows rather than by splitting the rendered `tracks.genre` column, which is what the
-/// Edit-Tags dialog did while its genre field was one box: a genre containing the separator
-/// (`Chanson, Francaise`) came back as two, and saving made that permanent. The rows are the truth
-/// and the column is derived from them, so the editor reads the truth.
+/// Every track's genres, keyed by track id, read as rows for `get_tag_edit_rows_by_ids`' reason.
 pub async fn get_track_genres_by_ids(
     db: &DbPool,
     ids: &[i64],
@@ -109,12 +94,7 @@ pub async fn get_track_genres_by_ids(
     Ok(grouped.into_iter().map(|(id, names)| (id, GenreList::new(names))).collect())
 }
 
-/// One track's ordered artist credit, the album's left alone.
-///
-/// [`get_track_credits_by_ids`] over a single parent minus its second query, for the lyrics
-/// lookup: it asks about the playing track and has no album credit to show, and the caller is
-/// about to open a socket, so the row multiplication that one avoids is not a cost worth paying
-/// here either.
+/// One track's ordered artist credit without the album's, for the lyrics lookup.
 pub async fn get_track_credit(db: &DbPool, id: i64) -> Result<ArtistCredit, AppError> {
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT a.name, ta.join_phrase \

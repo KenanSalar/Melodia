@@ -1,25 +1,14 @@
-//! Pre-migration database backups, and the retention that bounds them.
+//! Pre-migration database backups, and the retention that bounds them. The three invariants are
+//! the root `CLAUDE.md`'s; what is written down only here:
 //!
-//! The root `CLAUDE.md` states the three invariants this module owes — `VACUUM INTO` through the
-//! open connection rather than a file copy, staged under `.tmp` and renamed so the final name
-//! existing means it is complete, and retention deleting only names it can parse back into the
-//! scheme written here. What is written down only here:
+//! **Restoring** means deleting `melodia.db-wal` and `melodia.db-shm` beside the rename, with the
+//! app closed. A boot that died in a migration never reached `DbPool::close` and leaves them, and a
+//! WAL left in place is recovered onto page numbers the vacuum already moved.
 //!
-//! **Restoring.** The vacuum output carries no sidecars, but the *live* database usually does, so
-//! a restore means deleting `melodia.db-wal` and `melodia.db-shm` beside the rename, with the app
-//! closed. A boot that died in a migration is precisely the case that leaves them behind (nothing
-//! calls `DbPool::close`), and a WAL left in place is recovered onto page numbers the vacuum has
-//! already moved.
-//!
-//! **What the sweep may move.** Older versions wrote their backup loose in the data directory,
-//! under a name one segment away from the live database's own (`melodia.db.backup-v…` beside
-//! `melodia.db`). [`adopt_legacy`] moves those into `backups/` so they come under the retention
-//! above instead of being orphaned by it — which means it walks the directory the running library
-//! sits in, and [`legacy_version_of`] is the whole of what keeps it off that file. It parses a
-//! version out rather than testing a prefix for exactly that reason: loosened to `melodia.db.`,
-//! the same loop moves the database out from under the app. Where the version is already present
-//! the loose copy is deleted rather than renamed, `rename` onto an existing path failing on
-//! Windows.
+//! **The sweep walks the live database's directory.** Older versions wrote backups loose beside
+//! `melodia.db` (`melodia.db.backup-v…`), and [`adopt_legacy`] moves them under retention, so
+//! [`legacy_version_of`] is all that keeps it off the database itself. It parses a version out
+//! rather than testing a prefix, since `melodia.db.` would move the database out from under the app.
 
 use std::path::{Path, PathBuf};
 
@@ -28,11 +17,8 @@ use sqlx::sqlite::SqlitePool;
 
 use melodia_core::error::{AppError, describe};
 
-/// How many backups survive a [`maintain`] sweep.
-///
-/// Each one is a full copy of the library database, so the cost scales with the library rather
-/// than with a constant — and a backup's value decays fast, what you want back being the state
-/// from just before the migration that broke something.
+/// How many backups a [`maintain`] sweep keeps. Each is a full copy of the library, and what you
+/// want back is the state just before the migration that broke something.
 const MAX_BACKUPS: usize = 3;
 
 const PREFIX: &str = "melodia-v";
@@ -42,8 +28,7 @@ const SUFFIX: &str = ".db";
 /// replacing `SUFFIX`, so a half-written file can never satisfy [`version_of`].
 const TMP_SUFFIX: &str = ".tmp";
 
-// The two names written by the version of this code that kept backups loose in the data directory
-// beside the live database; `adopt_legacy` retires both.
+// The pre-`backups/` names, loose beside the live database.
 const LEGACY_PREFIX: &str = "melodia.db.backup-v";
 const LEGACY_INITIAL: &str = "melodia.db.pre-migration-backup";
 
@@ -52,8 +37,7 @@ fn file_name(version: i64) -> String {
     format!("{PREFIX}{version}{SUFFIX}")
 }
 
-/// The staged name [`create`] renames from — [`file_name`] plus a suffix, so the two can't drift
-/// into a staged copy that isn't the final name.
+/// The staged name [`create`] renames from.
 fn tmp_file_name(version: i64) -> String {
     format!("{}{TMP_SUFFIX}", file_name(version))
 }
@@ -64,8 +48,8 @@ fn version_of(name: &str) -> Option<i64> {
     name.strip_prefix(PREFIX)?.strip_suffix(SUFFIX)?.parse().ok()
 }
 
-/// The version a staged copy was going to become. [`prune`]'s `.tmp` sweep is gated on this for
-/// the same reason the rest of it is gated on [`version_of`].
+/// The version a staged copy was going to become, gating [`prune`]'s `.tmp` sweep as
+/// [`version_of`] gates the rest.
 fn tmp_version_of(name: &str) -> Option<i64> {
     version_of(name.strip_suffix(TMP_SUFFIX)?)
 }
@@ -73,19 +57,16 @@ fn tmp_version_of(name: &str) -> Option<i64> {
 /// Same, for the two pre-`backups/` names.
 fn legacy_version_of(name: &str) -> Option<i64> {
     if name == LEGACY_INITIAL {
-        // A database with no applied migrations *is* version 0 — it sorts oldest, so retention
-        // retires it first, which is right: it holds an empty schema.
+        // No migrations applied is version 0, the empty schema retention retires first.
         return Some(0);
     }
     name.strip_prefix(LEGACY_PREFIX)?.parse().ok()
 }
 
-/// Copy the database as it stands at `version` into `backups_dir`, returning the
-/// path written. Call before applying migrations.
+/// Copies the database as it stands at `version` into `backups_dir`, returning the path written.
 ///
-/// Returns early if that version is already backed up. A migration that fails is rolled back, so a
-/// re-attempt finds the database at the same applied version the existing file captured, and
-/// re-vacuuming would copy identical bytes on every launch for as long as it keeps failing.
+/// Returns early where that version is already backed up: a failed migration rolls back, so each
+/// retry would copy identical bytes.
 pub(super) async fn create(
     pool: &SqlitePool,
     backups_dir: &Path,
@@ -96,10 +77,8 @@ pub(super) async fn create(
         log::info!("Database backup already present at {}", final_path.display());
         return Ok(final_path);
     }
-    // A missing parent directory comes back as "unable to open database: <path>" with nothing
-    // pointing at the directory, and this path is fatal to startup. Every failure below names its
-    // file for the same reason: the boot stops here, and a bare `io::Error` would leave `main`
-    // reporting an errno with no path in it, on a desktop launch with no terminal to print to.
+    // Fatal to startup, so every failure here names its file: a missing directory otherwise reads
+    // "unable to open database", and a bare `io::Error` is an errno with no path.
     std::fs::create_dir_all(backups_dir).map_err(|e| {
         AppError::io(format!("Could not create the backup directory {}", backups_dir.display()), e)
     })?;
@@ -111,8 +90,7 @@ pub(super) async fn create(
         })?;
     }
 
-    // `VACUUM INTO` takes no bind parameter, so the path has to be interpolated. Doubling any
-    // quote is what keeps a directory name with an apostrophe from ending the literal early.
+    // `VACUUM INTO` takes no bind, so the path is interpolated with its quotes doubled.
     let escaped = tmp_path.display().to_string().replace('\'', "''");
     sqlx::raw_sql(AssertSqlSafe(format!("VACUUM INTO '{escaped}'"))).execute(pool).await?;
     std::fs::rename(&tmp_path, &final_path).map_err(|e| {
@@ -123,23 +101,17 @@ pub(super) async fn create(
     Ok(final_path)
 }
 
-/// Adopt any loose legacy backups, then cut the directory back to [`MAX_BACKUPS`]. Best-effort
-/// throughout — nothing here can fail a launch, the only thing at stake being disk space.
+/// Adopts loose legacy backups, then cuts the directory back to [`MAX_BACKUPS`]. Best-effort, only
+/// disk space being at stake.
 ///
-/// Runs on every launch rather than only on a migration launch: a user whose schema is already
-/// current has no pending migration to trigger a sweep, and would keep their loose files
-/// indefinitely.
-///
-/// Synchronous, unlike `updater::prune_stale_staging`'s `spawn_blocking` — this walks a directory
-/// of at most a handful of entries, so a plain `fn` stays testable without a runtime.
+/// Every launch, since a current schema has no migration to trigger a sweep. Synchronous: it walks
+/// a handful of entries, and a plain `fn` stays testable without a runtime.
 pub(super) fn maintain(data_dir: &Path, backups_dir: &Path) {
     let _ = std::fs::create_dir_all(backups_dir);
     adopt_legacy(data_dir, backups_dir);
     prune(backups_dir);
 }
 
-/// Move backups written under the old loose naming into `backups_dir`, so they come under the
-/// retention policy instead of being orphaned by it.
 fn adopt_legacy(data_dir: &Path, backups_dir: &Path) {
     let Ok(entries) = std::fs::read_dir(data_dir) else {
         return;
@@ -156,9 +128,7 @@ fn adopt_legacy(data_dir: &Path, backups_dir: &Path) {
 
         let source = entry.path();
         let target = backups_dir.join(file_name(version));
-        // Renaming onto an existing path fails on Windows, and the file already in `backups/`
-        // holds the same schema version — drop the legacy copy rather than choosing between two
-        // snapshots of one version.
+        // `rename` onto an existing path fails on Windows, and that file holds this version already.
         let superseded = target.exists();
         let outcome = if superseded {
             std::fs::remove_file(&source)
@@ -182,8 +152,8 @@ fn adopt_legacy(data_dir: &Path, backups_dir: &Path) {
     }
 }
 
-/// Delete all but the [`MAX_BACKUPS`] newest backups, plus any `.tmp` left by an interrupted
-/// [`create`].
+/// Deletes all but the [`MAX_BACKUPS`] newest backups, and any `.tmp` an interrupted [`create`]
+/// left.
 fn prune(backups_dir: &Path) {
     let Ok(entries) = std::fs::read_dir(backups_dir) else {
         return;

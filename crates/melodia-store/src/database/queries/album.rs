@@ -95,12 +95,8 @@ pub async fn get_albums_by_artist(
     Ok(albums)
 }
 
-/// Authoritatively set `artwork_path` for one or more albums by ID, within a
-/// caller-supplied transaction. Unlike `update_album_artwork_from_tracks`
-/// (which only backfills rows `WHERE artwork_path IS NULL OR = ''`), this
-/// overwrites an existing cover — the tag-edit orchestrator needs to replace
-/// an album's art when the user edits embedded artwork. Tx-scoped so it lands
-/// in the same transaction as the per-track metadata refresh.
+/// Overwrites the albums' `artwork_path` inside the tag edit's transaction, where
+/// `update_album_artwork_from_tracks` only fills empty ones.
 pub(crate) async fn set_album_artwork(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     album_ids: &[i64],
@@ -114,16 +110,11 @@ pub(crate) async fn set_album_artwork(
     Ok(())
 }
 
-/// Empty the release-level columns a tag edit cleared, on the albums it touched.
+/// Empties the release columns a tag edit cleared, on the albums it touched: `upsert_album`
+/// coalesces a NULL away and ORs `is_compilation`, so it can never say "this release has no label".
 ///
-/// The half of a release tag `upsert_album` structurally cannot write: it coalesces a NULL away so
-/// that a track saying nothing doesn't blank what its neighbours said, which leaves no way to say
-/// "this release has no label" through it. `is_compilation` is worse, its upsert being an `OR`.
-/// Every column here is one the Edit-Tags dialog offers, so every one of them owes the user a way
-/// back to empty.
-///
-/// One statement with a flag per column rather than assembled SET clauses: the column names stay
-/// literals, and a `false` flag leaves the column reading itself.
+/// A flag per column rather than assembled `SET` clauses, so the names stay literals and a `false`
+/// flag leaves its column as it was.
 pub(crate) async fn clear_release_tags(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     album_ids: &[i64],

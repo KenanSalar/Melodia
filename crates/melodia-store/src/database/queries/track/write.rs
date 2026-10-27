@@ -82,7 +82,6 @@ pub async fn update_last_position(db: &DbPool, id: i64, position_ms: i64) -> Res
     Ok(())
 }
 
-/// Set `is_favorite` for one or more tracks by ID.
 pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<(), AppError> {
     for chunk in ids.chunks(IDS_PER_SET) {
         set_where_id_in("UPDATE tracks SET is_favorite = ?", favorite, chunk)
@@ -92,8 +91,7 @@ pub async fn set_favorite(db: &DbPool, ids: &[i64], favorite: bool) -> Result<()
     Ok(())
 }
 
-/// Set the star `rating` (0–5) for one or more tracks by ID. The value is clamped by
-/// `library::ratings::set_rating`.
+/// Sets the star `rating`, which `library::ratings::set_rating` has already clamped.
 pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), AppError> {
     for chunk in ids.chunks(IDS_PER_SET) {
         set_where_id_in("UPDATE tracks SET rating = ?", rating, chunk).execute(db.write()).await?;
@@ -101,11 +99,8 @@ pub async fn set_rating(db: &DbPool, ids: &[i64], rating: i32) -> Result<(), App
     Ok(())
 }
 
-/// Authoritatively set `artwork_path` for one or more tracks by ID, within a caller-supplied
-/// transaction. Unlike `update_track_metadata`'s `artwork_path = COALESCE(?, artwork_path)`, this
-/// is a plain overwrite — so `None` genuinely nulls the column, the artwork-Remove case a COALESCE
-/// can never express. Tx-scoped because the tag-edit orchestrator writes it in the same
-/// transaction as the metadata refresh.
+/// Overwrites `artwork_path` inside the tag edit's transaction, so `None` nulls it as
+/// `update_track_metadata`'s `COALESCE` can't.
 pub(crate) async fn set_track_artwork(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     ids: &[i64],
@@ -119,12 +114,9 @@ pub(crate) async fn set_track_artwork(
     Ok(())
 }
 
-/// Blank every `date_modified`, answering with how many rows moved.
-///
-/// The column means "the mtime the stored row was parsed from", so NULL is honestly "unknown"
-/// rather than a sentinel: `track_is_current` compares it to the file's own and a missing value
-/// cannot match one. The scan overwrites it from the same `fs::metadata` that proved the file
-/// exists, so nothing is left blank behind the pass.
+/// Blanks every `date_modified`, answering how many rows moved. NULL honestly means unknown: it
+/// matches no file's mtime in `track_is_current`, and the scan refills it from the `stat` that
+/// proved the file exists.
 pub async fn mark_every_track_stale(db: &DbPool) -> Result<u64, AppError> {
     let result =
         sqlx::query("UPDATE tracks SET date_modified = NULL WHERE date_modified IS NOT NULL")
@@ -133,21 +125,14 @@ pub async fn mark_every_track_stale(db: &DbPool) -> Result<u64, AppError> {
     Ok(result.rows_affected())
 }
 
-/// Batch-update `file_hash` and `date_modified` for tracks by ID.
-/// All chunks share a single transaction to amortize fsync under
-/// `synchronous=NORMAL` — fast for retroactive backfills on large libraries.
-///
-/// Each chunk runs as a single CTE-driven UPDATE so the round-trip count
-/// is O(chunks), not O(rows). Chunk size is [`MAX_BINDS_PER_STATEMENT`] divided
-/// by 3 columns per row.
-///
-/// [`MAX_BINDS_PER_STATEMENT`]: crate::database::MAX_BINDS_PER_STATEMENT
+/// Writes `(id, file_hash, date_modified)` triples, a CTE-driven UPDATE per chunk inside one
+/// transaction, so a backfill over a large library pays one commit.
 pub async fn batch_update_hashes(
     db: &DbPool,
     updates: &[(i64, String, Option<String>)],
 ) -> Result<(), AppError> {
     const COLS_PER_ROW: usize = 3;
-    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW; // 333
+    const CHUNK_SIZE: usize = crate::database::MAX_BINDS_PER_STATEMENT / COLS_PER_ROW;
 
     if updates.is_empty() {
         return Ok(());

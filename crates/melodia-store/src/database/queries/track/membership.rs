@@ -81,11 +81,9 @@ impl Membership {
 
     /// Pushes the `FROM`, and the `WHERE` that narrows it to this membership where one does.
     ///
-    /// An artist or genre is matched through its join table, every credit and every tag rather
-    /// than the first, which is what its card's `track_count` counts: reading `tracks.genre_id`
-    /// once listed a subset of the count above it, and nothing for a genre no track carries first.
-    /// `IN` rather than a join, as a credit naming one artist twice ("X feat. X") would join its
-    /// track in twice.
+    /// An artist or genre is matched through its join table, every credit and tag rather than the
+    /// first, which is what its card's `track_count` counts. `IN` rather than a join, which would
+    /// list a track crediting one artist twice ("X feat. X") twice.
     pub(super) fn push_source(&self, qb: &mut QueryBuilder<Sqlite>) {
         match self {
             Self::Library => {

@@ -98,20 +98,16 @@ pub fn scan_files_parallel(
             }
             let current = scanned.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
 
-            // Report progress every 10 files
             if current.is_multiple_of(10) || current as usize == total {
                 let file_name = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
                 observer.read(current, file_name);
             }
 
-            // Every file reaching this point was selected by the caller's
-            // incremental filter (`track_is_current`) as new or changed, so
-            // a full extract — embedded artwork included — is always
-            // warranted. Unchanged files never get here.
+            // The incremental filter let only new or changed files through, so the full extract
+            // is owed.
             match extract_or_filename_row(path, artwork_dir, cover_cache, false) {
                 Ok(metadata) => Some(ScannedFile { path: path.clone(), metadata }),
-                // Only an unreadable file gets this far now; unparseable tags come back
-                // as a filename-derived row rather than a `None`.
+                // An unreadable file; unparseable tags still make a filename row.
                 Err(e) => {
                     log::warn!(
                         "Skipping {}: {}",
@@ -127,13 +123,10 @@ pub fn scan_files_parallel(
 
 /// A folder's walk sorted by path, each file paired with the row it already has, if any.
 ///
-/// What the incremental filter and the orphan purge need, without a second copy of every path:
-/// rows arrive one at a time and find their files by binary search, and only an orphan's path is
-/// kept. Sorted by the same lossy string a row stores, so a file and its row compare equal.
-///
-/// Orphans are the rows the **whole** walk didn't find, never the rows of the files left to
-/// parse: the filter leaves unchanged files out of those, and a no-change rescan would read the
-/// entire library as gone.
+/// Rows arrive one at a time and find their files by binary search, so only an orphan's path is
+/// copied, and the sort is on the lossy string a row stores so the two compare equal. Orphans are
+/// the rows the **whole** walk didn't find, never those of the files left to parse, which would
+/// read a no-change rescan's entire library as gone.
 pub struct WalkIndex {
     files: Vec<PathBuf>,
     rows: Vec<Option<ExistingTrackSummary>>,
@@ -202,16 +195,9 @@ impl WalkIndex {
     }
 }
 
-/// True when the on-disk file matches its existing DB row and needs no
-/// re-scan: the file's size **and** mtime both match `row`. Size + mtime
-/// unchanged is a heuristic — not a byte-identity guarantee — but it reliably
-/// catches tag and artwork edits, since any normal write bumps the mtime.
-/// Callers use this as an incremental-scan filter: a `true` result means Lofty
-/// can be skipped entirely for the file.
-///
-/// A `false` result — a changed size or mtime, or a file that can't be stat'ed
-/// — means the file must be (re)parsed in full so its metadata and cover are
-/// brought up to date.
+/// Whether `path` still matches its row's size **and** mtime, so the parse can skip it. A heuristic
+/// rather than a byte identity, but any normal write bumps the mtime; a file that can't be stat'ed
+/// isn't current.
 pub fn track_is_current(path: &Path, row: &ExistingTrackSummary) -> bool {
     let Ok(meta) = std::fs::metadata(path) else {
         return false;
@@ -220,9 +206,6 @@ pub fn track_is_current(path: &Path, row: &ExistingTrackSummary) -> bool {
     if row.file_size != Some(on_disk_size) {
         return false;
     }
-    // Derive the mtime string from the `meta` already in hand — no second
-    // `stat`. Goes through the shared formatter so it can't drift from the
-    // format `extract_date_modified` stored in `date_modified`.
     let on_disk_mtime = crate::media::ingest::metadata::date_modified_from_metadata(&meta);
     on_disk_mtime.is_some() && on_disk_mtime.as_deref() == row.date_modified.as_deref()
 }

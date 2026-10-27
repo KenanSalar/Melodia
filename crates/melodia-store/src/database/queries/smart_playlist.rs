@@ -1,12 +1,8 @@
-//! Smart-playlist evaluation engine — turns a [`SmartCriteria`] rule set into a
-//! parameterized query over the `tracks` table.
+//! Smart-playlist evaluation: a [`SmartCriteria`] rule set as a parameterized query over `tracks`.
 //!
-//! **Safety contract:** only enum-derived `&'static str` fragments (the column
-//! name or correlated rows from [`field_source`], the SQL operator token, the
-//! ORDER BY clause) are ever pushed as raw SQL. Every user-supplied value goes through
-//! [`sqlx::QueryBuilder::push_bind`] — the same "structure interpolated, data
-//! bound" guarantee the rest of the query layer gets from `AssertSqlSafe(sql) +
-//! .bind()`. No user string can reach the SQL text.
+//! **Only enum-derived `&'static str` fragments are pushed as SQL** (the columns and rows from
+//! [`field_source`], operator tokens, `ORDER BY`); every user value goes through
+//! [`sqlx::QueryBuilder::push_bind`].
 
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 
@@ -21,12 +17,9 @@ use melodia_core::entities::smart_criteria::{
 use melodia_core::entities::track;
 use melodia_core::error::AppError;
 
-/// A smart playlist's current membership as ids, in the criteria's order and under its optional
-/// cap.
-///
-/// **Backs the card menu's batch actions**, which resolve a selection to track ids and act on
-/// those. The detail page lists the same membership through its keyset, which reads it off
-/// [`push_positioned_membership`], except under a random cap, where the page keeps its own
+/// A smart playlist's membership as ids, in the criteria's order and under its cap, for the card
+/// menu's batch actions. The detail page reads the same membership through its keyset
+/// ([`push_positioned_membership`]), except under a random cap, where it keeps its own
 /// [`pick_random`] and the two draw separately.
 pub async fn get_smart_playlist_track_ids(
     db: &DbPool,
@@ -93,12 +86,11 @@ pub(crate) async fn first_cover(
     Ok(cover)
 }
 
-/// The `count` tracks `draw` picks from everything the rules match, in pick order: a
+/// The `count` tracks `draw` picks from everything the rules match, in pick order, for a
 /// [`LimitOrder::Random`] cap a page reads more than once.
 ///
-/// In Rust because `RANDOM()` takes no seed, so every query a page runs would draw again. Ranked
-/// by a hash of the draw and the id rather than shuffled, so a track entering or leaving the
-/// matches moves only itself and the rest of the pick holds across a reload.
+/// In Rust because `RANDOM()` takes no seed. Ranked by a hash of the draw and the id rather than
+/// shuffled, so a track entering or leaving the matches moves only itself.
 pub(crate) async fn pick_random(
     db: &DbPool,
     criteria: &SmartCriteria,
@@ -133,16 +125,12 @@ fn push_membership(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
     if let Some(limit) = &criteria.limit {
         push_order_and_limit(qb, limit);
     } else {
-        // Unlimited: fall back to the natural display order.
         qb.push(order_by_fragment(None));
     }
 }
 
-/// `(track_count, total_duration_ms)` for a smart playlist without projecting
-/// any track rows — backs the grid card and the rule editor's live count,
-/// which can't rely on the `playlist_items` triggers (a smart playlist has no
-/// junction rows). Respects the limit so a "top 25" playlist reports 25, not the full
-/// match count.
+/// `(track_count, total_duration_ms)` under the cap, for the grid card and the rule editor's live
+/// count; a smart playlist has no `playlist_items` rows for the triggers to count.
 pub async fn count_smart_playlist(
     db: &DbPool,
     criteria: &SmartCriteria,
@@ -157,12 +145,8 @@ pub async fn count_smart_playlist(
     };
     push_where(&mut qb, criteria);
     if let Some(limit) = &criteria.limit {
-        // The count subquery only needs the LIMIT to bound COUNT/SUM to the
-        // capped set. A deterministic order still selects *which* `count` rows
-        // are summed, so keep it — but `RANDOM()` would force SQLite to
-        // materialize + randomly sort the whole match set just to sum a
-        // nondeterministic slice (the displayed duration for a random-limited
-        // card is already nondeterministic), so skip that pointless full sort.
+        // A deterministic order picks which rows are counted; a random one would sort the whole
+        // match set to sum a slice that is random anyway.
         if limit.order != LimitOrder::Random {
             qb.push(order_by_fragment(Some(limit)));
         }
@@ -173,10 +157,8 @@ pub async fn count_smart_playlist(
     Ok(row)
 }
 
-/// Append the `WHERE (rule) <AND|OR> (rule) …` clause. Incoherent rules
-/// (operator not valid for the field's type, or a missing/wrong-typed value)
-/// are silently skipped; an all-skipped rule set yields no `WHERE` (matches the
-/// whole library).
+/// Appends `WHERE (rule) AND|OR (rule) …`, skipping incoherent rules; with none left it matches
+/// the whole library.
 fn push_where(qb: &mut QueryBuilder<Sqlite>, criteria: &SmartCriteria) {
     let rules = renderable_rules(criteria);
     if rules.is_empty() {
@@ -217,9 +199,8 @@ fn push_rules(qb: &mut QueryBuilder<Sqlite>, rules: &[&Rule], match_mode: MatchM
     }
 }
 
-/// Whether a rule is coherent enough to render: its operator must be valid for
-/// the field's value type, and any value-taking operator must carry a value of
-/// the matching kind. Guarantees the value extraction in [`push_rule`] succeeds.
+/// Whether a rule's operator is valid for its field's type, with a value of the matching kind
+/// wherever the operator takes one.
 fn rule_is_renderable(rule: &Rule) -> bool {
     if !ops_for(rule.field.value_type()).contains(&rule.op) {
         return false;
@@ -239,10 +220,7 @@ fn rule_is_renderable(rule: &Rule) -> bool {
     }
 }
 
-/// Push a single rule's predicate. The caller wraps it in `(...)`. Dispatches on
-/// the field's value category to a focused per-category helper. Assumes the rule
-/// passed [`rule_is_renderable`]; a value-shape mismatch degrades to a benign
-/// always-false term via [`push_false`] rather than panicking.
+/// One rule's predicate, which the caller parenthesizes.
 fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
     let value = rule.value.as_ref();
     let col = match field_source(rule.field) {
@@ -257,11 +235,8 @@ fn push_rule(qb: &mut QueryBuilder<Sqlite>, rule: &Rule) {
     }
 }
 
-/// Run a text predicate against a set-valued field's *rows*, as `(NOT) EXISTS` over the join table
-/// correlated on `tracks.id`.
-///
-/// The negation is spelled once here rather than per operator, so the inner predicate is the same
-/// [`push_text_predicate`] every column field runs and a set matches when *any* member does.
+/// A text predicate over a set-valued field's *rows*, as `(NOT) EXISTS` correlated on `tracks.id`.
+/// The negation is spelled once here, so a set matches when *any* member does.
 fn push_member_predicate(
     qb: &mut QueryBuilder<Sqlite>,
     rows: MemberRows,
@@ -298,17 +273,13 @@ fn push_member_predicate(
     qb.push(")");
 }
 
-/// A benign always-false term (`WHERE (… 0 …)` matches no row). Reached only if
-/// a rule that should have passed [`rule_is_renderable`] arrives with the wrong
-/// value shape — an internal-consistency break between the renderability gate
-/// and value extraction. Degrades to matching nothing rather than panicking on
-/// a user's library.
+/// An always-false term, for a value shape [`rule_is_renderable`] should have refused: matching
+/// nothing beats panicking on a user's library.
 fn push_false(qb: &mut QueryBuilder<Sqlite>) {
     qb.push("0");
 }
 
-/// `IS (NOT) NULL` presence test shared by every value category. Text columns
-/// also treat an empty string as "not set".
+/// The presence test every value category shares. A text column's empty string is "not set" too.
 fn push_presence(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, is_text: bool) {
     match op {
         RuleOp::IsSet => {
@@ -327,8 +298,6 @@ fn push_presence(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp, is_text: 
     }
 }
 
-/// Text-column predicates: substring/prefix/suffix `LIKE`, case-insensitive
-/// equality, and presence.
 fn push_text_predicate(
     qb: &mut QueryBuilder<Sqlite>,
     col: &str,
@@ -375,8 +344,6 @@ fn push_text_predicate(
     }
 }
 
-/// Numeric-column predicates: the six comparisons and presence. Owns the
-/// Duration seconds→milliseconds scaling.
 fn push_numeric_predicate(
     qb: &mut QueryBuilder<Sqlite>,
     col: &str,
@@ -398,9 +365,7 @@ fn push_numeric_predicate(
                 RuleOp::Lt => " < ",
                 _ => " <= ",
             };
-            // The editor presents Duration in whole seconds ("Duration (sec)"),
-            // but the column stores milliseconds — scale the bound value so the
-            // comparison is against the same unit the user typed.
+            // The editor takes Duration in whole seconds, and the column holds milliseconds.
             let bound = if field == RuleField::DurationMs { *n * 1000.0 } else { *n };
             qb.push(col).push(sql_op).push_bind(bound);
         }
@@ -408,7 +373,6 @@ fn push_numeric_predicate(
     }
 }
 
-/// Boolean-column predicates (`is_favorite = 1/0`).
 fn push_bool_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp) {
     match op {
         RuleOp::IsTrue => {
@@ -421,7 +385,6 @@ fn push_bool_predicate(qb: &mut QueryBuilder<Sqlite>, col: &str, op: RuleOp) {
     }
 }
 
-/// Date-column predicates: the relative-date window tests and presence.
 fn push_date_predicate(
     qb: &mut QueryBuilder<Sqlite>,
     col: &str,
@@ -446,10 +409,8 @@ fn push_date_predicate(
     }
 }
 
-/// Where a [`RuleField`]'s values live.
-///
-/// One answer per field, so nothing can compare a genre against the rendered line in one place and
-/// against its rows in another.
+/// Where a [`RuleField`]'s values live, one answer per field so nothing compares a genre against
+/// the rendered line in one place and its rows in another.
 enum FieldSource {
     /// A column on `tracks` holding the whole value.
     Column(&'static str),
@@ -457,9 +418,8 @@ enum FieldSource {
     Members(MemberRows),
 }
 
-/// The three fragments a correlated `EXISTS` over a join table needs. Split rather than one string
-/// so the correlation can't be left out of a fourth set of rows and go unnoticed — omitted, the
-/// subquery matches the whole library instead of failing.
+/// The three fragments a correlated `EXISTS` over a join table needs, split so a fourth set of rows
+/// can't leave out the correlation, which would match the whole library rather than fail.
 #[derive(Clone, Copy)]
 struct MemberRows {
     /// The `FROM` text: the join table and whatever it reaches for a name.
@@ -470,17 +430,12 @@ struct MemberRows {
     name: &'static str,
 }
 
-/// The column or rows each [`RuleField`] filters on. Exhaustive `match` over an enum, and every
-/// fragment it hands back is a `&'static str`, so no user string reaches SQL.
+/// The column or rows each [`RuleField`] filters on.
 ///
-/// **Genres and role credits are rows.** The `tracks.genre` / `.credits` columns beside them are
-/// the rendered line `tracks_fts` and the display surfaces read, and a rule run against that line
-/// leaves `is` unsatisfiable for a track carrying two of anything, `starts_with` reading only the
-/// one the line opens with, and `contains` matching across the seam between two of them.
-///
-/// **`Artist` is deliberately a column.** `tracks.artist` is the credit as the release printed it,
-/// which is the string on screen and so the string a rule is written against; the genre line is a
-/// join nothing prints.
+/// **Genres and role credits are rows**: against the rendered `tracks.genre` / `.credits` line, `is`
+/// can't match a track carrying two, `starts_with` reads only the first, and `contains` matches
+/// across the seam. **`Artist` is a column**, the credit as printed being the string on screen a
+/// rule is written against.
 fn field_source(field: RuleField) -> FieldSource {
     match field {
         RuleField::Genre => FieldSource::Members(MemberRows {
@@ -515,27 +470,21 @@ fn field_source(field: RuleField) -> FieldSource {
     }
 }
 
-/// Append `ORDER BY … LIMIT ?` for a capped smart playlist, shared by the row query and the
-/// member ids. An uncapped query handles ordering itself, and the count subquery spells its own so
-/// it can leave a random order out.
+/// Appends `ORDER BY … LIMIT ?` for a capped playlist. The count subquery spells its own so it can
+/// leave a random order out.
 fn push_order_and_limit(qb: &mut QueryBuilder<Sqlite>, limit: &SmartLimit) {
     qb.push(order_by_fragment(Some(limit)));
     qb.push(" LIMIT ").push_bind(i64::from(limit.count));
 }
 
-/// The `ORDER BY` clause (leading space included) for a resolved smart playlist.
-/// A `&'static str` from an enum match — the selection order can't inject SQL.
-/// Lexical `TEXT` order over RFC-3339 `last_played`/`date_added` == chronological
-/// order (same invariant `get_recently_played` documents).
+/// The `ORDER BY` clause, leading space included. RFC 3339 `last_played` and `date_added` sort
+/// chronologically as text.
 ///
-/// **Every arm ends in the id.** A cap falling inside a run of equal values (a scan stamps one
-/// `date_added` on its whole batch, and every unplayed track ties on play count) would otherwise
-/// keep whichever tied tracks the plan reaches first, and a rule bringing in a partial index, or
-/// the statistics `PRAGMA optimize` refreshes at close, can change the plan. Each direction is the
-/// one the arm's unfiltered plan already breaks ties in (an index walk carries the rowid with the
-/// column, a sort hands back the lowest ids first), so it is not a free choice: flipping one
-/// re-picks every playlist capped in that order, as borrowing `MOST_PLAYED_ORDER`'s extra keys for
-/// `PlayCountDesc` would.
+/// **Every arm ends in the id**, or a cap inside a run of ties (a scan stamps one `date_added` on
+/// its batch, every unplayed track ties on play count) keeps whichever the plan reaches first, and
+/// the plan moves with a rule's index or `PRAGMA optimize`'s statistics. Each direction is the one
+/// the arm's unfiltered plan already breaks ties in, so flipping one, or borrowing
+/// `MOST_PLAYED_ORDER`'s keys for `PlayCountDesc`, re-picks every playlist capped in that order.
 fn order_by_fragment(limit: Option<&SmartLimit>) -> &'static str {
     match limit.map(|l| l.order) {
         Some(LimitOrder::DateAddedDesc) => " ORDER BY date_added DESC, id DESC",
@@ -550,8 +499,7 @@ fn order_by_fragment(limit: Option<&SmartLimit>) -> &'static str {
     }
 }
 
-/// Escape a user substring for a `LIKE ? ESCAPE '\'` pattern — the wildcard
-/// metacharacters `% _ \` are prefixed with a backslash.
+/// Escapes `%`, `_` and `\` for a `LIKE ? ESCAPE '\'` pattern.
 fn escape_like(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     for ch in s.chars() {
@@ -563,13 +511,10 @@ fn escape_like(s: &str) -> String {
     out
 }
 
-/// Upper bound on a relative-date rule's day count (~9,863 years). Clamps a
-/// hostile/absurd value so `TimeDelta::try_days` can't overflow.
+/// The most days a relative-date rule reaches back, so `TimeDelta::try_days` can't overflow.
 const MAX_RELATIVE_DAYS: i64 = 3_600_000;
 
-/// The RFC-3339 cutoff `now - days` for the relative-date operators. `days` is
-/// clamped to [`MAX_RELATIVE_DAYS`] so a hostile/absurd value can't overflow
-/// `TimeDelta`; the `unwrap_or` fallback is dead after the clamp.
+/// The RFC 3339 cutoff `now - days` for the relative-date operators.
 fn cutoff_rfc3339(days: i64) -> String {
     let days = days.clamp(0, MAX_RELATIVE_DAYS);
     let delta = chrono::TimeDelta::try_days(days).unwrap_or_else(chrono::TimeDelta::zero);

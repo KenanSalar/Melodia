@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 11 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 12 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -110,8 +110,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 10.3 | `melodia-views`: the tabbed pages, Browse and Search | 0.44 | 1,783 | ~773 | 0.17 (681) | `2154ecf4` |
 | 10.4 | `melodia-views`: the shell and the player | 0.42 | 1,755 | ~704 | 0.23 (973) | `89a76e73` |
 | 10.5 | `melodia-views`: the rest of the shared layer | 0.33 | 2,334 | ~591 | 0.23 (1,632) | `caaa91bf` |
-| 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | 0.16 (1,287) | |
-| 11 | `melodia-store` | 0.34 | 2,456 | ~666 | | |
+| 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | 0.16 (1,287) | `1687b4db` |
+| 11 | `melodia-store` | 0.34 | 2,456 | ~666 | 0.20 (1,454) | |
 | 12 | `melodia-integrations` | 0.30 | 936 | ~147 | | |
 | 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | | |
 | 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | | |
@@ -240,11 +240,14 @@ Status: done.
   - **Stale claims removed:** the four detail opens' "body reads a fixed `below`" and Playlist Detail's close saying the same (the bodies mount at `above`); `open_album`'s, `open_artist`'s and `open_genre`'s "resets the sort to the default" (a fresh open restores the persisted sort); `albums::install`'s "the cover retune" among the handle's readers; `settings/mod.rs`' "Four modules" naming five; `rgb::color_to_rgb`'s genre hero reading its stops off `GenreRow` (it hashes them); the folder list's seed comment tying live updates to it (every refresh installs its own model); `format_duration_ms`'s two Slint callers (there are five).
 
 ### Phase 11: `melodia-store`
-Status: not started.
+Status: done.
 
-- [ ] **11. The crate**, one commit (51 files).
+- [x] **11. The crate**, one commit (51 files).
   - **Furthest over:** `media/ingest/metadata.rs` (108), `tag_writer.rs` (99), `database/mod.rs` (71), `queries/radio.rs` (54).
   - **Pointed at:** `CLAUDE.md` on `apply_watch_batch`, `backup.rs` and the write transaction rule; `.claude/rules/library-data.md`, `blake3.md` and `sqlx.md`.
+  - **Second copies dropped:** `library-data.md`'s copies of `tag_writer`'s per-format keys, `smart_playlist`'s injection contract and `get_tag_edit_rows_by_ids`' multi-valued argument, each now a pointer; `sqlx.md`'s read-pool caveat, now a pointer to `init_database`; `DbPool::close`'s copy of `FTS_OPTIMIZE`'s merge argument; `backup.rs`' restatement of the three invariants `CLAUDE.md` holds; the mtime argument restated in `handle_created`, `file_stat` and `track_is_current`; the prune-orphans reason at its three call sites.
+  - **Stale claims removed:** `upsert_album` naming `library::tags::clear_release_tags` (it is `queries::album`'s); `search.rs`' weights pinned by `20260802000001` (the newest rebuild is `20260910000000`) and its `fts5_escape`; `update_station`'s `RETURNING *` (`save_station` returns the id); `read_lyrics`' Lyrics tab (its callers are the lyrics resolver); `describe_unsupported`'s two write paths (one); `trimmed_values` as the tree's one multi-value read (`rating_tags` reads too); `update_track_metadata`'s module-doc pointer to an argument no module doc makes; `TRACK_INSERT_COLUMNS` as the whole edit for a new column; `renumber_playlist_positions_tx`' one caller (three).
+  - **Other apps unnamed:** `rating_tags` and `tag_writer`'s lyrics key keep the mechanism without naming the players.
 
 ### Phase 12: `melodia-integrations`
 Status: not started.

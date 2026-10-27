@@ -14,7 +14,7 @@ paths:
 - Use **two-pool architecture** for SQLite:
   - Write pool: `max_connections(1)` — SQLite only supports one concurrent writer
   - Read pool: `max_connections(num_cpus)` with `.read_only(true)` — multiple concurrent readers in WAL mode
-    - **Desktop caveat (Melodia):** a single-user desktop app issues tiny, effectively-sequential reads, so scaling per-core just multiplies idle per-connection page-cache/statement-cache memory. Clamp to a small fixed band (`.clamp(2, 4)`) and add an `idle_timeout` so boot-burst connections get reaped. See `init_database` in `crates/melodia-store/src/database/mod.rs`.
+    - **Desktop caveat (Melodia):** the read pool is a small fixed band with an `idle_timeout`, argued at `init_database` in `crates/melodia-store/src/database/mod.rs`.
 - A single shared pool degrades write performance by ~20x due to reader/writer contention
 
 ## Pragmas & Configuration

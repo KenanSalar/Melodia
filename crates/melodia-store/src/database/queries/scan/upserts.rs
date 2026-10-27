@@ -1,6 +1,5 @@
-//! FK helpers: upsert an `artist` / `album` / `genre` row by name and
-//! return its rowid. Each returns the supplied "unknown" sentinel id (or
-//! `None`) for empty names so callers can stay branch-free.
+//! The upserts a track resolves its foreign keys through, and the join rows that credit it. An
+//! empty name resolves to the sentinel or `None`, so callers stay branch-free.
 
 use melodia_core::entities::artist::ArtistCredit;
 use melodia_core::entities::scan::ExtractedMetadata;
@@ -9,11 +8,8 @@ use melodia_core::error::AppError;
 use super::name_cache::NameCache;
 use crate::database::queries::search_name::{self, Named};
 
-/// The statements a credit rewrite is made of, one per table.
-///
-/// Literals rather than a `format!` over a table name, which cost a `String` per re-ingested
-/// track to say the same thing every time. Each carries its own key column, so there is no way
-/// to pair a table with the wrong one.
+// One statement per table, each carrying its own key column, so a table can't be paired with the
+// wrong one.
 const CLEAR_TRACK_ARTISTS: &str = "DELETE FROM track_artists WHERE track_id = ?";
 const CLEAR_TRACK_CREDITS: &str = "DELETE FROM track_credits WHERE track_id = ?";
 const CLEAR_TRACK_GENRES: &str = "DELETE FROM track_genres WHERE track_id = ?";
@@ -24,13 +20,8 @@ const INSERT_ALBUM_ARTIST: &str =
     "INSERT INTO album_artists (album_id, artist_id, position, join_phrase) VALUES (?, ?, ?, ?)";
 
 /// The credit an album files under: its own tag where it has one, else the track artist's
-/// **first** name.
-///
-/// The whole track credit is the wrong fallback and the reason is the one the album-artist
-/// fallback already exists for. A guest on one track is not an album artist, so taking
-/// "X feat. Y" here would rename the album after whichever track happened to reach the upsert
-/// first and list the album in Y's discography. Same answer as [`album_artist_name_for`], one
-/// shape up.
+/// **first** name. A guest on one track is no album artist, so "X feat. Y" here would name the
+/// album after whichever track reached the upsert first and list it in Y's discography.
 #[must_use]
 pub fn album_credit_for(meta: &ExtractedMetadata) -> ArtistCredit {
     if meta.album_artist.is_empty() {
@@ -49,10 +40,8 @@ pub fn album_artist_name_for(meta: &ExtractedMetadata) -> &str {
     }
 }
 
-/// The identity tags a credit's names carry beside their spelling.
-///
-/// Its own type because the two travel to the same place and follow opposite rules — see
-/// [`write_credits`] for why one is position-aligned and the other is not.
+/// The identity tags a credit's names carry beside their spelling, following the opposite rules
+/// [`write_credits`] argues.
 #[derive(Default, Clone, Copy)]
 pub struct CreditDetails<'a> {
     /// `ARTISTSORT` / `ALBUMARTISTSORT`, which describes the whole printed credit rather than any
@@ -62,13 +51,11 @@ pub struct CreditDetails<'a> {
     pub mbids: &'a [String],
 }
 
-/// Write a freshly inserted track's artist credit.
+/// Writes a freshly inserted track's artist credit.
 ///
-/// **Position 0 is the row's own `tracks.artist_id`.** Album grouping and the sort indexes still
-/// read that FK, so the join table agreeing with it at the head is what stops an artist-scoped
-/// query and an album-scoped one disagreeing about the same track. `primary_artist_id` covers the
-/// one case the credit can't: a file with no artist tag, which resolves to the sentinel and still
-/// gets its row rather than being credited to nobody.
+/// **Position 0 is the row's own `tracks.artist_id`**, which album grouping and the sort indexes
+/// read, so an artist-scoped query and an album-scoped one agree about the track. A file with no
+/// artist tag resolves to the sentinel and is still credited to someone.
 pub(crate) async fn insert_track_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
@@ -82,10 +69,8 @@ pub(crate) async fn insert_track_credits(
 }
 
 /// Every join row a freshly inserted track owes: its artist credit, its role credits, its genres.
-///
-/// One entry point rather than three calls at each of the two insert sites, because the three
-/// tables are one fact about the row — a path that wrote two of them is a track that displays
-/// credits it cannot be found by, and the bug is invisible from either half.
+/// One entry point, since a path writing two of the three leaves a track displaying credits it
+/// can't be found by.
 pub(crate) async fn insert_track_joins(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     track_id: i64,
@@ -119,10 +104,8 @@ pub fn track_credit_details(meta: &ExtractedMetadata) -> CreditDetails<'_> {
     CreditDetails { sort_name: meta.sort.artist.as_deref(), mbids: &meta.artist_mbids }
 }
 
-/// The identity tags behind the credit an album files under.
-///
-/// Falls back to the track artist's the way [`album_credit_for`] does, so the sort name and the
-/// credit it describes come from the same tag rather than from different ones.
+/// The identity tags behind the credit an album files under, falling back as [`album_credit_for`]
+/// does so the sort name describes the same credit.
 #[must_use]
 pub fn album_credit_details(meta: &ExtractedMetadata) -> CreditDetails<'_> {
     if meta.album_artist.is_empty() {
@@ -187,11 +170,8 @@ async fn write_genres(
 }
 
 /// [`replace_track_joins`] for an album, plus the rendered credit `album_stats` displays and the
-/// `search_name` the Albums grid filters that same line by.
-///
-/// No insert-only sibling: `upsert_album` reaches this down both arms of its `ON CONFLICT`, so the
-/// rows may or may not be there and only the delete can tell. Both arms reaching it is also what
-/// makes it the one place an album's `search_name` is written.
+/// `search_name` the Albums grid filters it by. Both of `upsert_album`'s conflict arms reach it,
+/// which is why there is no insert-only sibling and why it is that `search_name`'s one writer.
 pub(crate) async fn replace_album_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     album_id: i64,
@@ -215,11 +195,8 @@ pub(crate) async fn replace_album_credits(
     search_name::refill(tx, Named::Albums, album_id).await
 }
 
-/// Drop a parent's whole credit, ahead of writing the replacement.
-///
-/// Delete-then-insert rather than a diff: a credit is a handful of ordered rows, so a diff would
-/// have to reconcile positions anyway and buys nothing but a way to leave the stats triggers out
-/// of step.
+/// Drops a parent's whole credit ahead of the replacement: a diff would reconcile positions anyway,
+/// and could leave the stats triggers out of step.
 async fn clear_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     delete: &'static str,
@@ -231,17 +208,11 @@ async fn clear_credits(
 
 /// One row per credited name, in order, upserting the names it hasn't seen.
 ///
-/// Position 0 takes `primary_artist_id` rather than an upsert of its own: every caller resolved
-/// that id *from* this credit's first name, so the round trip would ask a question it is holding
-/// the answer to. Which is also the invariant `album_credit_for` exists to keep true.
-///
-/// The two halves of `details` follow opposite rules, and both are conventions rather than
-/// choices. A `MusicBrainz` id is written **per name**, the tag listing one per credited artist in
-/// the same order. A sort name is written **only for a solo credit**: `ARTISTSORT` is the sort form
-/// of the whole printed line, so on "The Beatles & Yoko Ono" it reads "Beatles, The; Ono, Yoko" and
-/// stamping that onto the first artist files the Beatles under a string naming two people. The
-/// per-artist plural (`ARTISTSSORT`) has no lofty key, so a multi-artist credit keeps the locally
-/// derived sort name.
+/// Position 0 takes `primary_artist_id`, which every caller resolved from this credit's first name.
+/// A `MusicBrainz` id is written **per name**, the tag listing one per artist in order; a sort name
+/// only for a **solo** credit, `ARTISTSORT` sorting the whole line, so "Beatles, The; Ono, Yoko"
+/// stamped on the first artist would file the Beatles under two people. The per-artist
+/// `ARTISTSSORT` has no lofty key.
 async fn write_credits(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     insert: &'static str,
@@ -273,10 +244,8 @@ async fn write_credits(
         let sort_name = if solo { details.sort_name } else { None };
         apply_artist_details(tx, artist_id, sort_name, details.mbids.get(position)).await?;
 
-        // One row per *artist*, not per name. `artists.name` is `UNIQUE COLLATE NOCASE`, so a
-        // credit naming someone twice under two spellings resolves to one row here — and the
-        // stats triggers on this table would then count the track twice for them. The line keeps
-        // both names, being what the release printed; the join rows are what a count reads.
+        // One row per *artist*: two spellings of one name resolve to one `NOCASE` row, which the
+        // stats triggers would otherwise count twice. The line keeps both, as the release printed.
         if written.contains(&artist_id) {
             continue;
         }
@@ -293,20 +262,13 @@ async fn write_credits(
     Ok(())
 }
 
-/// Fill in an artist's sort name and `MusicBrainz` id from the file that named them.
+/// Fills an artist's sort name and `MusicBrainz` id from the file that named them, **only where
+/// still empty**, unlike [`upsert_album`]'s newest-wins release columns. These arrive per credited
+/// artist per track, so one disagreeing file would flip the filing order on every rescan; the cost
+/// is that a corrected `ARTISTSORT` can't reach a row that has one.
 ///
-/// **Only where the column is still empty**, deliberately unlike the release columns in
-/// [`upsert_album`], which take the newest value. These arrive once per *credited artist per
-/// track* rather than once per release, so a library where one file disagrees with its neighbours
-/// would flip the artist's filing order on every rescan depending on which file reached the upsert
-/// last.
-///
-/// The cost is that first writer wins for good: no surface edits these, so a corrected
-/// `ARTISTSORT` in the file cannot reach a row that already has one.
-///
-/// The emptiness test is spelled twice on purpose. The `CASE` arms decide the value but still
-/// match the row, and `SQLite` rewrites a matched row whether or not a value moved. On a tagged
-/// library that is one write per credited artist per track, for nothing.
+/// The emptiness test is spelled twice: the `CASE` arms decide the value, and the `WHERE` keeps
+/// `SQLite` from rewriting every matched row whether a value moved or not.
 async fn apply_artist_details(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     artist_id: i64,
@@ -337,19 +299,15 @@ async fn apply_artist_details(
     .bind(musicbrainz_id)
     .execute(&mut **tx)
     .await?;
-    // Either column may be the one that moved; refilling for a MusicBrainz id alone costs a write
-    // as rare as this one.
+    // Either column may have moved; a refill for the id alone is as rare as this write.
     if written.rows_affected() > 0 {
         search_name::refill(tx, Named::Artists, artist_id).await?;
     }
     Ok(())
 }
 
-/// Find or create an artist by name, returning the artist ID.
-/// Uses the provided `unknown_artist_id` for empty artist names.
-///
-/// A new row's `search_name` packs the name alone, no sort name having been written yet. The
-/// conflict arm only re-cases the name, which folds the same, so it leaves the column be.
+/// Finds or creates an artist by name, `unknown_artist_id` standing in for an empty one. Only a new
+/// row writes its `search_name`: the conflict arm re-cases the name, which folds the same.
 pub(crate) async fn upsert_artist(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     name: &str,
@@ -370,13 +328,8 @@ pub(crate) async fn upsert_artist(
     Ok(id)
 }
 
-/// Find or create an album by name and artist, returning the album ID.
-/// Returns None if the album name is empty.
-///
-/// `artist_id` is the album's grouping key, the primary name behind `credit`, and the two are
-/// separate arguments because the caller has already resolved and cached the id. The credit rows
-/// are written here rather than by the caller for the reason [`insert_track_joins`] gives: an
-/// album row without them files under nobody.
+/// Finds or creates an album by name and grouping artist, `None` for an empty name. Writes its
+/// credit rows too, for [`insert_track_joins`]' reason: an album without them files under nobody.
 pub(crate) async fn upsert_album(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     name: &str,
@@ -390,15 +343,10 @@ pub(crate) async fn upsert_album(
     }
     let release = &meta.release;
     let id = sqlx::query_scalar::<_, i64>(
-        // Every release field is `COALESCE(excluded.x, albums.x)`: it updates the stored value on
-        // re-ingest (e.g. a tag edit) but preserves it when the new value is NULL, so a track
-        // carrying one wins and a later track missing it doesn't blank it. Which is also why
-        // nothing here can *clear* one: a cleared field arrives as the NULL this coalesces away,
-        // so the Edit-Tags path nulls it explicitly afterwards (`library::tags::clear_release_tags`).
-        //
-        // `is_compilation` is the one exception, and an OR rather than a COALESCE: the column is
-        // NOT NULL so there is no "said nothing" to coalesce against, and one track flagged makes
-        // the release one. It is unset by that same pass.
+        // Each release field coalesces, so a track carrying one wins and a later one missing it
+        // doesn't blank it, and so nothing here can clear one: `album::clear_release_tags` does
+        // after an Edit-Tags save. `is_compilation` is NOT NULL and ORs, one flagged track making
+        // the release one, and the same pass unsets it.
         "INSERT INTO albums (
              name, artist_id, year, sort_name, is_compilation,
              musicbrainz_id, musicbrainz_release_group_id,
@@ -439,9 +387,8 @@ pub(crate) async fn upsert_album(
     Ok(Some(id))
 }
 
-/// Find or create a genre by name, returning the genre ID.
-/// Returns None if the genre name is empty. The conflict arm only re-cases the name, which folds
-/// the same, so only a new row writes its `search_name`.
+/// Finds or creates a genre by name, `None` for an empty one. Only a new row writes its
+/// `search_name`, for [`upsert_artist`]'s reason.
 pub(crate) async fn upsert_genre(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     name: &str,

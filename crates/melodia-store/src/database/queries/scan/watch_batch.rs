@@ -32,11 +32,11 @@ pub enum WatchedChange {
         to: PathBuf,
         /// `None` where `to` could not be read, or vanished before the batch was extracted.
         meta: Option<ExtractedMetadata>,
-        /// The mtime a re-pointed row stores. `meta`'s own wherever there is one, since
-        /// `update_track_location` writes the mtime but not the size or hash: a fresher `stat`
-        /// would land beside the previous scan's size, and an in-place tag edit that happened not
-        /// to change the size would then read as current to `scanner::track_is_current` on every
-        /// later scan. An older mtime only ever fails toward a re-parse.
+        /// The mtime a re-pointed row stores, `meta`'s wherever there is one.
+        /// `update_track_location` writes the mtime but not the size or hash, so a fresher `stat`
+        /// would sit beside the previous scan's size, and a size-preserving tag edit would read as
+        /// current to `scanner::track_is_current` from then on. An older mtime only fails toward a
+        /// re-parse.
         date_modified: Option<String>,
     },
     Removed(PathBuf),
@@ -45,23 +45,22 @@ pub enum WatchedChange {
 /// What one batch carries from event to event.
 #[derive(Default)]
 struct Batch {
-    /// Hash → `(id, old path)` of a row whose file has vanished: where a `Created` with those
-    /// bytes re-points rather than inserts. An entry is consumed on a successful re-point, so two
-    /// same-hash files in one batch can't both steal the one row.
+    /// Hash → `(id, old path)` of a row whose file vanished, where a `Created` with those bytes
+    /// re-points rather than inserts. Consumed on a re-point, so two same-hash files can't both
+    /// take the row.
     moved: HashMap<String, (i64, String)>,
-    /// One per batch, not one per event: a folder drop lands a release at a time, so every file in
-    /// it names the same artist and genre.
+    /// One per batch: a folder drop lands a release at a time, every file naming the same artist
+    /// and genre.
     names: NameCache,
 }
 
 /// Applies `changes` to the library, carrying a moved file's row across a delete and a create.
 ///
-/// **Both halves of that are here, and both are needed.** A move between filesystems reaches the
-/// watcher as a `Removed` plus a `Created` rather than a rename. The candidates are resolved
-/// before the write transaction opens, so the deletes are applied last: a `Removed` applied first
-/// would hard-delete the very row the matching `Created` needs, and the move would land as a fresh
-/// insert that drops the user's rating, play count and favourite. Dedup emits from a `HashMap`, so
-/// without the sort the two orders are a coin flip. Stable, so nothing else is reordered.
+/// A move between filesystems arrives as a `Removed` plus a `Created`, never a rename. **Both
+/// halves are needed**: the candidates are resolved before the write transaction opens, and the
+/// deletes apply last, since a `Removed` applied first would hard-delete the row the `Created`
+/// needs and land the move as a fresh insert without the user's rating, play count and favourite.
+/// Dedup emits from a `HashMap`, so the sort is what decides; stable, so nothing else moves.
 pub async fn apply_watch_batch(
     db: &DbPool,
     mut changes: Vec<WatchedChange>,
@@ -79,11 +78,7 @@ pub async fn apply_watch_batch(
         stats::disable_stats_triggers(&mut tx).await?;
     }
 
-    // Rows actually inserted / re-pointed / updated / deleted this batch.
-    // Gates the post-loop sweeps: a no-op batch (events for untracked
-    // files, paths outside library folders) must not pay the cover roll-ups
-    // or a stats recalc, which mirrors the `any_changes` gate on the scan
-    // path (`commit_scan`).
+    // Gates the sweeps below, which a batch of events for untracked files mustn't pay for.
     let mut changed: usize = 0;
 
     for change in &changes {
@@ -145,9 +140,7 @@ pub async fn apply_watch_batch(
     }
 
     if is_bulk {
-        // Triggers were off during the loop; with zero changes the
-        // denormalized stats are still correct, so only the re-enable is
-        // unconditional.
+        // With nothing changed the counts are still right, and only the re-enable is owed.
         if changed > 0 {
             stats::recalculate_all_stats(&mut tx).await?;
         }
@@ -156,7 +149,6 @@ pub async fn apply_watch_batch(
 
     if changed > 0 {
         roll_up_covers(&mut tx).await?;
-        // A deleted file can empty its album/artist/genre; prune the stranded rows.
         prune_orphans(&mut tx).await?;
     }
     tx.commit().await?;
@@ -164,12 +156,9 @@ pub async fn apply_watch_batch(
     Ok(())
 }
 
-/// The lowest-id row for each created file's hash whose own file is gone from disk: genuinely
-/// moved, not duplicated. One chunked query off the read pool and one `stat` pass off the runtime,
-/// both before the write transaction opens.
-///
-/// A lookup that fails costs the batch its move detection and nothing else, so it is logged and
-/// the batch goes on.
+/// The lowest-id row for each created file's hash whose own file is gone from disk: moved, not
+/// duplicated. Read before the write transaction opens; a failed lookup costs the batch its move
+/// detection and nothing else.
 async fn moved_candidates(
     db: &DbPool,
     changes: &[WatchedChange],
@@ -212,8 +201,7 @@ fn file_name_owned(path: &Path) -> String {
     path.file_name().and_then(|f| f.to_str()).unwrap_or("").to_owned()
 }
 
-/// Returns `true` when a row was actually written (insert or moved-file
-/// re-point) so the caller can gate the per-batch sweeps on real changes.
+/// Whether a row was written, by an insert or a re-point.
 async fn handle_created(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &Path,
@@ -226,19 +214,13 @@ async fn handle_created(
         return Ok(false);
     }
 
-    // Move detection: same content hash + the previous owner's path is now
-    // missing → re-point the existing row instead of inserting a new one.
-    // The entry is consumed only on a successful re-point, so a failed folder
-    // lookup leaves it available to a later same-hash event.
+    // A failed folder lookup leaves the entry for a later same-hash event.
     if let Some((existing_id, old_path)) = batch.moved.get(&meta.file_hash).cloned() {
         let Some(folder_id) = find_folder_for_path(tx, &path_str).await? else {
             log::debug!("Moved file not in any library folder, skipping: {}", path.display());
             return Ok(false);
         };
         let file_name = file_name_owned(path);
-        // `meta` was extracted from this very path, so its `date_modified` is the
-        // mtime already in hand — re-deriving it would `stat` the file again and
-        // could pair a fresh mtime with the size/hash of the earlier instant.
         let repointed = update_track_location(
             tx,
             existing_id,
@@ -253,10 +235,7 @@ async fn handle_created(
             log::info!("Detected moved file: {old_path} -> {path_str}");
             return Ok(true);
         }
-        // 0 rows: the candidate is gone. Deletes are applied last, so it wasn't
-        // one of this batch's; what's left is a scan committing a delete between
-        // the pre-transaction candidate read and this write. Drop the dead entry
-        // and fall through to a fresh insert.
+        // Deletes apply last, so a scan removed the row after the candidates were read.
         batch.moved.remove(&meta.file_hash);
     }
 
@@ -275,7 +254,7 @@ async fn handle_created(
     Ok(true)
 }
 
-/// Returns `true` when a row was actually written. See [`handle_created`].
+/// Whether a row was written.
 async fn handle_renamed(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     from: &Path,
@@ -294,8 +273,7 @@ async fn handle_renamed(
         };
 
         let file_name = file_name_owned(to);
-        // `track_id` was resolved by path inside this transaction, so the
-        // row can't have vanished — the re-point bool is vacuously true.
+        // Resolved inside this transaction, so the row is there.
         let _repointed =
             update_track_location(tx, track_id, &to_str, &file_name, folder_id, date_modified)
                 .await?;
@@ -308,7 +286,7 @@ async fn handle_renamed(
     Ok(false)
 }
 
-/// Returns `true` when a row was actually written. See [`handle_created`].
+/// Whether a row was written.
 async fn handle_modified(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     path: &Path,

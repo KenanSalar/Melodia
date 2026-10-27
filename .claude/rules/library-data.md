@@ -141,13 +141,10 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   ingest, hash backfill, detail, fixtures). Pick the slimmest — `SELECT *` into `Track` for a list
   view costs ~40 unused decodes/row.
 
-  - **The multi-valued fields are deliberately absent from `TagEditRow`**, and a widening that puts
-    one back is the regression. Artists, genres and role credits are rows (`track_artists`,
-    `track_genres`, `track_credits`), each with a rendered column beside them (`tracks.artist`,
-    `.genre`, `.credits`) that exists for the FTS index and the display surfaces. The dialog reads
-    the rows, through `queries::track::get_track_{credits,role_credits,genres}_by_ids`: an editor
-    populated from the rendered line splits `Chanson, Francaise` into two genres and saving makes
-    that permanent.
+  - **The multi-valued fields are deliberately absent from `TagEditRow`**, argued at
+    `queries::track::get_tag_edit_rows_by_ids`. Artists, genres and role credits are rows
+    (`track_artists`, `track_genres`, `track_credits`), each with a rendered column beside them
+    (`tracks.artist`, `.genre`, `.credits`) that exists for the FTS index and the display surfaces.
 
   - **The other half of narrowing is the keyset**: every list that can grow with the library (both
     Songs tabs, and the four details, a broad genre or a smart playlist running as long as one)
@@ -255,10 +252,8 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   **Lyrics live in the file, not the DB** (single-track tab only), though the tab is no longer their
   only reader: `library::lyrics` resolves a sidecar, this tag and a fetched-sheet store for the Now
   Playing panel, and hands the tab that same reading as an *Insert found lyrics* offer above the
-  field. The writer always targets the **primary tag type** (never `first_tag_mut()` — an ID3v1-only
-  MP3 would drop album-artist/composer/BPM/lyrics); BPM writes `IntegerBpm` **and** `Bpm`; **M4A
-  `Ilst` flattens every `pic_type` to `Other`**, so `clear_front_cover` must remove *both*
-  `CoverFront` and `Other` or Replace/Remove silently revert. Cover picks decode-validate up front, so a corrupt pick fails
+  field. The writer's per-format keys (the primary tag only, BPM's two keys, M4A's flattened
+  picture types) are argued in `tag_writer`. Cover picks decode-validate up front, so a corrupt pick fails
   the batch before any file is touched — that half is `media/ingest/cover_embed.rs`, which is about
   pixels where the writer beside it is about keys, and which owns the bounds a picked image is
   fitted to and the rule that a re-encode may never hand back more bytes than it was given. After the write it's the scan pipeline: re-extract via
@@ -297,8 +292,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   `crates/melodia-app/src/library/smart_playlists.rs`). `playlists.is_smart` + `smart_criteria TEXT` store a JSON
   `SmartCriteria` rule set instead of `playlist_items` — **resolved at read time**, never
   materialized (updates live). `#[serde(default)]` + a `version` field keep it forward-compatible.
-  The evaluator builds WHERE via `sqlx::QueryBuilder` — **only** enum-derived
-  `&'static str` fragments are `push`ed; every user value goes through `push_bind`. **The UI reuses
+  The evaluator's injection contract is `queries::smart_playlist`'s module doc. **The UI reuses
   the same grid + detail** (My Library's Playlists tab, where the retired nav 7 folds):
   `PlaylistRow.is_smart` **gates off every manual-membership edit** — reorder, remove, file-drop,
   Add-to-Playlist, adding being a write of orphan `playlist_items` a smart list never reads.

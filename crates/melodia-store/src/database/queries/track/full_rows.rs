@@ -74,19 +74,14 @@ pub async fn get_tracks_by_ids(db: &DbPool, ids: &[i64]) -> Result<Vec<track::Tr
     })
     .await?;
 
-    // Re-order results to match the input ID order
     let mut track_map: HashMap<i64, track::Track> = HashMap::with_capacity(tracks.len());
     track_map.extend(tracks.into_iter().map(|t| (t.id, t)));
 
     Ok(ids.iter().filter_map(|id| track_map.remove(id)).collect())
 }
 
-/// Find groups of tracks that share the same `file_hash` (duplicates).
-/// Returns a Vec of groups, where each group is a Vec of tracks with the same hash.
-///
-/// One query joins each track to the duplicate-hash CTE; rows arrive
-/// pre-sorted by `(file_hash, date_added)` so we can group consecutive
-/// equal hashes in Rust without a `HashMap`.
+/// The groups of tracks sharing a `file_hash`. Rows arrive sorted by `(file_hash, date_added)`,
+/// so a group is a run of equal hashes.
 pub async fn get_duplicate_tracks(db: &DbPool) -> Result<Vec<Vec<track::Track>>, AppError> {
     let rows: Vec<track::Track> = sqlx::query_as(
         "WITH dup_hashes AS (

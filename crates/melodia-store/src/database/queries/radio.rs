@@ -7,18 +7,11 @@ use melodia_core::error::{AppError, describe};
 const INSERT_COLUMNS: &str = "station_uuid, name, stream_url, homepage, favicon_url, tags,
     country, country_code, language, codec, bitrate, hls, sort_key, date_added";
 
-/// What a re-import is allowed to touch: the directory's own fields and nothing
-/// else. `is_favorite`, `play_count`, `last_played` and `date_added` are the
-/// user's side of the row and must survive it; `artwork_path` is left alone
-/// because the stored logo is still valid and blanking it would strand the file
-/// until the next sweep.
-/// The four `local_*` columns are absent for the same reason and a stronger one:
-/// they are the user's own answers to what a directory entry left blank, so the
-/// directory has nothing to say about them and rewriting its own four in full
-/// stays correct. `probed_codec` is absent on that same argument pointed the
-/// other way: it is what an open measured the stream to hold, against a `codec`
-/// naming only the container, so listing it here would revert the better answer
-/// every time the station was re-imported.
+/// What a re-import may touch: the directory's own fields and nothing else. The user's side of the
+/// row survives it (`is_favorite`, the play stats, `date_added`), and so does `artwork_path`, the
+/// stored logo still being valid. The `local_*` columns are the user's answers to what the
+/// directory left blank, and `probed_codec` is what an open measured, a better answer than the
+/// container a `codec` names, so a re-import reverts neither.
 const DIRECTORY_CONFLICT: &str = "\
     ON CONFLICT(station_uuid) DO UPDATE SET
         name = excluded.name,
@@ -34,22 +27,12 @@ const DIRECTORY_CONFLICT: &str = "\
         hls = excluded.hls,
         sort_key = excluded.sort_key";
 
-/// Save a station, resolving against the existing row when the directory
-/// already knows its `station_uuid`. Answers the row's id.
+/// Saves a station, resolving onto the existing row when the directory already knows its
+/// `station_uuid`, and answers the row's id.
 ///
-/// One door rather than an upsert and an insert the caller picks between,
-/// because the uuid already answers which is wanted: a directory row always
-/// carries one and a hand-typed URL never does. The clause is dropped for a
-/// `None` rather than left inert, `SQLite` treating NULLs as distinct under
-/// UNIQUE, so a hand-typed station adds a row every time the way importing the
-/// same playlist twice is two playlists.
-///
-/// **`RETURNING id`, not the row.** Every caller wants the id and nothing else, and the row is a
-/// column per field on [`radio::RadioStation`] and a heap string for most of them, dropped on the
-/// next line: a cost the import loop would pay per entry, and one that grows with the table.
-/// A caller that genuinely wants the persisted state reads it back with
-/// [`get_station_by_id`], which also answers for what `SQLite` stored rather than what the insert
-/// echoed.
+/// One door because the uuid already says which is wanted: a directory row always carries one and
+/// a hand-typed URL never does, adding a row every time. `RETURNING id` rather than the row, which
+/// every caller would drop; [`get_station_by_id`] reads back what `SQLite` stored.
 pub async fn save_station(db: &DbPool, station: &radio::NewRadioStation) -> Result<i64, AppError> {
     save_station_on(db.write(), station).await
 }
@@ -112,12 +95,9 @@ pub async fn get_favorite_stations(db: &DbPool) -> Result<Vec<radio::RadioStatio
     .await?)
 }
 
-/// The stations played most recently, newest first.
-///
-/// Ordered on the raw `TEXT`. `now_rfc3339` zero-pads its fraction and closes
-/// with a constant `+00:00`, and `+` sorts below every digit, so a stamp printed
-/// at coarser precision still lands ahead of a finer one sharing its prefix:
-/// lexical order is chronological order and nothing is parsed.
+/// The stations played most recently, newest first, ordered on the raw text: `now_rfc3339`
+/// zero-pads its fraction and ends in `+00:00`, `+` sorting below every digit, so lexical order is
+/// chronological even against a coarser stamp.
 pub async fn get_recent_stations(
     db: &DbPool,
     limit: i64,
@@ -132,15 +112,11 @@ pub async fn get_recent_stations(
     .await?)
 }
 
-/// Rewrite the fields a hand-typed station's editor owns.
+/// Rewrites the fields a hand-typed station's editor owns.
 ///
-/// Narrower than [`save_station`] on purpose: that one is the directory's door
-/// and would need a `NewRadioStation` the caller has no uuid, country or
-/// language for, and it would reset the play stats through `RETURNING *`.
-/// `artwork_path` stays out too — the logo is a file the caller fetches, so it
-/// is `set_artwork`'s to point at. `sort_key` is re-derived here because it is
-/// the name's shadow and a rename that left it standing would sort the station
-/// under its old one.
+/// Not [`save_station`], which wants a uuid, country and language the caller has none of.
+/// `artwork_path` is [`set_artwork`]'s, and `sort_key` is re-derived so a rename doesn't sort under
+/// the old name.
 pub async fn update_station(
     db: &DbPool,
     id: i64,
@@ -166,13 +142,9 @@ pub async fn update_station(
     Ok(())
 }
 
-/// The station already streaming from `stream_url`, if there is one.
-///
-/// The duplicate guard both hand-typed doors take, and it has to be a query: a
-/// hand-typed station carries no `station_uuid`, and `SQLite` treats NULLs as
-/// distinct under `UNIQUE`, so the constraint that stops a directory station
-/// arriving twice says nothing at all about this one. The id comes back rather
-/// than a bool because both doors merge onto the row they find.
+/// The station already streaming from `stream_url`, if any: the duplicate guard both hand-typed
+/// doors take. A query because a hand-typed station has no `station_uuid` for `UNIQUE` to catch;
+/// the id rather than a bool because both doors merge onto the row they find.
 pub async fn station_id_with_url(db: &DbPool, stream_url: &str) -> Result<Option<i64>, AppError> {
     Ok(sqlx::query_scalar("SELECT id FROM radio_stations WHERE stream_url = ? LIMIT 1")
         .bind(stream_url)
@@ -180,18 +152,12 @@ pub async fn station_id_with_url(db: &DbPool, stream_url: &str) -> Result<Option
         .await?)
 }
 
-/// The row an import entry lands on, as `(id, is_favorite)`, or `None` for one that is new.
+/// The row an import entry lands on, as `(id, is_favorite)`, or `None` for a new one.
 ///
-/// **Both keys in one statement, and the star in the same row.** The uuid is asked first — it is
-/// the directory's own identity for a station, so one repointed at a new mount is the same row
-/// under a `stream_url` that has moved — and the URL after it, so an entry with no uuid, or one
-/// typed in by hand before the directory listed it, still finds its row. Spelled as three queries
-/// (id by uuid, id by URL, then the row for its `is_favorite`) this ran per entry, over a table the
-/// import is itself growing.
-///
-/// Executor-generic because the import must ask *through its own transaction*: reading off the
-/// read pool would not see the rows earlier entries in the same file just wrote, and a list naming
-/// one station twice would add it twice.
+/// The uuid first, the directory's identity for a station whose `stream_url` has moved, then the
+/// URL, for an entry with no uuid or one typed in before the directory listed it. Executor-generic
+/// because the import asks through its own transaction, which alone sees what earlier entries
+/// wrote.
 async fn kept_station_matching<'e, E>(
     executor: E,
     station_uuid: Option<&str>,
@@ -240,14 +206,9 @@ pub struct ImportedStation {
 
 /// Puts every station in the kept list, answering how many entries that changed.
 ///
-/// **One transaction for the whole list.** As implicit commits on a single-connection write pool,
-/// fifty stations would queue a couple of hundred statements behind whatever else wanted to write.
-/// It also lets the lookup see the rows earlier entries just wrote, which the read pool would not,
-/// so a list naming one station twice stars it once.
-///
-/// All-or-nothing on an error, and that is the better half of the trade: the errors reachable here
-/// are the database being unwritable, which is not a condition the next entry recovers from. It is
-/// the same argument [`super::artwork::repoint_all`] makes for its own pass.
+/// One transaction, so the list doesn't queue its statements one commit at a time behind other
+/// writers, and so a station listed twice is starred once. All-or-nothing on an error, which here
+/// means an unwritable database, as [`super::artwork::repoint_all`] argues for its own pass.
 pub async fn import_stations(db: &DbPool, stations: &[ImportedStation]) -> Result<u32, AppError> {
     let mut tx = db.write().begin().await?;
     let mut changed: u32 = 0;
@@ -262,12 +223,10 @@ pub async fn import_stations(db: &DbPool, stations: &[ImportedStation]) -> Resul
 
 /// Stars one entry, answering whether that changed anything.
 ///
-/// **A row already here takes nothing from the file but its star.** A snapshot out of a file is
-/// not evidence against a live row, and [`set_local_fields`] writes all four columns in one
-/// statement, so a file naming one of them would clear the three it says nothing about. Nothing is
-/// lost by that: a station the user deleted arrives as a new row, and un-starring one never
-/// touched its `local_*` columns. It also keeps every row the overrides are written to logo-less,
-/// which is the state the logo repair needs to reach one.
+/// **A row already here takes only its star from the file**: [`set_local_fields`] writes all four
+/// columns at once, so a file naming one would clear the three it says nothing about. Nothing is
+/// lost, a deleted station arriving as a new row, and the rows overrides land on stay logo-less,
+/// the state the logo repair needs.
 async fn import_one(
     conn: &mut sqlx::SqliteConnection,
     entry: &ImportedStation,
@@ -280,8 +239,8 @@ async fn import_one(
     let Some((id, is_favorite)) = existing else {
         let id = save_station_on(&mut *conn, station).await?;
         set_favorite_on(&mut *conn, id, true).await?;
-        // Best-effort: one hand-edited line is not worth refusing a list of fifty stations over,
-        // and every field is editable on the card.
+        // Best-effort: one bad hand-edited line isn't worth refusing the list over, and every
+        // field is editable on the card.
         if let Some(overrides) = &entry.overrides
             && let Err(e) = set_local_fields_on(&mut *conn, id, overrides).await
         {
@@ -302,11 +261,9 @@ pub async fn delete_station(db: &DbPool, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Record what a station's stream was measured to hold, which only a successful open knows.
-///
-/// Written on every tune rather than compared first: the row would have to be re-read to compare,
-/// and a station that changed what it serves is exactly the one the stale value would be wrong
-/// for. It is one small `UPDATE` beside [`mark_played`]'s, on the same path.
+/// Records what a station's stream was measured to hold, which only a successful open knows.
+/// Written on every tune rather than compared, a station that changed what it serves being the one
+/// a stale value is wrong for.
 pub async fn set_probed_codec(db: &DbPool, id: i64, codec: &str) -> Result<(), AppError> {
     sqlx::query("UPDATE radio_stations SET probed_codec = ? WHERE id = ?")
         .bind(codec)
@@ -340,15 +297,10 @@ pub async fn clear_play_history(db: &DbPool, id: i64) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Record what the *user* says about a station, clearing each field it carries `None` for.
+/// Records what the *user* says about a station, clearing each field it carries `None` for.
 ///
-/// Deliberately not the four columns beside them, which are the directory's and are rewritten in
-/// full by [`DIRECTORY_CONFLICT`] on the next play. Narrower than [`update_station`] too, that
-/// being a hand-typed station's whole editable surface: this touches only the local columns, and
-/// they are the only edit a directory-owned row accepts.
-///
-/// One statement for all four, so a save cannot land half-applied and leave a card describing a
-/// station out of two different edits.
+/// The local columns only, the directory's four being rewritten by [`DIRECTORY_CONFLICT`], and the
+/// only edit a directory-owned row accepts. One statement, so a save can't land half-applied.
 pub async fn set_local_fields(
     db: &DbPool,
     id: i64,
@@ -393,13 +345,9 @@ pub async fn set_artwork(db: &DbPool, id: i64, artwork_path: Option<&str>) -> Re
 
 /// What is already known about each of `favicon_urls`.
 ///
-/// **Asked about a page, never about the table.** The key is a URL from a directory of tens of
-/// thousands of entries, so the row count has no bound a caller could read whole into a memo that
-/// holds two thousand.
-///
-/// One query for both halves of the answer, which is the whole reason the two live in one table:
-/// a page of fifty stations asks once and learns both which logos it already has and which URLs
-/// it must not ask about yet.
+/// **Asked about a page, never the table**, which is keyed on URLs from a directory of tens of
+/// thousands. One query learns both which logos a page has and which URLs it must not ask about
+/// yet, the reason both live in one table.
 pub async fn logo_answers(
     db: &DbPool,
     favicon_urls: &[String],
@@ -423,10 +371,8 @@ pub async fn logo_miss_attempts(db: &DbPool, favicon_url: &str) -> Result<Option
     Ok(attempts)
 }
 
-/// Record that `favicon_url` answered with a file, and what it cost.
-///
-/// Overwrites a miss rather than deleting one: a host that has started answering again must not
-/// stay suppressed by a backoff it earned while it was down, and the row is now the hit.
+/// Records that `favicon_url` answered with a file, and what it cost. Overwrites a miss, so a host
+/// answering again isn't held to the backoff it earned while down.
 pub async fn record_logo_hit(
     db: &DbPool,
     favicon_url: &str,
@@ -454,11 +400,9 @@ pub async fn record_logo_hit(
     Ok(())
 }
 
-/// Record that `favicon_url` answered with nothing, and when it may be asked again.
-///
-/// Both values are the caller's: [`logo_miss_attempts`] is what it counted from, and the schedule
-/// is `library::radio`'s to decide. Clears any path the URL used to have — the logo moved or went
-/// away, and a row naming a file this URL no longer serves would hold it on disk forever.
+/// Records that `favicon_url` answered with nothing, and when it may be asked again, the schedule
+/// being `library::radio`'s. Clears any path the URL had, which would otherwise keep a file it no
+/// longer serves.
 pub async fn record_logo_miss(
     db: &DbPool,
     favicon_url: &str,
@@ -486,17 +430,11 @@ pub async fn record_logo_miss(
     Ok(())
 }
 
-/// Drop the answers no longer worth keeping, and report how many went.
+/// Drops the answers no longer worth keeping, and reports how many went.
 ///
-/// Three rules, and the caller owns all three numbers. A **miss** past `miss_cutoff` has nothing
-/// left to say — it would be retried on the next page carrying it either way. A **hit** older than
-/// `hit_cutoff` is a logo nobody has looked at in long enough that re-fetching it once is cheaper
-/// than holding it. And past `max_bytes` the newest hits are kept and the rest go, which is the
-/// bound that actually holds: a TTL alone lets a heavy browsing habit run the store up as far as
-/// its own rate takes it.
-///
-/// **The rows go and the files follow.** Nothing here touches the store — a dropped row simply
-/// stops referencing its file, and the sweep retires whatever no column names.
+/// A **miss** past `miss_cutoff` would be retried anyway; a **hit** older than `hit_cutoff` is
+/// cheaper to fetch again than to hold; and past `max_bytes` only the newest hits stay, the bound a
+/// TTL alone can't give. Only rows go here, and the sweep retires the files no column names.
 pub async fn prune_logo_answers(
     db: &DbPool,
     miss_cutoff: &str,
@@ -514,8 +452,7 @@ pub async fn prune_logo_answers(
     .await?
     .rows_affected();
 
-    // Newest-first, so what survives is what a browse is most likely to ask for next. The running
-    // total is inclusive, hence `>`: the row that crosses the bound is the first one dropped.
+    // The running total is inclusive, so the row crossing the bound is the first dropped.
     let over_cap = sqlx::query(
         "DELETE FROM radio_logo_answers WHERE favicon_url IN (
              SELECT favicon_url FROM (
