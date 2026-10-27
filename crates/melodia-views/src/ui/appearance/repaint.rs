@@ -1,6 +1,5 @@
-//! Material You repaint entrypoint + the shared `apply_and_seed`
-//! orchestration core called from `install` and after every appearance
-//! callback.
+//! [`apply_and_seed`], the one repaint `install`, every appearance pick and the Material You
+//! coordinator go through.
 
 use std::rc::Rc;
 
@@ -18,10 +17,8 @@ use melodia_core::error::describe;
 use melodia_core::themes::{self, SystemColorState};
 use melodia_ui::{AppWindow, Settings};
 
-/// Re-read `settings.json` (theme / variant / accent / dynamic colour
-/// style) and repaint the palette using the supplied `system` snapshot.
-/// Used by the Material You coordinator after it writes a fresh dynamic
-/// palette into `system.material_you` — must run on the UI thread.
+/// Repaints the persisted pick against `system`, for the Material You coordinator once it has
+/// written a fresh palette into `system.material_you`. UI thread.
 pub fn repaint_from_settings(ui: &AppWindow, state: &AppState, system: &SystemColorState) {
     match library::settings::get_settings(&state.paths) {
         Ok(settings) => apply_settings(ui, &settings, system),
@@ -42,18 +39,12 @@ pub(super) fn apply_settings(ui: &AppWindow, settings: &SettingsData, system: &S
     );
 }
 
-/// Resolve a possibly-stale `(theme_id, variant_id, accent_id, style)`
-/// quadruple from `settings.json`, write every Settings global property,
-/// and apply the palette. Used at startup, after a theme change, and
-/// whenever the OS appearance state ticks while the persisted variant is
-/// `"system"`. `style_id` matches the `dynamic_color_style` field —
-/// drives only the `Settings.color-style-idx` seed; whether Material You
-/// is *actually* active is decided by `system.material_you.is_some()`
-/// (the coordinator publishes that asynchronously after extraction).
+/// Resolves a possibly stale pick, seats every `Settings` row and applies the palette. `style_id`
+/// seeds only the Color Style chips; whether Material You is active is
+/// `system.material_you.is_some()`, which the coordinator publishes once it has extracted.
 ///
-/// `last_static_accent` is the per-theme remembered static accent; when
-/// `accent_id == MATERIAL_YOU_ACCENT_ID` and MY isn't active, we paint
-/// and highlight that fallback instead of jumping to the theme default.
+/// `last_static_accent` is what a Material You accent paints while Material You isn't active,
+/// rather than the theme's default.
 pub fn apply_and_seed(
     ui: &AppWindow,
     theme_id: &str,
@@ -73,18 +64,15 @@ pub fn apply_and_seed(
         super::resolved_variant_id(theme, variant_idx)
     };
 
-    // Accent swatches use the resolved real variant so the dots render
-    // in the correct shade even when the user is on "System".
+    // The swatches take the variant System resolves to, so they draw in the shade painted.
     let accent_variant_for_swatches = theme.shade_for(resolved_variant, &system.theme).id;
     let (brushes, labels) = accent_swatches(theme, accent_variant_for_swatches);
     let g_swatches = ui.global::<Settings>();
     g_swatches.set_accent_colors(ModelRc::from(Rc::new(VecModel::from(brushes))));
     g_swatches.set_accent_names(ModelRc::from(Rc::new(VecModel::from(labels))));
 
-    // When the persisted accent is "material_you" but MY isn't active
-    // (no artwork / coordinator hasn't run yet / theme isn't material3),
-    // paint with the user's last static pick so the surfaces still match
-    // an accent the user actually chose.
+    // A Material You accent with nothing to follow yet paints the last static pick, an accent
+    // the user did choose.
     let my_active = material_you_active(theme.id, system);
     let effective_id = effective_accent_id(theme, accent_id, my_active, last_static_accent);
     let style_idx = SchemeStyle::all().iter().position(|s| s.as_id() == style_id).unwrap_or(0);

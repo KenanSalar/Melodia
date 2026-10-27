@@ -1,17 +1,5 @@
-//! Artists-view glue between Rust and Slint.
-//!
-//! Two Slint globals are driven from here:
-//!
-//! * `Artists` — the responsive artist-card grid, the same shape as the Albums grid: a paged grid
-//!   of the artists' ids in the current sort and filter, its loads `ui::card_grid`'s. Cards are
-//!   circular and pull their cover lazily via `request-cover`.
-//!
-//! * `ArtistDetail` — the full Artist Detail view. `open_artist` fetches the header, the albums
-//!   sub-section and the artist's tracks as a keyset in a [`TrackRows`], whose [`DetailCache`]
-//!   holds the sort and filter its loads run under.
-//!
-//! Cross-thread layout mirrors `albums.rs`: `ArtistsUi` is `Send + Sync`, and Slint properties and
-//! models are only touched from the UI thread via `Weak<AppWindow>::upgrade_in_event_loop`.
+//! The Artists page, shaped like [`crate::ui::albums`]: a card grid, and a detail whose
+//! `open_artist` fetches the header, the Albums strip and the artist's tracks as a [`TrackRows`].
 
 mod callbacks;
 mod detail;
@@ -46,23 +34,13 @@ use melodia_ui::{
 use grid::ArtistsGrid;
 use state::ArtistDetailState;
 
-// Reached from outside the slice: `ui::nav_history` replays a walk into a detail, `boot::ui_setup`
-// seeds the persisted one, and its `initial_grid_fetch!` kicks the first load after the window is
-// shown — which is why `reload_grid` can't fold into `install`.
 pub use detail::{open_artist_with, seed_detail_from_settings};
 pub use grid::reload_grid;
 
-// Reached from this slice's own `callbacks/` and the drill in `callbacks::cross_tab_nav`.
-// `pub(super)` is `pub(in crate::ui)` here, which is exactly that reach.
 pub(super) use detail::{open_artist, refresh_detail, restore_detail};
 
-/// Install the Artists grid + detail models, build the handle, and wire every `Artists.*` /
-/// `ArtistDetail.*` callback to it.
-///
-/// Takes `albums_ui` for the "open album from Artist Detail" hand-off, which needs a live
-/// `AlbumsUi` to call into. That parameter *is* the ordering, so "Albums before Artists" is a
-/// compile error to get wrong rather than a comment in the boot file. The detail's Albums strip
-/// no longer needs it — one tier serves every grid, so there is nothing left to borrow.
+/// Installs the grid and detail models and wires every `Artists.*` / `ArtistDetail.*` callback.
+/// `albums_ui` is the open-album hand-off, a parameter so the install order is a compile error.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
@@ -77,20 +55,15 @@ pub fn install(cx: ViewCtx<'_>, albums_ui: &Arc<AlbumsUi>) -> Arc<ArtistsUi> {
     artists_ui
 }
 
-/// Rust-side state for the Artists grid + detail views. Mirrors [`AlbumsUi`] layer by layer; the
-/// grid and detail concerns live in their own sub-structs.
+/// The Artists grid's and detail's state, shared by the UI callbacks and the async loads.
 pub struct ArtistsUi {
     grid: GridLoads,
     detail: ArtistDetailState,
-    /// Row-tier cache shared with Tracks / Browse / Albums — backs the small artwork column of the
-    /// detail view's `TrackList`. The grid cards and the detail's Albums strip both draw from
-    /// `ui::grid_prewarm::tier()`, which is why neither has a field here — one tier serves them
-    /// and the strip has nothing to borrow.
+    /// The shared row tier, for the detail `TrackList`'s artwork column. The cards and the
+    /// detail's Albums strip draw from `ui::grid_prewarm::tier()`, which no view holds.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Detail-tier `(cover, blur)` pair cache for the Artist Detail header. Released on section
-    /// exit.
+    /// The detail header's `(cover, blur)` pair; see [`crate::ui::detail_artwork`].
     detail_artwork: Arc<DetailArtwork>,
-    /// Section-visibility + staleness bookkeeping — see [`SectionState`].
     section: SectionState,
 }
 
@@ -110,7 +83,8 @@ impl ArtistsUi {
         }
     }
 
-    /// Drop just the detail-tier `(cover, blur)` pair cache. Called when the user closes a detail.
+    /// Drops the detail's `(cover, blur)` pair on close, for
+    /// [`crate::ui::albums::AlbumsUi::release_detail_artwork`]'s reason.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
         melodia_platform::services::platform::allocator::trim();
@@ -124,9 +98,7 @@ impl ArtistsUi {
     }
 }
 
-/// Build the empty models the Artists grid, the detail track list, the detail Albums sub-section
-/// and the detail selection need, and hand them to the Slint globals as `ModelRc`s. The grid is a
-/// `PagedGrid` and the track list a [`TrackRows`], each installed once.
+/// Hands both globals their models, each installed once and found by downcast afterwards.
 fn install_models(
     ui: &AppWindow,
     state: &AppState,
@@ -163,9 +135,7 @@ impl PagedRow for UiArtistRow {
     }
 }
 
-/// Convert an `ArtistStats` into the Slint `ArtistRow` an `EntityCard` (and
-/// the detail header) renders. Pure data — cover is pulled lazily via
-/// `request-cover`.
+/// An `ArtistStats` as the `ArtistRow` a card and the detail header render.
 pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
     UiArtistRow {
         id: clamp_i64_to_i32(a.id),
@@ -180,7 +150,6 @@ pub fn to_slint_artist_row(a: &ArtistStats) -> UiArtistRow {
 
 impl_section_state_helpers!(ArtistsUi);
 
-// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<ArtistsUi>();

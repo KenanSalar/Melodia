@@ -208,7 +208,6 @@ fn write(ui: &AppWindow, painted: &Painted) {
     let g = ui.global::<ThemeGlobal>();
     let p = &painted.palette;
 
-    // Surfaces / structure
     g.set_base(brush(p.base));
     g.set_mantle(brush(p.mantle));
     g.set_mantle_unfocused(brush(painted.mantle_unfocused));
@@ -217,7 +216,6 @@ fn write(ui: &AppWindow, painted: &Painted) {
     g.set_surface1(brush(p.surface1));
     g.set_surface2(brush(p.surface2));
 
-    // Overlays / text
     g.set_overlay0(brush(p.overlay0));
     g.set_overlay1(brush(p.overlay1));
     g.set_overlay2(brush(p.overlay2));
@@ -226,26 +224,20 @@ fn write(ui: &AppWindow, painted: &Painted) {
     g.set_subtext1(brush(p.subtext1));
     g.set_border(brush(p.border));
 
-    // Card controls
     g.set_card_control(brush(p.card_control));
     g.set_card_control_hover(brush(p.card_control_hover));
 
-    // Semantic palette slots
     g.set_red(brush(p.red));
     g.set_green(brush(p.green));
     g.set_yellow(brush(p.yellow));
 
-    // Accent + on-accent text
     g.set_accent(brush(painted.accent));
     g.set_accent_text(brush(painted.accent_text));
 
-    // `danger` / `danger-text` stay bound to red / accent-text via the Slint
-    // declarative defaults — re-evaluated whenever the source brushes update,
-    // so we don't write them here.
+    // `danger` / `danger-text` are Slint bindings over red and accent-text, so they follow.
 
-    // Paint the OS-drawn caption in the same mantle so it blends into the chrome
-    // below. Nothing to paint until the window is shown, which boot's
-    // post-show one-shot covers. See [`melodia_platform::services::platform::dwm_titlebar`].
+    // The OS caption in the same mantle, so it blends into the chrome below. There is no window
+    // to paint until it is shown, which boot's post-show one-shot covers.
     #[cfg(target_os = "windows")]
     if let Some(hwnd) = crate::ui::window_chrome::win32_hwnd(ui) {
         melodia_platform::services::platform::dwm_titlebar::apply(hwnd, p.mantle);

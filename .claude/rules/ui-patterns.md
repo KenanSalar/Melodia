@@ -1602,8 +1602,7 @@ edit would otherwise reverse.
 - **The search box takes two properties**: `search-input` for the `SearchBar`s, `search-query` for
   the sections, joined by a `FilterThrottle`. Mounting every page is what makes a keystroke
   expensive here with no model in sight. Both are cleared together on nav-away and on a category
-  pick. `on_matches` memoizes the fold against the raw needle, this being the one `Needle`
-  caller that can't hold a folded shadow: it is invoked per *field*, not per pass.
+  pick, and `settings_page::install` argues the fold's memo.
   **Two boxes write `search-input`**, the panel's own and the field the rail's button opens. Both
   stay mounted, each carrying a `changed blur-trigger` tracker an `if` would strand, and
   `settings-view.slint` hands the focus across when the fold swaps them.

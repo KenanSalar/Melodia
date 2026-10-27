@@ -1,19 +1,9 @@
-//! Wire the Settings page's Playback section to Rust.
+//! The Playback card, seeded from one `settings.json` read. Most rows apply to the live backend
+//! synchronously and then persist on the blocking pool, as the equalizer and `ReplayGain` do; an
+//! exception says so where it is wired.
 //!
-//! Everything here is seeded from one `settings.json` read, and most of it takes the
-//! two-phase shape the equalizer and `ReplayGain` callbacks use: apply to the live
-//! backend synchronously, then persist on the blocking pool. Three exceptions:
-//!
-//! - **Play-button animation** needs no runtime mirror — `PlayButton` binds its overlays
-//!   to the Slint global, so the chip click repaints reactively.
-//! - **Resume on startup** has no runtime side effect at all; the flag is consulted
-//!   once, by `main.rs` after `restore_persisted_playback`.
-//! - **The crossfade duration slider** splits `changed` (live, no disk) from `committed`
-//!   (drag release, persists), as `set-volume` / `commit-volume` do.
-//!
-//! Gapless defaults to `true` in two places that already agree — `PlaybackFlags::default()`
-//! and `PlayerState::default()` — so a first launch reads no file, falls through to
-//! both, and paints the toggle on.
+//! Gapless defaults on in two places that agree, `PlaybackFlags::default()` and
+//! `PlayerState::default()`, so a first launch reads no file and paints the toggle on.
 
 use slint::ComponentHandle;
 
@@ -25,10 +15,8 @@ use melodia_core::error::describe;
 use melodia_playback::player::playback::crossfade;
 use melodia_ui::{AppWindow, Settings};
 
-/// The on-disk token as a Slint chip index, in lock-step with the inline literal in
-/// `views/settings/animations-section.slint` — both sides have to agree on the order or
-/// the chip paints the wrong selection. Anything unrecognised lands on index 0, matching
-/// `SettingsData::default()`.
+/// The on-disk token as a chip index, in the order of `animations-section.slint`'s inline list,
+/// anything unrecognised landing on 0 as `SettingsData::default()` does.
 fn play_button_anim_idx_from_token(token: &str) -> i32 {
     match token {
         "equalizer" => 1,
@@ -44,9 +32,8 @@ fn play_button_anim_token_from_idx(idx: i32) -> &'static str {
 }
 
 pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
-    // An unreadable file leaves the Slint defaults in place, matching first launch. The
-    // slider's range comes from the player's own constants, seeded ahead of the disk
-    // read so the value below always lands inside a valid track.
+    // The slider's range is the player's own, seeded ahead of the read so the value lands inside
+    // it. A failed read leaves the Slint defaults, as on a first launch.
     {
         let g = ui.global::<Settings>();
         g.set_crossfade_min_secs(crossfade::crossfade_ms_to_secs(crossfade::MIN_CROSSFADE_MS));
@@ -70,9 +57,8 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
 
     let state_clone = state.clone();
     ui.global::<Settings>().on_gapless_playback_changed(move |on| {
-        // Synchronous: `player_set_gapless` publishes a new ViewModel through
-        // `with_state_emit`, so the bar's flag and the monitor's gate both refresh
-        // before this callback returns.
+        // `player_set_gapless` emits, so the bar's flag and the monitor's gate refresh before
+        // this returns.
         if let Err(e) = library::playback::player_set_gapless(&state_clone.playback_ctx(), on) {
             log::warn!("player_set_gapless runtime apply: {}", describe(&e));
         }
@@ -83,8 +69,7 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
 
     let state_anim = state.clone();
     ui.global::<Settings>().on_play_button_animation_changed(move |idx| {
-        // The runtime effect is already reactive off the global, so only the disk
-        // write happens here.
+        // `PlayButton` binds the global, so only the disk write is left.
         let token = play_button_anim_token_from_idx(idx).to_owned();
         state_anim.persist_blocking("persist play_button_animation", move |paths| {
             library::settings::set_play_button_animation(paths, token)
@@ -93,8 +78,7 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
 
     let state_resume = state.clone();
     ui.global::<Settings>().on_resume_on_startup_changed(move |on| {
-        // Single-phase: the flag is consulted only at the next startup, and the
-        // two-way binding already updated the property before this fired.
+        // Read only at the next startup, and the binding has already moved the property.
         state_resume.persist_blocking("persist resume_on_startup", move |paths| {
             library::settings::set_resume_on_startup(paths, on)
         });
@@ -103,9 +87,8 @@ pub fn install_playback_settings(ui: &AppWindow, state: &AppState) {
     install_crossfade_callbacks(ui, state);
 }
 
-/// The five crossfade callbacks. The four toggles take [`toggle_binding`]'s shared
-/// apply-then-persist shape; only the duration slider needs its own pair, splitting the
-/// live drag from the release.
+/// The four crossfade toggles take [`toggle_binding`]'s apply-then-persist shape, and the
+/// duration slider splits the live drag from the release, as `set-volume` / `commit-volume` do.
 fn install_crossfade_callbacks(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
 
@@ -134,8 +117,7 @@ fn install_crossfade_callbacks(ui: &AppWindow, state: &AppState) {
         library::settings::set_crossfade_fade_on_pause,
     ));
 
-    // Live drag: apply to the backend and write the clamped value back, so the readout
-    // tracks the thumb. No disk write — that is `committed`'s.
+    // The clamped value goes back so the readout tracks the thumb; the disk write is `committed`'s.
     let state_drag = state.clone();
     let weak = ui.as_weak();
     g.on_crossfade_duration_changed(move |secs| {

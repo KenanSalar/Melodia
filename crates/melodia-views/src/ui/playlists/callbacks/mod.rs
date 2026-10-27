@@ -1,18 +1,5 @@
-//! `Playlists.*` / `PlaylistDetail.*` callbacks, split by concern:
-//!
-//! * [`grid`] — the playlist-card grid (cover lookup, filter, drill-in,
-//!   the Rename-overlay name / description lookups).
-//! * [`detail`] — the open-playlist detail view: close-detail, drag-reorder,
-//!   edit-artwork open and track removal, plus the set every detail shares.
-//! * [`crud`] — the create / rename / delete commits.
-//! * [`artwork`] — the Edit Artwork picker: the grid card's opener and the body [`detail`]'s
-//!   shares, the mosaic-candidate toggle and the apply / clear commits.
-//! * [`row_cover`] — the row-tier cover lookup every picker dialog draws through.
-//! * [`smart`] — the smart-playlist rule editor.
-//! * [`lifecycle`] — what the tab hands the shared section lifecycle,
-//!   `callbacks::grid_tab`, plus the `stats_changed` subscriber.
-//!
-//! The Add-to-Playlist picker, opener included, is [`files`]'s.
+//! `Playlists.*` / `PlaylistDetail.*` callbacks. The Add-to-Playlist picker, opener included, is
+//! [`files`]'s.
 
 mod artwork;
 mod crud;
@@ -34,14 +21,8 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
-/// Wire every `Playlists.*` / `PlaylistDetail.*` callback to its
-/// `library::*` counterpart and the `playlists_ui` shared state, plus a
-/// `library_changed` subscriber that re-fetches the grid (and refreshes
-/// an open detail) on watcher / scan / CRUD events.
-///
-/// Called by [`super::install`], which is what guarantees the models are in place first — a
-/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
-/// have run before it.
+/// Wires every `Playlists.*` / `PlaylistDetail.*` callback but [`wire_files`]', on
+/// `albums::callbacks::wire`'s terms.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     grid::wire(ui, state, playlists_ui);
     detail::wire(ui, state, playlists_ui);
@@ -76,9 +57,7 @@ fn optional_text(text: &str) -> Option<String> {
     (!trimmed.is_empty()).then(|| trimmed.to_owned())
 }
 
-/// Wire the M3U8 import / export callbacks and the Add-to-Playlist picker. Split out of [`wire`]
-/// because each needs the `Rc<NotificationsUi>` for completion toasts, which is created after the
-/// per-view wiring runs. Boot's `install_ui` calls it once, through `ui::playlists::wire_files`.
+/// See `ui::playlists::wire_files`.
 pub fn wire_files(
     ui: &AppWindow,
     state: &AppState,

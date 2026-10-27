@@ -1,9 +1,5 @@
-//! `SchemeStyle` picker (`wire_color_style_changed`). Switching the colour
-//! style can simultaneously persist a new style + a flipped accent when
-//! crossing the None/non-None boundary; both writes plus the Material You
-//! coordinator kick are sequenced inside one `spawn_blocking` so the
-//! coordinator's `settings.json` read on wake-up sees both values
-//! committed.
+//! The Color Style picker. A pick crossing None writes an accent beside the style, and both
+//! writes and the coordinator's kick share one blocking task, so the coordinator wakes to both.
 
 use std::cell::Cell;
 
@@ -37,8 +33,7 @@ pub(super) fn wire_color_style_changed(
         let style = style_at(idx);
         let outgoing = last_style.replace(style);
 
-        // Snapshot the theme + variant on the UI thread so the spawn_blocking task below doesn't
-        // need any UI access.
+        // Read here, the blocking task below having no UI access.
         let material3 = registry_get(g.get_theme_idx()).filter(|t| t.id == MATERIAL3.id);
         let variant_id: Option<String> = material3.map(|t| {
             variant_id_at(t, usize_from(g.get_variant_idx()))
@@ -67,13 +62,7 @@ pub(super) fn wire_color_style_changed(
             seat_accent(&g, theme, accent);
         }
 
-        // Sequence both writes + the kick inside a single spawn_blocking
-        // so the coordinator's settings.json read on wake-up sees both
-        // the new style and the new accent. Firing the kick before the
-        // disk writes commit was racy — `mutate_settings` serializes
-        // writers via a mutex, but `read_settings` doesn't take that
-        // lock, so a kick raced ahead of the write would let the
-        // coordinator regenerate against a stale style.
+        // `read_settings` takes no writer's lock, so the kick has to follow both commits.
         let s_clone = s.clone();
         let kick_clone = kick.clone();
         let style_owned = style.as_id().to_owned();
@@ -98,12 +87,7 @@ pub(super) fn wire_color_style_changed(
                 all_persists_ok = false;
             }
 
-            // Kick AFTER both disk writes commit so the coordinator's
-            // settings.json read observes the new style + accent. Suppress
-            // the kick on a partial-write failure — otherwise the
-            // coordinator wakes and reads inconsistent (style ≠ accent)
-            // settings, regenerates against a frozen-in-time pair, and
-            // goes back to sleep until the next user action.
+            // A partial write would wake the coordinator to a style and an accent that disagree.
             if all_persists_ok {
                 kick_clone.bump();
             } else {

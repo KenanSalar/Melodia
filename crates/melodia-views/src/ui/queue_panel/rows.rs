@@ -15,15 +15,12 @@ use melodia_engine::player::engine::queue::{QueueEntry, current_index_to_i32};
 use melodia_engine::player::engine::state::lock_state;
 use melodia_ui::{AppWindow, Drag, DragOrigin, Queue};
 
-/// Follow the queue and the library while the panel is shown: each queue publish shows the queue,
-/// and each library tick reads the rows the panel holds again.
+/// Follows the queue and the library while the panel is shown: a queue publish shows the queue,
+/// and a library tick re-reads the rows held. Hidden, the teardown has released the rows, and the
+/// next show seats the queue from `PlayerState`.
 ///
-/// Gated on the panel being on screen: hidden, nobody sees the rows and the teardown has released
-/// them, so following would fetch rows nothing reads. The next `on_shown_changed(true)` shows the
-/// queue from `PlayerState`.
-///
-/// A queue publish is only the cue: what it shows is [`read_queue`]'s, the view model on the
-/// channel carrying no entries.
+/// A publish is only the cue: what it shows is [`read_queue`]'s, the channel's view model
+/// carrying no entries.
 pub(super) fn spawn_queue_rows_subscriber(
     ui: &AppWindow,
     state: &AppState,

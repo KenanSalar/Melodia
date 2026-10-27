@@ -1,7 +1,4 @@
 //! The Genres grid as a [`CardGrid`]: its keyset, its cards, and the count its header states.
-//!
-//! Genres have no artwork (see the `Genres` global comment in
-//! `crates/melodia-ui/ui/globals/genres.slint`), so there are no covers to warm.
 
 use std::sync::Arc;
 

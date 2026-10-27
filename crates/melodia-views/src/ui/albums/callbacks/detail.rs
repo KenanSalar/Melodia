@@ -11,7 +11,6 @@ use crate::ui::my_library::return_to_section;
 use melodia_app::state::AppState;
 use melodia_ui::{AlbumDetail, AppWindow};
 
-/// Wire the `AlbumDetail` callbacks. See [`super::wire`].
 pub(super) fn wire(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
     track_detail::wire(state, albums_ui);
     wire_close(ui, state, albums_ui);
@@ -27,14 +26,12 @@ fn wire_close(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<AlbumDetail>();
 
-        // Read only by the cross-section close, whose `selected-index` write mounts a page. A
-        // same-page back mounts a body, which takes a fixed `below` (see `ui::nav_transition`).
+        // Read only by a cross-section close, whose nav write mounts a page; a body ignores it.
         crate::ui::nav_transition::mark_drill_back(&ui);
 
-        // If another *section* opened this detail (Favorites, Search, …), return to it in the
-        // same UI-thread tick as the id reset, so Slint reroutes straight there without an
-        // Albums-grid frame. A drill from a sibling tab records no origin, the tab bar having
-        // said Albums for the whole visit. See `cross_tab_nav::origin_stamp`.
+        // A detail another section opened returns there in the tick that resets the id, so no
+        // grid frame paints between. A sibling tab's drill records none
+        // (`cross_tab_nav::origin_stamp`).
         let origin = g.get_origin_nav_index();
         let origin_was_cross_section = origin >= 0;
         if origin_was_cross_section {

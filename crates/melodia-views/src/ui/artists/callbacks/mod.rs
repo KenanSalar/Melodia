@@ -1,11 +1,4 @@
-//! `Artists.*` / `ArtistDetail.*` callbacks, split by concern:
-//!
-//! * [`grid`] — the artist-card grid (cover lookup, filter / sort, drill-in).
-//! * [`detail`] — the open-artist detail view: close-detail and the Albums
-//!   sub-section collapse, plus the set every detail shares.
-//! * [`cross_tab`] — the Artist Detail → Albums tab hand-off.
-//! * [`lifecycle`] — what the tab hands the shared section lifecycle,
-//!   `callbacks::grid_tab`.
+//! `Artists.*` / `ArtistDetail.*` callbacks.
 
 mod cross_tab;
 mod detail;
@@ -20,13 +13,8 @@ use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_ui::AppWindow;
 
-/// Wire every `Artists.*` / `ArtistDetail.*` callback. Mirrors the Albums
-/// slice's, plus an `ArtistDetail.open-album` that moves to the Albums tab and
-/// opens that album's detail.
-///
-/// Called by [`super::install`], which is what guarantees the models are in place first — a
-/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
-/// have run before it.
+/// Wires every `Artists.*` / `ArtistDetail.*` callback, on `albums::callbacks::wire`'s terms,
+/// `albums_ui` being the strip's open-album hand-off.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,

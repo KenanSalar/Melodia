@@ -1,25 +1,9 @@
-//! Playlist import/export (Extended-M3U8) callbacks — two of the Playlists
-//! tab's four action pills — plus the Add-to-Playlist picker's multi-select
-//! toggles + commit, split by concern:
+//! The Extended M3U8 import and export pills and the Add-to-Playlist picker, wired apart from
+//! [`super::wire`] for the `Rc<NotificationsUi>` their toasts need.
 //!
-//! * [`import`] — the Import pill (native multi-file picker, archives
-//!   included → per-file import aggregation → grid refresh → summary toast).
-//! * [`export`] — the Export pill (fill picker → save dialog → one `.m3u8`,
-//!   or a zip of several → toast) and the export picker's selection plumbing.
-//! * [`add_picker`] — the Add-to-Playlist picker's opener, selection plumbing
-//!   and the add-tracks commit.
-//!
-//! All native dialogs run on the UI thread via
-//! `slint::spawn_local(Compat::new(...))` (`Compat` supplies a tokio reactor
-//! so the awaited sqlx calls work); after each `.await` the future resumes on
-//! the UI thread, so pushing toasts through the `Rc<NotificationsUi>` and
-//! reading/writing `Dialog.*` is safe without an extra event-loop hop. Import
-//! and export await the file work on the runtime instead, since it parses or
-//! serializes every playlist and would otherwise do so on the UI thread.
-//!
-//! Wired separately from [`super::wire`] (in `boot::ui_setup::install`, after
-//! the notifications stack exists) because these handlers need the
-//! `Rc<NotificationsUi>` — see [`wire`].
+//! Each flow runs on the UI thread under `slint::spawn_local(Compat::new(…))`, so it resumes
+//! there after every `.await` and can toast and touch `Dialog.*` with no extra hop. Import and
+//! export await their file work on the runtime instead, which parses or serializes every playlist.
 
 mod add_picker;
 mod export;
@@ -36,8 +20,6 @@ use crate::ui::util::len_as_i32;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Dialog, PlaylistPickRow};
 
-/// Wire the `Playlists.*` import/export and Add-to-Playlist callbacks. Call once after both the
-/// `playlists_ui` handle and the notifications stack exist.
 pub fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -49,10 +31,8 @@ pub fn wire(
     add_picker::wire(ui, state, playlists_ui, notifications);
 }
 
-/// Find the picker row with `id` and flip it via `flip`, unless `enabled`
-/// rejects the row. Shared walk for both pickers' single-row toggles — the
-/// two row structs (`PlaylistExportPickRow`, `PlaylistPickRow`) are distinct
-/// generated types, so field access goes through closures.
+/// Flips the picker row with `id` unless `enabled` rejects it. Both pickers' toggles walk through
+/// here, their two row structs being distinct generated types reached through closures.
 fn toggle_pick<R: Clone + 'static>(
     model: &ModelRc<R>,
     id: i32,
@@ -77,8 +57,8 @@ fn toggle_pick<R: Clone + 'static>(
     }
 }
 
-/// Set every `enabled` row's `selected` to `sel`, writing back only rows that
-/// actually change. Shared walk for both pickers' "Select all" headers.
+/// Sets every enabled row's `selected` to `sel`, writing back only the rows that change. Both
+/// pickers' Select all.
 fn set_all_picks<R: Clone + 'static>(
     model: &ModelRc<R>,
     sel: bool,
@@ -106,9 +86,8 @@ fn add_pickable(row: &PlaylistPickRow, pick_total: i32) -> bool {
     !(pick_total > 0 && row.contained_count >= pick_total)
 }
 
-/// Recompute `Dialog.add-selected-count` and `Dialog.add-select-all` from the
-/// current Add-to-Playlist picker model, counting only enabled (not fully-
-/// contained) rows so "Select all" reflects "all selectable rows selected".
+/// Recounts the Add-to-Playlist picker's header off its enabled rows alone, so Select all means
+/// every selectable row.
 fn refresh_add_selection_meta(dlg: &Dialog) {
     let pick_total = dlg.get_pick_total_tracks();
     let model = dlg.get_playlist_pick_rows();
@@ -127,8 +106,6 @@ fn refresh_add_selection_meta(dlg: &Dialog) {
     dlg.set_add_select_all(enabled > 0 && selected == enabled);
 }
 
-/// Recompute `Dialog.export-selected-count` and `Dialog.export-select-all`
-/// from the current picker model.
 fn refresh_export_selection_meta(dlg: &Dialog) {
     let model = dlg.get_export_pick_rows();
     let total = model.row_count();

@@ -45,8 +45,7 @@ impl TrackDetail for AlbumsUi {
     }
 }
 
-/// An album's header and the genre its hero names, if most of its tracks share one. Shared by
-/// [`open_album`] (fresh user open) and [`refresh_detail`] (watcher-driven refresh).
+/// An album's header and the genre its hero names, if most of its tracks share one.
 async fn fetch_album_header(
     state: &AppState,
     album_id: i64,
@@ -56,10 +55,9 @@ async fn fetch_album_header(
     Ok((detail, dominant_genre(&lines)))
 }
 
-/// Fetch an album's header and track list and populate the `AlbumDetail` global,
-/// whose `album-id >= 0` swaps the grid for the detail view. Fresh-open
-/// semantics: resets the sort to the track-number default and clears any
-/// selection, where the watcher-driven [`refresh_detail`] preserves both.
+/// Fetches an album's header and tracks into `AlbumDetail`, whose `album-id >= 0` swaps the grid
+/// for the detail. A fresh open clears the filter and the selection, which [`refresh_detail`]
+/// keeps.
 pub async fn open_album(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -70,18 +68,13 @@ pub async fn open_album(
     open_album_with(state, albums_ui, weak, album_id, enter_from, |_ui| {}).await
 }
 
-/// [`open_album`] with a hook into the **same** `upgrade_in_event_loop` closure
-/// that writes `album-id`, running after every detail property is set — so a
-/// follow-on global write (`Nav.selected-index` for a cross-tab drill) lands in
-/// the same frame and Slint paints `AlbumDetailBody` with no grid frame in
-/// between. What follows the hook is the handful of writes that must read the
-/// tab it may have just moved: the shared-hero gate, the history record and the
-/// filter-box reseat.
+/// [`open_album`] with a hook run in the **same** closure that writes `album-id`, after every
+/// detail property, so a follow-on write (`Nav.selected-index` for a cross-tab drill) lands in the
+/// same frame and no grid frame paints between. What follows the hook is what must read the tab
+/// it may have just moved: the shared-hero gate, the history record and the filter-box reseat.
 ///
-/// `enter_from` is the enter direction of the **page** mount a cross-section
-/// drill produces; `AlbumDetailBody` takes a fixed `above` and holds still while
-/// the band morphs, so it reaches nothing when `Nav.selected-index` doesn't move
-/// in the same tick.
+/// `enter_from` is the enter direction of the **page** a cross-section drill mounts; the body
+/// takes a fixed `above`, so it reaches nothing when the nav index stays put.
 pub async fn open_album_with<F>(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -95,12 +88,9 @@ where
 {
     let (detail, genre) = fetch_album_header(state, album_id).await?;
 
-    // One shared sort for every album, restored across opens and restarts.
     let (sort_field, sort_dir) = resolve_view_sort(state, view_id::ALBUM_DETAIL, "track_number");
     let tracks = load::open(state, &**albums_ui, album_id, &sort_field, &sort_dir).await?;
 
-    // Both halves come off one source decode. The buffers stay raw RGB8 so they
-    // can cross the `upgrade_in_event_loop` boundary below.
     let pair =
         decode_detail_pair(state, albums_ui.detail_artwork.clone(), detail.artwork_path.clone())
             .await;
@@ -113,47 +103,29 @@ where
         let g = ui.global::<AlbumDetail>();
         let header = to_slint_album_row(&detail);
         g.set_album(header);
-        // The sort, an empty needle, no selection and the album's rows. The page's one filter box
-        // is reseated at the end of this closure.
         tracks.seat(&state, &albums_ui);
-        // Marked before the hook can flip `Nav.selected-index`, so a
-        // cross-section drill's new page samples it on first paint. Inert on a
-        // same-page drill, whose body reads a fixed `below`.
+        // Before the hook can move the nav index, so the page it mounts reads it on first paint.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_album_id(clamp_i64_to_i32(album_id));
-        // After `album-id`, so whatever globals the hook writes land in the same
-        // UI-thread tick as the detail flip.
         on_applied(&ui);
-        // The two globals six heroes share, written last because their gate is
-        // the **live** tab rather than the `section_active` shadow the
-        // `SectionActiveGate` only updates next frame. Read before the hook, a
-        // cross-section drill answers for the tab the user *left*.
+        // A live read after the hook: the `section_active` shadow only updates next frame, so a
+        // cross-section drill would answer for the tab the user left.
         let on_screen = tab_is_mounted(&ui, MyLibraryTab::Albums);
-        // Off `detail` rather than the `AlbumRow` above, which carries neither
-        // `disc_count` nor `is_compilation`.
+        // Off `detail`, the `AlbumRow` carrying neither `disc_count` nor `is_compilation`.
         crate::ui::hero_chips::publish_album(&ui, &detail, genre.as_deref(), on_screen);
-        // The blur cross-fades; the cover slot is written directly, the artwork
-        // tile being covered by the next album's in one frame.
         apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
-        // After the hook, so a cross-tab drill records the post-flip section.
-        // No-op while a Mouse-4/5 replay is in flight.
         crate::ui::nav_history::record_current(&ui);
-        // The filter clear above is only half a clear: the page's one box is
-        // `MyLibrary.filter`, and the sheet's `album-id` mirror can't announce a
-        // re-open writing the *same* id — which a section re-enter over an open
-        // detail is, leaving the box holding a needle this call just cleared.
-        // Last in the closure because `sync_box` reads the mounted tab, which
-        // `on_applied` may have just moved.
+        // The seat cleared the detail's needle but not `MyLibrary.filter`, and the sheet's id
+        // mirror can't see a re-open writing the same id. Last, because `sync_box` reads the tab
+        // `on_applied` may have moved.
         ui.global::<melodia_ui::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
 
-/// Re-read an open album after a library change, **preserving** the sort, the filter and the
-/// selection: the library-changed subscriber fires on every watcher and scan tick, so it must not
-/// silently reset any of them. The list reloads its ids and re-reads the rows it holds, repainting
-/// only those whose content moved. The header half bails if the detail was closed or navigated
-/// away while the fetch was in flight.
+/// Re-reads an open album after a library change, keeping the sort, the filter and the selection,
+/// since the subscriber fires on every watcher and scan tick. The header half drops out if the
+/// detail moved on while the fetch was in flight.
 pub async fn refresh_detail(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -163,38 +135,28 @@ pub async fn refresh_detail(
     track_rows::reload(state, albums_ui).await?;
     let (detail, genre) = fetch_album_header(state, album_id).await?;
 
-    // Re-decode the `(cover, blur)` pair — the artwork may have changed
-    // (cover swap, replace-on-disk). `get_or_decode` is a cache hit when
-    // the path is unchanged, so this is cheap in the steady state.
+    // The artwork may have been swapped; an unchanged path is a cache hit.
     let pair =
         decode_detail_pair(state, albums_ui.detail_artwork.clone(), detail.artwork_path.clone())
             .await;
 
     let _ = weak.upgrade_in_event_loop(move |ui| {
         let g = ui.global::<AlbumDetail>();
-        // The detail view was closed (or switched to another album) while
-        // the fetch was in flight — drop this stale refresh.
         if i64::from(g.get_album_id()) != album_id {
             return;
         }
 
-        // Header is one row — always refresh it (artwork / counts may
-        // have changed).
         g.set_album(to_slint_album_row(&detail));
         let on_screen = tab_is_mounted(&ui, MyLibraryTab::Albums);
         crate::ui::hero_chips::publish_album(&ui, &detail, genre.as_deref(), on_screen);
-        // No fade on the refresh path — this is the same album, the
-        // user did not navigate. Either it's a cache hit (no change) or
-        // the cover/blur is being replaced in place.
         apply_detail_artwork(&ui, &g, pair, /* animate */ false, on_screen);
     });
     Ok(())
 }
 
-/// Reopen the album that was visible at the last shutdown: now if the launch shows the Albums
-/// tab, otherwise on that tab's first enter. Runs once at startup *after* [`super::install`], so
-/// the `AlbumDetail` callbacks are live by the time `open_album`'s closure lands. A deleted album
-/// just logs and leaves `album-id` at `-1`, so the grid renders.
+/// Reopens the album on screen at the last shutdown: now if the launch shows the Albums tab,
+/// otherwise on that tab's first enter. Called after [`super::install`], so the callbacks are live
+/// when `open_album` lands; an album since deleted leaves the grid up.
 pub fn seed_detail_from_settings(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi>) {
     restore::seed_or_defer(ui, state, albums_ui, restore_detail);
 }
@@ -208,14 +170,14 @@ pub fn restore_detail(ui: &AppWindow, state: &AppState, albums_ui: &Arc<AlbumsUi
     let au = albums_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Above, not a drill-in slide: nobody navigated into this album, it is their last view.
+        // Above rather than a drill-in slide: nobody navigated here, it is their last view.
         if let Err(e) = open_album(&s, &au, weak.clone(), id, NavEnterFrom::Above).await {
             log::warn!("albums::restore_detail open_album({id}): {}", describe(&e));
         }
-        // Lowered however it went, and behind `open_album`'s own hop so the id is already in: an
-        // album gone since the last session owes the grid back rather than an empty body.
+        // However it went, and behind `open_album`'s hop so the id is in: an album gone since the
+        // last session owes the grid back rather than an empty body.
         au.section.end_restore();
-        // A grid handed back is warmed before the hop below shows it; a reopen turns this away.
+        // Warms a grid handed back before the hop below shows it; a reopen turns this away.
         crate::ui::grid_prewarm::prewarm_off_thread(&au, AlbumsUi::prewarm_visible_covers).await;
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<AlbumDetail>().set_restoring(false);

@@ -31,16 +31,13 @@ pub fn color_with_alpha(rgb: u32, alpha: f32) -> Color {
     color(rgb).with_alpha(alpha)
 }
 
-/// A solid `Brush` back to `0x00RRGGBB`, dropping alpha — how a solved surface
-/// reads the theme accent's *hue* out of the global as an artwork-less fallback.
-/// A gradient answers with its first stop, the right approximation here.
+/// A solid `Brush` back to `0x00RRGGBB`, dropping alpha, for a palette brush read back out of
+/// `Theme`. A gradient answers with its first stop, the right approximation for those.
 pub fn brush_to_rgb(brush: &Brush) -> u32 {
     color_to_rgb(brush.color())
 }
 
-/// Inverse of [`color`]. The Genre hero reads the hash-derived gradient stops
-/// off `GenreRow` — they arrive as `Color`, never as a `Brush` — and has to
-/// measure their lightness before it can solve a scrim against them.
+/// Inverse of [`color`], for a `Color` that `Color::mix` produced or `genre_accent` handed over.
 pub fn color_to_rgb(c: Color) -> u32 {
     (u32::from(c.red()) << 16) | (u32::from(c.green()) << 8) | u32::from(c.blue())
 }

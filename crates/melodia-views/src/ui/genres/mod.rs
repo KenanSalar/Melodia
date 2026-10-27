@@ -1,12 +1,5 @@
-//! The Genres page: a virtualized card grid, and the detail view a card drills
-//! into. Shaped like [`crate::ui::albums`], whose module docs argue the paged
-//! grid and the detail's keyset.
-//!
-//! What differs is that **no cover or hero-blur caches live here** — genres have
-//! no intrinsic artwork. Each tile renders `EntityCard`'s fallback glyph, and
-//! the detail header paints only its accent gradient and scrim. The one shared
-//! cache this page reads is the row tier, for the detail `TrackList`'s artwork
-//! column.
+//! The Genres page, shaped like [`crate::ui::albums`] less every cover: a genre has no artwork,
+//! so its card and detail header paint a gradient hashed off the name ([`color::genre_accent`]).
 
 mod callbacks;
 mod color;
@@ -35,27 +28,14 @@ use melodia_ui::{
 
 use grid::GenresGrid;
 
-// Re-exported for the Search view's Top Result card: a genre shown there
-// has to carry the same tint as its card in this grid, and the only way
-// to guarantee that is to derive both from the one function.
+// Search's Top Result tints a genre from the same function, so it matches the card here.
 pub use color::{GenreAccent, genre_accent};
-// Reached from outside the slice: `boot::ui_setup` seeds the persisted detail,
-// `ui::nav_history` replays a walk into one, and the cross-tab drill lands here
-// from `callbacks::cross_tab_nav`.
 pub use detail::{open_genre_with, seed_detail_from_settings};
-// `boot::ui_setup`'s `initial_grid_fetch!` kicks this after the window is shown,
-// which is why it can't fold into `install` with the models and the wiring.
 pub use grid::reload_grid;
 
-// `pub(super)` is `pub(in crate::ui)` here, the reach this slice's own `callbacks/` and the drill
-// in `callbacks::cross_tab_nav` need.
 pub(super) use detail::{open_genre, refresh_detail, restore_detail};
 
-/// Install the Genres grid + detail models, build the handle, and wire every
-/// `Genres.*` / `GenreDetail.*` callback to it.
-///
-/// Self-contained: no cross-tab origin and no artwork, just the shared row tier
-/// for the detail list's artwork column.
+/// Installs the grid and detail models and wires every `Genres.*` / `GenreDetail.*` callback.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
@@ -65,16 +45,12 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<GenresUi> {
     genres_ui
 }
 
-/// Rust-side state for the Genres grid and detail, shared between the UI
-/// callbacks and the async loads — and there is no cover tier at all, this
-/// page having no artwork.
+/// The Genres grid's and detail's state, shared by the UI callbacks and the async loads.
 pub struct GenresUi {
     grid: GridLoads,
     detail: DetailCache<GenreDetail<'static>>,
-    /// The shared row tier, for the detail `TrackList`'s artwork column. This
-    /// page never clears it.
+    /// The shared row tier, for the detail `TrackList`'s artwork column.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Visibility + staleness. See [`SectionState`].
     section: SectionState,
 }
 
@@ -87,17 +63,14 @@ impl GenresUi {
         Self { grid, detail, cover_thumbs, section: SectionState::new() }
     }
 
-    /// Hand retained glibc arena slack back, with no LRU to drop first. The
-    /// close-detail trim, where wiping the grid would be wrong — the user is now
-    /// looking at it. A section leave trims through `callbacks::grid_tab` instead.
+    /// The close-detail trim, with no cover to drop first and the grid now on screen left alone.
+    /// A section leave trims through `callbacks::grid_tab` instead.
     pub fn release_caches(&self) {
         melodia_platform::services::platform::allocator::trim();
     }
 }
 
-/// Hand the two globals their empty models, each installed once: the grid a `PagedGrid`, the
-/// detail's tracks a [`TrackRows`] for every genre it will show. Later updates find them by
-/// downcasting back.
+/// Hands both globals their models, each installed once and found by downcast afterwards.
 fn install_models(
     ui: &AppWindow,
     state: &AppState,
@@ -131,10 +104,8 @@ impl PagedRow for UiGenreRow {
     }
 }
 
-/// A `GenreStats` as the `GenreRow` an `EntityCard` and the detail header
-/// render. Cheap: there is no cover to decode. The name hashes into the tile stops the Slint side plugs
-/// into `@linear-gradient`; the dimmer backdrop pair stays on the Rust side,
-/// which is the only place it is read. See [`color::genre_accent`].
+/// A `GenreStats` as the `GenreRow` a card and the detail header render, carrying the tile stops
+/// of [`color::genre_accent`]; the dimmer hero pair is read only in Rust and stays there.
 pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
     let accent = color::genre_accent(&g.name);
     UiGenreRow {
@@ -153,7 +124,6 @@ pub fn to_slint_genre_row(g: &GenreStats) -> UiGenreRow {
 
 impl_section_state_helpers!(GenresUi);
 
-// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<GenresUi>();

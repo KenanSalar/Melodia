@@ -1,6 +1,4 @@
-//! The startup `install` function. Hydrates the Slint `Settings`
-//! global from `settings.json`, applies the resolved palette, wires
-//! every chip callback, and seeds the Material You repaint subscriber.
+//! The appearance cards' boot: their rows seeded, the palette painted, every picker wired.
 
 use std::sync::Arc;
 
@@ -23,26 +21,18 @@ use melodia_core::themes::SystemColorState;
 use melodia_platform::services::platform::desktop;
 use melodia_ui::{AppWindow, MiniPlayer, Settings, Theme};
 
-/// Hydrate the Settings global from `settings.json`, paint the resolved
-/// palette, and wire chip-click callbacks. Call once during startup,
-/// before `hydrate_ui_from_settings` so the UI's first frame uses the
-/// correct theme. Returns handles boot forwards to
-/// `tasks::material_you` so the coordinator can write dynamic palettes
-/// back into `os_state` and kick repaints.
+/// Seeds the cards, paints the palette and wires the pickers, ahead of `hydrate_ui_from_settings`
+/// so the first frame paints the persisted theme.
 pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, AppError> {
     let settings = library::settings::get_settings(&state.paths)?;
 
-    // Read the OS appearance state synchronously. We're on the main
-    // thread, before the Slint event loop, so a brief D-Bus + file read
-    // is the cheapest option — no async plumbing needed for a one-shot.
+    // Synchronously: ahead of the event loop, one D-Bus and file read wants no async plumbing.
     let initial_state = read_initial_system_state();
     let os_state = Arc::new(RwLock::new(initial_state.clone()));
 
     let kick = Signal::new();
     let repaint_tx = spawn_repaint_subscriber(ui, state, initial_state.clone());
 
-    // Follow the OS's light/dark flips, repainting whenever the persisted
-    // variant is `"system"`.
     system_watcher::watch_os_state(
         ui,
         state,
@@ -71,9 +61,6 @@ pub fn install(ui: &AppWindow, state: &AppState) -> Result<AppearanceHandles, Ap
     Ok(AppearanceHandles { os_state, kick, repaint_tx })
 }
 
-/// The repaint channel — the Material You coordinator writes the latest
-/// `SystemColorState` snapshot here after each palette generation; the
-/// subscriber this spawns applies it on the UI thread.
 fn spawn_repaint_subscriber(
     ui: &AppWindow,
     state: &AppState,
@@ -98,19 +85,14 @@ fn spawn_repaint_subscriber(
 /// The window rows' persisted values, written before `app.show()` so the first
 /// painted frame reflects them.
 fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
-    // Seed the Match Unfocused Window Background row.
     {
         let g = ui.global::<Settings>();
         g.set_match_unfocused_supported(desktop::is_kde_desktop());
         g.set_match_unfocused_bg(settings.layout.match_unfocused_to_system_bg);
     }
 
-    // Seed Window Corner Radius. `Settings.corner-radius` is the UI's
-    // single source of truth (chips bind to it); `Theme.shell-radius`
-    // drives the actual painted rounding on the outer mantle shell +
-    // inner content panel in custom-titlebar mode. Both must be set
-    // before `app.show()` so the first frame renders with the persisted
-    // radius.
+    // The chips read `Settings.corner-radius`, the shell and the content panel paint
+    // `Theme.shell-radius`.
     #[allow(
         clippy::cast_possible_wrap,
         clippy::cast_precision_loss,
@@ -124,11 +106,7 @@ fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
         theme.set_native_content_radius(desktop::get_os_corner_radius() as f32);
     }
 
-    // Seed the Decoration Button Style + Side rows. Same shape as the
-    // corner-radius seed above: `Settings.*` is the UI source of truth
-    // (chip selection), `Theme.*` drives `custom-titlebar.slint`'s
-    // conditional layout. Both written before `app.show()` so the first
-    // painted frame reflects the persisted choice.
+    // Likewise the chips read `Settings`, and `custom-titlebar.slint` lays out off `Theme`.
     {
         let style_idx = window_settings::idx_for(settings.window.titlebar_button_style);
         let side_idx = window_settings::idx_for_side(settings.window.titlebar_button_side);
@@ -143,11 +121,8 @@ fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
         ui.global::<MiniPlayer>().set_button_style(mini_style_idx);
     }
 
-    // Seed the tray toggles. `tray_enabled` drives the "System Tray Icon"
-    // master switch. `close_to_tray` is mirrored into both the Slint global
-    // (drives its switch) and the `tray_bridge` atomic (drives
-    // `window_chrome`'s close handlers) so a close-to-tray-enabled launch
-    // behaves correctly before the user ever opens Settings.
+    // `close_to_tray` goes into the `tray_bridge` atomic too, which the close handlers read
+    // whether or not Settings was ever opened.
     {
         ui.global::<Settings>().set_tray_enabled(settings.tray.tray_enabled);
         let on = settings.tray.close_to_tray;
@@ -155,10 +130,7 @@ fn seed_window_rows(ui: &AppWindow, settings: &SettingsData) {
         crate::ui::shell::tray_bridge::set_close_to_tray(on);
     }
 
-    // Seed the Overflow Menu Buttons checkboxes from
-    // `settings.overflow_buttons`. The Vec<String> stores ids of buttons
-    // that have been MOVED INTO the overflow popup, so the boolean is
-    // `true` iff the id is present.
+    // `overflow_buttons` lists the buttons moved into the overflow menu.
     {
         let g = ui.global::<Settings>();
         let v = &settings.overflow_buttons;

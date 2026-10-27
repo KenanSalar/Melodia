@@ -1,20 +1,6 @@
-//! Updater UI glue — startup seeding of the `Updater` Slint global +
-//! the `Notifications`-pushing subscriber for backend
-//! [`UpdaterEvent`]s.
-//!
-//! Composition:
-//!
-//! - [`install`] runs once at boot. Seeds `Updater.current-version` from
-//!   `CARGO_PKG_VERSION`, `Updater.auto-check-enabled` from disk,
-//!   `Updater.system-managed` from the writability probe in
-//!   `services::platform::install_kind::system_install`, and `Updater.updates-supported`
-//!   from `services::updater::is_available` — false on a source build,
-//!   which takes the whole section rather than trading its buttons.
-//! - [`install_event_subscriber`] hooks `event_rx` onto a UI-thread
-//!   `slint::spawn_local` loop that translates each `UpdaterEvent`
-//!   variant into a [`NotificationsUi::show_localized`] call. All three
-//!   rows are sticky, so the `Settings.invoke_update_*()` callbacks are
-//!   kept as a recipe rather than resolved once at push time.
+//! The `Updater` global's boot seed, and the subscriber turning [`UpdaterEvent`]s into toasts.
+//! Every one of them is sticky, so each keeps its `Settings.invoke_update_*` text as a recipe a
+//! locale switch re-runs rather than a string resolved once.
 
 use std::rc::Rc;
 
@@ -29,12 +15,8 @@ use melodia_app::state::AppState;
 use melodia_platform::services::platform::install_kind::is_system_install;
 use melodia_ui::{AppWindow, MelodiaUpdater, NotificationKind, NotificationVariant, Settings};
 
-// (The updater decides a failure's `FailureKind` where it makes the error;
-// here we just hand the discriminator string to Slint so the @tr() table
-// can pick the right friendly message.)
-
-/// Seed the `Updater` global at startup. Idempotent — safe to call
-/// before any user interaction.
+/// Seeds the `Updater` global at boot. `updates-supported` is false on a source build, which
+/// hides the whole section rather than its buttons.
 pub fn install(ui: &AppWindow, state: &AppState) {
     let updater = ui.global::<MelodiaUpdater>();
     updater.set_current_version(env!("CARGO_PKG_VERSION").into());
@@ -47,11 +29,8 @@ pub fn install(ui: &AppWindow, state: &AppState) {
     }
 }
 
-/// Discriminator string for the package-manager hint shown to users on
-/// system-managed installs. The Slint side branches on the value to
-/// pick the right `@tr(...)` literal so the hint re-resolves on locale
-/// switch. Keep the values in sync with the ternary in
-/// `crates/melodia-ui/ui/views/settings/update-section.slint`.
+/// The system-managed install's package-manager hint, as the key `update-section.slint`'s ternary
+/// picks its `@tr` literal by. Keep the two in step.
 fn platform_kind() -> &'static str {
     if cfg!(target_os = "windows") {
         "windows"
@@ -62,21 +41,15 @@ fn platform_kind() -> &'static str {
     }
 }
 
-/// Spawn the UI-thread subscriber that turns backend update events into
-/// toast notifications. Runs as a single `slint::spawn_local` task
-/// that exits when the `AppWindow` weak handle can no longer be
-/// upgraded (window dropped).
-///
-/// `event_rx` is the consumer end of the `watch` channel
-/// `tasks::updater_daily::spawn` (and the `Updater.install` /
-/// `Updater.check` callbacks) write into.
+/// Turns update events into toasts on the UI thread for as long as the window lives. `event_rx`
+/// is what `tasks::updater_daily` and the `Updater.install` / `.check` callbacks publish into.
 pub fn install_event_subscriber(
     weak: Weak<AppWindow>,
     notifications: Rc<NotificationsUi>,
     mut event_rx: watch::Receiver<Option<UpdaterEvent>>,
 ) {
     let _ = slint::spawn_local(Compat::new(async move {
-        // Skip the initial `None` value — it carries no event.
+        // `changed()` first: the initial `None` carries no event.
         loop {
             if event_rx.changed().await.is_err() {
                 break;
@@ -92,9 +65,7 @@ pub fn install_event_subscriber(
 fn dispatch(ui: &AppWindow, notifications: &NotificationsUi, event: UpdaterEvent) {
     match event {
         UpdaterEvent::Available { version, .. } => {
-            // Replace any prior update-available toast — only show the
-            // most-recently-reported version. (Without this, two
-            // successive daily checks could stack two cards.)
+            // One card, for the newest version, however many daily checks report one.
             notifications.dismiss_by_kind(NotificationKind::InstallUpdate);
             notifications.show_localized(
                 ui,

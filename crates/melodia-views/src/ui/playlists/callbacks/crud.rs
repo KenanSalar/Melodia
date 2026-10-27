@@ -23,7 +23,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playlist
     wire_delete(ui, state, playlists_ui);
 }
 
-/// The dispatcher hands us `(name, description, pending_track_ids)`.
 /// The playlist and its pending tracks land together or not at all.
 fn wire_create(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
@@ -60,9 +59,6 @@ fn wire_create(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>
     });
 }
 
-/// The dispatcher hands us `(id, new_name, description)`. Reuse the
-/// existing `update_playlist`. Refresh both grid and (if it's the open
-/// detail) the header.
 fn wire_rename(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let s = state.clone();
     let pu = playlists_ui.clone();
@@ -73,10 +69,7 @@ fn wire_rename(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>
         if name_str.is_empty() {
             return;
         }
-        // Empty description from the dialog ⇒ clear (`None` → NULL
-        // in the DB). The Rename dialog pre-fills `input-text-2`
-        // with the current description, so an empty value at
-        // commit time really does mean "user removed it".
+        // The dialog pre-fills the current description, so an empty one was cleared on purpose.
         let description_opt = optional_text(&description);
         let s = s.clone();
         let pu = pu.clone();
@@ -103,8 +96,7 @@ fn wire_rename(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>
     });
 }
 
-/// `delete-playlist` is the dispatcher's single id, `delete-playlists` the card
-/// menu's batch arm over a set; both delete the same way.
+/// `delete-playlist` is the dispatcher's single id, `delete-playlists` the card menu's batch.
 fn wire_delete(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>) {
     let playlists = ui.global::<Playlists>();
     {
@@ -126,13 +118,9 @@ fn wire_delete(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<PlaylistsUi>
     }
 }
 
-/// Delete `ids`. If the open detail is among them, swing the view back to the
-/// grid first; the cached row models are emptied on the UI thread before the DB
-/// delete to avoid a one-frame "deleted playlist still visible" flash.
-///
-/// A failed write is logged and the rest still runs: the detail is already
-/// closed by then, and the refetch is what keeps the grid honest about what
-/// survived.
+/// Deletes `ids`, closing the open detail first where it is among them, so no frame shows a
+/// deleted playlist. A failed write is logged and the rest still runs: the detail is closed by
+/// then, and the refetch keeps the grid honest about what survived.
 fn spawn_delete(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -153,8 +141,7 @@ fn spawn_delete(
             Err(e) => log::warn!("{label}({ids:?}): {}", describe(&e)),
         }
         if open_was_deleted {
-            // Clear the persisted "last detail" so a restart
-            // doesn't try to re-open the deleted playlist.
+            // So a restart doesn't reopen it.
             let s_disk = s.clone();
             s.runtime.spawn_blocking(move || {
                 if let Err(e) = library::settings::set_last_detail_id(

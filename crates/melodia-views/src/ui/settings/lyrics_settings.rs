@@ -1,15 +1,14 @@
 //! The lyrics feature's three switches, and the one place each is answered.
 //!
-//! Each has a row on the Settings card **and** a control in Now Playing, and neither view
-//! re-reads the other's global after boot — so whichever row is used has to write the twin, or
-//! the other opens showing what the flag was at launch. [`mirrored`] is that write, over
-//! [`shadow_toggle`]'s shadow-before-persist order: `library::lyrics` reads the feature and online
-//! switches on a worker on every track change, so a lookup landing between the click and the disk
-//! write has to see the new answer rather than the file's old one.
+//! Each has a Settings row **and** a Now Playing control, and neither view re-reads the other's
+//! global after boot, so whichever is used writes its twin ([`mirrored`]), over
+//! [`shadow_toggle`]'s shadow-before-persist order: `library::lyrics` reads the feature and
+//! online switches on a worker every track change, and a lookup between the click and the disk
+//! write has to see the new answer.
 //!
-//! Lyrics and the lookup are off by default, the second being what the shipped package
-//! description promises of every online feature. Romanization is on: it reaches nothing, and it
-//! draws nothing at all unless the sheet is in a script the reader cannot sound out.
+//! Lyrics and the lookup are off by default, the second as the package description promises of
+//! every online feature. Romanization is on: it reaches nothing, and draws nothing unless the
+//! sheet is in a script the reader cannot sound out.
 
 use slint::ComponentHandle;
 
@@ -20,11 +19,9 @@ use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 use melodia_ui::{AppWindow, Lyrics, Settings};
 
-/// Seed the Settings card's three rows and register their handlers.
 pub fn install(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Settings>();
-    // Seeded off the shadow rather than off `settings.json`, as `radio_settings` does: `AppState`
-    // already read the file at boot, and a second read here would answer the same question twice.
+    // Off the shadows `AppState` filled at boot, as `radio_settings` seeds, not a second file read.
     g.set_lyrics_enabled(state.lyrics_enabled.get());
     g.set_lyrics_online_enabled(state.lyrics_online_enabled.get());
     g.set_lyrics_romanization_shown(state.lyrics_romanization_shown.get());
@@ -88,12 +85,9 @@ pub(crate) fn romanization_handler(ui: &AppWindow, state: &AppState) -> impl Fn(
     )
 }
 
-/// [`shadow_toggle`] plus the write that keeps the switch's other row in step.
-///
-/// `mirror` writes **both** globals, so one handler serves either row and the
-/// `(shadow, label, setter)` triple is stated once per switch rather than once per row. Writing a
-/// global from inside its own change handler is a value-compared no-op, and the `<=>` a
-/// `ToggleSwitch` binds survives a write from Rust.
+/// [`shadow_toggle`] plus the write keeping the switch's other row in step. `mirror` writes
+/// **both** globals, so one handler serves either row; a global written from its own change
+/// handler is a value-compared no-op, and a `ToggleSwitch`'s `<=>` survives a write from Rust.
 fn mirrored(
     ui: &AppWindow,
     state: &AppState,

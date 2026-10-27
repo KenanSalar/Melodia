@@ -24,8 +24,8 @@ use melodia_core::entities::track_list::TrackListScope;
 use melodia_core::error::{AppResult, describe};
 use melodia_ui::{AppWindow, DragOrigin, MiniPlayer, Nav, NavEnterFrom, PlaylistDetail};
 
-/// The playlist's own curated order. Synthetic — no column header asks for it,
-/// which is why the sort cycle has to hand it back (`next_sort_with_natural`).
+/// The playlist's own order, which no column header asks for, so the sort cycle hands it back
+/// (`next_sort_with_natural`).
 pub const POSITION_FIELD: &str = "position";
 
 /// What a miss on the page's row model is logged under.
@@ -95,20 +95,16 @@ impl DetailPage {
     }
 }
 
-/// Whether the rows on screen are in the playlist's own order, ascending.
-///
-/// The drag hands over *display* indices and [`apply_optimistic_move`] moves them in the
-/// keyset, so this is the whole precondition for a display index being a position. The direction
-/// half is the easy one to miss: a descending position sort shows the list reversed, which would
-/// make every drag move the mirrored row.
+/// Whether the rows on screen are in the playlist's own order, ascending: the whole precondition
+/// for a drag's display index being a position. Descending shows the list reversed, and every
+/// drag would move the mirrored row.
 pub(super) fn is_manual_order(field: &str, dir: &str) -> bool {
     field == POSITION_FIELD && dir != "desc"
 }
 
 /// A playlist's header and how far its tracks spread. A smart playlist has no `playlist_items`
-/// rows, so its `track_count` and `total_duration_ms` stay 0 in the junction-maintained columns
-/// and are counted off its current membership instead, the same query its spread comes from, under
-/// the draw its list was picked by. Its automatic cover comes off its rules too, as on its card.
+/// rows to keep its count and duration, so both come off the query its spread does, under the
+/// draw its list was picked by, and its automatic cover off its rules, as on its card.
 async fn fetch_playlist_header(
     state: &AppState,
     playlists_ui: &PlaylistsUi,
@@ -124,10 +120,9 @@ async fn fetch_playlist_header(
     Ok((detail, HeroFold::from(&facts)))
 }
 
-/// Fetch a playlist's header + track list and populate the `PlaylistDetail` global — which flips
-/// `playlist-id >= 0`, swapping the grid for the detail view. Fresh-open semantics: restores the
-/// persisted detail sort and clears any prior selection. The watcher-driven refresh uses
-/// [`refresh_detail`] instead, which preserves both.
+/// Fetches a playlist's header and tracks into `PlaylistDetail`, as
+/// [`crate::ui::albums::open_album_with`] does an album's, drawing a random-capped smart
+/// playlist's pick afresh.
 pub async fn open_playlist(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -138,14 +133,7 @@ pub async fn open_playlist(
     open_playlist_with(state, playlists_ui, weak, playlist_id, enter_from, |_ui| {}).await
 }
 
-/// Same as [`open_playlist`] but the caller can hook into the **same** `upgrade_in_event_loop`
-/// closure that writes `playlist-id`. The hook runs after every detail property is set, so a
-/// follow-on global write — the tab and section flip a `nav_history` replay owes — lands in the
-/// same frame, and Slint paints `PlaylistDetailBody` with no Playlists-grid frame in between.
-///
-/// `enter_from` chooses the enter direction for the **page** mount a cross-section arrival
-/// produces; `PlaylistDetailBody` itself takes a fixed `above`, so it reaches nothing when
-/// `Nav.selected-index` doesn't move in the same tick.
+/// [`open_playlist`] with a hook, on [`crate::ui::albums::open_album_with`]'s contract.
 pub async fn open_playlist_with<F>(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -160,8 +148,6 @@ where
     playlists_ui.redraw();
     let (detail, fold) = fetch_playlist_header(state, playlists_ui, playlist_id).await?;
 
-    // `position` is the fresh-install default; a persisted non-`position` sort is restored across
-    // restarts.
     let (sort_field, sort_dir) = resolve_view_sort(state, view_id::PLAYLIST_DETAIL, POSITION_FIELD);
     let tracks = load::open(state, &**playlists_ui, playlist_id, &sort_field, &sort_dir).await?;
 
@@ -172,8 +158,7 @@ where
     )
     .await;
 
-    // Set before the UI hop so drag-reorder and play-row callbacks firing on the next tick
-    // already see it.
+    // Before the UI hop, so a drag or a row play on the next tick already sees it.
     playlists_ui.detail.set_id(playlist_id);
 
     let state = state.clone();
@@ -182,34 +167,21 @@ where
         let g = ui.global::<PlaylistDetail>();
         let header = to_slint_playlist_row(&detail);
         g.set_playlist(header);
-        // The sort, an empty needle, no selection and the playlist's tracks, so the user lands on
-        // the full track set rather than a stale needle from the previous detail.
         tracks.seat(&state, &playlists_ui);
-        // Set the page's enter direction before the `on_applied` hook can flip
-        // `Nav.selected-index`, so a cross-section arrival's new page samples it on first paint.
-        // Inert on a same-page open, whose body reads a fixed `below`.
         crate::ui::nav_transition::mark(&ui, enter_from);
         g.set_playlist_id(clamp_i64_to_i32(playlist_id));
-        // Run after `playlist-id` is set so any global writes the hook performs share this tick
-        // with the detail flip — the router then never sees the Playlists grid.
         on_applied(&ui);
-        // The two globals six heroes share, written last because their gate is the **live** tab
-        // rather than the `section_active` shadow, which the `SectionActiveGate` only updates next
-        // frame. Read before the hook above, it answers for the tab being *left*.
+        // From here on, in `open_album_with`'s order and for its reasons.
         let on_screen = tab_is_mounted(&ui, MyLibraryTab::Playlists);
         crate::ui::hero_chips::publish_playlist(&ui, &detail, fold, on_screen);
         apply_detail_artwork(&ui, &g, pair, /* animate */ true, on_screen);
-        // Record a browser-style history entry — see `albums::detail::open_album_with`.
         crate::ui::nav_history::record_current(&ui);
-        // Reseat the page's shared filter box, which the clear above doesn't reach — same
-        // reasoning, and same closure position, as `albums::detail::open_album_with`.
         ui.global::<melodia_ui::MyLibrary>().invoke_detail_scope_changed();
     });
     Ok(())
 }
 
-/// Re-read an already-open playlist after a library change or a CRUD operation, preserving the
-/// user's current sort, filter and selection. Same shape as `albums::detail::refresh_detail`.
+/// Re-reads an open playlist after a library change or an edit as `albums::refresh_detail` does.
 pub async fn refresh_detail(
     state: &AppState,
     playlists_ui: &Arc<PlaylistsUi>,
@@ -220,7 +192,7 @@ pub async fn refresh_detail(
     refresh_header(state, playlists_ui, weak, playlist_id).await
 }
 
-/// Re-read an open playlist's header and cover alone, for a write that left every row reading
+/// Re-reads an open playlist's header and cover alone, for a write that left every row reading
 /// the same: a move hands an automatic cover to whichever track now leads.
 pub async fn refresh_header(
     state: &AppState,
@@ -251,9 +223,8 @@ pub async fn refresh_header(
     Ok(())
 }
 
-/// Optimistically move the dragged rows together in the keyset, *before* the DB write lands,
-/// returning whether anything moved. Whatever the write answers, the caller asks the database for
-/// the order it holds once it returns.
+/// Moves the dragged rows together in the keyset ahead of the write, returning whether anything
+/// moved. Whatever the write answers, the caller then reads the order back from the database.
 pub fn apply_optimistic_move(
     ui: &AppWindow,
     playlists_ui: &PlaylistsUi,
@@ -263,12 +234,10 @@ pub fn apply_optimistic_move(
     let g = ui.global::<PlaylistDetail>();
     let field = g.get_sort_field();
     let dir = g.get_sort_dir();
-    // Asked here as well as in `reorder-enabled`, this being where the display indices reach the
-    // keyset. The filter term is the sharp one: filtered, the list is a subset of the playlist, so
-    // `to` lands among rows the playlist doesn't hold there — and the write still lands, a filtered
-    // index being in range. The list on show is asked too: it takes a sort or a needle a query
-    // after the page does, and an overtaken open can leave another playlist's rows up under this
-    // one's id.
+    // Asked again beside `reorder-enabled`, here being where display indices reach the keyset.
+    // Filtered, the list is a subset and `to` lands among rows the playlist doesn't hold there,
+    // the write still landing in range. The list on show takes a sort or needle a query after the
+    // page, and an overtaken open can leave another playlist's rows up under this id.
     if !is_manual_order(&field, &dir)
         || playlists_ui.detail.is_filtered()
         || !playlists_ui.detail.shows_own_order()
@@ -291,8 +260,8 @@ pub fn track_ids_at(ui: &AppWindow, rows: &[usize]) -> Vec<i64> {
     rows.iter().filter_map(|&row| ids.get(row).copied()).collect()
 }
 
-/// Reopen the playlist that was visible at the last shutdown, if any: now if the launch shows the
-/// Playlists tab, otherwise on that tab's first enter.
+/// Reopens the playlist on screen at the last shutdown: now if the launch shows the Playlists
+/// tab, otherwise on that tab's first enter.
 pub fn seed_detail_from_settings(
     ui: &AppWindow,
     state: &AppState,
@@ -310,14 +279,11 @@ pub fn restore_detail(ui: &AppWindow, state: &AppState, playlists_ui: &Arc<Playl
     let pu = playlists_ui.clone();
     let weak = ui.as_weak();
     state.runtime.spawn(async move {
-        // Above, not a drill-in slide: nobody navigated into this playlist, it is their last view.
+        // In `albums::restore_detail`'s order and for its reasons.
         if let Err(e) = open_playlist(&s, &pu, weak.clone(), id, NavEnterFrom::Above).await {
             log::warn!("playlists::restore_detail open_playlist({id}): {}", describe(&e));
         }
-        // Lowered however it went, and behind `open_playlist`'s own hop so the id is already in:
-        // a playlist deleted since the last session owes the grid back rather than an empty body.
         pu.section.end_restore();
-        // A grid handed back is warmed before the hop below shows it; a reopen turns this away.
         crate::ui::grid_prewarm::prewarm_off_thread(&pu, PlaylistsUi::prewarm_visible_covers).await;
         let _ = weak.upgrade_in_event_loop(|ui| {
             ui.global::<PlaylistDetail>().set_restoring(false);

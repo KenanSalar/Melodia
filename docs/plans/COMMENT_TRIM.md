@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 10.6 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 11 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -109,8 +109,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 10.2 | `melodia-views`: `ui/radio/` | 0.51 | 1,607 | ~817 | 0.24 (757) | `a657f0e1` |
 | 10.3 | `melodia-views`: the tabbed pages, Browse and Search | 0.44 | 1,783 | ~773 | 0.17 (681) | `2154ecf4` |
 | 10.4 | `melodia-views`: the shell and the player | 0.42 | 1,755 | ~704 | 0.23 (973) | `89a76e73` |
-| 10.5 | `melodia-views`: the rest of the shared layer | 0.33 | 2,334 | ~591 | 0.23 (1,632) | |
-| 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | | |
+| 10.5 | `melodia-views`: the rest of the shared layer | 0.33 | 2,334 | ~591 | 0.23 (1,632) | `caaa91bf` |
+| 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | 0.16 (1,287) | |
 | 11 | `melodia-store` | 0.34 | 2,456 | ~666 | | |
 | 12 | `melodia-integrations` | 0.30 | 936 | ~147 | | |
 | 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | | |
@@ -208,7 +208,7 @@ Status: done.
   - **Pointed at:** `CLAUDE.md` on the `--version` and `--logs` branches, the order in `main()` and `respawn_if_requested`. `main_order_tests` reads `main`'s body.
 
 ### Phase 10: `melodia-views`
-Status: in progress, 10.6 next.
+Status: done.
 
 - [x] **10.1 The artwork and backdrop tiers**, one commit: `backdrop.rs`, `grid_prewarm.rs`, `hero_backdrop.rs`, `hero_chips.rs`, `hero_folds.rs`, `artwork_cache.rs`, `detail_artwork.rs`, `now_playing_artwork.rs`, `mosaic_hero.rs`, `cover_generation.rs`, `name_palette.rs`, and `aurora/`.
   - **Furthest over:** `backdrop.rs` (175), `grid_prewarm.rs` (147).
@@ -234,9 +234,10 @@ Status: in progress, 10.6 next.
   - **Pointed at:** `CLAUDE.md` on `file_dialog::parented`, `launcher.rs`, `index_persist`, `CALLBACK_HOMES` and `PagedRows`.
   - **Second copies dropped:** `slint-pitfalls.md`'s sleep-timer entry, a restatement of the module doc that was no pitfall; `ui-patterns.md`'s reasons for the Shuffle pill, `play_row_start`'s two index spaces and what `cross_tab_nav::land` closes, each now a pointer; `macros.rs`' runtime-or-blocking-pool argument kept once, at `spawn_blocking_logged!`; `ui/mod.rs`' per-test narration over the source pins; the `nav_history` stutter argument kept once, on `NavHistory::record`.
   - **Stale claims removed:** `release_hero_slots`' "My Library its only such caller" (Favorites, Recently Played and Radio call it too), `wire_all`'s "all three surfaces" holding a row's `is_favorite` (seven), `pending_hook`'s "four `open_*_with` calls" (five, Radio's included), `TagSession`'s "`sleep_timer` pattern", and `macros.rs`' `use super::macros::*;`.
-- [ ] **10.6 Details, lists and settings**: `albums/`, `artists/`, `genres/`, `playlists/`, `track_detail/`, `tracks/`, `queue_panel/`, `settings/`, `appearance/`, `onboarding/`, `lib.rs`. One commit. Already near the target, so mostly the register pass (decision 4).
-  - **Pointed at:** `CLAUDE.md` on `theme_paint` and the system theme watcher; `.claude/rules/ui-patterns.md`'s Settings page.
-  - **Second copy to drop:** the `// const _ … no #[allow] is owed` line over each handle's `Send + Sync` assertion, `CLAUDE.md`'s to argue. Gone from 10.3's handles; still on `albums`, `artists`, `genres` and `playlists`.
+- [x] **10.6 Details, lists and settings**: `albums/`, `artists/`, `genres/`, `playlists/`, `track_detail/`, `tracks/`, `queue_panel/`, `settings/`, `appearance/`, `onboarding/`, `lib.rs`. One commit. Already near the target, so mostly the register pass (decision 4).
+  - **Pointed at:** `CLAUDE.md` on `theme_paint` and the system theme watcher; `.claude/rules/ui-patterns.md`'s Settings page. `crates/melodia/tests/hero_teardown.rs` reads `appearance/mod.rs`, and `cross_tier.rs` the three detail files' default sorts, both code.
+  - **Second copies dropped:** the `// const _ … no #[allow] is owed` line on `albums`, `artists`, `genres` and `playlists`; the other three details' copies of `open_album_with`'s hook, gate and reseat argument and of `albums::restore_detail`'s, and the other grids' copies of `albums/callbacks/grid.rs`', each now a pointer; the three re-export notes over `reload_grid`, whose doc already names the launch; Songs' leave restating the tabbed-pages rewind rule and the Escape entry; the kick-after-persist argument restated in `theme_picker.rs` and `material_you_sync.rs`, the root `CLAUDE.md`'s; `ui-patterns.md`'s copy of the Settings search memo, argued at `settings_page::install`.
+  - **Stale claims removed:** the four detail opens' "body reads a fixed `below`" and Playlist Detail's close saying the same (the bodies mount at `above`); `open_album`'s, `open_artist`'s and `open_genre`'s "resets the sort to the default" (a fresh open restores the persisted sort); `albums::install`'s "the cover retune" among the handle's readers; `settings/mod.rs`' "Four modules" naming five; `rgb::color_to_rgb`'s genre hero reading its stops off `GenreRow` (it hashes them); the folder list's seed comment tying live updates to it (every refresh installs its own model); `format_duration_ms`'s two Slint callers (there are five).
 
 ### Phase 11: `melodia-store`
 Status: not started.

@@ -1,6 +1,4 @@
-//! The Export pill: fetch playlists into the selectable picker, commit the
-//! selection to one named `.m3u8` or a zip of them, and the picker's
-//! selection plumbing (single-row toggle + "Select all").
+//! The Export pill: its picker, and the commit writing the picks to one `.m3u8` or a zip of them.
 
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -26,9 +24,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
     let playlists = ui.global::<Playlists>();
     let weak = ui.as_weak();
 
-    // request-export-playlists: fetch all playlists, fill the picker model
-    // (none selected — the user opts in), then open the dialog (chrome came
-    // from `Dialog.prepare-export-playlists`).
+    // The chrome is `Dialog.prepare-export-playlists`'s; this fills the rows and opens it.
     {
         let s = state.clone();
         let weak = weak.clone();
@@ -65,8 +61,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
                                 name: SharedString::from(p.name.as_str()),
                                 artwork_path: opt_shared(p.thumbnail_path.as_deref()),
                                 track_count: p.track_count,
-                                // Start with nothing selected — the user opts in
-                                // per playlist (or via "Select all").
                                 selected: false,
                             })
                         })
@@ -81,9 +75,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
         });
     }
 
-    // export-selected-playlists: fired by the accept dispatcher. Read the
-    // ticked rows synchronously (the dialog closes + clears its model right
-    // after this returns), then ask where to write them.
+    // The ticked rows are read synchronously, the dialog clearing its model as this returns.
     {
         let s = state.clone();
         let weak = weak.clone();
@@ -102,8 +94,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
         });
     }
 
-    // toggle-export-pick: flip one row's `selected`, then recompute the
-    // header's select-all + count.
     {
         let weak = weak.clone();
         playlists.on_toggle_export_pick(move |id| {
@@ -120,7 +110,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, notifications: &Rc<Notifica
         });
     }
 
-    // set-all-export-picks: set every row's `selected` to `sel`.
     {
         let weak = weak.clone();
         playlists.on_set_all_export_picks(move |sel| {

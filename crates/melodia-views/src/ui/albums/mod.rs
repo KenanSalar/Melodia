@@ -1,13 +1,6 @@
-//! The Albums page: a virtualized card grid, and the detail view a card drills
-//! into.
-//!
-//! The grid is a `PagedGrid` holding the albums' ids in the current sort and
-//! filter and only the cards near the viewport, its loads `ui::card_grid`'s. Each
-//! on-screen card pulls its cover through `request-cover` rather than carrying a
-//! decoded image.
-//!
-//! The detail lists its album as a keyset in a [`TrackRows`], whose
-//! [`DetailCache`] holds the sort and filter its loads run under.
+//! The Albums page: a `PagedGrid` of cards loaded through `ui::card_grid`, each pulling its cover
+//! through `request-cover`, and the detail a card drills into, which lists its album as a
+//! [`TrackRows`] under the sort and filter its [`DetailCache`] holds.
 
 mod callbacks;
 mod detail;
@@ -37,26 +30,15 @@ use melodia_ui::{
 
 use grid::AlbumsGrid;
 
-// Reached from outside the slice: `ui::nav_history` replays a walk into a
-// detail, `boot::ui_setup` seeds the persisted one, and its
-// `initial_grid_fetch!` kicks the first load after the window is shown
-// — which is why `reload_grid` can't fold into `install` with the rest.
 pub use detail::{open_album_with, seed_detail_from_settings};
 pub use grid::reload_grid;
 
-// `pub(super)` is `pub(in crate::ui)` here, which is exactly the reach these
-// need: this slice's own `callbacks/` and the drill in `callbacks::cross_tab_nav`.
 pub(super) use detail::{open_album, refresh_detail, restore_detail};
 
-/// Install the Albums grid + detail models, build the handle, and wire every
-/// `Albums.*` / `AlbumDetail.*` callback to it.
+/// Installs the grid and detail models and wires every `Albums.*` / `AlbumDetail.*` callback.
 ///
-/// The returned handle is read by `install_views` for the four things that
-/// genuinely outlive this call — the persisted-detail seed, the cover retune,
-/// the `ui_handles` registry, and the two peers that need a live `AlbumsUi`
-/// ([`crate::ui::artists`] and [`crate::ui::search`]). It is not a keepalive:
-/// every wired closure clones its own strong `Arc`, and those closures are
-/// owned by the `AppWindow` for the life of the app.
+/// The returned handle is not a keepalive: every wired closure clones its own strong `Arc`, and
+/// the `AppWindow` owns those closures for the life of the app.
 pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
     let (grid, detail) = install_models(cx.app, cx.state);
     let albums_ui = Arc::new(AlbumsUi::new(
@@ -69,18 +51,15 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<AlbumsUi> {
     albums_ui
 }
 
-/// Rust-side state for the Albums grid and detail, shared between the UI
-/// callbacks and the async loads. The two concerns are largely independent.
+/// The Albums grid's and detail's state, shared by the UI callbacks and the async loads.
 pub struct AlbumsUi {
     grid: GridLoads,
     detail: DetailCache<AlbumDetail<'static>>,
     /// The shared row tier, for the detail `TrackList`'s artwork column. The grid's cards draw
     /// from `ui::grid_prewarm::tier()`, which no view holds.
     cover_thumbs: Arc<CoverThumbs>,
-    /// The detail header's `(cover, blur)` pair, one decode yielding both — see
-    /// [`crate::ui::detail_artwork`]. Handed back beside the grid's covers.
+    /// The detail header's `(cover, blur)` pair; see [`crate::ui::detail_artwork`].
     detail_artwork: Arc<DetailArtwork>,
-    /// Visibility + staleness + the mutation gate. See [`SectionState`].
     section: SectionState,
 }
 
@@ -100,8 +79,8 @@ impl AlbumsUi {
         }
     }
 
-    /// Drop the detail's `(cover, blur)` pair on closing it: its slots aren't queried again until
-    /// the next `open_album`, and the grid the user is now looking at stays warm.
+    /// Drops the detail's `(cover, blur)` pair on close: nothing asks for it before the next
+    /// `open_album`, and the grid now on screen stays warm.
     pub fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
         melodia_platform::services::platform::allocator::trim();
@@ -117,9 +96,8 @@ impl AlbumsUi {
 
 impl_section_state_helpers!(AlbumsUi);
 
-/// Hand the two globals their empty models, each installed once: the grid a `PagedGrid`, the
-/// detail's tracks a [`TrackRows`] for every album it will show. Later updates find them by
-/// downcasting back.
+/// Hands both globals their models, each installed once for every album shown and found by
+/// downcast afterwards.
 fn install_models(
     ui: &AppWindow,
     state: &AppState,
@@ -153,8 +131,7 @@ impl PagedRow for UiAlbumRow {
     }
 }
 
-/// An `AlbumStats` as the `AlbumRow` an `EntityCard` and the detail header
-/// render. Pure data — the cover comes through `request-cover` per visible card.
+/// An `AlbumStats` as the `AlbumRow` a card and the detail header render.
 pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
     UiAlbumRow {
         id: clamp_i64_to_i32(a.id),
@@ -169,7 +146,6 @@ pub fn to_slint_album_row(a: &AlbumStats) -> UiAlbumRow {
     }
 }
 
-// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<AlbumsUi>();

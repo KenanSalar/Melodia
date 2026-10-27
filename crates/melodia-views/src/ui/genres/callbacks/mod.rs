@@ -1,12 +1,4 @@
-//! `Genres.*` / `GenreDetail.*` callbacks: [`grid`] (the tile grid — client-side
-//! filter / sort, drill-in), [`detail`] (close-detail, plus the set every detail
-//! shares) and
-//! [`lifecycle`] (what the tab hands the shared section lifecycle,
-//! `callbacks::grid_tab`).
-//!
-//! A mirror of `albums/callbacks` minus everything cover-related — genres have no
-//! intrinsic artwork — so there is no `request-cover` handler, no grid-cover release
-//! or prewarm, and no `(cover, blur)` pair to clear on detail close.
+//! `Genres.*` / `GenreDetail.*` callbacks: `albums/callbacks` less everything a cover needs.
 
 mod detail;
 mod grid;
@@ -19,13 +11,7 @@ use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_ui::AppWindow;
 
-/// Wire every `Genres.*` / `GenreDetail.*` callback to its `library::*` counterpart
-/// and the `genres_ui` shared state, plus a `library_changed` subscriber that
-/// re-fetches the grid and refreshes an open detail on watcher / scan / folder events.
-///
-/// Called by [`super::install`], which is what guarantees the models are in place first — a
-/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
-/// have run before it.
+/// Wires every `Genres.*` / `GenreDetail.*` callback, on `albums::callbacks::wire`'s terms.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,

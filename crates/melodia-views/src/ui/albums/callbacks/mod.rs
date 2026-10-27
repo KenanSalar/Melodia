@@ -1,10 +1,4 @@
-//! `Albums.*` / `AlbumDetail.*` callbacks, split by concern:
-//!
-//! * [`grid`] — the album-card grid (cover lookup, filter / sort, drill-in).
-//! * [`detail`] — the open-album detail view: close-detail, plus the set every
-//!   detail shares.
-//! * [`lifecycle`] — what the tab hands the shared section lifecycle,
-//!   `callbacks::grid_tab`.
+//! `Albums.*` / `AlbumDetail.*` callbacks.
 
 mod detail;
 mod grid;
@@ -17,14 +11,8 @@ use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_ui::AppWindow;
 
-/// Wire every `Albums.*` / `AlbumDetail.*` callback to its `library::*`
-/// counterpart and the `albums_ui` shared state, plus a
-/// `library_changed` subscriber that re-fetches the grid (and refreshes
-/// an open detail) on watcher / scan / folder events.
-///
-/// Called by [`super::install`], which is what guarantees the models are in place first — a
-/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
-/// have run before it.
+/// Wires every `Albums.*` / `AlbumDetail.*` callback. Only [`super::install`] calls it, so the
+/// models are always in first; `wire_all` has to have run before both.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,

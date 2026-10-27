@@ -1,14 +1,6 @@
-//! Wire the Discord Rich Presence settings section to Rust.
-//!
-//! Simpler than [`super::scrobbling_settings`] — Discord has no credentials
-//! or login dialog (the application id is a compile-time constant), so this is
-//! only the status side. The connection/enabled props are sync-seeded from
-//! `DiscordPresenceService::status()` (like [`crate::ui::replaygain`]) and then
-//! kept current by a `watch<DiscordStatus>` subscriber — the single writer of
-//! `Settings.discord-rpc-connected`, so a Discord restart flips the status row
-//! live without reopening the section. The three toggles flip a field in a fresh
-//! `DiscordFlags` snapshot, apply it to the shadow via `set_flags` (which
-//! starts/stops the IPC worker), then persist.
+//! The Discord Rich Presence card. No credentials or login, the application id being compiled
+//! in, so only the status side: seeded from `DiscordPresenceService::status()` and kept current
+//! by a `watch<DiscordStatus>` subscriber, so a Discord restart flips the row live.
 
 use async_compat::Compat;
 use slint::ComponentHandle;
@@ -21,27 +13,20 @@ use melodia_core::error::AppError;
 use melodia_integrations::services::integrations::discord::DiscordStatus;
 use melodia_ui::{AppWindow, Settings};
 
-/// Paint the connection/enabled props from a status snapshot. The single writer
-/// of these props — called once for the seed and then on every `subscribe_status`
-/// change (e.g. a background Discord restart flipping `connected`).
+/// The one writer of the connection and enabled rows, for the seed and every status change.
 fn paint_status(ui: &AppWindow, status: DiscordStatus) {
     let g = ui.global::<Settings>();
     g.set_discord_rpc_connected(status.connected);
     g.set_discord_rpc_enabled(status.enabled);
 }
 
-/// Build the change-handler for one Discord toggle: flip that field in a fresh
-/// flags snapshot, apply it to the shadow synchronously (so the detector task and
-/// worker see it at once — `set_flags` also starts/stops the worker), then
-/// persist. Sibling of `scrobbling_settings::scrobble_toggle_binding`, minus the
-/// `on_enable` side-effect (Discord's worker lifecycle lives inside `set_flags`).
+/// One toggle's handler: the field flipped in a fresh flags snapshot and applied synchronously,
+/// so the detector and the worker see it at once (`set_flags` starts and stops the worker), then
+/// persisted.
 ///
-/// `nudge_detector` (only the master toggle) forces one no-op view-model emit
-/// after `set_flags`, so enabling mid-playback paints the card at once instead of
-/// waiting for the next player-state change — the detector reacts only to the
-/// `view_model` watch, which a settings toggle doesn't otherwise disturb. The
-/// disabled→enabled edge resets the detector's dedupe, so this republish paints.
-/// Mirrors the Windows SMTC-attach flush in boot's `install_ui`.
+/// `nudge_detector`, the master toggle's, forces one no-op view-model emit: the detector reacts
+/// only to that watch, so enabling mid-playback would otherwise paint nothing until the player
+/// next moved. The enable edge resets its dedupe, so the republish paints.
 fn discord_toggle_binding(
     state: &AppState,
     label: &'static str,
@@ -66,8 +51,7 @@ fn discord_toggle_binding(
 }
 
 pub fn install_discord(ui: &AppWindow, state: &AppState) {
-    // Seed the sub-option flags once. They aren't part of `DiscordStatus`, so the
-    // status watch never touches them — they're user-owned after this seed.
+    // Seeded once: not part of `DiscordStatus`, so the watch never touches them.
     {
         let flags = state.discord.flags();
         let g = ui.global::<Settings>();
@@ -75,7 +59,6 @@ pub fn install_discord(ui: &AppWindow, state: &AppState) {
         g.set_discord_rpc_hide_when_paused(flags.discord_rpc_hide_when_paused);
     }
 
-    // Seed the connection status, then keep it current from the watch.
     let mut rx = state.discord.subscribe_status();
     paint_status(ui, state.discord.status());
     {

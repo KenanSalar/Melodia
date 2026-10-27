@@ -1,15 +1,5 @@
-//! Tracks-view glue between Rust and Slint.
-//!
-//! The Slint `Tracks` global owns a [`TrackRows`] set once at startup via
-//! `install_tracks_model`. It holds the library's ids in the current sort and
-//! filter, and only the rows near the viewport; a sort or a filter reloads the
-//! ids from SQL (`crate::ui::paged_rows`).
-//!
-//! Cross-thread layout:
-//! * `TracksUi` is `Send + Sync` — `Arc<TracksUi>` cloned into callback
-//!   closures and tokio tasks.
-//! * Slint properties / model can only be touched from the UI thread; a load
-//!   reaches back through the `Tracks` global's own weak handle.
+//! The Songs tab: one [`TrackRows`], installed at startup, holding the library's ids in the
+//! current sort and filter and only the rows near the viewport.
 
 mod callbacks;
 mod fetch;
@@ -30,20 +20,13 @@ use melodia_artwork::media::image::cover_thumbs::CoverThumbs;
 use melodia_core::entities::track::TrackListRow as RsTrackListRow;
 use melodia_ui::{AppWindow, TrackListRow as UiTrackListRow, Tracks};
 
-// `boot::ui_setup` kicks the first fetch after the window is shown, which is
-// why `refresh` can't fold into `install` with the rest.
 pub use fetch::{SongsQuery, refresh};
 
-// Reached only from this slice's own `callbacks`. `pub(super)` is
-// `pub(in crate::ui)` here.
 pub(super) use fetch::requery;
 
-/// Install the Tracks models, build the handle, and wire every `Tracks.*`
-/// callback to it.
+/// Installs the models and wires every `Tracks.*` callback.
 ///
-/// The returned handle is read by `install_views` for the initial fetch, the
-/// `library_changed` refresher and the now-playing row mirrors. It is not a
-/// keepalive; see [`crate::ui::albums::install`].
+/// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<TracksUi> {
     let scroll = install_tracks_model(cx.app, cx.state);
     install_selection_model(cx.app);
@@ -60,16 +43,11 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<TracksUi> {
 
 /// What the Songs tab's callbacks and loads share across threads.
 pub struct TracksUi {
-    /// The shared row tier, which a refresh prewarms for the rows it opens
-    /// on. The now-playing bar reads the same tier, so its tile reuses what
-    /// the Tracks view warmed.
+    /// The shared row tier, which a refresh prewarms for the rows it opens on, the now-playing
+    /// bar's tile included.
     cover_thumbs: Arc<CoverThumbs>,
-    /// Visibility and staleness bookkeeping (`section-active-changed`
-    /// shadow plus dirty flag). Unlike the entity-grid views, Tracks
-    /// releases nothing on leave — `dirty` is set by a launch that doesn't
-    /// show the tab and by the `library_changed` refresher when a bump
-    /// arrives while the section is hidden, and consumed on re-enter to run
-    /// one deferred fetch.
+    /// Dirtied by a launch onto another tab and by a library change while hidden, and consumed
+    /// by the re-enter's one deferred fetch; a leave releases nothing.
     section: SectionState,
     global: Weak<Tracks<'static>>,
     loads: ListLoads,
@@ -89,21 +67,16 @@ fn install_tracks_model(ui: &AppWindow, state: &AppState) -> ScrollPoint {
     scroll
 }
 
-/// Install a persistent `VecModel<i32>` for `Tracks.selected-ids` so
-/// selection mutations can `set_vec` into the same model instead of
-/// allocating a fresh `ModelRc + VecModel` on every click.
+/// Installed once, so a selection change `set_vec`s into it rather than allocating a model per
+/// click.
 fn install_selection_model(ui: &AppWindow) {
     let model: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Tracks>().set_selected_ids(ModelRc::from(model));
 }
 
-/// Build a track-list row for the Slint model, every text field but the title, which rarely
-/// repeats, drawn from `pool`.
-///
-/// Every field is `Send`, covers included — a row carries only its artwork *path* and
-/// `RowCovers.request` resolves the thumbnail per instantiated row on the Slint side — so this
-/// runs wherever the rows are, worker or event loop. It replaced a `prepare`/`finish` pair that
-/// split it across a thread hop the finished row makes just as well.
+/// A track-list row, every text field but the title, which rarely repeats, drawn from `pool`.
+/// A row carries its artwork *path*, so every field is `Send` and this runs wherever the rows
+/// are.
 pub fn to_slint_track_list_row(r: &RsTrackListRow, pool: &mut StringPool) -> UiTrackListRow {
     UiTrackListRow {
         id: clamp_i64_to_i32(r.id),
@@ -119,8 +92,7 @@ pub fn to_slint_track_list_row(r: &RsTrackListRow, pool: &mut StringPool) -> UiT
         artwork_path: pool.intern(r.artwork_path.as_deref().unwrap_or_default()),
         display_duration: pool.intern(&format_duration_ms(r.duration_ms.max(0))),
         selected: false,
-        // Always interactive for real DB-backed rows. Only the Browse view
-        // overrides this `false` — for disk-only files not yet in the library.
+        // Browse alone sets `false`, for a file on disk the library doesn't hold.
         enabled: true,
         album_id: r.album_id.map_or(0, clamp_i64_to_i32),
         artist_id: r.artist_id.map_or(0, clamp_i64_to_i32),
@@ -136,10 +108,8 @@ pub fn to_slint_track_list_rows<'a>(
     rows.into_iter().map(|r| to_slint_track_list_row(r, &mut pool)).collect()
 }
 
-/// `mm:ss` for tracks under one hour, `h:mm:ss` otherwise. Matches the Slint
-/// `Theme.format-duration` helper exactly so any UI surface that still calls
-/// the Slint version (the now-playing bar's drag tooltip + total length) and
-/// the precomputed row strings stay byte-identical.
+/// `m:ss` under an hour, `h:mm:ss` from one: byte for byte `Theme.format-duration`, which the
+/// Slint surfaces formatting live still call.
 pub(crate) fn format_duration_ms(ms: i64) -> String {
     let secs_total = ms / 1000;
     let hours = secs_total / 3600;
