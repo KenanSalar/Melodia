@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 2 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 3 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -90,8 +90,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 
 | Slice | Covers | Ratio before | Comment lines before | Over | After | Commit |
 |---|---|---|---|---|---|---|
-| 1 | `melodia-artwork` | 0.73 | 1,028 | ~674 | 0.31 (441) | |
-| 2 | `melodia-net` | 0.59 | 1,118 | ~648 | | |
+| 1 | `melodia-artwork` | 0.73 | 1,028 | ~674 | 0.31 (441) | `a6e10d5f` |
+| 2 | `melodia-net` | 0.59 | 1,118 | ~648 | 0.24 (448) | |
 | 3 | `melodia-platform` | 0.51 | 1,030 | ~523 | | |
 | 4 | `melodia-audio` | 0.48 | 1,414 | ~677 | | |
 | 5 | `melodia-engine` | 0.48 | 1,572 | ~756 | | |
@@ -132,15 +132,15 @@ Status: done.
   - **Pointed at:** `CLAUDE.md`'s `media/` bullet names `image_decode`'s primitives, `material_you`'s resampler, the artwork store, `cover_thumbs`' tiers and `logo_tile`'s floor. `crates/melodia/tests/bounded_decode.rs` walks for the decode exceptions.
 
 ### Phase 2: `melodia-net`
-Status: next.
+Status: done.
 
-- [ ] **2. The crate**, one commit (17 files).
+- [x] **2. The crate**, one commit (17 files).
   - **Furthest over:** `lyrics_directory/lrclib.rs` (129), `lyrics_directory/recording.rs` (84), `radio_browser/mod.rs` (61), `net/mod.rs` (49).
   - **Pointed at:** `CLAUDE.md`'s `services/` bullet (`http_url`, `read_capped`, `get_capped`, the `pacer`), held by `net_primitives.rs`, `radio_facade.rs` and `lyrics_switch.rs`; `.claude/rules/radio.md`.
   - **Test comment citing it:** `crates/melodia/tests/radio_facade.rs` quotes `radio_browser/mod.rs`'s module doc ("Nothing outside `library::radio` should reach here").
 
 ### Phase 3: `melodia-platform`
-Status: not started.
+Status: next.
 
 - [ ] **3. The crate**, one commit (25 files).
   - **Furthest over:** `single_instance.rs` (85), `logging.rs` (71), `crash_report.rs` (55), `desktop_integration.rs` (42).

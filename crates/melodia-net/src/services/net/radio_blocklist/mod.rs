@@ -1,18 +1,8 @@
-//! Station terms the directory may serve and this build will not show.
+//! Station terms the directory may serve and this build won't show. Read at build time from a
+//! source outside the repo; only keyed fingerprints reach the binary ([`source`], `build.rs`).
 //!
-//! Curation policy rather than a user setting, so there is no toggle for it and no
-//! surface in the UI names it. The terms are read at build time from a source that
-//! never enters the repo, hashed under a key from that same source, and only the
-//! fingerprints reach the binary — see [`source`] for the format and `build.rs` for
-//! where it is read from.
-//!
-//! **A build with no source blocks nothing**, which is what a contributor, a fork
-//! and every PR check gets. Every predicate here short-circuits on the empty term
-//! list, so that build pays one branch.
-//!
-//! Matching is exact on both sides of [`source::normalize`]'s fold, never substring:
-//! `Some Station 100.5 FM` is a different term from `Some Station`. That is what
-//! lets a fingerprint stand in for the value at all.
+//! **A build with no source blocks nothing**, which is what a contributor, a fork and every PR
+//! check gets, and every predicate short-circuits on the empty list.
 
 pub mod source;
 
@@ -22,25 +12,19 @@ use source::TermKind;
 
 use melodia_core::entities::radio::{DirectoryStation, Facet, FacetKind, NewRadioStation};
 
-// `BLOCKED_KEY`, the sorted `BLOCKED_TERMS`, and the substring half —
-// `BLOCKED_PATTERNS` with the `PATTERN_LENGTHS` that size their windows. Written by
-// `build.rs`; empty arrays when there is no source.
+// Written by `build.rs`; empty arrays when there is no source.
 include!(concat!(env!("OUT_DIR"), "/radio_blocklist_terms.rs"));
 
-/// A key and the terms hashed under it.
 pub struct Blocklist {
     key: [u8; 32],
-    /// Sorted, so a lookup is a binary search over what is at most a few hundred
-    /// entries and touches no allocation.
+    /// Sorted, for a binary search that allocates nothing.
     terms: Cow<'static, [u64]>,
-    /// Sorted for the same reason, and separate because they answer a different
-    /// question — see [`Blocklist::pattern_hit`].
+    /// Sorted too, and apart because [`Blocklist::pattern_hit`] asks a different question.
     patterns: Cow<'static, [u64]>,
     /// Ascending distinct pattern lengths, in characters.
     pattern_lengths: Cow<'static, [u32]>,
 }
 
-/// What this build was compiled with.
 const BAKED: Blocklist = Blocklist {
     key: BLOCKED_KEY,
     terms: Cow::Borrowed(&BLOCKED_TERMS),
@@ -48,12 +32,8 @@ const BAKED: Blocklist = Blocklist {
     pattern_lengths: Cow::Borrowed(&PATTERN_LENGTHS),
 };
 
-/// The fields a station is judged on, borrowed rather than owned.
-///
-/// A view rather than either concrete station type, so a row arriving from the
-/// directory, from an imported file and from the hand-typed form all meet the same
-/// predicate. Named fields rather than seven positional `&str`s for the reason
-/// [`NewRadioStation`] gives for being a struct.
+/// The fields a station is judged on, so a directory row, an imported file and the hand-typed
+/// form all meet one predicate.
 pub struct StationTerms<'a> {
     /// `None` for a station with no directory entry behind it.
     pub station_uuid: Option<&'a str>,
@@ -105,8 +85,7 @@ pub fn facet_is_blocked(kind: FacetKind, facet: &Facet) -> bool {
 }
 
 impl Blocklist {
-    /// Build one from a parsed source, which is how a test gets a list that does not
-    /// depend on whether the machine running it has one.
+    /// So a test gets a list that doesn't depend on whether its machine has one.
     pub fn from_terms(terms: source::Terms) -> Self {
         Self {
             key: terms.key,
@@ -136,25 +115,14 @@ impl Blocklist {
             || self.holds(TermKind::Codec, station.codec)
             || self.pattern_hit(TermKind::NameContains, station.name)
             || self.pattern_hit(TermKind::UrlContains, station.stream_url)
-            // One pass over the tags for both questions, since splitting twice would
-            // be the more expensive half of asking them.
+            // One split for both tag questions.
             || station.tags.split(',').any(|tag| {
                 self.holds(TermKind::Tag, tag) || self.pattern_hit(TermKind::TagContains, tag)
             })
     }
 
-    /// Whether any window of `value` hashes to a blocked pattern.
-    ///
-    /// **The candidate is what gets hashed, not the pattern**, which is the whole
-    /// trick: a fingerprint cannot be matched against a substring, so the substring
-    /// is reconstructed from the candidate and hashed whole. The pattern text never
-    /// ships, only its fingerprint and its length.
-    ///
-    /// Cost is one hash per window, and the windows are bounded by
-    /// [`source::MIN_PATTERN_CHARS`] at the short end and by the candidate's own
-    /// length at the long end. Directory values are short — a tag averages a handful
-    /// of characters — so this stays a few hashes per value, and it runs on the fetch
-    /// task rather than the UI thread.
+    /// Whether any window of `value` hashes to a blocked pattern. The candidate's windows are
+    /// hashed rather than the pattern, so only its fingerprint and length ship.
     fn pattern_hit(&self, kind: TermKind, value: &str) -> bool {
         if self.patterns.is_empty() {
             return false;
@@ -164,8 +132,7 @@ impl Blocklist {
             return false;
         }
 
-        // Byte offset of each character plus the end, so a window is a slice of the
-        // fold rather than a string rebuilt per position.
+        // Character boundaries, so a window is a slice of the fold.
         let mut bounds: Vec<usize> = Vec::with_capacity(folded.len() + 1);
         bounds.extend(folded.char_indices().map(|(offset, _)| offset));
         bounds.push(folded.len());
@@ -188,10 +155,8 @@ impl Blocklist {
         false
     }
 
-    /// **Countries match on the code and never on the name**, which is the one axis
-    /// where the two differ: `countrycode` is the search endpoint's only code-keyed
-    /// parameter, so the code is what a pick actually filters by. Matching the name
-    /// here would hide the chip while leaving every station under it visible.
+    /// Countries match on the code, never the name: the code is what a pick filters by, so
+    /// matching the name would hide the chip and leave its stations visible.
     fn blocks_facet(&self, kind: FacetKind, facet: &Facet) -> bool {
         if self.is_empty() {
             return false;
@@ -201,9 +166,6 @@ impl Blocklist {
                 facet.code.as_deref().is_some_and(|code| self.holds(TermKind::Country, code))
             }
             FacetKind::Languages => self.holds(TermKind::Language, &facet.name),
-            // The one facet a pattern reaches, and the reason patterns exist: the tag
-            // list carries a spelling per variant, so blocking a family one entry at a
-            // time never finishes.
             FacetKind::Tags => {
                 self.holds(TermKind::Tag, &facet.name)
                     || self.pattern_hit(TermKind::TagContains, &facet.name)
@@ -212,9 +174,7 @@ impl Blocklist {
         }
     }
 
-    /// A blank value is absent rather than a term: the directory serves `""` for a
-    /// field it does not know about as readily as it omits one, and an empty term is
-    /// refused at parse time, so hashing one could only ever waste the hash.
+    /// A blank value is absent rather than a term, empty terms being refused at parse time.
     fn holds(&self, kind: TermKind, value: &str) -> bool {
         if value.trim().is_empty() {
             return false;

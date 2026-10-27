@@ -24,29 +24,20 @@ struct DeezerApiError {
     code: i64,
 }
 
-/// What one search round trip actually returned.
-///
-/// Three arms rather than an `Option`, because "nothing matched" and "we never
-/// answered" are different facts and a caller that memoizes misses must not
-/// memoize the second. Deezer reports a tripped rate limit as **HTTP 200**
-/// carrying `{"error": {…}}` where `data` belongs — so decoding straight into the
-/// success type reports the API's own refusal as a malformed response, and a
-/// caller pacing a batch can't tell "no match" from "stop asking".
+/// What one search round trip returned. Three arms because "nothing matched" and "never
+/// answered" differ to a caller that memoizes misses, and Deezer reports a tripped rate limit as
+/// HTTP 200 with `{"error": …}` where `data` belongs.
 pub enum DeezerAnswer<T> {
-    /// Deezer answered, and this is what it found — `None` when nothing matched.
+    /// `None` when nothing matched.
     Body(Option<T>),
-    /// A non-success HTTP status. Says nothing about whether the thing searched
-    /// for exists, so it is not a miss.
+    /// Says nothing about whether the thing searched for exists, so it is not a miss.
     HttpStatus(reqwest::StatusCode),
-    /// Deezer answered 200 with its own error object. See [`halts_a_batch`] for
-    /// which codes are about the caller's pace rather than about the query.
+    /// See [`halts_a_batch`] for which codes are about the caller's pace.
     ApiError { message: String, code: i64 },
 }
 
 impl<T> DeezerAnswer<T> {
-    /// Re-key a decoded body onto what the caller actually wanted, leaving the two
-    /// non-body arms alone. The generic parameter changes across that step, so
-    /// without this every call site re-spells both of them to say nothing.
+    /// Re-keys a decoded body, leaving the two non-body arms alone.
     fn map_body<U>(self, extract: impl FnOnce(T) -> Option<U>) -> DeezerAnswer<U> {
         match self {
             Self::Body(body) => DeezerAnswer::Body(body.and_then(extract)),
@@ -56,27 +47,16 @@ impl<T> DeezerAnswer<T> {
     }
 }
 
-/// Whether a Deezer error code is about the *caller's* pace rather than about the
-/// query that asked.
-///
-/// `4` is `Quota limit exceeded` and `700` a busy service: a batch queued behind
-/// either would spend itself on refusals, so a caller pacing one should stop.
-/// Every other code answers the request it was sent — a malformed advanced-search
-/// string (`600`), a bad or missing parameter (`500`/`501`), no data (`800`) — and
-/// says nothing about the next search. Stopping on those lets one unlucky name cap
-/// how far a pass ever gets, and permanently, since a refusal is never memoized:
-/// the next pass re-reaches the same name and stops in the same place.
+/// Whether a Deezer error code is about the *caller's* pace: `4` is the quota and `700` a busy
+/// service. Every other code answers its own request (`600` a malformed query, `500`/`501` a bad
+/// parameter, `800` no data), and stopping on those would let one unlucky name cap every pass,
+/// a refusal never being memoized.
 pub const fn halts_a_batch(code: i64) -> bool {
     matches!(code, 4 | 700)
 }
 
-/// Classify a body Deezer answered 200 with, peeling off the API's error object
-/// before attempting the success shape.
-///
-/// The two shapes are disjoint — neither `data` nor `error` has a serde default —
-/// so the order costs nothing and only the error arm needs to come first. `what`
-/// names the body in the failure message, so a genuine decode failure still says
-/// which endpoint it came from.
+/// Peels off the API's error object before trying the success shape; the two are disjoint, so
+/// only the order matters. `what` names the endpoint in a decode failure.
 fn classify<T: serde::de::DeserializeOwned>(
     body: &[u8],
     what: &str,
@@ -93,18 +73,13 @@ fn classify<T: serde::de::DeserializeOwned>(
         .map_err(|e| AppError::network(format!("Failed to parse {what}"), e))
 }
 
-/// Ceiling on a search body. A page of results is a few kilobytes and the caller
-/// only ever reads the first entry, so the cap is slack rather than a budget.
+/// Slack rather than a budget: a page of results is a few kilobytes and only the first is read.
 const MAX_SEARCH_BYTES: u64 = 512 * 1024;
 
-/// Root of the Deezer API. Named so each search below can take its URL as an argument and a test
-/// can point one at a local server, the doors spelling this.
-///
-/// The image download does **not** go through it: what it validates is a URL the API handed back,
-/// against the host allowlist in [`download_artist_image`].
+/// A constant so each search can take its URL as an argument and a test can serve one. The image
+/// download validates the URL the API handed back instead.
 const API_BASE: &str = "https://api.deezer.com";
 
-/// Read and classify a search response.
 async fn decode_search<T: serde::de::DeserializeOwned>(
     response: reqwest::Response,
     what: &str,
@@ -119,7 +94,7 @@ async fn decode_search<T: serde::de::DeserializeOwned>(
     classify(&body, what)
 }
 
-/// Searches the Deezer API for an artist and returns the medium picture URL if found.
+/// The medium picture URL for an artist.
 pub async fn search_artist_image_url(
     client: &reqwest::Client,
     artist_name: &str,
@@ -154,9 +129,8 @@ struct DeezerAlbum {
     cover_big: Option<String>,
 }
 
-/// Searches the Deezer API for an album and returns the 500×500 `cover_big` URL
-/// if found. Used for Discord Rich Presence, which fetches the URL server-side,
-/// so this only passes the string along — no download, no disk cache.
+/// The 500×500 `cover_big` URL for an album, for Discord Rich Presence, which fetches it
+/// server-side, so nothing is downloaded here.
 pub async fn search_album_cover(
     client: &reqwest::Client,
     artist: &str,
@@ -180,10 +154,8 @@ async fn search_album_cover_at(
         .await
         .map_err(|e| AppError::network("Deezer album search failed", e))?;
 
-    // An `Option` rather than a `DeezerAnswer`: the caller runs one lookup per
-    // track change and reads any `Err` as non-definitive, which is what both
-    // non-body arms need. A `None` there would be cached as "this album has no
-    // cover" for the rest of the session, and neither arm says that.
+    // `Err` for both non-body arms: the caller caches a `None` as "no cover" for the session,
+    // which neither of them means.
     match decode_search::<DeezerAlbumSearchResponse>(response, "Deezer album response").await? {
         DeezerAnswer::Body(body) => {
             Ok(body.and_then(|b| b.data.first().and_then(|a| a.cover_big.clone())))
@@ -197,18 +169,9 @@ async fn search_album_cover_at(
     }
 }
 
-/// Strip the one character Deezer's advanced-search syntax can't carry inside a
-/// field.
-///
-/// Each field is delimited by double quotes and the syntax documents no escape,
-/// so an embedded one closes the field early and the whole query comes back as
-/// `InvalidQueryException` (code 600). Dropping it costs a character of precision
-/// on the handful of titles that contain one and keeps the query well-formed.
-///
-/// **The artist search deliberately doesn't route through here**, and reads like
-/// an oversight rather than a decision — it sends a plain `q=<name>` with no field
-/// syntax at all, so a quote there is ordinary free text, and stripping it would
-/// search for a name nobody has.
+/// Drops the double quote, which closes an advanced-search field early (code 600) and has no
+/// escape. The artist search deliberately doesn't route through here: it sends a plain
+/// `q=<name>`, where a quote is ordinary text.
 fn quotable(value: &str) -> Cow<'_, str> {
     if value.contains('"') {
         return Cow::Owned(value.replace('"', ""));
@@ -216,18 +179,13 @@ fn quotable(value: &str) -> Cow<'_, str> {
     Cow::Borrowed(value)
 }
 
-/// Maximum image download size (5 MB).
 const MAX_IMAGE_BYTES: u64 = 5 * 1024 * 1024;
 
-/// Downloads an artist image the search handed back.
-///
-/// Refuses anything but HTTPS on a Deezer CDN domain, and reads the body under a size limit so
-/// a host can't make it allocate without bound.
+/// Downloads an artist image the search handed back, HTTPS on a Deezer CDN host only.
 pub async fn download_artist_image(
     client: &reqwest::Client,
     image_url: &str,
 ) -> Result<Vec<u8>, AppError> {
-    // Validate URL scheme and domain
     let parsed =
         reqwest::Url::parse(image_url).map_err(|e| AppError::network("Invalid image URL", e))?;
     if parsed.scheme() != "https" {
@@ -244,7 +202,6 @@ pub async fn download_artist_image(
         .await
         .map_err(|e| AppError::network("Failed to download artist image", e))?;
 
-    // Check Content-Length before downloading body
     if let Some(len) = response.content_length()
         && len > MAX_IMAGE_BYTES
     {
@@ -253,9 +210,7 @@ pub async fn download_artist_image(
         )));
     }
 
-    // Streamed under the cap rather than `bytes()`-ed and measured afterwards: the header check
-    // above is only as good as the header, and a host that omits or understates it had already
-    // been allocated in full by the time the old check could refuse it.
+    // Still streamed under the cap: the header is only as good as the host.
     crate::services::net::read_capped(response, "Artist image", MAX_IMAGE_BYTES).await
 }
 

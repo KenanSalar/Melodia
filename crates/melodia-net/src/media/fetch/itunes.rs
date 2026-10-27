@@ -1,11 +1,9 @@
 use melodia_core::error::AppError;
 
-/// Ceiling on a search body. The query asks for `limit=1` and reads one field off it, so this is
-/// slack against a schema change rather than a budget.
+/// Slack against a schema change: the query asks for one result and reads one field.
 const MAX_RESPONSE_BYTES: u64 = 512 * 1024;
 
-/// The iTunes Search endpoint. Named so the fetch below can take its URL as an argument and a
-/// test can point it at a local server, the door spelling this.
+/// A constant so the fetch can take its URL as an argument and a test can serve one.
 const SEARCH_URL: &str = "https://itunes.apple.com/search";
 
 #[derive(serde::Deserialize)]
@@ -19,10 +17,8 @@ struct ItunesAlbum {
     artwork_url_100: Option<String>,
 }
 
-/// Searches the iTunes Search API for an album and returns an upsized cover URL if
-/// found. The Discord Rich Presence fallback for when Deezer has no match; like the
-/// Deezer path, Discord fetches the URL server-side, so this only passes the string
-/// along — no download, no disk cache. Keyless, single GET.
+/// An upsized album cover URL, Discord's fallback when Deezer has no match. Discord fetches it
+/// server-side, so nothing is downloaded here.
 pub async fn search_album_cover(
     client: &reqwest::Client,
     artist: &str,
@@ -37,8 +33,7 @@ async fn search_album_cover_at(
     artist: &str,
     album: &str,
 ) -> Result<Option<String>, AppError> {
-    // iTunes has no field-pinning search syntax; a combined term with entity=album is
-    // the conventional album lookup.
+    // No field syntax here; a combined term with `entity=album` is the usual album lookup.
     let term = format!("{artist} {album}");
     let response: reqwest::Response = client
         .get(url)
@@ -47,12 +42,8 @@ async fn search_album_cover_at(
         .await
         .map_err(|e| AppError::network("iTunes album search failed", e))?;
 
-    // An `Err`, never `Ok(None)`. A non-success status says nothing about whether the
-    // album exists, and `discord::artwork::run_lookup` reads `Ok(None)` as a
-    // *definitive* miss — cached as "this album has no cover" for the rest of the
-    // session once Deezer has missed too. iTunes Search rate-limits with a status, so
-    // folding one in blanks that album's cover until restart. Deezer's own non-body
-    // arms come back the same way; see `deezer::DeezerAnswer::HttpStatus`.
+    // An `Err`, never `Ok(None)`: `discord::artwork::run_lookup` caches `Ok(None)` as a definitive
+    // miss for the session, and iTunes rate-limits with a status.
     let status = response.status();
     if !status.is_success() {
         return Err(AppError::network_msg(format!("iTunes album search returned HTTP {status}")));
@@ -67,9 +58,8 @@ async fn search_album_cover_at(
     Ok(body.results.first().and_then(|a| a.artwork_url_100.as_deref().map(upsize_artwork_url)))
 }
 
-/// iTunes returns a 100 px thumbnail (`.../100x100bb.jpg`); swap the size token for a
-/// ~500 px cover to match Deezer's `cover_big`. Returns the input unchanged when the
-/// token isn't present — a small cover still beats none.
+/// The 100 px size token swapped for a cover about Deezer's `cover_big`. Unchanged where the
+/// token is missing, a small cover still beating none.
 fn upsize_artwork_url(url_100: &str) -> String {
     url_100.replace("100x100bb", "512x512bb")
 }
