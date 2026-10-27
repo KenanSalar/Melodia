@@ -9,12 +9,9 @@ import { SettingRow } from "../../components/settings/setting-row.slint";
 import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 
-// Per service: a status row with Connect / Disconnect, an enable toggle that
-// mounts only once connected, and a loved-tracks sync. Rust owns every value;
-// the status props come off `scrobbling_settings.rs`'s status-watch subscriber.
-// Connect fills its login dialog inline rather than through a callback, so the
-// `@tr` chrome stays in Slint and a Rust-driven open can't trip the recursion
-// guard. Search visibility follows `playback-section.slint`.
+// Connect fills its login dialog inline rather than through a callback, so the `@tr` chrome stays
+// in Slint and no Rust-driven open can trip the recursion guard. Search visibility follows
+// `playback-section.slint`.
 export component ScrobblingSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;

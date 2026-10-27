@@ -4,13 +4,8 @@ import { Player } from "../../globals/player.slint";
 import { TrackList } from "../../components/track-list/track-list.slint";
 import { TrackListScrollbars } from "../../components/track-list-scrollbars.slint";
 
-// The genre's track list under the shared band, on Album Detail's shape exactly. What is
-// particular to genres lives elsewhere now: the name-hashed tile gradient is a ternary on
-// the mount sheet, and the backdrop pair is written into `HeroBackdrop.floor-*` by Rust's
-// `open_genre`, which measures it and solves the scrim against it. `show_genre` is forced
-// off for the reason each sibling forces its own column off.
+// Album Detail's shape over the genre's tracks, the hero's gradient being the mount sheet's.
 export component GenreDetailBody inherits Rectangle {
-    // Catches any click no inner TouchArea consumes and gives the band's box up.
     TouchArea {
         clicked => { MyLibrary.blur-search-tick += 1; }
     }
@@ -38,11 +33,9 @@ export component GenreDetailBody inherits Rectangle {
         select-row(idx, id, sh, ct) => { GenreDetail.select-row(idx, id, sh, ct); }
         select-all => { GenreDetail.select-all(); }
         clear-selection => { GenreDetail.clear-selection(); }
-        // A click in the track list blurs the band's SearchBar.
         request-blur-search => { MyLibrary.blur-search-tick += 1; }
     }
 
-    // At the view root, flush with the content panel's rounded edges.
     TrackListScrollbars {
         x: 0; y: 0; width: 100%; height: 100%;
         list-y: tl.absolute-position.y - root.absolute-position.y;

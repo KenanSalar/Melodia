@@ -7,15 +7,9 @@ import { SectionDivider } from "../../components/settings/section-divider.slint"
 import { SettingRow } from "../../components/settings/setting-row.slint";
 import { SectionButton } from "../../components/settings/section-button.slint";
 
-// The conventional About pane: identity, authorship, support links, a repository
-// link and the license. Unlike Updates, no backend state gates a row — only the
-// search filter can hide one.
-//
-// The version reads `MelodiaUpdater.current-version` rather than its own copy,
-// so About and Updates can't disagree. Every link reaches the same launcher "Open
-// Containing Folder" uses: the repository through `crates/melodia-views/src/ui/settings/about.rs`, the
-// two support pages through `crates/melodia-views/src/ui/support.rs`, which owns them because the support
-// toast fires Ko-fi's callback. Search visibility follows `language-section.slint`.
+// The version reads `MelodiaUpdater.current-version`, so About and Updates can't disagree. The two
+// support pages open through `ui::support`, which owns them because the support toast fires
+// Ko-fi's callback. Search visibility follows `language-section.slint`.
 export component AboutSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -31,8 +25,8 @@ export component AboutSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
-    // The brands, the SPDX id and "GitHub" / "Ko-fi" / "GitHub Sponsors" stay untranslated
-    // but still belong in the haystack — they're what a user would type.
+    // The brands and the SPDX id stay untranslated but belong in the haystack, being what a user
+    // would type.
     property <string> app-label: "Melodia";
     // Translators: `{}` is the version number, such as 0.9.2
     property <string> version-desc: @tr("Version {}", MelodiaUpdater.current-version);
@@ -62,8 +56,6 @@ export component AboutSection inherits Rectangle {
     out property <bool> has-matches: show-app || show-author || show-support || show-license
         || show-welcome;
 
-    // Wrapper so the root's preferred-height tracks the card's natural height —
-    // see `language-section.slint`.
     VerticalLayout {
         if has-matches: SectionCard {
             title: root.card-title;
@@ -74,7 +66,6 @@ export component AboutSection inherits Rectangle {
                 description: root.version-desc;
             }
 
-            // No leading icon, matching the Updates section's action buttons.
             if root.show-app && root.show-author: SectionDivider {}
             if root.show-author: SettingRow {
                 icon: "person";
@@ -87,12 +78,9 @@ export component AboutSection inherits Rectangle {
                 }
             }
 
-            // The card's only filled buttons, and deliberately so: they ask for something
-            // rather than going somewhere. One shape and one fill, so neither reads as the
-            // preferred one. The mark keeps its own colours: it is Ko-fi's, and it reads on
-            // any accent because it carries both ends — the dark outline over a light one,
-            // the white cup over a dark one. Sponsors takes the heart glyph instead of
-            // GitHub's mark, which is one colour and would need a variant per accent.
+            // The card's only filled buttons: they ask for something rather than going somewhere,
+            // and share one shape and fill so neither reads as preferred. Ko-fi's mark keeps its
+            // colours, reading on any accent; GitHub's is one colour, so Sponsors takes a glyph.
             if (root.show-app || root.show-author) && root.show-support: SectionDivider {}
             if root.show-support: SettingRow {
                 icon: "favorite";
@@ -126,8 +114,8 @@ export component AboutSection inherits Rectangle {
                 description: root.license-desc;
             }
 
-            // Wired from `ui/onboarding/`, not `about.rs`: the card owns its own callback the way
-            // Ko-fi's does, so neither the row nor the feature has to know about the other.
+            // Wired from `ui/onboarding/`, not `about.rs`, so neither the row nor the feature knows
+            // about the other.
             if (root.show-app || root.show-author || root.show-support || root.show-license)
                 && root.show-welcome: SectionDivider {}
             if root.show-welcome: SettingRow {

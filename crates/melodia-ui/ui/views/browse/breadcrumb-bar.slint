@@ -2,8 +2,6 @@ import { Theme } from "../../theme.slint";
 import { BreadcrumbRow } from "../../models.slint";
 import { MaterialIcon } from "../../components/material-icon.slint";
 
-// One breadcrumb segment. The chevron separator lives outside it — the bar's loop
-// interleaves one before every segment after the first.
 component BreadcrumbPill inherits Rectangle {
     in property <string> label;
     in property <bool> is-current;
@@ -25,9 +23,8 @@ component BreadcrumbPill inherits Rectangle {
             font-size: Theme.font-size-sm;
             font-weight: 500;
             vertical-alignment: center;
-            // Ink, not elision: the pill's bound width above keeps the segment
-            // incompressible either way, so this only drops the line-box scissor
-            // that would cut a path segment's Arabic marks.
+            // For the ink, not the elision: the bound width keeps the segment whole, and this
+            // drops the line-box scissor that would cut Arabic marks.
             overflow: elide;
         }
     }
@@ -38,17 +35,9 @@ component BreadcrumbPill inherits Rectangle {
     }
 }
 
-// The whole breadcrumb trail, chevrons included, in its clipping container.
-//
-// **The clip is what keeps a deep path from shoving the header's action pill off screen** — the
-// segments carry bound (incompressible) widths, so a trail wider than the slot spills rather than
-// eliding, and the container cuts it. It cuts at the **right**, i.e. the current folder is what a
-// deep path loses first, `alignment: start` packing from the left edge. Hiding the *head* instead
-// means `alignment: end`, which also right-aligns every short trail — a look to choose rather than
-// a one-line correction.
-//
-// The segment and the loop that interleaves its separators are one file, the pill having no other
-// consumer.
+// The clip keeps a deep path from shoving the header's pill off screen: the segments' widths are
+// bound, so a trail wider than the slot spills and is cut at the right, the current folder going
+// first. Hiding the head instead takes `alignment: end`, which right-aligns every short trail too.
 export component BreadcrumbBar inherits Rectangle {
     in property <[BreadcrumbRow]> segments;
     callback segment-clicked(string);

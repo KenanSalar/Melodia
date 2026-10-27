@@ -2,9 +2,7 @@ import { Theme } from "../../theme.slint";
 import { Search } from "../../globals/search.slint";
 import { ArtworkImage } from "../../components/artwork-image.slint";
 
-// The featured card for the single best match, ranked over the albums, artists and
-// genres a query reached. No inputs — the whole card comes off `Search.top-*`, and the
-// mount site gates it on `top-kind` being non-empty.
+// The single best match over the albums, artists and genres a query reached.
 export component TopResultCard inherits VerticalLayout {
     horizontal-stretch: 0;
     alignment: start;
@@ -38,10 +36,8 @@ export component TopResultCard inherits VerticalLayout {
             padding: Theme.pad-md;
             spacing: Theme.pad-sm;
 
-            // **The shared `ArtworkImage`, not a hand-rolled square**: a coverless result
-            // here has to look like the same entity does in the strip below and in every
-            // track row, and this card spent a while painting its own placeholder
-            // matching neither. Circular for an artist, per the strip's own convention.
+            // The shared tile, so a coverless result looks as the same entity does in the strip
+            // below and every track row. Circular for an artist, as in the strip.
             ArtworkImage {
                 tile-size: 216px;
                 tile-radius: Search.top-kind == "artist"
@@ -67,8 +63,7 @@ export component TopResultCard inherits VerticalLayout {
                     : Theme.accent;
             }
 
-            // Localised inline: a Rust-pushed string can't `@tr`, so the extractor needs
-            // literals here.
+            // Inline literals, a Rust-pushed string being untranslatable.
             Text {
                 text: Search.top-kind == "album"
                     ? @tr("Album")

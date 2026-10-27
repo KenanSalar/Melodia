@@ -21,60 +21,38 @@ import { VisualizerPicker } from "../components/now-playing/visualizer-picker.sl
 import { VisualizerStrip } from "../components/now-playing/visualizer-strip.slint";
 import { NpBackdropStack } from "../components/now-playing/np-backdrop-stack.slint";
 
-// The full-screen Now Playing view, rendered inside the content panel — sidebar and now-playing
-// bar stay visible — when `Nav.now-playing-open`. A large centred artwork, title / artist / album,
-// and metadata chips floating directly on a blurred album-art backdrop, with an "Up Next" list
-// beside it. **Transport and seek are deliberately not duplicated here**: they live in the bar,
-// which stays visible below. The list itself lives in the shared `UpNextList`, so the miniplayer's
-// column reuses the same behaviour.
+// Transport and seek are deliberately not duplicated here: the bar stays visible below.
 export component NowPlayingView inherits Rectangle {
-    // Ceiling on the square cover's edge. The tile takes this much when the column has the height
-    // for it and less when it doesn't — the cover slot below is why the artwork gives ground.
     property <length> cover-size: clamp(root.width * 0.22, 200px, 384px);
 
-    // **Where the cover stops giving ground.** That slot is the column's only slack, so with no
-    // floor a short panel takes the artwork down to nothing and then overflows anyway. A fraction
-    // of the panel rather than a fixed edge: on the shortest one a fixed floor is room the strip
-    // and the title block would have to find instead.
+    // The cover slot is the column's only slack, so without a floor a short panel shrinks the
+    // artwork to nothing and overflows anyway. A fraction rather than a fixed edge, which on the
+    // shortest panel is room the strip and the title would have to find instead.
     property <length> cover-min: clamp(root.height * 0.2, 72px, 160px);
 
-    // The ceiling keeps a tall screen from turning the base of the group into the group. The floor
-    // is how a short one pays for the cover's: the strip is the largest term under the artwork and
-    // the only one whose own reading survives being halved.
+    // A low floor: the strip is the largest term under the artwork and the only one that still
+    // reads at half height, so a short panel pays for the cover's floor here.
     property <length> strip-h: clamp(root.height * 0.12, 28px, 128px);
 
-    // The strip's drop below the chips. Padding isn't something the layout can shrink on our
-    // behalf, so it comes off the panel height directly — the first thing a short window gives up.
+    // Padding the layout can't shrink, so it scales off the panel instead.
     property <length> strip-drop: clamp(root.height * 0.06, Theme.pad-sm, Theme.pad-lg * 2.5);
 
-    // The Up Next column, on a readable floor and a ceiling matching its old fixed width. Named
-    // rather than inlined because the body's left column — and so the chip strip's wrapping
-    // ceiling — is the panel minus this.
     property <length> up-next-width: clamp(root.width * 0.35, 280px, 420px);
-
-    // What the artwork / title / chip column gets: the panel less its left padding, the
-    // inter-column gap and the Up Next column.
     property <length> content-width: root.width - Theme.pad-lg - Theme.pad-md - root.up-next-width;
 
-    // The square the slot reserves. The tile is square at whichever axis runs out first, so on a
-    // narrow panel it is the column's width that decides — reserving the full ceiling there left a
-    // band of empty backdrop under the tile that everything below it could have used.
+    // Bound by the column's width too: on a narrow panel the square tile is width-bound, and
+    // reserving the full height leaves empty backdrop under it.
     property <length> cover-h: clamp(root.content-width, root.cover-min, root.cover-size);
 
-    // **A band's column pitch is the ceiling, not the strip's.** The band count is fixed, so a
-    // strip that keeps widening divides the same bars into ever-fatter columns whatever height it
-    // is drawn at. Ten pixels, the 2px gap included, is where a resting mark stops reading as one.
-    // Reading the published count beats restating `spectrum::NUM_BANDS`; the `max` covers boot.
+    // A per-band column pitch: the band count is fixed, so a wider strip only fattens each bar.
+    // Ten pixels, the 2px gap included, is where a resting mark stops reading as one. The count is
+    // read rather than restating `spectrum::NUM_BANDS`; the `max` covers boot.
     property <length> strip-w-max: 10px * max(1, Visualizer.band-count);
 
-    // Three quarters of that column, so the strip reads as the base of the whole cover → title →
-    // chips group. **The floor is not cosmetic**: at the window's own minimum `content-width` goes
-    // negative.
-    //
-    // Capped at the column *less both scrollbar lanes* besides. `cover-size` floors at 200px and
-    // only grows past it on a panel wider than ~900px, so on every narrower one the floor is wider
-    // than the whole column and the strip overhung both edges. Both lanes because the group is
-    // centred: clearing only the bar's own side would move the strip off the column's axis.
+    // Three quarters of the column, so the strip reads as the base of the cover, title and chips,
+    // floored at the cover because `content-width` goes negative at the window's minimum. Capped
+    // at the column less both scrollbar lanes, the cover's 200px floor being wider than the whole
+    // column on any panel under about 900px; both lanes, so the strip stays on the column's axis.
     property <length> strip-w: max(0px, min(
         root.content-width - 2 * Theme.scrollbar-slot,
         max(root.cover-size, min(root.content-width * 0.75, root.strip-w-max))
@@ -87,13 +65,10 @@ export component NowPlayingView inherits Rectangle {
         height: 100%;
     }
 
-    // **Padding is per-section, not uniform on this layout**: the Up Next column has to
-    // reach the panel's right edge so its overlay scrollbar sits flush there.
     VerticalLayout {
         padding-top: Theme.pad-lg;
         spacing: Theme.pad-md;
 
-        // Floats directly over the backdrop.
         HorizontalLayout {
             vertical-stretch: 0;
             padding-left: Theme.pad-lg;
@@ -103,8 +78,6 @@ export component NowPlayingView inherits Rectangle {
 
             AccentDiscButton {
                 icon: "arrow_back";
-                // Lateral: the view underneath remounts and samples this. See the
-                // bar's own track-info card, which is the other half of the toggle.
                 clicked => {
                     Nav.pending-enter-from = NavEnterFrom.above;
                     Nav.now-playing-open = false;
@@ -113,17 +86,15 @@ export component NowPlayingView inherits Rectangle {
 
             Rectangle { horizontal-stretch: 1; }
 
-            // Left of the favourite heart.
             if Player.vm.has_track: StarRating {
                 rating: Player.vm.track.rating;
                 star-size: 22px;
-                // Accent-tinted rather than the list views' yellow; `AccentGlyphButton`,
-                // which the rest of the row is, says why the group shares one colour.
+                // Accent rather than the lists' yellow; `AccentGlyphButton` says why the row
+                // shares one colour.
                 filled-color: Player.np-accent-bright;
                 empty-color: Player.np-accent-dim;
                 on-backdrop: true;
-                // The glyph family to the right answers the pointer; a star row that did not
-                // would be the one dead control in the header.
+                // The glyphs beside it answer the pointer, so the stars do too.
                 hover-preview: true;
                 rated(n) => { Player.set-current-rating(n); }
             }
@@ -136,54 +107,34 @@ export component NowPlayingView inherits Rectangle {
                 clicked => { Player.toggle-favorite(); }
             }
 
-            // **A station takes the vote in the heart's slot.** The favourite toggle acts on a
-            // `tracks` row a station has none of, so it could only ever sit there disabled; the
-            // vote is the one thing this header can offer that a stream actually answers.
-            //
-            // **Gone rather than disabled** where the directory does not know the station — a
-            // hand-typed one has no uuid to record a vote against — which is what the station
-            // page's own pill does with the same question. A permanently dead glyph is exactly
-            // what this replaced.
-            //
-            // The heart's own slot, not a new kind of control. Labelled on the station page,
-            // where three segments fit and a reader can weigh them; here there is room for one
-            // glyph, so it takes the tooltip.
+            // The heart acts on a `tracks` row a station lacks, so a station takes the vote in its
+            // slot, gone rather than disabled where there's no directory uuid to vote against.
             if Player.vm.has_station && Player.vm.radio.uuid != "": AccentGlyphButton {
                 icon: "thumb_up";
                 tooltip-text: @tr("Vote");
-                // Left, for the station page's own reason: this row is the panel's top edge,
-                // so an above-pill is cut off by it. The left arm centres vertically and
-                // clears inward over the header's own spacer.
+                // This row is the panel's top edge, which would cut off an above-pill.
                 tooltip-side: TooltipSide.left;
                 clicked => {
                     Radio.vote(Player.vm.radio.uuid, Player.vm.radio.station_id);
                 }
             }
 
-            // The visualizer's style on its own glyph, its label a tooltip.
-            //
-            // Not gated on `vm.has_track` — a style means something with an empty queue.
+            // Ungated: a style means something with an empty queue.
             VisualizerPicker { }
 
-            // **Gone rather than disabled on a station**, the vote's rule directly above: the
-            // column keeps its panel whatever the switch says, a stream having no track to look a
-            // sheet up for, so here it could only ever swap nothing for nothing.
+            // Gone on a station, a stream having no track to look a sheet up for.
             if !Player.vm.has_station: LyricsControls { }
         }
 
-        // The centred artwork group left, the Up Next column right, both floating on the backdrop
-        // with no card chrome. **No right or bottom padding**: the column reaches the panel edge on
-        // both axes, so its scrollbar lands flush and rows scroll off the bottom rather than under
-        // a strip of backdrop. The inset the artwork group wants goes on that column alone.
+        // No right or bottom padding: the Up Next column reaches the panel's edges, so its
+        // scrollbar lands flush and rows scroll off the bottom rather than under a strip of
+        // backdrop.
         HorizontalLayout {
             vertical-stretch: 1;
             padding-left: Theme.pad-lg;
             spacing: Theme.pad-md;
 
-            // Artwork, title and chips, vertically centred, and the scroller that keeps the group
-            // whole. The column spends the cover's slack first and scrolls only once its own
-            // floors no longer fit the panel — where before it ran out of slack and pushed the
-            // strip through the bottom edge, drawn in half with no way to reach the rest.
+            // Spends the cover's slack first and scrolls only once the group's floors don't fit.
             Rectangle {
                 horizontal-stretch: 1;
 
@@ -192,65 +143,42 @@ export component NowPlayingView inherits Rectangle {
                     height: 100%;
                     horizontal-scrollbar-policy: always-off;
                     vertical-scrollbar-policy: always-off;
-                    // Locked to the viewport: left alone a ScrollView sizes its content to the
-                    // content's own preferred width, and everything below centres against the
-                    // column rather than against the widest thing in it.
+                    // Locked, or the content takes its own preferred width and centres against it.
                     content-width: group-sv.visible-width;
-                    // The visible height for as long as the column's floors fit inside it, so the
-                    // cover gives ground before anything scrolls, and the column's own minimum
-                    // past that. **Off the column, never off the scroller** — a ScrollView reports
-                    // a preferred height of its own and binds `content-height` back through it,
-                    // so reading that here closes the loop through this very property.
+                    // Off the column's minimum, never the scroller's: a ScrollView binds
+                    // `content-height` back through its own preferred height, so that is a loop.
                     content-height: max(group-sv.visible-height, group.min-height);
 
                     group := VerticalLayout {
                         alignment: center;
-                        // Both off the panel: padding is not something the layout can shrink on
-                        // our behalf, so on a short one it is the cheapest room in the group.
                         padding-bottom: clamp(root.height * 0.04, Theme.pad-sm, Theme.pad-lg);
                         spacing: clamp(root.height * 0.03, 6px, Theme.pad-md);
 
-                        // The high-res foreground cover, cross-fading through the dual-slot
-                        // pattern. **The slot is a plain Rectangle rather than a centring layout,
-                        // and the tile inside spells out `x` and `y`** — that pair is what makes
-                        // the artwork the only child of this column with slack, a non-layout
-                        // element folding its children's constraints *except* those carrying an
-                        // `x`/`y` binding. Every other child has min == preferred and Slint's
-                        // shrink pass can only take height off a cell with room between the two.
+                        // A plain Rectangle with each tile at an explicit `x`/`y`, which keeps this
+                        // slot the column's only slack (`visualizer.md`). A centring layout would
+                        // fold the tile's minimum in and take that slack away.
                         cover-slot := Rectangle {
                             min-height: root.cover-min;
                             preferred-height: root.cover-h;
                             max-height: root.cover-h;
 
                             if !Player.vm.has_station: NowPlayingCover {
-                                // Square at whichever axis runs out first. The width term matters
-                                // on a narrow window, where the Up Next column holds its floor and
-                                // this one can end up narrower than the tile wants to be.
                                 tile-size: min(parent.height, parent.width);
                                 x: (parent.width - self.width) / 2;
                                 y: 0px;
                             }
 
-                            // **`ArtworkImage`, not `NowPlayingCover`.** That component is the
-                            // *track* cross-fade, and a station has nothing to cross-fade between;
-                            // what it does need is the inset card, the monogram and the `radio`
-                            // glyph, all of which the shared tile already owns. A station logo is
-                            // routinely a favicon, so without the inset a 32 px source is magnified
-                            // across 384.
-                            //
-                            // Both arms spell `x` and `y`, which is what keeps this slot the
-                            // artwork column's only slack — see the shrink-pass note in
-                            // `.claude/rules/visualizer.md`.
+                            // `ArtworkImage`, not `NowPlayingCover`: a station has nothing to
+                            // cross-fade, and the shared tile owns the inset a favicon needs.
                             if Player.vm.has_station: ArtworkImage {
                                 tile-size: min(parent.height, parent.width);
                                 tile-radius: Theme.radius-lg;
                                 x: (parent.width - self.width) / 2;
                                 y: 0px;
                                 artwork-path: Player.vm.radio.artwork_path;
-                                // The row tier until the detail decode lands, the miniplayer's
-                                // ternary. The subscriber empties the large slot the moment the
-                                // source moves, so an empty one is a decode still out rather than
-                                // a station with no logo.
+                                // The row tier until the large decode lands. The subscriber empties
+                                // the large slot on every source change, so an empty one is a
+                                // decode still out.
                                 cover: Player.np-station-logo.width > 0
                                     ? Player.np-station-logo
                                     : Player.vm.radio.logo_img;
@@ -264,18 +192,11 @@ export component NowPlayingView inherits Rectangle {
                             }
                         }
 
-                        // Centred under the artwork.
                         VerticalLayout {
                             spacing: 4px;
-                            // Backdrop-solved rather than a `Theme.*` brush: these sit on the blur,
-                            // where a fixed brush lands light-on-light on a light theme. The album
-                            // line takes the muted tier at reduced alpha — a three-line hierarchy,
-                            // two solved tones.
-                            //
-                            // **Sizes come off the panel, each on its own floor.** Three lines at
-                            // full size are most of what a short panel has to give, and one shared
-                            // scale would take the album line under a readable size to buy the
-                            // title a point it doesn't need.
+                            // Backdrop-solved: a `Theme.*` brush lands light-on-light on a light
+                            // theme. Each size scales off the panel on its own floor, since one
+                            // shared scale takes the album line under a readable size first.
                             Text {
                                 text: Player.source-title;
                                 color: Player.np-on-backdrop;
@@ -291,8 +212,6 @@ export component NowPlayingView inherits Rectangle {
                                 horizontal-alignment: center;
                                 overflow: elide;
                             }
-                            // An `if` rather than `visible:` — a hidden child still claims its
-                            // cell, so an album-less track reserved a full text line for nothing.
                             if Player.source-tertiary != "": Text {
                                 text: Player.source-tertiary;
                                 color: Player.np-on-backdrop-muted.transparentize(0.25);
@@ -302,9 +221,8 @@ export component NowPlayingView inherits Rectangle {
                             }
                         }
 
-                        // Contents are gated on the track id, so a fetch landing after a rapid
-                        // track change is never shown against the wrong track; the strip keeps the
-                        // hidden lines reserved until it lands (its `show-rows`).
+                        // Gated on the track id, so a fetch landing after a quick skip is never
+                        // shown against the wrong track.
                         if Player.vm.has_track: MetaChipStrip {
                             chips: Player.chips;
                             show-rows: Player.track-meta.track_id == Player.vm.track.id;
@@ -313,15 +231,11 @@ export component NowPlayingView inherits Rectangle {
                             chip-label-color: Player.np-chrome-text;
                         }
 
-                        // The base under the whole cover → title → chips group, in a row of its
-                        // own because the drop above it is padding, which a bare cell can't
-                        // carry; both dimensions come off the view root above.
+                        // A row of its own, a bare cell being unable to carry the drop above it.
                         if Visualizer.enabled: HorizontalLayout {
                             alignment: center;
-                            // Well below the column's shared spacing, so it reads as the base of
-                            // the group rather than one more line of metadata. **The column is
-                            // centred, so this splits between both ends** — budget twice the drop
-                            // you actually want.
+                            // The column is centred, so this splits between both ends: budget
+                            // twice the drop you want.
                             padding-top: root.strip-drop;
                             VisualizerStrip {
                                 width: root.strip-w;
@@ -331,9 +245,7 @@ export component NowPlayingView inherits Rectangle {
                     }
                 }
 
-                // No gutter: the column centres everything it holds, so the bar's lane is backdrop
-                // rather than content, and it only paints at all on a panel too short to seat the
-                // group at its floors.
+                // No gutter: the group is centred, which leaves the bar's lane as backdrop.
                 NpOverlayScrollbar {
                     x: parent.width - self.width;
                     y: 0;
@@ -346,54 +258,36 @@ export component NowPlayingView inherits Rectangle {
                 }
             }
 
-            // Responsive, so a narrow window doesn't squeeze the chip strip first, and
-            // reaching the panel's right edge so its scrollbar sits flush at any width.
             VerticalLayout {
                 width: root.up-next-width;
                 spacing: Theme.pad-sm;
 
                 Text {
-                    // A station's queue is untouched underneath it but is not what comes next,
-                    // so this column states what the station *is* instead. Lyrics take the same
-                    // slot on a track, the column being one column with three arms rather than a
-                    // place two things share.
                     // Translators: a heading in place of "Up Next", so keep it as short
                     text: Player.vm.has_station ? @tr("Station")
                         : Lyrics.enabled ? @tr("Lyrics")
                         : @tr("Up Next");
-                    // Accent-tinted like the divider under it but solid: a heading carries it at
-                    // full alpha where a hairline can't. The rows below keep the list palette.
                     color: Player.np-accent-bright;
                     font-size: Theme.font-size-lg;
                     font-weight: 600;
                 }
                 Rectangle {
                     height: 1px;
-                    // Weaker than the stars and heart above: a hairline, not a glyph, so it carries
-                    // at a lower alpha without turning into a stripe.
+                    // Lighter than the glyphs: a hairline at full alpha reads as a stripe.
                     background: Player.np-accent-bright.transparentize(0.55);
                 }
 
-                // The mini-player mounts the same component with `compact: true`.
                 if !Player.vm.has_station && !Lyrics.enabled: UpNextList {
                     vertical-stretch: 1;
                     compact: false;
                 }
 
-                // **A station keeps its panel whatever the switch says.** A stream has no track to
-                // look a sheet up for, so the switch would be offering something that could only
-                // ever be empty; what a station has instead is the description below.
                 if !Player.vm.has_station && Lyrics.enabled: LyricsPanel {
                     vertical-stretch: 1;
                 }
-                // **The station page's own body, on this view's palette.** What a stream has
-                // instead of a queue is a description of itself, so the two surfaces state the
-                // same facts through the same component rather than one of them inventing a
-                // second answer. No Votes row: that number comes from a directory refresh the
-                // station page runs and this column has no reason to.
-                //
-                // One scroller for the pair — the history is capped by the ring that fills it, so
-                // there is nothing to virtualize and no second scroller to nest.
+                // The station page's body on this view's palette, less the Votes row, whose number
+                // comes from a directory refresh only the station page runs. One scroller for
+                // both: the history is capped by its ring, so there's nothing to virtualize.
                 if Player.vm.has_station: Rectangle {
                     vertical-stretch: 1;
 
@@ -404,8 +298,8 @@ export component NowPlayingView inherits Rectangle {
                         vertical-scrollbar-policy: always-off;
                         content-width: self.width;
 
-                        // The station page's shape: the scroller keeps the full width so the
-                        // wheel works over the bar's lane too, and the content insets instead.
+                        // The scroller keeps the bar's lane so the wheel works there too; the
+                        // content insets instead.
                         VerticalLayout {
                             spacing: Theme.pad-md;
                             padding-right: Theme.scrollbar-slot;
@@ -417,8 +311,8 @@ export component NowPlayingView inherits Rectangle {
                                 codec: Player.vm.radio.codec;
                                 bitrate: Player.vm.radio.bitrate;
                                 play-count: Player.vm.radio.play_count;
-                                // The column is a third of the panel, so the label gutter gives
-                                // ground to the values — a stream URL needs what it can get.
+                                // Narrower than the station page's: this column is a third of the
+                                // panel, and a stream URL needs what it can get.
                                 label-width: 80px;
                                 label-color: Player.np-on-backdrop-muted;
                                 value-color: Player.np-on-backdrop;

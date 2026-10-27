@@ -279,7 +279,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   path, parser tolerantly ignores unknown `#` comments and a leading BOM. Import is
   **skip-and-report**: re-match each entry by `file_path` then BLAKE3 `file_hash`, always **create
   a new playlist** (the name isn't unique), count misses; never auto-imports on-disk files. UI is
-  the Import / Export pills in the My Library band's Playlists-tab row
+  the Import / Export entries in the overflow of the My Library band's Playlists-tab row
   (`crates/melodia-ui/ui/views/my-library/tab-pills.slint`), callbacks in
   `crates/melodia-views/src/ui/playlists/callbacks/files/`. A **tag edit rewrites the file and changes its
   `file_hash`**, so a previously exported `#MELODIA-HASH` line goes stale — the `file_path`-first

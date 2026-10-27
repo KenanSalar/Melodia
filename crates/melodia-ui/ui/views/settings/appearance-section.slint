@@ -10,24 +10,16 @@ import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
 import { ColorDotGrid } from "../../components/settings/color-dot-grid.slint";
 
-// Palette config — Theme / Variant / Accent / Color Style, all through the
-// `Settings` global. `crates/melodia-core/src/themes/` owns the registry,
-// `crates/melodia-views/src/ui/appearance/` populates the lists and applies a
-// palette on every change, and `crates/melodia-app/src/tasks/material_you.rs`
-// drives the dynamic one. The window-chrome rows
-// live in `window-chrome-section.slint`.
-//
-// Search visibility follows `language-section.slint` — each row ANDs its state
-// condition with the predicate, and a divider gates on a visible row either
-// side so the card can't end on a stranded one.
+// The palette rows; the window-chrome ones are `window-chrome-section.slint`'s. Search visibility
+// follows `language-section.slint`, a divider gating on a visible row either side so the card
+// can't end on a stranded one.
 export component AppearanceSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
     vertical-stretch: 0;
 
-    // Hidden only for KDE Breeze on System on a live KDE session, where
-    // `kdeglobals` dictates the accent and the user has no say. Material You
-    // does *not* hide it, a swatch picked there overriding the artwork's accent.
+    // Hidden only for KDE Breeze on System on a live KDE session, where `kdeglobals` dictates the
+    // accent. Not for Material You, a swatch picked there overriding the artwork's accent.
     pure function show-accent-row() -> bool {
         return !Settings.kde-system-active;
     }
@@ -73,22 +65,16 @@ export component AppearanceSection inherits Rectangle {
         show-theme || show-variant || show-follow-artwork || show-accent || show-color-style
             || show-backdrop;
 
-    // A divider needs a visible row on both sides; filtering down to one row
-    // would otherwise leave one dangling above it and another below.
     property <bool> any-above-follow-artwork: show-theme || show-variant;
     property <bool> any-above-accent: any-above-follow-artwork || show-follow-artwork;
     property <bool> any-above-color-style: any-above-accent || show-accent;
     property <bool> any-above-backdrop: any-above-color-style || show-color-style;
 
-    // Wrapper so the root's preferred-height tracks the card's natural height —
-    // see `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;
 
-        // `<=>` is mandatory: `ChipGroup` writes its own `selected-index` on
-        // click, which orphans a one-way binding, and Rust's later
-        // `set_theme_idx` would then never reach the chips.
+        // `<=>`: `ChipGroup` writes its own `selected-index`, which orphans a one-way binding.
         if root.show-theme: SettingRowStacked {
             icon: "brush";
             label: root.theme-label;
@@ -101,13 +87,8 @@ export component AppearanceSection inherits Rectangle {
         }
         if root.show-theme && root.show-variant: SectionDivider {}
 
-        // Variant names depend on the active theme. The labels are inlined
-        // literals rather than pushed from Rust because `@tr()` only translates
-        // at codegen — a Rust-seeded `[string]` renders English whatever the
-        // locale. Order MUST match `theme.variants` in `crates/melodia-core/src/themes/`, plus the
-        // synthetic "System" chip Rust's index math appends, since
-        // `Settings.variant-idx` indexes the list both sides see. Catppuccin
-        // variant names are proper nouns and stay verbatim.
+        // Inline literals in `theme.variants` order, plus the "System" chip Rust appends, since
+        // `Settings.variant-idx` indexes the list both sides see. Catppuccin names stay verbatim.
         if root.show-variant: SettingRowStacked {
             icon: "palette";
             label: root.variant-label;

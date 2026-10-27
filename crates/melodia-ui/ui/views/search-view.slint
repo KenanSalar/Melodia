@@ -9,23 +9,14 @@ import { NoResults } from "search/no-results.slint";
 import { TopResultCard } from "search/top-result-card.slint";
 import { SongsSection } from "search/songs-section.slint";
 
-// One full-height scroll container holding every state branch, with an autofocused `SearchBar`
-// floating over it and no page title. **A mount sheet**: this file owns the timers, branch
-// conditions and scroll chromes, `views/search/*.slint` own the bodies. Each section reads `Search`
-// directly and takes no inputs, so a branch here is one line.
+// A mount sheet: this file owns the timers, branch conditions and scroll chrome, and
+// `views/search/*.slint` the bodies. The bar floats rather than heading a row, which would clip
+// the scroller at its floor; with no `TouchArea` of its own, everything beside it stays clickable.
 //
-// **The bar is out of the flow, not a band** — heading a row inside the view's column clips the
-// scroller at that row's floor, cutting off the first card behind a strip of `Theme.base`.
-// Floating, it costs only the inset the body reserves, and with no `TouchArea` of its own
-// everything beside the pill stays clickable.
-//
-// Both strips match through their own tracks as well as by name, so a query reaching only track
-// metadata still fills them — and with them the Top Result, which ranks over those two plus genres.
-// **There is no Genres strip**: a genre is a *route*, so it surfaces as the Top Result card. An
-// album or artist card stamps `*Detail.origin-nav-index` **before** flipping `Nav.selected-index`.
+// Both strips match through their tracks as well as by name, so a query reaching only track
+// metadata still fills them. No Genres strip: a genre is a route, so it surfaces as the Top Result.
 export component SearchView inherits Rectangle {
-    // The `edited` bump; this Timer commits after the keystrokes go quiet and writes
-    // `applied` to halt itself — the Tracks / Favorites throttle shape.
+    // Commits once the keystrokes go quiet, writing `applied` to halt itself.
     debounce := Timer {
         interval: 300ms;
         running: Search.debounce-tick-pending != Search.debounce-tick-applied;
@@ -35,8 +26,7 @@ export component SearchView inherits Rectangle {
         }
     }
 
-    // The view is rebuilt on every entry, so this re-fires each time. **A Timer, not
-    // `init`**, which keeps the `focus()` call out of binding evaluation.
+    // A Timer rather than `init`, which keeps `focus()` out of binding evaluation.
     autofocus := Timer {
         interval: 1ms;
         running: true;
@@ -46,14 +36,12 @@ export component SearchView inherits Rectangle {
         }
     }
 
-    // Catches any click no inner TouchArea consumes and bumps the blur tick.
     TouchArea {
         clicked => { Search.blur-search-tick += 1; }
     }
 
-    // What the scroll body insets its content by, and the height of the floating row:
-    // the bar's own 32 px with `pad-md` of clearance above and below. Nothing starts
-    // underneath the pill, and everything scrolls behind it from there.
+    // The bar's 32 px plus `pad-md` above and below: nothing starts under the pill, and
+    // everything scrolls behind it from there.
     private property <length> bar-inset: 56px;
 
     body := Rectangle {
@@ -94,8 +82,6 @@ export component SearchView inherits Rectangle {
                     && Search.artist-rows.length == 0
                     && Search.top-kind == "": NoResults { }
 
-                // The Top Result subtree unmounts entirely with no top result, so the
-                // Songs column claims the full width naturally.
                 if Search.top-kind != "" || Search.tracks.length > 0: HorizontalLayout {
                     vertical-stretch: 0;
                     spacing: Theme.pad-lg;
@@ -120,7 +106,6 @@ export component SearchView inherits Rectangle {
                         Search.blur-search-tick += 1;
                         Search.open-album(id);
                     }
-                    // play-clicked unused (no play-overlay).
                 }
 
                 if Search.artist-rows.length > 0: HorizontalCardStrip {
@@ -140,17 +125,13 @@ export component SearchView inherits Rectangle {
                     }
                 }
 
-                // **Collects the surplus.** A column whose children are all
-                // `vertical-stretch: 0` divides spare height equally among them, which on
-                // the empty-query state — where only the Recent section is mounted —
-                // pushed its heading to the top and its chips to the bottom with a
-                // yawning gap between.
+                // Takes the surplus, which the column would otherwise split between the
+                // Recent section's heading and its chips.
                 Rectangle { vertical-stretch: 1; }
             }
         }
     }
 
-    // Covers the whole view, since the results now run its full height.
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
@@ -163,11 +144,9 @@ export component SearchView inherits Rectangle {
         scroll-to(o) => { below-sv.content-y = -o; }
     }
 
-    // Declared last so it paints over both the results and the scrollbar — Slint paints
-    // in declaration order. The height has to be pinned: as a layout child of a plain
-    // Rectangle it would otherwise fill the view and centre the pill down the middle of
-    // it. `pad-lg` on both sides keeps the bar clear of the scrollbar's 10 px track at
-    // any width, since it compresses toward its own `min-w` rather than overrunning.
+    // Last, so it paints over the results and the scrollbar. The height is pinned, a layout in a
+    // plain `Rectangle` otherwise filling the view; the side padding keeps it off the scrollbar,
+    // the bar compressing toward its `min-w` rather than overrunning.
     HorizontalLayout {
         y: 0;
         height: root.bar-inset;
@@ -185,11 +164,9 @@ export component SearchView inherits Rectangle {
                 Search.debounce-tick-pending += 1;
                 Search.query-changed(t);
             }
-            // Enter commits immediately, and aligning the ticks cancels the pending
-            // fire so the query isn't committed twice. **This is what lets a
-            // preserved query be re-run**: tab-leave released the results and cleared
-            // the models but kept `Search.query`, so no editing is needed — just
-            // focus and Enter.
+            // Enter commits at once, aligning the ticks so the pending fire doesn't commit it
+            // again. It is also how a query kept across a leave, which released the results,
+            // is re-run.
             accepted => {
                 Search.debounce-tick-applied = Search.debounce-tick-pending;
                 Search.commit-search(Search.query);

@@ -5,20 +5,15 @@ import { NavRow } from "../../components/nav-row.slint";
 import { SearchBar } from "../../components/search-bar.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 
-// The Settings category panel: the search box over one row per category, folding to an icon rail
-// when the page can't seat it beside the cards. Data-agnostic, the `TabBar` shape — parallel
-// `labels`/`icons` in, picked index out. **`labels` must arrive as an inline `[@tr("…"), …]`
-// literal at the call site**, an array populated from Rust rendering untranslated.
-//
-// On the rail the search box gives way to a button, and the field it opens is the host's: it sits
-// beside the panel, over the cards, where a 52 px card has no room for one.
+// The Settings category panel, `TabBar`'s contract on its side (`ui-patterns.md`). On the rail the
+// search box gives way to a button whose field is the host's, beside the panel over the cards, a
+// 52 px card having no room for one.
 export component SettingsNav inherits Rectangle {
     in property <[string]> labels;
     in property <[string]> icons;
     // Two-way, per the orphaned-one-way-binding pitfall.
     in-out property <int> selected-index;
-    // What the panel and the body beside it share. Feed it a **mirrored** width, never a live
-    // `parent.width` read — see the host's `view-w`.
+    // A mirrored width, never a live `parent.width` read (the host's `view-w`).
     in property <length> avail-w;
     // The host's field is open, so the rail's button reads as on.
     in property <bool> search-active;
@@ -48,10 +43,8 @@ export component SettingsNav inherits Rectangle {
     property <length> rail-inset: (root.row-h - 22px) / 2;
     property <length> rail-w: root.row-h + 2 * root.card-pad;
 
-    // **Measured, not a literal**, the labels being translated, and clamped so a long locale can't
-    // take the page while the search box keeps room for its `min-w`. The chrome is the insets this
-    // panel hands each row plus `NavRow`'s glyph and the gap after it. Rounded up to a whole
-    // pixel, the measured label being fractional and the cards beside the panel taking its edge.
+    // Measured, the labels being translated, and clamped: a long locale can't take the page, and
+    // the search box keeps its `min-w`. Rounded up to a whole pixel, the cards taking its edge.
     property <length> label-w: ruler.preferred-width;
     property <length> natural-w:
         root.label-w + 2 * root.row-pad + 22px + Theme.pad-md + 2 * root.card-pad;
@@ -68,10 +61,9 @@ export component SettingsNav inherits Rectangle {
         root.compact-t = root.compact ? 1.0 : 0.0;
     }
 
-    // `compact` rendered over time. **The binding is only a seed**, `changed compact` owning the
-    // property from the first flip on: an animated binding restarts on a dirty dependency, and
-    // `compact` reads `avail-w`, which a resize drag rewrites on every pointer motion. The rows'
-    // insets ease on the same curve, so the glyphs reach the rail's centre line with the card.
+    // Only seeded by the binding, `changed compact` owning it after: an animated binding restarts
+    // on every dirty dependency, and a resize drag rewrites `avail-w` per motion
+    // (`slint-pitfalls.md`).
     property <float> compact-t: root.compact ? 1.0 : 0.0;
     animate compact-t { duration: Theme.dur-med; easing: ease-in-out; enabled: root.eased; }
 
@@ -88,17 +80,12 @@ export component SettingsNav inherits Rectangle {
 
     out property <length> drawn-w: root.expanded-w + (root.rail-w - root.expanded-w) * root.compact-t;
 
-    // Where the rail's search button is centred on an unscrolled rail, for the host to line its
-    // field up against. Arithmetic rather than read off the button: the host's own layout would
-    // otherwise depend on this one's, which depends on the host's. The field ignores the scroll,
-    // its row sitting above the cards, which would move with it.
+    // Arithmetic rather than read off the button, which would tie the host's layout to this one's
+    // and back. Unscrolled, the field's row sitting above the cards.
     out property <length> rail-search-center-y: root.card-pad + root.row-h / 2;
 
-    // The rail's tooltip, for the host to paint on a layer of its own: anchored here, the pill
-    // would land over the cards and be painted under them. **One hover area answers for the whole
-    // list**, the row taken off the pointer's `y`, so the gaps between rows can't drop the pill
-    // and moving between icons moves it rather than re-arming it. The rect spans the card's width,
-    // so the pill clears the card rather than a row inside it.
+    // One hover area answers for the whole list, the row taken off the pointer's `y`, so the gaps
+    // between rows can't drop the pill and moving between icons moves it rather than re-arming it.
     property <int> hovered-row: !list-hover.has-hover ? -1
         : clamp(Math.floor(list-hover.mouse-y / (root.row-h + root.row-gap)),
                 0, root.labels.length - 1);
@@ -116,9 +103,7 @@ export component SettingsNav inherits Rectangle {
     background: SettingsPage.card-fill;
     border-radius: Theme.radius-lg;
 
-    // **Three constraints rather than one bound `width`**, for `TabBar`'s reason: a bound `width`
-    // is reported as both `min` and `max`, which would ease the window's own minimum along with
-    // the morph.
+    // Never a bound `width`, whose ease would drag the window's minimum along.
     min-width: root.rail-w;
     preferred-width: root.drawn-w;
     max-width: root.drawn-w;

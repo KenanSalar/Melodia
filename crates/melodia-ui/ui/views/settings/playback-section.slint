@@ -71,9 +71,6 @@ export component PlaybackSection inherits Rectangle {
 
     out property <bool> has-matches: show-gapless || show-resume || show-crossfade;
 
-    // Wrapper so the root's preferred-height tracks the card's natural height —
-    // a `Rectangle` sizes from a layout child, never from a conditional one.
-    // See `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;

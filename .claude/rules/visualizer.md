@@ -71,20 +71,14 @@ counter, both worth reading before changing a gate.
 
 ## The strip and its styles
 
-- **Both dimensions are the *view's*, not the strip's.** Width is
-  `max(cover-size, min(content-width * 0.75, strip-w-max))` — three quarters of the column the
-  metadata chips wrap against, derived arithmetically from view-root properties rather than read
-  off the `MetaChipStrip` (inside `if Player.vm.has_track`, and a binding-loop risk); the `max` is
-  load-bearing at the window's 350 px floor, where `content-width` goes negative. Height is
-  `clamp(root.height * 0.12, 28px, 128px)`, handed down as `VisualizerStrip.strip-height` since a
-  component root cannot reach `parent`. The floor is low because the strip is what a short panel
-  buys the cover's floor back with; 56 px stays the *component's* fallback, so a call site that
-  forgets still gets a strip at the height it used to pin. **The width ceiling is a per-band column
-  pitch times `Visualizer.band-count`, argued at `strip-w-max`**, and a maximized window on an
-  ordinary desktop is what reaches it. That count is published once from `spectrum::NUM_BANDS`
-  rather than read off the figure, which carries its band count only in its own geometry; the
-  ceiling is also clamped to the column less both scrollbar lanes, `cover-size`'s 200px floor
-  being wider than the whole column on any panel under about 900px.
+- **Both dimensions are the *view's*, not the strip's.** `now-playing-view.slint` derives them
+  from its own root properties rather than reading the `MetaChipStrip` the strip sits under
+  (inside `if Player.vm.has_track`, and a binding-loop risk), and hands the height down as
+  `VisualizerStrip.strip-height`, a component root being unable to reach `parent`; `strip-w`,
+  `strip-w-max` and `strip-h` argue their bounds there. 56 px stays the *component's* fallback, so
+  a call site that forgets still gets a strip. The band count behind the width ceiling is
+  published once from `spectrum::NUM_BANDS` rather than read off the figure, which carries it
+  only in its own geometry.
 
 - **What keeps the strip inside the panel is the column's scroller; what the column spends before
   reaching for it is the *cover slot*.** Slint's shrink pass (`solve_box_layout` falls through to

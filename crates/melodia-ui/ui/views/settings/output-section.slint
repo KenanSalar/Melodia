@@ -177,8 +177,6 @@ export component OutputSection inherits Rectangle {
     property <string> device-text: SignalPathUi.device-name == "" ? SignalPathUi.device-format
         : SignalPathUi.device-name + " · " + SignalPathUi.device-format;
 
-    // Wrapper so the root's preferred-height tracks the card's natural height. See
-    // `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;

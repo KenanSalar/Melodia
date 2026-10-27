@@ -5,9 +5,8 @@ import { AlbumGrid } from "../../components/grid/album-grid.slint";
 import { GridEmptyState } from "../../components/grid/grid-empty-state.slint";
 import { OverlayScrollbar } from "../../components/overlay-scrollbar.slint";
 
-// The Albums tab: the virtualized `AlbumGrid` and nothing else. Title, count, filter
-// box and sort row sit in the page's band; the geometry comes from the sheet's one
-// `GridGeometry`, since all four grid tabs draw the same card at the same size.
+// The grid and nothing else: title, count, filter and sort are the band's, and the geometry is
+// the sheet's one `GridGeometry`, all four grid tabs drawing the same card.
 export component MyLibraryAlbumsTab inherits Rectangle {
     in property <length> card-w;
     in property <length> card-h;

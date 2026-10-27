@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 13.6 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 14 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -117,8 +117,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | 0.31 (337) | `6f305ce2` |
 | 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | 0.25 (541) | `b5cc583f` |
 | 13.4 | Slint `components/`, its own files | 0.47 | 1,538 | ~725 | 0.30 (961) | `d2f6199d` |
-| 13.5 | Slint `components/`'s subdirectories | 0.34 | 3,013 | ~788 | 0.17 (1,512) | |
-| 13.6 | Slint `views/` | 0.29 | 2,055 | ~286 | | |
+| 13.5 | Slint `components/`'s subdirectories | 0.34 | 3,013 | ~788 | 0.17 (1,512) | `37175599` |
+| 13.6 | Slint `views/` | 0.29 | 2,055 | ~286 | 0.15 (1,041) | |
 | **Rust** | production Rust, tree-wide | **0.42** | **30,355** | **~12,400** | | |
 | **Slint** | the Slint tree | **0.40** | **9,204** | **~3,400** | | |
 
@@ -261,7 +261,7 @@ Status: done.
   - **Kept whole for rustfmt:** an enum whose variants are partly documented expands every struct variant, so `Identity::Playing` and `Effect::NowPlaying` keep a one-line doc rather than move code.
 
 ### Phase 13: the Slint tree
-Status: in progress.
+Status: done.
 
 The 36 `// Translators:` notes stay byte for byte: `crates/melodia/tests/translations.rs` holds each equal to its entry in the `.pot`.
 
@@ -296,8 +296,13 @@ The 36 `// Translators:` notes stay byte for byte: `crates/melodia/tests/transla
   - **Second copies dropped:** `TabSearchHeader`'s five fixes, `ui-patterns.md`'s `TabBar` block, and the two bands' copies of its `page-w` mirror; `LibraryTabBand`'s transition, mirror, `hero-shown`, `morphing` and height-split arguments, and `MosaicTabHero`'s `active-color` contrast argument, each now a pointer; `EntityCard`'s overlay-slot, `card-hovered`, ring-and-tint and `@children` framing arguments, `CardCell`'s and `BrowseCardGrid`'s headers, the card menu's two-direction favorite and kind-gate arguments, and the grids' copies of the covers repaint token, all `ui-patterns.md`'s; `TrackContextMenu`'s zero-size wrapper and the six list scrollers' drag-pan argument (pointed at `views/radio/station-grid.slint`), now `slint-pitfalls.md`'s; the two backdrop stacks' live-arm argument; `Theme.border` against `surface2`, restated in four files; the volume readouts' point anchor; `SmartPlaylistEditorBody`'s index alignment, `library-data.md`'s; the onboarding card's tracker rule, the root `CLAUDE.md`'s.
   - **Stale claims removed:** `NotificationCard`'s entry fade as "the `Tooltip` pattern, `shown` flipping on `init`" (`Tooltip` arms off a `Timer`); `HorizontalCardStrip`'s `card-touch` "driving the pill's fade-in" and "swallowing the rest" (it is `enabled: false`, which Slint 1.18.1's `TouchArea` answers by forcing `has-hover` off); `CoverMosaic`'s "the curated heroes drew this once" and `MosaicHeroTile`'s "the live 2×2 it once laid out" (changelog).
   - **Ends well under 0.25** on decision 4: past the target by the furthest-over files, the rest of the slice took the register pass, and most of what it found was a second copy of a rule.
-- [ ] **13.6 `views/`**, one commit.
-  - **Furthest over:** the files directly under `views/` (315 between them), `views/radio/` (132).
+- [x] **13.6 `views/`**, one commit (48 of its 76 files).
+  - **Furthest over:** `now-playing-view.slint` (99), `mini-player.slint` (69), `radio/tab-pills.slint` (55), `my-library-view.slint` (35).
+  - **Pointed at:** `visualizer.md` at `now-playing-view.slint`'s `strip-w`, `strip-w-max`, `strip-h` and cover slot, and `audio-stack.md` at its band-count read; `slint-pitfalls.md` at `station-grid.slint`'s drag-pan argument (which `browse-view.slint` and `facet-chip.slint` name too), `queue-panel.slint`'s opt-out, `queue-row.slint`'s duration cell, `browse-view.slint` as a composite view, `settings-view.slint`'s `view-w` seed and `my-library-view.slint`'s genre gradient; `ui-patterns.md` at the two `tab-pills.slint` collapses, the Settings page's four files and `station-card.slint`'s `logo-native-size`; every section at `language-section.slint` for search visibility; `library-data.md` at My Library's `tab-pills.slint`; `desktop-shell.md` at the caption chips' order; `settings.slint` and the onboarding panel at `appearance-section.slint`'s variant list, `dialog-forms.slint` at Radio's inline add dialog, `settings.slint` at `scrobbling-section.slint`'s Connect note. Each kept. The tests reading these files read code.
+  - **Second copies dropped:** `visualizer.md`'s restatement of the strip's width and height bounds, now a pointer to the view; the flush-column padding argument, stated three times in `now-playing-view.slint`, and its lyrics-on-a-station argument twice, each kept once; the labels-over-tooltips argument restated on Radio's station row; My Library's pills' recursion-guard notes, `dialog-forms.slint`'s; the reseat mirrors, the `>= 0` count guard, the inline `@tr` arrays and `body-anim-armed`'s arrivals, all `slint-pitfalls.md`'s, `ui-patterns.md`'s or the root `CLAUDE.md`'s, Radio's latch and arming now naming My Library's; the backdrop `TouchArea` and "a click in the track list blurs" notes on every page; the per-section wrapper pointer in nine Settings sections, the header line already naming `language-section.slint`, and that file's label-and-description argument, `ui-patterns.md`'s; Recently Played's header, now Favorites'; `settings-router.slint`'s search-escapes argument and `settings-view.slint`'s no-horizontal-bar argument, `ui-patterns.md`'s; `recent-searches.slint`'s bound-and-elided argument, `slint-pitfalls.md`'s placeholder entry.
+  - **Stale claims removed:** `my-library-view.slint`'s four details keeping `below` (they mount at `above`) and the "second" globals file importing siblings; `window-chrome-section.slint`'s unfocused tint gated in `sidebar.slint` and `now-playing-bar.slint` (it is `WindowChrome.mantle`); `folder-row.slint` panning Browse's horizontal scrollbar (there is none); `radio-view.slint`'s box describing the song history over a station page (it is hidden there); `station-detail.slint`'s two status lines (one); My Library's pills filling the Dialog "inline" on rows that call its openers; `now-playing-view.slint`'s "lateral" back button; `genre-detail.slint`'s `show_genre`, which the file never binds; `search-view.slint`'s `origin-nav-index` stamp, Rust's; `library-data.md`'s Import / Export "pills" (overflow entries).
+  - **Other apps unnamed:** `station-detail.slint`'s song history drops its comparison with other radio players.
+  - **Ends well under 0.25** on decision 4, the register pass reaching every file past the furthest-over.
 
 ### Phase 14: Measure, and hold the target
 Status: not started.

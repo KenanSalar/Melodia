@@ -10,13 +10,9 @@ import { ToggleSwitch } from "../../components/settings/toggle-switch.slint";
 import { ChipGroup } from "../../components/settings/chip-group.slint";
 import { ColorDotGrid } from "../../components/settings/color-dot-grid.slint";
 
-// The OS-facing window shell — titlebar mode, decoration buttons, corner
-// radius, tray. Split from `appearance-section.slint`: chrome is set once and
-// forgotten, where the palette rows carry the page's traffic.
-//
-// Search visibility follows `language-section.slint` — each row ANDs its state
-// condition with the predicate, and a divider gates on a visible row either
-// side so the card can't end on a stranded one.
+// The OS-facing window shell, kept off the palette rows' card because it is set once and forgotten.
+// Search visibility follows `language-section.slint`, each row ANDing its state with the
+// predicate and a divider gating on a visible row either side.
 export component WindowChromeSection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -34,9 +30,7 @@ export component WindowChromeSection inherits Rectangle {
                                         SettingsPage.search-query);
     }
 
-    // Each row's pair, declared once and read by both the visibility term and the row. Three of
-    // the descriptions swap with live state, so whichever form is on screen is the one in the
-    // haystack — which only holds while there is one copy of it.
+    // Three descriptions swap with live state, so the haystack holds whichever form is on screen.
     property <string> os-managed-desc: @tr("Managed by the operating system");
     property <string> native-titlebar-label: @tr("Native Title Bar");
     property <string> native-titlebar-desc: @tr("Use the operating system's native title bar instead of the custom one. Restart required to apply.");
@@ -156,11 +150,8 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-match && root.show-match-unfocused: SectionDivider {}
 
-        // KDE-only, so hidden off-KDE; greyed out under a custom titlebar
-        // because it mirrors OS-drawn decorations fading on focus loss, and we
-        // paint our own. `Theme.window-focused` is written unconditionally by
-        // `winit_filter.rs`; the tint itself is gated at the binding sites in
-        // `sidebar.slint` / `now-playing-bar.slint` on all three conditions.
+        // KDE-only; greyed out under a custom titlebar, which paints its own decorations. The
+        // tint's gate is `WindowChrome.mantle`.
         if root.show-match-unfocused: SettingRow {
             icon: "tonality";
             label: root.match-unfocused-label;
@@ -297,10 +288,8 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-tray-icon && root.show-tray-icon: SectionDivider {}
 
-        // Master toggle for the tray subsystem. Off, boot's `install_ui` skips
-        // `tray_bridge::install` entirely (no D-Bus connection, no service
-        // thread). That gate reads the value once at startup, so this takes the
-        // same restart-dialog shape as the Native Title Bar row above.
+        // Boot reads it once to skip `tray_bridge::install`, so it takes the Native Title Bar
+        // row's restart dialog.
         if root.show-tray-icon: SettingRow {
             icon: "dock_to_right";
             label: root.tray-icon-label;
@@ -323,9 +312,7 @@ export component WindowChromeSection inherits Rectangle {
 
         if root.any-above-close-to-tray && root.show-close-to-tray: SectionDivider {}
 
-        // Greyed out whenever no tray icon is active — the toggle above is off,
-        // or the session has no StatusNotifier host — since it then does
-        // nothing. Wired in `crates/melodia-views/src/ui/appearance/window_settings.rs`.
+        // Greyed out with no tray icon up, where it would do nothing.
         if root.show-close-to-tray: SettingRow {
             icon: "move_to_inbox";
             label: root.close-to-tray-label;

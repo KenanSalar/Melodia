@@ -17,31 +17,25 @@ import { WindowRectReport } from "../../components/window-rect-report.slint";
 import { FileDropBanner } from "../../components/file-drop-banner.slint";
 import { QueueRowItem } from "queue-row.slint";
 
-// The queue, docked after the content panel in the shell's row, so the sidebar, the content and
-// the bar all stay live beside it. Docked it draws no fill: the shell's mantle shows through, which
-// is the ground `RoundedFrame` masks the content panel's corners in.
-//
-// **A window with no room to dock floats it over the content panel instead**, and it stays this
-// one element: a second would share the rows' fetch anchor, the drag state and `pointer-in`, and
-// couldn't sit behind an `if`, its tracker on `Queue.shown` outliving the branch. Floating, the
-// root takes no width in the row and draws its body to its own left.
+// Docked after the content panel, drawing no fill so the shell's mantle shows through, the ground
+// `RoundedFrame` masks the panel's corners in. With no room to dock it floats over the content
+// panel as this same element: a second would share the rows' fetch anchor, the drag state and
+// `pointer-in`, and couldn't sit behind an `if`.
 export component QueuePanel inherits Rectangle {
-    // The panel sits in the full-UI branch, which the miniplayer swap unmounts, so a remount finds
-    // `Queue.shown` already settled and the reset in `changed watched-shown` never fires.
+    // A miniplayer swap remounts the panel with `Queue.shown` already settled, so
+    // `changed watched-shown` never fires for it.
     init => {
         Queue.pointer-in = false;
         root.arm-seat();
     }
 
-    // The width shown, which a narrow window holds below the one chosen. The host's to work out,
-    // being the only one that sees the row the panel shares.
+    // The host's to work out, being the one that sees the row: a narrow window holds it below the
+    // width chosen.
     in property <length> open-w;
-    // What the row leaves the panel beside the sidebar as it is drawn, the furthest its edge drags.
+    // The furthest the edge drags: what the row leaves beside the sidebar.
     in property <length> room;
-    // The width it floats at. The host's too, for the same reason as `open-w`.
     in property <length> float-w;
-    // How far a floating panel keeps from the content panel's top, right and bottom edges, so it
-    // never covers the corners `RoundedFrame` rounds. Published for the host's `float-w`.
+    // Clear of the content panel's corners, which `RoundedFrame` rounds.
     out property <length> float-inset: Theme.pad-sm;
 
     // The eases ride floats rather than the width, so dragging the edge moves `open-w` straight
@@ -50,11 +44,9 @@ export component QueuePanel inherits Rectangle {
     animate docked-t { duration: Theme.dur-med; easing: ease-in-out; }
     private property <float> float-t: Queue.floating ? 1.0 : 0.0;
     animate float-t { duration: Theme.dur-med; easing: ease-in-out; }
-    // Still floating while it slides back out.
     private property <bool> floating-drawn: Queue.floating || root.float-t > 0;
 
-    // Where the body is drawn, in the root's frame. Floating, it slides in from beyond the content
-    // panel's right edge, which is the root's left.
+    // Floating, the body slides in from the root's left, which is the content panel's right edge.
     private property <length> body-x: root.floating-drawn
         ? -(root.float-w + root.float-inset) * root.float-t
         : 0px;
@@ -74,9 +66,8 @@ export component QueuePanel inherits Rectangle {
     max-width: root.open-w;
     horizontal-stretch: 0;
     // The content is laid out at `open-w` and the box eases under it, so it rides the moving edge
-    // rather than reflowing every frame. Square, so a scissor rather than a layer. Off while
-    // floating: a clipping item takes every press outside its own box, and the body is all
-    // outside it then.
+    // rather than reflowing every frame. Off while floating: a clipping item takes every press
+    // outside its own box, and the body is all outside it then.
     clip: !root.floating-drawn;
 
     private property <bool> watched-shown: Queue.shown;
@@ -88,8 +79,7 @@ export component QueuePanel inherits Rectangle {
 
     private property <bool> has-rows: Queue.rows.length > 0;
 
-    // What letting go of another list's drag would do. Tracks are counted; a card is named, and
-    // several are counted by what they are, the tracks behind them being unknown until the drop.
+    // Cards are named or counted by kind, the tracks behind them being unknown until the drop.
     private property <DragItems> dragged: Drag.payload.items;
     private property <int> dragged-count: root.dragged.ids.length;
     private property <string> drop-label: root.dragged.kind == "track"
@@ -116,49 +106,33 @@ export component QueuePanel inherits Rectangle {
         return ListTravel.pin(y, inner-list.visible-height, inner-list.content-height);
     }
 
-    // Where the viewport sits with `index` centred, pinned inside the travel. Every row is
-    // the same height, so a row's top is its index times that and the panel needs no offset
-    // table.
+    // Rows share one height, so a row's top is its index times it and no offset table is needed.
     pure function centred-on(index: int) -> length {
         return root.in-travel(
             inner-list.visible-height / 2 - index * root.row-height - root.row-height / 2);
     }
 
-    // How long the seat keeps trying before it gives up, so a list that never finishes
-    // measuring cannot leave the timer running for the rest of the session. In ticks rather
-    // than a duration, so it follows whatever cadence the timer below is set to.
+    // A cap, so a list that never finishes measuring can't leave the timer running; in ticks, so
+    // it follows the timer's cadence.
     private property <int> seat-ticks-total: 40;
     private property <int> seat-ticks-left;
 
-    // Arms the seat: the show transition, and a remount that finds the panel already shown.
-    // Reading `Queue.shown` is what makes a hide disarm it. **Assigned rather than bound**,
-    // because `self.running = false` in the handler would orphan a binding on the first fire,
-    // leaving the panel seating once per process; and a binding reaching the list's height
-    // fails earlier still, evaluated by a change tracker in the pass that mounts the branch,
-    // the panel sitting inside the miniplayer `if`.
-    //
-    // **Arms rather than seats.** A scroll written from `changed watched-shown` lands inside
-    // `run_change_handlers`, which drains the flickable's in-bounds tracker re-entrantly, and
-    // that tracker evaluates against the `content-height` the hide's teardown left at zero and
-    // pins the offset straight back to the top.
+    // Assigned rather than bound: the handler's `self.running = false` would orphan a binding on
+    // the first fire, and a binding reaching the list's height is evaluated by a change tracker in
+    // the very pass that mounts the branch. Arms rather than seats, because a scroll written from
+    // `changed watched-shown` is pinned straight back to the top by the flickable's in-bounds
+    // tracker, which still sees the hide's zero `content-height`.
     function arm-seat() {
         root.seat-ticks-left = root.seat-ticks-total;
         seat-timer.running = Queue.shown && Queue.current-index >= 0;
     }
 
-    // Seats the list on the playing row once per show and then leaves it alone — a queue is
-    // read *past* the current track, so a panel that kept following would fight every
-    // scroll. **It converges rather than writing once.** A `ListView` publishes
-    // `visible-height` off its own geometry and `content-height` off its repeater, and on a
-    // fresh mount the two land on different passes, so a single write committed to whichever
-    // pair its one tick happened to find: the show after a miniplayer swap centred against a
-    // height of zero and put the playing row at the top, where the second show, laid out
-    // already, was reliably right. Converging also picks up the ListView's own re-anchoring,
-    // which row-aligns the offset and drops the centring remainder. Re-reading the target
-    // each tick costs one tick where it already agreed.
+    // Seats the list on the playing row once per show, then leaves it alone: a queue is read past
+    // the current track. Converges rather than writing once, a fresh `ListView` publishing its
+    // `visible-height` and `content-height` on different passes, so one write centred against
+    // whichever pair its tick found.
     seat-timer := Timer {
-        // Roughly a frame: the list republishes its heights once per layout pass, so a faster
-        // cadence only re-reads the answer it already has.
+        // About a frame, the list republishing its heights once per layout pass.
         interval: 16ms;
         running: false;
         triggered => {
@@ -167,10 +141,8 @@ export component QueuePanel inherits Rectangle {
                 self.running = false;
                 return;
             }
-            // Two ways to be unmeasured and neither is safe to centre against: no geometry at
-            // all, and a content height short of its own rows, where `in-travel` collapses to
-            // the top against a height about to grow. The second reads `QueueRowItem`'s height,
-            // which is the `row-height` handed to it.
+            // Unmeasured either way: no geometry, or a content height short of its rows, where
+            // `in-travel` collapses to the top against a height about to grow.
             if (inner-list.visible-height <= 0px
                 || inner-list.content-height < Queue.rows.length * root.row-height) {
                 return;
@@ -183,8 +155,7 @@ export component QueuePanel inherits Rectangle {
         }
     }
 
-    // A floating surface over the page: the docked look's mantle, rimmed so it lifts off the
-    // content, with fill and border on one element so the renderer tucks one under the other.
+    // Fill and border on one element, so the renderer tucks one under the other.
     if root.floating-drawn: Rectangle {
         x: root.body-x;
         y: root.body-y;
@@ -196,10 +167,9 @@ export component QueuePanel inherits Rectangle {
         border-radius: Theme.radius-lg;
     }
 
-    // The `CompositeScroll.hovered` shape: everything passes through to the children, and only
-    // `has-hover` is read, into what the winit filter consults to decide whether a press makes
-    // Escape, Ctrl+A and Delete the queue's. The edge handle sits inside it so a press there
-    // counts. Floating, it also keeps a press on the body's bare parts off the scrim beneath.
+    // Read only for `has-hover`, which the winit filter consults on a press to hand the queue its
+    // keys; the edge handle sits inside so a press there counts. Floating, it also keeps a press
+    // on the body's bare parts off the scrim beneath.
     hover-catch := TouchArea {
         x: root.body-x;
         y: root.body-y;
@@ -210,7 +180,6 @@ export component QueuePanel inherits Rectangle {
         // click in place after it wouldn't claim the keys (`slint-pitfalls.md`, `has-hover`).
         scroll-event(ev) => { return accept; }
 
-        // Where a file let go of lands in the queue, docked or floating.
         WindowRectReport {
             x: 0;
             y: 0;
@@ -223,9 +192,8 @@ export component QueuePanel inherits Rectangle {
             spacing: 0px;
             padding-bottom: root.body-pad-bottom;
 
-            // Title, count, Clear, and close, giving way to what letting go would do while a
-            // drag from another list holds the rows: there the drop lands at the line, which a
-            // banner over the rows would hide.
+            // Gives way to what letting go would do while another list's drag holds the rows: a
+            // banner over them would hide the line the drop lands at.
             Rectangle {
                 height: 56px;
 
@@ -244,9 +212,6 @@ export component QueuePanel inherits Rectangle {
                         alignment: stretch;
                         cross-axis-alignment: center;
 
-                        // A title over a count, the shape the My Library band states in its
-                        // idle row — restacked, and keeping its own font sizes: the band's
-                        // are tuned for a full page, where this sits in a single short row.
                         VerticalLayout {
                             spacing: 0;
                             Text {
@@ -269,8 +234,6 @@ export component QueuePanel inherits Rectangle {
                         }
                         Rectangle { horizontal-stretch: 1; }
 
-                        // `if` rather than `visible:` so the absent branch leaves no phantom
-                        // layout slot.
                         if root.has-rows: ActionPill {
                             PillButton {
                                 text: @tr("Clear queue");
@@ -316,13 +279,11 @@ export component QueuePanel inherits Rectangle {
                 }
             }
 
-            // Header separator.
             Rectangle {
                 height: 1px;
                 background: Theme.border;
             }
 
-            // List body.
             Rectangle {
                 vertical-stretch: 1;
                 clip: true;
@@ -332,28 +293,24 @@ export component QueuePanel inherits Rectangle {
                     allow-move: true;
                     x: 0;
                     y: 0;
-                    // Reserves the rail for the overlay scrollbar — the bar itself, the
-                    // panel inset, and a visible gap to the row content. Without it the
-                    // row hover pill paints under the scrollbar with no breathing room.
+                    // The scrollbar's rail: the bar, its inset and a gap, so a row's hover pill
+                    // stops short of it.
                     width: parent.width - 14px;
                     height: 100%;
 
                     inner-list := ListView {
-                        // The `OverlayScrollbar` below is the only scrollbar.
                         vertical-scrollbar-policy: always-off;
                         horizontal-scrollbar-policy: always-off;
                         width: 100%;
                         height: 100%;
-                        // A drag and a drag-pan are one gesture and only one element can own
-                        // it. Stated rather than inherited, the default being the style's to
-                        // pick; mechanism in `slint-pitfalls.md`.
+                        // A row drag and a drag-pan are one gesture; pinned rather than left to
+                        // the style (`slint-pitfalls.md`).
                         mouse-drag-pan-enabled: false;
                         for row[idx] in Queue.rows: QueueRowItem {
                             row-data: row;
                             row-index: idx;
                             row-height: root.row-height;
-                            // Drives the per-corner radius gating, so contiguous selected
-                            // rows merge into one pill.
+                            // So contiguous selected rows merge into one pill.
                             prev-selected: idx > 0 && Queue.rows[idx - 1].selected;
                             next-selected: idx < Queue.rows.length - 1 && Queue.rows[idx + 1].selected;
                             lifted: src.lifts(idx) || (row.selected && src.lifting-picks);
@@ -387,7 +344,6 @@ export component QueuePanel inherits Rectangle {
                     }
                 }
 
-                // A sibling, flush with the panel's edge.
                 OverlayScrollbar {
                     x: parent.width - self.width - 2px;
                     y: 0;
@@ -399,7 +355,6 @@ export component QueuePanel inherits Rectangle {
                     scroll-to(o) => { inner-list.content-y = -o; }
                 }
 
-                // Empty state.
                 if Queue.rows.length == 0: VerticalLayout {
                     alignment: center;
                     cross-axis-alignment: center;
@@ -419,8 +374,7 @@ export component QueuePanel inherits Rectangle {
             }
         }
 
-        // After the list, so it paints over it, and `if` rather than `visible:` so the absent
-        // branch claims no layout slot.
+        // After the list, so it paints over it.
         if FileDrag.target == FileDropTarget.queue: FileDropBanner {
             x: 0;
             y: 57px; // 56 px header + 1 px separator
@@ -431,7 +385,7 @@ export component QueuePanel inherits Rectangle {
         }
 
         // Last, over the rows it borders. Docked only: a floating panel's width is the room the
-        // content panel leaves it, nothing to drag.
+        // content panel leaves it.
         if !root.floating-drawn: EdgeResizeHandle {
             x: 0;
             y: 0;

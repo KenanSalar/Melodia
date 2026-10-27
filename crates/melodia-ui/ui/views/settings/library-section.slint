@@ -8,15 +8,9 @@ import { SectionButton } from "../../components/settings/section-button.slint";
 import { FolderRow } from "../../components/settings/folder-row.slint";
 import { ScanProgress } from "../../components/settings/scan-progress.slint";
 
-// Folder management: a header sub-row and Add button, optional scan progress,
-// then the folder rows or an empty state. Everything comes off
-// `LibrarySettings`, which Rust hydrates at startup and refreshes after each
-// mutation.
-//
-// **The whole card is one searchable atom** — it has no setting rows to match
-// individually, so a query hitting the title or one of its keyword aliases
-// reveals the section in full and anything else hides it outright. That's what
-// every settings search does with a container UI.
+// Everything comes off `LibrarySettings`, which Rust refreshes after each mutation. One searchable
+// atom: with no setting rows to match on their own, a query hitting the title or an alias shows
+// the whole card.
 export component LibrarySection inherits Rectangle {
     background: transparent;
     horizontal-stretch: 1;
@@ -34,8 +28,6 @@ export component LibrarySection inherits Rectangle {
                                  manage-label + " " + add-label,
                                  SettingsPage.search-query);
 
-    // Wrapper so the root's preferred-height tracks the card's natural height —
-    // see `language-section.slint`.
     VerticalLayout {
     if has-matches: SectionCard {
         title: root.card-title;

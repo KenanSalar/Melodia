@@ -13,33 +13,20 @@ import { KeptStationsTab } from "radio/kept-stations-tab.slint";
 import { RadioStationDetail } from "radio/station-detail.slint";
 import { RadioTabPills } from "radio/tab-pills.slint";
 
-// Radio: three tabs over the directory, the stations the user kept and the ones they played,
-// under the same `LibraryTabBand` My Library wears. The mount sheet and nothing else — the band
-// carries the tab bar, the filter box, the action pills and the count line; each tab body owns
-// whatever scroller it grows.
-//
-// **A station page is a fourth body branch, and it belongs to the tab it was opened from.**
-// `Radio.detail-open` is derived from the seat and the live tab, My Library's `album-open` shape,
-// so a tab pick unmounts the page without forgetting it and coming back re-mounts it.
-//
-// **The band's filter box goes away over a station page.** A station has no songs of its own to
-// narrow — its page is a list of facts about one stream — and a box that filters nothing is worse
-// than no box. The page's own actions take the band's pill slot instead, where every My Library
-// detail puts them.
+// Radio's mount sheet, under the same `LibraryTabBand` My Library wears. A station page is a
+// fourth body branch belonging to the tab it was opened from: `Radio.detail-open` is derived from
+// the seat and the live tab, so a tab pick unmounts the page without forgetting it. The filter box
+// goes away over a page, a station having nothing to narrow.
 export component RadioView inherits Rectangle {
     property <int> filter-tick-pending: 0;
 
-    // A click anywhere the band or a body doesn't claim gives the filter box up.
     TouchArea {
         clicked => { Radio.blur-search-tick += 1; }
     }
 
-    // **One mount for three tabs, and only one of them is the network case.** On Browse a settled
-    // burst is a directory request, not a walk over rows already in hand, so it is the tree's only
-    // `trailing` mount — a value the user typed through is a request and a logo burst spent on a
-    // page nobody will look at — at an interval sized to a round trip. The two local tabs filter
-    // rows the session already holds and take the cadence every other box in the tree takes;
-    // `filter::dispatch` routes on the same `tab-idx`, so the pacing follows the destination.
+    // On Browse a settled burst is a directory request, so it is the tree's only `trailing` mount,
+    // at an interval sized to a round trip: a value typed through is a request and a logo burst
+    // spent on a page nobody will see. The kept tabs filter rows in hand at every box's cadence.
     FilterThrottle {
         trailing: Radio.tab-idx == Radio.tab-browse;
         interval: Radio.tab-idx == Radio.tab-browse ? 200ms : 130ms;
@@ -47,9 +34,7 @@ export component RadioView inherits Rectangle {
         fire() => { Radio.filter-changed(Radio.filter); }
     }
 
-    // Every count holds `ui::tab_bar::UNFETCHED_COUNT` until fetched, hence the `>= 0` guard: a
-    // bare `-1` interpolates into the plural as "-1 stations". Resolved to one number first so the
-    // guard is written once rather than per tab.
+    // One number first, so the `>= 0` guard is written once.
     property <int> mounted-count:
         Radio.tab-idx == Radio.tab-browse ? Radio.browse-count
         : Radio.tab-idx == Radio.tab-favorites ? Radio.favorites-count
@@ -58,11 +43,9 @@ export component RadioView inherits Rectangle {
         ? @tr("{n} station" | "{n} stations" % root.mounted-count)
         : "";
 
-    // **The idle band's sentence, held across an open.** The band eases it out over the morph's
-    // first half, so a drill has to fade the sentence that was on screen; bound live it re-reads
-    // a count that can be mid-rewind, and the line blanks and repopulates inside the fade.
-    // Seeded by the binding and owned by `latch-count`, which is unguarded so `init` can take the
-    // binding over on a page mounting straight onto a grid — neither guard below fires there.
+    // Held across an open, as My Library's is: the band fades it over the morph's first half, and
+    // bound live it would re-read a count mid-rewind. `latch-count` is unguarded so `init` can own
+    // it.
     property <string> count-line: root.live-count;
     function latch-count() {
         self.count-line = root.live-count;
@@ -71,9 +54,8 @@ export component RadioView inherits Rectangle {
         if (!Radio.detail-open) { root.latch-count(); }
     }
 
-    // Arms the body's own cross-fade. `tab-anim-armed` is the band's answer for a tab move; a
-    // drill is not one, so `DetailArrival` raises it when a page opens or closes, leaving out a
-    // restore's landing, and `watched-tab-idx` for a tab move.
+    // My Library's shape: the bar arms a pick, `DetailArrival` a drill or close, and
+    // `watched-tab-idx` a tab move that isn't a pick.
     property <bool> body-anim-armed: band.tab-anim-armed;
     DetailArrival {
         open: Radio.detail-open;
@@ -83,12 +65,9 @@ export component RadioView inherits Rectangle {
     property <bool> watched-detail-open: Radio.detail-open;
     changed watched-detail-open => {
         if (!Radio.detail-open) { root.latch-count(); }
-        // The box describes the song history now, or the tab under it again. Neither is what the
-        // user last typed into it.
         Radio.detail-scope-changed();
     }
-    // The mirror My Library needs for arrivals that aren't picks, which this page has for the
-    // first time: a Mouse-4/5 walk moves the tab with nobody touching the bar.
+    // A Mouse-4/5 walk moves the tab with nobody touching the bar.
     property <int> watched-tab-idx: Radio.tab-idx;
     changed watched-tab-idx => {
         root.body-anim-armed = true;
@@ -99,16 +78,8 @@ export component RadioView inherits Rectangle {
         root.latch-count();
     }
 
-    // One derivation for all three tabs — they draw the same card in the same grid. Measured off
-    // the body, whose width the layout fixes independently of the cards inside it, so a card
-    // sizing itself from it is a derivation and not a cycle.
-    //
-    // **The width pitch stays the shared default**, so a station row packs like an album row and
-    // the tier `grid_prewarm` derives from that same default covers the card this grid draws. The
-    // text height is the one thing Radio moves, its card carrying a third line.
     property <length> grid-gap: 20px;
 
-    // Cards on the mounted grid's only row, the one thing the body width can't answer for itself.
     property <int> grid-lone-row-cards:
         Radio.tab-idx == Radio.tab-browse
             ? (Radio.browse-rows.length == 1 ? Radio.browse-rows[0].stations.length : -1)
@@ -119,12 +90,13 @@ export component RadioView inherits Rectangle {
     geom := GridGeometry {
         avail-width: body.width;
         gap: root.grid-gap;
+        // The one metric Radio moves, its card carrying a third line. The width pitch stays the
+        // shared default, the one `grid_prewarm`'s tier is sized off.
         card-text-h: 66px;
         lone-row-cards: root.grid-lone-row-cards;
     }
 
-    // One count for three grids: Rust re-chunks whichever tab is mounted, so the callback fires
-    // unconditionally and the branch that used to gate it lives on the Rust side instead.
+    // Ungated: Rust re-chunks whichever tab is mounted.
     GridColumnsSync {
         computed-cols: geom.cols;
         seed(c) => {
@@ -135,17 +107,13 @@ export component RadioView inherits Rectangle {
 
     VerticalLayout {
         band := LibraryTabBand {
-            // Inline literals: `@tr` folds msgids at codegen, so a Rust-seeded `[string]`
-            // renders untranslated. Order matches `Radio.tab-*`.
+            // Order matches `Radio.tab-*`.
             tab-labels: [@tr("Browse"), @tr("Favorites"), @tr("Recently Played")];
             tab-icons: ["travel_explore", "favorite", "history"];
             tab-idx <=> Radio.tab-idx;
             tab-selected(i) => {
-                // **The box is reseated, not cleared**, and Rust does it inside `tab-changed`.
-                // A directory query carried into the kept list would silently hide rows, but
-                // blanking the box here would leave Browse's own query standing in Rust with
-                // nothing on screen saying what the grid is filtered by. Each tab's needle is
-                // its own, and the box says whichever one is mounted.
+                // Rust reseats the box rather than clearing it, each tab keeping its own needle:
+                // blanked here, Browse's query would stand in Rust with nothing on screen.
                 Radio.blur-search-tick += 1;
                 Radio.tab-changed(i);
             }
@@ -154,13 +122,8 @@ export component RadioView inherits Rectangle {
             blur-tick: Radio.blur-search-tick;
             search-edited(t) => { root.filter-tick-pending += 1; }
 
-            // The **latched** sentence, not the live one — see `live-count` for what a drill does
-            // to a line that re-reads the arriving tab mid-fade.
             count-text: root.count-line;
 
-            // The box means different things on the two kinds of tab — a search sent to the
-            // directory against a filter over rows already here — so the placeholder says which.
-            // Over a station page there is no box to place a holder in.
             search-shown: !Radio.detail-open;
             filter-placeholder: Radio.tab-idx == Radio.tab-browse
                 ? @tr("Search stations…")
@@ -171,25 +134,20 @@ export component RadioView inherits Rectangle {
             hero-collapsed => { Radio.hero-collapsed(); }
 
             title: Radio.detail-station.name;
-            // Where the station is, and failing that whose site it is. A hand-typed station often
-            // has neither, and an empty subtitle is a line the band simply doesn't draw.
             subtitle: Radio.detail-station.country;
 
             artwork-path: Radio.detail-station.artwork_path;
             cover: Radio.cover;
-            // The card's own tile, so a station reads the same in the grid it was picked from and
-            // in the banner it opened into: its initials over the name-hashed gradient, and the
-            // glyph only for a name with no letters to take initials from.
+            // The card's own tile, so a station reads the same in the grid and the banner.
             fallback-text: Radio.detail-station.monogram;
             fallback-icon: "radio";
             tile-bg: @linear-gradient(135deg,
                 Radio.detail-station.tile_color_1,
                 Radio.detail-station.tile_color_2);
             tile-icon-color: Theme.tile-ink;
-            // The detail tier decodes at source size rather than to a fixed target, so the
-            // logo's own pixel count *is* its 1:1 size here, read at one device pixel per point.
-            // A favicon too small to stretch across a 232 px banner at 1× is too small at 2×, so
-            // the scale term would move no station across the line the tile draws.
+            // The detail tier decodes at source size, so the pixel count is the 1:1 size. Read at
+            // one device pixel per point: a favicon too small for the banner at 1× is too small
+            // at 2×, so a scale term would move no station across the line.
             native-size: Radio.detail-logo-size * 1px;
 
             blur-a: Radio.blur-img-a;
@@ -207,13 +165,8 @@ export component RadioView inherits Rectangle {
             vertical-stretch: 1;
             clip: true;
 
-            // `slide: !band.morphing` on every branch: it is what stops a body translating under
-            // a band that is itself moving, the two curves disagreeing enough that the sum
-            // briefly runs backwards.
-            //
-            // **The three tabs also gate on `!Radio.restoring`.** A boot that reopens a station
-            // has the tab index before it has the station, so without the term the grid paints
-            // for the length of that fetch and swaps.
+            // `!Radio.restoring`: a boot reopening a station has the tab before the station, and
+            // the grid would paint for the length of that fetch.
             if !Radio.detail-open && !Radio.restoring
                 && Radio.tab-idx == Radio.tab-browse: ViewTransition {
                 width: parent.width;
@@ -237,8 +190,7 @@ export component RadioView inherits Rectangle {
                 enter-from: band.tab-enter-from;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
-                // Everything starred out of Browse, plus everything typed in by hand — a custom
-                // station is starred on the way in, which is what lets one query answer the tab.
+                // A hand-typed station is starred on the way in, so one query answers the tab.
                 KeptStationsTab {
                     width: 100%;
                     height: 100%;
@@ -260,8 +212,7 @@ export component RadioView inherits Rectangle {
                 enter-from: band.tab-enter-from;
                 enabled: root.body-anim-armed;
                 slide: !band.morphing;
-                // The wider set: anything with a play behind it, starred or not — which is the
-                // whole reason this is a tab rather than a sort of the one beside it.
+                // Anything played, starred or not, which is why this is a tab and not a sort.
                 KeptStationsTab {
                     width: 100%;
                     height: 100%;
@@ -277,8 +228,7 @@ export component RadioView inherits Rectangle {
                 }
             }
 
-            // A fixed `above`, not the band's direction: a drill is not a move along the tab bar,
-            // and the body holds still while the band morphs above it either way.
+            // `above`, a drill not being a move along the tab bar.
             if Radio.detail-open: ViewTransition {
                 width: parent.width;
                 height: parent.height;
@@ -293,17 +243,14 @@ export component RadioView inherits Rectangle {
         }
     }
 
-    // The pill row with every label shown, measured and never drawn: the band weighs the room
-    // beside the cover against it, the drawn row no longer reporting it once its labels drop.
+    // My Library's `pill-ruler`.
     pill-ruler := RadioTabPills {
         x: 0px;
         y: 0px;
         visible: false;
     }
 
-    // On a layer of its own: the bar and the pills sit in the band, and Slint paints in
-    // declaration order, so anything the band owns is covered by the body underneath — and the
-    // band clips its own height besides.
+    // Last, since the band clips and the body declared after it would cover its pills.
     TooltipFrame {
         x: band.absolute-position.x - root.absolute-position.x + band.tip-x;
         y: band.absolute-position.y - root.absolute-position.y + band.tip-y;
