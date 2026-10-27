@@ -1,19 +1,11 @@
-//! Graphic-equalizer DSP — hand-rolled because rodio 0.22 shipped only
-//! `low_pass` / `high_pass` BLT filters, no peaking ones.
+//! The graphic equalizer. [`EqShared`] is the lock-free control state and [`EqSource`] reads it,
+//! one [`DirectForm1`] per band per channel, Form 1 because its delay line stays valid across a
+//! live coefficient swap, so a slider drag injects no transient.
 //!
-//! [`EqShared`] is the lock-free control state; [`EqSource`] is the
-//! [`AudioSource`] that reads it, one [`DirectForm1`] per band **per channel**.
-//! Per-channel state is the point — rodio's own `BltFilter` ran one state
-//! across interleaved channels and cross-contaminated them. `DirectForm1`
-//! rather than `DirectForm2Transposed` because its delay line stays valid
-//! across a live coefficient swap, so slider drags don't inject transients.
-//!
-//! [`EqSource`] carries two more stages the EQ toggle doesn't gate: the
-//! per-track `ReplayGain` pre-gain (baked at construction, *before* the bands,
-//! so the limiter guards a boost for free), and the deck's crossfade ramp
-//! (*after* the limiter's clamp, so two overlapping decks can't sum past unity
-//! in the unclamped mixer). Each is polled through its own generation
-//! counter. With all three inert the source is a bit-identical passthrough.
+//! [`EqSource`] also carries two stages the EQ toggle doesn't gate, each polled through its own
+//! generation: the track's `ReplayGain` before the bands, so the limiter guards a boost, and the
+//! deck's crossfade ramp after the clamp, so two decks can't sum past unity in the unclamped
+//! mixer. With all three inert it is a bit-identical passthrough.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,7 +20,6 @@ use melodia_audio::player::source::audio::{
     AudioSource, ChannelCount, Sample, SampleRate, SeekError, SourceFormat,
 };
 
-/// Number of equalizer bands.
 pub const NUM_BANDS: usize = 10;
 
 /// ISO octave centre frequencies (Hz) for the ten bands, low → high.
@@ -56,17 +47,15 @@ const GAIN_EPSILON_DB: f32 = 0.05;
 /// a flat EQ with no preamp can still take the bit-identical bypass path.
 const PREAMP_EPSILON_DB: f32 = 0.01;
 
-// Safety limiter, taken from rodio's general-purpose `LimitSettings::default()`:
-// transparent until near full scale, then it pins peaks at the threshold. Runs
-// in the active path only, so EQ-off audio is never touched.
+// The safety limiter: transparent until near full scale, then it pins peaks at the threshold. In
+// the active path only, so EQ-off audio is never touched.
 const LIMITER_THRESHOLD_DB: f32 = -1.0;
 const LIMITER_KNEE_DB: f32 = 4.0;
 const LIMITER_ATTACK_S: f32 = 0.005;
 const LIMITER_RELEASE_S: f32 = 0.100;
 
-/// A named gain curve. `PRESETS` order is load-bearing: the Slint preset
-/// dropdown lists the same names as inline `@tr` literals in this order, and
-/// the UI maps the dropdown index straight into this slice.
+/// `PRESETS` order is load-bearing: the preset dropdown lists the names as inline `@tr` literals
+/// in this order and maps its index straight in.
 pub struct EqPreset {
     pub name: &'static str,
     pub gains: [f32; NUM_BANDS],
@@ -98,26 +87,22 @@ pub const DEFAULT_PRESET: &str = "Flat";
 /// the synthetic slot at [`PRESET_COUNT`].
 pub const CUSTOM_PRESET: &str = "Custom";
 
-/// Clamp a single band gain into the supported range.
 #[must_use]
 pub fn clamp_gain(db: f32) -> f32 {
     if db.is_nan() { 0.0 } else { db.clamp(MIN_GAIN_DB, MAX_GAIN_DB) }
 }
 
-/// Clamp the preamp into the supported range.
 #[must_use]
 pub fn clamp_preamp(db: f32) -> f32 {
     if db.is_nan() { 0.0 } else { db.clamp(MIN_PREAMP_DB, MAX_PREAMP_DB) }
 }
 
-/// Coerce an arbitrary (possibly hand-edited / wrong-length) gain list into a
-/// validated `[f32; NUM_BANDS]`: pad missing bands with 0, drop extras, clamp.
+/// Coerces a hand-edited or wrong-length list: pads with 0, drops extras, clamps.
 #[must_use]
 pub fn normalize_gains(gains: &[f32]) -> [f32; NUM_BANDS] {
     std::array::from_fn(|i| clamp_gain(gains.get(i).copied().unwrap_or(0.0)))
 }
 
-/// Index of a named preset, if it matches one of [`PRESETS`].
 #[must_use]
 pub fn preset_index(name: &str) -> Option<usize> {
     PRESETS.iter().position(|p| p.name == name)
@@ -146,7 +131,6 @@ impl EqShared {
         })
     }
 
-    /// Publish a state change — see [`Generation::bump`].
     fn bump(&self) {
         self.generation.bump();
     }
@@ -214,23 +198,18 @@ fn smoothing_coeff(time_s: f32, rate: f32) -> f32 {
     if rate > 0.0 && time_s > 0.0 { (-1.0 / (time_s * rate)).exp() } else { 0.0 }
 }
 
-/// Soft-knee feed-forward peak limiter: one gain per frame from the frame's
-/// peak, smoothed with separate attack/release, so boosts are turned down
-/// cleanly rather than hard-clipped. The gain is coupled across channels to
-/// preserve stereo imaging — rodio's design (Giannoulis et al. 2012).
+/// Soft-knee feed-forward peak limiter (Giannoulis et al. 2012): one gain per frame from its peak,
+/// smoothed with separate attack and release, and coupled across channels to keep the image.
 struct Limiter {
     /// Smoothed linear gain (≤ 1.0); starts at unity.
     gain: f32,
     attack_coeff: f32,
     release_coeff: f32,
-    /// Knee's lower edge as a linear magnitude, precomputed so
-    /// [`Self::target_gain`] can answer a quiet frame without a `log10`.
+    /// Linear, so [`Self::target_gain`] answers a quiet frame without a `log10`.
     knee_low_linear: f32,
-    /// Knee's upper edge, the same trick at the other end: past it the curve has a closed
-    /// linear form and [`Self::target_gain`] needs no `log10` there either.
+    /// Linear, the curve having a closed linear form past it.
     knee_high_linear: f32,
-    /// The threshold as a linear magnitude, which above the knee *is* the numerator of the
-    /// gain. See [`Self::target_gain`].
+    /// Above the knee, the gain's numerator.
     threshold_linear: f32,
 }
 
@@ -250,30 +229,22 @@ impl Limiter {
         self.gain = 1.0;
     }
 
-    /// Target gain (linear, ≤ 1.0) for a peak magnitude — the soft-knee
-    /// limiter curve with an unbounded ratio above the knee.
+    /// The soft-knee curve with an unbounded ratio above the knee.
     fn target_gain(&self, peak: f32) -> f32 {
-        // The curve is flat at unity below the knee, so quiet frames — the
-        // overwhelmingly common case — skip the `log10`. `log10` is monotonic,
-        // so this is the exact linear-domain form of the dB test below.
+        // Unity below the knee, so the common quiet frame skips the `log10`.
         if peak <= self.knee_low_linear {
             return 1.0;
         }
-        // Above the knee the ratio is unbounded, so the output pins at the threshold and the
-        // gain is the ratio that puts it there. Spelled in dB it is `10^(-over/20)`, which
-        // expands to exactly this, the `log10` and the `powf` having only undone each other.
+        // The output pins at the threshold; `10^(-over/20)` in dB expands to exactly this.
         if peak >= self.knee_high_linear {
             return self.threshold_linear / peak;
         }
-        // Inside the knee, where the quadratic has no linear form. Both guards above are
-        // edges of this curve, and it meets them at unity and at `threshold / peak`.
+        // The quadratic knee, meeting both guards' answers at its edges.
         let over = linear_to_db(peak) - LIMITER_THRESHOLD_DB;
         let k = over + LIMITER_KNEE_DB / 2.0;
         db_to_linear(-(k * k) / (2.0 * LIMITER_KNEE_DB))
     }
 
-    /// Advance the smoothed gain toward this frame's target: fast attack as the
-    /// level rises, slow release as it falls.
     fn process(&mut self, peak: f32) -> f32 {
         let target = self.target_gain(peak);
         let coeff = if target < self.gain { self.attack_coeff } else { self.release_coeff };
@@ -282,13 +253,9 @@ impl Limiter {
     }
 }
 
-/// An [`AudioSource`] applying the shared graphic EQ **and `ReplayGain`** to its
-/// inner decoder — one per decoded track.
-///
-/// The playing and gapless-preloaded tracks share the same [`EqShared`] /
-/// [`ReplayGainShared`], so a live master change reaches both. The *per-track*
-/// `ReplayGain` values can't work that way — the preloaded track has its own
-/// tags — so they ride each source, baked at construction.
+/// The EQ, `ReplayGain` and fade over one decoded track. The master state is shared, so a change
+/// reaches the staged track too; the per-track gain is baked per source, a staged track having its
+/// own tags.
 #[allow(
     clippy::struct_excessive_bools,
     reason = "audio-thread hot state: each flag gates a distinct branch in `next()` and is read per sample; packing them into bitflags would add masking to the hot path"
@@ -297,63 +264,45 @@ pub struct EqSource<S> {
     input: S,
     shared: Arc<EqShared>,
     rg_shared: Arc<ReplayGainShared>,
-    /// This track's tag values, combined with `rg_shared`'s live mode/preamp at
-    /// `rebuild` time to produce `rg_gain`.
     baked_rg: TrackReplayGain,
-    /// Last generations applied; a mismatch triggers `rebuild`. RG is polled
-    /// separately so an RG-only change still rebuilds.
+    /// RG polled apart, so an RG-only change still rebuilds.
     last_generation: u64,
     last_rg_generation: u64,
-    /// Deck-scoped ramp cell — shared with a gapless successor on this deck, but
-    /// never with the other deck, so a fade armed here moves only this voice.
+    /// Shared with a gapless successor on this deck but never with the other deck, so a fade armed
+    /// here moves only this voice.
     fade: Arc<FadeShared>,
     last_fade_generation: u64,
-    /// Whether the fade stage applies at all. `false` ⇒ unity gain, and the
-    /// bit-identical bypass path stays available.
+    /// `false` is unity, keeping the bit-identical bypass available.
     fade_engaged: bool,
-    /// Whether `fade_pos` is still advancing, vs. holding at `fade_target`.
     fade_ramping: bool,
     fade_start: f32,
     fade_target: f32,
-    /// Current ramp gain — also the implicit start point for a ramp armed with
-    /// [`FadeCmd::start`](super::crossfade::FadeCmd::start) = `None`.
+    /// Also where a ramp armed with no start begins.
     fade_gain: f32,
-    /// Ramp progress and length, in **interleaved** samples of this source.
+    /// In interleaved samples of this source.
     fade_pos: u64,
     fade_total: u64,
-    /// Position within the current interleaved frame, tracked by the bypass path
-    /// only (the active path buffers whole frames, so it starts and ends on a
-    /// boundary by construction). Two things read it: the ramp, which must step
-    /// once per *frame* so both channels share a gain, and the generation poll,
-    /// which only fires at phase `0` so a rebuild can never hand the active path
-    /// a mid-frame start.
+    /// Tracked by the bypass path, the active one buffering whole frames. The ramp steps once a
+    /// frame so both channels share a gain, and the generation poll fires only at `0`, so a
+    /// rebuild never hands the active path a mid-frame start.
     frame_phase: usize,
-    /// The gain held across every sample of the frame the bypass path is emitting.
     frame_fade_gain: f32,
-    /// Fade-out: end the source once the ramp lands.
     fade_end_on_complete: bool,
-    /// Captured once — constant per decoded file, so coefficients computed from
-    /// it stay correct for the source's life.
+    /// Constant per decoded file, so coefficients built from it hold for the source's life.
     sample_rate: f32,
-    /// Converts a ramp's media milliseconds into interleaved samples.
     sample_rate_hz: u64,
     channels: u64,
-    /// `[channel][band]` filter state, allocated once. Its length *is* the
-    /// channel count, so the active path iterates it directly.
+    /// `[channel][band]`, its length the channel count.
     banks: Vec<[DirectForm1<f32>; NUM_BANDS]>,
     /// A band is inactive at unity gain or outside Nyquist.
     band_active: [bool; NUM_BANDS],
-    /// Linear gains applied before the bands, preamp first. `rg_gain` is 1.0
-    /// when `ReplayGain` is off or the track is untagged.
     preamp_gain: f32,
     rg_gain: f32,
     limiter: Limiter,
-    /// One processed interleaved frame awaiting emit — the active path's only,
-    /// so the limiter can act per-frame.
+    /// The active path's buffered frame, so the limiter acts per frame.
     frame: Vec<f32>,
     frame_len: usize,
     frame_pos: usize,
-    /// Fast path: `next` returns the inner sample untouched.
     bypass: bool,
 }
 
@@ -375,14 +324,11 @@ impl<S: AudioSource> EqSource<S> {
         let banks = (0..channels)
             .map(|_| std::array::from_fn(|_| DirectForm1::<f32>::new(identity_coeffs())))
             .collect();
-        // Frames elapse at the per-channel rate, which is exactly what
-        // `AudioSource::sample_rate()` already reports — do NOT divide by the
-        // channel count, or the limiter runs that many times too fast and
-        // desyncs from the biquads, which use the same value as their `fs`.
+        // Already per channel: dividing by the channel count runs the limiter that many times too
+        // fast against the biquads.
         let frame_rate = sample_rate;
-        // Seed off the live values so the first `next()` rebuilds. Same for the
-        // fade cell, which is how a gapless successor appended to an
-        // already-fading deck picks the ramp up.
+        // One behind the live values, so the first `next()` rebuilds and a gapless successor picks
+        // up a ramp already armed on its deck.
         let last_generation = shared.generation().wrapping_sub(1);
         let last_rg_generation = rg_shared.generation().wrapping_sub(1);
         let last_fade_generation = fade.generation().wrapping_sub(1);
@@ -420,25 +366,19 @@ impl<S: AudioSource> EqSource<S> {
         }
     }
 
-    /// Adopt the ramp currently armed on this source's deck. Called from `next`
-    /// only when the fade generation advances.
     fn apply_fade_cmd(&mut self) {
         let Some(cmd) = self.fade.snapshot() else {
-            // Idle: drop back to transparency and re-enable the bypass path.
             self.fade_engaged = false;
             self.fade_ramping = false;
             self.fade_gain = 1.0;
             return;
         };
-        // `None` means "ramp from wherever this source currently sits" — how a
-        // playing track fades out from unity, and how an aborted crossfade
-        // recovers a partially faded-in track without a step.
+        // No start ramps from wherever the source sits, so an aborted crossfade takes no step.
         self.fade_start = cmd.start.unwrap_or(self.fade_gain);
         self.fade_target = cmd.target;
         self.fade_gain = self.fade_start;
         self.fade_pos = 0;
-        // The controller can't precompute this: the two decks may hold tracks
-        // at different sample rates and it doesn't know the outgoing source's.
+        // Here rather than in the controller, which doesn't know each deck's rate.
         self.fade_total =
             cmd.ramp_ms.saturating_mul(self.sample_rate_hz).saturating_mul(self.channels) / 1000;
         self.fade_end_on_complete = cmd.end_on_complete;
@@ -446,17 +386,11 @@ impl<S: AudioSource> EqSource<S> {
         self.fade_ramping = true;
     }
 
-    /// The armed fade-out has landed and this source should end.
     fn fade_ended(&self) -> bool {
         self.fade_engaged && !self.fade_ramping && self.fade_end_on_complete
     }
 
-    /// Advance the interleave phase by one sample, wrapping at the frame width.
-    ///
-    /// A compare, not a modulo — this runs per sample on the bypass path, which
-    /// is what the default flat EQ takes. `banks` is sized from the decoder's
-    /// `NonZero` channel count, so the wrap can't spin and a mono source simply
-    /// sits at phase `0`.
+    /// A compare rather than a modulo, per sample on the default bypass path.
     #[inline]
     fn advance_frame_phase(&mut self) {
         self.frame_phase += 1;
@@ -465,8 +399,7 @@ impl<S: AudioSource> EqSource<S> {
         }
     }
 
-    /// Gain for the next `samples` interleaved samples, advancing the ramp.
-    /// Only called when `fade_engaged`.
+    /// Only while `fade_engaged`.
     fn step_fade(&mut self, samples: u64) -> f32 {
         if !self.fade_ramping {
             return self.fade_gain;
@@ -478,9 +411,7 @@ impl<S: AudioSource> EqSource<S> {
         if self.fade_pos >= self.fade_total {
             self.fade_gain = self.fade_target;
             self.fade_ramping = false;
-            // Landing back on unity (fade-in, crossfade abort) means the ramp is
-            // done influencing the signal, so `bypass` can resume. Landing on
-            // silence (pause fade) has to stay engaged and keep holding.
+            // Landing on unity frees the bypass; landing on silence keeps holding.
             if !self.fade_end_on_complete && crossfade::is_unity_target(self.fade_target) {
                 self.fade_engaged = false;
             }
@@ -488,20 +419,15 @@ impl<S: AudioSource> EqSource<S> {
         g
     }
 
-    /// Take the EQ out of the signal path entirely, for both of
-    /// [`Self::rebuild`]'s early returns. `ReplayGain` is a plain scalar and
-    /// applies either way, so it alone decides whether this is a passthrough.
+    /// `ReplayGain` applies either way, so it alone decides whether this is a passthrough.
     fn disable_bands(&mut self, rg_is_unity: bool) {
         self.preamp_gain = 1.0;
         self.band_active = [false; NUM_BANDS];
         self.bypass = rg_is_unity;
     }
 
-    /// Recompute per-band coefficients and the preamp gain from the shared
-    /// state, on a generation change.
     fn rebuild(&mut self) {
-        // ReplayGain is independent of the EQ toggle, so compute its gain FIRST
-        // — before any early return below could skip it.
+        // First: `ReplayGain` is independent of the EQ toggle and the early returns below.
         let rg_gain = if self.rg_shared.enabled() {
             replaygain::compute_linear_gain(
                 self.baked_rg,
@@ -525,7 +451,6 @@ impl<S: AudioSource> EqSource<S> {
         let preamp_is_unity = preamp_db.abs() < PREAMP_EPSILON_DB;
 
         let Ok(fs) = Hertz::<f32>::from_hz(self.sample_rate) else {
-            // Pathological sample rate — no peaking filters to be had.
             self.disable_bands(rg_is_unity);
             return;
         };
@@ -534,8 +459,7 @@ impl<S: AudioSource> EqSource<S> {
         for band in 0..NUM_BANDS {
             let gain = self.shared.gain(band);
 
-            // Skip unity-gain bands, and any whose centre exceeds this source's
-            // Nyquist limit.
+            // A band past this source's Nyquist yields no coefficients.
             let coeffs = if gain.abs() < GAIN_EPSILON_DB {
                 None
             } else {
@@ -548,9 +472,8 @@ impl<S: AudioSource> EqSource<S> {
                 Some(c) => {
                     let was_active = self.band_active[band];
                     for bank in &mut self.banks {
-                        // Inactive→active starts from a clean delay line so
-                        // stale state can't pop; an already-active band keeps
-                        // its state across the swap, which DF1 allows.
+                        // A band coming on starts clean so stale state can't pop; an active one
+                        // keeps its state across the swap, which DF1 allows.
                         if !was_active {
                             bank[band].reset_state();
                         }
@@ -563,23 +486,12 @@ impl<S: AudioSource> EqSource<S> {
             }
         }
 
-        // Any of the three needs the gain + limiter stage, so only all three
-        // inert can bypass.
         self.bypass = !any_active && preamp_is_unity && rg_is_unity;
     }
 
-    /// Pick up EQ, `ReplayGain` and crossfade changes.
-    ///
-    /// **Only ever called on a true frame boundary**, and that gate is
-    /// load-bearing rather than an optimization: a rebuild can flip `bypass`
-    /// off mid-track, and [`Self::next_active`] then starts framing from
-    /// wherever the source sits. Entered mid-frame, every frame it forms is
-    /// offset from a real one — inaudible in itself, but `fade_ended` would then
-    /// end the source on a *half* frame and flip that deck's mixer channel
-    /// parity for everything appended afterwards.
-    ///
-    /// It also takes the bypass path's `Acquire` loads from per-sample down to
-    /// per-frame, at the cost of a rebuild landing up to a frame late.
+    /// Only ever on a frame boundary, and not as an optimization: a rebuild can flip `bypass` off,
+    /// and [`Self::next_active`] framing from mid-frame would let `fade_ended` end the source on a
+    /// half frame, flipping that deck's mixer channel parity for good.
     #[inline]
     fn poll_generations(&mut self) {
         let generation = self.shared.generation();
@@ -596,8 +508,7 @@ impl<S: AudioSource> EqSource<S> {
         }
     }
 
-    /// Bit-identical per-sample passthrough. The interleave phase still
-    /// advances, so the generation poll and the ramp know where a frame begins.
+    /// Bit-identical, the phase still advancing so the poll and the ramp know where a frame begins.
     #[inline]
     fn next_bypass(&mut self) -> Option<Sample> {
         let s = self.input.next()?;
@@ -605,17 +516,12 @@ impl<S: AudioSource> EqSource<S> {
         Some(s)
     }
 
-    /// Bypass + fade: the EQ / `ReplayGain` stages are inert, so skip the frame
-    /// machinery, but still clamp before the ramp — raw decoder output can
-    /// exceed full scale and the mixer sums its voices unclamped.
-    ///
-    /// The ramp advances once per *frame*, so both channels share a gain;
-    /// per-sample would shear the stereo image across the fade.
+    /// Still clamps before the ramp, raw decoder output exceeding full scale and the mixer summing
+    /// unclamped. The ramp steps once a frame, or the stereo image shears.
     #[inline]
     fn next_bypass_faded(&mut self) -> Option<Sample> {
         if self.frame_phase == 0 {
-            // Ending here drains the deck, which is the signal
-            // `is_crossfading()` watches for.
+            // Draining the deck is what `is_crossfading()` watches for.
             if self.fade_ended() {
                 return None;
             }
@@ -626,12 +532,8 @@ impl<S: AudioSource> EqSource<S> {
         Some(s.clamp(-1.0, 1.0) * self.frame_fade_gain)
     }
 
-    /// Pull one interleaved frame, preamp + EQ each channel, then apply the
-    /// coupled limiter and the ramp across the whole frame. Returns its first
-    /// sample; the rest drain through [`Iterator::next`]'s fast path.
-    ///
-    /// Only ever entered at a frame boundary (see [`Self::poll_generations`]),
-    /// so ending the source here cannot cut a frame in half.
+    /// One whole frame through the bands, then the coupled limiter and the ramp across it; the rest
+    /// drains through [`Iterator::next`]'s fast path.
     #[inline]
     fn next_active(&mut self) -> Option<Sample> {
         if self.fade_ended() {
@@ -662,17 +564,14 @@ impl<S: AudioSource> EqSource<S> {
             peak = peak.max(s.abs());
         }
         let gain = self.limiter.process(peak);
-        // One ramp step per frame, so the whole frame shares a gain and the
-        // stereo image can't shear mid-fade.
         let fade_g = if self.fade_engaged {
             self.step_fade(u64::try_from(frame_len).unwrap_or(1))
         } else {
             1.0
         };
         for s in &mut self.frame[..self.frame_len] {
-            // The clamp catches the brief feed-forward overshoot before the
-            // gain settles. The ramp multiplies *after* it, which is what bounds
-            // the sum of two overlapping decks at unity.
+            // The clamp catches the feed-forward overshoot; the ramp after it bounds two decks'
+            // sum at unity.
             *s = (*s * gain).clamp(-1.0, 1.0) * fade_g;
         }
 
@@ -723,9 +622,8 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
         self.input.format()
     }
 
-    /// The bypass flag itself rather than the settings behind it, so an EQ that is on but has
-    /// nothing to do at this rate reads as untouched. The fade is left out: the ramp belongs to
-    /// the transport, which reports a crossfade on its own.
+    /// The bypass flag rather than the settings, so an EQ with nothing to do reads as untouched;
+    /// the fade is the transport's to report.
     fn dsp_engaged(&self) -> bool {
         !self.bypass || self.input.dsp_engaged()
     }
@@ -737,22 +635,16 @@ impl<S: AudioSource> AudioSource for EqSource<S> {
 
     fn try_seek(&mut self, pos: Duration) -> Result<(), SeekError> {
         self.input.try_seek(pos)?;
-        // Clear the delay lines and limiter envelope so the destination doesn't
-        // pop from pre-seek state. Deliberately does NOT touch the fade fields:
-        // `set_speed` re-anchors with a `try_seek` to the current position and a
-        // crossfade abort arms a ramp and *then* seeks, so resetting `fade_pos`
-        // would restart a fade-in from silence in both cases.
+        // Clears the filter and limiter state so the destination doesn't pop, and leaves the fade
+        // fields alone, so a ramp in flight carries across rather than restarting from silence.
         for bank in &mut self.banks {
             for filter in bank.iter_mut() {
                 filter.reset_state();
             }
         }
         self.limiter.reset();
-        // What is left of the frame being handed out drains rather than being dropped, and
-        // `frame_phase` is left alone for the same reason: those samples are owed, and dropping
-        // them leaves every frame after this one a channel out of step for the rest of the track.
-        // The deck's converter never seeks part way through a frame, so this is for a caller
-        // pulling by hand — and the decoder restores its own phase, so the two agree either way.
+        // The rest of the frame in hand drains and `frame_phase` stays: dropping owed samples
+        // leaves every later frame a channel out of step.
         Ok(())
     }
 
