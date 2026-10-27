@@ -1,11 +1,8 @@
 import { Theme } from "../theme.slint";
 
-// Chrome state for the Settings page — the search filter, the rule every section applies to it,
-// and the body's responsive geometry. Split out of `Settings`, which holds the values the user
-// configures: how the page is filtered is a different axis of change from what it configures.
+// The Settings page's chrome, apart from `Settings`' values: how the page is filtered and laid out
+// is a different axis of change from what it configures.
 export global SettingsPage {
-    // Named so the router and the panel's arrays key off something readable instead of a bare
-    // index, and so adding a category is a rename-safe edit.
     out property <int> category-library: 0;
     out property <int> category-playback: 1;
     out property <int> category-effects: 2;
@@ -23,77 +20,59 @@ export global SettingsPage {
     // against it rather than carrying a copy.
     out property <int> category-count: 12;
 
-    // Seeded from `views.json` at boot and persisted on change.
     in-out property <int> category-idx: 0;
     callback category-changed(int);
 
-    // Lands on a category from anywhere, Now Playing included: the Slint face of
-    // `settings_page::open_on`. A pick in the panel is `category-changed`, the page already being
-    // on screen.
+    // The Slint face of `settings_page::open_on`, from anywhere; a pick in the panel is
+    // `category-changed`.
     callback open-category(int);
 
-    // What the user is typing, and what the page is filtered by. **Two properties**, joined by a
-    // `FilterThrottle`: `row-visible` is three `matches` round-trips into Rust across dozens of call
-    // sites, and a non-empty query mounts *every* category page at once. Cleared together on
-    // nav-away and on a category pick — clearing only the settled one leaves the box holding a
-    // stale filter.
+    // **Two properties**, joined by a `FilterThrottle`: a settled query fans out to every page's
+    // `row-visible` (`ui-patterns.md`).
     in-out property <string> search-input;
     in-out property <string> search-query;
 
-    // Releases keyboard focus from the SearchBar, the `MyLibrary.blur-search-tick` pattern.
     in-out property <int> blur-search-tick: 0;
 
-    // The clear all three properties above owe, spelled once: nav-away is `app-window.slint`'s
-    // arm and a category pick is Rust's `on_category_changed`, so a copy in each is one no reader
-    // sees beside the other. A `public function` for the `Dialog.closed-teardown()` reason: a
-    // callback has one handler slot, and a Rust registration would replace the body.
+    // Spelled once for its two callers, `app-window.slint`'s nav-away and Rust's category pick. A
+    // `public function` because a callback has one handler slot, which a Rust registration takes.
     public function clear-search() {
         root.search-input = "";
         root.search-query = "";
         root.blur-search-tick += 1;
     }
 
-    // The one fact the view writes imperatively: the width the body column may take. A global
-    // can't be bound from a view, and the page can't read its live width into a binding feeding a
-    // child's size without re-entering layout. The seed is a plausible narrow body, where zero
-    // would collapse every card for the frame before the first write.
+    // The one fact the view writes imperatively: a global can't be bound from a view, and a live
+    // width read into a child's size re-enters layout. Seeded narrow, zero collapsing every card
+    // for the frame before the first write.
     in-out property <length> body-avail: 440px;
 
-    // How wide a card may grow. Past it the column stops and the page takes margins.
     out property <length> card-cap: 720px;
 
-    // What a card is drawn at. Pinned rather than left to the layout: the body column sits at its
-    // preferred width, which unpinned is its widest card's natural one, so one category's cards
-    // would come out narrower than another's.
+    // Pinned rather than left to the layout, where the column would sit at its widest card's
+    // natural width and one category's cards would come out narrower than another's.
     out property <length> card-w: min(root.body-avail, root.card-cap);
 
-    // The narrowest body the expanded category panel keeps beside it. Below it the panel folds to
-    // its icon rail: the cards need the room more than the labels do, and the rail's tooltips
-    // still carry the names.
+    // Below this the panel folds to its rail: the cards need the room more than the labels do, and
+    // the rail's tooltips still carry the names.
     out property <length> nav-collapse-body-w: 440px;
 
-    // What a card is filled with. Anything painting to match the card reads it here, since a brush
-    // one shade off shows as a box or a seam.
+    // Anything painting to match the card reads it here, a brush one shade off showing as a seam.
     out property <brush> card-fill: Theme.surface0;
 
-    // The glyph column both settings rows lead with, here so the two can't drift apart.
     out property <length> row-icon-w: 22px;
 
-    // The panel's row height and inset. Here because a card's title band is the panel's search row
-    // with that inset either side, so the title shares the search box's centre line and the rule
-    // under it meets the first category row.
+    // A card's title band is the panel's search row with its inset either side, so the title
+    // shares the search box's centre line and the rule under it meets the first category row.
     out property <length> nav-row-h: 36px;
     out property <length> nav-pad: Theme.pad-sm;
     out property <length> card-header-h: root.nav-row-h + 2 * root.nav-pad;
 
-    // Slint 1.18 has no `.contains()` on string, so the test is wired in Rust.
+    // Slint 1.18 has no `.contains()` on string.
     pure callback matches(string /*haystack*/, string /*needle*/) -> bool;
 
-    // Whether a row survives the filter, shared rather than copied into every section. **Reading
-    // `search-query` at the call site is what makes the result reactive** — Slint tracks the
-    // property read; `matches` is opaque to it. `category` is a term of its own, not a prefix
-    // spliced onto each title, so no card can match a substring spanning the seam — and search
-    // escapes the categories, so without it "Integrations" appears in no haystack.
+    // **Reading `search-query` at the call site is what makes the result reactive**, `matches`
+    // being opaque to Slint. `category` is a term of its own so no match spans the seam.
     public pure function row-visible(category: string, section: string, haystack: string,
                                      query: string) -> bool {
         return query == ""

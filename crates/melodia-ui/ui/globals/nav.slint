@@ -1,70 +1,56 @@
 import { Theme } from "../theme.slint";
 
-// Which edge the next `ViewTransition` mount slides in from: lateral sidebar nav drops in from
-// `above`, a drill comes from the `right`, the back button from the `left`. **The mount it steers
-// is a *page***, so a drill that doesn't move `Nav.selected-index` steers nothing.
+// Sidebar nav drops in from `above`, a drill from the `right`, the back button from the `left`.
+// **The mount it steers is a page**, so a drill that doesn't move `Nav.selected-index` steers
+// nothing.
 export enum NavEnterFrom { above, right, left }
 
 // Which content view the shell shows:
 //   0=search, 1=browse, 2=favorites, 3=my-library, 8=recently-played, 9=settings, 10=radio
-// **4–7 are retired** — they and Tracks are My Library's five tabs, told apart by
-// `MyLibrary.tab-idx`, and `boot::ui_setup` folds a persisted 4–7 onto 3. The gaps stay: 8 and 9
-// are already in `views.json` on every install, which is what leaves 10 as the next free index.
-// **Sidebar order is source order**, so Radio renders under My Library regardless. The top of the
-// range is `services::view_state::MAX_NAV_INDEX`, which bounds the persisted value both ways.
+// **4–7 are retired** My Library tabs, which `boot::ui_setup` folds onto 3. 8 and 9 kept their
+// numbers, being in `views.json` on every install. **Sidebar order is source order.**
+// `services::view_state::MAX_NAV_INDEX` bounds the persisted value both ways.
 export global Nav {
     in-out property <int> selected-index: 3;
-    // The full-screen Now Playing view. Toggled from the bar's track-info card, which stays
-    // mounted, so the same card closes it.
+    // Toggled from the bar's track card, which stays mounted to close it.
     in-out property <bool> now-playing-open: false;
-    // Lets the Up Next subscriber skip its rebuild while the view is closed. A global can't
-    // watch its own property, so `AppWindow` mirrors this locally.
+    // Lets the Up Next subscriber skip its rebuild while the view is closed. Fired from
+    // `AppWindow`'s mirror, a global being unable to watch its own property.
     callback now-playing-open-changed(bool);
     callback persist-selected-index(int);
-    // Right-click "Open Containing Folder".
     callback reveal-in-folder(int /*track_id*/);
-    // Every menu's "Go to …", wired in `ui::callbacks::cross_tab_nav`. One trio rather than one
-    // per host: the origin a drill records is read off where the user stands, not off who asked.
+    // One trio for every menu (`ui::callbacks::cross_tab_nav`): the origin a drill records is read
+    // off where the user stands, not off who asked.
     callback go-to-album(int /*album_id*/);
     callback go-to-artist(int /*artist_id*/);
     callback go-to-genre(int /*genre_id*/);
-    // Written synchronously **immediately before** the flip that triggers the new mount. Typed
-    // so a Rust typo is a compile error; `ui/nav_transition.rs` has the `mark_*` helpers.
+    // Written **immediately before** the flip that mounts the view (`ui/nav_transition.rs`).
     in-out property <NavEnterFrom> pending-enter-from: NavEnterFrom.above;
-    // Raised from construction, so the launch opens on its content, and by `MiniPlayerSwitch` for
-    // the full UI remounting on the way out of the miniplayer. The mount hands it back itself once
-    // settled; `view-transition.slint` says why Rust can't. Declared rather than written by Rust
-    // because `AppWindow::new()` already builds the default page, which a later raise would fade in.
+    // Handed back by the mount once settled (`view-transition.slint`). Declared raised because
+    // `AppWindow::new()` already builds the default page, which a raise from Rust would fade in.
     in-out property <bool> suppress-enter-animation: true;
     // The user's fold, and the only one persisted.
     in-out property <bool> sidebar-collapsed: false;
     in-out property <length> sidebar-width: 180px;
-    // The width drawn when expanded. Clamped here rather than on hydrate, so a stored width from
-    // outside the range is drawn inside it wherever it came from.
+    // Clamped here rather than on hydrate, so a stored width from anywhere is drawn in range.
     out property <length> sidebar-expanded-w:
         clamp(self.sidebar-width, Theme.sidebar-min-w, Theme.sidebar-max-w);
-    // Up while a narrow window, or the queue panel docked in it, holds the room an expanded sidebar
-    // needs, folded or not: the rail is forced and the fold controls stand down. Written only by
-    // `AppWindow`, which alone sees the window's width, and written rather than bound so a resize
-    // can't restart the sidebar's width ease on every move.
+    // Written only by `AppWindow`, which alone sees the window's width, and written rather than
+    // bound so a resize can't restart the sidebar's width ease on every move.
     in-out property <bool> sidebar-yields: false;
-    // What the sidebar draws, which every part of it reads. The fold toggle writes
-    // `sidebar-collapsed` and stands down while the rail is forced.
+    // What the sidebar draws, which every part of it reads.
     out property <bool> sidebar-rail: self.sidebar-collapsed || self.sidebar-yields;
-    // Switches off the rail's width ease and the rows' padding ease for a handle drag, which
-    // every mouse move would otherwise restart, leaving the edge and the icons lagging the pointer.
+    // Switches off the rail's and the rows' eases for a handle drag, which every mouse move would
+    // otherwise restart.
     in-out property <bool> sidebar-dragging: false;
-    // The collapsed rail's tooltip channel; `app-window.slint` paints one pill beside the rail.
-    // **It can't be mounted on the row** — `nav-scroll` clips its viewport, and the Sidebar is
-    // declared before the content panel, which paints over anything past the rail's edge. -1 is
-    // nothing hovered, and **only the row owning the hover may clear it**: a leave arriving after
-    // the next row's enter would blank a live tooltip.
+    // The rail's tooltip channel, `app-window.slint` painting the pill: on the row, `nav-scroll`
+    // would clip it and the content panel paint over it. -1 is none, and **only the row owning the
+    // hover may clear it**, or a late leave would blank the next row's tooltip.
     in-out property <int> sidebar-tip-idx: -1;
-    // The Collapse toggle loses its label like any nav row but owns no nav index, so it takes
-    // a slot outside `selected-index`'s range.
+    // Outside `selected-index`'s range, the Collapse toggle owning no nav index.
     out property <int> sidebar-collapse-tip-idx: -2;
     in-out property <string> sidebar-tip-label;
-    // Snapshotted on enter — only scrolling the rail moves a row, which re-fires this anyway.
+    // Snapshotted on enter: only scrolling the rail moves a row, which re-fires this anyway.
     in-out property <length> sidebar-tip-y;
     in-out property <length> sidebar-tip-h;
 }

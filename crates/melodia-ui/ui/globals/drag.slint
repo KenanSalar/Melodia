@@ -1,13 +1,13 @@
-// The in-window drag, which Slint's `DragArea` carries as an opaque `data-transfer` that Slint code
-// can't read. So the token is a constant and what a drag means sits here.
+// Slint's `DragArea` carries an opaque `data-transfer` Slint code can't read, so the token is a
+// constant and what a drag means sits here.
 
 import { LiftedRun } from "../models.slint";
 
-// The list a drag came out of. A list takes back only its own rows, as a reorder.
+// A list takes back only its own rows, as a reorder.
 export enum DragOrigin { none, queue, up-next, playlist }
 
-// What a drag carries for another list to take: Add to Queue's `(kind, ids)`, and what the chip
-// under the pointer draws. A `kind` of "" carries nothing.
+// Add to Queue's `(kind, ids)`, and what the chip under the pointer draws. A `kind` of "" carries
+// nothing.
 export struct DragItems {
     kind: string,
     ids: [int],
@@ -17,39 +17,34 @@ export struct DragItems {
 
 export struct DragPayload {
     origin: DragOrigin,
-    // The row pressed, in its own list's order.
+    // In its own list's order.
     index: int,
     // Whether the press lifted every row its list holds picked, rather than that row alone.
     picks: bool,
-    // Where the lifted rows sit, so a drop beside them can be told to move nothing.
+    // So a drop beside the lifted rows can be told to move nothing.
     run: LiftedRun,
     items: DragItems,
 }
 
 export global Drag {
-    // What every `DragSource` carries. Rust builds it once, a `data-transfer` being constructible
-    // only through the host, and gives it user data alone, so no backend can take the drag out of
-    // the window.
+    // Built once in Rust, the host being the only way to make one, and given user data alone so no
+    // backend can take the drag out of the window.
     in property <data-transfer> token;
 
-    // **Armed by the row a press lands on, and disarmed by every press first** (the winit filter,
-    // ahead of Slint's dispatch). A `DragArea` starts a drag from any press it contains, a gap
-    // between rows or a row's own button included, and no element sees every press, so a drag from
-    // one of those carries nothing rather than the last row clicked.
+    // **Armed by the row a press lands on, and disarmed by every press first** in the winit filter.
+    // A `DragArea` drags from any press it contains, a gap or a row's own button included, so a
+    // drag from one of those carries nothing rather than the last row clicked.
     out property <DragPayload> payload;
 
-    // A drag is under way, as its source's `dragging` says. A release that no target takes ends as
-    // an `Exit` rather than a `Drop`, so the source is the one thing every drag's end reaches. One
+    // The source's `dragging`, the one end every drag reaches (`slint-pitfalls.md`). A source
     // unmounted mid-drag never hears it, and the next press's disarm lowers this instead.
     in-out property <bool> live;
 
-    // Raised by the winit filter as a touch begins and lowered by a mouse press, both ahead of
-    // Slint's dispatch. Every `DragSource` stands down for a touch, which then pans the list under
-    // it, so nothing drags by touch.
+    // Raised by the winit filter as a touch begins and lowered by a mouse press. Every `DragSource`
+    // stands down for a touch, which pans the list instead.
     in-out property <bool> touching;
 
-    // The pointer, in window coordinates, and whether the chip shows there. Written by whatever
-    // took the last move: a target, or the leaf behind them all.
+    // Written by whatever took the last move: a target, or the leaf behind them all.
     out property <length> x;
     out property <length> y;
     out property <bool> ghost-shown;
@@ -67,8 +62,8 @@ export global Drag {
         };
     }
 
-    // For a press on a picked row while others are picked too, after it armed: the drag lifts
-    // them all. Rust says where they sit, a list it pages being one Slint can't walk.
+    // After the arm, for a press on a picked row while others are picked too. Rust says where they
+    // sit, a list it pages being one Slint can't walk.
     public function lift-picks(run: LiftedRun) {
         self.payload = {
             origin: self.payload.origin,
@@ -85,8 +80,8 @@ export global Drag {
         self.ghost-shown = false;
     }
 
-    // For a list whose rows moved under a live drag: it goes on, the source surviving the rebuild,
-    // but its index no longer names the row it lifted. The items are ids and still hold.
+    // For a list whose rows moved under a live drag: the drag goes on, but its index no longer
+    // names the row it lifted. The items are ids and still hold.
     public function revoke(origin: DragOrigin) {
         if (self.payload.origin == origin) {
             self.payload = { origin: DragOrigin.none, index: -1, items: self.payload.items };
@@ -100,10 +95,9 @@ export global Drag {
     }
 }
 
-// Where letting go of a file dragged in from outside the window lands.
 export enum FileDropTarget { none, queue, playlist }
 
-// A box in window coordinates, which is the space the winit filter has the pointer in.
+// In window coordinates, the space the winit filter has the pointer in.
 export struct WindowRect {
     x: length,
     y: length,
@@ -111,13 +105,11 @@ export struct WindowRect {
     height: length,
 }
 
-// A file dragged in from the file manager. No OS drag reaches a `DropArea`, and Slint has no
-// pointer while one is under way, so the winit filter hit-tests the drag against where the two
-// targets are drawn and says here what letting go would do.
+// A file dragged in from the file manager. No OS drag reaches a `DropArea`, so the winit filter
+// hit-tests it against these rects (`desktop-shell.md`).
 export global FileDrag {
-    // The queue panel's body, docked or floating, and the content panel, each written by a
-    // `WindowRectReport` as it moves. The filter reads them only while their target can take a
-    // drop, so neither is cleared when its target goes.
+    // Each written by a `WindowRectReport` as it moves. The filter reads one only while its target
+    // can take a drop, so neither is cleared when its target goes.
     in-out property <WindowRect> queue-rect;
     in-out property <WindowRect> content-rect;
 

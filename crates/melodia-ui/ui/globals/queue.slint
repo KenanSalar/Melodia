@@ -1,77 +1,55 @@
 import { LiftedRun, QueueRow } from "../models.slint";
 
-// The two surfaces rendering the play queue — the panel beside the content and the Up Next
-// list inside Now Playing. Same rows, deliberately separate lifecycles.
-
-// The queue panel. Rust owns the `rows` model and writes both it and `current-index` from a
-// subscriber on the same `sinks.queue` watch `Player.queue` reads.
 export global Queue {
     in-out property <[QueueRow]> rows;
-    // -1 when nothing is playing. Rows derive `playing: idx == current-index`, so the
-    // highlight flips without a model rewrite.
+    // Rows derive `playing` from it, so the highlight flips without a model rewrite.
     in property <int> current-index: -1;
-    // A Slint expression can't iterate a model, so Rust maintains this for the header's label.
+    // A Slint expression can't iterate a model, so Rust keeps this for the header's label.
     in property <int> selected-count: 0;
-    // The same selection as a batch payload for the row context menu, **deduped by track id and
-    // in display order**. Deliberately not `selected-count`'s length: a queue may hold one track
-    // twice, each copy picked on its own, and with both picked an undeduped list would add that
-    // track to a playlist twice. The menu counts rows and acts on ids, which is why both
-    // properties exist.
+    // **Deduped by track id**, in display order: a track queued twice is two picks, which the
+    // count above counts, and a batch must still act on it once.
     in property <[int]> selected-ids;
-    // What the user asked of the docked panel, and what persists. Whether the panel is on screen
-    // is `shown`.
+    // The docked panel the user asked for, and what persists.
     in-out property <bool> open;
-    // The overlay's `open`, for a window with no room to dock. Session-only, so a narrow launch
-    // with the panel saved open shows nothing until it is asked for.
+    // Session-only, so a narrow launch with the panel saved open shows nothing until asked.
     in-out property <bool> overlay-open;
-    // The docked panel open with room for it, or the overlay open, less what covers either: Now
-    // Playing, and the miniplayer, which unmounts it. Written only by `AppWindow`, a global being
-    // unable to watch its own properties; the rows and the covers follow it through
-    // `shown-changed`.
+    // `shown`, `floating` and `fits` are written by `AppWindow` alone, a global being unable to
+    // watch its own properties; `ui-patterns.md` has what each answers.
     in-out property <bool> shown;
-    // `shown` as the overlay. Written only by `AppWindow`, beside `shown`.
     in-out property <bool> floating;
-    // Whether the window has room to dock the panel, which the miniplayer and a narrow window
-    // don't. Written only by `AppWindow`.
     in-out property <bool> fits;
     // 0 is the default width, so changing `Theme.queue-panel-default-w` reaches everyone who never
     // dragged the edge.
     in-out property <length> panel-width: 0px;
-    // Whether the pointer is over the panel, for the winit filter to read at a press.
+    // For the winit filter to read at a press.
     in-out property <bool> pointer-in;
-    // The panel was the last thing pressed, so Escape, Ctrl+A and Delete are its. Written by the
-    // winit filter, which sees a press before any element can take it, and handed back by a row's
-    // menu as it closes, its popup having hidden that press from `pointer-in`.
+    // Written by the winit filter ahead of any element, and handed back by a row's menu as it
+    // closes, its popup having hidden that press from `pointer-in`.
     in-out property <bool> keys-owned;
 
-    // Lazy row cover against the panel's *own* tier, so hiding it releases every buffer. That tier
-    // borrows what the row tier already holds, so a cover the track lists draw is one buffer, and
-    // schedules any other miss off the UI thread. `generation` is the repaint token: reading it
-    // makes the binding depend on the counter Rust bumps as each scheduled batch lands, a `pure`
-    // callback's result being cached until a dependency is dirtied.
+    // Against the panel's own tier, backed by the row tier (`ui-patterns.md`'s `QueueRow` entry).
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 
-    // A drag of one row dropped somewhere that moves it, in play order.
+    // In play order.
     callback reorder(int /*from*/, int /*to*/);
-    // A drag of the picks, gathering every picked row in front of play-order slot `slot`.
+    // Gathers every picked row in front of play-order slot `slot`.
     callback move-picks(int /*slot*/);
-    // Where the picked rows sit, asked by a press on one of them. Only Rust holds the whole list.
+    // Asked by a press on a picked row; only Rust holds the whole list.
     callback picked-run() -> LiftedRun;
-    // Another list's drag let go over the rows: what Add to Queue on it would queue, landing in
-    // front of play-order slot `slot`.
+    // Another list's drag let go over the rows: what Add to Queue on it would queue, in front of
+    // play-order slot `slot`.
     callback drop-in(string /*kind*/, [int] /*ids*/, int /*slot*/);
     callback remove(int /*play_order_index*/);
-    // Removes every row Rust holds picked, and no other copy of their tracks.
+    // Every picked row, and no other copy of their tracks.
     callback remove-selected();
     callback skip-to(int /*play_order_index*/);
     callback clear-queue();
-    // The bar's button, its overflow entry and Q. Rust's, since a press under Now Playing closes
-    // it to bring the panel up, and `Nav` is not this file's to import.
+    // Rust's: a press under Now Playing closes it to bring the panel up, and `Nav` is not this
+    // file's to import.
     callback toggle();
-    // Closes the overlay, and the docked panel too where the window has room for it: a narrow
-    // window's ✕ leaves the docked panel to come back when the room does. Picks and the keys go
-    // with it, so neither is waiting on a panel nobody can see.
+    // A narrow window's ✕ leaves the docked panel to come back with the room. The picks and the
+    // keys go too, so neither waits on a panel nobody can see.
     public function close() {
         if (self.fits) {
             self.open = false;
@@ -85,47 +63,41 @@ export global Queue {
     callback clear-selection();
     callback select-all();
 
-    // The track lists' contracts, batch-shaped like them: Rust persists, then patches the rows
-    // holding those ids. The row menu passes the clicked row or the selection.
+    // The track lists' contracts: Rust persists, then patches the rows holding those ids.
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
 
     callback shown-changed(bool);
 }
 
-// The "Up Next" list inside Now Playing. Its own global rather than more fields on the
-// already-monolithic `Player`, with the same Rust-owned-model shape as `Queue`.
+// Up Next, its own global rather than more of the monolithic `Player`.
 export global NowPlaying {
-    // The next N tracks in play order, current excluded. Rust does the wrap-around slicing.
+    // The next N tracks in play order, current excluded; Rust does the wrap-around.
     in-out property <[QueueRow]> up-next-rows;
 
-    // The `RowCovers` contract once more. No generation counter, unlike `Queue`'s — nothing
-    // warms this tier behind the list's back.
+    // No generation, unlike `Queue`'s: nothing warms this tier behind the list's back.
     pure callback request-cover(/* artwork-path */ string) -> image;
 
-    // Play-order index of `up-next-rows[0]`, i.e. current + 1.
+    // The play-order index of `up-next-rows[0]`.
     in property <int> base-index: 0;
 
-    // Under repeat-all the list wraps past the end of the queue, so a row's real play-order
-    // index is `mod(base-index + idx, queue-length)`.
+    // Under repeat-all the list wraps, so a row's play-order index is
+    // `mod(base-index + idx, queue-length)`.
     in property <int> queue-length: 0;
 
-    // A drag of one row dropped somewhere that moves it, in the list's own rows. Rust maps the two
-    // onto play order, refusing a move across the repeat-all wrap.
+    // In the list's own rows; Rust maps them onto play order, refusing a move across the wrap.
     callback reorder(int /*from-row*/, int /*to-row*/);
 
-    // Drives the one-shot Up Next slide; anything at or past `slide-frames` is at rest. Reset to 0
-    // **only** on a real current-track change, not on a reorder keeping the same track. On the
-    // global so the reset lands on the *same* render as the model swap — through a `changed`
-    // handler it queues to the next iteration and paints the post-advance list at rest once first.
+    // Drives the one-shot slide, at rest from `slide-frames` on. Reset to 0 **only** on a real
+    // track change, and on the global so it lands on the same render as the model swap: through a
+    // `changed` handler it lands a frame late, after the advanced list has painted at rest once.
     in-out property <int> slide-phase: 18;
 
-    // 1 = advanced forward, -1 = rewound. Written **before** `slide-phase` is reset, so one
-    // render picks up both.
+    // 1 forward, -1 back. Written **before** `slide-phase` is reset, so one render takes both.
     in-out property <int> slide-direction: 1;
 
-    // The transient row rendered alongside the list for the length of the slide. Rust leaves
-    // `outgoing-visible` false when there's nothing to render, as on skip-to and queue rebuild.
+    // Drawn beside the list for the slide. Left hidden where there is nothing to draw, as on
+    // skip-to and a queue rebuild.
     in-out property <QueueRow> outgoing-row;
     in-out property <bool> outgoing-visible: false;
 }

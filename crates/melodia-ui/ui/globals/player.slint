@@ -1,26 +1,13 @@
 import { PlayerVm, QueueVm, TrackMetaRow } from "../models.slint";
 import { Settings } from "../settings.slint";
 
-// Bound to the backend through watch channels (push) and `library::*` (pull); cross-cutting
-// callbacks are wired in `crates/melodia-views/src/ui/callbacks/`, each view slice owning its own under `<view>/`.
 export global Player {
     in-out property <PlayerVm> vm;
     in-out property <QueueVm> queue;
 
-    // The two label lines every Now-Playing surface draws, derived once here rather than as a
-    // ternary at each of the three (bar, full view and miniplayer). The ladder is
-    // the same one `player::now_playing::SourceSummary` hands the OS surfaces, and it has to be
-    // spelled again in Slint because only `@tr` at a literal reaches the catalogues.
-    //
-    // **The song leads and the station follows**, so the station is on screen either way: as the
-    // third line once the stream names an artist, as the subtitle under a line naming none, and
-    // as the title until anything is announced. In that last case the subtitle falls through to
-    // the station's genres rather than standing empty — the line is there whatever happens, so it
-    // may as well say something, and a genre under a station name reads the way an artist under a
-    // title does.
-    //
-    // The LRM forces an LTR base direction so `elide` renders its `…` at the right edge for RTL
-    // scripts too; see the title-cell note in `track-list-row.slint`.
+    // `player::now_playing::SourceSummary`'s ladder, spelled again because only `@tr` at a literal
+    // reaches the catalogues. The LRM forces an LTR base so `elide` puts its `…` on the right for
+    // RTL scripts too (`track-title.slint`).
     out property <string> source-title: root.vm.has_station
         ? "‎" + (root.vm.radio.live_title == "" ? root.vm.radio.name : root.vm.radio.live_title)
         : (root.vm.has_track ? "‎" + root.vm.track.title : @tr("No track playing"));
@@ -33,21 +20,15 @@ export global Player {
             ? "‎" + (root.vm.track.artist == "" ? @tr("Unknown artist") : root.vm.track.artist)
             : "—");
 
-    // The third line: an album for a track; for a stream, the station once an artist has taken
-    // its line, otherwise the station's country. **Empty rather than LRM-prefixed when there is
-    // nothing**, so a host can gate its `Text` on `!= ""` without a second property to ask.
+    // **Empty rather than LRM-prefixed when there is nothing**, so a host can gate on `!= ""`.
     out property <string> source-tertiary: root.vm.has_station
         ? (root.vm.radio.live_artist != ""
             ? "‎" + root.vm.radio.name
             : (root.vm.radio.country == "" ? "" : "‎" + root.vm.radio.country))
         : (root.vm.has_track && root.vm.track.album != "" ? "‎" + root.vm.track.album : "");
 
-    // What the station pill says, in the slot a track's seek bar occupies. Four states, one
-    // pill: `loading` is the initial connect *and* the re-open a play on a paused station is,
-    // which is what keeps that from reading as a resume; `paused` has no connection left to be
-    // live over, `build_pause_actions` dropping it rather than holding a socket the server would
-    // back-pressure; `buffering` is a starved ring beside a still-`playing` status, so a dip
-    // never looks like a stop.
+    // `loading` is also the re-open a play on a paused station is, so that never reads as a resume;
+    // `buffering` is a starved ring under a still-`playing` status, so a dip never reads as a stop.
     out property <string> live-label: root.vm.status == "loading"
         ? @tr("Connecting…")
         : (root.vm.status == "paused"
@@ -58,47 +39,34 @@ export global Player {
                 // Translators: a short pill in place of a track's seek bar
                 : @tr("LIVE")));
 
-    // Projected out of `vm` for a *Rust* reader, which is the half a binding cannot help with:
-    // reading a struct property from Rust clones the whole of it, and the lyrics panel's follow
-    // wants these two on a 33 ms tick. Derived here so the clone happens once per publish rather
-    // than once per tick, the same trade the two scalars below make against their writers.
+    // For the lyrics follow's 33 ms tick, a Rust read of `vm` cloning all of it.
     out property <bool> vm-is-playing: root.vm.is_playing;
     out property <float> vm-playback-speed: root.vm.playback_speed;
 
-    // Standalone rather than fields of `vm`, so the 500 ms monitor publish only invalidates
-    // the bindings that read them — see `PlayerVm` in `models.slint`.
+    // Outside `vm` for the reason `PlayerVm` in `models.slint` gives.
     in-out property <int> position-ms;
     in-out property <int> duration-ms;
 
-    // A seek target held until the reported position lands within ±2 s or the track changes. While
-    // ≥ 0 the slider prefers it over `position-ms`, so the thumb doesn't snap back for a frame.
+    // Held until the position lands within ±2 s, so the slider's thumb doesn't snap back.
     in-out property <int> seek_pending_ms: -1;
 
-    // Where a run of *relative* seeks is walking to, or -1 between runs. The seek keys and a held
-    // Previous or Next both walk it; `ShortcutScope` owns the timer that lands it, a global holding
-    // no elements. The state lives here rather than beside that timer so `seek-to` can cancel a run,
-    // which is the only way an absolute seek is safe from a trailing edge landing back on the target
-    // it just abandoned.
+    // -1 between runs. Here rather than beside `ShortcutScope`'s timer so `seek-to` can cancel a
+    // run whose trailing edge would land on the target an absolute seek abandoned.
     in-out property <int> seek-run-target-ms: -1;
-    // Whether the target has moved since the last one was sent, so the trailing edge stays quiet
-    // when the leading one already covered the whole run.
+    // Keeps the trailing edge quiet when the leading one already covered the whole run.
     in-out property <bool> seek-run-unsent: false;
-    // Timer ticks left before the run ends, reset by every step. Non-zero is also what runs the
-    // timer, so clearing it is how an absolute seek drops the trailing edge.
+    // Non-zero is also what runs the timer, so clearing it drops the trailing edge.
     in-out property <int> seek-run-ticks: 0;
-    // The timer's period, held here so a window can be counted in its ticks.
     out property <duration> seek-run-tick: 100ms;
     property <int> seek-run-window-ticks: 3;
 
-    // The press-and-hold half of the transport, read by both the bar and the miniplayer so the two
-    // can't come to behave differently. A zero hold leaves a plain button.
     property <bool> can-scan: root.vm.has_track && root.duration-ms > 0;
     // Longer than a slow click, so an ordinary one never turns into a scan.
     out property <duration> scan-hold: root.can-scan ? 500ms : 0ms;
     // Long enough to hear each burst, short enough to read as one sweep.
     out property <duration> scan-interval: 250ms;
-    // A refill keeps the timer's phase, so a window of n ticks can lapse n - 1 ticks after the step
-    // that set it. One tick past what the interval spans keeps each step inside the last one's run.
+    // A refill keeps the timer's phase, so a window of n ticks can lapse n - 1 ticks after its
+    // step. One tick past the interval keeps each step inside the last one's run.
     property <int> scan-window-ticks: floor(root.scan-interval / root.seek-run-tick) + 2;
     // A nudge first, growing per step up to a share of the track, so an hour-long recording crosses
     // about as fast as a song.
@@ -111,8 +79,7 @@ export global Player {
     property <int> scan-end-margin-ms: 2000;
     property <int> scan-end-ms: max(0, root.duration-ms - root.scan-end-margin-ms
         - (Settings.crossfade-enabled ? round(Settings.crossfade-duration-secs * 1000) : 0));
-    // A stop, as against a pause: play starts the track over. Launch restores its track stopped
-    // where the last session left it, and that one resumes like a pause, hence the position.
+    // A launch restores its track stopped mid-way, and that resumes like a pause, hence the position.
     out property <bool> stopped-at-top: root.vm.has_track && root.vm.status == "stopped"
         && root.position-ms == 0;
     // Clearly longer than any click on the most-pressed button, and than the scan's hold. Off where
@@ -120,8 +87,6 @@ export global Player {
     out property <duration> stop-hold:
         (root.vm.has_track && !root.stopped-at-top) || root.vm.has_station ? 900ms : 0ms;
 
-    // The tooltip is the only thing on screen naming the hold, and on a dimmed button the only
-    // sign it does anything.
     out property <string> previous-tooltip: root.can-scan
         ? @tr("Previous (hold to rewind)")
         : @tr("Previous");
@@ -129,102 +94,66 @@ export global Player {
         ? @tr("Next (hold to fast-forward)")
         : @tr("Next");
 
-    // The dual-slot cross-fade: Rust writes the fresh blur into the *inactive* slot then flips
-    // `blur-use-a`. **Nothing clears a slot a fade may still read**: the outgoing layer stays
-    // painted for the whole fade, and `ui::now_playing` empties the unshown one only after it, once
-    // no surface draws the pair. Written only on track change, so these don't re-invalidate per
-    // tick.
+    // The two-slot cross-fade (`slint-pitfalls.md`), written only on a track change.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool> blur-use-a: true;
-    // False for an art-less or failed-decode track: both slots fade to 0 and the accent-tinted
-    // gradient floor shows through.
     in-out property <bool> blur-has-image: false;
 
-    // The foreground cover tile, same dual-slot contract over the sharp artwork rather than
-    // the row thumbnail in `vm.track.cover_img`.
+    // The same over the sharp cover, not `vm.track.cover_img`'s row thumbnail.
     in-out property <image> np-cover-a;
     in-out property <image> np-cover-b;
     in-out property <bool> np-cover-use-a: true;
     in-out property <bool> np-cover-has-image: false;
 
-    // The full view's station logo, at the same tier as the pair above but deliberately not in
-    // it: that pair is the *track's* cross-fade, and a station change is a deliberate act with
-    // nothing to cross-fade between. Empty (`width == 0`) with no logo, which is what puts the
-    // tile on its monogram.
+    // Outside the pair, a station change having nothing to cross-fade between.
     in-out property <image> np-station-logo;
-    // The decoded logo's own smallest side, `Radio.detail-logo-size`'s twin. A station logo is
-    // routinely a favicon, so the tile needs it to know whether to draw an inset card instead of
-    // magnifying a 32 px source across 384.
+    // `Radio.detail-logo-size`'s twin.
     in-out property <int> np-station-logo-size: 0;
 
-    // Replaced wholesale by the subscriber; `track_id` is what lets the view drop a stale push
-    // landing after a rapid track change.
+    // `track_id` lets the view drop a stale push landing after a rapid track change.
     in-out property <TrackMetaRow> track-meta;
 
-    // The metadata chips for `track-meta`, in reading order. Uncapped: the view has room to
-    // wrap where the hero band does not.
     in-out property <[string]> chips;
 
-    // The Now Playing backdrop colour set, written together by the `track_change` subscriber from
-    // `ui::backdrop`, which answers twice over: on the blur these take their *hue* from the accent
-    // quantized out of the cover (`Theme.accent` when art-less) and their *tone* from a solve against
-    // how bright it measured; on the aurora they are the theme's own base under a neutral ink.
-    // **Read the tier, never a `Theme.*` brush** — which arm is live is `backdrop::kind`'s answer and
-    // no consumer's. The literal defaults exist for the same reason and are never taken.
+    // The backdrop tier, written together from `ui::backdrop`. **Read the tier, never a `Theme.*`
+    // brush**: which arm is live is `backdrop::kind`'s answer, not a consumer's.
 
-    // Alpha baked in. Solved so the *composited* backdrop lands in a known dark band whatever
-    // the cover, which is what lets one light foreground be correct on all of them.
+    // Alpha baked in, solved so the composite lands in one dark band whatever the cover.
     in-out property <brush> np-scrim: #0a0a0e73;
 
-    // The floor under the blur slots, and the aurora's base — flat `Theme.base` in both stops on
-    // that arm. Two `color`s rather than one `brush`: gradient stops and `.mix()` need `color`
-    // operands.
+    // `color`s, since gradient stops and `.mix()` take no `brush`.
     in-out property <color> np-floor-start: #2b2135;
     in-out property <color> np-floor-end: #14101a;
 
-    // The aurora's washes: the cover's own colours off the same quantize, with nothing done to them,
-    // so what survives is the record's value structure rather than one tone wearing three hues. A
-    // coverless track substitutes the accent seated to a wash tone plus a deeper sibling; `color`
-    // carries each weight in its alpha, for the floor's gradient-stop reason. **The count matches
-    // `ui::aurora::WASH_COUNT`** — a brush animates stop-for-stop only against a matching one.
+    // The aurora's washes, each weight in its alpha. **As many as `ui::aurora::WASH_COUNT`**: a
+    // brush animates stop-for-stop only against a matching one.
     in-out property <color> np-tint-1: #3a2d4a;
     in-out property <color> np-tint-2: #2d3a4a;
     in-out property <color> np-tint-3: #4a2d3a;
 
-    // The aurora's grain, written once at boot. Here rather than beside the tints because it
-    // answers to the renderer rather than to the artwork; `ui::aurora::dither_tile` argues it.
+    // Written once at boot; `ui::aurora::dither_tile` argues it.
     in-out property <image> np-dither;
 
-    // The hue-carrying tier — visualizer, stars, heart, back button, chips, Up-Next chrome. On the
-    // blur, solved for the 3:1 non-text bar then floored, so a brighter accent keeps its own tone;
-    // one brush serves solid and translucent alike. **Never `.brighter()`** — that scales HSV value
-    // and can't lift a near-black accent at all.
+    // The hue-carrying tier, solved on the blur to 3:1 then floored so a brighter accent keeps its
+    // tone. **Never `.brighter()`**: it scales HSV value and can't lift a near-black accent.
     in-out property <brush> np-accent-bright: #cba6f7;
 
-    // Derived here so surfaces meant to match can't drift; genuine one-offs stay inline.
-    // **`transparentize`, not `with-alpha`** — it multiplies, so all three inherit whatever alpha the
-    // tier carries: opaque on the blur, partial on the aurora. Pinning alpha here would leave the
-    // pills heavier than the glyphs they sit behind.
+    // **`transparentize`, not `with-alpha`**: the tier carries an alpha of its own on the aurora.
     out property <brush> np-accent-pill: root.np-accent-bright.transparentize(0.84);
     out property <brush> np-accent-disc-hover: root.np-accent-bright.transparentize(0.7);
     out property <brush> np-accent-dim: root.np-accent-bright.transparentize(0.4);
 
-    // `HeroBackdrop.chrome-text` / `.chip-fill`'s twins. Deliberately *not* derived from the tier
-    // above: `np-accent-pill` is the disc buttons' and the Up-Next row's fill too, and the chips
-    // lightening to let the wash through must not take those affordances with them.
+    // `HeroBackdrop.chrome-text`/`.chip-fill`'s twins, not derived from `np-accent-pill`: the discs
+    // and Up Next fill with that too, and the chips lightening must not take them along.
     in-out property <brush> np-chrome-text: #cba6f7;
     in-out property <brush> np-chip-fill: #cba6f733;
 
-    // The spectrum bars and the waveform trace. Off the tier above but at its own weight, the
-    // visualizer being the only chrome that moves; no hero mounts one, so it has no twin.
     in-out property <brush> np-viz: #cba6f7;
 
-    // Body text. On the blur, solved for 4.5:1 and chroma-capped, so it reads as near-white
-    // carrying a whisper of the album's warmth — the tier above is where the hue gets to be loud.
+    // 4.5:1 on the blur and chroma-capped, the hue being the accent tier's to carry.
     in-out property <brush> np-on-backdrop: #c4c0cc;
-
-    // Secondary text, at 3:1 in its own dimmer band so the hierarchy survives every backdrop.
+    // 3:1, in a dimmer band of its own so the hierarchy survives every backdrop.
     in-out property <brush> np-on-backdrop-muted: #ada9b5;
 
     callback play-pause();
@@ -233,29 +162,20 @@ export global Player {
     callback stop();
     callback seek(int);          // position in ms
 
-    // Drop the relative-seek run, so the next press reads a fresh position.
     public function end-seek-run() {
         root.seek-run-target-ms = -1;
         root.seek-run-unsent = false;
         root.seek-run-ticks = 0;
     }
 
-    // The one spelling for a seek that names a position rather than a step. Every slider and the
-    // percentage shortcuts go through it; only the relative run's own flush calls `seek` bare.
+    // Every seek naming a position comes through here; only the run's own flush calls `seek` bare.
     public function seek-to(ms: int) {
         root.end-seek-run();
         root.seek(ms);
     }
 
-    // Walk the run's target rather than re-reading the position per press, for two reasons that
-    // happen to share a fix. A seek round-trips through the backend asynchronously and does not
-    // land inside a key repeat, so every repeat would aim at the same sample and the run would
-    // travel one step; and a seek is far from free down there, where the track is reopened and
-    // the demuxer walked to the target, so issuing one per repeat is the expensive way to go
-    // nowhere.
-    //
-    // Guarded on a real duration, so a press with no track loaded is a no-op rather than a seek
-    // against an unloaded backend.
+    // Walks the run's target rather than the position: a seek lands a round trip later, so each
+    // key repeat would aim at the same sample, and every one reopens the track down there.
     public function bump-seek(delta-ms: int) {
         if (root.duration-ms > 0) {
             root.walk-seek-run(delta-ms, root.duration-ms);
@@ -268,10 +188,8 @@ export global Player {
         }
     }
 
-    // One jump of a held Previous or Next. Unlike a key repeat every step is sent, the scan's
-    // interval being the rate limit, and each keeps the run open so the next walks from this
-    // target. At either end a step lands on the end again, so the position holds there rather than
-    // playing on into the start of the track or the next one.
+    // Unlike a key repeat every step is sent, the scan interval being the rate limit. At either end
+    // a step lands on the end again, so the position holds rather than playing on.
     public function scan-step(direction: int, step: int) {
         if (root.can-scan) {
             // Never below the run's own base, so a fast-forward started past the parking point
@@ -311,42 +229,34 @@ export global Player {
     // Relative, so Rust applies it to the level it holds: `vm.volume` comes back a round trip
     // later, and a fast wheel would read the same stale level for several notches.
     callback step-volume(int /*delta*/);
-    // Applies to the live player immediately *and* persists; reads back through `vm.playback_speed`.
     callback set-playback-speed(float);
     callback toggle-mute();
     callback toggle-shuffle();
     callback cycle-repeat();
     callback toggle-favorite();
-    // 0–5. Mirrors `toggle-favorite`: applies to `current_track` and fans out to the row
-    // surfaces. Reads back through `vm.track.rating`.
     callback set-current-rating(int /*rating*/);
 
-    // The playing track's album, artist and genre, for the bar's row menu; 0 where it has none or
-    // the read hasn't landed. Outside `vm` because `TrackSummary` carries no foreign keys, so
-    // `ui::track_links` reads them beside it.
+    // For the bar's row menu, 0 where there is none yet; `ui::track_links` writes them.
     in-out property <int> track-album-id;
     in-out property <int> track-artist-id;
     in-out property <int> track-genre-id;
 
     // 0 = off, > 0 = duration timer, -1 = "End of current track". **Session-only.**
     callback set-sleep-timer(int /*minutes*/);
-    // The flyout's ±stepper Start pill. Rust clamps to [30 s, 2 h].
+    // Rust clamps to [30 s, 2 h].
     callback set-sleep-timer-seconds(int /*seconds*/);
-    // The armed *duration*, 0 for none. Drives the preset rows' active highlight — a preset
-    // matches when `value * 60 == this`. End-of-track mode rides `vm.sleep_at_track_end`.
+    // The armed duration, 0 for none: a preset is lit when `value * 60 == this`. End-of-track mode
+    // rides `vm.sleep_at_track_end`.
     in-out property <int> sleep-timer-total-seconds: 0;
-    // Written each second by the countdown task. Standalone, not a `vm` field, so the update
-    // only invalidates the row reading it — the `position-ms` rule.
+    // Outside `vm` for `position-ms`' reason, being written every second.
     in-out property <string> sleep-timer-remaining: "";
 
     // Bumped by every volume step, key or wheel: `VolumeTrigger` force-shows its readout off it and
-    // `ShortcutScope` debounces the persist. **Slider drags don't bump it** — they raise the popup
-    // chrome and commit on release.
+    // `ShortcutScope` debounces the persist. **Slider drags don't bump it**, committing on release.
     in-out property <int> volume-step-tick: 0;
 
-    // Ctrl (Cmd on macOS) is the fine step, for the arrow keys and the wheel alike. A wheel over an
-    // unfocused window always takes the coarse one on Linux: Wayland sends modifiers only to the
-    // focused window, and winit's X11 backend forwards them only there.
+    // Ctrl (Cmd on macOS) is the fine step. A wheel over an unfocused window always takes the coarse
+    // one on Linux: Wayland and winit's X11 backend send modifiers only to the focused window.
     public pure function volume-step(modifiers: KeyboardModifiers) -> int {
         return modifiers.control ? 1 : 5;
     }
@@ -358,8 +268,7 @@ export global Player {
 
     // What Slint's winit backend turns one wheel line into.
     property <length> wheel-notch: 60px;
-    // Travel short of a notch. A touchpad sends a stream of small deltas, which add up to steps
-    // here rather than each being one.
+    // Travel short of a notch, so a touchpad's stream of small deltas adds up to steps.
     property <length> wheel-carry: 0px;
 
     // **Accepts every event, an empty one included**: a `TouchArea` that rejects the wheel drops

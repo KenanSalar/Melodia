@@ -1,190 +1,131 @@
 import { Theme } from "../theme.slint";
 import { Settings } from "../settings.slint";
 
-// Window-shell plumbing: the chrome the OS frame doesn't draw, the responsive miniplayer swap, and
-// the two globals keeping pointer state coherent when a view switch unmounts what was under it.
-
-// Which of the frameless window's resize grabs the pointer is over, named by the edge or corner it
-// moves. `ResizeRing` is the only writer.
+// The frameless window's resize grab under the pointer. `ResizeRing` is the only writer.
 export enum ResizeZone { none, north, south, west, east, north-west, north-east, south-west, south-east }
 
-// Which window-move region the pointer is over, named by the host because a double press on the
-// titlebar maximizes and one on the miniplayer only moves it. Each region is the only writer of its
-// own name.
+// Named by the host, since a double press on the titlebar maximizes and one on the miniplayer only
+// moves it. Each region is the only writer of its own name.
 export enum DragRegion { none, titlebar, miniplayer }
 
-// The custom titlebar, owned by `ui/window_chrome/` with Slint as the dumb renderer.
-// `is-maximized` comes off a winit `Resized` subscription, so the icon stays right under tiling
-// shortcuts that bypass our buttons. **Window dragging and resizing are not handled inside Slint** — a
-// `TouchArea` calling `drag_window()` leaks its mouse grab and wedges the window; Rust intercepts
-// the press at the winit layer. `restart-app` persists then respawns for the titlebar toggle;
-// `restart-tray` and `restart-backdrop` mirror it, so the gate each reads once at startup
-// re-evaluates: `install_ui`'s tray install and `boot::ui_setup::chrome::apply_backdrop_style`.
+// The custom titlebar's state, Slint only rendering it (`ui/window_chrome/`); dragging and resizing
+// are the winit layer's (`desktop-shell.md`). Each `restart-*` persists and respawns, so a gate read
+// once at startup is read again.
 export global WindowChrome {
+    // Off a winit `Resized` subscription, so the icon stays right under tiling shortcuts.
     in property <bool> is-maximized;
 
-    // What the OS frame adds to the client area on each axis, measured as the step the client takes
-    // when a decoration comes or goes rather than asked of the window: a Wayland compositor draws
-    // its decoration outside the surface and tells the client nothing about it, so the query reads
-    // zero on the one desktop whose client really does grow by a titlebar. Rust writes it only on a
-    // reading that crossed a change `frame-changed` has just announced, so it survives every
-    // frameless one after it, for the miniplayer's exit edge and for the window's minimum while a
-    // frame stands.
+    // What the OS frame adds to the client on each axis, held across the frameless span;
+    // `geometry::frame_allowance` argues the measurement and `desktop-shell.md` the coupling.
     in property <length> frame-allowance-w;
     in property <length> frame-allowance-h;
 
-    // The part of that frame outside the edges it draws: Win32's invisible resize borders, which a
-    // dropped frame hands to the client. Zero elsewhere, and written only while a frame stands.
+    // Win32's invisible resize borders, which a dropped frame hands to the client. Zero elsewhere,
+    // and written only while a frame stands.
     in property <length> frame-margin-left;
     in property <length> frame-margin-right;
     in property <length> frame-margin-bottom;
 
-    // The shell's rect in window coordinates, its top always at 0. `AppWindow` mirrors it here
-    // because a tooltip keeps its pill inside it and cannot reach the root's geometry.
+    // The shell's rect, its top always at 0. Mirrored by `AppWindow` because a tooltip keeps its
+    // pill inside it and cannot reach the root's geometry.
     in-out property <length> shell-x;
     in-out property <length> shell-width;
     in-out property <length> shell-height;
-    // What a tooltip or menu fitted to that rect keeps clear of its edges.
     out property <length> edge-clearance: Theme.pad-xs;
 
-    // The content panel's width, which the card grids are laid out in. Read by Rust, which sizes
-    // the grid cover tier off it: the sidebar and the queue panel beside it are the user's to
-    // drag and to open, so the window alone can't say how wide a card is drawn.
+    // The grid cover tier is sized off this rather than the window (`grid_prewarm::cover_size`).
     in-out property <length> content-panel-width;
 
-    // The frameless outline's colour, resolved from the Window Border Color pick. Unfocused is its
-    // own brush because Windows' accent borders go neutral on an inactive window; for any other pick
-    // the two are the same.
+    // Unfocused is its own brush because Windows' accent borders go neutral on an inactive window.
     in property <brush> border-color;
     in property <brush> border-color-unfocused;
 
-    // The mantle behind the full UI's chrome: the sidebar, the now-playing bar and the gutter
-    // beside the content panel, so they swap together. The KDE-only unfocused tint mirrors the fade
-    // an OS-drawn titlebar does, which is why it also gates on `use-native-titlebar`: under our own
-    // chrome there is nothing to match, and the toggle is kept across a titlebar disable so it
-    // survives a re-enable. No `animate` on any reader, since the OS swaps its colour instantly.
+    // The full UI chrome's ground, so the sidebar, the bar and the gutter swap together. The
+    // KDE-only unfocused tint mirrors the fade an OS titlebar does, so it needs the native titlebar
+    // under it, and the toggle is kept across a titlebar flip. No `animate` on any reader: the OS
+    // swaps its colour instantly.
     out property <brush> mantle: (Settings.match-unfocused-bg && Theme.use-native-titlebar
         && !Theme.window-focused) ? Theme.mantle-unfocused : Theme.mantle;
 
-    // `supported` gates the pin button so bare-Wayland and GNOME-without-window-calls users don't
-    // see a dead control. `active` is written optimistically on click; Rust reverts it on failure.
+    // `supported` hides a pin that would do nothing (bare Wayland, GNOME without window-calls).
+    // `active` is written optimistically on click; Rust reverts it on failure.
     in property <bool> always-on-top-supported;
     in-out property <bool> always-on-top-active;
 
     callback minimize();
     callback toggle-maximize();
-    // The miniplayer's middle caption. A miniplayer is a window size, so leaving it is a resize
-    // back to the geometry the full player last settled at, which Rust holds from the moment the
-    // miniplayer took over, across a relaunch included.
+    // A miniplayer is a window size, so leaving it is a resize back to the full player's last
+    // geometry, which Rust holds across a relaunch too.
     callback restore-full-player();
     callback close-window();
     callback toggle-always-on-top();
-    // Kept in a cell the winit `MouseInput` filter checks before starting an OS-level window move,
-    // or on the titlebar's second press, a maximize toggle.
+    // Both kept in cells the winit `MouseInput` filter reads at a press, the resize zone first,
+    // before it starts an OS-level move or resize.
     callback drag-region-changed(DragRegion);
-    // The same for `ResizeRing`'s grabs, kept in a cell the filter checks first, before an OS-level
-    // resize.
     callback resize-zone-changed(ResizeZone);
-    // The window is about to gain or lose its OS frame. Rust stamps the moment, because the step
-    // the client takes is only a frame while it is that change's own: a desktop that takes a
-    // dropped frame out of the window rather than handing it to the client reports no size at all,
-    // and the next resize of any kind would be read as the frame.
+    // Rust stamps the moment: a client step counts as the frame only while this change is recent.
     callback frame-changed();
     callback restart-app();
     callback restart-tray();
     callback restart-backdrop();
-    // Fired by the winit `Resized` filter, handled in `boot::ui_setup`. Rust to Rust through a
-    // global because the two ends are far apart: the filter is installed before the view handles
-    // exist, and the handler needs all seven of them. Nothing in Slint reads it.
-    //
-    // Every cover tier's capacity and decode size are answers about the window, and they were
-    // read once after `app.show()` — so a window maximized afterwards mounted more cards than
-    // its tier could hold and left the overflow on placeholders.
+    // Rust to Rust: the winit `Resized` filter is installed before the view handles exist that
+    // `boot::ui_setup`'s retune needs. Nothing in Slint reads it.
     callback display-changed();
-    // The same retune for the content panel, fired whenever `content-panel-width` moves: a panel
-    // toggle or a sidebar drag changes how wide a card is without resizing the window.
+    // The same retune for a panel toggle or a sidebar drag, which resize no window.
     callback content-panel-resized();
-    // Windows only, Rust to Rust like `display-changed`: fired by the winit `ThemeChanged` and
-    // focus-gain arms, handled in `ui::appearance`, which re-reads the default app mode and repaints
-    // a System variant painted for the other one. Focus gain too, as the border colour's refresh
-    // does, so an event winit never sent costs no more than a click back into the window.
+    // Windows only, Rust to Rust: winit `ThemeChanged` and every focus gain, so a change winit
+    // never reported costs a click back into the window.
     callback recheck-system-theme();
 }
 
-// Which of the miniplayer's layouts is up. A state rather than a flag per layout, since they are
-// mutually exclusive and a pair of flags can spell a combination neither means. All three are one
-// mount, grown or rearranged rather than swapped.
+// One mount grown or rearranged across all three, never swapped.
 export enum MiniLayout {
-    // One row, the artwork at its floor with the controls up on the title's line beside it, the
-    // timeline under them. For a window too short for either of the others.
+    // For a window too short for either of the others: one row, the controls on the title's line.
     strip,
-    // The artwork beside the title and controls, the timeline under both, the controls coming down
-    // under the title as the artwork grows and the window's captions opening above them as there is
-    // room.
+    // The artwork beside the title and controls, the captions opening above as there is room.
     card,
     // The card with its captions all the way open and room for a panel under it.
     column,
 }
 
-// The compact player replacing the full UI once the window shrinks past a threshold, and which of
-// its layouts is up. `MiniPlayerSwitch` owns both answers. **Entry and exit are resize-only.**
+// `MiniPlayerSwitch` owns both answers. **Entry and exit are resize-only.**
 export global MiniPlayer {
     in-out property <bool> active: false;
     in-out property <MiniLayout> layout: MiniLayout.strip;
 
-    // The most the card's and the column's artwork draws, leaving a tall window's height to the
-    // panel. The switch reads it too, handing the card over to the column only once the artwork
-    // and the captions row above it have stopped growing and the panel has room.
+    // Leaves a tall window's height to the panel.
     out property <length> art-cap: 180px;
 
-    // The least the artwork draws, which is the strip's thumbnail: the size the row tier is decoded
-    // for, so the strip draws its cover unscaled. The switch hands the strip over to the card once
-    // the window gives the artwork more, where the view has already moved everything into place.
+    // The row tier's decode size, so the strip draws its cover unscaled.
     out property <length> art-floor: 48px;
 
-    // The card's captions row with the gap under it, all the way open. Spelled rather than measured:
-    // the row is behind an `if`, and opens by what the rows under it leave rather than by its
-    // content. The switch reads it too, for where the column starts and where a resize settles the
-    // row.
+    // Spelled rather than measured: the row is behind an `if` and opens by what the rows under it
+    // leave, not by its content.
     out property <length> captions-height: 32px;
 
-    // The gap between the timeline and the column's panel, and the panel's whole floor: the list
-    // comes in under the gap the moment there is room for it, rather than that room standing empty
-    // until a row fits. The switch reads it too, for where the column starts.
+    // Also the panel's whole floor, so the list comes in the moment there is room for the gap.
     out property <length> panel-gap: Theme.pad-sm;
 
-    // The strip's smallest footprint, which is the window's floor. Rust floors a restored window at
-    // it too, so a hand-edited `settings.json` can't open one smaller.
+    // The strip's footprint, which Rust also floors a restored window at.
     out property <length> window-min-width: 350px;
     out property <length> window-min-height: 90px;
 
-    // **The thresholds below restate what the view lays out rather than measure it**, and
-    // `room-grow` is why they sit here rather than in the switch that used to hold them: the
-    // controls are sized by it and the artwork by the width they leave, so a reading back of
-    // either closes that loop. The switch had already spelled its own for its own reason, that it
-    // decides where a swap lands before the view exists to be asked.
-    //
-    // The padding, the timeline and the gap over it, which is everything the card's height holds
-    // but the artwork.
+    // **These restate the view's layout rather than measure it**: `room-grow` sizes the controls
+    // and the artwork takes the width they leave, so reading either back would close a loop.
+
+    // Everything the card's height holds but the artwork.
     out property <length> art-rows: 48px;
-    // The same across the row the artwork shares with the controls: the padding either side, the
-    // row's own inset and the gap to the title.
+    // The same across the artwork's row: the padding, the row's inset and the gap to the title.
     out property <length> art-row-insets: 20px;
-    // The smallest artwork that seats the title with the controls under it. Below it they rise
-    // onto the title's line, all the way by the artwork's floor.
+    // The smallest artwork that seats the controls under the title.
     out property <length> stacked-art: 70px;
-    // The controls' width beside the artwork, at the sizes the strip holds them at and at the
-    // ones a card with room to spare opens them to. The pin collapses where the window manager
-    // gives no way to keep a window on top.
+    // The pin collapses where the window manager gives no way to keep a window on top.
     out property <length> controls-min-width: WindowChrome.always-on-top-supported ? 220px : 190px;
     out property <length> controls-max-width: WindowChrome.always-on-top-supported ? 276px : 238px;
 
-    // How far a card with room to spare has opened the controls and the title past the strip's
-    // sizes. **Both axes, whichever has less to give**: the height picks up where the controls
-    // finish rising onto the title's line, over the artwork's remaining travel, and the width
-    // starts where a capped artwork and the controls at their floor stop competing for it and
-    // ends where they still both fit grown. So the growth spends exactly the surplus the artwork
-    // has no use for, and the cover stays at its cap the whole way along.
+    // How far a roomy card has opened the controls past the strip's sizes, by whichever axis has
+    // less to give. It spends only the surplus a capped artwork has no use for, so the cover stays
+    // at its cap the whole way.
     out property <float> room-grow: min(
         clamp((WindowChrome.shell-height - root.art-rows - root.stacked-art)
             / (root.art-cap - root.stacked-art), 0, 1),
@@ -192,44 +133,32 @@ export global MiniPlayer {
             - root.controls-min-width) / (root.controls-max-width - root.controls-min-width),
             0, 1));
 
-    // The column's window captions: 0 = Windows, 1 = macOS, 2 = KDE,
-    // `Theme.titlebar-button-style`'s tokens. Its own setting rather than that one's, a miniplayer
-    // showing captions under the native titlebar as well, where the titlebar's style has nothing
-    // to draw.
+    // 0 = Windows, 1 = macOS, 2 = KDE, `Theme.titlebar-button-style`'s tokens. A setting of its
+    // own, the miniplayer drawing captions under the native titlebar too.
     in property <int> button-style: 0;
 
-    // Whether the miniplayer paints the artwork backdrop and its solved ink instead of flat chrome.
-    // **Not `Theme.aurora-backdrop`**, which decides which of the two stacks every colour tier is
-    // solved for and is restart-gated for exactly that reason; this only says whether this surface
-    // mounts the one already chosen, which is why it can move on a click. Off by default, so an
-    // install that never presses the button keeps the look it has.
+    // Whether this surface mounts the backdrop already chosen, which can move on a click. **Not
+    // `Theme.aurora-backdrop`**, which picks the stack and is restart-gated. Off by default.
     in-out property <bool> backdrop-shown: false;
 
     callback active-changed(bool);
     callback layout-changed(MiniLayout);
-    // The window takes this height and keeps its width: the switch settling a resize let go with the
-    // captions row part of the way open.
+    // Keeps the width: the switch settling a resize let go with the captions part way open.
     callback request-height(length);
     callback set-backdrop-shown(bool);
 }
 
-// Bridges the winit `MouseWheel` filter to whichever *composite* view is mounted — Artist Detail
-// and Browse. Slint's inner `ListView` swallows the vertical wheel at its scroll edge and pure
-// Slint can't fix it without breaking row clicks, so the winit layer intercepts vertical-dominant
-// wheel over the region. **A page whose sections become tabs needs none of this** — tabs first.
+// The winit wheel route into a composite view (`slint-pitfalls.md`). **A page whose sections
+// become tabs needs none of this** — tabs first.
 export global CompositeScroll {
-    // Set by the mounted view's hover sentinel, cleared by `reset()` on any view switch.
     in-out property <bool> hovered: false;
-    // Logical px, +y scrolling up to match `flickable.rs`'s sign. Rust **adds** the delta then bumps
-    // the tick, surviving Slint coalescing several events into one `changed` firing. Nothing paints
-    // either, so the filter must also request the frame.
+    // Logical px, +y scrolling up as `flickable.rs` does. Rust **adds** the delta and then bumps the
+    // tick, which survives Slint coalescing several events into one `changed`.
     in-out property <length> wheel-dy: 0px;
     in-out property <int> wheel-tick: 0;
 
-    // **Every content-view switch owes this call**, Slint destroying the outgoing view with no
-    // unmount hook, so nothing else clears the flag its hover sentinel left set. Miss one and the
-    // filter keeps eating vertical wheel on the *new* view until the next mouse move. A `public
-    // function` for the `Dialog.closed-teardown()` reason: a callback has one handler slot.
+    // **Every content-view switch owes this call** (`slint-pitfalls.md`). A `public function`
+    // because a callback has one handler slot.
     public function reset() {
         root.hovered = false;
         root.wheel-dy = 0px;

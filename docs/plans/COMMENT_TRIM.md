@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 13 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 13.2 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -112,8 +112,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 10.5 | `melodia-views`: the rest of the shared layer | 0.33 | 2,334 | ~591 | 0.23 (1,632) | `caaa91bf` |
 | 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | 0.16 (1,287) | `1687b4db` |
 | 11 | `melodia-store` | 0.34 | 2,456 | ~666 | 0.20 (1,454) | `6d82a92b` |
-| 12 | `melodia-integrations` | 0.30 | 936 | ~147 | 0.14 (438) | |
-| 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | | |
+| 12 | `melodia-integrations` | 0.30 | 936 | ~147 | 0.14 (438) | `98e82bcd` |
+| 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | 0.56 (432) | |
 | 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | | |
 | 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | | |
 | 13.4 | Slint `components/`, its own files | 0.47 | 1,538 | ~725 | | |
@@ -261,13 +261,16 @@ Status: done.
   - **Kept whole for rustfmt:** an enum whose variants are partly documented expands every struct variant, so `Identity::Playing` and `Effect::NowPlaying` keep a one-line doc rather than move code.
 
 ### Phase 13: the Slint tree
-Status: not started.
+Status: in progress.
 
 The 36 `// Translators:` notes stay byte for byte: `crates/melodia/tests/translations.rs` holds each equal to its entry in the `.pot`.
 
-- [ ] **13.1 `globals/`, playback, shell and radio**, one commit: `radio`, `player`, `shell`, `lyrics`, `queue`, `audio`, `signal-path`, `hero-backdrop`, `hero-chips`, `drag`, `nav`, `settings-page`, `onboarding`, `updater`, `notifications`, `list-travel`.
+- [x] **13.1 `globals/`, playback, shell and radio**, one commit: `radio`, `player`, `shell`, `lyrics`, `queue`, `audio`, `signal-path`, `hero-backdrop`, `hero-chips`, `drag`, `nav`, `settings-page`, `onboarding`, `updater`, `notifications`, `list-travel`.
   - **Furthest over:** `radio.slint` (129), `player.slint` (116), `shell.slint` (114), `lyrics.slint` (86).
-  - **Pointed at:** `globals/nav.slint` as the nav map's authority, and `SettingsPage.category-count`.
+  - **Pointed at:** `globals/nav.slint` as the nav map's authority, and `SettingsPage.category-count`; `desktop-shell.md` at `WindowChrome.mantle`, `ui-patterns.md` at the `Lyrics` type scale, `drag-source.slint` at `Drag.payload`'s arming. The tests reading these files (`radio_tests`, `settings_page_tests`, `signal_path_tests`, `backdrop_tests`, `startup_motion_tests`, `onboarding_tests`, `volume_steps`) read code lines only.
+  - **Second copies dropped:** `Visualizer`'s header restating `visualizer.md` (the `enabled`/`set-active` split, the pushed trace and the asked-for bars) and `window-hidden` restating `wire_window_hidden`; `WindowChrome`'s frame-allowance and `frame-changed` notes restating `frame_allowance` and `desktop-shell.md`, and its header the winit-drag rule; the two-slot cross-fade on `Player.blur-*` and `Radio.blur-*`, `slint-pitfalls.md`'s; `CompositeScroll` restating the composite wheel entry; `Radio`'s one-gate, count, grid and Browse-box arguments, `Queue`'s `shown`/`floating`/`fits` and cover tier, and `SettingsPage`'s two search properties, all `ui-patterns.md`'s; `Onboarding`'s header re-arguing the root `CLAUDE.md`'s tracker rule.
+  - **Stale claims removed:** `Player`'s LRM pointer at `track-list-row.slint`'s title cell (the argument is `track-title.slint`'s); `MelodiaUpdater` naming `tasks::updater_daily` as a writer (it paints through `check_painter`) and `crate::Updater`; `shell.slint`'s "two globals" keeping pointer state (one); `Radio`'s `services::radio_browser` (`services::net::`); `ListTravel`'s "two scrollers" (three); `WindowChrome.display-changed`'s account of what a maximize used to do.
+  - **Ends above 0.25** on decision 3: a global is the declaration half of a contract whose other half is Rust, and nothing extracts docs from `.slint`, so what each property means to its writer is stated nowhere else.
 - [ ] **13.2 `globals/`, library and dialogs**, one commit: the other 16 files.
   - **Furthest over:** `dialog.slint` (84), `dialog-forms.slint` (55), `curated.slint` (54).
   - **Pointed at:** `CLAUDE.md` on the two dispatchers (`dialog.slint`, `selection.slint`).

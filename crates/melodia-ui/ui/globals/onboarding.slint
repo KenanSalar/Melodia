@@ -1,39 +1,30 @@
-// The first-run welcome card. Owned by `crates/melodia-views/src/ui/onboarding/`, which decides at
-// boot whether the card is owed, drives `mounted`/`open`, and answers `dismiss`.
-//
-// **`mounted` and `open` are two properties because the card is `if`-mounted.** `open` drives the
-// fade and `mounted` gates the branch, so a close clears the first and Rust clears the second a
-// beat later, once the card is gone. Rust owns both timers rather than a `changed t` handler in
-// the overlay: a tracker inside the dropped `if` branch watching one of these two stays registered
-// against a property that outlives it and panics when it moves, which re-running the card from
-// Settings does to both.
+// **`mounted` gates the card's `if` branch and `open` drives its fade**, so a close lowers `open`
+// and Rust lowers `mounted` a beat later. Rust owns both timers, for the root `CLAUDE.md`'s reason:
+// nothing under `components/onboarding/` may carry a `changed` handler.
 export global Onboarding {
-    // The branch gate. Nothing under `components/onboarding/` exists outside the launch it runs on.
     in-out property <bool> mounted;
-    // The fade. Raised a frame after `mounted` so `animate` has an edge to run on.
+    // Raised a frame after `mounted`, so `animate` has an edge to run on.
     in-out property <bool> open;
 
     in-out property <int> step;
-    // **The sole definition of how many panels there are** — the footer, the step dots and Rust's
-    // clamp all read it, so a fourth panel is one number and one branch.
+    // **The sole definition of how many panels there are**: the footer, the step dots and Rust's
+    // clamp all read it.
     out property <int> step-count: 3;
 
     public function advance(delta: int) {
         root.step = clamp(root.step + delta, 0, root.step-count - 1);
     }
 
-    // Every way out means the same thing: mark it seen and close. A card that returns because it
-    // was closed early is a nag, so the X, the backdrop, Escape and Skip all land here.
+    // Every way out marks the card seen, a card that comes back because it was closed early being
+    // a nag.
     callback dismiss();
 
-    // Close onto Settings ▸ Integrations. Both scrobbling services need a login, which has no
-    // business inside a welcome card.
+    // Onto Settings ▸ Integrations: a scrobbling login has no business inside a welcome card.
     callback open-services();
 
-    // The platform's Music folder as the first panel names it, or empty where there is nothing to
-    // offer: no such folder, or one the library already covers. Rust keeps it current while the
-    // card is up.
+    // Empty where there is nothing to offer: no Music folder, or one the library already covers.
+    // Rust keeps it current while the card is up.
     in property <string> suggested-folder;
-    // Add that folder and scan it: the Library tab's add, minus the picker.
+    // The Library tab's add, minus the picker.
     callback add-suggested-folder();
 }

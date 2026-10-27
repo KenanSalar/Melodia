@@ -1,11 +1,8 @@
-// UI state for the three DSP surfaces. All three are Rust-owned and seeded from `settings.json` at
-// boot; the chain they drive lives in `crates/melodia-playback/`. Every callback applies to the
-// live player
-// *and* persists — on release for the drag pairs, mirroring the `set-volume` / `commit-volume` split.
+// Every callback here applies to the live player *and* persists, the drag pairs on release as
+// `set-volume` and `commit-volume` split it.
 
-// `band-gains` is dB per band, low → high, sized by `equalizer::NUM_BANDS`. `preset-idx` indexes
-// the dropdown, whose last entry is the synthetic "Custom" shown once a band is hand-edited.
-// **Every bound is seeded from the Rust consts**, so there is nothing to drift.
+// `band-gains` is dB per band, low to high. `preset-idx`'s last entry is the synthetic "Custom" a
+// hand-edited band shows. **Every bound is seeded from the Rust consts**, so nothing can drift.
 export global Equalizer {
     in-out property <bool> enabled;
     in-out property <[float]> band-gains;
@@ -13,7 +10,7 @@ export global Equalizer {
     in property <float> min-gain;
     in property <float> max-gain;
 
-    // Master gain in dB — headroom for boosting without clipping.
+    // dB of headroom for boosting without clipping.
     in-out property <float> preamp;
     in property <float> min-preamp;
     in property <float> max-preamp;
@@ -27,7 +24,7 @@ export global Equalizer {
     callback commit-preamp(float /*dB*/);
 }
 
-// Loudness normalization. `mode-idx` matches `player::replaygain::RgMode`.
+// `mode-idx` matches `player::replaygain::RgMode`.
 export global ReplayGain {
     in-out property <bool> enabled;
     in-out property <int> mode-idx;
@@ -43,33 +40,22 @@ export global ReplayGain {
     callback commit-preamp(float /*dB*/);
 }
 
-// The Now-Playing visualizer strip. **`enabled` and `set-active` are deliberately separate**:
-// `enabled` is the persisted setting and decides whether the strip mounts, `set-active` is session
-// state — mounted *and* on screen — and the only thing arming the backend sample tap. `style` and
-// `style-idx` are one choice in two shapes, the strip mounting on the **key** so reordering the
-// picker can't repoint an existing install, while the Settings chips need the index.
+// The contract across the strip, the pickers and Rust is `.claude/rules/visualizer.md`.
 //
-// Both figures are SVG commands, strings because Slint rejects `for`-generated path elements
-// (slint-ui/slint#754). `wave-path` is pushed every tick. The bars are asked for through
-// `bars-figure`, because they snap to the window's pixel grid under the strip and a figure pushed
-// for one geometry rescales unevenly under another, which a resize or a sidebar animation hands
-// a strip at rest with no tick coming. `idle` reports the drawing has decayed to rest, letting the
-// Timer stop once a paused player settles — pausing halts the tap but leaves stale samples in the
-// ring, so re-analysing them would freeze the drawing mid-shape.
+// `style` and `style-idx` are one choice in two shapes: the strip mounts on the key, so reordering
+// the picker can't repoint an install, and the Settings chips need the index.
 //
-// **`window-shown` and `dormant` carry different certainty on purpose.** `window-shown` is the OS
-// saying the window is off screen and every such event has a matching one putting it back, so it is
-// safe to stop the Timer on; `dormant` is inferred with no wake-up event, so it only slows it.
+// **`window-shown` and `dormant` carry different certainty on purpose.** The OS reports every hide
+// and the show that undoes it, so the first may stop the Timer; nothing wakes the second, which is
+// inferred, so it only slows it.
 export global Visualizer {
     in-out property <bool> enabled: true;
     in-out property <string> style: "bars";
     in-out property <int> style-idx;
-    // Moved by the tick whenever the bands it analysed change what the bars draw: the token that
-    // re-runs `bars-figure`, the strip's geometry being the rest of what it reads.
+    // The token that re-runs `bars-figure` when the bands change what the bars draw.
     in property <int> bars-generation;
     in property <string> wave-path;
-    // Published from `spectrum::NUM_BANDS` rather than restated here. Only the strip's width
-    // ceiling reads it: the figure itself carries its own band count in its geometry.
+    // Only the strip's width ceiling reads it, the figure carrying its own band count.
     in property <int> band-count;
     in property <bool> idle: true;
     in property <bool> window-shown: true;
@@ -77,17 +63,14 @@ export global Visualizer {
 
     callback set-enabled(bool);
     callback set-style(int);
-    // Fired by `AppWindow`'s mirror, not by the strip: `NowPlayingView` is destroyed while closed
-    // and Slint has no unmount callback, so the gate has to live somewhere always mounted.
+    // Fired by `AppWindow`'s mirror, the strip having no unmount hook.
     callback set-active(bool);
-    // Fired by whoever lowers `window-shown`. The tick is the steady-state writer of the tap's arm
-    // state but can't be relied on here: `window-shown` also gates the strip's Timer, so a hide
-    // landing on a settled drawing stops it in the same pass and no further tick arrives.
+    // Fired by whoever lowers `window-shown`; `ui::visualizer::wire_window_hidden` says why the
+    // tick can't cover it.
     callback window-hidden();
     // The width rides along for the trace, whose column count follows it.
     callback tick(bool /*is-playing*/, float /*strip width, logical px*/);
-    // The bars for the latest levels, laid out on the strip as it stands. The style rides along
-    // for its anchor, so a Bars↔Mirrored pick redraws a strip at rest.
+    // The style rides along for its anchor, so a Bars↔Mirrored pick redraws a strip at rest.
     pure callback bars-figure(
         int /*generation*/,
         int /*style-idx*/,
