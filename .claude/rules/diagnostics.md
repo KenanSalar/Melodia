@@ -38,9 +38,8 @@ reverses the rotated half; a crash report is `head_of` where a log is `tail_of`;
 doc comments before changing any of them.
 
 **Never log a credential, token or session key.** `build_report` ships the tail of the rolling log
-inside a file users attach to public GitHub issues; its settings block is a hand-written
-**allowlist**, so a new `SettingsData` field can't start shipping by accident, and
-`scrobble_credentials.json` is never read by that module.
+inside a file users attach to public GitHub issues; what else it may carry is argued in its module
+doc.
 
 **The sweep deletes only names that parse back into its own scheme** (root `CLAUDE.md`):
 `crash_report::prune` gates on `timestamp_of`, `flexi_logger`'s own cleanup on its `melodia`

@@ -1,41 +1,18 @@
-//! Streaming minisign verification.
-//!
-//! Two traps to avoid in this module, both pinned by `tests/minisign_tests.rs`:
-//!
-//! 1. `PublicKey::from_base64()` only accepts the bare base64 portion and returns
-//!    `Error::InvalidEncoding` on the full multi-line file `minisign -G` produces. The embedded
-//!    pubkey at `assets/updater-pubkey.b64` is the full file, so it is parsed via
-//!    [`PublicKey::decode`].
-//! 2. [`PublicKey::verify_stream`] only accepts prehashed signatures, so CI must sign with
-//!    `minisign -SH …` — without `-H` the client would have to buffer the whole artifact into RAM
-//!    for the non-streaming `verify()`. Non-prehashed signatures are rejected up-front with a
-//!    clear error, so a release accidentally signed without `-H` can't silently break the
-//!    streaming path.
+//! Streaming minisign verification, pinned by `tests/minisign_tests.rs` against two traps.
+//! `PublicKey::from_base64` rejects the full key file `minisign -G` writes, so the embedded key
+//! goes through [`PublicKey::decode`]. [`PublicKey::verify_stream`] takes only prehashed
+//! signatures, so CI signs with `minisign -SH` and a legacy one is refused up front.
 
 use std::io::Read;
 
 use minisign_verify::{Error as MinisignVerifyError, PublicKey, Signature};
 
-/// The compiled-in public key the updater verifies every downloaded artifact against. Full
-/// multi-line minisign file, paired with the `MINISIGN_SECRET_KEY` GitHub Secret;
-/// `.github/actions/minisign-sign` signs every artifact with `minisign -SH` (prehashed — see
-/// [`verify_stream`]).
+/// The key every artifact and manifest is verified against, paired with the `MINISIGN_SECRET_KEY`
+/// secret. **Rotating it strands every installed client**: each rejects the first release signed
+/// with the new key, and moves past it only by a manual install.
 ///
-/// Rotation is **one-way and disruptive**: shipping a release signed with a new key makes every
-/// installed client, still verifying against the old key, reject the new artifact as a signature
-/// mismatch. To rotate:
-///   1. `minisign -G -p new.pub -s new.key` — generate a fresh keypair.
-///   2. Replace `assets/updater-pubkey.b64` with the contents of `new.pub`.
-///   3. Update the `MINISIGN_SECRET_KEY` GitHub Secret (base64-encoded `new.key`) and
-///      `MINISIGN_PASSWORD`.
-///   4. Bump `Cargo.toml`'s version and push the matching tag; `release.yml` ships the first
-///      release signed with the new key. Clients on prior releases stay stuck on their installed
-///      version until the user manually downloads and installs from the GitHub release page.
-///
-/// Relative rather than through `MELODIA_REPO_ROOT`, which only the corpus walkers may use,
-/// being dev-dependencies: cargo finds `.cargo/config.toml` by walking up from the *working
-/// directory*, so a `cargo install --git` or a `--manifest-path` build from elsewhere never
-/// defines it and this file stops compiling.
+/// Relative rather than through `MELODIA_REPO_ROOT`, which cargo defines only for a build run from
+/// inside the repo, so a `cargo install --git` would stop compiling.
 const EMBEDDED_PUBKEY: &str = include_str!("../../../../../assets/updater-pubkey.b64");
 
 #[derive(Debug, thiserror::Error)]
@@ -56,26 +33,15 @@ pub enum MinisignError {
     Io(#[from] std::io::Error),
 }
 
-/// Parse the embedded pubkey. Cheap, but called once per verify with no caching, so a swapped
-/// `assets/updater-pubkey.b64` always takes effect on rebuild.
 pub fn embedded_pubkey() -> Result<PublicKey, MinisignError> {
     PublicKey::decode(EMBEDDED_PUBKEY).map_err(MinisignError::PubkeyDecode)
 }
 
-/// Stream-verify `reader`'s contents against `sig_text` (the full multi-line `.minisig` text)
-/// using `pubkey`. The signature **must** be prehashed; non-prehashed ones are rejected up-front
-/// by [`PublicKey::verify_stream`] before any byte of the data stream is read.
+/// Stream-verifies `reader` against the full `.minisig` text, which must be prehashed.
 ///
-/// When `expected_version` is `Some`, the trusted comment is parsed for a `version=<X.Y.Z>` field
-/// and asserted equal once the cryptographic verification succeeds — the comment is covered by the
-/// signature, so this is a substitution check rather than an integrity one. CI must sign with
-/// `minisign -SH -t "version=$VERSION …"` for it to find a `version=` field; older releases and
-/// fixtures without `-t` are rejected with [`MinisignError::VersionMismatch`].
-///
-/// Pass `None` to skip the cross-check.
-///
-/// Production callers pass [`embedded_pubkey`]; the parameter exists so tests can inject their own
-/// keypair, the production pubkey being keyed to a placeholder no fixture can match.
+/// With `expected_version`, the signed trusted comment must also carry `version=<it>`: integrity
+/// is already proven, so this catches a validly signed artifact from another release. `pubkey` is
+/// a parameter for tests, the embedded key matching no fixture.
 pub fn verify_stream<R: Read>(
     reader: R,
     sig_text: &str,
@@ -100,14 +66,11 @@ pub fn verify_stream<R: Read>(
     }
 }
 
-/// The `version=` value from a minisign trusted-comment line. Stops at the next whitespace, so
-/// `version=0.42.0 target=…` returns `Some("0.42.0")`.
 pub(crate) fn parse_trusted_comment_version(comment: &str) -> Option<&str> {
     parse_trusted_comment_field(comment, "version")
 }
 
-/// Generic `key=` lookup in a trusted-comment line, which is a free-form space-separated bag of
-/// `key=value` tokens. The value is a slice into `comment`.
+/// `key`'s value in a trusted comment, which is a space-separated bag of `key=value` tokens.
 pub(crate) fn parse_trusted_comment_field<'a>(comment: &'a str, key: &str) -> Option<&'a str> {
     for token in comment.split_whitespace() {
         if let Some(value) = token.strip_prefix(key)
@@ -119,13 +82,9 @@ pub(crate) fn parse_trusted_comment_field<'a>(comment: &'a str, key: &str) -> Op
     None
 }
 
-/// Verify the `latest.json` body against `sig_text` using `pubkey`, then assert the trusted
-/// comment's `manifest=` field equals `expected_manifest_tag`.
-///
-/// Production passes `"true"`. That is **domain separation**: an artifact's `.minisig` is a valid
-/// minisign blob signed with the same key, so the cryptographic verify would pass on one
-/// cross-pasted into this slot. No version is cross-checked, the manifest *being* the source of
-/// the version string.
+/// Verifies `latest.json` and requires `manifest=<expected_manifest_tag>` in its trusted comment.
+/// That is **domain separation**: an artifact's `.minisig` carries the same key and would verify
+/// here too. No version is cross-checked, the manifest being where the version comes from.
 pub fn verify_manifest_bytes(
     body: &[u8],
     sig_text: &str,

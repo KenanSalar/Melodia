@@ -15,15 +15,13 @@ use melodia_playback::player::playback::output::{
 };
 use melodia_playback::player::playback::replaygain::{DEFAULT_MODE, RG_DEFAULT_PREAMP_DB};
 
-/// Audio-playback preferences.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PlaybackFlags {
     pub gapless_playback: bool,
     pub resume_on_startup: bool,
     pub is_muted: bool,
-    /// Rate multiplier, clamped to the player's `MIN_SPEED..=MAX_SPEED` when
-    /// applied or persisted.
+    /// Clamped to the player's `MIN_SPEED..=MAX_SPEED` when applied or persisted.
     pub playback_speed: f64,
 }
 
@@ -38,10 +36,8 @@ impl Default for PlaybackFlags {
     }
 }
 
-/// Graphic-equalizer preferences. Ships **off** with a flat curve, so a fresh
-/// install sounds bit-identical to no EQ until the user opts in. Gains are in
-/// dB and go through `equalizer::normalize_gains` on read, so a hand-edited or
-/// wrong-length array can't pin a bad value.
+/// Ships off and flat. Gains are dB, through `equalizer::normalize_gains` on read so a hand-edited
+/// or wrong-length array can't pin a bad value.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct EqualizerFlags {
@@ -63,11 +59,8 @@ impl Default for EqualizerFlags {
     }
 }
 
-/// `ReplayGain` (loudness normalization) preferences. Ships **off**, so a fresh
-/// install plays at the raw recorded level until the user opts in; the
-/// `rg_prevent_clipping` guard then defaults **on** so a boosted track can't
-/// clip. `rg_mode` is a lowercase token, falling back to Album on an unknown
-/// value.
+/// Ships off, with `rg_prevent_clipping` on for once it isn't. `rg_mode` is a lowercase token, an
+/// unknown one reading as Album.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ReplayGainFlags {
@@ -89,10 +82,8 @@ impl Default for ReplayGainFlags {
     }
 }
 
-/// Crossfade preferences. Ships **off**, so an install keeps the gapless
-/// behaviour it already has. Once enabled, `crossfade_skip_same_album` defaults
-/// **on** so continuous-mix albums stay gapless. `crossfade_duration_ms` is
-/// clamped to `MIN_CROSSFADE_MS..=MAX_CROSSFADE_MS`.
+/// Ships off, with `crossfade_skip_same_album` on so a continuous mix stays gapless once it isn't.
+/// `crossfade_duration_ms` is clamped to `MIN_CROSSFADE_MS..=MAX_CROSSFADE_MS`.
 #[allow(
     clippy::struct_excessive_bools,
     reason = "one serde field per independent user-facing toggle; each must round-trip through settings.json by name"
@@ -119,46 +110,35 @@ impl Default for CrossfadeFlags {
     }
 }
 
-/// How the output device is opened.
-///
-/// `output_follow_rate` reopens the output at each track's own sample rate so the system mixer
-/// has no reason to resample it. Off by default: it costs a short silence, and the crossfade, at
-/// every rate boundary.
-///
-/// `output_mode` takes the card from every other application, so it ships shared.
-/// `output_device` is the card's stable id, or `None` for the first one the system lists. Where
-/// the ids name a shared target too (Windows), both modes play through it.
-///
-/// `output_period_ms` and `output_polling` pace an exclusive claim's writer, and
-/// `output_resync_ms` is the silence written after a reopen onto a new rate. Each is held to its
-/// range on the way to the engine, so a hand-edited value can't pin a bad one.
-///
-/// `output_hardware_volume` has a claim carry the volume on the device's own control, which is
-/// also that device's system volume while the claim holds it, so it ships off.
-///
-/// `output_rate_fallback` keeps a claim on a device lacking the file's rate by converting to one
-/// it has. It ships giving the claim up instead, as every claim did before it.
-///
-/// `output_paused_device` gives a claimed device back once a pause has held it for a while. It
-/// ships keeping it, since play then has to reopen the device, and it sits outside the choice so
-/// a toggle never reopens a claim.
-///
-/// `output_resampler` is how every conversion interpolates, a rate mismatch and a speed other than
-/// one alike. It ships as [`Resampler::default`], which argues the platform split.
+/// How the output device is opened. Each number is held to its range on the way to the engine, so
+/// a hand-edited value can't pin a bad one.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputFlags {
+    /// Reopens at each track's own rate, costing a short silence and the crossfade at every rate
+    /// boundary, so it ships off.
     pub output_follow_rate: bool,
+    /// Ships shared, an exclusive claim taking the card from every other application.
     #[serde(with = "OutputModeKey")]
     pub output_mode: OutputMode,
+    /// The card's stable id, `None` for the first one listed. Where it names a shared target too
+    /// (Windows), both modes play through it.
     pub output_device: Option<String>,
+    /// With `output_polling`, paces an exclusive claim's writer.
     pub output_period_ms: u32,
     pub output_polling: bool,
+    /// The silence written after a reopen onto a new rate.
     pub output_resync_ms: u32,
+    /// Carries a claim's volume on the device's own control, which is also its system volume, so
+    /// it ships off.
     pub output_hardware_volume: bool,
+    /// Converts to a rate the device has rather than giving the claim up, which it ships doing.
     #[serde(with = "RateFallbackKey")]
     pub output_rate_fallback: RateFallback,
+    /// Gives a claimed device back after a long pause. Ships keeping it, play then having to
+    /// reopen; kept out of the choice so a toggle never reopens a claim.
     pub output_paused_device: PausedDevice,
+    /// How every conversion interpolates; [`Resampler::default`] argues the platform split.
     #[serde(with = "ResamplerKey")]
     pub output_resampler: Resampler,
 }
@@ -258,17 +238,9 @@ impl PausedDevice {
     }
 }
 
-/// Audio-visualizer preferences — the one feature here that ships **on**, being
-/// a presentation flourish confined to the Now-Playing view rather than
-/// something that alters what you hear.
-///
-/// `viz_enabled` decides whether the strip *mounts* and nothing more: the
-/// audio-thread tap is armed by the view being on screen, so leaving this on
-/// costs nothing while the view is closed.
-///
-/// `viz_style` is a **key**, not an index into the picker — an index would
-/// silently repoint every existing install the day the style list is reordered.
-/// An unrecognized key resolves back to the default.
+/// Ships on, a flourish confined to Now Playing rather than anything you hear. `viz_enabled` only
+/// decides whether the strip mounts, the audio tap arming with the view on screen. `viz_style` is
+/// a key rather than a picker index, so reordering the styles repoints no install.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VisualizerFlags {
@@ -276,9 +248,8 @@ pub struct VisualizerFlags {
     pub viz_style: String,
 }
 
-/// The style key a fresh install starts on, and the one an unrecognized key
-/// resolves back to. `melodia-views`' `ui/visualizer/`'s style table must *head with the
-/// same key* — its own fallbacks land on index 0 — which its tests pin.
+/// The style a fresh install starts on and an unknown key reads as. `melodia-views`'
+/// `ui/visualizer/` style table must head with it, its own fallbacks landing on index 0.
 pub const DEFAULT_VIZ_STYLE: &str = "bars";
 
 impl Default for VisualizerFlags {
@@ -287,7 +258,6 @@ impl Default for VisualizerFlags {
     }
 }
 
-/// Queue-behavior preferences.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct QueueFlags {

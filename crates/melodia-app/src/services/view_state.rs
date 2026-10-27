@@ -1,10 +1,4 @@
-//! `views.json` persistence: the serde model for per-view UI state, plus its
-//! load / save / atomic read-mutate-write I/O.
-//!
-//! Separate from `settings.json` so genuine app preferences don't share a file
-//! with transient per-view layout state — a purpose-scoped sibling like
-//! `queue.json` and `search_history.json`. The shared boundary types stay
-//! defined in [`super::settings`] and are imported here.
+//! `views.json`: per-view UI state, kept apart from the preferences in `settings.json`.
 
 use std::collections::BTreeMap;
 
@@ -14,55 +8,38 @@ use crate::services::settings::{ColumnWidths, ViewSort};
 use melodia_core::config::Paths;
 use melodia_core::error::AppResult;
 
-/// Per-view UI state persisted between launches. Every field is
-/// `#[serde(default)]` through the struct attribute, so a missing key — or a
-/// missing file — falls back to first-launch behaviour.
+/// Per-view UI state. A missing key or file reads as a first launch.
 ///
-/// The maps are `BTreeMap`s so the same state always saves as the same file: each `HashMap`
-/// iterates in an order of its own, and every save reads into a new one.
+/// The maps are `BTreeMap`s so the same state always saves as the same file, where a `HashMap`
+/// read back iterates in an order of its own.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ViewStateData {
-    /// Keyed by view-id (`melodia-views`' `ui/track_list_view.rs::view_id`); one map each
-    /// covers every list or grid view.
+    /// Keyed by view id (`melodia-views`' `track_list_view::view_id`), like the maps below.
     pub view_columns: BTreeMap<String, Vec<String>>,
-    /// Whether a track list shows each row mark (the two hearts and the hover star strip), keyed
-    /// like `view_columns` and then by mark. **A flag per mark, under a key of its own, rather
-    /// than more ids in `view_columns`**: every exit saves that list for every track list, so an
-    /// id added to it later reads as unticked on every install that has run once, where a mark
-    /// missing here takes the view's default.
+    /// Whether a track list shows each row mark, keyed like `view_columns` and then by mark. Not
+    /// more ids in `view_columns`: every exit saves that list, so an id added later would read as
+    /// unticked on every install that has run once, where a mark missing here takes the default.
     pub view_marks: BTreeMap<String, BTreeMap<String, bool>>,
     pub view_column_widths: BTreeMap<String, ColumnWidths>,
     pub view_sort: BTreeMap<String, ViewSort>,
-    /// Browse's folder at last shutdown. `None` lands at the library root.
+    /// `None` lands at the library root.
     pub browse_path: Option<String>,
-    /// Browse's presentation. Clamped on read through `ui::tab_bar::clamp_tab`,
-    /// the guard every tab index below takes, so a value from a build with more
-    /// modes can't select a branch that mounts nothing.
+    /// Clamped on read through `ui::tab_bar::clamp_tab`, as every tab index below is, so a value
+    /// from a build with more modes can't mount nothing.
     pub browse_view_mode: i32,
-    /// Sidebar tab at last shutdown, hydrated into `Nav.selected-index`. A file
-    /// written before the five library views became one page can hold 4–7;
-    /// `ui::my_library::fold_retired_nav_index` maps those onto 3 on the way in.
+    /// `Nav.selected-index`. An older file can hold the retired 4–7, which
+    /// `ui::my_library::fold_retired_nav_index` folds onto 3.
     pub last_nav_index: i32,
-    /// Detail ids open at last shutdown, keyed by view-id. An absent entry lands
-    /// that view on its root.
+    /// An absent entry lands that view on its root.
     pub last_detail_ids: BTreeMap<String, i64>,
-    /// Artist Detail's Albums header toggle. `true` hides the scroller so the
-    /// all-tracks list claims that space.
+    /// Artist Detail's Albums toggle, handing the scroller's space to the track list.
     pub artist_albums_collapsed: bool,
-    /// The Settings category and the four page tabs at last shutdown, each
-    /// clamped against its own global's count.
+    /// The Settings category and the four page tabs, each clamped against its own global's count.
     ///
-    /// An index rather than a set of bools, and that is the rule rather than a
-    /// preference: `favorites_tab` replaced two `*_collapsed` flags that sat
-    /// with `artist_albums_collapsed` exactly at clippy's
-    /// `struct_excessive_bools` cap. **A persisted view flag is an int, a string
-    /// or a map** — never a bool, whatever the current count.
-    ///
-    /// `settings_category` replaced a `settings_tab` that indexed the five tabs
-    /// before them. A new key rather than a fold: the old numbers overlap the
-    /// new ones, so a fold couldn't tell a file written before the change from
-    /// one written after it, and the old key is simply left unread.
+    /// **A persisted view flag is an int, a string or a map, never a bool**: this struct sits at
+    /// clippy's `struct_excessive_bools` cap. `settings_category` is a new key rather than a fold
+    /// of the old `settings_tab`, whose numbers overlap its own, so the old key is left unread.
     pub settings_category: i32,
     pub favorites_tab: i32,
     pub recently_played_tab: i32,
@@ -91,18 +68,14 @@ impl Default for ViewStateData {
     }
 }
 
-/// Matches `nav.slint`'s own `Nav.selected-index` default, so a fresh install
-/// lands where the Slint side already points.
+/// `nav.slint`'s own `Nav.selected-index` default.
 fn default_last_nav_index() -> i32 {
     3
 }
 
-/// The highest index `nav.slint` routes. Bounds [`ViewStateData::last_nav_index`]
-/// at both ends of its round trip — the clamp in
-/// `library::settings::set_last_nav_index` and the guard in
-/// `boot::ui_setup::views::install_views` — and the two have to agree, a section written
-/// past the write's clamp and one dropped by the read's guard both landing the
-/// next boot somewhere else with nothing to say why.
+/// The highest index `nav.slint` routes, shared by the write's clamp in
+/// `library::settings::set_last_nav_index` and the read's guard in
+/// `boot::ui_setup::views::install_views`, which must agree or a boot silently lands elsewhere.
 pub const MAX_NAV_INDEX: i32 = 10;
 
 pub fn read_view_state(paths: &Paths) -> AppResult<ViewStateData> {
@@ -113,14 +86,10 @@ pub fn write_view_state(paths: &Paths, view_state: &ViewStateData) -> AppResult<
     melodia_core::utils::atomic_file::write_json_sync(&paths.view_state_path, view_state)
 }
 
-/// Held across the whole read→mutate→write window, so a burst of UI events can't
-/// interleave their read snapshots and lose updates. `settings`'s `MUTATE_LOCK`
-/// shape; the plain read and write stay lock-free, a single-shot read and a
-/// full-replacement write being race-free against each other.
+/// `settings`' `MUTATE_LOCK`, for `views.json`.
 static MUTATE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
-/// Atomically read → mutate → write `views.json`, serialized against every other
-/// caller so concurrent partial updates merge without tearing each other's reads.
+/// Reads, mutates and writes `views.json` under `MUTATE_LOCK`.
 pub fn mutate_view_state<F>(paths: &Paths, mutate: F) -> AppResult<()>
 where
     F: FnOnce(&mut ViewStateData),
@@ -128,8 +97,7 @@ where
     mutate_view_state_with(paths, mutate)
 }
 
-/// [`mutate_view_state`] returning a value the caller wants to keep. Mirrors
-/// `services::settings::mutate_settings_with`.
+/// [`mutate_view_state`], handing back the closure's value.
 pub fn mutate_view_state_with<F, R>(paths: &Paths, mutate: F) -> AppResult<R>
 where
     F: FnOnce(&mut ViewStateData) -> R,

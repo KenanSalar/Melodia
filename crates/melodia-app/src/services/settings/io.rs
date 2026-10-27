@@ -1,5 +1,4 @@
-//! Load / save / atomic-mutate for `settings.json`. The data model these
-//! functions read and write lives in the sibling [`super::data`] module.
+//! Load, save and atomic read-mutate-write for `settings.json`.
 
 use melodia_core::config::Paths;
 use melodia_core::error::AppResult;
@@ -20,17 +19,12 @@ pub(crate) fn write_settings(paths: &Paths, settings: &SettingsData) -> AppResul
     melodia_core::utils::atomic_file::write_json_sync(&paths.settings_path, settings)
 }
 
-/// Process-wide lock around `settings.json` mutation. Held by `mutate_settings`
-/// for the entire read→mutate→write window so a burst of UI events (e.g. a
-/// rapid theme + variant + accent click sequence) can't interleave their read
-/// snapshots and lose updates. A plain `read_settings` stays lock-free; writing
-/// back what one returned is exactly the lost update this lock exists to stop.
+/// Held across the read, mutate and write, so a burst of UI events can't interleave snapshots and
+/// lose updates. A bare `read_settings` stays unlocked, so writing back what one returned is the
+/// lost update this exists to stop.
 static MUTATE_LOCK: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
 
-/// Atomically read → mutate → write `settings.json`. Serializes against every
-/// other `mutate_settings` caller so concurrent partial-update callsites
-/// (`set_appearance`, `update_view_columns`, …) merge cleanly without tearing
-/// each other's reads.
+/// Reads, mutates and writes `settings.json` under `MUTATE_LOCK`.
 pub fn mutate_settings<F>(paths: &Paths, mutate: F) -> AppResult<()>
 where
     F: FnOnce(&mut SettingsData),
@@ -38,15 +32,8 @@ where
     mutate_settings_with(paths, mutate)
 }
 
-/// Read → inspect/mutate → optionally write `settings.json` under the
-/// same `MUTATE_LOCK` as `mutate_settings`. The closure both reads and
-/// optionally mutates the settings, returning a value the caller wants
-/// to retain (typically the pre-mutation snapshot of one or two fields).
-///
-/// The closure receives `&mut SettingsData` so it can mutate in place;
-/// the write step always runs, mirroring `mutate_settings`. If the
-/// closure makes no changes the write is a redundant full-replacement,
-/// but it's still cheaper than two separate `spawn_blocking` round-trips.
+/// [`mutate_settings`], handing back the closure's value. It always writes; a caller that often
+/// changes nothing takes [`mutate_settings_if`].
 pub fn mutate_settings_with<F, R>(paths: &Paths, mutate: F) -> AppResult<R>
 where
     F: FnOnce(&mut SettingsData) -> R,

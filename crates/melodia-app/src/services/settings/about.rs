@@ -3,15 +3,10 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Auto-updater state persisted between launches.
-///
-/// `last_known_release` and `last_manifest_etag` describe one manifest, the last
-/// one read in full, and are only ever replaced together. `last_check_unix` drives
-/// the daily loop's elapsed gate and `consecutive_failures` lengthens its re-arm
-/// against flaky-network thrash. `skipped_release` is set *only* by the "Skip this
-/// version" affordance. Dismissing the toast deliberately doesn't, since a dismissed
-/// update returns at the next daily check while a skipped one stays quiet until a
-/// strictly newer release lands.
+/// The updater's state. `last_known_release` and `last_manifest_etag` describe the last manifest
+/// read in full and change together. `skipped_release` is set only by "Skip this version": a
+/// dismissed toast returns at the next daily check, a skipped release stays quiet until a newer
+/// one lands.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateFlags {
@@ -51,9 +46,8 @@ impl UpdateFlags {
         }
     }
 
-    /// A fetch that didn't. Advancing `last_check_unix` is what the counter depends on: the daily
-    /// loop's 24h gate reads it, and a failure that left it alone would re-fire every iteration
-    /// rather than backing off.
+    /// A fetch that failed. It advances `last_check_unix` too, or the daily loop's gate would
+    /// re-fire every iteration instead of backing off.
     pub fn record_failure(&mut self, now_unix: i64) {
         self.last_check_unix = now_unix;
         self.consecutive_failures = self.consecutive_failures.saturating_add(1);
@@ -73,20 +67,16 @@ impl Default for UpdateFlags {
     }
 }
 
-/// What the diagnostics surfaces record.
-///
-/// `verbose_logging` is a debugging mode, and against a fixed rotation budget
-/// leaving it on costs a reporter the older history. Persisted rather than
-/// session-scoped so `logging::install` can start a boot at it.
+/// `verbose_logging` is persisted so `logging::install` can start a boot at it. Left on, it spends
+/// the fixed rotation budget a reporter's older history needs.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DiagnosticsFlags {
     pub verbose_logging: bool,
 }
 
-/// What the one-time Ko-fi prompt remembers. `launch_count` stops advancing
-/// once `support_prompt_seen` is set, so a settled install stops rewriting
-/// `settings.json` at boot rather than counting forever.
+/// The one-time Ko-fi prompt. `launch_count` stops advancing once `support_prompt_seen` is set,
+/// so a settled install stops rewriting `settings.json` at boot.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SupportFlags {
@@ -94,12 +84,8 @@ pub struct SupportFlags {
     pub support_prompt_seen: bool,
 }
 
-/// The onboarding revision this install has been shown, `0` meaning never.
-///
-/// A revision rather than a bool so a later feature that belongs in the welcome card can bump
-/// [`ONBOARDING_VERSION`] and reach installs that already ran the flow, instead of owing a
-/// separate what's-new surface. While the constant never moves this behaves exactly as a bool
-/// would have.
+/// The welcome card revision this install has seen, `0` meaning never. A revision rather than a
+/// bool, so a later feature can bump [`ONBOARDING_VERSION`] and reach installs that already ran it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OnboardingFlags {

@@ -1,36 +1,23 @@
-//! Backend → UI cross-thread event type, and the failure every updater path returns.
+//! The updater's event for the UI thread, toasted by `ui::settings::updater_settings`, and the
+//! failure every updater path returns.
 //!
-//! Constructed on tokio workers by both update checks and the `Updater.install`
-//! callback, drained by a UI-thread subscriber in
-//! `ui::settings::updater_settings` that turns each variant into a toast.
-//!
-//! A typed channel rather than poking the UI from the task, `NotificationsUi` being
-//! `Rc`-backed where the task is `Send + 'static`. The variants deliberately carry no
-//! translated text — the UI thread looks the strings up through
-//! `Settings.invoke_update_*()`, so they re-resolve in whatever locale is active.
+//! The variants carry no translated text: the UI thread looks each string up through
+//! `Settings.invoke_update_*()`, so it follows the active locale.
 
 use melodia_core::error::AppError;
 
 #[derive(Debug, Clone)]
 pub enum UpdaterEvent {
-    /// A strictly-newer version that hasn't been skipped. Becomes an "Update
-    /// available" toast of kind `InstallUpdate`, whose button fires
-    /// `MelodiaUpdater.install()`.
-    ///
-    /// `critical` mirrors the manifest flag and hides "Skip this version". Dismissing
-    /// the toast still works: it returns at the next daily check, and only the
-    /// permanent skip is suppressed.
+    /// A newer version not skipped, toasted as `InstallUpdate`. `critical` hides only "Skip this
+    /// version"; a dismissed toast still returns at the next daily check.
     Available { version: String, notes_short: String, critical: bool },
-    /// `download_and_install` finished and the next launch runs the new version.
-    /// Becomes the "Update installed — Restart" toast, of kind `UpdateRestart`.
+    /// The next launch runs the new version, toasted as `UpdateRestart`.
     Installed,
-    /// Any error path. Becomes an "Update failed" toast with a per-category message,
-    /// the kind its [`UpdateFailure`] was made with; the error itself stays log-only.
+    /// Toasted by its kind; the error itself stays in the log.
     Failed { kind: FailureKind },
 }
 
-/// The bucket the UI picks a toast message from. Narrow on purpose — the toast is a
-/// one-liner, and the raw `AppError` was already logged at the send site.
+/// The bucket a failure's one-line toast comes from, the error having been logged at the send.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FailureKind {
     /// Couldn't reach the update server — DNS, TCP, TLS, captive portal, HTTP 5xx.
@@ -40,8 +27,7 @@ pub enum FailureKind {
     Signature,
     /// The manifest didn't parse, or parsed missing something it declares it has.
     Parse,
-    /// Local I/O — the staged write, the rename, the cleanup. Usually disk-full,
-    /// permissions, or AV holding the file.
+    /// Local I/O: the staged write, the rename, the cleanup.
     Io,
     /// Anything else; a generic "Update failed".
     Other,

@@ -1,16 +1,6 @@
-//! In-memory cache of the most-recently-observed `Available` asset.
-//!
-//! `Updater.install` (`ui::callbacks::updater::wire`) re-reads `latest.json`
-//! for the asset blob (URL + signature + size) before downloading. That fails
-//! outright on a flaky network, and a failure between the Available toast and the
-//! Install click surfaced as a confusing re-fetch error.
-//!
-//! So `spawn_install` falls back to the last `PlatformAsset` from a successful
-//! `Available` outcome: it stays valid as long as the release hasn't been retracted,
-//! and the signature check downstream catches any URL drift. Process-scoped, cleared
-//! on `Installed` so a stale asset can't survive into an in-process re-check, and
-//! never persisted: `settings.json` keeps a manifest's version and tag for
-//! revalidating it, not the download target.
+//! The last `Available` asset this process saw, which an Install click falls back to when its own
+//! re-fetch fails. It stays valid until the release is retracted, the signature check catching any
+//! drift, and is never persisted.
 
 use std::sync::OnceLock;
 
@@ -18,10 +8,7 @@ use parking_lot::Mutex;
 
 use super::manifest::PlatformAsset;
 
-/// Pairs the asset with the manifest version it was observed under, which
-/// [`super::install::download_and_install`] forwards to `verify_stream`'s
-/// trusted-comment cross-check: pinning the two together at observation time is what
-/// stops the fallback tripping that check over a version it merely lost track of.
+/// The asset with the version it was seen under, the pair `verify_stream`'s version check needs.
 #[derive(Debug, Clone)]
 pub struct CachedAsset {
     pub version: String,
@@ -34,20 +21,15 @@ fn slot() -> &'static Mutex<Option<CachedAsset>> {
     CACHE.get_or_init(|| Mutex::new(None))
 }
 
-/// Replace the cached asset. Called wherever a check finds `Verdict::Available`:
-/// `run_check` and the install re-fetch.
 pub fn store(version: String, asset: PlatformAsset) {
     *slot().lock() = Some(CachedAsset { version, asset });
 }
 
-/// A clone of the cached entry, or `None` if nothing has been observed yet this
-/// process. Cheap relative to the network round-trip it spares.
 pub fn snapshot() -> Option<CachedAsset> {
     slot().lock().clone()
 }
 
-/// Drop the cached asset after a successful install, so a later click can't be
-/// fooled into re-downloading the same artifact.
+/// After an install, so a later click can't download the same artifact again.
 pub fn clear() {
     *slot().lock() = None;
 }

@@ -3,19 +3,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The Radio section's master switch, off by default. An upgrade has to be silent
-/// for an install that never asked for a network feature, which is the reason
-/// `discord_rpc_enabled` ships off and what the shipped package description
-/// promises of every online feature.
-///
-/// The live answers are the shadows on [`crate::state::AppState`] this seeds at
-/// boot — every reader is either on a tokio worker or in the boot path, where a
-/// settings read is disk I/O for one bool.
-///
-/// Click reporting is the one field the derive would get wrong, so the `Default`
-/// below is written by hand: it describes what the feature does rather than
-/// whether it runs, and `false` there ships a directory nobody's plays are
-/// counted for.
+/// Radio ships off, as every online feature does, so an upgrade stays silent for an install that
+/// never asked for the network. Read live through the shadows it seeds on
+/// [`crate::state::AppState`] at boot. The `Default` is hand-written for `radio_send_clicks`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 #[expect(
@@ -24,25 +14,15 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct RadioFlags {
     pub radio_enabled: bool,
-    /// Whether to drop segmented stations from directory results.
-    ///
-    /// Off by default: they play. It survives its own obsolescence because a
-    /// segment playlist still starts several seconds slower than a direct
-    /// mount, which is a reason to skip them and not one to hide the choice.
-    ///
-    /// **Renamed rather than re-defaulted**: the key it replaced shipped `true`, and a new default
-    /// reaches no file that already spells the old key.
+    /// Drops segmented stations from directory results. Off, since they play, if seconds slower
+    /// to start than a direct mount. **A new key rather than a new default**: the one it replaced
+    /// shipped `true`, and a default reaches no file already spelling the key.
     pub radio_hide_segmented: bool,
-    /// Whether playing a station tells the directory so.
-    ///
-    /// Opt-out rather than opt-in: the click is what popularity ordering is
-    /// built from, so a user who leaves it on is paying for the ordering every
-    /// other user browses by. It carries no identity beyond the request itself.
+    /// Tells the directory a station was played. Opt-out: clicks build the popularity order
+    /// everyone browses by, and carry no identity beyond the request.
     pub radio_send_clicks: bool,
-    /// Whether a song heard on a station is scrobbled like a track.
-    ///
-    /// Opt-in: a station's announcement is the station's word for what is playing rather than a
-    /// file's tags, and a user who scrobbles their library has not asked for that on their profile.
+    /// Scrobbles a song heard on a station. Opt-in: an announcement is the station's word rather
+    /// than a file's tags, and scrobbling a library is not asking for it.
     pub radio_scrobble: bool,
 }
 
@@ -57,27 +37,14 @@ impl Default for RadioFlags {
     }
 }
 
-/// Whether lyrics run at all, whether they may be looked up online, and how a line is drawn.
+/// Lyrics, their online lookup and romanization: **three independent switches, since they sell
+/// different things.** Off, the feature reads, fetches and holds nothing. The lookup is traffic,
+/// and without it a stored sheet stays readable. Romanization only changes how a line is drawn.
 ///
-/// **Three switches because they sell different things.** The first is the feature: off, the Now
-/// Playing column is Up Next and nothing reads, fetches or holds a sheet. The lookup is traffic,
-/// and turning it off leaves a sheet already in the store perfectly readable, which is what "no
-/// traffic" means and what "no lyrics" would not. Romanization is neither: it is how a line the
-/// panel already has is drawn, so it costs nothing and reaches nothing.
-///
-/// **The first two are off and the third is on**, which is why the `Default` is written out rather
-/// than derived. A panel nobody asked for should not take the Up Next column on upgrade, and the
-/// shipped package description promises that every online feature is a setting the user controls;
-/// but a reader who has turned lyrics on and is looking at a script they cannot sound out wanted
-/// this before they knew to ask. It draws nothing at all for a Latin sheet, so "on" costs the other
-/// libraries nothing.
-///
-/// **The three are independent, and the third one especially.** Turning lyrics off and on again
-/// says nothing about romanization, so a reader who switched it off gets it back off.
-///
-/// `settings.json` rather than `views.json` for the feature switch too, for
-/// `VisualizerFlags::viz_enabled`'s reason: it is the other Now Playing preference flipped from that
-/// view's own header, and a `views.json` flag may not be a bool.
+/// The first two ship off, a panel nobody asked for not taking the Up Next column on upgrade.
+/// Romanization ships on, drawing nothing for a Latin sheet. All three live in `settings.json`
+/// like `viz_enabled`, the other switch on Now Playing's header, a `views.json` flag never being a
+/// bool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LyricsFlags {

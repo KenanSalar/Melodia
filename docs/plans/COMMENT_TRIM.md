@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 8.3 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 8.4 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -100,8 +100,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 7.1 | `melodia-playback`: the files directly under `player/playback/`, plus `lib.rs` | 0.54 | 1,075 | ~574 | 0.25 (496) | `1ba22f47` |
 | 7.2 | `melodia-playback`: `output/` | 0.41 | 1,662 | ~647 | 0.27 (1,084) | `3400c452` |
 | 8.1 | `melodia-app`: `library/radio/`, `library/lyrics/` | 0.64 | 912 | ~555 | 0.29 (416) | `a5383164` |
-| 8.2 | `melodia-app`: `state/`, `lib.rs` | 0.54 | 282 | ~153 | 0.31 (161) | |
-| 8.3 | `melodia-app`: `services/` | 0.44 | 1,233 | ~539 | | |
+| 8.2 | `melodia-app`: `state/`, `lib.rs` | 0.54 | 282 | ~153 | 0.31 (161) | `ed91cdfe` |
+| 8.3 | `melodia-app`: `services/` | 0.44 | 1,233 | ~539 | 0.20 (564) | |
 | 8.4 | `melodia-app`: `tasks/` | 0.42 | 939 | ~377 | | |
 | 8.5 | `melodia-app`: the rest of `library/` | 0.40 | 1,712 | ~636 | | |
 | 9 | `melodia` (the binary) | 0.42 | 533 | ~216 | | |
@@ -182,14 +182,14 @@ Status: done.
   - **Pointed at:** `CLAUDE.md` on `output::device::open` and `AudioOutput`; `.claude/rules/audio-stack.md`.
 
 ### Phase 8: `melodia-app`
-Status: in progress, 8.3 next.
+Status: in progress, 8.4 next.
 
 - [x] **8.1 `library/radio/` and `library/lyrics/`**, the two doors, one commit.
   - **Furthest over:** `library/radio/logos.rs` (113), `library/lyrics/mod.rs` (91).
   - **Pointed at:** `CLAUDE.md`'s `library/` bullet; `.claude/rules/radio.md`; ADRs 12 and 15.
 - [x] **8.2 `state/` and `lib.rs`**, one commit.
   - **Pointed at:** `CLAUDE.md` on `Signal` and `SharedFlag` (`state/signal.rs`).
-- [ ] **8.3 `services/`**, one commit.
+- [x] **8.3 `services/`**, one commit.
   - **Pointed at:** `CLAUDE.md` on `view_state::ViewStateData`, `first_launch_theme` and the updater; `.claude/rules/updater.md`.
   - **Test comment citing it:** `support_tests.rs` (`SupportFlags`' doc).
 - [ ] **8.4 `tasks/`**, one commit.

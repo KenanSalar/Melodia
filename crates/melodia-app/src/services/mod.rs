@@ -1,6 +1,5 @@
-//! Settings, the two JSON state files, the artist-image orchestration, the diagnostics bundle and
-//! the updater — what is left of `services/` once the three adapter groups became their own
-//! crates, and what each of them has in common is naming `database` or `state` or both.
+//! The services that need the database or the app state: settings, the two JSON state files,
+//! artist images, the diagnostics bundle and the updater.
 
 pub mod artist_images;
 pub mod diagnostics;

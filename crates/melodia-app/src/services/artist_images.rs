@@ -16,44 +16,32 @@ use crate::state::{AppState, Signal};
 
 /// How long a definitive "no match" stands before the artist is searched again.
 ///
-/// Recorded on the artist's row rather than in memory: `spawn_fetch` runs after every scan, a
-/// launch's no-change re-scan included, so a per-session record would search every artist the
-/// directory doesn't know again on each launch. It lapses because the directory keeps adding
-/// artists.
+/// On the artist's row rather than in memory, `spawn_fetch` running after every scan, a launch's
+/// re-scan included. It lapses because the directory keeps adding artists.
 const NO_MATCH_RETRY_AFTER: Duration = Duration::from_hours(30 * 24);
 
-/// Per-artist result of one Deezer round-trip.
 enum FetchOutcome {
-    /// Image found, downloaded, and cached at this path.
+    /// Stored at this path.
     Cached(String),
-    /// Deezer answered definitively with no usable result, recorded for
-    /// [`NO_MATCH_RETRY_AFTER`].
+    /// No usable result, recorded for [`NO_MATCH_RETRY_AFTER`].
     NoMatch,
-    /// Transport/HTTP/download failure — retry on a later scan. Also where a
-    /// Deezer error code that isn't [`deezer::halts_a_batch`] lands: those answer
-    /// the query rather than the pace, so the pass keeps going and the answer is
-    /// deliberately not recorded. A name that reliably draws one therefore costs
-    /// a request per scan, which is the right way round: recording it would
-    /// strand a genuinely transient failure for the whole retry window, and it is
-    /// one request either way.
+    /// Retried on a later scan: a transport failure, or a Deezer error that answers the query
+    /// rather than the pace. Unrecorded, since recording a transient one would strand the artist
+    /// for the whole retry window.
     Transient,
-    /// Deezer refused the search itself, carrying its own reason. In practice a
-    /// tripped quota, which the remaining batches would spend on refusals too —
-    /// so this stops the pass. Nothing is recorded, so the next scan retries.
+    /// Deezer refused the search, in practice a tripped quota, so the pass stops and the next scan
+    /// retries.
     Refused(String),
 }
 
 /// What a search's answer leaves the pass to do for one artist.
 enum Searched {
-    /// An image to download.
     Found(String),
-    /// Nothing to download, for this reason.
     Settled(FetchOutcome),
 }
 
-/// Reads Deezer's answer to the search for `name`. Only a definitive "no match" becomes
-/// [`FetchOutcome::NoMatch`], the one answer recorded for the retry window, so a misfiled arm
-/// blanks an artist for a month rather than for a scan.
+/// Only a definitive "no match" becomes [`FetchOutcome::NoMatch`]: it is the one answer recorded,
+/// so a misfiled arm blanks an artist for a month rather than a scan.
 fn judge(name: &str, answer: AppResult<DeezerAnswer<String>>) -> Searched {
     match answer {
         Ok(DeezerAnswer::Body(Some(url))) => Searched::Found(url),
@@ -77,41 +65,22 @@ fn judge(name: &str, answer: AppResult<DeezerAnswer<String>>) -> Searched {
     }
 }
 
-/// Deezer's ceiling is 50 requests per 5 s per IP, and the Discord presence path
-/// spends from the same budget over the same client. Five at a time a beat apart
-/// stays well under it while still clearing a first-launch backlog quickly — but
-/// only for one pass at a time, which is what [`PASS_IN_FLIGHT`] is for.
+/// Deezer allows 50 requests per 5 s per IP, shared with Discord presence over the same client.
+/// Five a beat apart stays well under it, for one pass at a time ([`PASS_IN_FLIGHT`]).
 const BATCH_SIZE: usize = 5;
 const BATCH_INTERVAL: Duration = Duration::from_millis(750);
 
-/// Coalesces overlapping passes, and the request budget above is why.
-///
-/// [`spawn_fetch`] is detached and fires at the end of *every* folder scan, while
-/// `reconcile_watched_folders` walks the enabled folders back to back — so folder
-/// one's pass is still running when folder two's starts. Each takes its own
-/// `get_artists_without_images` snapshot, and an image leaves that list only once
-/// its download has landed in the DB, so the snapshots overlap almost entirely:
-/// N folders means N times the concurrency spent on the same artists, which is
-/// what trips the quota the pacing above exists to respect.
-///
-/// RAII-cleared by [`PassGuard`], so an early return can't strand it. The
-/// `reconcile_watched_folders` shape, one service over.
+/// Coalesces overlapping passes. [`spawn_fetch`] fires after every folder scan and
+/// `reconcile_watched_folders` scans them back to back, so without it each folder's pass would
+/// search the same artists at once and trip the quota. Cleared by [`PassGuard`].
 static PASS_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
-/// **Deferred, not dropped**, which `reconcile_watched_folders` needs only for a
-/// request wider than the pass in flight, and this needs for every one.
+/// A request that found a pass in flight, which that pass re-runs for once it ends.
 ///
-/// A pass queries once, at the start, so the artists a *later* scan commits are
-/// not in its snapshot. Dropping the overlapping request would therefore lose them
-/// until some future scan, and on a first launch with several folders that means
-/// the next launch: folder one's pass takes the snapshot and folders two onward
-/// never get one. So a skipped request records itself here, and the running pass
-/// re-runs once it finishes. Cleared *before* each pass rather than after, so a
-/// request arriving mid-flight is the one thing the check can't miss.
-///
-/// A halted pass is the exception that doesn't re-run: it stopped because Deezer
-/// said to stop asking, and a queued request would spend itself on the same closed
-/// window — which is the reason the pass stopped.
+/// Deferred rather than dropped: a pass reads its artists once, at the start, so a dropped request
+/// would leave its scan's artists for the next launch. Cleared before each pass, so one arriving
+/// mid-flight can't be missed. A halted pass doesn't re-run, the quota that stopped it still being
+/// closed.
 static PASS_REQUESTED_AGAIN: AtomicBool = AtomicBool::new(false);
 
 struct PassGuard;
@@ -121,18 +90,13 @@ impl Drop for PassGuard {
     }
 }
 
-/// What one pass did, for the re-run decision above.
 struct PassOutcome {
     fetched: u32,
     halted: bool,
 }
 
-/// Fetch artist images from Deezer for artists that don't have one yet.
-///
-/// One pass at a time: a call made while another is running defers to that pass's
-/// re-run rather than doubling the concurrency spent on the same artists. Uses the
-/// shared `reqwest::Client` from `AppState` so the connection pool is reused
-/// across every HTTP-using service.
+/// Fetches a Deezer image for every artist without one, answering how many it stored. A call made
+/// while a pass runs defers to that pass's re-run and answers 0.
 pub async fn fetch_artist_images(
     paths: &Paths,
     db: &DbPool,
@@ -147,11 +111,8 @@ pub async fn fetch_artist_images(
     run_passes(&PASS_REQUESTED_AGAIN, || run_pass(paths, db, client)).await
 }
 
-/// Runs `pass` until one halts or no request landed while it ran, answering with every image the
-/// passes stored.
-///
-/// A re-run that fails still answers with what the passes before it stored: those images are in
-/// the database, and the bump the caller makes for them is the only thing that repaints the lists.
+/// Runs `pass` until one halts or no request landed while it ran. A failed re-run still answers
+/// what the earlier passes stored, the caller's bump for those being all that repaints the lists.
 async fn run_passes<Pass, Run>(requested_again: &AtomicBool, mut pass: Pass) -> AppResult<u32>
 where
     Pass: FnMut() -> Run,
@@ -177,10 +138,7 @@ where
     }
 }
 
-/// One walk of the artists that still have no image.
-///
-/// Runs one [`BATCH_SIZE`] batch of concurrent searches per [`BATCH_INTERVAL`],
-/// and abandons the rest if Deezer refuses on a code that says to stop asking.
+/// One walk of the artists still without an image, a batch per [`BATCH_INTERVAL`].
 async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppResult<PassOutcome> {
     let now = now_unix();
     let missed_before = now.saturating_sub_unsigned(NO_MATCH_RETRY_AFTER.as_secs());
@@ -215,8 +173,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
 
                 match download_and_store(&client, &url, dir).await {
                     Ok(Some(path)) => (id, name, FetchOutcome::Cached(path)),
-                    // A found URL that yielded no cacheable image could be a
-                    // CDN hiccup — treat as transient so a later scan retries.
+                    // A found URL with no usable image may be a CDN hiccup.
                     Ok(None) => (id, name, FetchOutcome::Transient),
                     Err(e) => {
                         log::warn!("Failed to download image for '{name}': {}", describe(&e));
@@ -226,8 +183,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
             });
         }
 
-        // The whole batch shares one closed quota window, so it reports one
-        // refusal rather than five identical warnings.
+        // One refusal per batch, which shares one closed quota window.
         let mut refusal: Option<String> = None;
         let mut refused = 0usize;
         let mut missed: Vec<i64> = Vec::with_capacity(batch.len());
@@ -258,9 +214,7 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
             log::warn!("Failed to record artist image misses: {}", describe(&e));
         }
 
-        // Refusals don't count: Deezer declined to answer for those, so they sit
-        // with the artists the pass never reached rather than with the ones it
-        // got a round trip out of.
+        // A refused artist counts as unreached.
         processed += batch.len() - refused;
 
         if let Some(reason) = refusal {
@@ -276,11 +230,8 @@ async fn run_pass(paths: &Paths, db: &DbPool, client: &reqwest::Client) -> AppRe
     Ok(PassOutcome { fetched: fetched_count, halted })
 }
 
-/// Download one artist image into the artists store, returning where it landed.
-///
-/// Through the shared store so an artist image is bounded and deduplicated exactly as a cover is.
-/// Deezer serves these at a fixed 250 px, so the bounds don't fire today; what matters is that the
-/// two directories can't drift into two size policies.
+/// Through the shared artwork store, so an artist image is bounded and deduplicated as a cover is
+/// and the two directories can't drift into two size policies.
 async fn download_and_store(
     client: &reqwest::Client,
     url: &str,
@@ -292,7 +243,6 @@ async fn download_and_store(
         .map_err(AppError::io_source)
 }
 
-/// Spawn a background task to fetch artist images. Fire-and-forget.
 pub fn spawn_fetch(state: &AppState) {
     let paths = Arc::clone(&state.paths);
     let db = state.db.clone();
@@ -301,9 +251,8 @@ pub fn spawn_fetch(state: &AppState) {
     tokio::spawn(async move { fetch_and_announce(&paths, &db, &client, &library_changed).await });
 }
 
-/// A pass, and one bump of `library_changed` if it stored any image. Nothing else tells a painted
-/// Artists grid its rows now have one, and the pass outlives the scan whose bump it would
-/// otherwise have to ride.
+/// Bumps `library_changed` if the pass stored an image, the pass outliving the scan whose bump
+/// would otherwise have told a painted Artists grid.
 async fn fetch_and_announce(
     paths: &Paths,
     db: &DbPool,
