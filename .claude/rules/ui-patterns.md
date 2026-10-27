@@ -1105,10 +1105,8 @@ three components that answer it, and each argues its geometry at its own file.
   the whole mechanism that brings a scheduled decode to the screen. Its *value* decides nothing
   there: `grid_prewarm::grid_cover` schedules a miss unconditionally, which is what the three My
   Library grids always did and what every other grid does now.
-  - **One notifier, because there is one grid tier.** `set_decoded_notifier` is a `OnceLock`, so
-    `boot::ui_setup::views::install_grid_covers` is the single install and its closure bumps every
-    grid global. A bump on an unmounted page is a property write with no bindings to dirty, so
-    answering for all six costs nothing and saves the tier having to know which grid asked.
+  - **One notifier, because there is one grid tier**: `boot::ui_setup::views::install_grid_covers`
+    bumps every grid global, and argues why that costs nothing.
   - **The `0` ⇒ cache-only arm is gone, and its premise is why.** It existed so rows mounting on a
     tab pick "don't queue work for a tier a leave is about to clear" — no leave clears one now, and
     keeping it left a card that missed the retained set scheduling nothing and waiting for the

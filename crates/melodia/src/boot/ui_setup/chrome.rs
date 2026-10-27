@@ -9,9 +9,8 @@ use melodia_ui::{AppWindow, HeroBackdrop, Player, Theme};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
-/// Hydrate Slint's bundled-translation runtime from the persisted
-/// `settings.locale` *before* `app.show()`, so the very first frame's `@tr(...)`
-/// resolutions land in the chosen language, then wire the Language section.
+/// Selects the persisted locale before `app.show()`, so the first frame's `@tr` strings land in
+/// it, then wires the Language section.
 pub fn install_locale(
     app: &AppWindow,
     state: &AppState,
@@ -25,27 +24,19 @@ pub fn install_locale(
     ui::settings::locale::install_locale(app, state);
 }
 
-/// Install `WindowChrome` (titlebar mode, drag-region, native-frame hydrate).
-/// Errors are logged and swallowed — chrome install is best-effort.
+/// Installs `WindowChrome`; a failure is logged and the boot goes on.
 pub fn install_app_chrome(app: &AppWindow, state: &AppState) {
     if let Err(e) = ui::window_chrome::install(app, state) {
         log::warn!("window_chrome::install: {}", describe(&e));
     }
 }
 
-/// Raise the persisted backdrop choice, and do it **before `install_views`**.
+/// Raises the persisted backdrop choice ahead of `install_views`, whose artwork tiers decide off it
+/// whether to hold a blur at all. Its obvious homes, `appearance::install` and
+/// `hydrate_ui_from_settings`, both run later.
 ///
-/// The flag has to be up before the first tier exists, not merely before `app.show()`:
-/// `install_views` constructs the three `DetailArtwork` caches — whose blur half is built or
-/// skipped on this answer — and then seeds all four detail views, whose fetches end in
-/// `ui::backdrop::kind`. The two obvious homes, `ui::appearance::install` and
-/// `hydrate_ui_from_settings`, both run after it. A failed settings read leaves the
-/// Slint-declared default, which is the same value.
-///
-/// Returns whether the aurora arm is live, read back off the property so the failed-read arm
-/// answers with what boot raised — the writer reporting what it wrote, not a second reader.
-/// `#[must_use]` because dropping the answer is the live mutation: the dither install downstream is
-/// the aurora's alone, and a bare call statement would compile clean past it.
+/// Returns whether the aurora is live, read back off the property so a failed settings read
+/// answers with the Slint default. Dropped, the aurora's dither install would be skipped unseen.
 #[must_use]
 pub fn apply_backdrop_style(
     app: &AppWindow,
@@ -59,11 +50,7 @@ pub fn apply_backdrop_style(
 }
 
 /// One tile for the process, shared by both aurora tiers: it answers to the renderer's lack of
-/// gradient dithering rather than to any artwork, so nothing later rewrites it. The `Image` is
-/// `Rc`-backed, so the second global clones a handle, not a buffer.
-///
-/// **The aurora arm's alone** — on the blur arm it is a generator run and a buffer nothing draws,
-/// and skipping it leaves the unset `image` `AuroraBackdrop` already degrades to.
+/// gradient dithering, not to any artwork. Aurora only; on the blur arm nothing draws it.
 pub fn install_backdrop_dither(app: &AppWindow) {
     let tile = slint::Image::from_rgba8(ui::aurora::dither_tile());
     app.global::<Player>().set_np_dither(tile.clone());

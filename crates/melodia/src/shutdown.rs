@@ -1,5 +1,4 @@
-//! Shutdown sequence: state flush, task cancellation + bounded wait,
-//! runtime drop in background, optional respawn.
+//! What `main()` runs once the event loop has returned.
 
 use melodia_app::services;
 use melodia_app::state::AppState;
@@ -10,10 +9,8 @@ use melodia_ui::{AppWindow, Nav, Queue};
 use melodia_views::ui;
 use slint::ComponentHandle;
 
-/// Persist playback position and queue before shutdown. Synchronous writes only:
-/// the runtime is about to be torn down, so a spawned task could be dropped
-/// mid-write. The function-local `AtomicBool` makes it safe to call from both
-/// shutdown paths (window close and run-loop exit).
+/// Persists what only lives in memory during a session. Synchronous writes only: the runtime is
+/// about to go, and a spawned task could be dropped mid-write.
 pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::runtime::Runtime) {
     use melodia_engine::player::engine::state::lock_state;
     use melodia_store::database::queries;
@@ -30,10 +27,8 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
         (td, s.to_persisted(), s.volume, s.is_muted)
     };
 
-    // `Nav.sidebar-width` always holds the expanded-mode width; the rail
-    // renders `Theme.sidebar-collapsed-w` separately and does not mutate
-    // this property (drag handle is gated on `!sidebar-rail`). Collapsed is
-    // the user's own fold, never the rail a narrow window forces.
+    // The expanded width, which the rail never writes, and the user's own fold rather than the
+    // rail a narrow window forces.
     let sidebar_width = f64::from(app.global::<Nav>().get_sidebar_width());
     let sidebar_collapsed = app.global::<Nav>().get_sidebar_collapsed();
 
@@ -44,10 +39,8 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
     let panel_width = f64::from(queue.get_panel_width());
     let queue_panel_width = (panel_width > 0.0).then_some(panel_width);
 
-    // Volume, mute, the sidebar, the queue panel and window geometry live only
-    // in UI/PlayerState during a session, so they need flushing to survive one.
-    // Under the settings lock, so a toggle still persisting as the window
-    // closed isn't written back over.
+    // Under the settings lock, so a toggle still persisting as the window closed isn't written
+    // back over.
     let flushed = services::settings::mutate_settings(&state.paths, |settings| {
         settings.volume = volume;
         settings.playback.is_muted = is_muted;
@@ -55,26 +48,17 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
         settings.layout.sidebar_collapsed = sidebar_collapsed;
         settings.queue_panel.queue_panel_open = queue_panel_open;
         settings.queue_panel.queue_panel_width = queue_panel_width;
-        // For the next launch's `BackendSelector` attributes hook and
-        // `geometry::restore`. Size and position are skipped while maximized, so
-        // the user's real restore geometry survives.
         ui::window_chrome::geometry::snapshot_into(settings);
     });
     if let Err(e) = flushed {
         log::warn!("save_state_on_exit: settings.json: {}", describe(&e));
     }
 
-    // Column widths and visibility into views.json. `ui::track_columns` clamps
-    // whatever it reads, so a persisted width can't lay out out of range. Every
-    // other view-state field is written eagerly by its
-    // own callback; only column state needs a shutdown snapshot — plus the one
-    // retired key below.
+    // Every other `views.json` field is written by its own callback as it changes.
     match services::view_state::read_view_state(&state.paths) {
         Ok(mut vs) => {
             ui::track_list_view::snapshot_all(app, &mut vs);
-            // Recently Played stopped being sortable; drop the key builds
-            // before that wrote so an upgraded views.json doesn't carry
-            // state nothing reads.
+            // Recently Played has no sort, and an older build's key would sit there unread.
             vs.view_sort.remove(ui::track_list_view::view_id::RECENTLY_PLAYED);
             if let Err(e) = services::view_state::write_view_state(&state.paths, &vs) {
                 log::warn!("save_state_on_exit: write views.json: {}", describe(&e));
@@ -98,10 +82,8 @@ pub fn save_state_on_exit(app: &AppWindow, state: &AppState, runtime: &tokio::ru
     }
 }
 
-/// Cancel the shutdown token, close the task tracker, and wait up to 3 s
-/// for both `tracker.wait()` and `db.close()` to settle. Returns `true` if
-/// the wait completed within the budget. Past the budget the caller forces
-/// exit — persisted state was already written by `save_state_on_exit`.
+/// Cancels every task and waits up to 3 s for them and the pool to settle, returning whether they
+/// did. Past that the caller exits anyway, `save_state_on_exit` having written what matters.
 pub fn flush_tasks_and_db(runtime: &tokio::runtime::Runtime, state: AppState) -> bool {
     state.shutdown_token.cancel();
     state.task_tracker.close();
@@ -110,13 +92,9 @@ pub fn flush_tasks_and_db(runtime: &tokio::runtime::Runtime, state: AppState) ->
     let db = state.db.clone();
     drop(state);
 
-    // One budget over both operations. Most tasks honour `shutdown_token` and
-    // exit within a `select!` tick, but `spawn_blocking` work can't be
-    // cancelled from outside: a scan stops only at its own checkpoints and still
-    // owes its last write, and `material_you` finishes its quantize pass. And
-    // `db.close()` waits for every connection to come back to the pool, which a
-    // task holding one across an await pins indefinitely.
-    // Past the budget we force-exit regardless of what tokio thinks is pending.
+    // One budget over both: `spawn_blocking` work can't be cancelled from outside (a scan stops
+    // only at its own checkpoints), and `db.close()` waits for every connection to come back,
+    // which a task holding one across an await can pin indefinitely.
     runtime.block_on(async move {
         tokio::time::timeout(std::time::Duration::from_secs(3), async {
             tracker.wait().await;
@@ -138,24 +116,13 @@ pub fn drop_runtime_in_background(runtime: tokio::runtime::Runtime) {
     }
 }
 
-/// Replace this process with a fresh copy of the binary when `ui::window_chrome`
-/// left the respawn flag set (a titlebar-mode restart, or the updater's "Restart
-/// Now"). `execvp` semantics, so the old window goes the instant the new one
-/// arrives with no fork-then-exit race on screen.
+/// Replaces this process with the binary `window_chrome::respawn_target` names, when
+/// `window_chrome` left the respawn flag set.
 ///
-/// Which binary is `window_chrome::respawn_target`'s answer: the path the
-/// updater recorded before its install swapped the file, else the running one
-/// through `utils::exe::current_exe` — so a package upgrade mid-session can't hand
-/// back the `<path> (deleted)` the kernel appends to an unlinked executable.
-///
-/// **Unix** — `CommandExt::exec` (`execvp`) replaces the process atomically:
-/// same PID, fds, env, cwd, process group. None of the "parent exits → child
-/// gets SIGHUP / broken pipe / orphan reap" modes apply, which is what made
-/// `spawn` + `process::exit` flaky under KDE's `kio-launcher` — it wires stdio
-/// to a journald pipe and keeps the child in its own process group, so the
-/// parent's exit raced the new child's first paint. Only returns on failure.
-///
-/// **Windows / exec failure** — falls through to `spawn_detached`.
+/// On Unix through `exec`, which keeps the PID, fds and process group, so the old window goes as
+/// the new one arrives. A spawn and exit raced the child's first paint under a launcher that pipes
+/// stdio to journald and keeps its own process group. Elsewhere, or if `exec` fails,
+/// [`spawn_detached`].
 pub fn respawn_if_requested() {
     if !ui::window_chrome::should_respawn_after_exit() {
         return;
@@ -168,8 +135,7 @@ pub fn respawn_if_requested() {
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        // `exec` only returns on failure — successful invocation
-        // replaces this process in place and never resumes here.
+        // Returns only on failure.
         let err = std::process::Command::new(&exe).exec();
         log::warn!(
             "respawn exec failed for {}: {}; falling back to detached spawn",
@@ -178,15 +144,13 @@ pub fn respawn_if_requested() {
         );
     }
 
-    // Only on exec failure, or on a non-Unix target.
     if let Err(e) = spawn_detached(&exe) {
         log::warn!("respawn spawn failed for {}: {}", exe.display(), describe(&e));
     }
 }
 
-/// Spawn `exe` detached, stdio to `/dev/null`. On Unix its own process group,
-/// so a signal to the parent's after `process::exit` can't take it down;
-/// Windows has no such handoff problem and `Command::spawn` suffices.
+/// Spawns `exe` detached, in its own process group on Unix so a signal to the parent's can't take
+/// it down.
 fn spawn_detached(exe: &std::path::Path) -> std::io::Result<std::process::Child> {
     detached_command(exe).spawn()
 }
@@ -194,10 +158,8 @@ fn spawn_detached(exe: &std::path::Path) -> std::io::Result<std::process::Child>
 /// [`spawn_detached`]'s command, built rather than spawned so the mark below can be asserted.
 fn detached_command(exe: &std::path::Path) -> std::process::Command {
     let mut cmd = std::process::Command::new(exe);
-    // Marks the child a restart, so it waits for the single-instance name
-    // rather than forwarding to a parent that is about to exit — both being
-    // alive at once is what separates this path from the `exec` above, which
-    // frees the name at the image replace and so is deliberately left unmarked.
+    // A restart waits for the single-instance name rather than forwarding to a parent about to
+    // exit. `exec` frees the name at the image replace, so that arm is left unmarked.
     cmd.env(RESPAWN_ENV, "1");
     cmd.stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

@@ -1,8 +1,6 @@
-// Without this, rustc defaults to the `console` subsystem on Windows: the OS
-// allocates a console beside the GUI window and ties the app's lifetime to it.
-// Gated on `debug_assertions` so `cargo run` keeps a console for `RUST_LOG` /
-// `MELODIA_RSS_SAMPLE`. A parent's `Stdio::piped()` still captures stdout either
-// way, which is what the updater's smoke test relies on.
+// Otherwise Windows opens a console beside the window and ties the app's lifetime to it. Debug
+// builds keep one for `RUST_LOG`. A parent's `Stdio::piped()` still captures stdout, which the
+// updater's smoke test relies on.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod boot;
@@ -19,37 +17,25 @@ use melodia_ui::AppWindow;
 use melodia_views::ui;
 use slint::ComponentHandle;
 
-/// Rayon's global pool, where jpeg-decoder runs its passes for every JPEG decoded outside a pool.
-/// Two keeps a cover decode parallel without a worker per core idling from the first decode to
-/// quit; a pass over library files brings a `ScanPool` of its own rather than landing here.
+/// Rayon's global pool, where jpeg-decoder runs every JPEG decoded outside a pool. Two keeps a
+/// cover decode parallel without a worker per core idling until quit; a scan brings its own pool.
 const GLOBAL_RAYON_THREADS: usize = 2;
 
 fn main() -> AppResult<()> {
-    // The updater's post-swap smoke test spawns the freshly renamed binary with
-    // this and asserts exit 0 plus a `Melodia ` prefix carrying the expected
-    // version. It must **stay here forever**: removing the branch or the prefix
-    // breaks in-place updates for every older client. Ahead of `mallopt`, which
-    // shapes a long-lived process's steady state and would only cost the
-    // verifier latency.
+    // The updater's smoke test runs the swapped-in binary with this and wants exit 0 and a
+    // `Melodia ` prefix, so dropping either breaks in-place updates for every older client. Ahead
+    // of `mallopt`, which shapes a long-lived process and would only slow the check.
     if std::env::args().nth(1).as_deref() == Some("--version") {
         use std::io::Write;
-        // Locked handle to dodge `clippy::print_stdout`, which guards against
-        // accidental GUI-app stdout where this is a deliberate CLI contract. A
-        // write failure is swallowed — the binary still works, and the
-        // verifier's prefix check fails on the empty stdout anyway.
+        // Not `println!`, which `clippy::print_stdout` denies. A failed write fails the
+        // verifier's prefix check anyway.
         let _ = writeln!(std::io::stdout().lock(), "Melodia {}", env!("CARGO_PKG_VERSION"));
         return Ok(());
     }
 
-    // Answers what the rest of the diagnostics feature can't: that surface sits
-    // behind Settings → About, unreachable when the thing being reported is that
-    // Melodia won't open. Touches neither the database nor Slint, and stays
-    // beside the branch above — both must precede anything that can fail.
-    //
-    // Linux and macOS only, not by choice: a release build has no console under
-    // `windows_subsystem = "windows"`, so this is swallowed there. Debug builds
-    // are console-subsystem, making the gap invisible locally — `README.md` and
-    // the issue template point Windows at `%APPDATA%\Melodia\logs\`.
+    // Ahead of anything that can fail: the rest of diagnostics sits behind Settings, out of reach
+    // when Melodia won't open. Linux and macOS only, a Windows release build having no console,
+    // so `README.md` and the issue template point Windows at `%APPDATA%\Melodia\logs\`.
     if std::env::args().nth(1).as_deref() == Some("--logs") {
         use std::io::Write;
         let paths = Paths::resolve()?;
@@ -59,14 +45,11 @@ fn main() -> AppResult<()> {
 
     prepare_process();
 
-    // Ahead of the logger, whose file sink needs somewhere to write. A failure
-    // here has no logger to reach and never will — it means no data directory.
+    // Ahead of the logger, which writes under it, so a failure here has nowhere to be logged.
     let paths = Paths::resolve()?;
 
-    // Claim the right to be the only Melodia over this data directory, or hand
-    // what we were asked to open to the one that already is. Ahead of the logger
-    // so a forwarding launch never opens the shared file, and ahead of
-    // everything expensive so it costs a socket write and a return.
+    // Ahead of the logger, so a forwarding launch never opens the shared file, and of everything
+    // expensive, so forwarding costs a socket write and a return.
     let startup_files = platform::single_instance::audio_files_from_argv();
     let mut unenforced_reason = None;
     let file_open_listener = match platform::single_instance::claim(&paths.data_dir, &startup_files)
@@ -82,8 +65,7 @@ fn main() -> AppResult<()> {
     install_diagnostics(&paths, unenforced_reason);
     let runtime = build_runtime()?;
 
-    // Slint's a11y/D-Bus thread looks up a tokio reactor from UI-thread tasks,
-    // so the guard has to stay alive for as long as the event loop runs.
+    // Held while the event loop runs: Slint's a11y thread finds its tokio reactor through it.
     let runtime_guard = runtime.enter();
 
     let (state, channels) = runtime.block_on(AppState::init(paths, runtime.handle().clone()))?;
@@ -97,7 +79,6 @@ fn main() -> AppResult<()> {
     boot::tasks::spawn_background_tasks(&spawner, &state, channels);
     boot::tasks::restore_persisted_playback(&runtime, &state);
 
-    // Read `settings.json` and `views.json` once and reuse them everywhere.
     let startup_settings: Option<services::settings::SettingsData> =
         library::settings::get_settings(&state.paths).ok();
     let startup_view_state: Option<services::view_state::ViewStateData> =
@@ -123,9 +104,7 @@ fn main() -> AppResult<()> {
         file_open_listener,
     )?;
 
-    // Not `app.run()`: its loop terminates as soon as the last window is
-    // *hidden*, which close-to-tray does. This is Slint's documented tray
-    // pattern, returning only on `quit_event_loop()`.
+    // Not `app.run()`, whose loop ends once the last window is hidden, which close-to-tray does.
     app.show().map_err(|e| AppError::io("show window", e))?;
     slint::run_event_loop_until_quit().map_err(|e| AppError::io("event loop", e))?;
 
@@ -136,10 +115,8 @@ fn main() -> AppResult<()> {
     // the volume it had, rather than leaving it at Melodia's.
     state.engine.close_output();
 
-    // Before `process::exit(0)` skips destructors — a leaked `tray-icon` ghosts
-    // in the Windows notification area. No-op on Linux, whose ksni handle its
-    // subscriber drops during `flush_tasks_and_db`. Main thread, as the `!Send`
-    // Win/mac handle requires.
+    // Likewise, or `tray-icon` ghosts in the Windows notification area. On the main thread, the
+    // Win/mac handle being `!Send`; Linux's drops with its subscriber task.
     ui::shell::tray_bridge::shutdown();
 
     log::info!("Melodia shutting down — signalling tasks");
@@ -159,43 +136,35 @@ fn main() -> AppResult<()> {
 
     shutdown::drop_runtime_in_background(runtime);
 
-    // Before `respawn_if_requested`, which `exec`s and never returns on Unix,
-    // and before the `process::exit(0)` below — neither runs a destructor.
+    // Neither the respawn's `exec` nor the `process::exit` below runs a destructor.
     platform::logging::flush();
 
     shutdown::respawn_if_requested();
 
-    // Returning normally would linger until every non-daemon thread exits, and
-    // two never do: accesskit's a11y thread and any tokio worker parked on a
-    // blocking call. State is flushed and the rest is OS-managed.
+    // A normal return waits on threads that never exit: accesskit's a11y thread and any tokio
+    // worker parked on a blocking call.
     std::process::exit(0);
 }
 
 /// What has to happen before the first thread starts or the first arena is created.
 fn prepare_process() {
-    // Reap the rollback snapshot `swap_in_place` keeps on AppImage / tarball
-    // installs — reaching this launch proves the new binary works. Linux-only;
-    // msiexec never leaves an `.old` at the install target.
+    // The rollback copy `swap_in_place` keeps, which reaching this launch proves unneeded.
+    // msiexec never leaves one.
     #[cfg(target_os = "linux")]
     {
         if let Ok(stale) = services::updater::install_target_old() {
             let _ = std::fs::remove_file(stale);
         }
     }
-    // Ahead of the logger and the runtime builder, both of which allocate; the
-    // module argues the numbers.
+    // Ahead of the logger and the runtime, both of which allocate on threads of their own.
     platform::allocator::pin_arenas_and_thresholds();
 
-    // Give PipeWire's ALSA-compat layer a clean stream name: CPAL opens the
-    // default ALSA PCM, which PipeWire turns into a node auto-named
-    // `alsa_playback.<prgname>` and EasyEffects and pavucontrol show verbatim.
-    // pipewire-alsa reads this when the PCM opens; ignored on bare ALSA. Before
-    // any thread spawns, so `AppState::init`'s device inherits it.
+    // Names the PipeWire node the default ALSA PCM becomes, which mixers otherwise list as
+    // `alsa_playback.<prgname>`. Ignored on bare ALSA.
     #[cfg(target_os = "linux")]
     #[allow(unsafe_code, reason = "env::set_var is unsafe in Rust 2024")]
-    // SAFETY: `set_var` requires that no other thread is reading or writing the
-    // environment. Nothing has spawned one yet — the logger, the runtime and
-    // Slint all come later.
+    // SAFETY: `set_var` requires that no other thread reads or writes the environment, and none
+    // exists yet: the logger, the runtime and Slint all come later.
     unsafe {
         std::env::set_var(
             "PIPEWIRE_ALSA",
@@ -206,19 +175,15 @@ fn prepare_process() {
 
 /// The rolling log and the crash hook, then the startup facts only this launch knows.
 fn install_diagnostics(paths: &Paths, unenforced_reason: Option<std::io::Error>) {
-    // Infallible: a log file that can't be opened degrades to stderr rather
-    // than stopping the boot. See `platform::logging::install`.
-    // An unparseable settings file is no reason to start louder; it surfaces later through
-    // `AppState::init`'s own read.
+    // An unreadable settings file starts quiet; `AppState::init`'s own read reports it.
     let verbose_logging = services::settings::read_settings(paths)
         .is_ok_and(|settings| settings.diagnostics.verbose_logging);
     platform::logging::install(paths, verbose_logging);
     // Before the runtime and before Slint, so boot panics are covered too.
     platform::crash_report::install_hook(&paths.logs_dir);
     log::info!("Melodia starting");
-    // Which root this boot landed on is the one startup fact nothing downstream can infer: a dev
-    // build and `MELODIA_DATA_DIR` both move it. The diagnostics bundle carries it as a field of
-    // its own; this is the copy a live tail has.
+    // A dev build and `MELODIA_DATA_DIR` both move the root, and nothing downstream says which
+    // this boot took. The diagnostics bundle carries it too; this is a live tail's copy.
     log::info!("data directory: {}", utils::redact::redact_home(&paths.data_dir.to_string_lossy()));
     // The claim happened before there was anywhere to say this.
     if let Some(e) = unenforced_reason {
@@ -231,15 +196,12 @@ fn install_diagnostics(paths: &Paths, unenforced_reason: Option<std::io::Error>)
 
 /// The tokio runtime, and rayon's global pool beside it.
 fn build_runtime() -> AppResult<tokio::runtime::Runtime> {
-    // Two workers: the async work is event-driven (queries, watch publishes,
-    // position ticks, media-control events) and CPU-bound work goes to Rayon
-    // or `spawn_blocking`, neither of which draws on this pool. The `num_cpus`
-    // default leaves 6+ idle threads on a desktop, each with a 2 MB stack.
+    // The async work is event-driven, and CPU-bound work goes to rayon or `spawn_blocking`,
+    // neither of which draws on these. One per core would idle, each holding a 2 MB stack.
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
-        // A burst ceiling, not an idle-cost one — blocking threads spawn on
-        // demand and get reaped, so tokio's 512 default never sits resident.
-        // `system_theme::spawn_color_watcher` is the one permanent tenant.
+        // A burst ceiling: blocking threads spawn on demand and are reaped. The one permanent
+        // tenant is `system_theme::spawn_color_watcher`.
         .max_blocking_threads(32)
         .enable_all()
         .thread_name("melodia-bg")
@@ -259,9 +221,8 @@ fn build_runtime() -> AppResult<tokio::runtime::Runtime> {
 
 /// The main window on the winit backend, at the persisted geometry and not yet shown.
 fn open_window(settings: Option<&SettingsData>) -> AppResult<AppWindow> {
-    // Maximized rides the winit `WindowAttributes` hook — Slint exposes no API
-    // for it, and the hook creates the window already-maximized with no flash.
-    // Size and position come after `AppWindow::new()`, via `geometry::restore`.
+    // Maximized rides the attributes hook, Slint having no API for it, so the window is created
+    // maximized with no flash.
     let geometry = settings.map_or_else(
         ui::window_chrome::geometry::PersistedGeometry::fallback,
         ui::window_chrome::geometry::PersistedGeometry::from_settings,
@@ -270,10 +231,8 @@ fn open_window(settings: Option<&SettingsData>) -> AppResult<AppWindow> {
 
     let app = AppWindow::new().map_err(|e| AppError::io("main window", e))?;
 
-    // After `AppWindow::new()` (the adapter must exist) and before `app.show()`
-    // (the window must not be shown). `set_size` sets winit's
-    // `has_explicit_size`, which stops Slint snapping the window to its
-    // content-preferred size on first show.
+    // Before `app.show()`: `set_size` sets winit's `has_explicit_size`, which stops Slint snapping
+    // the window to its preferred size on first show.
     ui::window_chrome::geometry::restore(
         &app,
         geometry,
@@ -287,13 +246,9 @@ fn select_backend(restore_maximized: bool) -> AppResult<()> {
         .backend_name("winit".into())
         .with_winit_window_attributes_hook(move |attrs| {
             let attrs = if restore_maximized { attrs.with_maximized(true) } else { attrs };
-            // Pin the window identity so the compositor resolves our icon and
-            // label. X11 matches `WM_CLASS` against the desktop file's
-            // `StartupWMClass=Melodia`, falling back to the binary basename when
-            // empty. Wayland clients can't set an icon at all — the compositor
-            // matches `app_id` to a desktop file of the *same basename* and
-            // reads its `Icon=` — so that half must be the reverse-DNS id we
-            // install under, or KWin shows the generic placeholder.
+            // How the compositor finds our icon and label. X11 matches `WM_CLASS` against the
+            // desktop file's `StartupWMClass`; Wayland matches `app_id` to a desktop file of the
+            // same basename, so it has to be the reverse-DNS id we install under.
             #[cfg(target_os = "linux")]
             let attrs = {
                 use slint::winit_030::winit::platform::wayland::WindowAttributesExtWayland;

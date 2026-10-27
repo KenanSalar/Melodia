@@ -242,10 +242,8 @@ The other way paths arrive from outside, and the one that can arrive before ther
   `current_index`, and `player_play_tracks` wants ids in order where
   `ImportFilesResult::track_ids` is partly `HashMap` order.
 
-- **A cold start with files skips resume-on-startup** — `open_startup_files` runs synchronously
-  after `restore_persisted_playback`, so resume would only be visible for the moment it takes them
-  to land. It is also **too early to toast**: that bridge installs with the UI and drops rather than
-  queues, so a cold-start failure can only log.
+- **A cold start with files skips resume-on-startup and can only log a failure**, argued at
+  `main()`'s branch and at `boot::tasks::open_startup_files`.
 
 - **A warm one raises through `tray_bridge::raise_window`**, the only thing that knows whether the
   window is hidden (tray or minimize → `show_window` + `SAVED_WINDOW_GEOM`) or merely buried (→
@@ -312,11 +310,6 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 ## Shutdown
 
-- **Force-exit.** `main()` ends in `std::process::exit(0)`; a normal return lets accesskit's a11y
-  thread and any tokio worker parked on a blocking call pin the process.
-  The audio output used to be a third and no longer is: `PlaybackEngine` owns it, and `main()`
-  closes it explicitly after `save_state_on_exit` (`PlaybackEngine::close_output`), since an
-  exclusive claim hands the device back, and the device's own volume with it, only in a destructor
-  the exit skips. `main_order_tests` pins it ahead of both ways out.
-  `tracker.wait()` + `db.close()` in a 3 s `timeout`, runtime dropped on a background thread;
-  `save_state_on_exit` flushes synchronously *before* the timeout.
+- **Force-exit.** `main()` ends in `std::process::exit(0)`, so whatever a destructor would have
+  done is an explicit call ahead of it, each argued at `main()`'s tail and in `shutdown.rs`.
+  `main_order_tests` pins the output close and the log flush ahead of both ways out.

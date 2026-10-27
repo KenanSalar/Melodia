@@ -46,9 +46,7 @@ doc.
 basename and `log` suffix — two independent gates, so a third file in `logs/` has to fall outside
 both.
 
-**`--logs` is the branch that answers what this feature can't** — everything above sits behind
-Settings → About → Diagnostics, unreachable when the thing being reported is that Melodia won't
-open. It is a Linux/macOS route: under `windows_subsystem = "windows"` a release build has no
-console, so `GetStdHandle` hands back nothing and the `writeln!` is swallowed (`--version` escapes
-only because the updater spawns it with `Stdio::piped()`). Attaching the parent console was
-declined: one diagnostic is not worth another Win32 FFI site.
+**`--logs` is the branch that answers what this feature can't**, everything above sitting behind
+Settings → About → Diagnostics, out of reach when Melodia won't open. Why it is a Linux/macOS
+route is argued at the branch in `main.rs`. Attaching the parent console on Windows was declined:
+one diagnostic is not worth another Win32 FFI site.

@@ -1,5 +1,4 @@
-//! Background-task spawning, queue restore, and what the two ways of starting
-//! resolve to: resume-on-startup, or the files this launch was handed.
+//! The backend half of boot: background tasks, the restored queue, and what a launch plays.
 
 use std::sync::Arc;
 
@@ -15,8 +14,7 @@ use melodia_platform::services::platform;
 use melodia_ui::AppWindow;
 use melodia_views::ui;
 
-/// Spawn every always-running background task and the OS media-control event
-/// receiver. Consumes `channels`.
+/// Spawns every always-running background task and the OS media-control event receiver.
 pub fn spawn_background_tasks(
     spawner: &tasks::TaskSpawner,
     state: &AppState,
@@ -25,48 +23,29 @@ pub fn spawn_background_tasks(
     tasks::playback_monitor::spawn(spawner, state);
     tasks::file_event_processor::spawn(spawner, state, channels.file_event_rx);
     tasks::queue_prune::spawn(spawner, state);
-    // Fetches the records the player starts tracks from, which the queue holds only ids for.
-    // Before the restore, which seats its own window but whose first change this has to see.
+    // Before the restore, whose first window change it has to see.
     tasks::queue_window::spawn(spawner, state);
     tasks::retroactive_hash::spawn(spawner, state);
     tasks::search_text_backfill::spawn(spawner, state);
-    // Puts back a stored cover a cache finds missing: mid-session, and with watching off, where no
-    // boot scan reconciles the library, one gone while the app was closed too.
     tasks::artwork_restore::spawn(spawner, state);
-    // Every other sweep follows a scan, and a launch with no library folders runs none, so the
-    // covers of a library removed last session would otherwise stay on disk.
     tasks::artwork_sweep::spawn(spawner, state);
-    // One-shot, and gated on its own settings marker rather than on anything here.
+    // The three once-per-install passes, each gated on its own settings marker.
     tasks::artwork_renormalize::spawn(spawner, state);
-    // The other one-shot: reads the ratings a library already carried in before the scan
-    // learned to look for them, which no rescan can reach.
     tasks::rating_import::spawn(spawner, state);
-    // And the third: marks a library indexed before the ingest widened as stale, so the boot scan
-    // re-reads the tags the migrations could only seed from what the database already knew.
     tasks::tag_backfill::spawn(spawner, state);
-    // Carries a star back out into the file. Before any callback can set one.
+    // Before any callback can set a rating.
     tasks::rating_writeback::spawn(spawner, state);
     tasks::heap_trim::spawn(spawner);
-    // Folds the output device's fault counters into one line per window, and is
-    // the only thing watching for a device that goes away mid-session.
     tasks::audio_health::spawn(spawner, state);
-    // Follows the system moving a device whose own control carries the volume. Inert until a
-    // claim with hardware volume reports a move.
     tasks::device_volume::spawn(spawner, state);
-    // Batches `play_count` / `skip_count` UPDATEs so a fast skip burst is one
-    // write. Before any playback can fire an `UpdatePlayCount`.
+    // Before any playback can fire an `UpdatePlayCount`.
     tasks::play_count_flusher::spawn(spawner, state.db.clone(), state.stats_changed.clone());
-    // Watches the view-model/position seam, enqueues qualifying plays and
-    // drains the durable queue. Inert until a provider is connected.
     tasks::scrobble::spawn(spawner, state);
-    // Projects the view-model into a Discord activity card. Inert until enabled;
-    // started here when it already is, so the card connects while idle rather
-    // than on the first track.
     tasks::discord_presence::spawn(spawner, state);
+    // Started here when already enabled, so the card connects while idle rather than on the
+    // first track.
     state.discord.start_if_enabled();
 
-    // OS media-control events drive the same `library::*` paths the UI does,
-    // keeping MPRIS / SMTC in lockstep with it.
     if let Some(rx) = channels.media_control_rx.take() {
         let sink: Arc<dyn EventSink> =
             Arc::new(ui::shell::event_sink::SlintEventSink { state: state.clone() });
@@ -87,12 +66,8 @@ pub fn restore_persisted_playback(runtime: &tokio::runtime::Runtime, state: &App
     }
 }
 
-/// With "Resume on Startup" on and a restored source, play here so the
-/// first frame paints `Playing` and the deck is already decoding.
-///
-/// A restored station goes through the same call and comes back the way it went away — as a
-/// re-open, since `player_play` routes a paused station to `resume_station`. That one is a
-/// network round trip rather than a decode, so the first frame paints `Connecting…` instead.
+/// Plays a restored source when "Resume on Startup" is on, here so the first frame paints
+/// `Playing`. A station re-opens through the same call and paints `Connecting…` instead.
 pub fn maybe_resume_on_startup(
     state: &AppState,
     startup_settings: Option<&services::settings::SettingsData>,
@@ -101,8 +76,7 @@ pub fn maybe_resume_on_startup(
     if !resume_enabled {
         return;
     }
-    // Bind the bool out so the guard drops *before* `player_play()`, which
-    // re-enters the same lock through `with_state_emit`.
+    // The guard drops before `player_play`, which re-enters this lock.
     let has_source = {
         let s = melodia_engine::player::engine::state::lock_state(&state.player_state);
         s.source.is_some()
@@ -112,28 +86,21 @@ pub fn maybe_resume_on_startup(
     }
 }
 
-/// Play the files this launch was handed on the command line.
-///
-/// After [`restore_persisted_playback`] so an opened track wins over what the
-/// last session left; `main()` skips [`maybe_resume_on_startup`] when there are
-/// files, resuming being visible for the moment it takes this to replace it.
-/// Synchronous like the restore — the first frame should paint what was
-/// double-clicked.
+/// Plays the files this launch was handed, after [`restore_persisted_playback`] so they win over
+/// what the last session left. Synchronous, so the first frame paints what was opened.
 pub fn open_startup_files(
     runtime: &tokio::runtime::Runtime,
     state: &AppState,
     files: &[std::path::PathBuf],
 ) {
     let paths: Vec<String> = files.iter().map(|p| p.to_string_lossy().into_owned()).collect();
-    // Too early to toast: that bridge installs with the UI and drops rather
-    // than queues what arrives before it.
+    // Too early to toast: the bridge installs with the UI and drops what arrives before it.
     if let Err(e) = runtime.block_on(library::queue::open_files(state, paths)) {
         log::warn!("Failed to open the files given on the command line: {}", describe(&e));
     }
 }
 
-/// Start accepting forwarded launches. The listener has been bound since before
-/// the logger opened, so what waited in the backlog is delivered from here.
+/// Starts accepting forwarded launches, including those queued since the boot's claim.
 pub fn serve_file_opens(
     state: &AppState,
     app: &AppWindow,
@@ -143,8 +110,7 @@ pub fn serve_file_opens(
     let weak = app.as_weak();
 
     platform::single_instance::serve(listener, move |paths| {
-        // Raise either way — an empty forward is someone launching Melodia
-        // again to get at the window.
+        // Raised either way: an empty forward is a launch to get at the window.
         let _ = weak.upgrade_in_event_loop(|ui| ui::shell::tray_bridge::raise_window(&ui));
 
         if paths.is_empty() {
@@ -160,8 +126,7 @@ pub fn serve_file_opens(
     });
 }
 
-/// Folder-watcher restart and the launch reconcile (off-thread, tracked so
-/// shutdown can await its DB writes before dropping the runtime).
+/// Restarts folder watching and runs the launch reconcile, tracked so shutdown awaits its writes.
 pub fn spawn_resume_watching(spawner: &tasks::TaskSpawner, state: &AppState) {
     let state_for_init = state.clone();
     spawner.spawn(async move {
