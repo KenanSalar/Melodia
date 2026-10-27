@@ -1,14 +1,9 @@
-//! Provider-agnostic scrobble payload and the play-duration threshold rule
-//! both services agree on. Kept free of any provider or I/O type so it stays a
-//! pure, independently-testable core.
+//! The provider-agnostic scrobble payload and the threshold rule both services share.
 
 use melodia_engine::player::engine::now_playing::Announcement;
 use serde::{Deserialize, Serialize};
 
-/// One scrobble's worth of track metadata, normalized to what both Last.fm and
-/// `ListenBrainz` accept. Enriched from a DB row at track start and persisted
-/// verbatim in the offline queue, so it derives `Serialize` / `Deserialize`
-/// and owns its strings.
+/// What both services accept, persisted verbatim in the offline queue.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScrobbleTrack {
     pub artist: String,
@@ -24,10 +19,7 @@ pub struct ScrobbleTrack {
 }
 
 impl ScrobbleTrack {
-    /// Build a scrobble payload from a DB row, or `None` when the row can't be
-    /// scrobbled — both services require a non-empty artist and track name. Maps
-    /// `title` → `track`, `duration_ms` → `duration_secs`, the `i32` track number
-    /// to `u32`, and the two `MusicBrainz` ids to the recording/release MBIDs.
+    /// `None` when the row can't scrobble, both services needing an artist and a title.
     pub fn from_row(row: &melodia_core::entities::track::ScrobbleRow) -> Option<Self> {
         let artist = non_empty(row.artist.as_deref())?;
         let track = non_empty(Some(&row.title))?;
@@ -43,8 +35,8 @@ impl ScrobbleTrack {
         })
     }
 
-    /// Build a scrobble payload from what a station announced. A stream carries nothing past the
-    /// two names, so every other field stays absent rather than guessed.
+    /// A stream carries nothing past the two names, so every other field stays absent rather than
+    /// guessed.
     pub fn heard_on_air(song: Announcement<'_>) -> Self {
         Self {
             artist: song.artist.to_owned(),
@@ -59,7 +51,6 @@ impl ScrobbleTrack {
     }
 }
 
-/// Trim `s` and return it owned only if it has non-whitespace content.
 fn non_empty(s: Option<&str>) -> Option<String> {
     s.map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned)
 }
@@ -67,13 +58,9 @@ fn non_empty(s: Option<&str>) -> Option<String> {
 /// The length both services require a track to exceed before it may scrobble at all.
 pub const MIN_TRACK_MS: u64 = 30_000;
 
-/// Played-time (ms) after which a track qualifies to scrobble, per the rule both
-/// services share: a track over [`MIN_TRACK_MS`] scrobbles once it has played at
-/// least half its length **or** 4 minutes, whichever comes first.
-///
-/// Returns `None` for tracks that can never scrobble. A `duration_ms` of `0` means
-/// "duration unknown"; those fall back to the 4-minute cap so a stream with no
-/// reported length can still scrobble.
+/// Played time after which a track over [`MIN_TRACK_MS`] qualifies: half its length or four
+/// minutes, whichever comes first. `None` for one that never can; an unknown length (`0`) takes
+/// the four-minute cap.
 pub fn scrobble_threshold_ms(duration_ms: u64) -> Option<u64> {
     const FOUR_MIN_MS: u64 = 240_000;
 

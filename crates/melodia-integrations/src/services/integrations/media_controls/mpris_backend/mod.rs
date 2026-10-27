@@ -39,8 +39,6 @@ enum Emit {
     Seeked(u64),
 }
 
-/// The Linux half of the OS media controls.
-///
 /// `emits` is `None` when the bus could not be reached, leaving the handle an inert no-op.
 pub struct MediaControlsHandle {
     published: Arc<Mutex<Published>>,
@@ -67,7 +65,6 @@ impl MediaControlsHandle {
     }
 }
 
-/// Serve both interfaces and start the signal thread, or `None` with a warning.
 fn start(
     published: &Arc<Mutex<Published>>,
     events: mpsc::Sender<PlayerEvent>,

@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 12 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 13 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -111,8 +111,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 10.4 | `melodia-views`: the shell and the player | 0.42 | 1,755 | ~704 | 0.23 (973) | `89a76e73` |
 | 10.5 | `melodia-views`: the rest of the shared layer | 0.33 | 2,334 | ~591 | 0.23 (1,632) | `caaa91bf` |
 | 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | 0.16 (1,287) | `1687b4db` |
-| 11 | `melodia-store` | 0.34 | 2,456 | ~666 | 0.20 (1,454) | |
-| 12 | `melodia-integrations` | 0.30 | 936 | ~147 | | |
+| 11 | `melodia-store` | 0.34 | 2,456 | ~666 | 0.20 (1,454) | `6d82a92b` |
+| 12 | `melodia-integrations` | 0.30 | 936 | ~147 | 0.14 (438) | |
 | 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | | |
 | 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | | |
 | 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | | |
@@ -250,11 +250,15 @@ Status: done.
   - **Other apps unnamed:** `rating_tags` and `tag_writer`'s lyrics key keep the mechanism without naming the players.
 
 ### Phase 12: `melodia-integrations`
-Status: not started.
+Status: done.
 
-- [ ] **12. The crate**, one commit (24 files).
+- [x] **12. The crate**, one commit (24 files).
   - **Furthest over:** `scrobble/mod.rs` (34), `discord/model.rs` (30).
-  - **Pointed at:** `CLAUDE.md`'s zbus footgun.
+  - **Pointed at:** `CLAUDE.md`'s zbus footgun and its `services/` bullet (the one-crate reason); `.claude/rules/desktop-shell.md`'s media controls; ADRs 23 and 24.
+  - **Second copies dropped:** `desktop-shell.md`'s restatement of the late SMTC attach and the channel cap, now the cross-tree wiring plus a pointer to `souvlaki_backend::MediaControlsHandle::new`; `integrations/mod.rs`' copy of the crate doc's one-crate argument; `ipc.rs`' and `credentials.rs`' re-arguments of ADRs 24 and 23, each now naming the ADR; `LastfmError::Api`'s retry argument, kept once at `submit::lastfm_reaction`; the `recording_mbid` gate argued at four sites, kept on `listenbrainz_love_armed`.
+  - **Stale claims removed:** `CardSource` allocating "only when the song moves" (`classify` builds one per evaluation); `enqueue_track`'s flag that "would never clear" (the drain drops a non-ready provider's flags); `wait_and_backoff` growing "on a plain timeout" (any `Continue` grows it); `ASSET_LOGO` as the badge over a cover (that is `ASSET_PLAYING`); `on_position`'s "~1 Hz" tick (500 ms); `submit_scrobbles`' "Phase-1 clients"; the scrobble threshold's "stream" (a station never reaches it).
+  - **Other apps unnamed:** `media_controls`' module doc keeps the phone-bridge mechanism without naming the client.
+  - **Kept whole for rustfmt:** an enum whose variants are partly documented expands every struct variant, so `Identity::Playing` and `Effect::NowPlaying` keep a one-line doc rather than move code.
 
 ### Phase 13: the Slint tree
 Status: not started.

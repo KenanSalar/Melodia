@@ -1,12 +1,8 @@
-//! `ListenBrainz` provider: token validation, "playing now", and durable listen
-//! submission.
+//! The `ListenBrainz` calls: token validation, playing-now, listens and recording feedback.
 //!
-//! Unlike Last.fm there's no app registration — the user's own token
-//! authenticates every call via an `Authorization: Token <token>` header, and
-//! failures come back as real HTTP statuses. Submissions carry
-//! `submission_client = "Melodia"` + this build's version, and rate limiting is
-//! read from the `X-RateLimit-Reset-In` header (seconds until the window
-//! resets — clock-skew-proof, unlike the epoch `X-RateLimit-Reset`).
+//! No app registration: the user's token authenticates every call, and a failure comes back as a
+//! real HTTP status. The rate limit is read from `X-RateLimit-Reset-In`, seconds until the window
+//! resets, which a skewed clock can't misread the way the epoch `X-RateLimit-Reset` can.
 
 use std::time::Duration;
 
@@ -17,9 +13,9 @@ use reqwest::StatusCode;
 use crate::services::integrations::scrobble::model::ScrobbleTrack;
 use melodia_core::error::AppError;
 
-/// The `ListenBrainz` API root. Every entry point below takes its base as an argument and every
-/// production caller passes this, so the submitter's suites can point the whole drain at a local
-/// server without a second code path deciding where a listen goes.
+/// Every entry point takes its base as an argument and every production caller passes this, so
+/// the submitter's suites point the whole drain at a local server without a second code path
+/// deciding where a listen goes.
 pub const LB_API_BASE: &str = "https://api.listenbrainz.org";
 
 /// Ceiling on a refusal's body. Tighter than [`ANSWER_MAX_BYTES`] because the text lands in an
@@ -30,22 +26,19 @@ const ERROR_MAX_BYTES: u64 = 8 * 1024;
 /// bounds a host answering with something else.
 const ANSWER_MAX_BYTES: u64 = 64 * 1024;
 
-/// Identifies Melodia as the player and submitting client in listen metadata.
 const MEDIA_PLAYER: &str = "Melodia";
 const SUBMISSION_CLIENT: &str = "Melodia";
 const SUBMISSION_CLIENT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// A `ListenBrainz` submission's outcome, classified for the submitter's retry
-/// policy.
+/// Classified for the submitter's retry policy.
 #[derive(Debug, thiserror::Error)]
 pub enum ListenBrainzError {
-    /// HTTP 401 — the user token was rejected. Disconnect and prompt re-auth.
+    /// HTTP 401.
     #[error("ListenBrainz token rejected")]
     InvalidToken,
-    /// HTTP 429 — rate limited. Retry after `reset_in_secs` if the header gave one.
+    /// HTTP 429, with the reset the header gave, if any.
     #[error("ListenBrainz rate limited")]
     RateLimited { reset_in_secs: Option<u64> },
-    /// Any other non-success status — retry with backoff.
     #[error("ListenBrainz server error (HTTP {status}): {message}")]
     Server { status: u16, message: String },
     /// Transport or response-decode failure.
@@ -53,15 +46,13 @@ pub enum ListenBrainzError {
     Transport(#[from] AppError),
 }
 
-/// The parsed body of `GET /1/validate-token`.
 #[derive(Debug, Deserialize)]
 pub struct ValidatedToken {
     pub valid: bool,
     pub user_name: Option<String>,
 }
 
-/// Validate a user token via `GET /1/validate-token`. A rejected token (HTTP
-/// 401) is a normal result, not an error: it returns `valid: false`.
+/// A rejected token is an answer, not an error: `valid: false`.
 pub async fn validate_token(
     client: &reqwest::Client,
     base_url: &str,
@@ -93,8 +84,6 @@ pub async fn validate_token(
     Ok(validated)
 }
 
-/// Report the currently-playing track (no `listened_at`). Ephemeral — never
-/// retried or queued.
 pub async fn submit_playing_now(
     client: &reqwest::Client,
     base_url: &str,
@@ -104,7 +93,6 @@ pub async fn submit_playing_now(
     submit(client, base_url, token, &playing_now_payload(track)).await
 }
 
-/// Submit one or more durable listens, each stamped with its real start time.
 /// An empty batch is a no-op.
 pub async fn submit_listens(
     client: &reqwest::Client,
@@ -118,10 +106,7 @@ pub async fn submit_listens(
     submit(client, base_url, token, &listens_payload(listens)).await
 }
 
-/// Love or clear feedback for a recording via `POST /1/feedback/recording-feedback`.
-/// `score` is `1` to love, `0` to clear (unlove). Only meaningful for a track
-/// with a known `recording_mbid` — LB feedback keys on it — so the caller gates
-/// on that. Durable/retried like a listen, sharing the same error policy.
+/// `score` is `1` to love and `0` to clear.
 pub async fn submit_feedback(
     client: &reqwest::Client,
     base_url: &str,
@@ -139,7 +124,6 @@ pub async fn submit_feedback(
     classify_response(response).await
 }
 
-/// POST a payload to `/1/submit-listens` and classify the response.
 async fn submit(
     client: &reqwest::Client,
     base_url: &str,
@@ -156,9 +140,6 @@ async fn submit(
     classify_response(response).await
 }
 
-/// Turn a completed response into `Ok(())` on success, else the classified error
-/// (rate-limit / invalid-token / server). Shared by listen submission and
-/// recording feedback.
 async fn classify_response(response: reqwest::Response) -> Result<(), ListenBrainzError> {
     let status = response.status();
     if status.is_success() {
@@ -175,9 +156,7 @@ async fn classify_response(response: reqwest::Response) -> Result<(), ListenBrai
     Err(server_error(status, response).await)
 }
 
-/// Read a failed response's body into a `Server` error — best-effort, so an
-/// unreadable body, or one past [`ERROR_MAX_BYTES`], degrades to an empty
-/// message.
+/// Best-effort: an unreadable body, or one past [`ERROR_MAX_BYTES`], leaves the message empty.
 async fn server_error(status: StatusCode, response: reqwest::Response) -> ListenBrainzError {
     let message = melodia_net::services::net::read_capped(
         response,
@@ -190,7 +169,6 @@ async fn server_error(status: StatusCode, response: reqwest::Response) -> Listen
     ListenBrainzError::Server { status: status.as_u16(), message }
 }
 
-/// Parse `X-RateLimit-Reset-In` (seconds until the rate-limit window resets).
 fn rate_limit_reset_in(headers: &reqwest::header::HeaderMap) -> Option<u64> {
     headers
         .get("X-RateLimit-Reset-In")
@@ -198,22 +176,18 @@ fn rate_limit_reset_in(headers: &reqwest::header::HeaderMap) -> Option<u64> {
         .and_then(|value| value.parse().ok())
 }
 
-/// Fallback wait when a 429 carries no `X-RateLimit-Reset-In` header to honor.
+/// The wait when a 429 names none.
 const DEFAULT_RATE_LIMIT_BACKOFF_SECS: u64 = 30;
-/// Cap on a single rate-limit wait so a misbehaving header can't park a task for
-/// minutes; a longer real window just costs one extra retry.
+/// So a misbehaving header can't park a task for minutes; a longer real window costs one extra
+/// retry.
 const MAX_RATE_LIMIT_BACKOFF_SECS: u64 = 300;
 
-/// The backoff to honor for a rate-limited (`429`) response: the reported
-/// seconds-until-reset (`X-RateLimit-Reset-In`, already parsed) if present, else
-/// [`DEFAULT_RATE_LIMIT_BACKOFF_SECS`], clamped to [`MAX_RATE_LIMIT_BACKOFF_SECS`].
 pub fn rate_limit_backoff(reset_in_secs: Option<u64>) -> Duration {
     Duration::from_secs(
         reset_in_secs.unwrap_or(DEFAULT_RATE_LIMIT_BACKOFF_SECS).min(MAX_RATE_LIMIT_BACKOFF_SECS),
     )
 }
 
-/// A `playing_now` payload: one listen with no `listened_at`.
 fn playing_now_payload(track: &ScrobbleTrack) -> SubmitListens<'_> {
     SubmitListens {
         listen_type: "playing_now",
@@ -221,7 +195,6 @@ fn playing_now_payload(track: &ScrobbleTrack) -> SubmitListens<'_> {
     }
 }
 
-/// A durable-listen payload: `single` for one listen, `import` for a batch.
 fn listens_payload<'a>(listens: &'a [(&'a ScrobbleTrack, i64)]) -> SubmitListens<'a> {
     SubmitListens {
         listen_type: if listens.len() == 1 { "single" } else { "import" },
@@ -235,12 +208,10 @@ fn listens_payload<'a>(listens: &'a [(&'a ScrobbleTrack, i64)]) -> SubmitListens
     }
 }
 
-/// The `recording-feedback` body: the recording MBID and its `1`/`0` score.
 fn feedback_payload(recording_mbid: &str, score: i8) -> RecordingFeedback<'_> {
     RecordingFeedback { recording_mbid, score }
 }
 
-/// Build the `track_metadata` block shared by "playing now" and listen payloads.
 fn build_metadata(track: &ScrobbleTrack) -> TrackMetadata<'_> {
     TrackMetadata {
         artist_name: &track.artist,

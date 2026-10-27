@@ -1,8 +1,5 @@
-//! The submitter's drain passes: batched scrobble submission and per-item love
-//! submission, with per-provider readiness gating, auto-disconnect on rejected
-//! auth, and rate-limit/transient backoff. Split out of the [`ScrobbleService`]
-//! handle (`mod.rs`) so the HTTP-drain concern stays separate from the state
-//! handle; it reaches the service's private queue/shadow as a descendant module.
+//! The submitter's drain: batched listens and per-item loves, gated per provider, disconnecting
+//! on rejected auth and backing off on everything else.
 
 use std::collections::VecDeque;
 use std::time::Duration;
@@ -18,14 +15,11 @@ use super::providers::lastfm::{self, LastfmError};
 use super::providers::listenbrainz::{self, ListenBrainzError};
 use super::queue::{LoveItem, ProviderFlags, QueuedItem, ScrobbleQueue};
 
-/// Provider cap on listens per submission POST (Last.fm's limit; we share it for
-/// `ListenBrainz` too, which permits more).
+/// Last.fm's cap on listens per POST, held for `ListenBrainz` too and for a round of loves.
 const SCROBBLE_BATCH_MAX: usize = 50;
 
 impl ScrobbleService {
-    /// Log the Last.fm session rejection and clear the stored credential
-    /// (best-effort persist). Called from the submit drains on an invalid session
-    /// — the caller then drops the pending Last.fm flags itself.
+    /// Best-effort; the caller drops the pending Last.fm flags itself.
     async fn disconnect_lastfm(&self) {
         log::warn!("Last.fm session invalid; disconnecting");
         if let Err(e) = self.set_lastfm_credentials(None).await {
@@ -33,7 +27,6 @@ impl ScrobbleService {
         }
     }
 
-    /// `ListenBrainz` sibling of [`Self::disconnect_lastfm`], on a rejected token.
     async fn disconnect_listenbrainz(&self) {
         log::warn!("ListenBrainz token invalid; disconnecting");
         if let Err(e) = self.set_listenbrainz_credentials(None).await {
@@ -41,10 +34,8 @@ impl ScrobbleService {
         }
     }
 
-    /// One drain round over both the scrobble and love queues. Returns
-    /// `Some(delay)` when a provider asked to be retried later (transient / rate
-    /// limit); `None` when idle or progress was made. Routine failures stay
-    /// silent (logged), per the no-toast-spam convention.
+    /// One round over listens and loves, `Some(delay)` where a provider deferred. Failures are
+    /// logged, never toasted.
     ///
     /// Once `stop` fires no further request starts and the one in flight is
     /// abandoned, but what already went out is still written back: a round cut
@@ -67,10 +58,6 @@ impl ScrobbleService {
         retry
     }
 
-    /// Drain the scrobble queue: batch each connected + enabled provider (≤
-    /// `SCROBBLE_BATCH_MAX`), POST via the Phase-1 clients, clear the
-    /// per-provider flag on success, drop the flag for a now-disconnected
-    /// provider, then `retain_pending` + persist.
     async fn submit_scrobbles(&self, stop: &CancellationToken) -> Option<Duration> {
         let snapshot: Vec<QueuedItem> = {
             let queue = self.queue.lock();
@@ -80,9 +67,7 @@ impl ScrobbleService {
             queue.items.iter().cloned().collect()
         };
 
-        // One shadow read; secrets cloned out so no guard is held across a POST.
-        // Readiness (scrobble toggle on + reachable) is snapshotted alongside the
-        // creds so both come from the same lock acquisition.
+        // Cloned out under one read, so no guard is held across a POST.
         let (lastfm_creds, lastfm_ready, lb_creds, lb_ready) = {
             let runtime = self.runtime.read();
             (
@@ -96,7 +81,6 @@ impl ScrobbleService {
         let client = self.client();
         let mut lastfm = Drain::new(&snapshot, |it: &QueuedItem| it.lastfm_remaining);
         if !lastfm_ready {
-            // Nowhere to send: drop the Last.fm side of every pending item.
             lastfm.drop_pending();
         } else if let Some(creds) = lastfm_creds.as_ref()
             && let Some((api_key, secret)) = lastfm::keys()
@@ -104,10 +88,8 @@ impl ScrobbleService {
             let session = LastfmSession { api_key, secret, session_key: &creds.session_key };
             self.scrobble_to_lastfm(&mut lastfm, &client, &session, stop).await;
         } else {
-            // `lastfm_ready` implies `is_configured()` (both keys present) AND a
-            // stored session, so this arm is unreachable. If a future change ever
-            // decouples that invariant, drop the flags rather than leave them set
-            // with no retry — which would spin the submitter at zero delay.
+            // Unreachable, `lastfm_ready` implying both keys and a session. Should that ever
+            // break, dropping the flags keeps them from spinning the submitter at zero delay.
             debug_assert!(
                 false,
                 "lastfm_ready but api keys/session absent — is_configured() invariant broke"
@@ -185,8 +167,6 @@ impl ScrobbleService {
         }
     }
 
-    /// A rejected session disconnects Last.fm and drops every flag still pending for it, which
-    /// would otherwise retry against a credential just deleted; anything else defers.
     async fn on_lastfm_error<T>(&self, error: &LastfmError, what: &str, drain: &mut Drain<'_, T>) {
         match lastfm_reaction(error) {
             Reaction::Disconnect => {
@@ -197,7 +177,6 @@ impl ScrobbleService {
         }
     }
 
-    /// [`Self::on_lastfm_error`] for `ListenBrainz`.
     async fn on_listenbrainz_error<T>(
         &self,
         error: &ListenBrainzError,
@@ -213,16 +192,10 @@ impl ScrobbleService {
         }
     }
 
-    /// Clear the submitted providers' flags by snapshot index (bounds-checked
-    /// against a rare cap-drop shift — a double-submit is deduped by both
-    /// services), `retain_pending`, and return the new queue when it changed (for
-    /// the caller to persist off-thread). `select` picks the sub-queue —
-    /// `items` for scrobbles, `loves` for loves — so both drains share this walk.
-    ///
-    /// `keep` guards each clear against the entry having changed under the lock
-    /// while its POST was in flight: `submit_loves` passes a `loved`-match check
-    /// so a favorite toggled the opposite way mid-submit isn't cleared (its newer
-    /// state stays pending); `submit_scrobbles` passes `|_, _| true`.
+    /// Clears the submitted flags by snapshot index, returning the queue to persist when it
+    /// changed. A cap drop mid-POST can shift the indices, hence the bounds check; the double
+    /// submit that can follow is one both services dedupe. `keep` vetoes a clear for an entry
+    /// that changed under the lock while its POST was in flight.
     pub(super) fn collect_writeback<T: ProviderFlags>(
         &self,
         select: impl Fn(&mut ScrobbleQueue) -> &mut VecDeque<T>,
@@ -254,21 +227,14 @@ impl ScrobbleService {
         changed.then(|| queue.clone())
     }
 
-    /// Persist a post-drain queue snapshot off the async runtime (via
-    /// [`Self::save_queue`]). Best-effort: a failed write is logged, and the item
-    /// stays in the in-memory queue to be re-persisted on the next drain.
+    /// Best-effort: a failed write leaves the queue in memory for the next drain to persist.
     async fn persist_queue(&self, snapshot: ScrobbleQueue) {
         if let Err(e) = self.save_queue(snapshot).await {
             log::warn!("Failed to persist scrobble queue after submit: {}", describe(&e));
         }
     }
 
-    /// Drain the love queue: one POST per pending love (Last.fm
-    /// `track.love`/`track.unlove`, `ListenBrainz` recording feedback), clearing
-    /// the per-provider flag on success and auto-disconnecting on rejected auth —
-    /// mirroring `submit_scrobbles`. Reads the shadow fresh so a disconnect from
-    /// the scrobble pass in the same round is honored. Capped per round; the
-    /// submitter loop re-drains while loves remain.
+    /// Reads the shadow afresh, so a disconnect in this round's scrobble pass holds here too.
     async fn submit_loves(&self, stop: &CancellationToken) -> Option<Duration> {
         let snapshot: Vec<LoveItem> = {
             let queue = self.queue.lock();
@@ -278,8 +244,7 @@ impl ScrobbleService {
             queue.loves.iter().cloned().collect()
         };
 
-        // Loves drain on reachability alone — the love toggles (not the scrobble
-        // toggles) gate *enqueuing*, so neither `*_enabled` flag is read here.
+        // Reachability alone: the love toggles gate enqueuing, not the drain.
         let (lastfm_creds, lastfm_ready, lb_creds, lb_ready) = {
             let runtime = self.runtime.read();
             (
@@ -300,9 +265,7 @@ impl ScrobbleService {
             let session = LastfmSession { api_key, secret, session_key: &creds.session_key };
             self.love_on_lastfm(&mut lastfm, &client, &session, stop).await;
         } else {
-            // Unreachable while `lastfm_reachable()` keeps its `is_configured()`
-            // gate (see the matching arm in `submit_scrobbles`); drop rather than
-            // spin if that ever changes.
+            // As in `submit_scrobbles`.
             debug_assert!(
                 false,
                 "lastfm reachable but api keys/session absent — is_configured() invariant broke"
@@ -317,11 +280,8 @@ impl ScrobbleService {
             self.love_on_listenbrainz(&mut lb, &client, &creds.token, stop).await;
         }
 
-        // Only clear a love whose queued `loved` still matches what we submitted:
-        // a favorite toggled the opposite way while the POST was in flight
-        // coalesces a fresh `loved` into the same entry (`push_love`), and clearing
-        // it by index would drop that newer state. Mismatches stay pending and go
-        // out next round.
+        // A favorite toggled back mid-POST coalesced a newer `loved` into the same entry
+        // (`push_love`), which a clear by index would drop; it goes out next round instead.
         if let Some(queue_snapshot) = self.collect_writeback(
             |q| &mut q.loves,
             &lastfm.done,
@@ -333,8 +293,6 @@ impl ScrobbleService {
         merge_opt(lastfm.retry_after, lb.retry_after)
     }
 
-    /// One `track.love`/`track.unlove` per pending love, up to the round's cap, stopping at the
-    /// first failure.
     async fn love_on_lastfm(
         &self,
         drain: &mut Drain<'_, LoveItem>,
@@ -372,7 +330,6 @@ impl ScrobbleService {
         }
     }
 
-    /// One recording-feedback POST per pending love, as [`Self::love_on_lastfm`].
     async fn love_on_listenbrainz(
         &self,
         drain: &mut Drain<'_, LoveItem>,
@@ -446,20 +403,20 @@ impl<'a, T> Drain<'a, T> {
     }
 }
 
-/// What a failed provider call means for the queue. Both drains ask this of both providers, so
-/// the policy is written once rather than four times, and is decidable without a socket.
+/// What a failed provider call means for the queue, decided without a socket.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Reaction {
     /// Auth was rejected: clear the credential and drop this provider's pending flags, which
-    /// would otherwise retry forever against something we just deleted.
+    /// would otherwise retry against a credential just deleted.
     Disconnect,
     /// Keep the entry queued. `Duration::ZERO` means the provider named no wait and the
     /// submitter's own backoff picks one.
     Retry(Duration),
 }
 
-/// Last.fm's retry policy. Only a rejected session disconnects: an unclassified code keeps its
-/// queue slot deliberately, since one mis-read as permanent silently loses the listen.
+/// Only a rejected session disconnects. Any other code keeps its slot, a permanent one (10, an
+/// invalid key; 26, a suspended one) until the cap evicts it, since a code mis-read as permanent
+/// silently loses the listen.
 fn lastfm_reaction(error: &LastfmError) -> Reaction {
     match error {
         LastfmError::InvalidSession => Reaction::Disconnect,
@@ -467,8 +424,7 @@ fn lastfm_reaction(error: &LastfmError) -> Reaction {
     }
 }
 
-/// `ListenBrainz`'s retry policy. The one provider that names its own wait, via the 429's
-/// `X-RateLimit-Reset-In`.
+/// The one provider that names its own wait, in the 429's `X-RateLimit-Reset-In`.
 fn listenbrainz_reaction(error: &ListenBrainzError) -> Reaction {
     match error {
         ListenBrainzError::InvalidToken => Reaction::Disconnect,
@@ -488,14 +444,11 @@ fn log_deferral(what: &str, cause: &dyn std::error::Error, delay: Duration) {
     }
 }
 
-/// Fold a requested retry delay into the running maximum, so honoring several
-/// providers means honoring the longest.
+/// The loop honors the longest wait any provider asked for.
 fn merge_retry(current: Option<Duration>, requested: Duration) -> Duration {
     current.map_or(requested, |c| c.max(requested))
 }
 
-/// Combine two optional retry delays, keeping the longer — the scrobble and love
-/// drains each report one, and the loop honors whichever asks to wait longest.
 fn merge_opt(a: Option<Duration>, b: Option<Duration>) -> Option<Duration> {
     match (a, b) {
         (Some(x), Some(y)) => Some(x.max(y)),
@@ -503,15 +456,11 @@ fn merge_opt(a: Option<Duration>, b: Option<Duration>) -> Option<Duration> {
     }
 }
 
-/// Collect the snapshot indices whose `flag` predicate holds — the entries to
-/// mark done for a provider that can't be submitted to right now. Generic over
-/// the queued type, shared by the scrobble and love drains.
 fn drop_flags<T>(snapshot: &[T], flag: impl Fn(&T) -> bool, out: &mut Vec<usize>) {
     out.extend(snapshot.iter().enumerate().filter(|(_, it)| flag(it)).map(|(i, _)| i));
 }
 
-/// Build a `≤ SCROBBLE_BATCH_MAX` batch of `(&track, timestamp)` from the items
-/// whose `flag` is set, returning it alongside their snapshot indices.
+/// Up to [`SCROBBLE_BATCH_MAX`] pending listens, with their snapshot indices.
 fn take_batch(
     snapshot: &[QueuedItem],
     flag: impl Fn(&QueuedItem) -> bool,

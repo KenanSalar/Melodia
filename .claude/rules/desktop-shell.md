@@ -248,14 +248,11 @@ The other way paths arrive from outside, and the one that can arrive before ther
 
 ## Tray and media keys
 
-- **OS media controls** — MPRIS over `zbus` on Linux, souvlaki 0.8 for SMTC and macOS
-  `MediaPlayer`. Bounded `mpsc` (cap 32) decouples the callback thread from `PlayerState`,
-  `EventSink` from Slint. **Windows SMTC deferred** — souvlaki panics on a null
-  `HWND` and no OS window exists at `AppState::init`, so `init_media_controls()` leaves Windows
-  inert; `boot::ui_setup::install` posts a one-shot post-show `invoke_from_event_loop` grabbing
-  the `HWND` and calling `MediaControlsHandle::attach_smtc`, a newly-attached `true` triggering a no-op
-  `with_state_emit` to flush playback. Linux MPRIS / macOS MediaPlayer attach eagerly; `event_tx`
-  retained Windows-only for the late rewire.
+- **OS media controls** — MPRIS over `zbus` on Linux, souvlaki for SMTC and macOS
+  `MediaPlayer`, behind `media_controls`' façade, which argues the split. **Windows SMTC
+  attaches after `app.show()`**, argued at the souvlaki backend's `MediaControlsHandle::new`:
+  `boot::ui_setup::install` hands `attach_smtc` the `HWND` once the window exists, and a `true`
+  re-syncs the panel through a no-op `with_state_emit`.
 
 - **System tray** — `crates/melodia-platform/src/services/platform/tray/` cfg-split (Linux `ksni`, Win/mac `tray-icon`) behind
   a `mod.rs` façade (`TrayAction`, `TraySnapshot`, embedded `tray.png`, `init_tray`).
