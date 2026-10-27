@@ -125,6 +125,19 @@ each earn its place, and re-read every comment before moving on.
 - **Document public APIs** using the doc-comment format below. Start with a single-sentence
   summary; don't just repeat the member name.
 
+**The budget is about 0.25 comment lines per line of code**, each corpus measured on its own:
+
+```bash
+# production Rust
+cloc --include-lang=Rust --exclude-dir=tests,target,melodia-testkit,benches --not-match-f='_tests\.rs$' crates
+# the Slint tree: cloc has no Slint, and C++ comments the same way
+cloc --force-lang=C++,slint --include-ext=slint crates/melodia-ui/ui
+```
+
+It holds across the corpus, not per file: a module of `SAFETY:` invariants and tuned constants
+can sit above it while a plain one sits well below. It shows drift and is never an allowance; a
+comment the rules above don't justify goes whatever the count says.
+
 **Doc comments in this tree:**
 
 | Language | Doc syntax | Notes |
@@ -133,4 +146,6 @@ each earn its place, and re-read every comment before moving on.
 | Slint | none — `//` and `/* */` only | Nothing extracts docs from `.slint`, so a note above a component, property or callback is the whole affordance; keep it to why the binding is shaped that way |
 
 SQL migrations (`--`) and the `scripts/` helpers (`#`) have no doc-comment form either; the
-generic rules above are the whole contract there.
+generic rules above are the whole contract there. A shipped migration's comments are frozen with
+its SQL: sqlx checksums the whole file, so trimming one fails the migration run on every database
+that already applied it.
