@@ -1,6 +1,4 @@
-//! `Favorites.*` card actions and sub-view routing: Most Played
-//! play-track, the cross-tab open-artist hand-off, the tab switch, and the
-//! grid's column-count push. See [`super::wire`].
+//! The grid cards' actions and the tab switch.
 
 use std::sync::Arc;
 
@@ -19,7 +17,6 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Favorites};
 
-/// Wire the card-action and sub-view-routing callbacks.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -33,10 +30,8 @@ pub(super) fn wire(
     wire_columns_changed(ui);
 }
 
-/// Clicking a Most Played card loads that grid into the queue
-/// and starts on that card — the grid is the context, not the Songs list
-/// on the other tab. The Slint callback carries no row index (these are
-/// cards, not list rows), so the start slot comes from the id.
+/// A Most Played card queues that grid rather than the Songs list, starting on the card. A card
+/// carries no row index, so the start comes from the id.
 fn wire_play_track(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     let weak = ui.as_weak();
@@ -57,11 +52,7 @@ fn wire_play_track(ui: &AppWindow, state: &AppState) {
     });
 }
 
-/// Clicking a favorite artist card drills into the Artists tab's
-/// Artist Detail; the shared hand-off stamps the origin so the back
-/// arrow returns to Favorites. The grid is unmounted the moment Nav
-/// flips, so its cover tier goes with it — the same release
-/// `on_open_album` does for the Albums grid.
+/// Drills into Artist Detail, handing the grid's covers back as Nav unmounts it.
 fn wire_open_artist(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi>) {
     let s = state.clone();
     let aru = artists_ui.clone();
@@ -79,51 +70,34 @@ fn wire_open_artist(ui: &AppWindow, state: &AppState, artists_ui: &Arc<ArtistsUi
     });
 }
 
-/// The bar has already moved `tab-idx` and cleared the Slint-side
-/// filter by the time this runs, so this is the catch-up: drop the Rust
-/// filter shadow to match, reload the entering tab if it missed a tick, then
-/// off-thread persist the pick and warm the entering grid's covers.
-///
-/// Every tab keeps its list across a pick, so the entering one paints what it
-/// showed last on this tick and a reload it owes refreshes behind it. Its count
-/// is still the one that list was shown with, so nothing is rewound.
+/// Catches the Rust side up once the bar has moved `tab-idx` and cleared the Slint-side filter.
+/// Every tab keeps its list across a pick, so nothing is rewound and a reload the entering tab
+/// owes lands behind what it shows.
 fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
     let s = state.clone();
     let fu = fav_ui.clone();
     let weak = ui.as_weak();
-    // Ordered: a bounce queues a value per pick and two blocking tasks have
-    // none of their own, so a reversed pair reopens the page on a tab the
-    // user only passed through.
     let persist = Arc::new(IndexPersist::new(g.get_tab_idx()));
     g.on_tab_changed(move |tab| {
         let Some(ui) = weak.upgrade() else { return };
         let g = ui.global::<Favorites>();
         let entering = favorites_ui_mod::tab_from_index(&g, tab);
         persist.publish(tab);
-        // A sub-view pick moves no nav index, so `record_current` never
-        // hears about it. The bar has already written `tab-idx`, so the tag
-        // reads the tab being entered.
+        // A pick moves no nav index, so `record_current` never logs it.
         crate::ui::view_tag::log_current(&ui);
 
-        // Asked before the shadow moves, so it reads the tab being left: the
-        // pick is about to clear the needle that tab was loaded under, and the
-        // pick that brings it back has to reload it.
+        // Before the shadow moves, so it asks about the tab being left, whose needle the pick
+        // clears.
         if fu.shows_filtered() {
             fu.mark_tab_dirty(fu.active_tab());
         }
 
-        // Shadow first: every later load decides which list to fill and which
-        // covers to warm from it, and both can run off the UI thread where the
-        // global isn't reachable.
+        // Shadow first, every load below choosing its list and covers from it.
         fu.set_active_tab(entering);
         favorites_ui_mod::set_filter(&fu, "");
         crate::ui::hero_chips::publish_favorites(&ui, &fu);
 
-        // Each tab's load only runs while that tab is mounted, so entering one
-        // is where a tick skipped on another gets paid for; the flag is what
-        // keeps a pick back and forth from reloading a list nothing has
-        // invalidated. See `lifecycle::kick_full_refresh`.
         if fu.take_tab_dirty(entering) {
             reload_tab(&ui, &s, &fu, entering);
         }
@@ -132,22 +106,17 @@ fn wire_tab_changed(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>)
         let s_disk = s.clone();
         let persist_disk = Arc::clone(&persist);
         s.runtime.spawn_blocking(move || {
-            // Scoped to the write alone: a superseded tab drops its own disk
-            // hop, and the cover swap below is this task's regardless.
+            // Only the write is superseded; the prewarm runs regardless.
             persist_disk.write_if_current(tab, || {
                 if let Err(e) = library::settings::set_favorites_tab(&s_disk.paths, tab) {
                     log::warn!("favorites::set_favorites_tab: {}", describe(&e));
                 }
             });
-            // Whatever the entering grid painted last visit is still in the tier
-            // as a proxy; this sharpens it, and anything genuinely absent
-            // schedules itself off the card's own lookup.
             favorites_ui_mod::prewarm_tab_covers(&fu_covers, entering);
         });
     });
 }
 
-/// The entering tab's reload, behind the list it kept from its last visit. UI thread.
 fn reload_tab(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>, tab: FavoritesTab) {
     if tab != FavoritesTab::Songs {
         favorites_ui_mod::reload_grid(ui, state, fav_ui, tab);

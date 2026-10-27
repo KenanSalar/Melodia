@@ -1,12 +1,4 @@
-//! `RecentlyPlayed.*` callbacks, split by concern:
-//!
-//! * [`covers`] — the Most Played grid's lazy cover-lookup callback.
-//! * [`subviews`] — the Most Played card actions, the tab switch, and the
-//!   grid's column-count push.
-//! * [`tracklist`] — the Songs tab: row actions, filter, column visibility,
-//!   modifier-aware selection, and its Shuffle pill.
-//! * [`lifecycle`] — section enter/leave cache management + the joined
-//!   `library_changed` + `stats_changed` re-fetch subscriber.
+//! Every `RecentlyPlayed.*` callback, split by concern.
 
 mod covers;
 mod lifecycle;
@@ -19,11 +11,7 @@ use crate::ui::recently_played::RecentlyPlayedUi;
 use melodia_app::state::AppState;
 use melodia_ui::AppWindow;
 
-/// Wire every `RecentlyPlayed.*` callback.
-///
-/// Called by [`super::install`], which is what guarantees the models are in place first — a
-/// pairing, rather than two statements a boot-file reorder could separate. `wire_all` still has to
-/// have run before it.
+/// Runs after `wire_all`, from [`super::install`], which installs the models first.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     covers::wire(ui);
     subviews::wire(ui, state, rp_ui);

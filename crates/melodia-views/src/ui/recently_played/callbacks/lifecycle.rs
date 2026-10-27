@@ -1,7 +1,4 @@
-//! Recently-Played section lifecycle: the `section-active-changed` enter/leave
-//! handler (cache release + re-fetch), the joined `library_changed` +
-//! `stats_changed` subscriber, and the first-enter initial fetch. See
-//! [`super::wire`].
+//! The Recently Played section's enter and leave, its refresh subscriber and its first fetch.
 
 use std::sync::Arc;
 
@@ -20,18 +17,12 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, CardSelection, Nav, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
-/// Wire the Recently-Played section-lifecycle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     let g = ui.global::<RecentlyPlayed>();
     let weak = ui.as_weak();
 
-    // --- Section-active mirror + cache release / re-enter ---------
-    // Seed the synchronous shadow from the current nav state: the gate's
-    // `ChangeTracker` baselines inside `AppWindow::new()` and fires only on a
-    // later difference, so a section the boot doesn't land on gets no edge at
-    // all, and the one it does land on gets its edge a frame late — after
-    // boot has already read this shadow. See the `SectionActiveGate` bullet
-    // in `.claude/rules/ui-patterns.md`.
+    // Seeded here, the gate firing only on a later difference (`ui-patterns.md`'s
+    // `SectionActiveGate` bullet).
     rp_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_RECENTLY_PLAYED);
     {
         let ru = rp_ui.clone();
@@ -40,37 +31,21 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         g.on_section_active_changed(move |active| {
             ru.set_section_active(active);
             if !active {
-                // Land synchronously before the release task is spawned so the
-                // re-enter handler's `take_dirty()` never observes stale data.
+                // Before the release is spawned, so a re-enter's `take_dirty()` can't miss it.
                 ru.mark_dirty();
             }
             if !active && let Some(ui) = weak.upgrade() {
-                // UI-thread teardown: hand back the banner's cover and blur slots so their
-                // `SharedPixelBuffer` Arcs release immediately, and empty the
-                // models so their `SharedString`s drop on the same tick as the
-                // LRU release below.
+                // The banner's slots hold their buffers past the LRU, so they go back here.
                 let g = ui.global::<RecentlyPlayed>();
                 release_hero_slots(&g);
-                // Unconditional, on the same tick as the wipe — see the
-                // matching call in `favorites/lifecycle.rs`.
                 ru.forget_mosaic();
-                // Six heroes share one colour set and one chip row, so hand
-                // both back rather than leaving this banner's solve and this
-                // view's counts for the next hero to paint under.
                 release_shared_hero(&ui);
-                // Rewind both counts to "not fetched yet" on the same tick
-                // as the models they number, for the reason the folds are reset
-                // beside their caches: a count that outlives its model is the
-                // one thing these surfaces can state that is *wrong* rather
-                // than merely absent. `track-count` is the visible one — the
-                // hero square reads it to pick its fallback glyph.
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 clear_vec_model::<UiTrackListRow>(&g.get_tracks(), "recently_played: clear tracks");
                 recently_played_ui_mod::release_grid(&ui, &ru);
                 list_selection::clear_row_selection(&g);
-                // The card grid's set goes back with the models it describes;
-                // `card-selection.slint` argues why it cannot outlive the leave.
+                // The card selection goes back with the models (`card-selection.slint`).
                 ui.global::<CardSelection>().invoke_clear();
             }
             let ru = ru.clone();
@@ -90,14 +65,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         });
     }
 
-    // --- library_changed + stats_changed subscriber ---------
-    // `library_changed` is bumped by scans / imports / favorite toggles;
-    // `stats_changed` after every play-count flush (which writes both this
-    // view's ordering keys — `last_played` for Songs, `play_count` for Most
-    // Played), so it listens to `stats_changed` as Favorites and Playlists
-    // do. Visible ⇒ refetch grid + tracks in place; hidden ⇒ mark dirty
-    // for the next enter. Its own loop for Favorites' reason: it selects over
-    // both channels, and `ui::signal::on_signal` takes one.
+    // `stats_changed` follows a play-count flush, which writes both tabs' ordering keys. Its own
+    // loop because it selects over both channels, where `ui::signal::on_signal` takes one.
     {
         let s = state.clone();
         let ru = rp_ui.clone();
@@ -106,8 +75,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         let mut stats_rx = state.stats_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
             loop {
-                // Both senders live in `AppState` for the process lifetime, so
-                // an `Err` only happens during teardown — exit the loop.
                 tokio::select! {
                     changed = library_rx.changed() => {
                         if changed.is_err() {
@@ -129,9 +96,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
         }));
     }
 
-    // First section enter: kick an initial fetch so the page paints with data.
-    // If the session starts elsewhere, `section-active-changed` triggers the
-    // same fetch via `take_dirty()`.
+    // A boot onto this page gets no edge, so it fetches here; one elsewhere fetches on its first
+    // enter.
     rp_ui.mark_dirty();
     if rp_ui.section_active() {
         let s = state.clone();
@@ -145,24 +111,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     }
 }
 
-/// Fetch the recency list, and reload the Most Played grid only when its tab is the one
-/// mounted.
-///
-/// `refresh_tracks` always runs: it answers the count, running time and collage the band states
-/// on both tabs. The grid reloads on every `stats_changed` tick, i.e. once per finished track, for
-/// as long as it is on screen; on the Songs tab that is a grid nobody can see. My Library answers
-/// this with a `SectionActiveGate` per tab; this page has one gate for both tabs, so the tick that
-/// was skipped is remembered on [`RecentlyPlayedUi::mark_grid_dirty`] and the pick that mounts the
-/// grid reloads instead.
+/// Refreshes the recency list, which the band reads on both tabs, and the grid only while it is
+/// mounted, a tick skipped on Songs going on [`RecentlyPlayedUi::mark_grid_dirty`].
 async fn kick_full_refresh(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
     weak: &slint::Weak<AppWindow>,
 ) {
     if rp_ui.active_tab() == RecentlyPlayedTab::MostPlayed {
-        // This *is* the load the flag schedules, so it settles it here rather than
-        // leaving the next pick to reload a grid this tick just filled. Seeded
-        // `true`, so without it a boot onto this tab pays for its own load twice.
+        // Consumed by the load it schedules, so a boot onto the grid loads once.
         rp_ui.take_grid_dirty();
         let s = state.clone();
         let ru = Arc::clone(rp_ui);

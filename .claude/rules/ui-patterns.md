@@ -1047,14 +1047,12 @@ three components that answer it, and each argues its geometry at its own file.
   every entry to `PROXY_COVER_DIM` square in place rather than calling `clear`, so a re-entry paints
   the right cover on frame one and the prewarm already on its way sharpens it behind
   (`CoverThumbs::shrink_to_proxy`).
-  - **The guard sits ahead of the decode, where it used to sit after one.** A prewarm for an
-    off-screen section was answered by decoding and then releasing; against a tier nothing clears,
-    that leaves a screenful resident for a page nobody opened. Browse is where it bit, being the
-    only view whose boot seed fetches while the section is off screen, so a launch landing anywhere
-    else paid for a screenful it never drew. Every other prewarm site gates its fetch on
-    `section_active()`, and the three grids a detail can cover (Albums, Artists, Playlists) on
-    `SectionState::grid_on_screen`, which argues why. A leave landing *inside* a decode is no
-    longer a reason to hand anything back: those buffers are what the re-entry paints.
+  - **A prewarm is guarded ahead of its decode**: against a tier nothing clears, decoding and then
+    releasing leaves a screenful resident for a page nobody opened. Every other prewarm site gates
+    its fetch on `section_active()`, and the three grids a detail can cover (Albums, Artists,
+    Playlists) on `SectionState::grid_on_screen`, which argues why; Browse, whose boot seed fetches
+    off screen, guards the decode itself (`BrowseUi::warm_card_tier`). A leave landing inside a
+    decode hands nothing back: those buffers are what the re-entry paints.
   - **Radio's logo tier is not this tier, and the reason is its card rather than its decode.**
     `station-card.slint` derives `logo-native-size` from `cover.width / logo-decode-size`, so the
     decoded *extent* is load-bearing for that card's layout: a proxy makes every logo read as a tiny
@@ -1114,11 +1112,6 @@ three components that answer it, and each argues its geometry at its own file.
     beside the clear. `radio::covers::logo_cover` is that branch's one remaining home. The queue
     panel's tier is released on hide too, but its rows borrow or schedule from the first frame, so
     its generation is a repaint token like a grid's and nothing rewinds it.
-  - Browse rebuilds **without hopping the event loop** — `invoke_from_event_loop` posts even from
-    the UI thread, and a redraw winning that race paints an empty grid. It keeps its card model
-    across the leave, which is why the covers under it are shrunk rather than dropped and why it
-    still owes a `mark_dirty()` on leave and a wire-time `mark_dirty()` while hidden, having no
-    enter-time fetch.
   - **The Rust half is `grid_prewarm::grid_cover(path)`** — one tier, one lookup, no branch. Reach
     for it at a new surface: a copy that grew a **decoding** arm reads correctly and puts the
     UI-thread decode straight back, which is the one thing it will not do.

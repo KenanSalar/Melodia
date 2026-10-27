@@ -1,5 +1,5 @@
-//! In-place writers for the three `Browse` `VecModel`s. Each falls back
-//! to a fresh `ModelRc` only if the install step somehow didn't run.
+//! In-place writers for `Browse`'s list models, each falling back to a fresh `ModelRc` if the
+//! install never ran.
 
 use slint::{Model, ModelRc, VecModel};
 

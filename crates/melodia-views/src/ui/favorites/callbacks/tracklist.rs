@@ -1,6 +1,4 @@
-//! `Favorites.*` Songs-tab callbacks: row actions (play, queue, favorite
-//! toggle), the filter pass, sort, column visibility, and modifier-aware
-//! row selection. See [`super::wire`].
+//! The Songs tab's callbacks, and the filter every tab shares.
 
 use std::sync::Arc;
 
@@ -18,7 +16,6 @@ use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Favorites};
 
-/// Wire the Songs tab's row / filter / sort / selection callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
     wire_play_row(ui, state);
@@ -30,8 +27,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     wire_row_selection(&g.as_weak());
 }
 
-/// Loads the filtered list into the queue and starts on the clicked track;
-/// the hero's Shuffle is the same call at index 0, plus a shuffle flip.
+/// Queues the filtered list, starting on the clicked track.
 fn wire_play_row(ui: &AppWindow, state: &AppState) {
     let s = state.clone();
     let weak = ui.as_weak();
@@ -45,10 +41,8 @@ fn wire_play_row(ui: &AppWindow, state: &AppState) {
 fn wire_row_flags(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
     let fu = fav_ui.clone();
-    // An unfavourite drops the rows on this tick; `set_favorite` has already bumped
-    // `library_changed`, whose refresh reloads the list behind it, which also covers an undo
-    // landing before the removal does. Multi-select arrives as `[int]`; single-row mode sends a
-    // 1-element array.
+    // An unfavourite drops the rows on this tick, and the `library_changed` refresh behind it
+    // reloads the list, an undo landing first included.
     wire_row_flag!(g, on_toggle_row_favorite, state, "favorites::set_favorite",
     library::favorites::set_favorite, collect_track_ids,
     captures: [fu],

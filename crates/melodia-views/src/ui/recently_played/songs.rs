@@ -1,8 +1,5 @@
-//! Songs tab: fetch (recency order), in-memory filter, hero stats, and model apply.
-//!
-//! Unlike Favorites, the recency set is fetched once and both its membership and its order are
-//! fixed — the list is mounted non-sortable. Filtering re-walks the cached `tracks_all` entirely
-//! in memory and preserves that order.
+//! The Songs tab: the capped recency set, fetched once per refresh and filtered in memory in its
+//! own order.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -20,21 +17,16 @@ use melodia_core::error::AppResult;
 use melodia_core::utils::needle::{Needle, fold_needle};
 use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
-/// Read-and-return the active filter needle, folded by [`set_filter`] and ready to hand to a
-/// `row_match` predicate.
 pub fn current_filter(rp_ui: &RecentlyPlayedUi) -> Needle {
     rp_ui.state().filter.lock().clone()
 }
 
-/// Update the cached filter needle. Folded on the way in, so the list and the Most Played grid
-/// beside it share one needle.
+/// Folded on the way in, so the list and the Most Played grid share one needle.
 pub fn set_filter(rp_ui: &RecentlyPlayedUi, filter: &str) {
     *rp_ui.state().filter.lock() = fold_needle(filter);
 }
 
-/// Fetch the 200 most-recently-played tracks, cache them, push the hero stats, then apply the
-/// in-memory filter into the Slint model. Runs on a tokio worker; the model write hops to the UI
-/// thread.
+/// Fetches the recency set, stores it with the band's facts, then writes the filtered rows.
 pub async fn refresh_tracks(
     state: &AppState,
     rp_ui: &Arc<RecentlyPlayedUi>,
@@ -42,18 +34,13 @@ pub async fn refresh_tracks(
 ) -> AppResult<()> {
     let rows = library::recently_played::get_recently_played(&state.db).await?;
 
-    // A leave that landed while the query was in flight has already cleared `tracks_all` and
-    // emptied the model, so everything below would undo that teardown behind a view nobody can
-    // see. Placement is the rule every `section_active()` bail follows: after the slow part,
-    // because before it the leave hasn't happened yet.
+    // A leave landing mid-query has already cleared the cache and the model.
     if !rp_ui.section_active() {
         return Ok(());
     }
 
-    // Prewarm the row covers off-thread before the first model apply — a mounted row resolves its
-    // thumbnail through `RowCovers.request` on the UI thread, so a cold cache would pay one
-    // synchronous decode per unique cover at paint time. The rows are already in recency order,
-    // so the prefix surviving the cap is the right one.
+    // Warmed before the first write, a mounted row resolving its cover on the UI thread. The rows
+    // are in recency order, so the prefix the cap keeps is the right one.
     let cover_paths: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         rows.iter().map(|r| r.artwork_path.as_deref()),
         rp_ui.cover_thumbs.capacity(),
@@ -63,16 +50,12 @@ pub async fn refresh_tracks(
         let _ = tokio::task::spawn_blocking(move || thumbs.prewarm(&cover_paths)).await;
     }
 
-    // The decode burst above is an `.await`, so the guard has to be asked again: a leave landing
-    // inside it has already emptied the models and wiped the cache.
+    // Asked again, the prewarm being an `.await`.
     if !rp_ui.section_active() {
         return Ok(());
     }
 
-    // Hero: count + total duration over the full (unfiltered) recency set, and the up-to-4
-    // most-recently-played distinct covers for the mosaic. Folded here, on the worker that holds
-    // the rows — a publish triggered from the *grid* has to be able to state them too, so they
-    // outlive this function and can't be arguments.
+    // The band's facts, over the unfiltered set.
     let totals = SongsTotals {
         tracks: len_as_i32(rows.len()),
         duration_ms: rows.iter().map(|r| r.duration_ms).sum(),
@@ -80,10 +63,7 @@ pub async fn refresh_tracks(
     let fold = crate::ui::hero_folds::fold_tracks(&rows);
     let mosaic_paths = super::hero::mosaic_paths_from(&rows, 4);
 
-    // Under the section gate so the stores can't interleave with `release_section_state`'s wipe
-    // and leave half of each on screen. Held across the synchronous stores only, never across an
-    // `.await`, and taken *before* the push below so the band can't publish a fold this hasn't
-    // landed yet.
+    // Stored before the push below, so the band can't publish a fold this hasn't landed.
     {
         let _gate = rp_ui.gate();
         *rp_ui.state().songs_totals.lock() = totals;
@@ -92,9 +72,8 @@ pub async fn refresh_tracks(
     }
 
     super::hero::push_hero_stats(totals.tracks, rp_ui, weak);
-    // Only recompose the banner when the covers differ from the ones on screen: a played-track
-    // refresh usually yields the same top four, and recomposing them is wasted blocking-pool
-    // work. The matching claim is `hero::publish_hero_artwork`'s, for `MosaicGuard`'s reason.
+    // A refresh usually yields the same top four. The matching claim is `publish_hero_artwork`'s,
+    // for `MosaicGuard`'s reason.
     if rp_ui.state().last_mosaic_paths.is_stale(&mosaic_paths) {
         let st = state.clone();
         let ru = rp_ui.clone();
@@ -108,18 +87,9 @@ pub async fn refresh_tracks(
     Ok(())
 }
 
-/// Re-walk the cached `tracks_all` through the active filter and push the result into
-/// `RecentlyPlayed.tracks`, still in recency order. Existing selection is re-stamped so a filter
-/// change doesn't visually drop it.
-///
-/// A hidden section is never written to, and the check sits in [`write_filtered_tracks`] rather
-/// than out here, because the leave can land while the post is in flight.
-///
-/// **An unmounted tab is refused for the same reason, and asked about twice.**
-/// `RecentlyPlayed.tracks` feeds one element, under `if tab-idx == tab-songs`, so on the Most
-/// Played tab every row built here reaches nothing. [`build_filtered_tracks`]' check skips the
-/// cost on the paths that reach here without a tab pick; [`write_filtered_tracks`]' stops a pick
-/// landing mid-post from pinning a row per track behind a tab the user just left.
+/// Re-walks the cache through the active filter into `RecentlyPlayed.tracks`, keeping the
+/// selection. An unmounted Songs tab is refused twice: before the build, to skip its cost, and at
+/// the write with the hidden page, a leave or a pick landing while the post is in flight.
 pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindow>) {
     let Some(rows) = build_filtered_tracks(rp_ui) else {
         return;
@@ -133,22 +103,14 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
     });
 }
 
-/// Apply from the UI thread, with no event-loop hop — the rows land in the model before Slint
-/// re-evaluates the `if` that mounts the entering tab.
-///
-/// `slint::invoke_from_event_loop` posts even when called *from* the UI thread, so a redraw can
-/// win the race. The tab-leave empties this model, so what a lost race paints is a `TrackList` of
-/// headers over nothing.
+/// [`apply_filtered_tracks`] without the event-loop hop, for a tab pick (`ui-patterns.md`'s
+/// tabbed pages).
 pub fn apply_filtered_tracks_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     if let Some(rows) = build_filtered_tracks(rp_ui) {
         write_filtered_tracks(ui, rp_ui, rows);
     }
 }
 
-/// Walk the cached `tracks_all` through the active filter, or `None` when Songs isn't the mounted
-/// tab and the walk would feed nothing.
-///
-/// Filters and builds the rows on the calling thread, borrowing the cache in place.
 fn build_filtered_tracks(rp_ui: &RecentlyPlayedUi) -> Option<Vec<UiTrackListRow>> {
     if rp_ui.active_tab() != RecentlyPlayedTab::Songs {
         return None;
@@ -160,11 +122,6 @@ fn build_filtered_tracks(rp_ui: &RecentlyPlayedUi) -> Option<Vec<UiTrackListRow>
     ))
 }
 
-/// Push the rows into `RecentlyPlayed.tracks`. UI thread only.
-///
-/// Both gates are re-asked here rather than trusted from the build: on the posting path a section
-/// leave or a tab pick can land while the closure is in flight, and either has already emptied
-/// this model on purpose.
 fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec<UiTrackListRow>) {
     if !rp_ui.section_active() || rp_ui.active_tab() != RecentlyPlayedTab::Songs {
         return;
@@ -182,9 +139,7 @@ fn write_filtered_tracks(ui: &AppWindow, rp_ui: &RecentlyPlayedUi, mut rows: Vec
     crate::ui::model_diff::apply_rows_keyed(vec, rows, |r| r.id);
 }
 
-/// Flip `is_favorite` on a single row in the Slint `VecModel`. Recency membership is independent
-/// of the favorite flag, so an in-place patch is always correct here — no re-fetch, no full-list
-/// rebuild.
+/// Patches the one row in place, recency membership not depending on the flag.
 pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         crate::ui::model_patch::patch_track_row_by_id(
@@ -195,9 +150,7 @@ pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     });
 }
 
-/// Set `rating` on a single row in the Slint `VecModel` — the star-rating analogue of
-/// [`apply_row_favorite`]. These lists have no rating column and no in-table rating sort, so the
-/// row never moves.
+/// [`apply_row_favorite`]'s star-rating twin.
 pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         crate::ui::model_patch::patch_track_row_by_id(

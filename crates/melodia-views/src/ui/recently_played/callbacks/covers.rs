@@ -1,16 +1,11 @@
-//! `RecentlyPlayed`'s lazy cover-lookup callback — the Most Played grid cards.
-//! (Songs rows resolve through the shared `RowCovers` global like every other
-//! `TrackListRowItem`.) See [`super::wire`].
+//! The Most Played grid's cover lookup; Songs rows resolve through `RowCovers` like every list's.
 
 use slint::ComponentHandle;
 
 use melodia_ui::{AppWindow, RecentlyPlayed};
 
-/// Wire the `request-most-played-cover` callback.
-///
-/// The second argument is `RecentlyPlayed.covers-generation`, read for its effect on the card's
-/// `pure` binding and never for its value: it is what re-runs the lookup once a scheduled decode
-/// lands behind an already-mounted grid.
+/// `generation` is read for its effect on the binding, never its value: it re-runs the lookup
+/// once a decode lands behind a mounted grid.
 pub(super) fn wire(ui: &AppWindow) {
     ui.global::<RecentlyPlayed>().on_request_most_played_cover(|path, _generation| {
         crate::ui::grid_prewarm::grid_cover(path.as_str())

@@ -1,5 +1,5 @@
-//! `Search.*` query callbacks: keystroke debounce, commit → FTS fetch,
-//! and the compact/full Songs toggle. See [`super::wire`].
+//! The query box's callbacks: each keystroke, the debounced commit, and the compact/full Songs
+//! toggle.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -12,24 +12,13 @@ use crate::ui::search::{SearchUi, apply, fetch};
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Search};
 
-/// Wire the query / debounce / show-all callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
     let g = ui.global::<Search>();
     let weak = ui.as_weak();
 
-    // Every keystroke: mirror the trimmed text into Rust state, reset
-    // `show-all-tracks` (every new query starts compact),
-    // bump the history token (defers any pending 2-second history-add
-    // for a previous query), and fast-path the empty case so the
-    // recent-searches branch re-mounts as soon as the user clears
-    // the SearchBar.
-    //
-    // Empty-input also releases the strip-tier LRUs + cached results
-    // off-thread: the user explicitly cleared the field, so we treat
-    // it like a soft section-leave (mirrors `release_section_state`'s
-    // ordering but without the section-active bail). UI-side
-    // selection is dropped synchronously so the leftover
-    // "{N} selected" pill from the previous query doesn't linger.
+    // Every keystroke starts compact and defers a pending history add. An emptied box is a soft
+    // leave (`SearchUi::release_for_empty_query`), its selection dropped so no "{N} selected"
+    // pill outlives the results.
     {
         let s = state.clone();
         let su = search_ui.clone();
@@ -58,18 +47,10 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
             let su = su.clone();
             let weak = weak.clone();
             let q = text.to_string();
-            // The commit, not `query-changed` beside it, which fires per
-            // keystroke. Behind the view's 300 ms debounce or an Enter press.
+            // Logged at the commit, behind the view's debounce or an Enter, not per keystroke.
             log::debug!("search: {q:?}");
-            // Reset selection if this commit targets a different
-            // query than the one whose results currently populate
-            // the model. Previous selection ids reference tracks
-            // that may not appear in the new result set, so the
-            // "{N} selected" pill would lie. Compare against the
-            // cached `last_query` (not `Search.query`, which is
-            // the live keystroke text — they're equal at commit
-            // time only when the throttle Timer just fired against
-            // a quiet field).
+            // A new query drops the selection, whose ids its results may not hold. Compared
+            // against `last_query` rather than the live `Search.query`, which runs ahead of it.
             if q.trim() != su.state().last_query.lock().as_str()
                 && let Some(ui) = weak.upgrade()
             {

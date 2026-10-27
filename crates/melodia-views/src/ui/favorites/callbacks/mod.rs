@@ -1,20 +1,4 @@
-//! `Favorites.*` callbacks, split by concern:
-//!
-//! * [`covers`] — the lazy cover-lookup callbacks for the three card tiers.
-//! * [`hero`] — the per-tab shuffle pills.
-//! * [`subviews`] — the grid cards' actions, the cross-tab open-artist
-//!   hand-off, the tab switch, and the grid column-count push.
-//! * [`tracklist`] — the Songs tab: row actions, filter, sort, column
-//!   visibility, and modifier-aware selection.
-//! * [`lifecycle`] — section enter/leave cache management + the
-//!   `library_changed` re-fetch subscriber.
-//!
-//! Cross-tab back-nav: clicking a favorite artist card sets
-//! `ArtistDetail.origin-nav-index = NAV_FAVORITES` synchronously *before*
-//! the async fetch yields, then `artists_ui.open_artist_with` flips
-//! `Nav.selected-index` in the same `upgrade_in_event_loop` closure that
-//! writes `artist-id`. The back arrow on `ArtistDetail` reads the origin
-//! and flips Nav back here.
+//! Every `Favorites.*` callback, split by concern.
 
 mod covers;
 mod hero;
@@ -34,12 +18,7 @@ use melodia_app::services::view_state::ViewStateData;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Favorites};
 
-/// Wire every `Favorites.*` callback.
-///
-/// Called by [`super::install`], which is what guarantees the models are in
-/// place first and that the Artists handle exists (the sub-view module borrows
-/// it for the cross-tab open-artist hand-off). `wire_all` still has to have run
-/// before it.
+/// Runs after `wire_all`, from [`super::install`], which installs the models first.
 pub(super) fn wire(
     ui: &AppWindow,
     state: &AppState,
@@ -56,13 +35,8 @@ pub(super) fn wire(
     lifecycle::wire(ui, state, fav_ui);
 }
 
-/// Read the two persisted sorts from settings and seed both the Rust cache
-/// and the Slint properties. `None` (never persisted) leaves the
-/// defaults in place.
-///
-/// Two, because the page has two independently sortable sub-views: the Songs
-/// tab's `TrackList` and the Favorite Artists grid. They share the `view_sort`
-/// map under separate keys.
+/// Seeds the Songs list's and the Favorite Artists grid's persisted sorts, each under its own
+/// `view_sort` key; one never persisted keeps its default.
 fn hydrate_sort_from_settings(
     view_state: Option<&ViewStateData>,
     fav_ui: &FavoritesUi,

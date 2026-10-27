@@ -1,5 +1,4 @@
-//! Favorites section lifecycle: the `section-active-changed` enter/leave handler, the
-//! `library_changed` subscriber, and the first-enter initial fetch. See [`super::wire`].
+//! The Favorites section's enter and leave, its refresh subscriber and its first fetch.
 
 use std::sync::Arc;
 
@@ -16,17 +15,12 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, CardSelection, Favorites, Nav};
 
-/// Wire the Favorites section-lifecycle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) {
     let g = ui.global::<Favorites>();
     let weak = ui.as_weak();
 
-    // --- Section-active mirror + cache release / re-enter --------
-    // Seed the synchronous shadow from the current nav state — it has to be right on its own, the
-    // gate firing only on a later difference (`.claude/rules/ui-patterns.md`'s `SectionActiveGate`
-    // bullet). `boot::ui_setup::views::install_views` hydrates the persisted nav index before any
-    // `wire_*` runs, so the read below sees it; the sibling `active_tab` shadow is
-    // `favorites::seed_tab`'s.
+    // Seeded here, the gate firing only on a later difference (`ui-patterns.md`'s
+    // `SectionActiveGate` bullet); `install_views` hydrates the nav index before any `wire_*` runs.
     fav_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_FAVORITES);
     {
         let fu = fav_ui.clone();
@@ -35,37 +29,22 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         g.on_section_active_changed(move |active| {
             fu.set_section_active(active);
             if !active {
-                // Land synchronously on the UI thread *before* the release task is spawned — the
-                // re-enter handler reads this through `take_dirty()` and must never observe stale
-                // data because release hadn't run yet.
+                // Before the release is spawned, so a re-enter's `take_dirty()` can't miss it.
                 fu.mark_dirty();
             }
             if !active && let Some(ui) = weak.upgrade() {
-                // UI-thread teardown: hand back the banner's cover and blur slots so their
-                // `SharedPixelBuffer` Arcs release immediately — the dual blur slots hold their
-                // own refs even after the LRU drops — and empty the models so their
-                // `SharedString`s go on this tick.
+                // The banner's slots hold their buffers past the LRU, so they go back here.
                 let g = ui.global::<Favorites>();
                 release_hero_slots(&g);
-                // Same tick as the wipe above, and unconditional: `release_section_state` bails
-                // when the user has already come back, so leaving the guard to it can strand the
-                // hero on the bare gradient floor until the next channel tick.
                 fu.forget_mosaic();
-                // Six heroes share one colour set and one chip row, so hand both back rather than
-                // leaving this banner's solve for the next hero to paint under.
                 release_shared_hero(&ui);
-                // Rewind all three counts on the same tick as the models they number: a count
-                // that outlives its model is the one thing these surfaces can state that is
-                // *wrong* rather than merely absent. `track-count` is the visible one, the hero
-                // square reading it to pick its fallback glyph.
                 g.set_track_count(UNFETCHED_COUNT);
                 g.set_most_played_count(UNFETCHED_COUNT);
                 g.set_artist_count(UNFETCHED_COUNT);
                 list_selection::clear_row_selection(&g);
                 favorites_ui_mod::release_tracks(&g);
                 favorites_ui_mod::release_grids(&ui, &fu);
-                // The card grids' set goes back with the models it describes;
-                // `card-selection.slint` argues why it cannot outlive the leave.
+                // The card selection goes back with the models (`card-selection.slint`).
                 ui.global::<CardSelection>().invoke_clear();
             }
             let fu = fu.clone();
@@ -79,19 +58,15 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
                     }
                 });
             } else {
-                // Off-thread heavy release — runs after the UI-thread teardown so the LRU drop
-                // pairs with already-released Slint properties and no Arc ref lingers.
+                // After the teardown above, so no Slint property still holds what the LRU drops.
                 let runtime = s.runtime.clone();
                 runtime.spawn_blocking(move || fu.release_section_state());
             }
         });
     }
 
-    // --- library_changed + stats_changed subscriber ---
-    // `library_changed` is bumped after every favorite toggle and every scan / file-event commit;
-    // `stats_changed` after every play-count flush, which reorders Most Played. Visible, it
-    // refetches in place; hidden, it marks dirty so the next enter triggers `kick_full_refresh`.
-    // Its own loop because it selects over both channels, and `ui::signal::on_signal` takes one.
+    // `stats_changed` follows a play-count flush, which reorders Most Played. Its own loop because
+    // it selects over both channels, where `ui::signal::on_signal` takes one.
     {
         let s = state.clone();
         let fu = fav_ui.clone();
@@ -100,8 +75,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         let mut stats_rx = state.stats_changed.subscribe();
         let _ = slint::spawn_local(Compat::new(async move {
             loop {
-                // Both senders live in `AppState` for the process lifetime, so an `Err` only
-                // happens during teardown — exit the loop.
                 let stale = tokio::select! {
                     changed = library_rx.changed() => {
                         if changed.is_err() {
@@ -125,10 +98,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
         }));
     }
 
-    // First section enter: kick an initial fetch so the page paints with data rather than empty
-    // models. A session starting elsewhere gets the same fetch from `section-active-changed`
-    // through `take_dirty()`; the mark here is what covers a session starting *on* Favorites,
-    // whose `else` arm above never fires.
+    // A boot onto Favorites gets no edge, so it fetches here; one elsewhere fetches on its first
+    // enter.
     fav_ui.mark_dirty();
     if fav_ui.section_active() {
         let s = state.clone();
@@ -157,15 +128,9 @@ impl Stale {
     }
 }
 
-/// Fetch the hero stats plus **whichever tab is mounted**, concurrently, where `stale` reaches it.
-///
-/// `refresh_hero` always runs: it answers the count, running time and mosaic the band states on
-/// all three tabs, and it is self-contained. The tabs are gated, being mutually exclusive `if`s
-/// that only the mounted one draws.
-///
-/// **The loading tab consumes its flag**, which is what stops a boot onto a tab loading twice;
-/// the tabs that skip *set* theirs, so the pick that mounts one knows a tick went by. A tab
-/// `stale` doesn't reach is left as it was.
+/// Refreshes the band, which every tab states, and the mounted tab where `stale` reaches it. The
+/// loading tab consumes its flag, so a boot onto it loads once; the others set theirs for the pick
+/// that mounts them.
 async fn kick_full_refresh(
     state: &AppState,
     fav_ui: &Arc<FavoritesUi>,

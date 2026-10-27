@@ -21,9 +21,7 @@ pub(super) struct Scrolls {
     pub artists: ScrollPoint,
 }
 
-/// Bind the page's models, each installed once: the Songs list a [`TrackRows`], the two grid tabs
-/// a `PagedGrid` each, and the selection set a `VecModel`. Later updates locate them by
-/// downcasting back from the UI thread.
+/// Binds the page's models once; every later write finds them by downcasting back.
 pub(super) fn install_favorites_models(ui: &AppWindow, state: &AppState) -> Scrolls {
     let g = ui.global::<Favorites>();
 
@@ -49,11 +47,8 @@ pub fn most_played_ids(ui: &AppWindow) -> Vec<i64> {
     card_grid::shown_ids::<FavoriteMostPlayed>(ui)
 }
 
-/// Map a `FavoriteArtist` + caller-supplied subtitle to its Slint card
-/// row. The subtitle is the translated `"{n} favorite[s]"` count line and
-/// must be resolved on the UI thread via `Favorites.artist-favorite-subtitle(count)`
-/// (Slint 1.18 doesn't expose `translate_from_bundle` to Rust). `play_count`
-/// is unused.
+/// Maps a `FavoriteArtist` to its card. `subtitle` is the translated count line, resolved on the
+/// UI thread through `Favorites.artist-favorite-subtitle`, Rust having no `@tr`.
 pub fn to_slint_fav_artist_row(a: &FavoriteArtist, subtitle: SharedString) -> UiEntityStripRow {
     UiEntityStripRow {
         id: clamp_i64_to_i32(a.id),

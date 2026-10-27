@@ -1,6 +1,4 @@
-//! `Search.*` recent-searches callbacks: pick (re-run a past query),
-//! remove a single term, and clear the whole list. See
-//! [`super::wire`].
+//! The recent searches' callbacks.
 
 use std::sync::Arc;
 
@@ -12,16 +10,12 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Search};
 
-/// Wire the recent-pick / recent-remove / recent-clear callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
     let g = ui.global::<Search>();
     let weak = ui.as_weak();
 
-    // recent-pick: optimistically fill the SearchBar (so the user
-    // sees the chip's text in the input immediately) and bump
-    // `debounce-tick-pending` so the throttle Timer fires
-    // `commit-search` after the usual 300 ms. The fresh
-    // `kick_search` will re-add the term to history naturally.
+    // A pick fills the box and goes through the usual debounce, so its commit re-adds the term
+    // to the history like any other.
     {
         let weak = weak.clone();
         g.on_recent_pick(move |term| {

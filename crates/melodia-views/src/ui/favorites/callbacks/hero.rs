@@ -1,8 +1,4 @@
-//! The hero's shuffle pills. See [`super::wire`].
-//!
-//! The pill is per-tab, so each one shuffles what its own tab is showing —
-//! and both id lists are filter-aware, so the queue can't disagree with what
-//! is on screen.
+//! The hero's per-tab shuffle pills, each shuffling what its tab shows, filter included.
 
 use slint::ComponentHandle;
 
@@ -11,7 +7,6 @@ use crate::ui::favorites as favorites_ui_mod;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Favorites};
 
-/// Wire the two hero shuffle callbacks.
 pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Favorites>();
 

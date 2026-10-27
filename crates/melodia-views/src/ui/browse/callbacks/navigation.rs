@@ -1,9 +1,5 @@
-//! Moving between folders: a row click, the back arrow, a breadcrumb segment.
-//!
-//! All three do the same two things — spawn a fetch for the new path, then persist it —
-//! and differ only in how they reach that path and what they do to the history stack
-//! first. Those two halves were written out three times each; they are [`spawn_fetch`]
-//! and [`persist_path`] now.
+//! Moving between folders: a row click, the back arrow, a breadcrumb segment. Each fetches and
+//! persists the new path, differing only in what it does to the history first.
 
 use std::sync::Arc;
 
@@ -16,11 +12,8 @@ use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Browse};
 
-/// Fetch `path` and apply it to the view, logging a failure under `label`.
-///
-/// A plain fn rather than `spawn_logged!` because the label varies per caller and that
-/// macro takes a `literal` — which is the right constraint for it, since a label built at
-/// runtime is usually one that should have been interpolated.
+/// A plain fn rather than `spawn_logged!`, whose label is a literal where this one varies per
+/// caller.
 fn spawn_fetch(
     state: &AppState,
     browse_ui: &Arc<BrowseUi>,
@@ -38,8 +31,7 @@ fn spawn_fetch(
     });
 }
 
-/// Remember where the user is, so the next launch opens there. `None` is the library
-/// root, which is what an empty path means everywhere else in this slice.
+/// Remembers where the user is, for the next launch; `None` is the library root.
 fn persist_path(state: &AppState, path: Option<String>) {
     let s = state.clone();
     spawn_blocking_logged!(
@@ -49,8 +41,8 @@ fn persist_path(state: &AppState, path: Option<String>) {
     );
 }
 
-/// The path a navigation target names, as [`persist_path`] wants it: `None` for the
-/// library root, which is what an empty path means everywhere in this slice.
+/// An empty path is the library root everywhere in this slice, and [`persist_path`] spells it
+/// `None`.
 fn path_or_root(path: &str) -> Option<String> {
     (!path.is_empty()).then(|| path.to_owned())
 }
@@ -59,8 +51,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     let g = ui.global::<Browse>();
     let weak = ui.as_weak();
 
-    // open-folder: push the current path onto history, fetch the new one, persist it. The
-    // Slint TouchArea fires this on a folder-row click.
     {
         let s = state.clone();
         let bu = browse_ui.clone();
@@ -70,13 +60,12 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
             let leaving = bu.current_path();
             bu.push_history(leaving, path.clone());
             spawn_fetch(&s, &bu, &weak, path.clone(), "browse::open_folder");
-            // Not `path_or_root` — an `open-folder` target is always a real directory, so
-            // an empty string here would be a bug rather than the root.
+            // Not `path_or_root`: an `open-folder` target is always a real directory, so an empty
+            // string here would be a bug rather than the root.
             persist_path(&s, Some(path));
         });
     }
 
-    // go-back: pop history, fetch the popped path, persist. No-op when history is empty.
     {
         let s = state.clone();
         let bu = browse_ui.clone();
@@ -90,9 +79,6 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
         });
     }
 
-    // navigate-to: breadcrumb segment click. Truncate history down to (and including) the
-    // target if it's in the stack — gives "click ancestor → jump back N levels"
-    // semantics. Empty string = root.
     {
         let s = state.clone();
         let bu = browse_ui.clone();

@@ -10,9 +10,7 @@ use crate::ui::paged_rows::ScrollPoint;
 use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, RecentlyPlayed, TrackListRow as UiTrackListRow};
 
-/// Bind the page's models, each installed once: the Most Played grid a `PagedGrid`, the Songs list
-/// and the selection set `VecModel`s. Hands back where the grid is scrolled, for the loads that
-/// seed it.
+/// Binds the page's models once, handing back where the grid is scrolled.
 pub(super) fn install_recently_played_models(ui: &AppWindow, state: &AppState) -> ScrollPoint {
     let g = ui.global::<RecentlyPlayed>();
 

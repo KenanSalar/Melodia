@@ -1,27 +1,14 @@
-//! The Browse page: the filesystem under the library folders, as a track list
-//! or a card grid.
+//! The Browse page: the filesystem under the library folders, as a track list or a card grid.
+//! Its models are installed once and mutated in place, never swapped, so Slint's bindings keep
+//! their dependency tracks.
 //!
-//! Its models are installed once at startup and mutated **in place** on every
-//! navigation — no `ModelRc` swaps after install, so Slint's reactive bindings
-//! keep their dependency tracks.
+//! A file on disk but not in the library gets a sparse row with `id == 0` and `enabled == false`,
+//! which the row draws dimmed and inert. An empty `current-path` is the root, listing the library
+//! folders as drillable rows, `browse_directory` refusing an empty path.
 //!
-//! `rows` renders through the shared `TrackList`. In-library files carry their
-//! real `TrackListRow`; a file on disk that isn't in the DB carries a synthesized
-//! sparse row with `id == 0` and `enabled == false`, so the row item draws it
-//! dimmed and swallows every interaction.
-//!
-//! `current-path == ""` is the **root** state: rather than call
-//! `browse_directory`, which rejects an empty path, Rust lists the library
-//! folders as drillable rows — and flips `has_library_folders` false when there
-//! are none, so the view paints its CTA.
-//!
-//! Browse sorts **in memory**, mixing disk-only and DB files, so unlike the
-//! Tracks view it can't push an `ORDER BY`. The sort state lives on `BrowseUi`,
-//! so a watcher-driven re-fetch preserves the user's chosen order.
-//!
-//! Every [`fetch_and_apply`] bumps `fetch_token` and captures the post-bump
-//! value; a late fetch whose token has moved by the time its closure runs drops
-//! its UI write rather than overwriting a newer result.
+//! Browse sorts in memory, mixing disk-only and library files where no `ORDER BY` reaches, and
+//! keeps the sort on [`BrowseUi`] so a watcher's re-fetch preserves it. A fetch whose
+//! `fetch_token` moved before its write lands drops the write.
 
 mod breadcrumbs;
 mod callbacks;
@@ -51,22 +38,15 @@ use melodia_ui::{
     BrowseFolderRow as UiBrowseFolderRow, TrackListRow as UiTrackListRow,
 };
 
-/// Browse's `Nav.selected-index` — see [`crate::ui::favorites::NAV_FAVORITES`].
+/// This page's `Nav.selected-index`, and the single definition of it.
 pub const NAV_BROWSE: i32 = 1;
 
-// `pub(super)` is `pub(in crate::ui)` here, which is exactly the reach these
-// need: this slice's own `callbacks.rs`, plus the cross-slice `apply_row_*`
-// mirrors in `callbacks::now_playing`.
 pub(super) use cards::{BrowseViewMode, mode_from_index, mode_index, rebuild_cards};
 pub(super) use fetch::{apply_row_favorite, apply_row_rating, fetch_and_apply, resort_and_apply};
 pub(super) use selection::{clear_selection, handle_select_row, select_all};
 
-/// Install the Browse models, build the handle, wire every `Browse.*` callback,
-/// and seed the persisted path + presentation mode.
-///
-/// The seed folds in here, being Browse-local and needing only the handle this
-/// call just built — which is also what lets it take `views.json` as an argument
-/// rather than re-reading a file `install_views` already parsed.
+/// Wires every `Browse.*` callback and seeds the persisted path and presentation mode, here
+/// because the seed needs the handle this builds.
 ///
 /// The returned handle is not a keepalive; see [`crate::ui::albums::install`].
 pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
@@ -78,39 +58,26 @@ pub fn install(cx: ViewCtx<'_>) -> Arc<BrowseUi> {
     browse_ui
 }
 
-/// Rust-side state for the Browse view. Shared between the UI callbacks
-/// (`callbacks::wire`) and the async fetcher.
+/// The Browse page's handle, shared by its callbacks and its off-thread fetch.
 pub struct BrowseUi {
-    /// Canonical current location. `""` ⇒ root (library folder list).
-    /// Mirrored into `Browse.current-path` on every successful fetch.
+    /// Empty at the root, and mirrored into `Browse.current-path` by every successful fetch.
     current_path: Mutex<String>,
-    /// Back-stack of paths the user has drilled out of. `go_back` pops
-    /// and refetches; `open_folder` pushes the current path before
-    /// switching.
+    /// The paths drilled out of, for the back arrow.
     pub(super) history: Mutex<Vec<String>>,
-    /// Last fetched files, already in display order — `play-row`, the selection
-    /// helpers and the favourite toggle recover full row data from here rather
-    /// than round-tripping the Slint model.
+    /// The last fetched files in display order, so callbacks read row data here rather than off
+    /// the Slint model.
     pub(super) last_files: Mutex<Vec<BrowseFile>>,
-    /// Cached beside `last_files` because the card view draws both in one grid,
-    /// and a mode toggle rebuilds it with no fetch to take them from.
+    /// Kept for the card view, which draws folders and files in one grid and rebuilds it on a
+    /// mode toggle with no fetch to take them from.
     pub(super) last_folders: Mutex<Vec<BrowseFolder>>,
-    /// In-memory sort state — Browse mixes disk-only and DB files, so it can't
-    /// push an `ORDER BY`.
     sort_field: Mutex<String>,
     sort_dir: Mutex<String>,
-    /// The shared row tier. The card view's tiles draw from
-    /// `ui::grid_prewarm::tier()`, which no view holds.
+    /// The shared row tier; the cards draw from `grid_prewarm::tier()` instead.
     pub(super) cover_thumbs: Arc<CoverThumbs>,
-    /// Synchronous shadow of `Browse.view-mode`, read by the fetch off a tokio
-    /// worker where the global is out of reach. A bool because the index itself
-    /// lives only in Slint.
+    /// Shadow of `Browse.view-mode` for the off-thread fetch, a bool because the index lives only
+    /// in Slint.
     card_mode: AtomicBool,
-    /// Stale-fetch guard — see the module docs.
     pub(super) fetch_token: AtomicU64,
-    /// Visibility and staleness. Browse releases nothing on leave, so `dirty` is
-    /// set only by the `library_changed` subscriber while hidden, and consumed
-    /// on re-enter to re-fetch the current directory once.
     section: SectionState,
 }
 
@@ -130,7 +97,6 @@ impl BrowseUi {
         }
     }
 
-    /// Which presentation is mounted.
     pub fn view_mode(&self) -> BrowseViewMode {
         if self.card_mode.load(Ordering::Relaxed) {
             BrowseViewMode::Card
@@ -139,21 +105,14 @@ impl BrowseUi {
         }
     }
 
-    /// Mirror `Browse.view-mode` into the synchronous shadow.
     pub fn set_view_mode(&self, mode: BrowseViewMode) {
         self.card_mode.store(mode == BrowseViewMode::Card, Ordering::Relaxed);
     }
 
-    /// Decode `paths` into the grid tier, for a card view the user is looking at. Blocking — call
-    /// from `spawn_blocking`.
+    /// Decodes `paths` into the grid tier for a card view on screen. Blocking.
     ///
-    /// **The guard sits ahead of the decode, where its predecessor released after one.** Browse is
-    /// the only view whose boot seed fetches while the section is off screen, and against a tier
-    /// nothing clears any more, decode-then-release leaves a screenful of card covers resident for
-    /// the session, for a page the user has not opened. A leave landing *inside* the decode is no
-    /// longer a reason to hand anything back: those buffers are what the re-entry paints.
-    ///
-    /// An empty `paths` is nothing to decode — a directory of nothing but subfolders has no cover.
+    /// Guarded here rather than at the fetch: Browse's boot seed fetches while the section is off
+    /// screen, and a decode for it would stay resident for a page the user hasn't opened.
     pub fn warm_card_tier(&self, paths: &[PathBuf]) {
         if paths.is_empty() || !self.section_active() || self.view_mode() != BrowseViewMode::Card {
             return;
@@ -161,8 +120,7 @@ impl BrowseUi {
         crate::ui::grid_prewarm::prewarm(paths);
     }
 
-    /// [`Self::warm_card_tier`] over the cached listing — the mode toggle's path,
-    /// which has no fetch to take a fresh file list from.
+    /// [`Self::warm_card_tier`] over the cached listing, for the mode toggle.
     pub fn prewarm_card_covers(&self) {
         let unique = {
             let files = self.last_files.lock();
@@ -175,13 +133,12 @@ impl BrowseUi {
         self.current_path.lock().clone()
     }
 
-    /// Push `leaving` onto the back-stack and land on `going_to`.
+    /// Pushes `leaving` onto the back-stack and lands on `going_to`.
     pub fn push_history(&self, leaving: String, going_to: String) {
         self.history.lock().push(leaving);
         *self.current_path.lock() = going_to;
     }
 
-    /// Pop the most recent entry off the back-stack.
     pub fn pop_history(&self) -> Option<String> {
         let popped = self.history.lock().pop();
         if let Some(p) = popped.as_ref() {
@@ -190,9 +147,8 @@ impl BrowseUi {
         popped
     }
 
-    /// Trim history back to `path` and land on it. A `path` that isn't in the
-    /// stack — a breadcrumb that stopped being an ancestor across a refresh —
-    /// clears it instead.
+    /// Trims history back to `path` and lands on it. A `path` that isn't in the stack, a
+    /// breadcrumb that stopped being an ancestor across a refresh, clears it instead.
     pub fn truncate_history_to(&self, path: &str) {
         let mut h = self.history.lock();
         if let Some(pos) = h.iter().position(|p| p == path) {
@@ -203,8 +159,7 @@ impl BrowseUi {
         path.clone_into(&mut self.current_path.lock());
     }
 
-    /// Replace `current_path` without touching history — the refresh path and
-    /// the initial seed.
+    /// Lands on `path` without touching history.
     pub fn set_path(&self, path: String) {
         *self.current_path.lock() = path;
     }
@@ -217,20 +172,17 @@ impl BrowseUi {
         self.sort_dir.lock().clone()
     }
 
-    /// Store the sort, for the next `fetch_and_apply` / `resort_and_apply`.
     pub fn set_sort(&self, field: String, dir: String) {
         *self.sort_field.lock() = field;
         *self.sort_dir.lock() = dir;
     }
 
-    /// Ids of the in-library `last_files` rows, in display order — what
-    /// `play-row` hands to `player_play_tracks`.
+    /// The in-library rows' ids in display order, what `play-row` queues.
     pub fn current_in_library_ids(&self) -> Vec<i64> {
         self.last_files.lock().iter().filter_map(|f| f.in_library.then_some(f.row.id)).collect()
     }
 
-    /// Flip `is_favorite` on the cached row, so a single-row toggle needs no
-    /// re-fetch.
+    /// Patches the cached row, so a toggle needs no re-fetch.
     pub fn flip_favorite(&self, id: i64, fav: bool) {
         let mut files = self.last_files.lock();
         if let Some(f) = files.iter_mut().find(|f| f.row.id == id) {
@@ -247,8 +199,7 @@ impl BrowseUi {
     }
 }
 
-/// Hand the `Browse` global its four empty `VecModel`s. Later updates find them
-/// by downcasting back and mutating in place.
+/// Hands the global its empty `VecModel`s, which every later write downcasts back to.
 fn install_models(ui: &AppWindow) {
     let g = ui.global::<Browse>();
     let folders: Rc<VecModel<UiBrowseFolderRow>> = Rc::new(VecModel::default());
@@ -261,17 +212,15 @@ fn install_models(ui: &AppWindow) {
     g.set_card_rows(ModelRc::from(cards));
 }
 
-/// A persistent model for `Browse.selected-ids`, so a selection change is a
-/// `set_vec` rather than a fresh `ModelRc` per click. Mirrors
-/// `tracks::install_selection_model`.
+/// A persistent `Browse.selected-ids`, so a selection change is a `set_vec` rather than a fresh
+/// `ModelRc` per click.
 fn install_selection_model(ui: &AppWindow) {
     let model: Rc<VecModel<i32>> = Rc::new(VecModel::default());
     ui.global::<Browse>().set_selected_ids(ModelRc::from(model));
 }
 
-/// Seed the path and presentation mode from `views.json` and kick the initial
-/// fetch. `None` — a fresh install, or a file that wouldn't read — lands at the
-/// root in list mode. Takes the boot read rather than repeating it.
+/// Seeds the path and presentation mode from `views.json` and kicks the first fetch; with no
+/// file, the root in list mode.
 fn seed_from_settings(
     ui: &AppWindow,
     state: &AppState,
@@ -303,9 +252,7 @@ fn seed_from_settings(
 
 use melodia_ui::BreadcrumbRow as UiBreadcrumbRow;
 
-/// A `BrowseFile` as the shared `TrackListRow`. An in-library file reuses the
-/// Tracks converter; a disk-only one becomes the sparse, dimmed,
-/// non-interactive row the module docs describe.
+/// A `BrowseFile` as the shared `TrackListRow`, a disk-only one as the module doc's sparse row.
 pub fn to_slint_browse_track_row(f: &BrowseFile, pool: &mut StringPool) -> UiTrackListRow {
     if f.in_library {
         crate::ui::tracks::to_slint_track_list_row(&f.row, pool)
@@ -327,7 +274,6 @@ pub fn to_slint_browse_track_rows(files: &[BrowseFile]) -> Vec<UiTrackListRow> {
 
 impl_section_state_helpers!(BrowseUi);
 
-// `const _` is type-checked but never dead-code-flagged, so no `#[allow]` is owed.
 const _: fn() = || {
     fn check<T: Send + Sync>() {}
     check::<BrowseUi>();

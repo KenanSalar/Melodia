@@ -1,5 +1,4 @@
-//! Folder fetch + sort + favourite-row update. Bumps `fetch_token` to
-//! drop stale UI writes when a faster navigation overtakes us.
+//! The folder fetch, the in-memory re-sort and the row patches.
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -23,17 +22,8 @@ use melodia_ui::{
     TrackListRow as UiTrackListRow,
 };
 
-/// Re-fetch the current folder (root or otherwise) and push the result
-/// into the Slint models. Async — runs on the tokio runtime; the UI
-/// write hops back via `upgrade_in_event_loop`.
-///
-/// Bumps `fetch_token` and captures its post-bump value; if a later
-/// fetch overtakes us by the time the UI-thread closure runs, the late
-/// fetch drops its UI write (the more recent one already painted).
-///
-/// Navigation clears the selection — keeping selected ids across a
-/// folder change would risk stale ids referencing rows that no longer
-/// exist.
+/// Fetches `path`, the root or a folder, and paints it unless a later fetch overtook this one.
+/// Clears the selection, whose ids the new folder needn't hold.
 pub async fn fetch_and_apply(
     state: &AppState,
     browse_ui: &Arc<BrowseUi>,
@@ -46,16 +36,9 @@ pub async fn fetch_and_apply(
         return apply_root(state, browse_ui, &weak, my_token).await;
     }
 
-    // Drilled-in view: fetch via `browse_directory`. On Err (folder
-    // deleted, permission denied, etc.) paint the error state — don't
-    // propagate up, because the watcher-driven re-fetch path doesn't
-    // want a transient FS hiccup to disable the whole subscriber.
-    //
-    // Fetch the library-folder list once and reuse it: `browse_directory`
-    // needs it to validate the path is inside an enabled folder, and
-    // `build_breadcrumbs` needs it to truncate the trail at the library
-    // root. Previously each re-queried it independently — two identical
-    // full-table `folders` reads per navigation.
+    // A failure paints the error state rather than propagating, so a passing filesystem error
+    // can't stop the watcher's re-fetches. The folder list is read once, for both
+    // `browse_directory` and the breadcrumbs.
     let library_folders = library::settings::get_folders(&state.db).await.unwrap_or_default();
     let result = library::browse::browse_directory(&state.db, path.clone(), &library_folders).await;
     if superseded(browse_ui, my_token) {
@@ -70,8 +53,7 @@ pub async fn fetch_and_apply(
             Listing {
                 files: Vec::new(),
                 folders: Vec::new(),
-                // Keep breadcrumbs for the path we tried — gives the user
-                // a way back up the tree even when the leaf is gone.
+                // Still a way back up the tree when the leaf is gone.
                 breadcrumbs: build_breadcrumbs(&path, &library_folders),
                 current_path: path,
                 has_library_folders: true,
@@ -83,9 +65,8 @@ pub async fn fetch_and_apply(
     Ok(())
 }
 
-/// Bump `fetch_token`, returning this fetch's ticket, and flip loading on (UI thread).
-/// Tolerates a missed token-bump race; even if a later fetch overtakes us, painting
-/// `loading: true` briefly is harmless.
+/// Bumps `fetch_token`, returning this fetch's ticket, and raises `loading`, which is harmless
+/// even if a later fetch overtakes this one.
 fn begin_fetch(browse_ui: &BrowseUi, weak: &Weak<AppWindow>) -> u64 {
     let my_token = browse_ui.fetch_token.fetch_add(1, Ordering::Relaxed) + 1;
     let _ = weak.upgrade_in_event_loop(|ui| {
@@ -99,7 +80,7 @@ fn superseded(browse_ui: &BrowseUi, my_token: u64) -> bool {
     browse_ui.fetch_token.load(Ordering::Relaxed) != my_token
 }
 
-/// Root view: render the library folder list as drillable rows.
+/// The root: the library folders as drillable rows.
 async fn apply_root(
     state: &AppState,
     browse_ui: &Arc<BrowseUi>,
@@ -131,8 +112,8 @@ async fn apply_root(
     Ok(())
 }
 
-/// A drilled-in folder: warm both cover tiers around the sort, checking between each slow step
-/// that a later fetch hasn't overtaken this one.
+/// A drilled-in folder: warms both cover tiers around the sort, checking after each slow step
+/// that no later fetch has overtaken this one.
 async fn apply_folder(
     browse_ui: &Arc<BrowseUi>,
     weak: &Weak<AppWindow>,
@@ -145,10 +126,6 @@ async fn apply_folder(
         return;
     }
 
-    // Sort to the user's current order. The sorted list is cached
-    // in `last_files` (callbacks like `play-row` / selection read
-    // it without round-tripping) — but the caching happens inside
-    // the UI closure below as a *move*, not a `clone_from`.
     let mut files = res.files;
     sort_browse_files(&mut files, &browse_ui.sort_field(), &browse_ui.sort_dir());
     warm_card_tier(browse_ui, &files).await;
@@ -171,12 +148,9 @@ async fn apply_folder(
     );
 }
 
-/// Prewarm cover thumbnails. Walked in *fetch* order — the sort
-/// hasn't run yet — so on a folder holding more unique
-/// covers than the tier, the surviving prefix isn't the one that
-/// paints first. Moving the prewarm past the sort would put it
-/// after the staleness check it currently precedes, and a folder
-/// that deep is well outside what Browse is for.
+/// Walked in fetch order, ahead of the staleness check the sort follows, so a folder holding more
+/// covers than the tier keeps a prefix that isn't the first to paint. A folder that big is outside
+/// what Browse is for.
 async fn prewarm_row_tier(browse_ui: &BrowseUi, files: &[BrowseFile]) {
     let unique_paths: Vec<PathBuf> = crate::ui::grid_prewarm::unique_artwork_paths(
         files.iter().map(|f| f.row.artwork_path.as_deref()),
@@ -192,11 +166,8 @@ async fn prewarm_row_tier(browse_ui: &BrowseUi, files: &[BrowseFile]) {
     .await;
 }
 
-/// The card tier, warmed **after** the sort — unlike the row-tier
-/// prewarm, this one is capped at a screenful, so the prefix
-/// that survives the cap has to be the prefix that paints. Awaited
-/// before the rows land (the Albums prewarm-then-write ordering), so
-/// the first screenful of cards is a cache hit.
+/// The card tier, warmed after the sort: capped at a screenful, its prefix has to be the one that
+/// paints. Awaited before the rows land, so that screenful is a cache hit.
 async fn warm_card_tier(browse_ui: &Arc<BrowseUi>, files: &[BrowseFile]) {
     if browse_ui.view_mode() != BrowseViewMode::Card {
         return;
@@ -219,8 +190,8 @@ struct Listing {
     error_message: String,
 }
 
-/// Write `listing` into the `Browse` global on the UI thread, and the caches the card view
-/// rebuilds from beside it.
+/// Writes `listing` into the `Browse` global, and beside it the caches the card view rebuilds
+/// from.
 fn paint_listing(weak: &Weak<AppWindow>, browse_ui: &Arc<BrowseUi>, listing: Listing) {
     let browse_ui = browse_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -234,10 +205,8 @@ fn paint_listing(weak: &Weak<AppWindow>, browse_ui: &Arc<BrowseUi>, listing: Lis
             error_message,
         } = listing;
         let g = ui.global::<Browse>();
-        // Build the rows from `&files`, then move `files` itself
-        // into the `last_files` cache as the final step — one
-        // move, no clone. Covers resolve lazily per visible row via
-        // `RowCovers.request`.
+        // The rows are built from `&files` before `files` moves into the cache, so nothing is
+        // cloned.
         replace_folder_model(&g, to_ui_folder_rows(&folders));
         replace_rows_model(&g, to_slint_browse_track_rows(&files));
         replace_breadcrumb_model(&g, breadcrumbs);
@@ -253,10 +222,8 @@ fn paint_listing(weak: &Weak<AppWindow>, browse_ui: &Arc<BrowseUi>, listing: Lis
     });
 }
 
-/// Project the cached folder list into the Slint rows the list view draws.
-/// Both fetch arms build their `Vec<BrowseFolder>` first and derive these from
-/// it, so the folder list has one source and the card view's cache can't drift
-/// from what the list is showing.
+/// The list view's folder rows, derived from the same `BrowseFolder`s the card view caches, so
+/// the two can't drift.
 fn to_ui_folder_rows(folders: &[BrowseFolder]) -> Vec<UiBrowseFolderRow> {
     folders
         .iter()
@@ -267,15 +234,9 @@ fn to_ui_folder_rows(folders: &[BrowseFolder]) -> Vec<UiBrowseFolderRow> {
         .collect()
 }
 
-/// Re-sort the cached `last_files` to the current `BrowseUi` sort state
-/// and rebuild the `Browse.rows` model in place. No DB hit. Runs on the
-/// UI thread (called directly from the `request-sort` callback).
-/// Selection is preserved — track ids are stable across a re-sort, only
-/// the row order changes.
-///
-/// The card model needs no write here: `request-sort` comes from a `TrackList`
-/// column header, which only exists while the list is mounted, and the toggle
-/// rebuilds the cards from this same re-ordered `last_files`.
+/// Re-sorts the cached files and rebuilds `Browse.rows`, keeping the selection, ids being stable
+/// across a re-sort. The cards need no write: a sort comes from a header that exists only while
+/// the list is mounted, and the toggle rebuilds them from these same files.
 pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
     let sort_field = browse_ui.sort_field();
     let sort_dir = browse_ui.sort_dir();
@@ -289,8 +250,7 @@ pub fn resort_and_apply(ui: &AppWindow, browse_ui: &Arc<BrowseUi>) {
     apply_selection_to_rows(&g);
 }
 
-/// Flip `is_favorite` on a single row in the Slint `VecModel`. Only
-/// touches the affected row — scroll position and neighbours stay put.
+/// Patches the one row on screen, so the scroll holds.
 pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         model_patch::patch_track_row_by_id(&ui.global::<Browse>().get_rows(), id, |r| {
@@ -299,8 +259,7 @@ pub fn apply_row_favorite(weak: &Weak<AppWindow>, id: i64, fav: bool) {
     });
 }
 
-/// Set `rating` on a single row in the Slint `VecModel` — the rating analogue
-/// of [`apply_row_favorite`].
+/// [`apply_row_favorite`]'s star-rating twin.
 pub fn apply_row_rating(weak: &Weak<AppWindow>, id: i64, rating: i32) {
     let _ = weak.upgrade_in_event_loop(move |ui| {
         model_patch::patch_track_row_by_id(&ui.global::<Browse>().get_rows(), id, |r| {

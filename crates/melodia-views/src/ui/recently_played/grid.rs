@@ -1,11 +1,6 @@
-//! The Most Played tab, the library's played tracks ranked by count, as a `CardGrid`.
-//!
-//! It keeps its keyset and the cards near its viewport across a tab pick and hands both back on
-//! the section leave. Only the mounted tab loads: a tick reaching the page on Songs marks the grid
-//! dirty, and the pick that mounts it reloads.
-//!
-//! The count it writes is the filtered one, gating its `GridEmptyState`; the band states the whole
-//! played set, which each load answers beside its ids.
+//! The Most Played tab, the library's played tracks ranked by count, as a `CardGrid`. The count
+//! it writes is the filtered one, gating its empty state; the band states the whole played set,
+//! which each load answers beside its ids.
 
 use std::sync::Arc;
 
@@ -88,28 +83,24 @@ impl CardGrid for RecentMostPlayed {
     }
 }
 
-/// Reload the grid: what a section enter, a library or stats tick and a pick onto a grid that
-/// missed one ask for. UI thread.
 pub fn reload_grid(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     card_grid::reload::<RecentMostPlayed>(ui, state, rp_ui);
 }
 
-/// Load the grid's ids under a new filter. UI thread.
+/// Reloads the grid's ids under a new filter.
 pub fn requery_grid(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedUi>) {
     card_grid::requery::<RecentMostPlayed>(ui, state, rp_ui);
 }
 
-/// Chunk the grid at `columns` cards a row. UI thread.
 pub fn set_columns(ui: &AppWindow, columns: i32) {
     card_grid::set_columns::<RecentMostPlayed>(ui, columns);
 }
 
-/// Empty the grid for the section leave. UI thread.
 pub fn release_grid(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     card_grid::release::<RecentMostPlayed>(ui, rp_ui);
 }
 
-/// Warm the covers the grid's last load opened on, if it is the tab on screen. Blocking.
+/// Warms the covers the grid last opened on, if it is the tab on screen. Blocking.
 pub fn prewarm_covers(rp_ui: &RecentlyPlayedUi) {
     card_grid::prewarm_seeded::<RecentMostPlayed>(rp_ui);
 }
