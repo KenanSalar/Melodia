@@ -62,8 +62,6 @@ is the copy to delete.
   `a_station_reaches_the_deck_only_from_behind_the_switch` covers the door the pair above
   structurally cannot: a station opens through `PlaybackContext.http`, so `play_station` reaches
   the network naming no client at all.
-- **`station_to_restore` is the one getter guarded like a play**, what it does being to put a
-  station back on the deck rather than to answer a question about one.
 - **Turning it off has four consequences beyond the row, and three are findable only from here.**
   `ui::radio::disable` stops a playing station, sweeps section 10 out of the nav history, closes and
   forgets every seated detail, and folds a live `Nav.selected-index` off 10. The history sweep is

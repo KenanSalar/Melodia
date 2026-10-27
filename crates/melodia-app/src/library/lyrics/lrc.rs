@@ -1,32 +1,20 @@
-//! The LRC format, pure and IO-free.
+//! The LRC format, pure and IO-free, hand-rolled for `playlist_files::m3u`'s reason: the format is
+//! small and settled.
 //!
-//! Hand-rolled rather than a crate, for `playlist_files::m3u`'s reason: the format is small and
-//! settled, so a dependency would be carried forever against a parser that never needs to change.
-//!
-//! [`parse`] is total and tolerant. It takes a sidecar file, a lyrics tag or an API field without
-//! being told which, and answers with a timed sheet, a plain one, or nothing. So no caller has to
-//! ask whether some text "is LRC" before handing it over, and whether the answer came back timed
-//! is [`Lyrics::is_synced`]'s question rather than a second one asked up front.
+//! [`parse`] is total and tolerant. It takes a sidecar, a lyrics tag or an API field without being
+//! told which, so no caller asks whether text "is LRC" first; whether it came back timed is
+//! [`Lyrics::is_synced`]'s question.
 
 use std::borrow::Cow;
 
 use melodia_core::entities::lyrics::{LyricLine, Lyrics, LyricsSource, split_gloss};
 
-/// The identification tags the format defines. A line that is nothing but one of these is
-/// metadata, and is dropped rather than sung.
-///
-/// Matched only against a whole bracketed line, which is what lets a plain sheet keep its
-/// `[Chorus]` and `[Verse 2]` markers: those carry no colon and no known key, and a reader wants
-/// them on the page.
+/// The identification tags the format defines, dropped as metadata. Matched only against a whole
+/// bracketed line with a known key, so a plain sheet keeps its `[Chorus]` markers.
 const ID_TAG_KEYS: [&str; 9] = ["al", "ar", "au", "by", "length", "offset", "re", "ti", "ve"];
 
-/// Parses a sheet, or `None` where there is nothing to show.
-///
-/// Tolerant the way the M3U reader is: anything that does not parse as a timestamp is either
-/// metadata to drop or text to keep, and no input is an error.
-///
-/// A sheet carrying any timed line at all keeps **only** its timed lines. That is what makes
-/// "a sheet is timed or it is not" true for everything downstream, rather than a hope.
+/// Parses a sheet, or `None` where there is nothing to show; no input is an error. A sheet with
+/// any timed line keeps **only** its timed lines, so downstream a sheet is timed or it isn't.
 #[must_use]
 pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
@@ -52,9 +40,8 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
         }
         let stripped = strip_word_stamps(rest);
         let (mut sung, mut gloss) = split_translation(stripped.trim());
-        // **Moved into the last stamp rather than cloned for all of them.** Nearly every line of
-        // nearly every sheet carries exactly one, where a clone-then-drop is the whole cost; the
-        // several-stamps case is a chorus written once, and it still clones for the ones before.
+        // Moved into the last stamp: nearly every line carries exactly one, where a clone would be
+        // the whole cost.
         let last = stamps.len() - 1;
         for (index, at) in stamps.into_iter().enumerate() {
             let (text, translation) = if index == last {
@@ -80,15 +67,9 @@ pub fn parse(text: &str, source: LyricsSource) -> Option<Lyrics> {
     Lyrics::new(close_at_blanks(timed), source)
 }
 
-/// Turns each blank stamp into the end of the line above it.
-///
-/// **A stamp with no words is how the format spells "stop showing the last line", so it is a line
-/// ending rather than a line.** Drawn as one it is a row with nothing in it, which is what a panel
-/// following the song then centres on for the length of the solo; folded in, the same stamp is the
-/// only thing on a timed sheet that says a pause happened at all.
-///
-/// The first blank of a run wins, the ones after it re-closing a line that has already ended, and a
-/// blank before any words is dropped, having nothing above it to end.
+/// Turns each blank stamp, the format's "stop showing the last line", into the end of the line
+/// above it rather than an empty row the panel centres on through the solo. The first blank of a
+/// run wins, and one before any words is dropped.
 fn close_at_blanks(lines: Vec<LyricLine>) -> Vec<LyricLine> {
     let mut sung: Vec<LyricLine> = Vec::with_capacity(lines.len());
     for line in lines {
@@ -105,27 +86,20 @@ fn close_at_blanks(lines: Vec<LyricLine>) -> Vec<LyricLine> {
     sung
 }
 
-/// Whether `text` carries timings, without building the sheet to find out.
-///
-/// The same reading [`parse`] takes, stopping at the first stamped line: a caller choosing where
-/// to write a sheet, or which of two homes to believe, is asking only this and would otherwise
-/// allocate every line to learn it.
+/// Whether `text` carries timings, read as [`parse`] reads it but stopping at the first stamped
+/// line rather than building the sheet.
 #[must_use]
 pub(super) fn is_timed(text: &str) -> bool {
     text.lines().any(|line| !split_stamps(line).0.is_empty())
 }
 
-/// [`split_gloss`] with both halves owned, which is what the two builders above store.
 fn split_translation(line: &str) -> (String, Option<String>) {
     let (sung, gloss) = split_gloss(line);
     (sung.to_owned(), gloss.map(str::to_owned))
 }
 
-/// The `[offset:±ms]` tag, or zero.
-///
-/// A **positive** offset means the sheet runs early, so it comes off the stamps rather than onto
-/// them. It is the only correction a hand-timed sheet carries, so ignoring it would leave exactly
-/// the sheets that needed a nudge running wrong.
+/// The `[offset:±ms]` tag, or zero. A **positive** offset means the sheet runs early, so it comes
+/// off the stamps rather than onto them.
 fn offset_ms(text: &str) -> i64 {
     text.lines()
         .filter_map(bracketed)
@@ -150,10 +124,8 @@ fn is_id_tag(line: &str) -> bool {
     ID_TAG_KEYS.iter().any(|known| known.eq_ignore_ascii_case(key.trim()))
 }
 
-/// Peels the leading `[mm:ss.xx]` stamps off a line, returning them and whatever follows.
-///
-/// A list rather than one stamp because that is how the format spells a repeated chorus, so a
-/// parser taking only the first silently loses every repeat.
+/// Peels the leading `[mm:ss.xx]` stamps off a line, returning them and whatever follows. Several
+/// is how the format spells a repeated chorus.
 fn split_stamps(line: &str) -> (Vec<i64>, &str) {
     let mut rest = line.trim_start();
     let mut stamps = Vec::new();
@@ -167,18 +139,15 @@ fn split_stamps(line: &str) -> (Vec<i64>, &str) {
     (stamps, rest)
 }
 
-/// `mm:ss`, `mm:ss.xx` or `mm:ss.xxx` in milliseconds, taking `,` as a decimal point too.
-///
-/// `None` for anything else, which is what drops every identification tag without a second rule
-/// to keep in step with this one: a key that is not a number is not a time.
+/// `mm:ss`, `mm:ss.xx` or `mm:ss.xxx` in milliseconds, taking `,` as a decimal point too. `None`
+/// for anything else, which is what keeps an identification tag from reading as a stamp.
 fn stamp_ms(inner: &str) -> Option<i64> {
     let (minutes, rest) = inner.split_once(':')?;
     let (seconds, fraction) = rest.split_once(['.', ',']).unwrap_or((rest, ""));
     Some((digits(minutes)? * 60 + digits(seconds)?) * 1000 + fraction_ms(fraction)?)
 }
 
-/// A field that is nothing but ASCII digits. Rejects the sign `i64::from_str` would take, a
-/// negative minute being a stamp nothing could seek to.
+/// A field that is nothing but ASCII digits, refusing the sign `i64::from_str` would take.
 fn digits(field: &str) -> Option<i64> {
     let field = field.trim();
     if field.is_empty() || !field.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -189,7 +158,6 @@ fn digits(field: &str) -> Option<i64> {
 
 /// The fractional field in milliseconds, so `.5`, `.50` and `.500` agree.
 fn fraction_ms(fraction: &str) -> Option<i64> {
-    /// What the first digit after the point is worth.
     const FIRST_PLACE: i64 = 100;
 
     let mut ms = 0;
@@ -205,11 +173,8 @@ fn fraction_ms(fraction: &str) -> Option<i64> {
     Some(ms)
 }
 
-/// Drops enhanced-LRC word stamps (`<mm:ss.xx>`) from a line's text.
-///
-/// The timings are real and a karaoke sweep would want them, but nothing draws one yet and left
-/// in the string they would be drawn as words. A `<` that is not a stamp stays put, so a line
-/// with `<3` in it survives.
+/// Drops enhanced-LRC word stamps (`<mm:ss.xx>`), which nothing draws yet. A `<` that is not a
+/// stamp stays put, so a line with `<3` in it survives.
 fn strip_word_stamps(line: &str) -> Cow<'_, str> {
     if !line.contains('<') {
         return Cow::Borrowed(line);
