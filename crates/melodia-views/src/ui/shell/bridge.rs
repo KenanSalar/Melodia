@@ -1,10 +1,5 @@
-//! Push-side glue: subscribes to the player's `tokio::sync::watch` channels
-//! and writes converted `ViewModels` into the Slint `Player` global.
-//!
-//! Each subscriber is a `slint::spawn_local(async_compat::Compat::new(...))`
-//! future. `spawn_local` runs on the Slint event-loop thread (so it can write
-//! to UI properties directly) and `Compat` provides a tokio reactor for the
-//! `watch::Receiver::changed` await.
+//! The `Player` global's three `watch` subscribers, each a `spawn_local` future on the UI thread
+//! with `Compat` lending it a tokio reactor.
 
 use std::cell::Cell;
 use std::path::Path;
@@ -29,12 +24,9 @@ use melodia_ui::{AppWindow, Player, PlayerVm, QueueVm, RadioVm, TrackSummaryRow}
 /// thumb until the track changes.
 const SEEK_HOLD_SLACK_MS: i32 = 2_000;
 
-/// The stamp of the position on screen, shared by the two subscribers that write one.
-///
-/// The view model and the position ticks arrive on separate channels whose subscribers wake
-/// independently, so one woken early can apply the newest view model ahead of a tick read before
-/// it. The engine stamps every position it publishes on either, and only a newer one is shown.
-/// The duration goes with it, since a view model a tick outranks is never applied.
+/// The stamp of the position on screen, shared by the two subscribers that write one. Their
+/// channels wake independently, so a view model can land ahead of a tick read before it; only a
+/// newer engine stamp is shown, the duration with it.
 #[derive(Clone, Default)]
 pub struct ShownPosition(Rc<Cell<u64>>);
 
@@ -61,9 +53,6 @@ pub fn show_position(player: &Player<'_>, position_ms: u64, duration_ms: u64) {
     }
 }
 
-/// Subscribe to the lightweight player `ViewModel` (status, current track,
-/// volume, `has_next/prev`). Fires on every state change; replaces the whole
-/// `Player.vm` property each time.
 pub fn spawn_view_model_subscriber(
     ui: Weak<AppWindow>,
     sinks: &Arc<PlayerSinks>,
@@ -83,14 +72,6 @@ pub fn spawn_view_model_subscriber(
                 let player = ui.global::<Player>();
                 let prev_vm = player.get_vm();
                 let mut new_vm = to_slint_player_vm(&vm, &cover_thumbs);
-                // Stable artwork identity: when the artwork path is
-                // unchanged, reuse the previous `Image` handle instead of
-                // the fresh one minted by `to_slint_track`. Slint compares
-                // `Image` by identity, so a new handle per emit dirties
-                // every binding reading `vm` and forces FemtoVG to treat
-                // the cover as a brand-new texture on each volume step /
-                // seek / queue edit. Same pixels either way — both handles
-                // wrap the same cached RGB8 buffer.
                 let cover_path = reuse_or_warm(
                     &new_vm.track.artwork_path,
                     &prev_vm.track.artwork_path,
@@ -107,18 +88,12 @@ pub fn spawn_view_model_subscriber(
                 if new_vm.track.id != prev_vm.track.id {
                     player.set_seek_pending_ms(-1);
                 }
-                // Position scalars are top-level on the Player global (not
-                // fields of `vm`) so the position-tick path can update them
-                // every 500 ms without invalidating the metadata bindings.
-                // We push them here too so a track change resets the slider
-                // immediately instead of waiting for the next tick.
+                // Here too, so a track change resets the slider without waiting for a tick.
                 if shown.admits(vm.position_stamp) {
                     show_position(&player, vm.position_ms, vm.duration_ms);
                 }
-                // `Property::set` is value-compared, so this guard spares only the move into the
-                // setter and the binding-handle access it opens with, and pays a second compare
-                // whenever the VM *did* change. Worth it because most emits are value-identical —
-                // a seek carries its position outside `vm`.
+                // `Property::set` compares too, so this spares only the move and the binding-handle
+                // access, at a second compare when the VM did change. Most emits are identical.
                 if new_vm != prev_vm {
                     player.set_vm(new_vm);
                 }
@@ -141,7 +116,6 @@ pub fn spawn_view_model_subscriber(
     Ok(())
 }
 
-/// Subscribe to queue-summary updates (length, shuffle, `repeat_mode`).
 pub fn spawn_queue_subscriber(
     ui: Weak<AppWindow>,
     sinks: &Arc<PlayerSinks>,
@@ -163,12 +137,7 @@ pub fn spawn_queue_subscriber(
     Ok(())
 }
 
-/// Subscribe to ~500 ms position ticks and write only the position scalars
-/// on the `Player` global. Crucially this no longer touches
-/// `Player.vm`: dirtying that struct invalidated every binding that read
-/// any field (title, artist, artwork, …) — at 7 200 ticks/hour that path
-/// produced a monotonic RSS climb. See the comment on `PlayerVm` in
-/// `crates/melodia-ui/ui/models.slint` for the full history.
+/// Writes only the position scalars, never `Player.vm` (`models.slint` argues why).
 pub fn spawn_position_subscriber(
     ui: Weak<AppWindow>,
     position_tx: &watch::Sender<Option<PositionTick>>,
@@ -195,13 +164,9 @@ pub fn spawn_position_subscriber(
     Ok(())
 }
 
-// ---------- conversions ----------
-
-/// **Cache-only on the cover**, because both callers run on the event loop: `get_or_load_opt` would
-/// decode the full source there, and `decode_thumb_buffer` takes the large-decode gate the prewarm
-/// pool holds while it works — so a miss parks the loop behind a background decode rather than
-/// merely paying for its own. A cold cover comes back as the empty [`slint::Image`] and
-/// [`warm_vm_cover`] fills the slot in a moment later.
+/// **Cache-only on the cover**, both callers running on the event loop: a load there would decode
+/// the full source behind the large-decode gate the prewarm pool holds, parking the loop behind a
+/// background decode. A cold cover comes back empty and [`warm_vm_cover`] fills it.
 pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSummaryRow {
     let cover_img = cover_thumbs.get_cached_opt(t.artwork_path.as_deref());
     TrackSummaryRow {
@@ -218,17 +183,13 @@ pub fn to_slint_track(t: &TrackSummary, cover_thumbs: &CoverThumbs) -> TrackSumm
     }
 }
 
-/// Both halves of one artwork slot's contract: keep the handle where the path stands still, and
-/// answer the path to warm where it moved onto a tier that had nothing.
+/// Keeps the slot's handle where its path stands still, and answers the path to warm where it moved
+/// onto a tier that had nothing.
 ///
-/// **Stable identity is the first half and it is invisible until profiled.** Slint compares
-/// `Image` by identity, so a fresh handle per emit dirties every binding reading `vm` and makes
-/// `FemtoVG` treat the artwork as a brand-new texture on each volume step, seek or queue edit. Same
-/// pixels either way; both handles wrap the same cached RGB8 buffer.
-///
-/// The second is gated on the path having *moved* rather than on the slot being empty, since the
-/// reuse hands a cover that failed to decode straight back — an is-it-empty test would re-ask on
-/// every volume step for the rest of the track.
+/// Slint compares `Image` by identity, so a fresh handle per emit dirties every binding reading `vm`
+/// and makes `FemtoVG` upload the artwork as a new texture on each volume step, seek or queue edit.
+/// The warm is gated on the path moving rather than the slot being empty: the reuse hands back a
+/// cover that failed to decode, and an emptiness test would re-ask on every volume step.
 fn reuse_or_warm(
     new_path: &SharedString,
     prev_path: &SharedString,
@@ -242,12 +203,9 @@ fn reuse_or_warm(
     (new_image.size().width == 0).then(|| new_path.to_string())
 }
 
-/// Convert the station on the deck for the Slint boundary.
-///
-/// The logo is resolved exactly as [`to_slint_track`] resolves a cover — cache-only, so nothing
-/// decodes on the event loop, with [`warm_vm_cover`] filling a miss. The tile comes from
-/// `ui::radio::station_tile`, the same derivation the grid card and the station hero take theirs
-/// from, so one station cannot wear two different tiles on two pages.
+/// The logo resolves cache-only, as [`to_slint_track`]'s cover does. The tile is
+/// `ui::radio::station_tile`'s, as the grid card's and the hero's are, so a station wears one tile
+/// everywhere.
 fn to_slint_radio_vm(station: &RadioNowPlaying, cover_thumbs: &CoverThumbs) -> RadioVm {
     let tile = crate::ui::radio::station_tile(&station.name);
     let announcement = station.announcement();
@@ -279,22 +237,16 @@ fn to_slint_radio_vm(station: &RadioNowPlaying, cover_thumbs: &CoverThumbs) -> R
     }
 }
 
-/// Which half of `Player.vm` a warm is filling. The two paths differ only in the field they guard
-/// on and the field they write, so a parallel `warm_vm_logo` would be the same round trip, the
-/// same staleness check and the same bail spelled twice.
+/// Which half of `Player.vm` a warm fills.
 #[derive(Clone, Copy)]
 pub enum VmCoverSlot {
     Track,
     Station,
 }
 
-/// Decode `path` into the row tier off the event loop, then write it into `Player.vm`.
-///
-/// [`to_slint_track`]'s other half: it answers cache-only so nothing decodes on the UI thread, and
-/// this is what makes a cold cover arrive at all. Fire-and-forget — the buffer crosses back rather
-/// than a second lookup, `SharedPixelBuffer` being `Send` where [`slint::Image`] is not. Keyed on
-/// the path on the way back in, so a track change that landed while this decoded keeps its own
-/// cover; nothing is written for an empty path or a failed decode.
+/// Decodes `path` into the row tier off the event loop and writes it into `Player.vm`, which is
+/// how a cold cover arrives at all. Checked against the path on the way back, so a track change
+/// that landed meanwhile keeps its own cover.
 pub fn warm_vm_cover(
     weak: Weak<AppWindow>,
     runtime: &Handle,
@@ -307,10 +259,8 @@ pub fn warm_vm_cover(
     }
     let thumbs = cover_thumbs.clone();
     runtime.spawn_blocking(move || {
-        // A decode that failed has nothing to write — the slot is already the empty `Image`, that
-        // emptiness being what asked for this. Bailing here skips the whole round trip: the write
-        // would repaint nothing, but the hop, the `PlayerVm` clone `get_vm` hands back and the
-        // compare over it are all paid on the UI thread before it can decide that.
+        // A failed decode bails before the hop: the write would repaint nothing, but the hop, the
+        // `get_vm` clone and its compare would all be paid on the UI thread.
         let Some(buffer) = thumbs.get_or_load_rgb8(Path::new(&path)) else {
             return;
         };
@@ -334,11 +284,6 @@ pub fn warm_vm_cover(
     });
 }
 
-/// Convert a backend view-model snapshot to the Slint `PlayerVm` struct.
-/// Position-related scalars (`position_ms`, `duration_ms`) are
-/// deliberately *not* on `PlayerVm` — they live as standalone properties on
-/// the `Player` global and are written directly by the position-tick
-/// subscriber. See `crates/melodia-ui/ui/models.slint` for the rationale.
 pub fn to_slint_player_vm(vm: &PlayerViewModelLight, cover_thumbs: &CoverThumbs) -> PlayerVm {
     let track = vm
         .current_track
@@ -363,7 +308,6 @@ pub fn to_slint_player_vm(vm: &PlayerViewModelLight, cover_thumbs: &CoverThumbs)
     }
 }
 
-/// Narrow playback speed (f64 backend, f32 Slint) for UI consumption.
 #[allow(
     clippy::cast_possible_truncation,
     reason = "playback speed values (0.25..=2.0) round-trip through f32 without observable loss"

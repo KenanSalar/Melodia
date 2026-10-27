@@ -1,8 +1,5 @@
-//! "Up Next" list subscriber + open-callback seeder. Both rebuilds are
-//! gated on the view being visible.
-//!
-//! The queue publishes ids, so the list fetches the rows of the slice it shows by id. It shows
-//! them, and plays a track change's slide, in the one tick the fetch lands in, rather than painting
+//! Up Next. The queue publishes ids, so the list fetches the rows of the slice it shows, and shows
+//! them, a track change's slide with them, in the tick the fetch lands rather than painting
 //! placeholders first: twenty rows are one short read.
 
 use std::collections::HashMap;
@@ -24,10 +21,8 @@ use melodia_core::error::describe;
 use melodia_engine::player::engine::state::QueueViewModel;
 use melodia_ui::{AppWindow, Drag, DragOrigin, Nav, NowPlaying, QueueRow};
 
-/// Follow `sinks.queue` and `library_changed`. Closed, the subscriber only stashes the latest
-/// snapshot into `NowPlayingState::latest_qvm`; open, it rebuilds the Up Next list when the visible
-/// id slice or the current track moved, and reads the rows again on a library tick, a retag
-/// changing what a row says without moving the queue.
+/// Closed, only stashes the snapshot; open, follows the queue, and reads the rows again on a
+/// library tick, a retag changing what a row says without moving the queue.
 pub(super) fn spawn_up_next_subscriber(
     ui: &AppWindow,
     state: &AppState,
@@ -61,8 +56,7 @@ pub(super) fn spawn_up_next_subscriber(
                 }
             }
 
-            // Nothing that renders the model is on screen; the stash is what a later open seeds
-            // from.
+            // Nothing renders the model; a later open seeds from the stash.
             if !np_state.open.get() && !np_state.mini_visible.get() {
                 continue;
             }
@@ -80,9 +74,8 @@ pub(super) fn spawn_up_next_subscriber(
     Ok(())
 }
 
-/// Bring the list up to `qvm`. A queue edit that leaves the visible slice and the current track
-/// alone (a reorder *below* the window) moves nothing; anything else shows the slice's rows, and a
-/// current-track change also restarts the slide.
+/// A queue edit leaving the slice and the current track alone, a reorder below the window, moves
+/// nothing.
 async fn follow(
     weak: &Weak<AppWindow>,
     state: &AppState,
@@ -134,17 +127,8 @@ async fn follow(
     np.set_slide_phase(0);
 }
 
-/// Rebuild the Up Next list from `np_state.latest_qvm` (the snapshot the
-/// subscriber stashes while no surface renders the model). No-op when no
-/// snapshot has been stashed. Shared between:
-///
-/// - `wire_now_playing_open` — when the full-screen Now Playing view opens.
-/// - `crate::ui::shell::mini_player::install` — via `NowPlayingState::kick_up_next`,
-///   when the responsive miniplayer becomes visible.
-/// - the subscriber, on a library tick, the slice's ids standing and its rows maybe not.
-///
-/// Resets the slide bookkeeping so the next real track change picks the right direction
-/// without replaying a phantom animation for changes that happened while closed.
+/// Rebuilds the list from the stashed snapshot, for an open, a miniplayer show or a library tick.
+/// Resets the slide bookkeeping, so a change made while closed replays no phantom slide.
 pub(super) async fn seed_from_stash(
     weak: &Weak<AppWindow>,
     state: &AppState,
@@ -178,8 +162,7 @@ pub(super) fn spawn_seed(
     }
 }
 
-/// Wire `Nav.now-playing-open-changed`, mirrored from `app-window.slint`. Updates the
-/// shared `open` flag and, on open, seeds what the two subscribers skipped while closed.
+/// On open, seeds what the subscribers skipped while closed.
 pub(super) fn wire_now_playing_open(
     ui: &AppWindow,
     state: &AppState,
@@ -192,10 +175,9 @@ pub(super) fn wire_now_playing_open(
     ui.global::<Nav>().on_now_playing_open_changed(move |is_open| {
         np_state.open.set(is_open);
         if !is_open {
-            // **Each half asks whether anything still renders what it would hand back, and the
-            // two answers differ.** Entering the miniplayer force-closes this view, so both run on
-            // every entry, and releasing there costs the miniplayer the sheet and the cover it
-            // is about to ask for again.
+            // Each half asks whether anything still renders what it would hand back, and the
+            // answers differ: entering the miniplayer force-closes this view, and releasing there
+            // would cost it what it is about to ask for again.
             if !np_state.renders_panel()
                 && let Some(ui) = weak.upgrade()
             {
@@ -212,10 +194,7 @@ pub(super) fn wire_now_playing_open(
 
         spawn_seed(weak.clone(), state.clone(), up_next_model.clone(), np_state.clone());
 
-        // Artwork and chips, but only when the source differs from what is already in
-        // the `Player` global — a close and re-open with no change between needs no
-        // decode. `animate = false`: the cover should already be there when the view
-        // appears, not cross-fade in.
+        // Not animated: the cover should already be there when the view appears.
         let current_source = np_state.current_source.borrow().clone();
         let current_key = current_source.as_ref().map(|s| s.key.clone());
         if current_key != *np_state.applied_source.borrow() {
@@ -232,25 +211,20 @@ pub(super) fn wire_now_playing_open(
             }
         }
 
-        // **Outside that guard, and that is the whole point of it being here.** The close above
-        // hands the sheet back, so a re-open on the same track needs one again — but the artwork
-        // is still applied, so the branch that would have fetched it returns early. It dedupes on
-        // its own claim, so on the open that *did* re-decode this costs nothing.
+        // Outside that guard: the close handed the sheet back, so a same-track reopen needs one
+        // while its artwork is still applied. It dedupes on its own claim.
         np_state.lyrics.kick();
     });
 }
 
-/// What kind of step the current-track change was, driving both the slide direction and
-/// which row, if any, renders as the transient "outgoing" overlay.
+/// The step a current-track change was, deciding the slide's direction and its outgoing row.
 #[derive(Clone, Copy)]
 enum SlideKind {
-    /// A forward step, wrap from last to first included. The just-promoted track slides
-    /// off the top with the list.
+    /// Wrap included. The just-promoted track slides off the top with the list.
     Forward,
-    /// A backward step, wrap included. The row that fell off the visible bottom slides
-    /// off the bottom.
+    /// Wrap included. The row that fell off the bottom slides off it.
     Backward,
-    /// A skip-to or a queue rebuild: animates forward, with no outgoing overlay.
+    /// A skip-to or a queue rebuild: animates forward, with no outgoing row.
     Other,
 }
 
@@ -263,8 +237,7 @@ impl SlideKind {
     }
 }
 
-/// Classify the transition from `old_idx`, recognising single-step moves *with*
-/// wrap-around so repeat-all and repeat-one navigation animates the right way.
+/// Single steps count across the wrap, so repeat navigation slides the right way.
 fn classify_step(old_idx: i32, qvm: &QueueViewModel) -> SlideKind {
     let new_idx = qvm.queue_index;
     let len = len_as_i32(qvm.ids.len());
@@ -280,9 +253,8 @@ fn classify_step(old_idx: i32, qvm: &QueueViewModel) -> SlideKind {
     }
 }
 
-/// The "outgoing" row for the slide, if any, out of the rows the list was showing: on `Forward`
-/// the just-promoted track, which was at their top; on `Backward` the one that fell off the
-/// bottom, which the caller only passes when it really fell off.
+/// The slide's outgoing row out of those shown. A backward step's tail is passed only where it
+/// really fell off.
 fn outgoing_row(
     kind: SlideKind,
     shown: &[QueueRow],
@@ -297,12 +269,9 @@ fn outgoing_row(
     shown.iter().find(|row| i64::from(row.id) == id).cloned()
 }
 
-/// Play-order indices of the next `UP_NEXT_N` tracks after the current one, plus the
-/// base index — `queue_index + 1` clamped, since `queue_index` is `-1` with nothing
-/// playing.
-///
-/// Under `RepeatMode::All` or `One` the queue is a cycle, so the slice wraps past the
-/// end and stops just before the current track again; `Off` takes a plain forward slice.
+/// Play-order indices of the next `UP_NEXT_N` tracks, and the base, clamped for the `-1` of
+/// nothing playing. A repeating queue is a cycle, so the slice wraps and stops short of the
+/// current track.
 pub(super) fn upcoming_indices(qvm: &QueueViewModel) -> (Vec<usize>, usize) {
     let len = qvm.ids.len();
     let base = usize::try_from(qvm.queue_index + 1).unwrap_or(0);
@@ -315,7 +284,6 @@ pub(super) fn upcoming_indices(qvm: &QueueViewModel) -> (Vec<usize>, usize) {
     (indices, base)
 }
 
-/// The track ids the list renders for `qvm`, in its order.
 fn upcoming_id_slice(qvm: &QueueViewModel) -> Vec<i64> {
     let (indices, _) = upcoming_indices(qvm);
     indices.iter().map(|&i| qvm.ids[i]).collect()
@@ -353,15 +321,10 @@ async fn fetch_slice(
     (np_state.up_next_ticket.get() == ticket).then_some(rows)
 }
 
-/// Show `ids` in `up_next_model` from the `fetched` rows, and publish the base index and queue
-/// length, so a row click can `Queue.skip-to` with a modulo for the wrapped repeat-all case.
-///
-/// A row the fetch didn't return, its track deleted since the queue was read, shows as a
-/// placeholder rather than closing up, which would point every click below it one track off.
-///
-/// A slice that moved revokes a drag still in flight: it goes on, the list's source surviving its
-/// rows, but the index it lifted no longer names the same track. A library tick reseeds the same
-/// slice, which leaves it be.
+/// Publishes the base index and queue length beside the rows, so a click can skip to a wrapped row.
+/// A row the fetch didn't return shows as a placeholder rather than closing up, which would point
+/// every click below it one track off. A slice that moved revokes a drag still in flight, whose
+/// lifted index no longer names its track.
 fn show_slice(
     ui: &AppWindow,
     up_next_model: &VecModel<QueueRow>,

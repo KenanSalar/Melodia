@@ -1,22 +1,15 @@
 //! The Slint tick Win32's modal resize-and-move loop parks winit out of.
 //!
-//! Win32 pumps its own message loop for the whole of a resize or move drag, so winit sits inside
-//! `DefWindowProcW` and never reaches the wait point that emits `NewEvents`, the one place the
-//! backend calls `update_timers_and_animations`. Sizes and paints keep arriving, so the layout
-//! tracks the pointer and only the *decisions* stall: every `Timer` and every `changed` handler,
-//! which is the whole responsive layer (the miniplayer swap, `GridColumnsSync`'s column count, each
-//! `changed width` mirror).
+//! Win32 pumps its own message loop for a whole drag, so winit never reaches the wait that emits
+//! `NewEvents`, the one place the backend runs `update_timers_and_animations`. Sizes and paints
+//! still arrive, so the layout tracks the pointer and only the decisions stall: every `Timer` and
+//! `changed` handler, the miniplayer swap and the grid column counts among them.
 //!
-//! [`pump`] runs that tick from the window events the modal loop still delivers, and on its own it
-//! only lasts while events do. Slint's frame throttle is itself a `Timer`, so a paint landing before
-//! the throttle's next deadline fires nothing and asks for no further paint: the pointer stops and
-//! the swap stops with it, half faded. The heartbeat is what outlives the pointer. A thread sleeps
-//! until the next timer is due and posts the tick back, and a posted event is one the modal loop
-//! dispatches.
-//!
-//! [`LoopTicks`] is how a parked loop is told apart from the ordinary one, which runs `NewEvents`
-//! ahead of every batch. Two pumps with none between them can only be inside a modal loop, and
-//! nothing arms outside one, so a window idling or animating normally never wakes for this.
+//! [`pump`] runs that tick off the events the modal loop still delivers, which stop with the
+//! pointer, and Slint's frame throttle is itself a `Timer`, so the swap would stop half faded. A
+//! heartbeat thread carries it past them by posting the tick back, a posted event being one the
+//! modal loop dispatches. It arms only once two pumps see no `NewEvents` between them, which only
+//! a modal loop allows, so an ordinary idle or animating window never wakes for it.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::sync::mpsc::{self, Sender};
@@ -33,22 +26,17 @@ use melodia_core::error::describe;
 const PARKED_TICK_CAP: Duration = Duration::from_millis(16);
 
 thread_local! {
-    /// `NewEvents` so far. Winit emits them on the thread that runs the pumps.
+    /// `NewEvents` so far, emitted on the thread that runs the pumps.
     static LOOP_TICKS: Cell<u64> = const { Cell::new(0) };
     static WATCH: RefCell<ParkedWatch> = const { RefCell::new(ParkedWatch::new()) };
     /// The heartbeat thread's inbox, spawned by the first parked pump. `None` if the spawn failed.
     static HEARTBEAT: OnceCell<Option<Sender<Duration>>> = const { OnceCell::new() };
 }
 
-/// What the pumps and the heartbeat remember between calls, as `NewEvents` counts.
-///
-/// Each method is one transition and answers what that transition decides, the way
-/// `Iterator::next` both advances and answers: split into a query and a command, a caller could
-/// ask and forget to record, which is a heartbeat armed twice or an arm never spent.
+/// What the pumps and the heartbeat remember, as `NewEvents` counts. Each method records and
+/// answers in one, so a heartbeat can't be armed twice or an arm left unspent.
 struct ParkedWatch {
-    /// The count the previous window-event pump saw.
     pumped_at: Option<u64>,
-    /// The count a pending heartbeat was armed at.
     armed_at: Option<u64>,
 }
 
@@ -95,8 +83,7 @@ pub fn pump() {
     }
 }
 
-/// How long the heartbeat sleeps toward the next due timer, or `None` when there is nothing left
-/// for it to fire.
+/// `None` when nothing is left for the heartbeat to fire.
 fn heartbeat_delay(until_next_timer: Option<Duration>) -> Option<Duration> {
     until_next_timer.map(|until| until.min(PARKED_TICK_CAP))
 }

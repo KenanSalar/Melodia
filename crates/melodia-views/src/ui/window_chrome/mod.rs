@@ -1,29 +1,15 @@
-//! Wires the `WindowChrome` global and the `Theme.use-native-titlebar`
-//! property to the persisted setting, the `slint::Window` API, and
-//! winit (via Slint's `unstable-winit-030` accessor).
+//! The window itself, through winit where Slint's window API falls short: controls, dragging and
+//! resizing, geometry, file drops and the restart flow.
 //!
-//! Seven reasons it exists: hydrating `Theme.use-native-titlebar` (in the gap between
-//! `AppWindow::new()` and `app.show()`, where boot calls [`install`], so the window maps
-//! with its frame decided rather than swapping it on screen), the
-//! window control callbacks ([`controls`]), window dragging and resizing ([`winit_filter`],
-//! [`drag_region`], [`resize_grab`], [`resize_release`]), the Slint tick a Win32 drag parks
-//! (`parked_loop`), routing a file drop by where it is let go ([`file_drop`]), geometry
-//! ([`geometry`]) and the restart flow.
+//! **Dragging and resizing belong at the winit layer.** `drag_window()` from a `pointer-event`
+//! leaks the grab: the compositor takes the pointer for the move, the matching `Released` never
+//! reaches Slint, and the `TouchArea` stays pressed, taking every later click. So the filter
+//! intercepts `MouseInput { Pressed, Left }` before dispatch, against cells kept in step with
+//! drag-region and resize-grab hover.
 //!
-//! **Dragging and resizing belong at the winit layer.** `drag_window()` from a `TouchArea`'s
-//! `pointer-event` leaks the grab: the compositor takes pointer ownership for the move and
-//! the matching `Released` never reaches Slint, so a `TouchArea` that returned `GrabMouse`
-//! stays pressed forever and every later click routes back to it. A resize drag is the same
-//! handover. So the filter intercepts `MouseInput { Pressed, Left }` before dispatch, against
-//! cells Slint callbacks keep in step with drag-region and resize-grab hover.
-//!
-//! **A restart persists, then hands off to [`request_respawn_and_quit`]**, which arms
-//! [`RESPAWN_AFTER_EXIT`] and quits the loop so `main()` falls through to shutdown before
-//! the new process takes over. One function rather than three, since it owns the refusal.
-//! The native titlebar toggle takes this path because boot is the only writer of
-//! `Theme.use-native-titlebar`, and of `Settings.match-unfocused-bg`, which a KDE enable turns
-//! on alongside. The frame itself needs no restart: Slint applies `no-frame` live, which is how
-//! the miniplayer drops the native one.
+//! **The native titlebar toggle restarts**, not for the frame, which Slint applies live through
+//! `no-frame`, but because boot is the only writer of `Theme.use-native-titlebar` and of
+//! `Settings.match-unfocused-bg`, which a KDE enable turns on alongside.
 
 mod controls;
 mod drag_region;
@@ -51,27 +37,20 @@ use melodia_platform::services::platform::always_on_top;
 use melodia_platform::services::platform::always_on_top::AlwaysOnTopMethod;
 use melodia_ui::{AppWindow, Theme};
 
-/// Armed once the new setting is persisted, read at the very end of `main()` — after the
-/// event loop has exited and every background task wound down. Spawning *before* shutdown
-/// leaves two windows on screen while the old process tears down its runtime.
+/// Read at the end of `main()`, past shutdown: spawning before it leaves two windows on screen
+/// while the old process tears down.
 static RESPAWN_AFTER_EXIT: AtomicBool = AtomicBool::new(false);
 
-/// Read by `shutdown::respawn_if_requested` once the event loop has returned.
 pub fn should_respawn_after_exit() -> bool {
     RESPAWN_AFTER_EXIT.load(Ordering::SeqCst)
 }
 
-/// Explicit binary path for the post-exit respawn, set by the auto-updater at
-/// install-success time while the path still resolves to the live binary.
-/// [`respawn_target`] prefers it over asking the OS because an **atomic-swap** install
-/// *renamed* the running binary to `<target>.old` — a move, not an unlink, so
-/// `/proc/self/exe` reports that stale path with a straight face and respawning from it
-/// relaunches the *old* binary, which nothing can recover after the fact. The titlebar and
-/// tray restarts never set this: no install happened, so the OS answer is right.
+/// The binary the updater installed. An atomic-swap install renames the running binary to
+/// `<target>.old` and `/proc/self/exe` follows the rename, so the OS's answer would relaunch the
+/// old one.
 static RESPAWN_EXE: Mutex<Option<PathBuf>> = Mutex::new(None);
 
-/// Record the binary path to relaunch on exit. The auto-updater calls this on a
-/// successful install with `install_target()` captured *before* the swap.
+/// Called by the updater on a successful install, with `install_target()` captured before the swap.
 pub fn set_respawn_exe(path: PathBuf) {
     match RESPAWN_EXE.lock() {
         Ok(mut slot) => *slot = Some(path),
@@ -82,15 +61,12 @@ pub fn set_respawn_exe(path: PathBuf) {
     }
 }
 
-/// The explicit respawn path, if the updater recorded one this session. Private, so no
-/// caller reaches the slot without the fallback that makes an empty one mean "ask the OS".
 fn respawn_exe() -> Option<PathBuf> {
     RESPAWN_EXE.lock().ok().and_then(|slot| slot.clone())
 }
 
-/// The binary the post-exit respawn should launch: the path the updater recorded before
-/// its install swapped the file, else the running binary's own. `None` only when the OS
-/// refused to say where we are running from, so there is nothing to come back to.
+/// The binary the post-exit respawn launches: the updater's recorded path, else the running one.
+/// `None` only when the OS won't say where we run from.
 pub fn respawn_target() -> Option<PathBuf> {
     if let Some(recorded) = respawn_exe() {
         return Some(recorded);
@@ -104,14 +80,12 @@ pub fn respawn_target() -> Option<PathBuf> {
     }
 }
 
-/// Arm the post-exit respawn and quit the event loop — unless there is no binary to come
-/// back to, in which case leave the app running and say so.
+/// Arms the post-exit respawn and quits the loop, unless there is no binary to come back to, in
+/// which case the app stays up and says so.
 ///
-/// All three restart paths go through here because getting the check wrong costs the user
-/// their session: past `quit_event_loop()` the window is gone, and a failed `exec` in the
-/// binary's `shutdown::respawn_if_requested` has nothing to fall back to. Hence resolving
-/// the target *before* the exit. Every caller has persisted its setting by now, so a
-/// refusal still applies on the next manual launch, which is what the toast says.
+/// The check sits on this side of the exit: past `quit_event_loop()` the window is gone, and a
+/// failed `exec` in `shutdown::respawn_if_requested` has nothing to fall back to. Every caller has
+/// persisted its setting by then, so the toast's "next launch" is honest.
 pub fn request_respawn_and_quit() {
     match respawn_target() {
         Some(exe) if exe.exists() => {}
@@ -128,25 +102,17 @@ pub fn request_respawn_and_quit() {
 
     RESPAWN_AFTER_EXIT.store(true, Ordering::SeqCst);
     if let Err(e) = slint::quit_event_loop() {
-        // Nothing reads the flag while the loop runs, but an ordinary window close later
-        // in the session would, and relaunching out of that is not what was asked for.
+        // Or an ordinary close later in the session reads it and relaunches.
         RESPAWN_AFTER_EXIT.store(false, Ordering::SeqCst);
         log::warn!("restart: quit_event_loop: {}", describe(&e));
     }
 }
 
-/// The shown window's native Win32 `HWND`.
+/// The shown window's Win32 `HWND`, `None` before the first show. Fetched per call, the accessor
+/// only borrowing for the closure.
 ///
-/// `None` until the window has first been shown, and `None` if the active winit backend isn't
-/// Win32 — impossible on a Windows build, but the API surface stays honest.
-///
-/// The two consumers are one layer apart and neither may hold this hop: souvlaki's SMTC attach in
-/// `boot::ui_setup::install`, and `dwm_titlebar` through `ui::appearance::theme_paint`, which the
-/// split keeps off every Slint name. It sat in both for a while, byte-identical, which is what a
-/// private copy of an accessor hop turns into.
-///
-/// Fetched per call rather than cached: Slint's `with_winit_window` accessor only borrows for the
-/// closure's duration.
+/// The one hop for its two consumers, souvlaki's SMTC attach in `boot::ui_setup::install` and
+/// `dwm_titlebar` through `ui::appearance::theme_paint`.
 #[cfg(target_os = "windows")]
 pub fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
     use slint::winit_030::WinitWindowAccessor;
@@ -160,8 +126,8 @@ pub fn win32_hwnd(app: &AppWindow) -> Option<*mut std::ffi::c_void> {
         .flatten()
 }
 
-/// Hydrate `Theme.use-native-titlebar` from the persisted setting and wire the
-/// `WindowChrome` callbacks. Must run between `AppWindow::new()` and `app.show()`.
+/// Hydrates `Theme.use-native-titlebar` and wires the `WindowChrome` callbacks. Runs between
+/// `AppWindow::new()` and `app.show()`, so the window maps with its frame decided.
 pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
     let settings = melodia_app::library::settings::get_settings(&state.paths)?;
     let use_native = settings.window.use_native_titlebar;
@@ -181,13 +147,8 @@ pub fn install(app: &AppWindow, state: &AppState) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Push the cached capability and persisted pinned state into `WindowChrome`, and
-/// re-apply at the OS level if the window was pinned last time. Both re-applies wait.
-/// This runs before `app.show()`, and the winit window only exists once the event loop
-/// creates it, so the native one waits for that. The Linux one waits so `KWin` / GNOME
-/// have registered the window: `MakeAbove` against a not-yet-shown one quietly fails on
-/// bare `window-calls`. On Linux it then watches for the pin moving outside Melodia,
-/// pinned or not.
+/// Seeds the pin's capability and persisted state, re-applies a persisted pin once the window can
+/// take one, and on Linux follows a pin moved outside Melodia.
 fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool) {
     let chrome = app.global::<melodia_ui::WindowChrome>();
     chrome.set_always_on_top_supported(state.always_on_top.supported);
@@ -219,14 +180,12 @@ fn seed_always_on_top(app: &AppWindow, state: &AppState, persisted_pinned: bool)
             follow_reported_pin(app, state, reported);
 
             let state = state.clone();
-            // `Handle::clone()` releases the borrow on `state.runtime` so the same
-            // `state` can be moved into the async block.
             state.runtime.clone().spawn(async move {
                 let method = state.always_on_top.method;
                 let data_dir = &state.paths.data_dir;
                 if persisted_pinned {
-                    // KWin enumerates `workspace.stackingOrder` by PID, so the window has to
-                    // be mapped by the compositor first.
+                    // The compositor has to have mapped the window: `KWin` finds it by PID in
+                    // `workspace.stackingOrder`, and bare `window-calls` quietly fails before then.
                     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
                     if let Err(e) = always_on_top::apply(method, data_dir, true).await {
                         log::warn!("startup always_on_top re-apply: {}", describe(&e));

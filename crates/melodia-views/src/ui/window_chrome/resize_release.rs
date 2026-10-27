@@ -1,19 +1,14 @@
 //! Tells a resize the pointer has let go of apart from one it is still holding.
 //!
-//! The OS holds the pointer for the whole of a resize drag, so the release never reaches the window
-//! as such. What does is the pointer coming back: winit posts a left-button release when its own
-//! Win32 drag ends, and X11, macOS and Wayland hand the window pointer input again once the grab is
-//! over. None of it can arrive while the drag goes on.
+//! The OS holds the pointer for the whole drag, so the release never reaches the window as such:
+//! what does is the pointer coming back (winit posts a left release when its Win32 drag ends, and
+//! the others hand the window pointer input again once the grab is over).
 //!
-//! **On Wayland the pointer coming back is not yet the end.** xdg-shell ends a resize with a
-//! configure dropping the resizing state, and `KWin` sends it a loop pass after handing the pointer
-//! back. A size the window picks before acknowledging that configure is one `KWin` doesn't adopt, so
-//! the configure puts the drag's size straight back: a snap taken on the pointer flashes and undoes
+//! **On Wayland that isn't yet the end.** xdg-shell ends a resize with a configure dropping the
+//! resizing state, which `KWin` sends a loop pass after handing the pointer back, and a size picked
+//! before acknowledging it is put straight back, so a snap taken on the pointer flashes and undoes
 //! itself. The release there is the next size reading, which winit emits for that configure even
-//! when the size is unchanged, the state set having changed.
-//!
-//! [`ResizeRelease`] decides; [`ResizeWatch`] is what the winit filter drives, carrying each
-//! decision to the UI.
+//! when the size is unchanged.
 
 use std::cell::{OnceCell, RefCell};
 use std::rc::Rc;
@@ -31,14 +26,12 @@ use melodia_ui::AppWindow;
 /// than a wait `KWin` reaches, which sends it a loop pass behind the pointer.
 const CONFIGURE_GRACE: Duration = Duration::from_millis(250);
 
-/// Which window system the window is on, the one answer the release waits on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum WindowServer {
     Wayland,
     Other,
 }
 
-/// What a reading means for the resize.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Transition {
     None,
@@ -58,10 +51,8 @@ enum Phase {
     AwaitingConfigure,
 }
 
-/// Where the window's latest resize stands.
-///
-/// Each method is one transition and answers what that transition decides, `ParkedWatch`'s shape:
-/// split into a query and a command, a caller could ask and forget to record.
+/// Where the window's latest resize stands. Each method records and answers in one, so no caller
+/// can ask and forget to record.
 #[derive(Debug, Default)]
 pub(super) struct ResizeRelease {
     phase: Phase,
@@ -69,9 +60,7 @@ pub(super) struct ResizeRelease {
 }
 
 impl ResizeRelease {
-    /// Records a size reading.
-    ///
-    /// A Wayland reading that repeats the size mid-resize is the ending configure with the pointer
+    /// A Wayland reading repeating the size mid-resize is the ending configure with the pointer
     /// still away, which is all a drag let go off the window hands back.
     pub(super) fn resized(&mut self, size: PhysicalSize<u32>, server: WindowServer) -> Transition {
         let repeated = self.size.replace(size) == Some(size);
@@ -86,7 +75,6 @@ impl ResizeRelease {
         }
     }
 
-    /// Records pointer input.
     pub(super) fn pointer(&mut self, server: WindowServer) -> Transition {
         if self.phase != Phase::Resizing {
             return Transition::None;
@@ -115,8 +103,7 @@ impl ResizeRelease {
     }
 }
 
-/// [`ResizeRelease`] fed from the winit filter, telling the window when a resize begins and when it
-/// is let go.
+/// [`ResizeRelease`] fed from the winit filter, telling the window when a resize begins and ends.
 pub(super) struct ResizeWatch {
     weak: slint::Weak<AppWindow>,
     release: Rc<RefCell<ResizeRelease>>,

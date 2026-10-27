@@ -1,10 +1,6 @@
-//! One drawn frame of the visualizer, per style.
-//!
-//! Both run on the UI thread off the strip's own `Timer` and are the only consumers of the
-//! sample ring. Each takes the analysis rate its caller resolved — `0` when nothing should
-//! be analysed, which is how a pause, a minimised window and a track that hasn't started
-//! yet all reach the same path: no snapshot, no transform, just the decay. Each returns
-//! whether its drawing has settled, which is what stops the Timer. Neither allocates.
+//! One drawn frame per style, off the strip's Timer; the sample ring's only consumers. A rate of
+//! `0`, for a pause, a minimised window or a track not yet started, skips the snapshot and the
+//! transform and only decays. Each answers whether its drawing settled, which stops the Timer.
 
 use melodia_playback::player::playback::spectrum::SpectrumAnalyzer;
 use melodia_playback::player::playback::visualizer::VisualizerShared;

@@ -1,13 +1,7 @@
 //! The lyrics panel's Rust half.
 //!
-//! Four modules under one door: [`measure`] estimates how wide a line is set, [`rows`] turns a
-//! sheet into the rows the panel draws, [`sheet`] gets one and hands it back, and [`follow`] keeps
-//! the sung line marked. What is left here is the state all four read and the wiring that installs
-//! them.
-//!
-//! **Every position is milliseconds in an `i32`**, which is what the `Player` global already
-//! publishes and what the panel's rows carry. It reaches past three weeks of one track, and it is
-//! what lets [`follow`]'s interpolation convert into `f64` without losing a bit.
+//! **Every position is milliseconds in an `i32`**, as the `Player` global publishes and the rows
+//! carry: it reaches past three weeks of one track and converts into `f64` without loss.
 
 mod follow;
 mod measure;
@@ -29,18 +23,10 @@ use melodia_ui::{AppWindow, LyricRow, Lyrics};
 
 pub(super) use sheet::{release, wire_menu, wire_reseed};
 
-/// Width to estimate against before the panel has reported its own.
-///
-/// Only ever wrong for one tick: the panel reports on both its cadences, so a real number lands
-/// within a second of it mounting. Sized to the middle of `up-next-width`'s clamp so the first
-/// draw is close rather than merely defined.
+/// Until the panel reports its own, within a second of mounting. Mid `up-next-width`'s clamp, so
+/// the first draw is close.
 const ASSUMED_WIDTH: f32 = 340.0;
 
-/// What a row is.
-///
-/// A gap is a row of the panel's own making rather than anything the sheet holds, which is why it
-/// is spelled here and not in the sheet: how long a rest has to be before it is worth drawing is a
-/// question about the panel, and the sheet has already answered the only one it can.
 #[derive(Clone, Copy)]
 enum RowKind {
     Words,
@@ -51,11 +37,8 @@ enum RowKind {
     },
 }
 
-/// One row as the panel draws it. An interlude carries no text and none of the two lines under it.
-///
-/// **The three texts are `SharedString` so that publishing a row is a refcount bump.** They are
-/// handed to the model on every re-measure, and a `String` here meant a second heap copy of the
-/// whole sheet each time — and a second resident copy of it for as long as the panel was open.
+/// One row as the panel draws it. **The texts are `SharedString`**, so publishing a row on every
+/// re-measure is a refcount bump rather than a resident second copy of the sheet.
 struct Row {
     kind: RowKind,
     /// `None` on an untimed sheet, the two never mixing within one sheet.
@@ -63,7 +46,7 @@ struct Row {
     text: SharedString,
     /// How the words sound, for a script that does not spell it. `None` for a Latin line.
     romanization: Option<SharedString>,
-    /// The gloss a bilingual sheet carries under the words, drawn at its own size beneath them.
+    /// The gloss a bilingual sheet carries under the words.
     translation: Option<SharedString>,
     /// Wrapped line count, and so this row's height in `Lyrics.line-height` units.
     lines: u8,
@@ -75,8 +58,7 @@ struct Row {
 }
 
 impl Row {
-    /// A line of the sheet. The three counts are [`follow::republish`]'s to fill against the live
-    /// width.
+    /// The three counts are [`follow::republish`]'s to fill against the live width.
     fn words(line: &LyricLine, at_ms: Option<i32>) -> Self {
         Self {
             kind: RowKind::Words,
@@ -90,11 +72,8 @@ impl Row {
         }
     }
 
-    /// The quiet between two lines, drawn as the notes.
-    ///
-    /// Blank text is what makes this cost no arithmetic anywhere else: `wrapped_lines` floors a
-    /// blank run at one line, so the row comes out exactly as tall as a one-line verse and
-    /// [`Metrics::row_height`] needs no arm for it.
+    /// The quiet between two lines, drawn as the notes. Blank text floors at one wrapped line, so
+    /// the row is a one-line verse's height and [`Metrics::row_height`] needs no arm for it.
     fn interlude(from_ms: i32, until_ms: i32) -> Self {
         Self {
             kind: RowKind::Interlude { until_ms },
@@ -126,10 +105,8 @@ struct Metrics {
 }
 
 impl Metrics {
-    /// The scale as the `Lyrics` global declares it.
-    ///
-    /// Read once: every one of these is an `out` property with a literal behind it, so the panel
-    /// and this cannot drift apart within a session however the sheet changes.
+    /// Read once: each is an `out` property over a literal, so the two halves can't drift apart
+    /// within a session.
     fn from_global(global: &Lyrics) -> Self {
         Self {
             font_size: global.get_font_size(),
@@ -145,12 +122,8 @@ impl Metrics {
         }
     }
 
-    /// How tall a row's own box is: the words, and whichever of the two lines under them it has.
-    ///
-    /// Each part carries the gap above it, so a row of one, two or three comes out right with no
-    /// branch per shape. The gap *between* rows is not in here — that is the layout's `spacing`,
-    /// and it belongs to neither of the rows it separates. The vertical padding is, being what
-    /// the hover fill covers.
+    /// Each part carries the gap above it, so no shape needs a branch. The gap between rows is the
+    /// layout's `spacing`; the vertical padding is in, being what the hover fill covers.
     fn row_height(self, row: &Row) -> f32 {
         let mut height = 2.0 * self.row_pad_y + self.line_height * f32::from(row.lines);
         if row.romanization_lines > 0 {
@@ -170,10 +143,7 @@ pub(crate) struct LyricsUi {
     rows: RefCell<Vec<Row>>,
     /// Cumulative top edge of each row in logical pixels, one entry per row.
     offsets: RefCell<Vec<f32>>,
-    /// The sizes and line heights the panel draws by. Fixed for the session, unlike [`Self::width`]
-    /// beside it, which follows the layout.
     metrics: Metrics,
-    /// Panel width last reported, in logical pixels.
     width: Cell<f32>,
     /// Which way the romanization toggle stood when the model was last written, so a re-measure
     /// can tell a flip from a width that moved and publish only for the former.
@@ -185,33 +155,27 @@ pub(crate) struct LyricsUi {
     /// A clicked row, held until the clock catches up with it.
     pinned: Cell<Option<usize>>,
     pinned_at_ms: Cell<i32>,
-    /// The track path the resident sheet belongs to, and `None` whenever the rows have been
-    /// handed back. **This is what makes the reseed idempotent**, so the three unrelated edges
-    /// that reach it cost one lookup between them rather than one each.
+    /// The track path the resident sheet belongs to, `None` once the rows are handed back. **This
+    /// makes the reseed idempotent**, so the three edges reaching it cost one lookup between them.
     holding: RefCell<Option<String>>,
-    /// Filled after [`install`] returns, because looking a sheet up needs the `NowPlayingState`
-    /// this is a field of. `NowPlayingState`'s own two seeders, one layer down.
+    /// Filled after [`install`] returns, needing the `NowPlayingState` this is a field of.
     reseed: RefCell<Option<super::Hook>>,
     model: Rc<VecModel<LyricRow>>,
 }
 
 impl LyricsUi {
-    /// Look a sheet up for whatever is playing, unless the panel already holds it.
-    ///
-    /// A no-op before [`install`]'s caller has wired the hook.
+    /// Looks a sheet up for what is playing, unless the panel already holds it.
     pub(super) fn kick(&self) {
         if let Some(reseed) = self.reseed.borrow().as_ref() {
             reseed();
         }
     }
 
-    /// Whether the resident sheet is already this track's.
     fn holds(&self, path: &str) -> bool {
         self.holding.borrow().as_deref() == Some(path)
     }
 }
 
-/// Install the panel's callbacks and seed the toggles.
 pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
     let model: Rc<VecModel<LyricRow>> = Rc::new(VecModel::default());
     let global = ui.global::<Lyrics>();
@@ -242,10 +206,8 @@ pub(super) fn install(ui: &AppWindow, state: &AppState) -> Rc<LyricsUi> {
 fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
     let global = ui.global::<Lyrics>();
 
-    // Off the shadows rather than off `settings.json`, because the Settings card writes the same
-    // fields and may have moved them since this view last mounted. Every handler is the card's,
-    // which is what keeps the two controls of each switch from drifting; what is left here is the
-    // extra each owes the panel standing behind it.
+    // Off the shadows, the Settings card writing the same fields. Every handler is the card's, so
+    // the two controls of a switch can't drift; what's left here is what each owes the panel.
     global.set_enabled(state.lyrics_enabled.get());
     {
         let persist = lyrics_settings::enabled_handler(ui, state);
@@ -253,9 +215,8 @@ fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
         let ly_toggle = ly.clone();
         global.on_set_enabled(move |on| {
             persist(on);
-            // **Switching on is a reason to look a sheet up**, where the fetch would otherwise
-            // wait for the next track; switching off is what hands the sheet back, the reseed
-            // releasing whatever it holds once the door is shut.
+            // On, a sheet is looked up now rather than at the next track; off, the reseed releases
+            // what it holds.
             ly_toggle.kick();
             // The store stops growing here just as it does on a close, which skips its own prune
             // while lyrics are off.
@@ -288,11 +249,9 @@ fn wire_toggles(ui: &AppWindow, state: &AppState, ly: &Rc<LyricsUi>) {
         global.on_set_online_enabled(move |on| {
             persist(on);
             let Some(ui) = weak.upgrade() else { return };
-            // **Switching it on is a reason to look this track up, and the claim has to go with
-            // it**: `reseed` dedupes on the sheet it holds, which here is the empty answer the
-            // switch just invalidated. Switching it off re-runs only where there is nothing to
-            // lose, so an empty panel stops naming a lookup that can no longer run while a sheet
-            // on screen is kept: the switch buys traffic rather than silence.
+            // On, the claim goes too: `reseed` dedupes on the sheet it holds, here the empty answer
+            // the switch just invalidated. Off re-runs only an empty panel, so it stops naming a
+            // lookup that can no longer run while a sheet on screen is kept.
             if on || ly_online.rows.borrow().is_empty() {
                 release(&ui, &ly_online);
                 ly_online.kick();

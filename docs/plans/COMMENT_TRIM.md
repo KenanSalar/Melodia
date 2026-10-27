@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 10.4 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 10.5 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -107,8 +107,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 9 | `melodia` (the binary) | 0.42 | 533 | ~216 | 0.20 (252) | `f225baa6` |
 | 10.1 | `melodia-views`: the artwork and backdrop tiers | 0.73 | 1,009 | ~665 | 0.33 (457) | `a9f55daf` |
 | 10.2 | `melodia-views`: `ui/radio/` | 0.51 | 1,607 | ~817 | 0.24 (757) | `a657f0e1` |
-| 10.3 | `melodia-views`: the tabbed pages, Browse and Search | 0.44 | 1,783 | ~773 | 0.17 (681) | |
-| 10.4 | `melodia-views`: the shell and the player | 0.42 | 1,755 | ~704 | | |
+| 10.3 | `melodia-views`: the tabbed pages, Browse and Search | 0.44 | 1,783 | ~773 | 0.17 (681) | `2154ecf4` |
+| 10.4 | `melodia-views`: the shell and the player | 0.42 | 1,755 | ~704 | 0.23 (973) | |
 | 10.5 | `melodia-views`: the rest of the shared layer | 0.33 | 2,334 | ~591 | | |
 | 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | | |
 | 11 | `melodia-store` | 0.34 | 2,456 | ~666 | | |
@@ -208,7 +208,7 @@ Status: done.
   - **Pointed at:** `CLAUDE.md` on the `--version` and `--logs` branches, the order in `main()` and `respawn_if_requested`. `main_order_tests` reads `main`'s body.
 
 ### Phase 10: `melodia-views`
-Status: in progress, 10.4 next.
+Status: in progress, 10.5 next.
 
 - [x] **10.1 The artwork and backdrop tiers**, one commit: `backdrop.rs`, `grid_prewarm.rs`, `hero_backdrop.rs`, `hero_chips.rs`, `hero_folds.rs`, `artwork_cache.rs`, `detail_artwork.rs`, `now_playing_artwork.rs`, `mosaic_hero.rs`, `cover_generation.rs`, `name_palette.rs`, and `aurora/`.
   - **Furthest over:** `backdrop.rs` (175), `grid_prewarm.rs` (147).
@@ -224,9 +224,11 @@ Status: in progress, 10.4 next.
   - **Test comment citing it:** `browse_tests.rs` ("the method's own comment"), `truncate_history_to`'s breadcrumb case kept.
   - **Second copies dropped:** the tabbed-pages contract restated at the call sites (count rewinds, dirty re-arms, the no-hop pick, the covers a pick repaints) now lives in the rule alone; Recently Played's `forget_mosaic`, `release_section_state` and `seed_tab` name Favorites' rather than re-argue them; `ui-patterns.md`'s Browse sub-bullet in the Covers block went, its three facts argued at `browse/callbacks/`, and the prewarm-guard bullet names `BrowseUi::warm_card_tier` for Browse's half.
   - **Stale claims removed:** `BrowseUi::section`'s "set only by the `library_changed` subscriber" (the leave and the boot mark it too), `SearchUiState::recent`'s sort-handler reader and `last_results`' clear on every commit (neither exists), `NAV_SEARCH`'s `cross_tab_nav` consts, and `apply.rs`'s cover lookups in the event-loop closure.
-- [ ] **10.4 The shell and the player**: `window_chrome/`, `shell/`, `now_playing/`, `visualizer/`. One commit.
+- [x] **10.4 The shell and the player**: `window_chrome/`, `shell/`, `now_playing/`, `visualizer/`. One commit.
   - **Furthest over:** `window_chrome/geometry.rs` (86).
   - **Pointed at:** `CLAUDE.md` on the bridge, `file_drop` and `respawn_target`; `.claude/rules/desktop-shell.md` and `visualizer.md`.
+  - **Second copies dropped:** `desktop-shell.md`'s restatements of `frame_allowance`'s Wayland argument, `request_respawn_and_quit`'s doc and `parked_loop`'s heartbeat, each now a pointer; `bridge.rs`'s three copies of `models.slint`'s case for the position scalars, and its inline copy of `reuse_or_warm`'s identity argument; `measure.rs`'s Hangul story, `slint-pitfalls.md`'s to tell; the gap-floor argument kept once in `lyrics/rows.rs`.
+  - **Stale claims removed:** `shell/mod.rs`' "lets `tasks/` reach" `event_sink` (its callers are the tray bridge and `boot::tasks`), `request_respawn_and_quit`'s "all three restart paths" (four), and `desktop-shell.md`'s "retired the platform split `with_returning_frame` used to carry".
 - [ ] **10.5 The rest of the shared layer**: the other 32 files directly under `ui/`, plus `callbacks/` and `paged_rows/`. One commit.
   - **Pointed at:** `CLAUDE.md` on `file_dialog::parented`, `launcher.rs`, `index_persist`, `CALLBACK_HOMES` and `PagedRows`.
   - **Check:** `detail_view::release_hero_slots`' doc calls My Library its only multi-global caller; Favorites' and Recently Played's leaves call it too, beside `release_shared_hero`.

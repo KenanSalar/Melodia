@@ -1,8 +1,8 @@
 //! Getting a sheet for whatever is playing, and handing it back.
 //!
-//! **Three unrelated edges reach [`reseed`], and dropping any one of them shows an empty panel**:
-//! a track change, the view re-opening and the header's switch. It is idempotent by
-//! [`super::LyricsUi::holds`], so they may overlap freely — whichever gets there first pays.
+//! **Three edges reach [`reseed`], and dropping any one shows an empty panel**: a track change, the
+//! view re-opening (the sheet goes back on every close) and the header's switch. It is idempotent
+//! by [`super::LyricsUi::holds`], so they may overlap: whichever gets there first pays.
 
 use std::rc::Rc;
 use std::sync::Arc;
@@ -19,10 +19,8 @@ use melodia_core::entities::track::TrackSummary;
 use melodia_core::utils::toast::{self, ToastKind};
 use melodia_ui::{AppWindow, Lyrics, LyricsState};
 
-/// The sheet for `track`, or `None` where the panel should be left as it is.
-///
-/// A failure is logged and reads as "nothing found": a sidecar in some old codepage or a directory
-/// that is down are both, to a reader, a panel with no words in it, and neither is worth a toast.
+/// A failure is logged and reads as nothing found: an old-codepage sidecar and a directory that's
+/// down are both, to a reader, a panel with no words, and neither is worth a toast.
 async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
     match library::lyrics::for_track(state, track).await {
         Ok(outcome) => outcome,
@@ -37,26 +35,14 @@ async fn fetch(state: &AppState, track: &TrackSummary) -> LyricsOutcome {
     }
 }
 
-/// Bring the panel in line with whatever is playing, looking a sheet up if it has to.
-///
-/// **Three unrelated edges reach this, and dropping any one of them shows an empty panel.** The
-/// sheet is handed back on every close, which is the trade this feature makes against holding a
-/// resident copy for the life of the process — so a re-open of the *same* track has nothing to
-/// paint, and the artwork's already-applied guard has no way to know that. The three are a track
-/// change, the view re-opening and the header's switch.
-///
-/// Idempotent by [`LyricsUi::holds`], so the edges may overlap freely: whichever gets there first
-/// pays, and the claim is taken before the first `.await` rather than after the last.
+/// Brings the panel in line with what is playing, claiming the track before the first `.await`.
 fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingState>) {
     let Some(ui) = weak.upgrade() else { return };
     let ly = &np_state.lyrics;
 
     let track = playing_track(np_state);
-    // **Both terms, and the mount is the one that is not obvious.** The switch is the persisted
-    // setting rather than "the panel is mounted", so on its own it answers `true` for a closed
-    // view behind which the source-change path is still running. That would spend a request per
-    // track on a panel nobody can see. Two surfaces mount one, the full view and the
-    // miniplayer's column; the card and the strip have no slot for it whatever they paint on.
+    // Both terms: the switch is the setting, still on behind a closed view whose source-change
+    // path runs on, and a request per track there would fill a panel nobody can see.
     let wanted = np_state.renders_panel() && library::lyrics::is_enabled(state);
     let Some(track) = track.filter(|_| wanted) else {
         // Closed, switched off, or a station, which has no words to look up. Either way the
@@ -77,8 +63,7 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     let res = slint::spawn_local(Compat::new(async move {
         let outcome = fetch(&state, &track).await;
         let Some(ui) = weak.upgrade() else { return };
-        // The song may have moved under the lookup; the claim taken above is what says so, and it
-        // is the same test the two other edges dedupe on.
+        // The song may have moved under the lookup; the claim says so.
         if !np_state.lyrics.holds(&track.file_path) {
             return;
         }
@@ -92,11 +77,8 @@ fn reseed(weak: &Weak<AppWindow>, state: &AppState, np_state: &Rc<NowPlayingStat
     }
 }
 
-/// Wire the menu's two actions, which need the same `NowPlayingState` the reseed hook does.
-///
-/// **Both act on whatever is playing, read at click time rather than captured.** The menu is a
-/// popup over a view that outlives any one track, so a handle taken at wire time names the wrong
-/// song by the second verse.
+/// **Both actions read what is playing at click time**: the menu outlives any one track, so a
+/// handle taken at wire time would name the wrong song by the second verse.
 pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
     let global = ui.global::<Lyrics>();
 
@@ -161,8 +143,7 @@ pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayi
                     return report_save_failure(&e);
                 }
                 toast::notify(ToastKind::LyricsSaved, track.title.clone());
-                // The tag now holds what the panel is showing, so the row that offered this has
-                // nothing left to do — and the sheet is the file's own from here.
+                // The tag now holds the sheet, which is the file's own from here.
                 let Some(ui) = weak.upgrade() else { return };
                 ui.global::<Lyrics>().set_can_save_to_tag(false);
                 np_state.lyrics.holding.borrow_mut().take();
@@ -178,11 +159,8 @@ pub(crate) fn wire_menu(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayi
     }
 }
 
-/// Say a save did not happen, where it was asked for by name.
-///
-/// **A toast rather than a log line**, the radio vote's rule: this runs only because somebody
-/// pressed a control that says it writes to their file, and a control that quietly does nothing is
-/// worse than one that says why.
+/// A toast rather than a log line, the radio vote's rule: a control that says it writes to the
+/// user's file has to say why it didn't.
 fn report_save_failure(e: &melodia_core::error::AppError) {
     let reason = melodia_core::error::describe(e);
     log::warn!("lyrics save: {reason}");
@@ -194,7 +172,6 @@ fn playing_track(np_state: &NowPlayingState) -> Option<Arc<TrackSummary>> {
     np_state.current_source.borrow().as_ref().and_then(|s| s.track.clone())
 }
 
-/// Wire the reseed hook, once the `NowPlayingState` this panel's state is a field of exists.
 pub(crate) fn wire_reseed(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPlayingState>) {
     let weak_ui = ui.as_weak();
     let state = state.clone();
@@ -207,10 +184,7 @@ pub(crate) fn wire_reseed(ui: &AppWindow, state: &AppState, np_state: &Rc<NowPla
     }));
 }
 
-/// Write an outcome into the panel.
-///
-/// `online_enabled` comes from the caller rather than being read here, because it decides only
-/// which of two sentences an empty panel shows and the caller is the half holding `AppState`.
+/// `online_enabled` decides only which sentence an empty panel shows.
 fn apply(
     ui: &AppWindow,
     ly: &Rc<LyricsUi>,
@@ -221,9 +195,8 @@ fn apply(
     ly.pinned.set(None);
     let global = ui.global::<Lyrics>();
 
-    // Recorded whichever of the three this came to, so a re-open that finds the same track already
-    // answered does not pay for a second lookup — including the two that draw no rows, which are
-    // answers rather than absences.
+    // Whatever the outcome, so a re-open on an answered track pays no second lookup: an outcome
+    // with no rows is an answer, not an absence.
     *ly.holding.borrow_mut() = Some(track_path.to_owned());
 
     match outcome {
@@ -255,21 +228,16 @@ fn apply(
     }
 }
 
-/// Say a lookup is out, so the panel is not claiming "not found" while it is still looking.
-///
-/// **Claims the track before the `.await`, not after it.** The lookup can reach a file and then a
-/// socket, and a reseed landing in that window would otherwise see a sheet for the *previous*
-/// track and start a second one for the same song.
+/// **Claims the track before the `.await`**: the lookup can reach a file and then a socket, and a
+/// reseed landing in that window would start a second one for the same song.
 fn mark_loading(ui: &AppWindow, ly: &Rc<LyricsUi>, track_path: &str) {
     clear(ui, ly);
     *ly.holding.borrow_mut() = Some(track_path.to_owned());
     ui.global::<Lyrics>().set_state(LyricsState::Loading);
 }
 
-/// Hand back the rows and the table, on the view's own teardown.
-///
-/// Gives up the claim with them, so the next open looks the sheet up again rather than believing
-/// it is still on screen. That belief is what left a re-opened view blank until a restart.
+/// Hands back the rows and the table with the claim, so the next open looks the sheet up again
+/// rather than believing it is still on screen.
 pub(crate) fn release(ui: &AppWindow, ly: &Rc<LyricsUi>) {
     ly.holding.borrow_mut().take();
     clear(ui, ly);

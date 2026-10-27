@@ -1,17 +1,13 @@
 //! Has the window painted lately?
 //!
-//! The strip's Timer fires off the event loop, so it keeps ticking for a window the
-//! compositor has stopped showing. A tray hide and our own minimize button both drop
-//! [`tray_bridge`](crate::ui::shell::tray_bridge)'s visibility shadow, but an OS-driven
-//! minimize only sometimes does and Wayland never tells a client it was minimized at all.
-//! Frames cover the rest: a window nobody is showing gets no frame callbacks, which
-//! catches a Wayland minimize and, for free, a fully covered window.
+//! The strip's Timer keeps ticking for a window the compositor has stopped showing. A tray hide
+//! and our minimize drop [`tray_bridge`](crate::ui::shell::tray_bridge)'s visibility shadow, but
+//! an OS minimize only sometimes does and Wayland never says. A window nobody shows gets no
+//! frames, which catches a Wayland minimize and, for free, a fully covered window.
 //!
-//! An *inference* rather than a fact, so it gates only the expensive half and never stops
-//! the Timer — which is what lets the tick see frames come back with no event to wait for.
-//! The count moves only because the tick dirties a property every frame, so it means
-//! nothing across a span where the tick wasn't running; see
-//! [`FRAME_STALL_TICKS`](super::FRAME_STALL_TICKS).
+//! An inference, so it gates only the expensive half and never stops the Timer, which is what
+//! lets the tick see frames come back. The count moves only because the tick dirties a property
+//! every frame, so it means nothing across a span the tick wasn't running.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -20,8 +16,7 @@ use slint::{ComponentHandle, RenderingState};
 use melodia_core::error::describe;
 use melodia_ui::AppWindow;
 
-/// Frames drawn since startup. Monotonic, and never read for its absolute value —
-/// the tick only asks whether it moved since last time.
+/// Never read for its absolute value, only for whether it moved.
 static FRAMES: AtomicU64 = AtomicU64::new(0);
 
 /// `true` once the notifier is installed and [`FRAMES`] means something. Latched for the
@@ -34,14 +29,10 @@ static COUNTING: AtomicBool = AtomicBool::new(false);
 /// return `AlreadySet`, so a second call would silently replace ours.
 static INSTALLED: AtomicBool = AtomicBool::new(false);
 
-/// Start counting. Called from `set-active` the first time a strip mounts rather than at
-/// startup: a live notifier costs the renderer an extra flush on every drawn frame of the
-/// *whole window*, and a user who never opens Now Playing shouldn't pay for a signal
-/// nothing is reading.
-///
-/// Deferring costs the window's *first* `RenderingState::RenderingSetup`, long gone by the
-/// time this lands — a re-show fires another, so that phase is unreliable here rather than
-/// absent. Anything needing setup moves the install back to startup.
+/// Called from the first `set-active` rather than at startup: a live notifier costs the renderer
+/// an extra flush on every frame of the whole window, which a user who never opens Now Playing
+/// shouldn't pay. The deferral loses the window's first `RenderingSetup` (a re-show fires another),
+/// so anything needing that phase moves the install back to startup.
 pub(super) fn install(ui: &AppWindow) {
     if INSTALLED.swap(true, Ordering::Relaxed) {
         return;

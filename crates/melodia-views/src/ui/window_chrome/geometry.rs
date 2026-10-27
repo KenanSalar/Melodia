@@ -1,34 +1,17 @@
-//! Persisted window geometry restore + snapshot.
+//! Window geometry: restored before `app.show()`, mirrored from winit while the window lives,
+//! snapshotted at exit.
 //!
-//! **Restore** runs in `main.rs` between `AppWindow::new()` and `app.show()`. Size and
-//! position go through `slint::Window::set_size` / `set_position` rather than the
-//! `WindowAttributes` hook, because `set_size` flips `has_explicit_size` in the winit
-//! backend and that flag, re-read at first show, is what stops Slint snapping the window
-//! to its content-preferred size; `with_inner_size` does not set it. Both calls land
-//! before the winit window exists, so they become the ordinary WM request and a KDE window
-//! rule still wins. **Maximized** has no `slint::Window` API at all, so `main.rs`'s
-//! window-attributes hook applies `with_maximized(true)` during `AppWindow::new()` — no
-//! un-maximize→maximize flash.
+//! Restore goes through `slint::Window::set_size`/`set_position` rather than the attributes hook:
+//! `set_size` sets the backend's `has_explicit_size`, which stops Slint snapping the window to its
+//! preferred size at first show, and `with_inner_size` doesn't. Both land before the winit window
+//! exists, so a KDE window rule still wins. Maximized has no `slint::Window` API, so `main.rs`'s
+//! attributes hook applies it. Wayland ignores `set_position`.
 //!
-//! **Save** can't read winit: `shutdown::save_state_on_exit` runs after the event loop
-//! returns, by which point the window is destroyed and `with_winit_window` answers `None`.
-//! [`super::winit_filter`]'s `Resized` / `Moved` handlers call [`record`] to keep an
-//! in-memory mirror while the window is alive, and [`snapshot_into`] reads it at exit.
+//! The window is gone by `shutdown::save_state_on_exit`, so the winit filter feeds [`record`] a
+//! mirror for [`snapshot_into`] to read.
 //!
-//! Wayland forbids a client setting its own position, so `set_position` is a silent no-op
-//! there. Size still works.
-//!
-//! **The miniplayer is a window size, so the full player's geometry has to be held across it.**
-//! Entering it [`hold_full_player`]s the last placement that sat still, and its restore button
-//! hands that back through [`restore_full_player`]. A close while it is up persists the miniplayer
-//! as the window and the hold beside it, so the next launch reopens the miniplayer and its restore
-//! button still knows the player the user shrank away from.
-//!
-//! **The frame the miniplayer drops is measured as the step it costs the client, not asked of the
-//! window.** [`frame_allowance`] carries the argument; the exit edge and the restore both want that
-//! step and nothing else, so there is one number rather than a query per platform. What bounds it
-//! to a frame is [`wire_frame_changes`]: the step is only a frame while it is the decoration
-//! change's own, and half the desktops answer that change with no reading at all.
+//! The miniplayer is a window size, so the full player's placement is held across it
+//! ([`hold_full_player`], [`restore_full_player`]) and persisted beside a close from it.
 
 use std::sync::{Once, OnceLock};
 use std::time::{Duration, Instant};
@@ -51,8 +34,7 @@ use melodia_ui::{AppWindow, MiniPlayer};
 /// a corrupt hold can't leave the button resizing the miniplayer into itself.
 const MIN_FULL_PLAYER: LogicalSize = LogicalSize::new(640.0, 420.0);
 
-/// Window geometry persisted in `settings.json`. Built from `read_settings` at startup
-/// and from winit events into the live mirror ([`record`]).
+/// Window geometry as `settings.json` holds it.
 #[derive(Debug, Clone, Copy)]
 pub struct PersistedGeometry {
     pub width: f64,
@@ -73,16 +55,14 @@ impl PersistedGeometry {
         }
     }
 
-    /// First-launch fallback when `settings.json` couldn't be read — the same defaults
-    /// `SettingsData::default()` carries, so the window always opens at a sane size.
+    /// The default settings' geometry, for a `settings.json` that couldn't be read.
     pub fn fallback() -> Self {
         Self::from_settings(&SettingsData::default())
     }
 }
 
-/// Restore the persisted window size and position, the full player held behind a miniplayer it
-/// closed as, and seed `WindowChrome.is-maximized`. Must run after `AppWindow::new()`, the window
-/// adapter having to exist, and before `app.show()`.
+/// Restores the persisted size and position, `WindowChrome.is-maximized` and the full player held
+/// behind a miniplayer close. Runs between `AppWindow::new()` and `app.show()`.
 pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<FullPlayerGeometry>) {
     let mini = app.global::<MiniPlayer>();
     let floor = LogicalSize::new(mini.get_window_min_width(), mini.get_window_min_height());
@@ -91,9 +71,7 @@ pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<Ful
     window.set_size(size);
     window.set_position(position);
 
-    // From persisted state, not the winit window, which doesn't exist yet.
-    // `app-window.slint` keys its transparent-rounded versus opaque-square background on
-    // this, so a window restored maximized paints square from the first frame.
+    // So a window restored maximized paints square from the first frame.
     app.global::<melodia_ui::WindowChrome>().set_is_maximized(geom.maximized);
 
     // After `set_size`, which is what hands the switch the size it decides on.
@@ -102,10 +80,9 @@ pub fn restore(app: &AppWindow, geom: PersistedGeometry, full_player: Option<Ful
     *held().lock() = hold_at_launch(full_player, opens_as_miniplayer);
 }
 
-/// The hold a launch starts with, the full player saved beside a miniplayer close if there is one.
-///
-/// A size that opens the miniplayer with none saved, as a hand-edited one can, holds the first
-/// launch's placement: holding nothing would leave `hold_full_player` only the miniplayer's own.
+/// The hold a launch starts with. A miniplayer-sized launch with nothing saved, as a hand-edited
+/// size can be, holds the first launch's placement: holding nothing would leave
+/// [`hold_full_player`] only the miniplayer's own.
 fn hold_at_launch(
     saved: Option<FullPlayerGeometry>,
     opens_as_miniplayer: bool,
@@ -115,14 +92,12 @@ fn hold_at_launch(
         .or_else(|| opens_as_miniplayer.then(Placement::first_launch))
 }
 
-/// A geometry as the logical size and position Slint takes, the size floored against a corrupt
-/// source producing a window too small to use.
+/// The size and position Slint takes, the size floored so a corrupt source can't leave a window
+/// too small to use.
 fn logical_placement(
     geom: PersistedGeometry,
     floor: LogicalSize,
 ) -> (LogicalSize, LogicalPosition) {
-    // Persisted geometry is `f64`, Slint's logical types `f32` — window pixel coordinates
-    // are small integers, well inside `f32`'s exact-integer range.
     #[allow(
         clippy::cast_possible_truncation,
         reason = "window pixel coordinates are small; f32 precision is sufficient"
@@ -131,18 +106,15 @@ fn logical_placement(
     (LogicalSize::new(w.max(floor.width), h.max(floor.height)), LogicalPosition::new(x, y))
 }
 
-/// How long a window has to sit neither resized nor moved before its geometry is one the user kept
-/// rather than one a drag passed through. A drag reports a reading per pointer event, far inside
-/// this, so the placement before a drag's first reading is the one it started from.
+/// How long a placement has to sit still to count as one the user kept. A drag reports far inside
+/// this, so the placement before its first reading is the one it started from.
 const SETTLE: Duration = Duration::from_millis(300);
 
-/// The geometry plus whether winit ever reported a real position.
 #[derive(Debug, Clone, Copy)]
 struct Placement {
     geom: PersistedGeometry,
-    /// `true` once `outer_position()` has succeeded at least once. Stays `false` on
-    /// Wayland, where a client may not read its own position, so [`snapshot_into`] skips
-    /// persisting x/y rather than degrading `settings.json` to `0, 0`.
+    /// Stays `false` on Wayland, which won't tell a client its position, so [`snapshot_into`]
+    /// leaves x/y alone rather than writing `0, 0`.
     position_known: bool,
 }
 
@@ -171,19 +143,16 @@ impl Placement {
     }
 }
 
-/// Live-mirror payload.
 #[derive(Debug, Clone, Copy)]
 struct LiveGeometry {
     current: Placement,
     recorded_at: Instant,
-    /// The last placement that sat still for [`SETTLE`] before a reading moved it. **What entering
-    /// the miniplayer holds, rather than `current`**: by then `current` is the drag that shrank the
-    /// window into it, a size just past the threshold rather than one the user ever used.
+    /// The last placement that sat still for [`SETTLE`]. Entering the miniplayer holds this rather
+    /// than `current`, which by then is the drag that shrank the window into it.
     settled: Placement,
 }
 
 impl LiveGeometry {
-    /// The mirror a window's first reading starts, before that reading is taken.
     fn first(seen: Placement, now: Instant) -> Self {
         let unplaced = Placement { position_known: false, ..seen };
         Self { current: unplaced, recorded_at: now, settled: unplaced }
@@ -211,9 +180,8 @@ impl LiveGeometry {
     }
 }
 
-/// Live in-memory mirror, fed by every winit `Resized` / `Moved` through [`record`].
-/// `None` until the first fires — winit emits a synthetic `Resized` on first map, so it is
-/// populated before the user can close the window.
+/// Fed by [`record`]. `None` until the first reading, which winit's synthetic first-map `Resized`
+/// delivers before a close is possible.
 static LIVE_GEOMETRY: OnceLock<Mutex<Option<LiveGeometry>>> = OnceLock::new();
 
 fn live() -> &'static Mutex<Option<LiveGeometry>> {
@@ -227,34 +195,30 @@ fn held() -> &'static Mutex<Option<Placement>> {
     HELD_FULL_PLAYER.get_or_init(|| Mutex::new(None))
 }
 
-/// The last reading [`frame_allowance`] has a decoration state and a client size from, which is
-/// what the next one is a step away from.
+/// The reading [`frame_allowance`] measures the next step from.
 static LAST_FRAMING: OnceLock<Mutex<Option<WindowReading>>> = OnceLock::new();
 
 fn last_framing() -> &'static Mutex<Option<WindowReading>> {
     LAST_FRAMING.get_or_init(|| Mutex::new(None))
 }
 
-/// When the window last announced it was gaining or losing its OS frame, `None` once a step has
-/// been measured across it.
+/// When the window last announced gaining or losing its OS frame, cleared once a step is measured
+/// across it.
 static FRAME_CHANGED_AT: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
 
 fn frame_changed_at() -> &'static Mutex<Option<Instant>> {
     FRAME_CHANGED_AT.get_or_init(|| Mutex::new(None))
 }
 
-/// Take `app-window.slint`'s decoration changes, which is the one thing [`frame_allowance`] cannot
-/// see for itself: `frameless` is what drives `no-frame`, and no winit event announces the change
-/// on the desktops that answer it with no size at all.
+/// Stamps `app-window.slint`'s decoration changes, the one thing [`frame_allowance`] can't see: no
+/// winit event announces one on the desktops that answer it with no size at all.
 pub fn wire_frame_changes(app: &AppWindow) {
     app.global::<melodia_ui::WindowChrome>()
         .on_frame_changed(|| *frame_changed_at().lock() = Some(Instant::now()));
 }
 
-/// The window state a `Resized` or `Moved` event consults more than once, read in one pass.
-///
-/// On X11 the client size and the maximized state are each a blocking round trip on the UI
-/// thread, so the readers below share one reading rather than asking per answer.
+/// The window state a `Resized` or `Moved` event reads more than once, taken in one pass: on X11
+/// each answer is a blocking round trip on the UI thread.
 #[derive(Debug, Clone, Copy)]
 pub struct WindowReading {
     client: WinitPhysicalSize<u32>,
@@ -278,16 +242,11 @@ impl WindowReading {
     }
 }
 
-/// Update the live mirror from the current winit window state, called by the `Resized` and
-/// `Moved` handlers while the winit window is still alive.
+/// Updates the live mirror.
 ///
-/// Skips everything while minimized, the maximized flag included: winit clears it on a Win32
-/// minimize, so closing from the taskbar would otherwise persist an un-maximized, empty rect at
-/// the parked position, which the next launch can only clamp and re-centre.
-///
-/// Skips size and position while maximized: winit's `inner_size` there is the maximized
-/// screen size, and persisting it would clobber the user's real restore geometry. The
-/// `maximized` flag itself is still recorded.
+/// Skips a minimized window entirely: winit clears the maximized flag on a Win32 minimize, so a
+/// close from the taskbar would persist an empty rect at the parked position. While maximized only
+/// the flag is recorded, `inner_size` being the screen's rather than the user's restore size.
 pub fn record(w: &WinitWindow, reading: WindowReading) {
     if is_minimized_client(reading.client) {
         return;
@@ -311,10 +270,9 @@ pub fn record(w: &WinitWindow, reading: WindowReading) {
     live().lock().get_or_insert_with(|| LiveGeometry::first(seen, now)).observe(seen, now);
 }
 
-/// Hold the placement the full player last settled at, the miniplayer having just taken over.
-///
-/// A hold already there is kept: it is the one [`restore`] brought back with a window relaunched as
-/// the miniplayer, whose settled placement is the miniplayer itself.
+/// Holds the placement the full player last settled at, the miniplayer having taken over. A hold
+/// already there is kept: [`restore`] seeded it for a relaunched miniplayer, whose settled
+/// placement is the miniplayer itself.
 pub fn hold_full_player() {
     let settled = live().lock().map(|entry| entry.settled);
     let mut held = held().lock();
@@ -323,15 +281,12 @@ pub fn hold_full_player() {
     }
 }
 
-/// Let the held placement go, the full player being back.
 pub fn release_full_player() {
     *held().lock() = None;
 }
 
-/// Size and place the window back where the full player was held, which leaves the miniplayer.
-///
-/// Placed only where winit ever reported a position, so Wayland keeps the compositor's placement.
-/// Nothing held falls back to the first-launch geometry.
+/// Sizes and places the window where the full player was held, leaving the miniplayer. Placed only
+/// where winit ever reported a position, so Wayland keeps the compositor's placement.
 pub fn restore_full_player(app: &AppWindow) {
     let placement = (*held().lock()).unwrap_or_else(Placement::first_launch);
     let (size, position) = logical_placement(placement.geom, MIN_FULL_PLAYER);
@@ -342,11 +297,8 @@ pub fn restore_full_player(app: &AppWindow) {
     }
 }
 
-/// The miniplayer's size that leaves the full player at `client` once a native titlebar's frame
-/// is back: the step that frame took out of the client when it went, handed back.
-///
-/// Where a returning frame comes out of the window rather than the client the step is 0 and this is
-/// the identity, which is the platform split this used to be written as two bodies for.
+/// The size that leaves the full player at `client` once a native titlebar's frame is back: the
+/// step that frame took out of the client when it went, handed back.
 fn with_returning_frame(app: &AppWindow, client: LogicalSize) -> LogicalSize {
     let chrome = app.global::<melodia_ui::WindowChrome>();
     LogicalSize::new(
@@ -355,29 +307,23 @@ fn with_returning_frame(app: &AppWindow, client: LogicalSize) -> LogicalSize {
     )
 }
 
-/// How long after [`wire_frame_changes`]' announcement a reading can still be the one the
-/// decoration change moved.
+/// How long after [`wire_frame_changes`]' stamp a reading can still be the decoration change's.
 ///
-/// Past it the client was moved by something else. Unbounded, a desktop that answers a dropped
-/// frame with no size at all leaves the *next* resize of any kind looking like the crossing, and
-/// the leave's own resize measures the whole miniplayer-to-full-player step as a frame. `KWin`'s
+/// Unbounded, a desktop answering a dropped frame with no size leaves the next resize of any kind
+/// looking like the crossing, and the leave's own resize reads as a frame. `KWin`'s
 /// `CONFIGURE_GRACE` in [`super::resize_release`] is the same budget for the same round trip.
 const FRAME_STEP_GRACE: Duration = Duration::from_millis(250);
 
 /// Returns what the OS frame adds to the client area, in logical pixels, on a reading
-/// [`step_across`] can attribute to a decoration change, and `None` on every other.
+/// [`step_across`] can pin on a decoration change, and `None` on every other.
 ///
-/// **Measured as the step rather than asked of the window, because the window server that most
-/// needs asking cannot answer.** A Wayland compositor draws its decoration outside the surface and
-/// tells the client nothing about it, so `outer_size` there reads the client straight back and a
-/// query is zero on exactly the desktop whose client grows by a titlebar when the miniplayer drops
-/// it. The miniplayer then decides against an edge short by that titlebar and bounces in and out of
-/// the threshold for as long as the window sits near it. The step is what both readers want anyway,
-/// and where a dropped frame comes out of the window rather than going to the client it is honestly
-/// zero.
+/// **Measured as the step rather than asked of the window**: a Wayland compositor draws its
+/// decoration outside the surface and tells the client nothing, so a query is zero on exactly the
+/// desktop whose client grows by a titlebar when the miniplayer drops it, and the miniplayer then
+/// bounces across its threshold. Where a dropped frame comes out of the window rather than going to
+/// the client, the step is honestly zero.
 ///
-/// Records the reading and answers what that reading decides, [`super::resize_release`]'s shape:
-/// split into a query and a command, a caller could ask and forget to record.
+/// Records the reading as it answers, so no caller can ask and forget to record.
 pub fn frame_allowance(reading: WindowReading) -> Option<WinitLogicalSize<f32>> {
     measurable_client(reading)?;
     let since_flip = frame_changed_at().lock().map(|at| at.elapsed());
@@ -387,13 +333,9 @@ pub fn frame_allowance(reading: WindowReading) -> Option<WinitLogicalSize<f32>> 
     Some(step)
 }
 
-/// [`frame_allowance`] past its lock reads.
-///
-/// `None` wherever the two readings wear the same decoration, which is every reading a resize drag
-/// delivers: measured across those, the step would be the drag's own motion and the exit edge would
-/// follow the pointer. `None` too wherever no decoration change is recent enough to have moved this
-/// reading ([`FRAME_STEP_GRACE`]), and wherever the two were taken under different scale factors,
-/// their physical sizes then not being in the same units.
+/// [`frame_allowance`] past its lock reads. `None` across two readings wearing the same decoration,
+/// as every reading in a resize drag does (the step would be the drag's own motion), past
+/// [`FRAME_STEP_GRACE`], and across a scale change, the two sizes then being in different units.
 fn step_across(
     before: WindowReading,
     now: WindowReading,
@@ -405,9 +347,7 @@ fn step_across(
     if since_flip.is_none_or(|since| since > FRAME_STEP_GRACE) {
         return None;
     }
-    // Bit equality rather than a tolerance: the factor is one `f64` for as long as the window stays
-    // on a monitor, and a move that changed it is exactly what the two sizes can't be subtracted
-    // across.
+    // Bit equality, not a tolerance: the factor is one exact `f64` until a monitor change.
     if before.scale.to_bits() != now.scale.to_bits() {
         return None;
     }
@@ -417,12 +357,11 @@ fn step_across(
 }
 
 /// Returns the part of the OS frame outside the edges it draws, in logical pixels: what the client
-/// takes over when the frame drops, without the visible window having moved.
+/// takes over when the frame drops, the visible window not moving.
 ///
-/// Win32's left, right and bottom are invisible resize borders, and its top is the caption the user
-/// sees, so `top` is always zero. `None` wherever [`measurable_client`] finds no window to measure,
-/// and wherever there is no frame standing: undecorated, the outer rect *is* the client, so the
-/// margins would read zero and replace the ones the native miniplayer insets itself by.
+/// Win32's left, right and bottom are invisible resize borders and its top is the visible caption,
+/// so `top` is zero. `None` without a frame standing: undecorated, the outer rect is the client, and
+/// zero margins would replace the ones the native miniplayer insets itself by.
 #[cfg(target_os = "windows")]
 pub fn frame_margins(w: &WinitWindow, reading: WindowReading) -> Option<WinitLogicalInsets<f32>> {
     if !reading.decorated {
@@ -441,28 +380,21 @@ pub fn frame_margins(_: &WinitWindow, _: WindowReading) -> Option<WinitLogicalIn
     None
 }
 
-/// The client size while the window is one a frame reading may be taken against at all.
-///
-/// `None` while maximized, where a WM may strip the frame without the window ever learning it lost
-/// one; and while minimized, the client then describing no window to measure.
+/// The client size while a frame reading means anything: not while maximized, where a WM may strip
+/// the frame unannounced, nor while minimized.
 fn measurable_client(reading: WindowReading) -> Option<WinitPhysicalSize<u32>> {
     let measurable = !reading.maximized && !is_minimized_client(reading.client);
     measurable.then_some(reading.client)
 }
 
-/// Whether a client size is Win32's reading of a minimized window: empty, inside a small outer
-/// rect parked at −32000, −32000, so nothing measured off it describes the window the user will
-/// restore. Read off the size rather than asked of `is_minimized`, which costs X11 a round trip
-/// on every resize and move event these run for.
+/// Win32's reading of a minimized window, an empty client parked at −32000. Read off the size
+/// because `is_minimized` costs X11 a round trip per event.
 fn is_minimized_client(client: WinitPhysicalSize<u32>) -> bool {
     client.width == 0 || client.height == 0
 }
 
-/// What the frame between a framed client and the bare one that replaced it was worth, in logical
-/// pixels.
-///
-/// Floored at zero rather than wrapped: a wrapped `u32` is a step wider than any window, and the
-/// exit edge would put the miniplayer past every size the window can be dragged to.
+/// What the frame between a framed client and the bare one replacing it was worth, floored at zero:
+/// a wrapped `u32` would put the exit edge past any size the window can be dragged to.
 fn step_between(
     framed: WinitPhysicalSize<u32>,
     bare: WinitPhysicalSize<u32>,
@@ -516,19 +448,14 @@ fn gap(near: i64, far: i64) -> u32 {
     u32::try_from(far - near).unwrap_or(0)
 }
 
-/// A `u32` monitor or window dimension as `i32`, saturating rather than wrapping — real
-/// display dimensions sit far below `i32::MAX`, so that branch is unreachable.
 fn dim_i32(v: u32) -> i32 {
     i32::try_from(v).unwrap_or(i32::MAX)
 }
 
-/// One-shot off-screen recovery, run from the first `WindowEvent::Resized` — winit emits a
-/// synthetic one on first map, by which point `available_monitors()` is populated. A
-/// restored, non-maximized rect overlapping no connected monitor is re-centred so it stays
-/// reachable, the custom titlebar offering no native "move window" affordance.
-///
-/// No-op on Wayland, where `outer_position()` errors and the compositor never places a
-/// window off-screen, and while maximized, the WM remapping those itself.
+/// Re-centres a restored window that overlaps no connected monitor, the custom titlebar offering no
+/// native "move window". Runs once, from the first `Resized`, by which point winit's synthetic
+/// first-map event has populated `available_monitors()`. Wayland and a maximized window are left to
+/// the compositor.
 pub fn ensure_on_screen(w: &WinitWindow, reading: WindowReading) {
     static DONE: Once = Once::new();
     let mut first = false;
@@ -541,7 +468,7 @@ pub fn ensure_on_screen(w: &WinitWindow, reading: WindowReading) {
         return;
     }
     let Ok(pos) = w.outer_position() else {
-        return; // Wayland — position is compositor-managed.
+        return;
     };
     let size = w.outer_size();
     let (wx, wy) = (pos.x, pos.y);
@@ -570,12 +497,9 @@ pub fn ensure_on_screen(w: &WinitWindow, reading: WindowReading) {
     log::info!("restored window was off-screen; re-centered to ({cx}, {cy})");
 }
 
-/// Snapshot the live geometry mirror into `settings`. A no-op if no `Resized` / `Moved`
-/// ever fired, which leaves the existing values untouched — correct, nothing having
-/// changed this session.
-///
-/// A close from the miniplayer persists the miniplayer as the window and the held full player
-/// beside it, which is what tells the next launch the restore button has somewhere to go.
+/// Writes the live mirror into `settings`, untouched if no reading ever arrived. A close from the
+/// miniplayer persists it as the window and the held full player beside it, which is where the
+/// next launch's restore button goes.
 pub fn snapshot_into(settings: &mut SettingsData) {
     let Some(mirror) = *live().lock() else {
         return;
@@ -595,7 +519,6 @@ fn write_snapshot(
     if !geom.maximized {
         settings.window_width = geom.width;
         settings.window_height = geom.height;
-        // Only when winit actually reported one — never on Wayland.
         if position_known {
             settings.window_x = geom.x;
             settings.window_y = geom.y;

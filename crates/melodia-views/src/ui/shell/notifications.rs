@@ -1,12 +1,5 @@
-//! Transient in-app notification stack — Rust side.
-//!
-//! Owns the `Rc<VecModel<NotificationRow>>` behind the `Notifications` global's `rows`,
-//! plus a monotonic id counter, a visible cap, and the relabel recipes the sticky rows are
-//! rebuilt from after a language switch — these strings are resolved once and stored, where
-//! the switch reaches only live `@tr` bindings.
-//!
-//! `Rc<VecModel<_>>` is UI-thread-only, so every `&self` method here must be called from
-//! a Slint callback context or through `upgrade_in_event_loop`.
+//! The toast stack's Rust half: the `Notifications` rows, their cap, and the recipes sticky rows
+//! are rebuilt from after a language switch, which reaches only live `@tr` bindings.
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -19,16 +12,13 @@ use melodia_ui::{
     Notifications, Settings, SettingsPage,
 };
 
-/// Maximum visible notifications. Pushing past it drops the oldest first, so the stack
-/// never grows off-screen.
+/// Past it the oldest is dropped, so the stack never grows off-screen.
 const MAX_VISIBLE: usize = 5;
 
-/// How long a transient confirmation toast stays up. Errors stay sticky instead — a
-/// failure nobody was looking at is a failure nobody heard about — so this only ever
-/// reaches [`NotificationsUi::show_auto_dismiss`].
+/// How long a confirmation stays up. Errors stay sticky: a failure nobody was looking at is one
+/// nobody heard about.
 pub const TOAST_AUTO_DISMISS_MS: u32 = 3000;
 
-/// One notification's worth of data.
 pub struct NotificationParams {
     pub variant: NotificationVariant,
     pub title: SharedString,
@@ -41,10 +31,8 @@ pub struct NotificationParams {
 }
 
 impl NotificationParams {
-    /// A toast with no action button and nothing to dismiss it by — most of them.
-    /// Anything carrying a `kind` builds the struct literal instead: that field routes the
-    /// button *and* groups rows for [`NotificationsUi::dismiss_by_kind`], and a constructor
-    /// hiding it would make the two roles harder to tell apart.
+    /// A toast with no action button and nothing to dismiss it by, most of them. One with a `kind`
+    /// spells the literal, so that field's two roles stay in view.
     pub fn plain(variant: NotificationVariant, title: SharedString, message: SharedString) -> Self {
         Self {
             variant,
@@ -97,19 +85,12 @@ pub struct NotificationsUi {
 }
 
 impl NotificationsUi {
-    /// Push a new notification, returning its id so the caller can `dismiss` it later.
-    /// Past `MAX_VISIBLE` the oldest is evicted before the new one lands.
-    ///
-    /// **Private, and that is the whole enforcement of the locale rule**: the two public
-    /// pushes are [`show_auto_dismiss`](Self::show_auto_dismiss), whose row is gone before
-    /// anyone reaches the language picker, and [`show_localized`](Self::show_localized),
-    /// whose row keeps the recipe that re-renders it. A sticky push taking rendered strings
-    /// is the regression, it fails only in a locale nobody reviews in, and there is nothing
-    /// at runtime to catch it — so it is spelled out of reach rather than tested for.
+    /// **Private, which is the whole enforcement of the locale rule**: the public pushes are
+    /// [`show_auto_dismiss`](Self::show_auto_dismiss), gone before anyone reaches the language
+    /// picker, and [`show_localized`](Self::show_localized), which keeps the recipe. A sticky push
+    /// of rendered strings fails only in a locale nobody reviews in, so it is put out of reach.
     fn show(&self, p: NotificationParams) -> i32 {
         let id = self.next_id.get();
-        // Saturating, against the wrap-to-negative on a session that somehow pushes
-        // 2^31 notifications.
         self.next_id.set(id.saturating_add(1));
 
         // Down to `MAX_VISIBLE - 1`, leaving room for the push to settle at the cap.
@@ -128,11 +109,8 @@ impl NotificationsUi {
         id
     }
 
-    /// [`show`](Self::show) plus a single-shot timer, for a transient confirmation that
-    /// shouldn't need a manual close — errors and actionable prompts stay sticky. If the
-    /// user closes it first, or it is evicted past the cap, the by-id removal finds
-    /// nothing and no-ops: ids are monotonic and never reused, so it can't dismiss the
-    /// wrong row.
+    /// For a confirmation that shouldn't need a close. A row closed or evicted first is simply not
+    /// found, ids never being reused.
     pub fn show_auto_dismiss(&self, p: NotificationParams, ms: u32) -> i32 {
         let id = self.show(p);
         let rows = self.rows.clone();
@@ -145,13 +123,8 @@ impl NotificationsUi {
         id
     }
 
-    /// [`show`](Self::show) for a row that must survive a language switch: the recipe is
-    /// rendered once for the push and kept, so [`refresh_for_locale`](Self::refresh_for_locale)
-    /// can run it again. For the sticky rows only — an auto-dismissing toast is gone before
-    /// anyone reaches the language picker.
-    ///
-    /// [`NotificationKind::None`] is a row that groups with nothing, as on
-    /// [`NotificationParams::plain`].
+    /// For a sticky row, which has to survive a language switch: the recipe renders the push and
+    /// is kept for [`refresh_for_locale`](Self::refresh_for_locale).
     pub fn show_localized<F>(
         &self,
         ui: &AppWindow,
@@ -199,11 +172,8 @@ impl NotificationsUi {
         self.show_localized(ui, NotificationVariant::Error, NotificationKind::None, relabel)
     }
 
-    /// Re-render every row carrying a recipe. The switch itself reaches only live `@tr`
-    /// bindings, and these strings were resolved once and stored.
-    ///
-    /// The rows are collected before any write: `set_row_data` notifies Slint, and a
-    /// handler that raised a toast would re-enter the `RefCell` this walk holds.
+    /// Re-renders every row carrying a recipe, collected before any write: `set_row_data` notifies
+    /// Slint, and a handler raising a toast would re-enter the `RefCell` this walk holds.
     pub fn refresh_for_locale(&self, ui: &AppWindow) {
         let updated: Vec<(usize, NotificationRow)> = {
             let recipes = self.recipes.borrow();
@@ -229,16 +199,13 @@ impl NotificationsUi {
         }
     }
 
-    /// Remove the row with this id; a no-op if none matches.
     pub fn dismiss(&self, id: i32) {
         if let Some(pos) = self.rows.iter().position(|r: NotificationRow| r.id == id) {
             self.remove_at(pos);
         }
     }
 
-    /// Remove every row whose `kind` matches — the file-watching toggle clearing
-    /// its "watching disabled" row. Back-to-front, so a remove doesn't invalidate the
-    /// indices of pending matches.
+    /// Back to front, so a remove doesn't shift the matches still to come.
     pub fn dismiss_by_kind(&self, kind: NotificationKind) {
         for i in (0..self.rows.row_count()).rev() {
             if self.rows.row_data(i).is_some_and(|r| r.kind == kind) {
@@ -252,10 +219,9 @@ impl NotificationsUi {
     }
 }
 
-/// Drop a row and whatever recipe it carried. **Every removal goes through here** — a
-/// recipe outliving its row is a closure kept for the session, and the ids never come back.
-/// Free rather than a method so the auto-dismiss timer, which holds the two halves rather
-/// than the handle, shares it.
+/// **Every removal goes through here**: a recipe outliving its row is a closure kept for the
+/// session. Free, so the auto-dismiss timer, holding the two halves rather than the handle, shares
+/// it.
 fn remove_at(
     rows: &VecModel<NotificationRow>,
     recipes: &RefCell<HashMap<i32, Relabel>>,
@@ -267,8 +233,7 @@ fn remove_at(
     rows.remove(pos);
 }
 
-/// Install the `Notifications` global's row model and wire both its callbacks,
-/// returning the handle the caller threads into the modules that raise toasts.
+/// Installs the row model and both callbacks, answering the handle toast raisers take.
 pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
     let rows: Rc<VecModel<NotificationRow>> = Rc::new(VecModel::default());
     ui.global::<Notifications>().set_rows(ModelRc::from(rows.clone()));
@@ -299,11 +264,9 @@ pub fn install(ui: &AppWindow) -> Rc<NotificationsUi> {
     state
 }
 
-/// Runs what a row's action button stands for, through the callback the matching control in
-/// Settings or the update card fires, so the two share one handler.
-///
-/// Here rather than in Slint because only Rust matches exhaustively: a new kind doesn't build
-/// until it has an arm, where a missing Slint branch still paints a button that does nothing.
+/// Runs a row's action through the callback its control in Settings or the update card fires.
+/// Here rather than in Slint because only Rust matches exhaustively: a new kind doesn't build until
+/// it has an arm, where a missing Slint branch paints a button that does nothing.
 fn run_action(ui: &AppWindow, kind: NotificationKind) {
     match kind {
         NotificationKind::InstallUpdate => ui.global::<MelodiaUpdater>().invoke_install(),

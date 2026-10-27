@@ -67,11 +67,9 @@ the OS owns has to be attached late or not at all on at least one platform.
 - **On Win32 a resize or move drag parks winit's loop, and with it every Slint `Timer` and
   `changed` handler**, so the whole responsive layer — the miniplayer swap, grid column counts,
   each `changed width` mirror — waits for the button to come up. `window_chrome::parked_loop` is
-  what keeps them running and carries the argument. The filter's `RedrawRequested` and `Moved` arms
-  pump from the events the modal loop still delivers. A heartbeat thread carries the tick past the
-  last of them, armed only once `LoopTicks` (installed on the backend in `main.rs`) has seen no
-  `NewEvents` between two pumps, so the ordinary loop never wakes for it. A new drag-reachable winit
-  arm is where a third pump site would go.
+  what keeps them running and carries the argument. Its pump sites are the filter's
+  `RedrawRequested` and `Moved` arms, and its `LoopTicks` is installed on the backend in `main.rs`.
+  A new drag-reachable winit arm is where a third pump site would go.
 
 - **The Native Title Bar toggle restarts** via `DialogKind.restart-titlebar` →
   `window_chrome::request_respawn_and_quit`; hydrate `Theme.use-native-titlebar` *before*
@@ -85,11 +83,7 @@ the OS owns has to be attached late or not at all on at least one platform.
   (`window_chrome::geometry::frame_allowance`), `WindowChrome.frame-allowance-*` holds it across the
   frameless span, `MiniPlayerSwitch` widens its exit edge by it and `restore_full_player` hands it
   back. Drop any link and a window parked just inside the threshold bounces in and out.
-  **The step is measured rather than asked of the window because the desktop it bites hardest on
-  cannot be asked**: a Wayland compositor draws its decoration outside the surface, so winit's
-  `outer_size` reads the client straight back and a frame query is zero exactly where the client
-  really did grow by a titlebar. That is argued at `frame_allowance`, which also says why the
-  measurement retired the platform split `with_returning_frame` used to carry.
+  **The step is measured rather than asked of the window**, argued at `frame_allowance`.
   **The desktops it doesn't bite answer that change with no reading at all**, X11 and a compositor
   drawing its own decorations both taking a dropped frame out of the window rather than handing it
   to the client, **so a step counts only while the decoration change is recent enough to be what
@@ -131,20 +125,13 @@ the OS owns has to be attached late or not at all on at least one platform.
   (`library::window::set_aurora_backdrop` + `request_respawn_and_quit`). Why it can't be live is
   `.claude/rules/ui-patterns.md`'s.
 
-- **A restart can refuse, and the check has to sit on this side of the exit.** All four restart
-  paths — titlebar toggle, tray toggle, backdrop-style toggle, the updater's "Restart Now" — go
-  through
-  **`window_chrome::request_respawn_and_quit`**, which resolves `respawn_target()` *before*
-  setting `RESPAWN_AFTER_EXIT` and quitting: past `slint::quit_event_loop()` the window is gone, so
-  a failed `exec` in `shutdown::respawn_if_requested` has nothing to fall back to and the app
-  simply vanishes. With no binary to come back to it stays up and raises a sticky
-  `ToastKind::RestartRequired`; every caller has persisted its setting by then, so a toast asking
-  the user to close and reopen is an honest answer — the change lands on the next manual launch.
+- **A restart can refuse, and the check has to sit on this side of the exit**, argued at
+  **`window_chrome::request_respawn_and_quit`**. All four restart paths go through it: the
+  titlebar toggle, the tray toggle, the backdrop-style toggle and the updater's "Restart Now".
   `respawn_target()` is the updater's recorded pre-swap path (`set_respawn_exe`) if there is one,
-  else `utils::exe::current_exe()` — the marker-resolving form, so a package upgrade mid-session
-  can't hand back a `<path> (deleted)` string. Don't inline the flag store + `quit_event_loop` pair
-  at a fourth site; outside `window_chrome` you can't, both statics being private, so the rule only
-  binds *inside* that module.
+  else `utils::exe::current_exe()`, the marker-resolving form, so a package upgrade mid-session
+  can't hand back a `<path> (deleted)` string. Don't spell the flag store + `quit_event_loop` pair
+  anywhere else; both statics are private, so outside `window_chrome` you can't.
 
 - **Transparent ARGB window for the rounded outline.** Slint's winit backend creates every window
   `with_transparent(true)`; `Window.background: Colors.transparent`; the shell, a rounded

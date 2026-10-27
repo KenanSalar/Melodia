@@ -26,7 +26,6 @@ pub(super) fn wire(app: &AppWindow) -> Rc<Cell<DragRegion>> {
     region
 }
 
-/// What a left press on a drag region does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum PressAction {
     Move,
@@ -40,11 +39,9 @@ pub(super) struct DoublePress {
 }
 
 impl DoublePress {
-    /// Answers what a left press on `region` does, and keeps it as the first half of the next
-    /// double press. A completed pair starts over, so a third press moves the window again.
-    ///
-    /// Only the titlebar's pair maximizes: the miniplayer is a window size of its own, and
-    /// maximizing it would only hand the window to the full player.
+    /// Answers what a left press on `region` does, keeping it as the first half of the next double
+    /// press. Only the titlebar's pair maximizes: maximizing the miniplayer would only hand the
+    /// window to the full player.
     pub(super) fn press(
         &mut self,
         region: DragRegion,
