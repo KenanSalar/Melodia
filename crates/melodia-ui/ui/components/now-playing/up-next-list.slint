@@ -13,43 +13,30 @@ import { TrackContextMenu } from "../track-list/track-context-menu.slint";
 import { NpOverlayScrollbar } from "np-overlay-scrollbar.slint";
 import { NpEmptyState } from "np-empty-state.slint";
 
-// One row inside the Up Next list. The two variants differ only in scale and palette — same three
-// cells, same typography — so a track reads the same way in the miniplayer as full-screen.
-//
-// **Scale** comes from the host, one source of truth shared with the slide animation, and the tile
-// and padding step down with it: the miniplayer sits tighter so more of the queue fits, but not so
-// much tighter that it becomes a different list.
-//
-// **Palette is the host's, and deliberately not tied to the scale**: the list hands every row the
-// same three brushes, which `UpNextList` argues. Nothing here eases them, and the hover flips
-// without an `animate` like the track rows, where an eased fade reads as lag when crossing rows.
+// One Up Next row, the same cells at two scales so a track reads alike in the miniplayer and
+// full-screen. The palette is the host's and not tied to the scale (`UpNextList`); the hover flips
+// without an `animate`, an eased fade reading as lag across rows.
 component UpNextRow inherits Rectangle {
     in property <QueueRow> data;
     in property <bool> compact;
     in property <brush> ink;
     in property <brush> ink-muted;
     in property <brush> row-hover;
-    // Owned by the host so the row and the slide animation can't disagree
-    // about how tall a row is.
+    // The host's, so the row and the slide can't disagree.
     in property <length> row-height;
-    // Where the row sits in play order. The outgoing row names none, the place it showed being one
-    // it can no longer skip to, so nothing on it acts.
+    // -1 on the outgoing row, whose place it can no longer skip to, so nothing on it acts.
     in property <int> play-index: -1;
-    // Whether the row raises the queue's menu.
     in property <bool> menu-enabled;
-    // The row the list's drag picked up.
     in property <bool> lifted;
 
-    // A left press, which is what a drag from the row would carry.
     callback pressed();
 
     height: row-height;
 
     property <length> pad-v: compact ? Theme.pad-xs : Theme.pad-sm;
-    // What every hover-driven binding reads, so the row stays lit under its own menu.
+    // Every hover binding reads this, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
-    // The lifted row dims through its brushes rather than `opacity`, which would render it into a
-    // layer for the length of the drag.
+    // Through the brushes, `opacity` holding a layer for the length of the drag.
     property <float> fade: root.lifted ? Theme.fade-lifted : 1.0;
 
     Rectangle {
@@ -73,7 +60,6 @@ component UpNextRow inherits Rectangle {
                 fade: root.fade;
             }
 
-            // Clips bidi overflow so elide fires — the bar's track-info pattern.
             Rectangle {
                 clip: true;
                 horizontal-stretch: 1;
@@ -122,8 +108,6 @@ component UpNextRow inherits Rectangle {
             }
         }
 
-        // The queue panel's menu without its picks, Up Next selecting nothing; `"up-next"` drops
-        // the selection group with Play Next and Add to Queue.
         ctx-menu := TrackContextMenu {
             row-id: root.data.id;
             row-is-favorite: root.data.is_favorite;
@@ -143,56 +127,39 @@ component UpNextRow inherits Rectangle {
     }
 }
 
-// The list itself: advance-by-row slide, outgoing-row overlay, overlay scrollbar and
-// empty state, all off the same `NowPlaying` data for both surfaces.
+// Up Next, in the full view and the miniplayer but never both at once: entering the miniplayer
+// closes Now Playing, so one slide timer runs.
 //
-// **Two hosts mount it but never at once**: entering the miniplayer force-closes
-// `Nav.now-playing-open`, so only one local slide timer ever runs.
-//
-// Row height, scrollbar slot, list inset and the empty glyph all key off `compact`, so a caller
-// threads one property rather than five.
-//
-// **The palette is not the scale's, and every colour defaults to the backdrop tiers** the full view
-// paints on. The miniplayer is compact whether or not it paints its own backdrop, and hands over
-// either those tiers or the neutral list palette, easing between them. That includes the row
-// hover: the Now-Playing accent is always solved *light* for the blur, and a light tint on a light
-// theme's mantle is no hover indication at all.
+// The palette isn't the scale's: the miniplayer is compact with or without its backdrop and hands
+// over these tiers or the neutral list palette. The hover too, the accent being solved light for
+// the blur and no hover at all on a light theme's mantle.
 export component UpNextList inherits Rectangle {
     in property <bool> compact;
-    // Whether the rows raise the queue's menu, which the miniplayer's sheet has no room for.
+    // The miniplayer's sheet has no room for a menu.
     in property <bool> menu-enabled: true;
     in property <brush> ink: Player.np-on-backdrop;
-    // The artist and the duration. Off a backdrop a host takes `Theme.text` here like every other
-    // row list; on one the muted tier is what holds the hierarchy against the artwork.
     in property <brush> ink-muted: Player.np-on-backdrop-muted;
     in property <brush> row-hover: Player.np-accent-pill;
     in property <brush> empty-ink: Player.np-on-backdrop-muted;
     in property <brush> empty-glyph: Player.np-on-backdrop-muted.transparentize(0.5);
-    // The bar's palette, stepped rather than handed over as brushes: `OverlayScrollbar` eases its own
-    // colours, so a host easing them too would restart that curve every frame. It takes the pace
-    // instead.
+    // A flag and a pace rather than brushes: `OverlayScrollbar` eases its own colours.
     in property <bool> bar-on-backdrop: true;
     in property <duration> bar-recolor-duration: Theme.dur-fast;
-    // **Must exceed `scrollbar-width`**, else the list extent and the scrollbar slot
-    // overlap and the row hover paints under the bar. The remaining gap also keeps the
-    // row TouchAreas off the window's right-edge resize band.
+    // Wider than `scrollbar-width`, or the row hover paints under the bar. The rest keeps the rows
+    // off the window's right-edge resize band.
     in property <length> list-inset-right: compact ? 12px : 20px;
-    // The bar keeps its own thickness; the extra in the full host is hit-test margin. The compact
-    // branch goes under the shared slot, the sheet having no room for it — as the collapsed
-    // sidebar rail does, for the same kind of reason.
+    // The full host's extra is hit-test margin; the compact sheet has no room for the slot.
     in property <length> scrollbar-width: compact ? 8px : Theme.scrollbar-slot;
 
-    // **The one place a row's height is decided**, handed to every row and to the slide
-    // below, so the two can't drift.
+    // Handed to every row and to the slide, so the two can't drift.
     property <length> row-h: compact ? 46px : 52px;
     property <int> slide-frames: 18;         // ~288ms at 16ms
     property <float> slide-raw: clamp(1.0 * NowPlaying.slide-phase / root.slide-frames, 0.0, 1.0);
-    // Ease-out cubic, so the row decelerates into place instead of stopping dead.
+    // Ease-out cubic, so the row decelerates into place.
     property <float> slide-p:
         1.0 - (1.0 - root.slide-raw) * (1.0 - root.slide-raw) * (1.0 - root.slide-raw);
 
-    // Rust resetting the phase to 0 restarts this; it advances the phase per frame and
-    // stops itself at the end.
+    // Rust restarts it by resetting the phase to 0.
     slide-timer := Timer {
         interval: 16ms;
         running: NowPlaying.slide-phase < root.slide-frames;
@@ -203,27 +170,22 @@ export component UpNextList inherits Rectangle {
 
     clip: true;
 
-    // An **absolute** child of this wrapper, not a layout child, so its `y` can carry
-    // the one-shot slide without fighting a layout; the clip above hides the row height
-    // it is offset by mid-slide.
+    // Absolute, so its `y` can carry the slide without fighting a layout.
     src := DragSource {
         origin: DragOrigin.up-next;
         allow-move: true;
         x: 0;
-        // Starts one row-height off rest on a track change and slides in. The sign
-        // comes from `slide-direction`: forward slides up, rewound slides down.
+        // One row off rest on a track change: forward slides up, rewound slides down.
         y: NowPlaying.slide-direction * (1.0 - root.slide-p) * root.row-h;
         width: parent.width - root.list-inset-right;
-        // Only as tall as its rows: a `DragArea` takes every left press its children leave, and the
-        // space under a short queue is the miniplayer's window grab.
+        // Only as tall as its rows, so the space under a short queue stays the miniplayer's window
+        // grab (`slint-pitfalls.md`'s in-window drag entry).
         height: min(parent.height, NowPlaying.up-next-rows.length * root.row-h);
 
         up-next-list := ListView {
-            // The `OverlayScrollbar` below is the only scrollbar.
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A row click jumps the queue and a drag reorders it, so it answers the way a card
-            // does; argument on `views/radio/station-grid.slint`.
+            // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
             mouse-drag-pan-enabled: false;
             width: 100%;
             height: 100%;
@@ -234,8 +196,7 @@ export component UpNextList inherits Rectangle {
                 ink-muted: root.ink-muted;
                 row-hover: root.row-hover;
                 row-height: root.row-h;
-                // Under repeat-all the list wraps past the end, so the play-order index is
-                // taken modulo the queue length.
+                // Modulo the queue, the list wrapping past the end under repeat-all.
                 play-index: Math.mod(NowPlaying.base-index + idx, NowPlaying.queue-length);
                 menu-enabled: root.menu-enabled;
                 lifted: src.lifts(idx);
@@ -244,10 +205,7 @@ export component UpNextList inherits Rectangle {
         }
     }
 
-    // The row that just left the list. Forward, it is the track that became current and
-    // slides off the top; backward, the one that fell off the bottom and slides off
-    // there. The wrapper clips both ends. **It names no play index**, so nothing on it acts:
-    // it lasts a few hundred ms and shows a position it can no longer skip to.
+    // The row that just left: off the top going forward, off the bottom going back.
     UpNextRow {
         visible: NowPlaying.outgoing-visible
                  && NowPlaying.slide-phase < root.slide-frames;
@@ -268,15 +226,14 @@ export component UpNextList inherits Rectangle {
         x: src.x;
         y: src.y;
         width: src.width;
-        // The full height where the source stops at its rows, so a drop below them lands at the end;
-        // a `DropArea` passes presses through to the window grab.
+        // The full height, so a drop below the rows lands at the end; a `DropArea` passes presses
+        // through to the window grab.
         height: parent.height;
         origin: DragOrigin.up-next;
         row-height: root.row-h;
         row-count: NowPlaying.up-next-rows.length;
         content-y: up-next-list.content-y;
-        // Where the rows past the repeat-all wrap begin, `up_next::play_order_move` refusing a
-        // move across it. With no wrap it falls past the last row.
+        // The repeat-all wrap, which `up_next::play_order_move` refuses a move across.
         split-row: NowPlaying.queue-length - NowPlaying.base-index;
         line-color: root.ink;
         reorder(from, to) => { NowPlaying.reorder(from, to); }

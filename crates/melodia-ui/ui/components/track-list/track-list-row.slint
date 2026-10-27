@@ -12,115 +12,80 @@ import { DataCell } from "track-list-cell.slint";
 import { Checkbox } from "../checkbox.slint";
 import { SelectionPill } from "selection-pill.slint";
 
-// One body row in a track table. The outer Rectangle is the virtualizer slot the ListView measures
-// — `Theme.row-h` plus `Theme.row-gap` of transparent space, so a row leaves a gap under itself
-// without painting over the next one. **Anything deriving a row pitch reads
-// `Theme.track-row-pitch`.** The inner `chrome` Rectangle is the visible pill and owns the
-// TouchArea, cell layout and context popup.
-//
-// Column widths, visibility and the playing track id arrive as `in` properties; the menu's
-// globals are `TrackContextMenu`'s.
+// One body row in a track table. The outer slot is what the ListView measures, `row-gap` of
+// transparent space under the visible `chrome` pill; anything deriving a row pitch reads
+// `Theme.track-row-pitch`.
 export component TrackListRowItem inherits Rectangle {
     in property <TrackListRow> row-data;
     in property <int> row-index;
 
-    // The list's visibility flags and the `layout` it resolved from them, the one the header places
-    // its cells by.
+    // The `layout` the header places its cells by too.
     in property <TrackColumns> columns;
     in property <TrackColumnLayout> layout;
 
-    // `"track_number"` shows the real album track number (Album Detail only); `"index"` the 1-based
-    // position in the current view, counting down N..1 under a descending `#` sort so the column
-    // reads as sorted — which is why the row needs the sort state and the list length.
+    // `"track_number"` is the album's own; `"index"` counts down N..1 under a descending `#` sort
+    // so the column reads as sorted, which is why the row takes the sort and the list length.
     in property <string> number-mode: "index";
     in property <string> sort-field;
     in property <string> sort-dir;
 
-    // Rows matching it flip their cells to accent. Handed down rather than read off
-    // `Player` so the component stays reusable with no implicit dependencies.
+    // Handed down rather than read off `Player`, so the row stays reusable.
     in property <int> playing-track-id;
 
-    // Merge contiguous selected rows into one continuous pill: top corners square when
-    // the row above is selected, bottom when the row below is. `TrackList` computes both
-    // from `rows[idx ± 1].selected`, keeping this component loop-agnostic.
+    // Squares the pill's corners onto a selected neighbour; `TrackList` answers both.
     in property <bool> prev-selected;
     in property <bool> next-selected;
 
-    // Derived state.
     property <bool> playing: root.row-data.id == root.playing-track-id;
     property <bool> selected: root.row-data.selected;
-    // What every hover-driven binding reads, so the row stays lit under its own menu.
+    // Every hover binding reads this, so the row stays lit under its own menu.
     property <bool> hovered: touch.has-hover || ctx-menu.is-open;
     property <bool> favorite-button-shown: root.hovered && root.columns.show_favorite_button;
-    // Once the view holds a selection the row body picks too. The first pick stays the box's,
-    // which is what keeps an idle list from selecting by accident.
+    // The body picks only once the view holds a selection: the first pick is the box's, which
+    // keeps an idle list from selecting by accident.
     property <bool> selecting: root.view-selected-ids.length > 0;
-    // Shift as it stood on the press the pick is about to complete; see `touch.clicked`.
     property <bool> press-shift;
-    // Disk-only Browse rows arrive `enabled == false` — dimmed, and swallowing every
-    // interaction: row body, # checkbox, favourite button and right-click menu alike.
+    // Disk-only Browse rows: dimmed, and every interaction swallowed.
     property <bool> enabled: root.row-data.enabled;
-    // The dimming, a disk-only row's and a lifted one's, through each brush rather than `opacity`,
-    // which would render every dimmed row into a texture of its own for as long as it stays
-    // dimmed: a drag of picks lifts a screenful.
+    // Through each brush rather than `opacity`, which holds a texture per dimmed row, and a drag
+    // of picks lifts a screenful.
     property <float> fade: (root.enabled ? 1.0 : Theme.fade-disk-only)
         * (root.lifted ? Theme.fade-lifted : 1.0);
-    // Every cell's colour. The body-copy rung, not the muted one: muted, a cell fell under 4.5:1 on
-    // macOS Light and sat exactly on it under two other light variants. The whole list, header
-    // included, is on this one rung, and hierarchy comes from size and weight instead.
+    // The body-copy rung for every cell, header included: the muted one fell under 4.5:1 on light
+    // variants. Hierarchy comes from size and weight.
     property <brush> unfaded-ink: root.playing ? Theme.accent : Theme.text;
     property <brush> ink: root.unfaded-ink.transparentize(1.0 - root.fade);
 
-    // Drives context-menu entry visibility (no "Go to Album" inside Album Detail, "Remove from
-    // Playlist" only in Playlist Detail) and the current-playlist exclusion in the Add-to-Playlist
-    // sub-list. `TrackContextMenu.view-context` lists the values.
+    // `TrackContextMenu.view-context` lists the values.
     in property <string> view-context;
-    // Set only under `view-context == "playlist-detail"`; the Add-to-Playlist sub-list filters it
-    // out so "add to the playlist you're looking at" never appears. 0 = none.
+    // Playlist Detail's own, kept out of its Add-to-Playlist list. 0 = none.
     in property <int> current-playlist-id: 0;
-    // Mirror of the per-view global's `selected-ids`, which is how the menu decides between the
-    // right-clicked row and the whole selection. Multi-mode needs this row selected *and* more
-    // than one entry — right-clicking an unselected row falls back to that row alone.
     in property <[int]> view-selected-ids;
-    // The list's length, which the `index` number mode counts down from.
     in property <int> row-count: 0;
-    // The row the list's drag picked up. Only a list with a `DragSource` sets it.
     in property <bool> lifted: false;
     property <length> pitch: Theme.track-row-pitch(root.columns.show_artwork);
 
     callback double-clicked-row();
     callback toggle-favorite();
     callback play-row(int /*track_id*/, int /*index*/);
-    // Batch-shaped: a single-row click emits a 1-element array, a multi-select
-    // right-click the whole `view-selected-ids`. One signature for both spares the Rust
-    // handlers a single/batch dispatch branch.
+    // Batch-shaped, a single row being a one-element array, so Rust has no single/batch branch.
     callback play-next([int]);
     callback add-to-queue([int]);
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new_state*/);
-    // 0–5, batch-shaped like the favorite toggle; the hover strip emits one id today
-    // and leaves room for multi-select later.
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
-    // Raised by the context menu; the view that owns the set answers them.
     callback select-all();
     callback clear-selection();
-    // The box and the row body both pick through here. Ctrl is forced on whenever shift isn't
-    // held, so the backend's "replace selection" branch is unreachable from either and a pick on
-    // a selected row always removes it.
+    // Ctrl is forced on unless shift is held, so a pick on a selected row always removes it.
     function pick(shift: bool) {
         root.select-row(root.row-index, root.row-data.id, shift, !shift);
     }
-    // Only emitted under `view-context == "playlist-detail"`.
     callback request-remove-from-playlist([int] /*track_ids*/);
-    // Bumped by anything that should make the host's filter input give up the keyboard: row
-    // clicks, checkbox clicks, right-click. Slint doesn't blur a TextInput on an outside click, so
-    // the host watches this counter and clears focus itself.
+    // Slint doesn't blur a `TextInput` on an outside click, so the host clears focus on this.
     callback request-blur-search();
-    // A left press on the row body, which is what a drag from it would carry.
     callback pressed();
 
-    // What a drag from this row carries: the set this row's menu acts on, under its own title and
-    // cover. A disk-only Browse row never reports a press, its body being disabled.
+    // The set this row's menu acts on, under its own title and cover.
     public pure function drag-items() -> DragItems {
         return {
             kind: "track",
@@ -131,31 +96,22 @@ export component TrackListRowItem inherits Rectangle {
         };
     }
 
-    // No width of its own: the list sets every row to its own width, which is the width `layout`
-    // was resolved for.
-    //
-    // Pinning min- and max-height equal is what lets the virtualizer measure rows, and
-    // `vertical-stretch: 0` stops them sharing leftover space. The pitch collapses the row to
-    // `row-h-compact` when the 36 px tile unmounts, thumbnail-less rows otherwise keeping
-    // full-height chrome and reading as low-density.
+    // Pinned so the virtualizer can measure rows (`slint-pitfalls.md`). The pitch drops to the
+    // compact height when the artwork column is off.
     min-height: root.pitch;
     max-height: root.pitch;
     vertical-stretch: 0;
 
-    // Owns the cross-axis sizing of `chrome`, with `padding-bottom` carving off the inter-row gap.
-    // Without the layout, a free-positioned `width: 100%` chrome under a free Rectangle forms the
-    // height-100%-vs-Npx cycle and the ListView hands every row ~0 height, stacking them at y=0.
+    // A free `width: 100%` chrome under a free Rectangle is the height-100% cycle that hands every
+    // row ~0 height.
     VerticalLayout {
         padding-bottom: Theme.row-gap;
 
         chrome := Rectangle {
-            // Pinned so the pill always fills the slot. Left to size from its content, chrome grows
-            // on hover as the checkbox and fav button swap in, reading as a row expanding under the
-            // cursor.
+            // Pinned, or the pill grows under the cursor as the checkbox and heart swap in.
             min-height: Theme.track-row-h(root.columns.show_artwork);
             max-height: Theme.track-row-h(root.columns.show_artwork);
-        // No radius here: a clip copies its element's radius, and a rounded one renders the whole
-        // row into a texture. Nothing reaches the corners, so a plain clip cuts the same overflow.
+        // Radius-less, so a scissor rather than a texture (`slint-pitfalls.md`).
         clip: true;
 
         if root.selected || root.hovered: SelectionPill {
@@ -170,33 +126,21 @@ export component TrackListRowItem inherits Rectangle {
             next-selected: root.next-selected;
         }
 
-        // `touch` **wraps** the cells so `cb-touch` and `fav-touch` are real descendants.
-        // Slint propagates `has-hover` up to a TouchArea's ancestors but not across cousins, so
-        // with the cells outside `touch`, moving onto `cb-touch` flipped `touch.has-hover` false,
-        // unmounted the checkbox mid-move and lost the click. Wrapping fixes hover and hit-testing
-        // at once: the deepest TouchArea wins, and plain Rectangles pass clicks through.
+        // Wraps the cells so `cb-touch` and `fav-touch` are descendants: `has-hover` propagates
+        // to ancestors but not cousins, and the checkbox unmounted under a pointer moving onto it.
         touch := TouchArea {
-            // A disabled TouchArea processes nothing, so disk-only rows get no hover background,
-            // no checkbox swap-in and no double-click.
             enabled: root.enabled;
-            // A row-body click picks only once the view holds a selection, so the first pick is
-            // the box's and an idle list can't select by accident. **On `clicked`** rather than
-            // the release: this row's favourite toggle and star strip are the worked example in
-            // `slint-pitfalls.md`'s grab-invalidation entry. A drag sends this area a cancel, so
-            // it lands no pick.
+            // On `clicked`, this row's heart and stars being `slint-pitfalls.md`'s grab-invalidation
+            // example. A drag sends a cancel, so it lands no pick.
             clicked => {
                 if (root.enabled && root.selecting) {
                     root.pick(root.press-shift);
                 }
             }
-            // Still plays while a selection is live: the two clicks pick and unpick, so the set
-            // comes out where it started.
+            // Still plays mid-selection: its two clicks pick and unpick, leaving the set as it was.
             double-clicked => { root.double-clicked-row(); }
-            // The blur request is every left release, so clicking anywhere on a row drops filter
-            // focus.
             pointer-event(ev) => {
-                // `clicked` carries no modifiers, so the shift a range-pick needs is taken off
-                // the press that armed it.
+                // `clicked` carries no modifiers, so a range-pick's shift comes off the press.
                 if (ev.kind == PointerEventKind.down && ev.button == PointerEventButton.left) {
                     root.press-shift = ev.modifiers.shift;
                     root.pressed();
@@ -211,10 +155,7 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // A playing row flips every cell to accent and keeps the weight — no bold-on-play.
-            //
             // Every cell is placed where `layout` says, never laid out, for the header's reason.
-            // The number swaps to a checkbox on hover or selection.
             if root.columns.show_number: Rectangle {
                 x: root.layout.number_x;
                 y: 0;
@@ -224,9 +165,7 @@ export component TrackListRowItem inherits Rectangle {
                 VerticalLayout {
                     alignment: center;
                     if !root.hovered && !root.selected: Text {
-                        // `track_number` falls back to the row position when the tag
-                        // is missing; `index` counts down N..1 under a descending
-                        // sort so the column itself reads as sorted.
+                        // An untagged track number falls back to the row position.
                         text: root.number-mode == "track_number"
                             ? (root.row-data.track_number > 0
                                 ? root.row-data.track_number
@@ -238,20 +177,14 @@ export component TrackListRowItem inherits Rectangle {
                         font-size: Theme.font-size-row;
                         horizontal-alignment: left;
                     }
-                    // Hollow on hover, filled accent when selected. Owns its own
-                    // TouchArea so the box drives selection independently of the row.
                     if root.hovered || root.selected: Checkbox {
                         checked: root.selected;
-                        // The rim stands in for the number it replaced, so it takes
-                        // that cell's ink rather than the quieter default, unfaded since
-                        // the box applies the row's fade to its fill and rim alike.
+                        // The number's ink, unfaded: the box applies `fade` to its rim itself.
                         unchecked-border: root.unfaded-ink;
                         fade: root.fade;
 
                         cb-touch := TouchArea {
                             mouse-cursor: pointer;
-                            // Plain click toggles this row in or out; shift
-                            // range-selects against the anchor.
                             pointer-event(ev) => {
                                 if (ev.kind == PointerEventKind.up && ev.button == PointerEventButton.left && root.enabled) {
                                     root.pick(ev.modifiers.shift);
@@ -263,7 +196,6 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // Title cell: artwork, then the title with its favourite and rating marks.
             Rectangle {
                 x: root.layout.title_x;
                 y: 0;
@@ -276,9 +208,8 @@ export component TrackListRowItem inherits Rectangle {
                     cross-axis-alignment: center;
                     if root.columns.show_artwork: ArtworkImage {
                         artwork-path: root.row-data.artwork_path;
-                        // Lazy per-instantiated-row lookup, so only the visible rows of a
-                        // virtualized list reach the shared row-tier LRU. A miss paints the
-                        // placeholder and schedules; `generation` is what repaints it.
+                        // Per instantiated row, so only visible rows reach the tier; `generation`
+                        // repaints a scheduled miss.
                         cover: RowCovers.request(root.row-data.artwork_path,
                             RowCovers.generation);
                         tile-size: 36px;
@@ -291,7 +222,6 @@ export component TrackListRowItem inherits Rectangle {
                         favorite-shown: root.columns.show_favorite_mark
                             && root.row-data.is_favorite;
                         rating: root.row-data.rating;
-                        // Disk-only Browse rows can't be rated.
                         rating-shown: root.columns.show_rating_strip
                             && root.hovered && root.enabled;
                         fade: root.fade;
@@ -300,16 +230,12 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // Uniform elide-with-LRM cells; year and length are structurally different and stay
-            // inline below.
             if root.columns.show_artist: DataCell {
                 x: root.layout.artist_x;
                 y: 0;
                 width: root.layout.artist_w;
                 height: parent.height;
-                // Sentence case rather than title, to share `Unknown artist`'s msgid with the
-                // grid card and the now-playing line — a second casing is a second catalogue
-                // entry saying the same thing.
+                // Sentence case, sharing the msgid the grid card and now-playing line use.
                 text-content: root.row-data.artist != ""
                     ? root.row-data.artist
                     : @tr("Unknown artist");
@@ -334,7 +260,6 @@ export component TrackListRowItem inherits Rectangle {
                 ink: root.ink;
             }
 
-            // Year — no LRM, no elide (4-digit value always fits).
             if root.columns.show_year: Rectangle {
                 x: root.layout.year_x;
                 y: 0;
@@ -351,8 +276,7 @@ export component TrackListRowItem inherits Rectangle {
                 }
             }
 
-            // The duration gives way to the favourite toggle on hover, where the view shows one.
-            // The persistent mark lives beside the title; this swap is only the action button.
+            // The duration gives way to the favourite toggle on hover; the kept mark is the title's.
             Rectangle {
                 x: root.layout.length_x;
                 y: 0;
@@ -364,8 +288,7 @@ export component TrackListRowItem inherits Rectangle {
                     alignment: start;
                     cross-axis-alignment: center;
                     if !root.favorite-button-shown: Text {
-                        // Precomputed in Rust at row build, so this binding doesn't
-                        // re-run a Slint pure function on every invalidation.
+                        // Formatted in Rust, not by a pure function re-run on every invalidation.
                         text: root.row-data.display_duration;
                         color: root.ink;
                         font-size: Theme.font-size-row;
@@ -393,8 +316,6 @@ export component TrackListRowItem inherits Rectangle {
             }
         }
 
-        // The menu itself is `TrackContextMenu`, shared with the queue panel's row. What stays
-        // here is the pointer position, the one thing it deliberately doesn't own.
         ctx-menu := TrackContextMenu {
             row-id: root.row-data.id;
             row-is-favorite: root.row-data.is_favorite;

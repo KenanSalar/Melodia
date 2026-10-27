@@ -4,22 +4,17 @@ import { Radio } from "../../globals/radio.slint";
 import { Selection } from "../../globals/selection.slint";
 import { ContextMenuPopup, CopyField, FavoriteMenuItem, MenuItem, MenuSeparator } from "../context-menu.slint";
 
-// The right-click menu a station card raises, on all three Radio tabs.
+// The right-click menu a station card raises on all three Radio tabs. Its own component rather
+// than a kind of `CardContextMenu`, nothing here resolving to tracks: a station goes through
+// `Radio`, and none of `CardActions` applies.
 //
-// `CardContextMenu`'s contract over a station: the host keeps the pointer, this keeps the menu.
-// **Its own component rather than a kind inside that one**, because nothing here resolves to
-// tracks: a station is played, starred, edited and removed through `Radio`, and none of
-// `CardActions` applies to it.
-//
-// **Every entry is gated on what its operation needs, never on the tab for its own sake.** Play,
-// the website and Edit are single-target; the star needs a uuid to star against; removal needs a
-// kept list, Browse's stations having no row to remove.
+// Every entry is gated on what its operation needs, never on the tab: the star needs a uuid,
+// removal a kept list, Browse's stations having no row.
 export component StationContextMenu inherits Rectangle {
     in property <RadioStationRow> station;
     // `Radio.tab-*`: the list the card is on, which decides what removal means there.
     in property <int> list;
     in property <bool> card-selected;
-    // The batch payload in multi mode, the host's own scope's selection.
     in property <[int]> effective-selection;
     in property <int> selection-count;
 
@@ -66,7 +61,6 @@ export component StationContextMenu inherits Rectangle {
         pop.show();
     }
 
-    // `TrackContextMenu.dismiss`: every entry closes the menu after acting.
     function dismiss() {
         root.copy-open = false;
         pop.close();

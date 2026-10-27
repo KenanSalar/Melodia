@@ -42,9 +42,6 @@ component ResizeHandle inherits Rectangle {
     }
 }
 
-// One header cell. `field` is what the click carries up, and the active column shows a
-// chevron driven by the two sort inputs. `sortable: false` makes it a plain label — see
-// the note on the row's own flag.
 component HeaderCell inherits Rectangle {
     in property <string> label;
     in property <string> field;
@@ -55,12 +52,10 @@ component HeaderCell inherits Rectangle {
 
     callback clicked();
 
-    // Radius-less, as in the rows: a rounded clip would render the cell into a texture to cut
-    // corners nothing reaches.
+    // Radius-less, so a scissor rather than a texture (`slint-pitfalls.md`).
     clip: true;
 
-    // The hover fill, in the track rows' hover colour. Binding `x` and `y` keeps it out of the
-    // cell's layout info.
+    // Its `x` and `y` keep it out of the cell's layout info.
     Rectangle {
         x: 0;
         y: Theme.pad-xs;
@@ -80,9 +75,7 @@ component HeaderCell inherits Rectangle {
 
         Text {
             text: root.label;
-            // The same size and rung as the rows beneath it: weight alone reads as a
-            // header, so it needn't give up contrast to separate itself, and on
-            // `subtext0` it was the dimmest text on the app's densest screen.
+            // The rows' size and rung: weight alone reads as a header, so it gives up no contrast.
             color: root.active-field == root.field ? Theme.accent : Theme.text;
             font-size: Theme.font-size-row;
             font-weight: 600;
@@ -95,9 +88,8 @@ component HeaderCell inherits Rectangle {
         }
     }
 
-    // **`enabled: false` is the whole gate**: the item forces `has-hover` off, skips the
-    // cursor write and forwards the event, so the hover fill and the pointer cursor go
-    // with it and nothing intercepts the resize grab.
+    // `enabled: false` is the whole gate: hover, cursor and click go, and the resize grab isn't
+    // intercepted.
     touch := TouchArea {
         enabled: root.sortable;
         mouse-cursor: pointer;
@@ -105,10 +97,8 @@ component HeaderCell inherits Rectangle {
     }
 }
 
-// One column's cell and the divider in the gap after it. The host sizes it to span both, so the
-// cell takes all but the gap and the divider sits in the gap. Both are placed rather than laid out,
-// for the header's reason below, and the divider is the cell's sibling so `sortable: false` leaves
-// it grabbable.
+// One column's cell and the divider in the gap after it, placed for the header's reason below. The
+// divider is the cell's sibling, so `sortable: false` leaves it grabbable.
 component HeaderColumn inherits Rectangle {
     in property <string> label;
     in property <string> field;
@@ -145,29 +135,20 @@ component HeaderColumn inherits Rectangle {
     }
 }
 
-// The header row: a cell per visible column where `layout` puts it, and a divider in the gap after
-// every column but the last.
+// The header row: a cell per visible column and a divider after every column but the last.
 //
-// **Cells are placed, never laid out.** `layout` comes off the list's own width, and a size derived
-// from that width inside a layout folds into the list's `layout_info`, which is what the host sizes
-// the list from: a loop. A child that binds `x` contributes nothing to it. The rows place their
-// cells for the same reason.
-//
-// A drag resolves against this element's width, the header spanning the list. Globals-free apart
-// from the sizing arithmetic: the result writes the caller's bound `columns` through `<=>`, and a
-// click emits the field.
+// Cells are placed, never laid out. `layout` comes off the list's own width, and a size derived
+// from it inside a layout folds into the `layout_info` the host sizes the list from: a loop. A
+// child that binds `x` contributes nothing to it. The rows place their cells for the same reason.
 export component TrackListHeader inherits Rectangle {
+    // A drag writes the caller's bound `columns` through `<=>`.
     in-out property <TrackColumns> columns;
     in property <TrackColumnLayout> layout;
 
-    // Active sort indicator state.
     in property <string> sort-field;
     in property <string> sort-dir;
 
-    // `false` makes every cell a plain label — no click, no hover fill, no cursor — for
-    // a list whose order isn't the user's to pick: Recently Played is read in recency
-    // order, so a column sort fights the point of the page. **Resizing is unaffected**,
-    // the handles being siblings of the cells rather than children.
+    // For a list whose order isn't the user's to pick (`ui-patterns.md`'s Recently Played).
     in property <bool> sortable: true;
 
     callback sort-clicked(string /*field*/);

@@ -4,10 +4,7 @@ import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
 import { DragSource } from "../drag-source.slint";
 
-// Virtualized artist-card grid, `AlbumGrid`'s shape: Rust hands it rows of
-// `columns` cards and the inner `ListView` virtualizes by row. The
-// cards are circular, and an art-less artist falls back to a silhouette rather
-// than the music-note placeholder.
+// The virtualized artist grid, `AlbumGrid`'s shape with circular cards.
 export component ArtistGrid inherits Rectangle {
     in property <[ArtistGridRow]> rows;
     in property <length> card-width: 180px;
@@ -15,8 +12,7 @@ export component ArtistGrid inherits Rectangle {
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
 
-    // Bumped by the host once a scheduled decode batch lands; the card's binding reads it so a
-    // `pure` callback re-runs. See `AlbumGrid`.
+    // The repaint token (`ui-patterns.md`'s Covers).
     in property <int> covers-generation: 0;
 
     callback open-artist(int /*artist_id*/);
@@ -41,8 +37,7 @@ export component ArtistGrid inherits Rectangle {
             height: 100%;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A card click and a drag-pan are one gesture, and the default is the style's to
-            // pick; argument on `views/radio/station-grid.slint`.
+            // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
             mouse-drag-pan-enabled: false;
 
             for grid-row in root.rows: Rectangle {
@@ -69,13 +64,9 @@ export component ArtistGrid inherits Rectangle {
                             fallback-icon: "person";
                             artwork-path: artist.image_path;
                             cover: root.request-cover(artist.image_path, root.covers-generation);
-                            // A pronounced zoom on the placeholder, as on the other
-                            // grids; real artwork stays gentle so a cover doesn't
-                            // jitter inside the tile clip on hover.
+                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
                             cover-scale-hover: artist.image_path == "" ? 1.15 : 1.04;
                             title: artist.name;
-                            // The separator is punctuation; the album count drops out
-                            // entirely at zero.
                             subtitle:
                                 @tr("{n} track" | "{n} tracks" % artist.track_count)
                                 + (artist.album_count > 0

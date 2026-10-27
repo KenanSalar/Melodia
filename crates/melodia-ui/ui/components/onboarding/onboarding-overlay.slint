@@ -6,25 +6,19 @@ import { OnboardingAppearancePanel } from "appearance-panel.slint";
 import { OnboardingMusicPanel } from "music-panel.slint";
 import { OnboardingFeaturesPanel } from "features-panel.slint";
 
-// The first-run card. Borrows `DialogOverlay`'s backdrop and card treatment and owns the rest:
-// a step index, and a footer that doesn't close on Next.
+// The first-run card, on `DialogOverlay`'s backdrop and card treatment, with a step index and a
+// footer that doesn't close on Next.
 //
-// **Nothing written here may carry a `changed` handler.** The branch mounting it is dropped on
-// close, and a tracker watching anything that outlives the branch — a global, or a property owned
-// above the mount — stays registered against it and panics the next time it moves, which
-// re-running the card from Settings does directly. That rules out `TabBar` (hence the hand-drawn
-// dots below), `SearchBar`, `GridColumnsSync`, `FilterThrottle` and `FocusLossWatcher`. A tracker
-// on a property local to the branch is fine and one is already here: `IconButton` brings a
-// `Tooltip`, whose `changed hovered` dies with the button — `NowPlayingView` is `if`-mounted too
-// and drops the same one on every close.
+// No `changed` handler watching anything outside the branch (the root `CLAUDE.md`), which rules
+// out `TabBar`, `SearchBar`, `GridColumnsSync`, `FilterThrottle` and `FocusLossWatcher` here.
+// `IconButton`'s `Tooltip` tracks only its own hover, so it may stay.
 export component OnboardingOverlay inherits Rectangle {
     width: 100%;
     height: 100%;
 
     private property <float> t: Onboarding.open ? 1.0 : 0.0;
     animate t { duration: Theme.dur-fast; easing: ease-out; }
-    // `DialogOverlay`'s bias, for its reason: the card's small-area fade lands about when the
-    // full-viewport dim hits its perceptual ceiling.
+    // `DialogOverlay`'s bias, for its reason.
     private property <float> card-t: min(1.0, root.t * 1.5);
 
     Rectangle {
@@ -41,31 +35,28 @@ export component OnboardingOverlay inherits Rectangle {
     }
 
     card := Rectangle {
-        // Wide enough for the feature rows' label-plus-description pairs without the copy running
-        // to a second line at every locale.
+        // So the feature rows' copy doesn't wrap at every locale.
         property <length> max-w: 560px;
 
         width: min(self.max-w, max(360px, parent.width - 96px));
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2 + (1.0 - root.card-t) * 12px;
-        // Uncapped, as every non-scrolling dialog kind is: nothing here clips, so a card squeezed
-        // shorter than its children paints the remainder onto the backdrop. A panel that outgrows a
-        // short window owes a scroller rather than a cap here.
+        // Uncapped, for `DialogOverlay`'s reason: a panel outgrowing a short window owes a
+        // scroller, not a cap.
         height: layout.preferred-height;
         background: Theme.surface0;
-        // Not `Theme.border` — all four Catppuccin variants define it as the same hex as
-        // `surface0`, so the rim would paint its own fill.
+        // `surface2`, `Theme.border` being `surface0` itself (`ui-patterns.md`).
         border-color: Theme.surface2;
         border-width: 1px;
         border-radius: Theme.radius-lg;
         opacity: root.card-t;
         visible: root.card-t > 0.01;
 
+        // Keeps a card click from reaching the backdrop's dismiss.
         TouchArea {
             width: 100%;
             height: 100%;
             enabled: Onboarding.open;
-            // Swallows card clicks so the backdrop's dismiss doesn't fire underneath.
             clicked => { }
         }
 
@@ -90,8 +81,7 @@ export component OnboardingOverlay inherits Rectangle {
                 font-size: Theme.hero-title-size;
                 font-weight: 700;
                 color: Theme.text;
-                // Every Text that can meet a long-plural locale elides rather than clipping: the
-                // default `clip` pushes a scissor at the line box and cuts through glyphs.
+                // The default `clip` scissors a `Text` at its line box, shorter than the ink.
                 overflow: elide;
             }
 

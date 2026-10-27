@@ -3,89 +3,66 @@ import { NavEnterFrom } from "../../globals/nav.slint";
 import { SearchBar } from "../search-bar.slint";
 import { TabBar } from "../tab-bar.slint";
 
-// The tab bar and the filter box sharing one row, plus the width budget dividing it and the tooltip
-// anchor the host draws for them. **Three pages spelled this out before**, each paying for the five
-// fixes separately, so they live here once:
-//
-//  1. **The floor is published, not restated.** `row-floor` is the narrowest row still seating the
-//     bar at `compact-w` *and* the input at `search-w-max`; a host seeds its width mirror off it,
-//     seeded wide being how the bar draws full-width tabs into a panel that can't seat them.
-//  2. **The budget reserves against two *published* floors**, `bar.compact-w` and `search.min-w`.
-//  3. **The filter yields before the tabs do**, down to its floor and then to its glyph. Tabs
-//     navigate, search only refines.
-//  4. **The slide direction comes off `bar.previous-index`**, never a mirror of `selected-index`:
-//     the cell writes that *before* it emits `selected`, and a page can be re-entered on any tab.
-//  5. **The tooltip anchor is published rather than drawn**, the pill having to be declared after
-//     the scroll body; equal-width cells let the rect come from the *index*.
-//
-// Data-agnostic, and **no string is spelled here** — `@tr` folds literals at codegen.
+// The tab bar and the filter box sharing one row: the width budget dividing it, the slide
+// direction and the tooltip anchor, held once for every page with tabs (`ui-patterns.md`'s
+// `TabBar`). No string is spelled here.
 export component TabSearchHeader inherits HorizontalLayout {
-    // Inline `[@tr("…"), …]` at the host — an array populated from Rust renders untranslated.
     in property <[string]> tab-labels;
     in property <[string]> tab-icons;
-    // Two-way, per the orphaned-one-way-binding pitfall — the bar writes this on every pick.
+    // Two-way: the bar writes it on every pick (`slint-pitfalls.md`'s orphaned binding).
     in-out property <int> tab-idx;
 
     in-out property <string> filter;
     in property <string> filter-placeholder;
     in property <int> blur-tick;
-    // **Whether the row carries a box at all.** For a surface whose content is not a list of rows
-    // to narrow — Radio's station page is a set of facts about one stream — a box that filters
-    // nothing is worse than no box. Collapses the cell rather than unmounting it, for two reasons
-    // below: `search.min-w` has to stay readable, and the budget deliberately keeps reserving as
-    // though the box were there so the bar does not re-flow when it goes.
+    // Off where the content isn't rows to narrow (Radio's station page). The cell collapses rather
+    // than unmounting, so `search.min-w` stays readable and the budget doesn't move.
     in property <bool> search-shown: true;
 
-    // Taken from the host's mirror rather than measured — a live `root.width` read feeding a
-    // child's size re-enters layout, and the host needs the mirror for its own geometry.
+    // The host's mirror: a live `root.width` read feeding a child's size re-enters layout.
     in property <length> avail-w;
-    // The leading slot's width, its trailing gap folded in, so the row can carry `spacing: 0` and
-    // the whole inset can ease to zero. Only `LibraryTabBand` uses it, for its morphing back button.
+    // The leading slot's width with its trailing gap folded in, so the row can carry `spacing: 0`
+    // and the inset can ease to zero.
     in property <length> lead-w: 0px;
 
-    // Every brush the row paints with, defaulted to the theme for a flat page. The two hero bands
-    // hand over solved `HeroBackdrop` tiers, a `Theme.*` brush being wrong on a hero.
+    // Theme defaults for a flat page; the hero bands hand over `HeroBackdrop` tiers.
     in property <brush> label-color: Theme.text;
     in property <brush> active-color: Theme.accent;
     in property <brush> hover-fill: Theme.surface0;
     in property <brush> divider-color: Theme.surface1;
 
-    // Fires *after* the direction and arming below have settled, so a host handler that clears
-    // its filter and calls into Rust can't be sequenced ahead of them.
+    // Fires after the direction and arming have settled, so a host handler calling into Rust
+    // can't run ahead of them.
     callback tab-selected(int);
     callback search-edited(string);
 
-    // --- The width budget ---------------------------------------------------
     property <length> search-w-max: 220px;
     property <length> search-w-min: search.min-w;
     property <length> content-w: root.avail-w - root.lead-w;
 
+    // The narrowest row seating the compact bar beside the widest box. A host seeds its width
+    // mirror here, a wide seed drawing full tabs into a panel that can't seat them.
     out property <length> row-floor:
         bar.compact-w + 2 * Theme.pad-md + root.search-w-max;
+    // The filter yields before the tabs do: tabs navigate, search only refines.
     out property <length> search-w: clamp(
         root.content-w - bar.compact-w - 2 * Theme.pad-md,
         root.search-w-min, root.search-w-max);
-    // The bar's own height, published so a host can reserve its row without restating it.
     out property <length> row-h: bar.height;
 
-    // --- The fold -----------------------------------------------------------
-    //
-    // Past the narrowest row seating the compact bar beside the input's floor, the box folds to
-    // its glyph rather than drawing past its cell. Measured against the budget's own floors, and
-    // latched across the bar's band, a resize drag otherwise flipping it on every jittered pixel.
+    // Past the compact bar beside the box's floor, the box folds to its glyph rather than drawing
+    // past its cell. Latched across the bar's band against a jittered resize drag.
     property <length> fold-hysteresis: 24px;
     property <bool> fold-latched: false;
     property <bool> folds: root.search-shown
         && root.content-w < bar.compact-w + 2 * Theme.pad-md + root.search-w-min
             + (root.fold-latched ? root.fold-hysteresis : 0px);
-    // Opened across the row, over the bar, for as long as it holds focus or text. Covering the
-    // tabs costs little: a pick would clear the filter anyway.
+    // Opened across the row, over the bar, while it holds focus or text; a pick clears the filter
+    // anyway.
     property <bool> field-over-tabs: root.folds && (search.has-focus || root.filter != "");
 
-    // Both decisions rendered over time, the way `TabBar` renders its own: **seeded by the binding
-    // and owned by the handler**, since each verdict reads the row's width and an eased binding
-    // over it would restart on every move of a resize drag. The tab bar's curve and length, so the
-    // row folds as one, and landed rather than eased while the row is still learning its width.
+    // `TabBar`'s `compact-t` shape: written, not bound, each verdict reading the row's width. The
+    // bar's curve and length, so the row folds as one.
     property <float> fold-t: root.folds ? 1.0 : 0.0;
     property <float> open-t: root.field-over-tabs ? 1.0 : 0.0;
     changed folds => {
@@ -98,7 +75,7 @@ export component TabSearchHeader inherits HorizontalLayout {
         easing: cubic-bezier(0.2, 0, 0, 1);
         enabled: root.eased;
     }
-    // `TabBar`'s gate and for its reason: it has to outlast the host's first `changed width`.
+    // `TabBar`'s gate: it has to outlast the host's first `changed width`.
     property <bool> eased: false;
     Timer {
         interval: 100ms;
@@ -108,22 +85,17 @@ export component TabSearchHeader inherits HorizontalLayout {
         }
     }
 
-    // What the box takes from the bar's budget: the glyph's square once folded, whether or not the
-    // field is open over the bar, so opening it never replays the bar's compact morph.
+    // The glyph's square once folded, open or not, so opening never replays the bar's morph.
     property <length> box-w: root.search-w + (search.bar-height - root.search-w) * root.fold-t;
 
-    // --- What a host's sub-view bodies read ---------------------------------
+    // Off `bar.previous-index`, never a mirror: the cell writes `selected-index` before it emits.
     out property <NavEnterFrom> tab-enter-from: NavEnterFrom.right;
-    // Starts `false` so a page's own entry animation isn't compounded with a horizontal slide — the
-    // two together read as a diagonal — and it re-disarms for free, the page being rebuilt on entry.
+    // Starts `false` so a page's own entry isn't compounded with a slide into a diagonal; the
+    // page's rebuild re-disarms it.
     out property <bool> tab-anim-armed: false;
 
-    // --- The compact-mode tooltip's anchor ----------------------------------
-    //
-    // Relative to this row; the host adds its own `absolute-position` delta. **Both axes carry the
-    // bar's offset inside the row**, the one part a host can't reach: with a leading slot the bar
-    // starts a whole `lead-w` in, and the two hosts without one put it at `x == 0` — which is what
-    // makes dropping the term invisible except where it matters.
+    // Relative to this row; the host adds its own delta. Both axes carry the bar's offset inside
+    // the row, a whole `lead-w` with a leading slot and zero on the hosts without one.
     out property <length> tip-x:
         bar.absolute-position.x - root.absolute-position.x + bar.tab-w * bar.hovered-idx;
     out property <length> tip-y: bar.absolute-position.y - root.absolute-position.y;
@@ -134,17 +106,14 @@ export component TabSearchHeader inherits HorizontalLayout {
         bar.hovered-idx >= 0 && bar.compact && !root.field-over-tabs;
 
     vertical-stretch: 0;
-    // **Every gap in this row belongs to a child, not to the layout**, the leading slot's having to
-    // reach zero. The bar-to-input clearance is the stretchy spacer's own floor.
+    // Every gap belongs to a child, the leading slot's having to reach zero.
     spacing: 0px;
 
     @children
 
-    // Shrunk to nothing under the opening field rather than unmounted, so the bar keeps its compact
-    // verdict and the budget keeps reading it. Shut, the empty clip takes every event and draws
-    // nothing. A rectangular clip, so a scissor, and nothing the bar draws reaches past it, its
-    // tooltip being the host's to paint. The brushes fade with the shrink, folded into the inputs
-    // because the bar eases floats and never a brush.
+    // Shrunk under the opening field rather than unmounted, so the bar keeps its compact verdict.
+    // A radius-less clip, so a scissor. The brushes fade with it through the inputs, the bar
+    // easing floats and never a brush.
     Rectangle {
         clip: true;
         min-width: root.open-t > 0.0 ? 0px : bar.min-width;
@@ -162,8 +131,7 @@ export component TabSearchHeader inherits HorizontalLayout {
                 hover-fill: root.hover-fill.transparentize(root.open-t);
                 divider-color: root.divider-color.transparentize(root.open-t);
                 selected(i) => {
-                    // Direction first, in the same handler that moved the index: Slint re-evaluates
-                    // a host's `if` branches next frame, so this lands before the new body mounts.
+                    // Before the host's `if` re-evaluates next frame and mounts the new body.
                     root.tab-enter-from = i > bar.previous-index
                         ? NavEnterFrom.right
                         : NavEnterFrom.left;
@@ -174,30 +142,17 @@ export component TabSearchHeader inherits HorizontalLayout {
         }
     }
 
-    // The two `pad-md`s the budget reserves, held as this cell's own floor now that the
-    // layout hands out no spacing of its own.
+    // The budget's two `pad-md`s, as this cell's floor.
     Rectangle {
         horizontal-stretch: 1;
         min-width: 2 * Theme.pad-md;
     }
 
-    // Padded to the band the bar keeps clear for its divider, so the input centres on the
-    // tab labels' line rather than on the row's.
+    // Padded to the bar's divider band, so the input centres on the labels' line.
     //
-    // **Collapsed rather than unmounted when `search-shown` is false**, so `search := ` stays
-    // readable from the budget above — an id declared inside an `if` is not. A hidden element draws
-    // nothing and takes no events, so the box is as unreachable as a dropped branch. The three
-    // width constraints are spelled out because an explicit `min-width` is what *replaces* the
-    // constraint the bar's own bound width would otherwise merge in.
-    //
-    // **`visible`, never `clip`.** The cell is exactly as wide as the bar, and the bar's focus
-    // swell reaches past it; a clip shaved the swollen ends flat. Slint lowers `visible` to a clip
-    // that only applies while hidden, which is the whole collapse this needs.
-    //
-    // **The budget above is deliberately not gated with it.** `box-w` still reserves, so
-    // `TabBar.avail-width` does not move and the bar does not play its 350 ms compact morph on a
-    // frame the box merely went away on. What is freed is dead strip at the row's trailing edge,
-    // which on the one host that hides it is under the action pills anyway.
+    // Collapsed through `visible`, never `clip`, which shaved the focus swell flat
+    // (`slint-pitfalls.md`). An explicit `min-width` replaces the constraint the bar's bound width
+    // would merge in. `box-w` still reserves while hidden, so the bar doesn't replay its morph.
     Rectangle {
         visible: root.search-shown;
         min-width: 0px;
@@ -207,7 +162,6 @@ export component TabSearchHeader inherits HorizontalLayout {
         VerticalLayout {
             alignment: center;
             padding-bottom: Theme.pad-sm;
-            // Opening over the bar takes the field out of its fold and across the row together.
             search := SearchBar {
                 fold-t: root.fold-t * (1.0 - root.open-t);
                 input-width: root.search-w

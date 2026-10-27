@@ -1,23 +1,15 @@
 import { MiniPlayer } from "../../globals/shell.slint";
 import { NpBackdropStack } from "../now-playing/np-backdrop-stack.slint";
 
-// The artwork backdrop behind the miniplayer, faded in and out on its switch.
-//
-// **Unmounted once drained** rather than left drained to transparent, unlike the hero bands, which
-// have an idle state to hold: `Brush::is_transparent()` answers false for every gradient whatever its
-// stop alphas, so a hidden stack still fills the whole surface every frame, and this one is hidden
-// for every install that leaves the button off.
+// The miniplayer's artwork backdrop, unmounted once drained rather than left transparent: a
+// gradient is never `is_transparent()`, so a hidden stack still fills the surface every frame, and
+// this one is hidden on every install leaving the button off (`ui-patterns.md`).
 export component MiniBackdrop inherits Rectangle {
-    // How long the stack takes to fade, the host's repaint pace.
     in property <duration> fade-duration;
 
-    // **Two flags rather than one, because a fade needs both of its ends on screen.** A stack
-    // mounted already painting has nothing to ease in from, and one that stops painting still has
-    // to be there for the length of its drain. So a press on mounts the stack unpainted and paints
-    // it a tick later, and a press off unpaints it and unmounts it once the drain has run.
-    //
-    // Seeded by the binding and owned by `set-shown`, `my-library-view.slint`'s latch idiom: `init`
-    // writes both to take them off the switch, which the function moves after them.
+    // Two flags, a fade needing both ends on screen: a press on mounts the stack unpainted and
+    // paints it a tick later, a press off unpaints it and unmounts it once drained. `init` takes
+    // both off the switch's binding, so only `set-shown` moves them.
     private property <bool> mounted: MiniPlayer.backdrop-shown;
     private property <bool> painting: MiniPlayer.backdrop-shown;
     init => {
@@ -25,15 +17,12 @@ export component MiniBackdrop inherits Rectangle {
         root.painting = MiniPlayer.backdrop-shown;
     }
 
-    // The one way the miniplayer's button moves the switch. **Imperative rather than a `changed`
-    // handler on the switch**: the miniplayer is mounted behind an `if`, and a tracker on a global
-    // outlives the branch that declared it, so the next miniplayer's press would fire the last
-    // one's and panic.
+    // Imperative rather than a `changed` on the switch: the miniplayer sits behind an `if`, and a
+    // tracker on a global outlives its branch, so the next miniplayer's press would panic.
     public function set-shown(on: bool) {
         drain.running = false;
         if (on) {
-            // Still mounted means mid-drain, with painted frames to ease back from. Otherwise it
-            // mounts unpainted and the timer inside the mount paints it.
+            // Still mounted means mid-drain, with painted frames to ease back from.
             root.painting = root.mounted;
             root.mounted = true;
         } else {
@@ -44,8 +33,7 @@ export component MiniBackdrop inherits Rectangle {
         MiniPlayer.set-backdrop-shown(on);
     }
 
-    // Unmounts the stack once it has drained. Reads the switch rather than clearing the flag, for a
-    // press back on that landed as it fired.
+    // Reads the switch rather than clearing the flag, for a press back on as it fires.
     drain := Timer {
         interval: root.fade-duration;
         running: false;
@@ -62,9 +50,8 @@ export component MiniBackdrop inherits Rectangle {
         height: 100%;
         shown: root.painting;
 
-        // Paints the stack a tick after it mounts, so it eases in from the unpainted values its
-        // layers read in `init`. Reads the switch rather than setting `true`, for a press back off
-        // inside that tick.
+        // A tick after the mount, so it eases from the values its layers read in `init`. Reads the
+        // switch, for a press back off inside that tick.
         Timer {
             interval: 1ms;
             running: true;

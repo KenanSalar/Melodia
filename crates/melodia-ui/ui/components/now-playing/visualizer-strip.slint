@@ -3,42 +3,30 @@ import { Player } from "../../globals/player.slint";
 import { SpectrumBars } from "spectrum-bars.slint";
 import { WaveformTrace } from "waveform-trace.slint";
 
-// The strip's footprint plus the one Timer driving whichever style is showing. The Timer is here
-// rather than in each style because its `running` gate is easy to get subtly wrong, and three
-// copies would be three chances to. Styles are pure render.
+// The strip's footprint and the one Timer driving whichever style shows, its gate being easy to
+// get subtly wrong and three copies three chances to.
 export component VisualizerStrip inherits Rectangle {
-    // The host's to decide, it following the panel and a component root not reaching `parent`. The
-    // default is the old pinned height, so a call site that forgets still gets a strip.
+    // The host's, a component root not reaching `parent`.
     in property <length> strip-height: 56px;
 
     min-height: root.strip-height;
     max-height: root.strip-height;
-    // A fixed slot in an `alignment: center` column; the cover slot above is what absorbs a
-    // short window, being the one child there with room to shrink.
+    // The cover slot above absorbs a short window.
     vertical-stretch: 0;
 
-    // Matched on the key rather than an index, so reordering the pickers can't repoint an
-    // install's saved style. The `!=` makes bars the catch-all, so an unknown key degrades to
-    // the default instead of drawing nothing; Mirrored is those same bars, re-anchored.
+    // On the key, so reordering the pickers can't repoint a saved style. `!=` makes the bars the
+    // catch-all, Mirrored and an unknown key included.
     if Visualizer.style == "waveform": WaveformTrace { }
     if Visualizer.style != "waveform": SpectrumBars { }
 
-    // The width rides along for the trace's columns. Read here, in a handler, so it binds nothing
-    // to layout; the bars read their geometry where they draw (`spectrum-bars.slint`).
+    // Read in a handler, so the width binds nothing to layout.
     function tick() {
         Visualizer.tick(Player.vm.is_playing, root.width / 1px);
     }
 
-    // One shared Timer, running a full snapshot → analysis → property pass in Rust; the only thing
-    // that reads the sample ring. **30 Hz for every style**: both figures are rebuilt and
-    // re-tessellated from scratch on every tick, so the rate is what that costs, and a trace has no
-    // decay to keep smooth, so a high rate only makes it frantic. `dormant` overrides both, the
-    // tick then only still here to notice frames coming back.
-    //
-    // **`running` is deliberately not just `is_playing`**: a pause stops the tap but leaves the
-    // last window of samples in the ring, so freezing the Timer would strand the drawing on a stale
-    // shape. The tick fires past the pause, feeding the analyzers silence, until Rust reports
-    // everything settled. An off-screen window leaves through `window-shown` the same way.
+    // 30 Hz for every style (`visualizer.md`); `dormant` only notices frames coming back. Not just
+    // `is_playing`: a pause leaves the last window in the ring, so the tick runs on, feeding the
+    // analyzers silence, until Rust reports everything settled.
     Timer {
         interval: Visualizer.dormant ? 500ms : 33ms;
         running: (Player.vm.is_playing && Visualizer.window-shown) || !Visualizer.idle;

@@ -7,11 +7,8 @@ import { PillButton } from "../action-pill.slint";
 import { ControlledInput } from "./controlled-input.slint";
 import { RemoveRowButton } from "./remove-row-button.slint";
 
-// One credited name. Purely presentational — Rust owns the model.
-//
-// The phrase picker sits on every row *but* the last: it names what follows this name, and after
-// the last one there is nothing to join to. Removing is likewise hidden on a lone row, a credit
-// with no names being a state the editor should not be able to reach.
+// One credited name. The phrase picker names what follows it, so the last row has none, and a
+// lone row can't be removed, a credit with no names being unreachable.
 component CreditRowView inherits HorizontalLayout {
     in property <ArtistCreditRow> credit;
     in property <bool> is-last;
@@ -35,18 +32,14 @@ component CreditRowView inherits HorizontalLayout {
     if !root.is-last: Dropdown {
         trigger-width: 112px;
         options: TagEditor.join-phrases;
-        // One-way plus `manual` keeps Rust the single source of truth: a row removed above
-        // this one shifts every index down, and a self-writing Dropdown would orphan the
-        // binding that re-reads them.
+        // `manual`, so the binding survives a removal above shifting the indices
+        // (`slint-pitfalls.md`).
         manual: true;
         selected-index: root.credit.join-index;
         selected(idx) => { root.set-join(idx); }
     }
-    // Keeps the × flush-right on a list's last row, which draws no picker. **Not on a lone
-    // credit**: there is no row above to line up with, and reserving the two slots anyway is what
-    // left the field visibly short of the `LabeledInput`s either side of it. Both trailing
-    // elements go rather than hiding, an unmounted branch claiming no layout where a hidden one
-    // still claims its share of the spacing.
+    // Keeps the × flush-right on the last row. Not on a lone one, where the reserved slots left
+    // the field short of the inputs either side.
     if root.is-last && !root.is-only: Rectangle { width: 112px; }
 
     if !root.is-only: RemoveRowButton {
@@ -54,20 +47,16 @@ component CreditRowView inherits HorizontalLayout {
     }
 }
 
-// One artist field of the Edit-Tags dialog: the ordered credit, a row per name.
-//
-// Mounted twice, for Artist and for Album Artist — the two tags have the same shape and the same
-// convention, so the second mount is a property rather than a copy of this file.
+// One artist field of the Edit-Tags dialog, a row per credited name; Artist and Album Artist both.
 export component CreditEditor inherits VerticalLayout {
     in property <string> label;
     in property <[ArtistCreditRow]> credits;
     in property <string> placeholder;
-    // The credit as it will be written. Shown only once it says something the rows don't already:
-    // a single name is its own preview.
+    // The credit as written, shown once there is more than one name.
     in property <string> preview;
     in property <int> field;
 
-    // `LabeledInput`'s own label gap, for the same reason as the field height.
+    // `LabeledInput`'s label gap.
     spacing: 4px;
 
     FieldLabel {
@@ -78,8 +67,7 @@ export component CreditEditor inherits VerticalLayout {
         credit: credit;
         is-last: i == root.credits.length - 1;
         is-only: root.credits.length == 1;
-        // Only the first row carries the ‹multiple values› hint; repeating it down a list would
-        // read as one hint per artist.
+        // Repeated, the multiple-values hint would read as one per artist.
         placeholder: i == 0 ? root.placeholder : "";
         set-name(t) => { TagEditor.set-credit-name(root.field, i, t); }
         set-join(idx) => { TagEditor.set-credit-join(root.field, i, idx); }
@@ -91,14 +79,10 @@ export component CreditEditor inherits VerticalLayout {
         alignment: start;
         cross-axis-alignment: center;
 
-        // `PillButton` rather than a stadium with a `"+"` in its label: a literal plus is a text
-        // glyph at label weight and reads a size smaller than the control around it. This is the
-        // same pill, at the same size, with the same Material glyph as the genre list's add.
+        // The genre list's add: a literal "+" label reads a size smaller than its control.
         PillButton {
             icon: "add";
-            // `NameListEditor`'s label, and the same reason: the field's own heading sits directly
-            // above, so naming it again here repeats it. Two spellings of one literal rather than a
-            // shared property, the two components having no relationship to hang one off.
+            // Bare, the field's heading sitting directly above.
             text: @tr("Add");
             clicked => { TagEditor.add-credit(root.field); }
         }

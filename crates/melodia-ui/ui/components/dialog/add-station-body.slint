@@ -3,24 +3,16 @@ import { RadioForm } from "../../globals/dialog-forms.slint";
 import { LabeledInput } from "../labeled-input.slint";
 import { DialogScrollPane } from "./dialog-scroll-pane.slint";
 
-// Add or edit a station by URL. One body for both kinds — `RadioForm.edit-id` is the only
-// difference, and it belongs to the state rather than to the form.
+// Add or edit a station by URL, one body for both kinds.
 //
-// **A directory-owned row drops its name and stream URL**, which are rewritten from the directory
-// on the next play, so showing them would be offering an edit that silently reverts. What it keeps
-// is whatever the directory left blank, per field — the four `local_*` columns the conflict clause
-// yields on.
+// A directory-owned row drops its name and stream URL, which the next play rewrites, so an edit
+// would silently revert. It keeps whatever the directory left blank (`radio.md`'s `local_*`).
 //
-// **No auto-focus on init**: calling `focus()` during the open re-enters Slint's property
-// evaluator and trips its recursion guard.
+// No auto-focus on init: `focus()` during the open trips Slint's recursion guard.
 export component AddStationBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
-    // The card is capped against the window, so the deficit six fields leave on a short one has to
-    // land somewhere that can absorb it; `vertical-stretch` puts it here and the scroller clips.
-    //
-    // **`preferred-height` comes off the column, never off the scroller** — which is what
-    // `DialogScrollPane.content-height` publishes, and why the pane publishes it at all.
+    // The card is capped against the window, so a short one's deficit lands here and scrolls.
     pane := DialogScrollPane {
         min-height: 96px;
         preferred-height: pane.content-height;
@@ -29,8 +21,7 @@ export component AddStationBody inherits VerticalLayout {
 
         if !RadioForm.directory-owned: LabeledInput {
             label: @tr("Stream URL");
-            // Not translated: an example URL is the same in every locale, and a catalogue
-            // entry for one is an invitation to localize a hostname.
+            // Untranslated: a catalogue entry for a URL invites localizing a hostname.
             placeholder: "https://example.com/stream";
             text <=> RadioForm.url;
             accepted => { RadioForm.submit-if-ready(); }
@@ -43,10 +34,8 @@ export component AddStationBody inherits VerticalLayout {
             accepted => { RadioForm.submit-if-ready(); }
         }
 
-        // The four the directory may have left blank. Each is gated on its own flag rather
-        // than on `directory-owned`, so a station that has a genre but no website shows one
-        // field and not the other; a hand-typed station has no directory behind it and sees
-        // all four.
+        // Each on its own flag rather than `directory-owned`, the directory leaving them blank
+        // one at a time.
         if RadioForm.can-edit-website: LabeledInput {
             label: @tr("Website");
             placeholder: "https://example.com";
@@ -61,9 +50,7 @@ export component AddStationBody inherits VerticalLayout {
             accepted => { RadioForm.submit-if-ready(); }
         }
 
-        // Left blank with a website filled in, the logo is read off that site instead —
-        // which is the path most stations take, so the field is the fallback rather than
-        // the ask.
+        // Most stations take this path, so the field is the fallback rather than the ask.
         if RadioForm.can-edit-logo && RadioForm.logo-url == "" && RadioForm.website != "": Text {
             text: @tr("Leave blank to look for a logo on the website above.");
             color: Theme.subtext0;
@@ -85,8 +72,7 @@ export component AddStationBody inherits VerticalLayout {
             accepted => { RadioForm.submit-if-ready(); }
         }
 
-        // Says why the name and stream URL are missing, which otherwise reads as a broken
-        // dialog.
+        // Without it, the missing name and URL read as a broken dialog.
         if RadioForm.directory-owned: Text {
             text: @tr("The directory owns this station's name and stream. What it left blank is yours to fill in; leave a field empty to remove it again.");
             color: Theme.subtext0;
@@ -95,11 +81,8 @@ export component AddStationBody inherits VerticalLayout {
         }
     }
 
-    // Outside the scroller, both of them: a wait the user is watching for and a refusal they have
-    // to read are the two lines that must not be somewhere else on the page.
-    //
-    // Says what the wait is for. The submit is a real connect, not a save, and a dialog that simply
-    // sat there for a few seconds would read as stuck.
+    // Both outside the scroller, where they can't be scrolled away. The submit is a real connect,
+    // and a dialog sitting silent for seconds would read as stuck.
     if RadioForm.busy: Text {
         text: @tr("Checking the stream…");
         color: Theme.subtext0;

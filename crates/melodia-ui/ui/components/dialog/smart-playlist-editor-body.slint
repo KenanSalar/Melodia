@@ -15,48 +15,41 @@ component RowLabel inherits Text {
     font-size: Theme.font-size-md;
 }
 
-// One editable rule, a row of the rules card. Purely presentational: Rust owns the model and
-// applies every edit through the callbacks below, so this never mutates `rule`. The `View` suffix
-// is to keep it clear of the model struct's name.
-//
-// **A flex rather than a row**, so a card too narrow for every control wraps the value field onto
-// a line of its own instead of pushing the remove button out of it. On one line the field takes
-// whatever the pickers leave; wrapped, it takes the line.
+// One editable rule; Rust owns the model and applies every edit, so this never mutates `rule`.
+// A flex, so a card too narrow for every control wraps the value field onto a line of its own
+// rather than pushing the remove button out.
 component SmartRuleRowView inherits Rectangle {
     in property <SmartRuleRow> rule;
     in property <[string]> field-names;
-    // Resolved by the host, so the four operator arrays live in one place.
+    // Resolved by the host, so the operator arrays live in one place.
     in property <[string]> ops;
     callback set-field(int /*field index*/);
     callback set-op(int /*op index*/);
     callback set-value(string);
     callback remove();
 
-    // Narrower than this beside the pickers, the value field moves to a line of its own.
+    // Narrower than this beside the pickers, the value field wraps.
     property <length> value-basis: 200px;
 
-    // Bound, because the flex reports no maximum and spreads its lines over any surplus.
+    // The flex reports no maximum and would spread its lines over any surplus.
     height: flow.preferred-height;
 
     flow := FlexboxLayout {
-        // `SectionDivider`'s inset, so the rule between two rows ends where their controls do.
+        // `SectionDivider`'s inset, so the rule between rows ends where their controls do.
         padding-left: Theme.pad-lg;
         padding-right: Theme.pad-lg;
         padding-top: Theme.pad-sm;
         padding-bottom: Theme.pad-sm;
         spacing: Theme.pad-sm;
-        // Grows only the value field (or the spacer standing in for it); every other control here
-        // has a fixed width, so a line without one leaves its slack free.
+        // Only the value field or its spacer grows, every other control being fixed.
         alignment: stretch;
         cross-axis-alignment: center;
 
         Dropdown {
             trigger-width: 148px;
             options: root.field-names;
-            // One-way plus `manual` keeps Rust the single source of truth: the index
-            // re-reads after every model edit, so a field change that resets the
-            // operator can't leave a stale selection. A self-writing `Dropdown`
-            // would orphan the binding on the first pick.
+            // `manual`, so the index re-reads after a field change resets the operator
+            // (`slint-pitfalls.md`).
             manual: true;
             selected-index: root.rule.field-index;
             selected(idx) => { root.set-field(idx); }
@@ -69,10 +62,8 @@ component SmartRuleRowView inherits Rectangle {
             selected(idx) => { root.set-op(idx); }
         }
 
-        // Split by input-kind so switching kinds remounts a fresh input that
-        // re-reads the Rust-reset value, while a same-kind change reuses it and
-        // keeps what's typed. Do NOT collapse the branches into one with a ternary
-        // placeholder — that boundary *is* the remount key that resyncs the input.
+        // Split by input kind: a switch remounts an input that re-reads the value Rust reset, and a
+        // same-kind change keeps what's typed. Collapsing the branches loses that remount.
         if root.rule.input-kind == 1: ControlledInput {
             height: Theme.dropdown-h;
             horizontal-stretch: 1;
@@ -94,7 +85,6 @@ component SmartRuleRowView inherits Rectangle {
             placeholder: root.rule.field-kind == 3 ? @tr("days") : @tr("number");
             edited(t) => { root.set-value(t); }
         }
-        // Days suffix for the relative-date operators.
         if root.rule.field-kind == 3 && root.rule.input-kind == 2: RowLabel {
             text: @tr("days");
         }
@@ -107,15 +97,9 @@ component SmartRuleRowView inherits Rectangle {
     }
 }
 
-// Body of the rule-builder dialog, over the `SmartEditor` global; Rust owns the
-// rules model and rebuilds a `SmartCriteria` on commit.
-//
-// Every dropdown array below is an inline literal list — a Rust-populated
-// `[string]` renders untranslated — ordered to mirror
-// `entities::smart_criteria::{FIELDS, ops_for, LimitOrder}` **by index**. Adding
-// or reordering a field or operator means editing both sides in lockstep;
-// `entities::tests::smart_criteria_tests` pins the leading order and each
-// array's length against the Rust side.
+// The rule-builder dialog over `SmartEditor`. Every dropdown array mirrors
+// `entities::smart_criteria` by index (`library-data.md`), so a field or operator changes on both
+// sides together.
 export component SmartPlaylistEditorBody inherits VerticalLayout {
     spacing: Theme.pad-md;
 
@@ -164,8 +148,7 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         SmartEditor.recount();
     }
 
-    // The card is capped against the window, so a long rule set scrolls the whole form rather
-    // than a strip of it. `preferred-height` comes off the column, as in `AddStationBody`.
+    // A long rule set scrolls the whole form rather than a strip of it.
     pane := DialogScrollPane {
         min-height: 96px;
         preferred-height: pane.content-height;
@@ -202,8 +185,6 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         VerticalLayout {
             spacing: Theme.pad-sm;
 
-            // One card holding every rule, divided the way a settings card divides its rows. Its
-            // fill is a step off the dialog's, and unmounted with no rules to hold.
             if SmartEditor.rules.length > 0: Rectangle {
                 background: Theme.base;
                 border-radius: Theme.radius-lg;
@@ -287,8 +268,7 @@ export component SmartPlaylistEditorBody inherits VerticalLayout {
         }
     }
 
-    // The next tick rather than the click itself: the new row has to lay out before there is an
-    // end to scroll to.
+    // The next tick: the new row has to lay out before there is an end to scroll to.
     Timer {
         interval: 1ms;
         running: root.reveal-end;

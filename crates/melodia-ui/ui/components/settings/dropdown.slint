@@ -49,29 +49,18 @@ component DropdownOption inherits Rectangle {
     }
 }
 
-// Custom rather than `std-widgets.ComboBox`, whose styling follows the active
-// backend and can't be made to match the rest of the controls.
+// Custom rather than `std-widgets.ComboBox`, whose styling follows the backend.
 //
-// The popup is `close-on-click-outside` rather than the default: on
-// `close-on-click` a row's own handler wouldn't get to fire, so the rows close
-// it themselves.
+// `manual: true` leaves `selected-index` to the host's one-way binding and only fires the
+// callback (`slint-pitfalls.md`'s orphaned binding).
 //
-// `manual: true` suppresses the self-write to `selected-index`, leaving only the
-// callback — `ToggleSwitch`'s controlled pattern. Reach for it when the index is
-// a one-way binding to an owned model value, where a self-write would orphan the
-// binding and stop it tracking the model.
+// `about-to-open` lets a host refresh options nothing announces. A refresh landing later returns
+// the `options-revision` it will publish and the popup waits for it, since a list re-measured
+// while open moves a pass late (`slint-pitfalls.md`). The wait is bounded, so a refresh that
+// never lands costs a stale list rather than a dead control.
 //
-// `about-to-open` is for a host whose options can change with nothing to announce
-// it, so it can refresh them as they are about to be read. A refresh that lands
-// later returns the `options-revision` it will publish, and the popup waits for
-// it: shown first, the list would change under the pointer, and Slint re-places a
-// re-measured popup a timer pass after resizing it, which an end-aligned one shows
-// as a jump. The wait is bounded, so a refresh that never lands costs a stale list
-// rather than a dead control.
-//
-// `popup-align-end` lines a popup wider than the trigger up with its trailing
-// edge, for a trigger with no room on its right: Slint clamps an overflowing
-// popup flush to the window edge, over whatever scrollbar sits there.
+// `popup-align-end` is for a trigger with no room on its right, Slint clamping an overflowing
+// popup flush to the window edge, over the scrollbar.
 export component Dropdown inherits Rectangle {
     in property <[string]> options;
     in-out property <int> selected-index;
@@ -91,12 +80,9 @@ export component Dropdown inherits Rectangle {
     property <duration> refresh-poll: 16ms;
     property <duration> refresh-timeout: 500ms;
 
-    // An option row's height, which the cap and the opening scroll below count in.
     property <length> option-h: 32px;
-    // Past this many the list scrolls: a dropdown is read a few rows at a time, and a taller list
-    // covers the form it was opened over.
+    // Past this many the list scrolls, a taller one covering the form it opened over.
     property <int> shown-options: 10;
-    // Between the trigger and its list, on whichever side the list opens.
     property <length> popup-gap: 4px;
 
     width: root.trigger-width;
@@ -129,9 +115,8 @@ export component Dropdown inherits Rectangle {
         height: Theme.dropdown-h;
         border-radius: Theme.radius-md;
         background: touch.has-hover ? Theme.card-control-hover : Theme.card-control;
-        // The resting fill rather than `transparent`, which reads the same: the renderer tucks a
-        // fill under an opaque border only, and a border fading through transparent would
-        // antialias the corners twice for as long as it eases.
+        // The resting fill rather than `transparent`: the renderer tucks a fill under an opaque
+        // border only (`slint-pitfalls.md`).
         border-color: touch.has-hover ? Theme.accent : Theme.card-control;
         border-width: 1px;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
@@ -172,8 +157,7 @@ export component Dropdown inherits Rectangle {
     }
 
     popup := PopupWindow {
-        // Under the trigger, or above it where below is short and above has more room, so a
-        // trigger near the window's foot never opens its list over itself (`PopupFit`).
+        // On the side with room, never over its own trigger (`PopupFit`).
         property <length> above-y: root.absolute-position.y - root.popup-gap;
         property <length> below-y: root.absolute-position.y + trigger.height + root.popup-gap;
         property <length> wanted-h: min(col.rows-h,
@@ -183,15 +167,12 @@ export component Dropdown inherits Rectangle {
 
         x: root.popup-align-end ? root.trigger-width - self.width : 0;
         y: self.opens-above ? -root.popup-gap - self.height : trigger.height + root.popup-gap;
-        // Bound on the popup, the only scope that may read its descendant's
-        // `preferred-width`.
+        // On the popup, the only scope that may read its descendant's `preferred-width`.
         width: max(root.trigger-width, col.rows-w + col.gutter);
         height: PopupFit.side-h(self.above-y, self.below-y, self.wanted-h);
-        // See above — the rows need their handlers to run before it closes.
+        // On `close-on-click` a row's own handler wouldn't run, so the rows close it.
         close-policy: close-on-click-outside;
 
-        // Ungated: a popup's body exists only while it is shown, so however
-        // many of these Settings mounts, only the open one watches.
         FocusLossWatcher {
             close => { popup.close(); }
         }

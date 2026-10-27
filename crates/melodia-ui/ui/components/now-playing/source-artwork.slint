@@ -2,24 +2,15 @@ import { Theme } from "../../theme.slint";
 import { Player } from "../../globals/player.slint";
 import { ArtworkImage } from "../artwork-image.slint";
 
-// The now-playing tile, whichever kind of source is on the deck. Mounted by the bar and by the
-// miniplayer, so the track-versus-station split is made once rather than as seven ternaries at
-// each site.
+// The now-playing tile for a track or a station, so the bar and the miniplayer make the split
+// once. A logoless station paints the stops and initials its card and hero do.
 //
-// A station with no logo gets its own two stops and its initials, the same tile `StationCard` and
-// the station hero paint — a generic glyph across three surfaces is what makes one station look
-// like a different thing on each of them.
-//
-// **No `native-size`.** `media::image::logo_tile::MIN_LOGO_DIM` is 32 px and the thumbnails that
-// mount this draw under twice that, so a source can never be small enough for `ArtworkImage`'s inset
-// arm to fire. The large tiles are where that question is real, and each asks it itself: the
-// miniplayer's large artwork, which extends this, and the full view's cover.
+// No `native-size`: `media::image::logo_tile::MIN_LOGO_DIM` is 32 px and the thumbnails mounting
+// this draw under twice that, so `ArtworkImage`'s inset arm can't fire. The large tiles ask it
+// themselves.
 export component SourceArtwork inherits ArtworkImage {
-    // The **track** placeholder's two colours, as inputs so a host painting on an artwork backdrop
-    // can hand over the accent solved against the cover. The station arm below stays the
-    // component's own either way: those colours belong to the station, not to the surface it is
-    // drawn on. Defaults restate `ArtworkImage`'s, a ternary having to answer both sides; they are
-    // the shared tile's, so change them there first.
+    // The track placeholder's, so a host on an artwork backdrop can hand over its solved accent;
+    // a station's colours are its own. Defaults restate `ArtworkImage`'s, so change those first.
     in property <brush> track-tile-bg: Theme.accent.with-alpha(0.15);
     in property <brush> track-tile-icon-color: Theme.accent;
 
@@ -28,7 +19,7 @@ export component SourceArtwork inherits ArtworkImage {
         : Player.vm.track.artwork_path;
     cover: Player.vm.has_station ? Player.vm.radio.logo_img : Player.vm.track.cover_img;
     fallback-text: Player.vm.has_station ? Player.vm.radio.monogram : "";
-    // Still the last resort for a station, for a name with no letters to take initials from.
+    // For a station name with no letters to take initials from.
     fallback-icon: Player.vm.has_station ? "radio" : "music-note";
     tile-bg: Player.vm.has_station
         ? @linear-gradient(135deg, Player.vm.radio.tile_color_1, Player.vm.radio.tile_color_2)

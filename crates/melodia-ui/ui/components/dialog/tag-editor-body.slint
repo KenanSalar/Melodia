@@ -10,7 +10,6 @@ import { MultilineInput } from "../multiline-input.slint";
 import { DialogScrollPane } from "./dialog-scroll-pane.slint";
 import { DialogToggleRow } from "./dialog-toggle-row.slint";
 
-// One read-only row for the Summary tab. Useful nowhere else.
 component SummaryRow inherits HorizontalLayout {
     in property <string> label;
     in property <string> value;
@@ -29,39 +28,29 @@ component SummaryRow inherits HorizontalLayout {
         font-size: Theme.font-size-sm;
         horizontal-stretch: 1;
         wrap: word-wrap;
-        // Ink, not elision — a wrapped line never exceeds the width elision is
-        // measured against, so this only retires the line-box scissor. A tag value
-        // is user data and carries whatever the file does.
+        // Wrapping, so elide never fires; it only drops the line-box scissor that would cut the
+        // ink of a value carrying whatever the file does (`slint-pitfalls.md`).
         overflow: elide;
     }
 }
 
-// Edit-Track-Information body: a cover panel beside a `ChipGroup` tab bar over
-// Tags / Lyrics / Summary. Every input two-way-binds a `TagEditor` field and
-// Rust owns the snapshot and the tri-state diff. Lyrics and Summary are
-// single-selection only, and in multi mode their chips leave the `options` list
-// and their bodies go unmounted — never merely disabled, and never
-// `visible: false`, which would still claim the layout slot.
+// The Edit Track Information body: a cover panel beside the tabbed fields. Every input two-way
+// binds a `TagEditor` field, and Rust owns the snapshot and the diff. The single-track tabs leave
+// the chip list in multi mode and unmount, rather than disable or hide.
 export component TagEditorBody inherits HorizontalLayout {
     spacing: Theme.pad-lg;
 
-    // The Credits tab's role headings, **in `entities::credits::ROLES` order** — the Rust side
-    // indexes `role-names` by position, so a label out of order files a conductor as a producer.
-    // An inline literal list because `@tr` resolves at codegen: a `[string]` seeded from Rust
-    // renders whatever Rust pushed, untranslated.
-    //
-    // `tags_tests.rs::the_slint_label_lists_line_up_with_the_rust_order` holds this against
-    // `settings.slint`'s `tag-field-labels`, which claims the same order from the other side.
+    // In `entities::credits::ROLES` order, `TagEditor.role-names` being indexed in parallel: out of
+    // order, a label files a conductor as a producer.
     private property <[string]> role-labels: [
         @tr("Composer"), @tr("Lyricist"), @tr("Arranger"), @tr("Conductor"), @tr("Performer"),
         @tr("Remixer"), @tr("Producer"), @tr("Engineer"), @tr("Mixer"), @tr("DJ Mixer"),
     ];
 
-    // Fixed body height so switching tabs doesn't resize + recenter the card.
+    // Fixed, so switching tabs doesn't resize and recentre the card.
     private property <length> body-h: 360px;
     private property <length> cover-w: 160px;
 
-    // Left column: cover + artwork actions.
     VerticalLayout {
         horizontal-stretch: 0;
         spacing: Theme.pad-sm;
@@ -83,18 +72,14 @@ export component TagEditorBody inherits HorizontalLayout {
             danger: true;
             clicked => { TagEditor.remove-artwork(); }
         }
-        // Pins this column to the top of the taller one beside it; without it
-        // the layout divides the surplus equally.
+        // Top-pins the column beside the taller one.
         Rectangle { vertical-stretch: 1; }
     }
 
-    // Right column: tab bar + body.
     VerticalLayout {
         horizontal-stretch: 1;
         spacing: Theme.pad-md;
 
-        // `@tr` only translates literals, so the two tab sets are inline arrays
-        // rather than a Rust-seeded `[string]`.
         ChipGroup {
             options: TagEditor.track-count == 1
                 ? [@tr("Tags"), @tr("Credits"), @tr("Details"), @tr("Lyrics"), @tr("Summary")]
@@ -102,9 +87,7 @@ export component TagEditorBody inherits HorizontalLayout {
             selected-index <=> TagEditor.active-tab;
         }
 
-        // The children may take 100% here, which is normally a trap: the parent
-        // is a plain Rectangle with an explicit height, so its size isn't
-        // derived from theirs.
+        // The children may take 100%: an explicit height here isn't derived from theirs.
         Rectangle {
             height: root.body-h;
 
@@ -145,8 +128,8 @@ export component TagEditorBody inherits HorizontalLayout {
                     remove(row) => { TagEditor.remove-genre(row); }
                 }
 
-                // Digits only wherever the commit parses an integer, which otherwise keeps the old
-                // value over a typo without a word.
+                // Digits only where the commit parses an integer, which silently keeps the old
+                // value over a typo.
                 HorizontalLayout {
                     spacing: Theme.pad-sm;
                     LabeledInput {
@@ -201,9 +184,8 @@ export component TagEditorBody inherits HorizontalLayout {
                 }
             }
 
-            // Every role gets a box even where the format has no key for it — the writer reports
-            // those back through `WriteOutcome` rather than the form hiding them per file,
-            // which over a mixed selection could only ever be wrong for some of it.
+            // Every role gets a box where the format has no key for it too: the writer reports
+            // those through `WriteOutcome`, and hiding them per file is wrong over a mixed selection.
             if TagEditor.active-tab == TagEditor.tab-credits: DialogScrollPane {
                 width: 100%;
                 height: 100%;
@@ -349,9 +331,8 @@ export component TagEditorBody inherits HorizontalLayout {
                 VerticalLayout {
                     spacing: Theme.pad-sm;
 
-                    // **Above the field rather than beside Save**, which commits the whole dialog:
-                    // this one fills the box and leaves the reader to check it, so it belongs to
-                    // the tab and not to the footer.
+                    // Above the field rather than beside Save: it fills the box for the reader to
+                    // check, where Save commits the whole dialog.
                     if TagEditor.has-resident-lyrics: HorizontalLayout {
                         alignment: start;
                         vertical-stretch: 0;

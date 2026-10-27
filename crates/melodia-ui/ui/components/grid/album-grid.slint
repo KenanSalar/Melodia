@@ -4,43 +4,30 @@ import { EntityCard } from "entity-card.slint";
 import { CardCell } from "card-cell.slint";
 import { DragSource } from "../drag-source.slint";
 
-// Virtualized album-card grid. Rust hands it rows of `columns` cards, so the inner `ListView`
-// virtualizes by row and only on-screen rows build their cards. Covers come lazily off
-// that same virtualization: only a mounted card evaluates its binding, so nothing is decoded for an
-// album the user hasn't scrolled to. Rust prewarms the first screenful or two
-// (`GRID_PREWARM_AHEAD`) and the rest decode on scroll-in, bounded by the `CoverThumbs` LRU.
-//
-// Same host-mounted-scrollbar contract as `TrackList`: the `v-*` properties and `set-v-offset` let
-// the host place its `OverlayScrollbar` flush with the content-panel edge.
+// The virtualized album grid; only a mounted card evaluates its cover binding, so nothing decodes
+// for an album nobody scrolled to.
 export component AlbumGrid inherits Rectangle {
     in property <[AlbumGridRow]> rows;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // The gap is baked into the slot height because a `ListView` lays its
-    // delegates back-to-back and has no `spacing`.
+    // The gap is in the slot height, a `ListView` having no `spacing`.
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
 
-    // Bumped by the host once a scheduled decode batch lands. The card's binding *reads* it,
-    // which is the only thing making the bump re-run a `pure` callback whose result is otherwise
-    // cached until a dependency dirties.
+    // The repaint token (`ui-patterns.md`'s Covers).
     in property <int> covers-generation: 0;
 
     callback open-album(int /*album_id*/);
     callback request-blur-search();
-    // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
-    // Same sign convention as `TrackList` — a positive `v-offset` is N px
-    // scrolled, where the inner `ListView` holds that as a non-positive
-    // `content-y`, so the boundary negates.
+    // `TrackList`'s sign convention: a positive `v-offset` is N px scrolled.
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.content-height;
     out property <length> v-offset: -list.content-y;
     callback set-v-offset(length);
     set-v-offset(o) => { list.content-y = -o; }
 
-    // Cards drag out as what Add to Queue on them would take.
     src := DragSource {
         width: 100%;
         height: 100%;
@@ -52,13 +39,10 @@ export component AlbumGrid inherits Rectangle {
             height: 100%;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A card click and a drag-pan are one gesture, and the default is the style's to
-            // pick; argument on `views/radio/station-grid.slint`.
+            // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
             mouse-drag-pan-enabled: false;
 
             for grid-row in root.rows: Rectangle {
-                // A `ListView` delegate needs a fixed height or the virtualization
-                // math breaks.
                 min-height: root.row-height;
                 max-height: root.row-height;
 
@@ -82,13 +66,9 @@ export component AlbumGrid inherits Rectangle {
                             artwork-path: album.artwork_path;
                             cover: root.request-cover(album.artwork_path, root.covers-generation);
                             fallback-icon: "album";
-                            // A pronounced zoom on the placeholder, as on the other
-                            // grids; real artwork stays gentle so a cover doesn't
-                            // jitter inside the tile clip on hover.
+                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
                             cover-scale-hover: album.artwork_path == "" ? 1.15 : 1.04;
                             title: album.name;
-                            // The separator is punctuation; only the fallback is
-                            // translated.
                             subtitle: (album.artist_name == ""
                                 ? @tr("Unknown artist")
                                 : album.artist_name)

@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 13.5 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 13.6 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -116,8 +116,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | 0.56 (432) | `358c39f1` |
 | 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | 0.31 (337) | `6f305ce2` |
 | 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | 0.25 (541) | `b5cc583f` |
-| 13.4 | Slint `components/`, its own files | 0.47 | 1,538 | ~725 | 0.30 (961) | |
-| 13.5 | Slint `components/`'s subdirectories | 0.34 | 3,013 | ~788 | | |
+| 13.4 | Slint `components/`, its own files | 0.47 | 1,538 | ~725 | 0.30 (961) | `d2f6199d` |
+| 13.5 | Slint `components/`'s subdirectories | 0.34 | 3,013 | ~788 | 0.17 (1,512) | |
 | 13.6 | Slint `views/` | 0.29 | 2,055 | ~286 | | |
 | **Rust** | production Rust, tree-wide | **0.42** | **30,355** | **~12,400** | | |
 | **Slint** | the Slint tree | **0.40** | **9,204** | **~3,400** | | |
@@ -290,9 +290,12 @@ The 36 `// Translators:` notes stay byte for byte: `crates/melodia/tests/transla
   - **Second copies dropped:** `TabBar`'s equal-width, brush-easing, two-layer and `compact-t` seed arguments and its three-constraint split, `IconButton`'s layer and layout-fold arguments, `SearchBar`'s `has-hover` latch and slot split, `CompositeScrollbars`' re-clamp, `ViewTransition`'s Timer-over-`init`, `FilterThrottle`'s two `fire()` shapes, `DragSource`'s never-in-a-row, `RoundedFrame`'s winding and decimal-separator arguments, `GridColumnsSync`'s mount Timer, `MetaChipStrip`'s flex-in-an-`if` and `EdgeResizeHandle`'s absolute coordinates, each now a pointer to `slint-pitfalls.md`; `MiniPlayerSwitch`'s 0×0 construction pass, `SectionActiveGate`'s per-tab history, `Tooltip`'s not-a-popup reason, `TooltipFrame`'s `sidebar-tip` exception, and `HeroChipStrip`'s, `SortPillRow`'s, `QualityChip`'s and `PillButton`'s alignment arguments, all `ui-patterns.md`'s; `OverlayScrollbar`'s header, the root `CLAUDE.md`'s Scrollbars bullet; `ContextMenuPopup`'s grows-by-the-flyout paragraph, kept once at `ContextMenuMetrics`.
   - **Stale claims removed:** `MultilineInput`'s placeholder taking `search-bar.slint`'s rung (the bar paints `Theme.text` at 0.3; the shared rung is `SingleLineInput`'s `overlay2`), and `Checkbox`'s header centring its own glyph in an em box (`MaterialIcon` does).
   - **Ends above 0.25** on decision 3: what is left is mostly the arguments the rules name these files as the anchor for, `TabBar`'s internals, the caption geometry and the aurora's stops among them.
-- [ ] **13.5 `components/`'s subdirectories**, one commit.
-  - **Furthest over:** `now-playing/` (266), `hero/` (201), `grid/` (170), `track-list/` (104).
-  - **Pointed at:** `CLAUDE.md` on `components/onboarding/` (no `changed` handler) and `section-active-gate`; `.claude/rules/ui-patterns.md` and `slint-pitfalls.md`.
+- [x] **13.5 `components/`'s subdirectories**, one commit (107 files).
+  - **Furthest over:** `grid/entity-card.slint` (120), `hero/library-tab-band.slint` (107), `now-playing/lyrics-panel.slint` (72), `hero/tab-search-header.slint` (55).
+  - **Pointed at:** `CLAUDE.md` on `components/onboarding/` (no `changed` handler); `slint-pitfalls.md` at `entity-card.slint`'s ring and tint and its `clicked`, `library-tab-band.slint`'s transition, mirrors and `hero-shown`, `tab-search-header.slint`'s `visible` collapse, `lyrics-panel.slint`'s `settled`, `overflow-menu.slint`, `dropdown.slint`, `waveform-trace.slint`, `genre-grid.slint`, `notification-stack.slint`, `play-button.slint` and `selectable-picker.slint`; `ui-patterns.md` at `TabSearchHeader`, `track-context-menu.slint`, `card-context-menu.slint`, the two backdrop stacks, `VolumeTrigger`, `TrackTitle` and the settings controls; `visualizer.md` at the strip and its leaves; `radio.md` and `logo_tile_tests` at `source-artwork.slint`'s `MIN_LOGO_DIM` sentence, kept verbatim; `library-data.md` at the two dialog bodies. Each kept. The tests reading these files strip comments, read code, or count `@tr` literals inside arrays no comment sits in.
+  - **Second copies dropped:** `TabSearchHeader`'s five fixes, `ui-patterns.md`'s `TabBar` block, and the two bands' copies of its `page-w` mirror; `LibraryTabBand`'s transition, mirror, `hero-shown`, `morphing` and height-split arguments, and `MosaicTabHero`'s `active-color` contrast argument, each now a pointer; `EntityCard`'s overlay-slot, `card-hovered`, ring-and-tint and `@children` framing arguments, `CardCell`'s and `BrowseCardGrid`'s headers, the card menu's two-direction favorite and kind-gate arguments, and the grids' copies of the covers repaint token, all `ui-patterns.md`'s; `TrackContextMenu`'s zero-size wrapper and the six list scrollers' drag-pan argument (pointed at `views/radio/station-grid.slint`), now `slint-pitfalls.md`'s; the two backdrop stacks' live-arm argument; `Theme.border` against `surface2`, restated in four files; the volume readouts' point anchor; `SmartPlaylistEditorBody`'s index alignment, `library-data.md`'s; the onboarding card's tracker rule, the root `CLAUDE.md`'s.
+  - **Stale claims removed:** `NotificationCard`'s entry fade as "the `Tooltip` pattern, `shown` flipping on `init`" (`Tooltip` arms off a `Timer`); `HorizontalCardStrip`'s `card-touch` "driving the pill's fade-in" and "swallowing the rest" (it is `enabled: false`, which Slint 1.18.1's `TouchArea` answers by forcing `has-hover` off); `CoverMosaic`'s "the curated heroes drew this once" and `MosaicHeroTile`'s "the live 2×2 it once laid out" (changelog).
+  - **Ends well under 0.25** on decision 4: past the target by the furthest-over files, the rest of the slice took the register pass, and most of what it found was a second copy of a rule.
 - [ ] **13.6 `views/`**, one commit.
   - **Furthest over:** the files directly under `views/` (315 between them), `views/radio/` (132).
 

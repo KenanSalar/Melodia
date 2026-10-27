@@ -6,67 +6,43 @@ import { CardCell } from "card-cell.slint";
 import { CardFavoriteButton } from "card-favorite-button.slint";
 import { DragSource } from "../drag-source.slint";
 
-// Virtualized card grid over `EntityStripRow`, the vertical counterpart to
-// `HorizontalCardStrip`. Rust hands it rows of `columns` cards, so the inner `ListView`
-// virtualizes by row.
-//
-// That is why a strip and a grid aren't one component: a strip walks its rows in a plain `for`,
-// affordable for a capped carousel and not for an uncapped page, where every card would be built
-// and every cover requested. All three grid tabs are uncapped. Covers come lazily — only a mounted
-// card evaluates its binding, so the model stays pure data. Same host-mounted-scrollbar contract as
-// `AlbumGrid`, so the host places its `OverlayScrollbar` flush with the content-panel edge.
+// The virtualized counterpart to `HorizontalCardStrip` over the same row struct, a strip's plain
+// `for` building every card of an uncapped page (`ui-patterns.md`).
 export component EntityCardGrid inherits Rectangle {
     in property <[EntityGridRow]> rows;
     in property <length> card-width: 180px;
     in property <length> card-height: 226px;
-    // The gap is baked into the slot height because a `ListView` lays its delegates back-to-back
-    // and has no `spacing`.
+    // The gap is in the slot height, a `ListView` having no `spacing`.
     in property <length> row-height: 246px;
     in property <length> gap: 20px;
-    // Circular artwork, for the artist flavour.
     in property <bool> circular: false;
-    // An `ArtworkImage` placeholder key, not a Material ligature — the same vocabulary
-    // `EntityCard` and `HorizontalCardStrip` take.
+    // An `ArtworkImage` placeholder key, not a Material ligature.
     in property <string> fallback-icon: "music-note";
-    // Reveals the play-count badge where a row carries one; an unplayed row stays bare either way.
     in property <bool> show-play-count: false;
-    // The track mounts' heart, off each row's `is_favorite`, and whether a starred card keeps it
-    // up while idle: off on Favorites, where every card is one. The menu's favorite entry reads
-    // the same flag, the card's state being known exactly where its heart is drawn.
+    // The heart, and whether a starred card keeps it up while idle: off on Favorites, where every
+    // card is one. The menu's favorite entry reads the same flag.
     in property <bool> show-favorite: false;
     in property <bool> favorite-marks-kept: true;
 
-    // **Three mounts, and they are not all the same kind of thing.** Favorites' Artists tab draws
-    // artists; its Most Played tab and Recently Played's draw *tracks*. So the kind and the
-    // selection scope are the host's to state rather than this component's to assume.
-    //
-    // **Neither carries a default, and a plausible one is what that buys.** `"track"` here would
-    // send a fourth mount's album ids down the track arm, queueing whatever rows happen to hold
-    // those numbers — silently right-looking. Empty reaches `EntityKind::from_token`'s `None` and
-    // the warn already written for it.
+    // No defaults: the mounts draw artists and tracks, and a plausible `"track"` would send a new
+    // mount's album ids down the track arm. Empty reaches `EntityKind::from_token`'s warn.
     in property <string> card-kind;
     in property <string> selection-scope;
 
-    // Bumped by the host per scheduled decode batch that lands. The card's binding *reads* it,
-    // which is the only thing making a bump re-run a `pure` callback whose result is otherwise
-    // cached until a dependency dirties. Its *value* decides nothing: the lookup behind it
-    // always schedules a miss.
+    // The repaint token (`ui-patterns.md`'s Covers).
     in property <int> covers-generation: 0;
 
     callback row-clicked(int /*entity_id*/);
     callback request-blur-search();
-    // Forwarded by the host to its own global. `pure` so a binding can call it.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 
-    // Same sign convention as `TrackList` and `AlbumGrid` — a positive `v-offset` is N px
-    // scrolled, where the inner `ListView` holds that as a non-positive `content-y`.
+    // `TrackList`'s sign convention: a positive `v-offset` is N px scrolled.
     out property <length> v-visible-height: list.visible-height;
     out property <length> v-viewport-height: list.content-height;
     out property <length> v-offset: -list.content-y;
     callback set-v-offset(length);
     set-v-offset(o) => { list.content-y = -o; }
 
-    // Cards drag out as what Add to Queue on them would take.
     src := DragSource {
         width: 100%;
         height: 100%;
@@ -78,12 +54,10 @@ export component EntityCardGrid inherits Rectangle {
             height: 100%;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A card click and a drag-pan are one gesture, and the default is the style's to
-            // pick; argument on `views/radio/station-grid.slint`.
+            // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
             mouse-drag-pan-enabled: false;
 
             for grid-row in root.rows: Rectangle {
-                // A `ListView` delegate needs a fixed height or the virtualization math breaks.
                 min-height: root.row-height;
                 max-height: root.row-height;
 
@@ -101,9 +75,7 @@ export component EntityCardGrid inherits Rectangle {
                         card-id: entity.id;
                         favorite-known: root.show-favorite;
                         card-is-favorite: entity.is_favorite;
-                        // The card's own activation, so Play over a single track card means
-                        // what clicking it means. Inert on the artist mount, which never takes
-                        // the arm.
+                        // Play on one track card means what clicking it means.
                         play-single => { root.row-clicked(entity.id); }
 
                         card := EntityCard {
@@ -113,8 +85,7 @@ export component EntityCardGrid inherits Rectangle {
                             cover: root.request-cover(entity.artwork_path, root.covers-generation);
                             circular: root.circular;
                             fallback-icon: root.fallback-icon;
-                            // A pronounced zoom on the placeholder, as on the other grids; real
-                            // artwork stays gentle so a cover doesn't jitter inside the tile clip.
+                            // Real artwork stays gentle so a cover doesn't jitter in the clip.
                             cover-scale-hover: entity.artwork_path == "" ? 1.15 : 1.04;
                             title: entity.title;
                             subtitle: entity.subtitle;
@@ -133,9 +104,8 @@ export component EntityCardGrid inherits Rectangle {
                             }
                         }
 
-                        // Hidden rather than `if`-mounted, the card reading its hover back
-                        // above. Through `CardActions` like the menu's own entry: the page's
-                        // `library_changed` refetch is what repaints it.
+                        // Hidden rather than `if`-mounted, the card reading its hover above. The
+                        // page's `library_changed` refetch repaints it.
                         fav := CardFavoriteButton {
                             visible: root.show-favorite;
                             card-width: root.card-width;

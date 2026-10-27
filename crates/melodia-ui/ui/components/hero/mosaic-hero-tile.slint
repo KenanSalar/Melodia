@@ -2,24 +2,19 @@ import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The artwork square both curated heroes draw, mounted once by `MosaicTabHero`. `cover` is a collage
-// `media::image::artwork::compose_cover` composed from the page's top four, so this is an ordinary
-// single-artwork square rather than the live 2×2 it once laid out.
-//
-// **Every brush here is a `HeroBackdrop` tier, and none may become a `Theme.*` token.** The tile sits
-// *on* the hero — with no collage that's the dark gradient floor, where a light theme's accent lands
-// dark-on-dark.
+// The curated heroes' artwork square, drawing one composed collage (`ui-patterns.md`). Every brush
+// is a `HeroBackdrop` tier, never `Theme.*`: with no collage the tile sits on the dark floor, where
+// a light theme's accent lands dark-on-dark.
 export component MosaicHeroTile inherits Rectangle {
-    // Entries behind the collage. Zero means an empty *set*; a positive count with no cover
-    // means a set whose entries carry no artwork, and the two get different glyphs.
+    // Zero is an empty set; a positive count with no cover is a set without artwork, and the two
+    // draw different glyphs.
     in property <int> count;
     in property <image> cover;
-    // Each view passes its own sidebar entry's glyph.
+    // The page's own sidebar glyph.
     in property <string> empty-glyph;
     in property <bool> empty-glyph-filled: false;
 
-    // The composed collage is what decides the arm, not `count`: a set whose every entry
-    // lacks artwork is populated and has nothing to paint.
+    // The cover decides the arm, not `count`.
     property <bool> shows-cover: root.cover.width > 0;
 
     width: Theme.hero-artwork;
@@ -27,9 +22,7 @@ export component MosaicHeroTile inherits Rectangle {
     border-radius: Theme.radius-lg;
     clip: true;
 
-    // The tinted fallback fill mirrors the tracklist placeholder, so a coverless hero
-    // reads as one giant placeholder tile rather than as a bare surface. Square inside the
-    // clip, which stays the corner's only antialiased pass, as in `ArtworkImage`.
+    // Square inside the clip, the corner's only antialiased pass, as in `ArtworkImage`.
     Rectangle {
         x: 0;
         y: 0;
@@ -48,8 +41,6 @@ export component MosaicHeroTile inherits Rectangle {
     }
 
     if !root.shows-cover: MaterialIcon {
-        // The page's own glyph for an empty set; the tracklist placeholder's for a
-        // set that exists and simply has no art to show.
         name: root.count == 0 ? root.empty-glyph : "music_note";
         filled: root.count == 0 && root.empty-glyph-filled;
         icon-size: 56px;

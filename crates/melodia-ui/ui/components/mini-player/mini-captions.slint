@@ -7,34 +7,27 @@ import { CaptionButton, CaptionGlyph, CaptionStyle, MinimizeCaption, CloseCaptio
 import { MacOsTitleBarCluster } from "../macos-titlebar-cluster.slint";
 import { MiniIconButton, MiniGlyphs } from "mini-icon-button.slint";
 
-// Minimize, full player and close for the captions row's corner, in the style the Settings card
-// picked. **The middle one restores rather than maximizes**: a miniplayer is a window size, so the
-// button that grows the window hands back the full player at the geometry it last settled at.
+// Minimize, full player and close in the style the Settings card picked. The middle one restores
+// rather than maximizes: a miniplayer is a window size, so growing it hands back the full player.
 //
-// A layout rather than a `Rectangle`, so the `if`-mounted captions size it. Every caption takes the
-// titlebar's cell and the pitch its style is drawn to: this row is the window's top edge as the
-// titlebar's is, so the cells reach back over the host's inset rather than sitting inside it.
+// A layout, so the `if`-mounted captions size it. Each takes the titlebar's cell, this row being
+// the window's top edge as the titlebar is.
 export component MiniCaptions inherits HorizontalLayout {
-    // The drawn glyphs' ink, eased by the host with the rest of its surface. Hover and its fill
-    // stay stepped, the caption easing those itself.
+    // Eased by the host; the caption steps hover and its fill itself.
     in property <brush> ink;
     // The glyph a KDE caption punches out of its lit disc.
     in property <brush> ink-on-lit;
 
-    // Only the macOS arm reads this as a constraint: a `HorizontalLayout` stretches its cross-axis
-    // children and ignores their min and max, where `MacOsTitleBarCluster`'s `GridLayout` caps its
-    // lights at it and would otherwise top-align them above the drawn captions.
+    // A constraint only to the macOS arm, whose `GridLayout` would otherwise top-align its lights.
     private property <length> cell-height: MiniPlayer.captions-height;
 
     out property <CaptionStyle> style: MiniPlayer.button-style == 2
         ? CaptionStyle.kde
         : CaptionStyle.standard;
-    // A standard caption lights its glyph over a fill, where a KDE one fills a disc with the lit ink.
     private property <brush> caption-hover-fg:
         root.style == CaptionStyle.kde ? root.ink-on-lit : MiniGlyphs.lit;
-    // `MiniGlyphs.hover-bg` goes transparent on the backdrop, which the round controls answer with
-    // `hover-lift`. A caption has no lift and its fill is the whole cell, so there it takes the
-    // tier the disc buttons take.
+    // A caption has no `hover-lift` and fills its whole cell, so on the backdrop it takes the disc
+    // buttons' tier where `MiniGlyphs.hover-bg` goes transparent.
     private property <brush> caption-hover-bg: root.style == CaptionStyle.kde
         ? MiniGlyphs.lit
         : MiniPlayer.backdrop-shown ? Player.np-accent-disc-hover : MiniGlyphs.hover-bg;
@@ -42,7 +35,7 @@ export component MiniCaptions inherits HorizontalLayout {
     horizontal-stretch: 0;
     spacing: 0;
 
-    // The corner is fixed, so the cluster's side is too, whichever the titlebar's is set to.
+    // The corner is fixed, so the cluster's side is too.
     if MiniPlayer.button-style == 1: MacOsTitleBarCluster {
         captions-left: false;
         cell-height: root.cell-height;
@@ -66,8 +59,7 @@ export component MiniCaptions inherits HorizontalLayout {
         hover-bg: root.caption-hover-bg;
         clicked => { WindowChrome.restore-full-player(); }
     }
-    // Hover keeps the danger fill and its ink on either surface: closing is the one caption whose
-    // warning is the point.
+    // Keeps its danger hover on either surface, the warning being the point.
     if MiniPlayer.button-style != 1: CloseCaption {
         style: root.style;
         cell-height: root.cell-height;
@@ -75,24 +67,19 @@ export component MiniCaptions inherits HorizontalLayout {
     }
 }
 
-// The window's captions in the corner, where every titlebar puts them, and the lyrics switch
-// opposite. The row opens into whatever height the host hands it, fading and shrinking its buttons
-// as it closes.
+// The captions in the corner and the lyrics switch opposite, the row fading and shrinking its
+// buttons as the host closes it.
 export component MiniCaptionsRow inherits Rectangle {
-    // How far the row is open, up to `MiniPlayer.captions-height`.
+    // Up to `MiniPlayer.captions-height`.
     in property <length> open-height;
-    // How far the host insets its content from the window edge, which a KDE cluster reaches back
-    // over.
+    // The host's inset from the window edge, which the captions reach back over.
     in property <length> edge-pad;
-    // `MiniCaptions`' two eased inks.
     in property <brush> ink;
     in property <brush> ink-on-lit;
 
-    // How small the buttons get on their way out: enough to read as leaving, not enough to read as
-    // a second size.
+    // Enough to read as leaving, not as a second size.
     private property <float> exit-scale: 0.8;
-    // How far open the row is when its buttons are gone. Any lower and the row closes through a
-    // button still showing, which cuts a glyph that fills its box, the lyrics one.
+    // Any lower and the row closes through a button still showing, cutting the lyrics glyph.
     private property <float> fade-end: 0.5;
 
     private property <float> open-t: root.open-height / MiniPlayer.captions-height;
@@ -102,43 +89,36 @@ export component MiniCaptionsRow inherits Rectangle {
     min-height: root.open-height;
     max-height: root.open-height;
 
-    // **Unmounted once faded** rather than left at nothing: an opacity under 1 draws the row into a
-    // texture, 0 included. The row goes on closing without it.
+    // Unmounted once faded: an `opacity` under 1 is a texture, 0 included.
     if root.row-fade > 0: Rectangle {
         x: 0;
         y: 0;
         width: 100%;
         height: 100%;
-        // Only while the row opens or closes, where a hover fill reaches past it. A resize settles
-        // it open, and open a caption's tooltip hangs below it.
+        // Only while moving: open, a caption's tooltip hangs below the row.
         clip: root.open-t < 1;
         opacity: root.row-fade;
 
         HorizontalLayout {
             x: 0;
-            // Centred on the row while it opens, reaching back over the host's inset once it is
-            // open, so the cells land on the window's top edge where the titlebar's do.
+            // Reaches back over the host's inset once open, so the cells land on the window's top
+            // edge as the titlebar's do.
             y: (parent.height - self.height) / 2 - root.edge-pad * root.open-t;
             width: parent.width;
             height: MiniPlayer.captions-height;
             spacing: 2px;
             padding-left: 4px;
-            // The cluster reaches back over the host's padding to the inset the titlebar gives its
-            // style, flush for all but KDE, where Breeze keeps a gap. So the close fill reaches the
-            // window edge as the titlebar's does, and the strip of it past the clip is cut only
-            // while the row is moving, where the row is fading anyway.
+            // The titlebar's inset for the style, flush for all but KDE, where Breeze keeps a gap.
             padding-right: (captions.style == CaptionStyle.kde
                 ? Theme.kde-caption-edge-pad
                 : 0px) - root.edge-pad;
             cross-axis-alignment: center;
 
-            // Gone on a station, which has no track to look a sheet up for.
+            // A station has no track to look a sheet up for.
             if !Player.vm.has_station: MiniIconButton {
                 icon: "lyrics";
-                // **The glyph's own size rather than a `transform-scale`**, as `press-shrink`
-                // does it: FemtoVG draws glyphs under a scaling transform as paths rather than
-                // from its atlas, and this one comes out filled there. The captions beside it
-                // draw no glyph at rest.
+                // Sized rather than `transform-scale`d: FemtoVG draws a scaled glyph as a path, and
+                // this one comes out filled.
                 icon-size: round(18px * root.button-scale / Theme.text-size-step)
                     * Theme.text-size-step;
                 active: Lyrics.enabled;
@@ -146,9 +126,7 @@ export component MiniCaptionsRow inherits Rectangle {
                 tooltip-text: Lyrics.enabled
                     ? @tr("Show Up Next") : @tr("Show lyrics");
                 tooltip-side: TooltipSide.right;
-                // Both halves, the full view's switch and the visualizer picker's shape: the
-                // property so the panel swaps on the press, the callback so it is still swapped
-                // next launch.
+                // The property swaps the panel on the press, the callback persists it.
                 clicked => {
                     Lyrics.enabled = !Lyrics.enabled;
                     Lyrics.set-enabled(Lyrics.enabled);
