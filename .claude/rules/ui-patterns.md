@@ -1038,12 +1038,8 @@ three components that answer it, and each argues its geometry at its own file.
   need zero cover plumbing. `CoverThumbs::prewarm` dedupes and caps at LRU capacity — pass paths in
   **display order** so the kept prefix paints first.
 
-- **One tier behind every card grid, and it is `ui::grid_prewarm::tier()`.** Seven of them sat in
-  six view handles before — Favorites held two — each built at the same fallback, capped by the
-  same `cover_cap_for_window`, tuned by the same retune and told by its own notifier; the split
-  bought nothing but a section leave releasing its own, which is what made every re-entry cold. A module singleton rather than a
-  `ViewCtx` field, there being exactly one of it and no view owning it — the shape
-  `ui::nav_history::nav()` takes. **The tiers that stay private are private on decode size**:
+- **One tier behind every card grid, and it is `ui::grid_prewarm::tier()`**, whose module doc
+  says why one. **The tiers that stay private are private on decode size**:
   Search's two card strips and the row tier. Two are private on other grounds: the queue panel's,
   on lifetime (the `QueueRow` entry below), and Radio's logo tier, below.
 
@@ -1127,79 +1123,31 @@ three components that answer it, and each argues its geometry at its own file.
     for it at a new surface: a copy that grew a **decoding** arm reads correctly and puts the
     UI-thread decode straight back, which is the one thing it will not do.
 
-- **Cache cap via `grid_prewarm::cover_cap_for_window(app, size)`** — one band for every grid, they
-  all draw the same card. Derives its cap from the **window's** own logical size against
-  `GridGeometry`'s pitches, deliberately not the monitor's: the monitor caps against a screen the
-  window may occupy a corner of, and asking costs a `with_winit_window` round trip that answers
-  `None` for the whole window-less boot. A zero extent lands on `GRID_COVER_CAP_FALLBACK`, which
-  the module owns now that one tier takes it.
-  - **The pitches have to be the grid's, not a footprint estimate**: the cap has to come out at or
-    above the cards actually mounted, or the scheduling lookup leaves the overflow on placeholders
-    until a scroll. Margin comes from measuring the window rather than the grid's own box;
-    `grid_prewarm_tests` pins the two against each other.
-  - **The ceiling is bytes, not entries.** A decoded buffer costs the square of the tier size, so
-    one entry count is two different budgets — and it was wrong the expensive way round, a large
-    logical desktop being by construction a 1× one, where the buffers are a fifth the size and the
-    same bytes buy several times the entries. **It is a ceiling on a tier that has not retuned**:
-    the cap is derived from the size being moved *to* while `resize` trims by entry count, and a
-    retune leaves the old buffers in place on purpose (the release/retune asymmetry above), so a
-    drag across a step can hold two sizes at once until each is replaced or evicted. Bounded at
-    one entry per path, and a section leave shrinks every entry to `PROXY_COVER_DIM` rather than
-    dropping it, so the idle case is that side length squared per cover and not the tier's.
-  - **Read after `app.show()` and again on every resize**, through `WindowChrome.display-changed`
-    off the winit `Resized` filter, and through `content-panel-resized` whenever the panel's width
-    moves without the window's. Read once, a cap sized for the launch window is one a later
-    maximize overruns. It sets the cap exactly rather than growing it: a smaller window really
-    does draw fewer cards.
-
-- **Decode size via `grid_prewarm::cover_size_for_content(app)`, and it is derived from the card,
-  not stepped off the scale factor.** `GridGeometry` packs toward `min-card-w`, so a card is
-  *smallest* on the panels mounting the most of them: the two constants this replaced sized the
-  wide case generously and doubled it for `HiDPI`, which made the displays paying for the most
-  buffers hold each one at roughly twice the pixels it drew. `widest_card × scale` is the whole
-  question, clamped to `MAX_CARD_W` before the scale and to `STORE_MAX_DIM` after it, the second
-  being what caps a single-column panel's sharpness once a scale factor is on it.
-  - **The bound, never the card itself.** `card-w` sweeps `min-card-w` up to
-    `min-card-w + pitch/cols` inside *every* column band, so a tier tracking it crosses a step
-    boundary twice a band — and the retune re-derives on every winit `Resized` and every content
-    panel resize, so each crossing re-decodes every grid's visible covers mid-drag, on one pool
-    every tier shares.
-    Sizing to the band's upper bound is what makes the answer flat across a drag rather than
-    merely close, and the step is what collapses the column counts a desktop passes through into
-    a handful of sizes. What a crossing does not cost is the covers themselves; that half is the
-    release/retune asymmetry above.
+- **The grid tier's cap and decode size are `grid_prewarm::tune_for_display`'s**, read together
+  after `app.show()` and again on every `WindowChrome.display-changed` (the winit `Resized` filter)
+  and `content-panel-resized`. `cover_cap_for_window`, `cover_size` and `widest_card` each argue
+  their half at the definition; a tier spelling its own size is the duplication they replaced.
+  What spans files:
+  - **The cap is a ceiling on a tier that has not retuned**: it is derived from the size being
+    moved *to* while `resize` trims by entry count, and a retune leaves the old buffers in place
+    on purpose (the release/retune asymmetry above), so a drag across a step can hold two sizes at
+    once until each is replaced or evicted. `grid_prewarm_tests` pins the cap against the cards
+    `GridGeometry` mounts.
   - **The size is read off the content panel, never the window.** The sidebar and the queue panel
     either side of it are the user's to drag and to open, so no window measurement can say how
     wide a card is drawn, and a guess sized for both at their widest over-sizes the tier wherever
     they aren't, which with the panel closed is most installs. The panel reports its own width
     into `WindowChrome.content-panel-width` through the `WindowRectReport` the file drop already
-    mounts on it (`desktop-shell.md`). `PAGE_INSET_W` takes off the most any grid page insets,
-    which is Browse's: over-subtracting costs a tier one step too large, under-subtracting puts
-    every card on an upscale, and `FemtoVG` minifies bilinear with no mipmaps.
-  - `GRID_COVER_FALLBACK` is what a tier is *built* at, before any geometry exists. A fallback,
-    not a tier size, but sized for the run where the deferred retune never schedules and it stays
-    the live tier.
+    mounts on it (`desktop-shell.md`).
+  - `cover_thumbs::row_cover_size` is the row tier's twin, applied in the same `display-changed`
+    retune. The queue panel's tier takes the row tier's size through its backing rather than being
+    wired a second time.
 
-- **The cap and the size are read together**, in `grid_prewarm::tune_for_display` — two halves of
-  one budget, and both are answers about the display. The derived size replaced a `448` copied
-  into five files, each justifying it in its own doc comment off the same claim that flex-filled
-  cards "run well past 260 px". They don't: `GridGeometry` packs toward `min-card-w`, so a card
-  is **largest in a narrow panel**, where `max-card-w` is now what stops it, and lands near 190 px
-  on a wide one. A tier spelling its own size is the thing to reach for this instead of. Needs no
-  winit round trip, the scale factor being Slint's own, and answers `GRID_COVER_FALLBACK` until
-  the panel has reported a width.
-  `cover_thumbs::row_cover_size` is the row tier's twin, applied in the same `display-changed`
-  retune. The queue panel's tier takes the row tier's size through its backing rather than being
-  wired a second time.
-
-- **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`**, first-seen-ordered
-  and non-empty. **Every prewarm site goes through it**, the grid owning only the projection
-  (`CardGrid::artwork`, Browse's `first_screenful_paths`); don't lean on `prewarm`'s internal dedup as a reason to skip it, the two sites that
-  did each grew a divergent copy. **`cap` bounds kept *paths*, not input items** — capping the
-  input is what stops a detail over a 20 000-track genre allocating a `PathBuf` per unique cover to
-  keep 512, and `prewarm`'s own `.take(cap)` sits **after** its already-cached filter, so over a
-  partly warm tier an uncapped call decodes a full capacity from anywhere in the list, evicting the
-  visible prefix to do it.
+- **Prewarm path dedup via `grid_prewarm::unique_artwork_paths(paths, cap)`, and every prewarm
+  site goes through it**, the grid owning only the projection (`CardGrid::artwork`, Browse's
+  `first_screenful_paths`). Don't lean on `prewarm`'s internal dedup instead: its `.take(cap)` sits
+  **after** its already-cached filter, so over a partly warm tier an uncapped call decodes a full
+  capacity from anywhere in the list, evicting the visible prefix to do it.
 
 - **Artist Detail's Albums strip has nothing to borrow any more** — it draws from the one grid
   tier like every other card, so the handle that used to hold Albums' is gone and with it the

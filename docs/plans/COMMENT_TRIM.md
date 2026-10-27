@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 10 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 10.2 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -104,8 +104,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 8.3 | `melodia-app`: `services/` | 0.44 | 1,233 | ~539 | 0.20 (564) | `e6e13337` |
 | 8.4 | `melodia-app`: `tasks/` | 0.42 | 939 | ~377 | 0.19 (417) | `26f281f3` |
 | 8.5 | `melodia-app`: the rest of `library/` | 0.40 | 1,712 | ~636 | 0.22 (949) | `05d4913d` |
-| 9 | `melodia` (the binary) | 0.42 | 533 | ~216 | 0.20 (252) | |
-| 10.1 | `melodia-views`: the artwork and backdrop tiers | 0.73 | 1,009 | ~665 | | |
+| 9 | `melodia` (the binary) | 0.42 | 533 | ~216 | 0.20 (252) | `f225baa6` |
+| 10.1 | `melodia-views`: the artwork and backdrop tiers | 0.73 | 1,009 | ~665 | 0.33 (457) | |
 | 10.2 | `melodia-views`: `ui/radio/` | 0.51 | 1,607 | ~817 | | |
 | 10.3 | `melodia-views`: the tabbed pages, Browse and Search | 0.44 | 1,783 | ~773 | | |
 | 10.4 | `melodia-views`: the shell and the player | 0.42 | 1,755 | ~704 | | |
@@ -208,11 +208,13 @@ Status: done.
   - **Pointed at:** `CLAUDE.md` on the `--version` and `--logs` branches, the order in `main()` and `respawn_if_requested`. `main_order_tests` reads `main`'s body.
 
 ### Phase 10: `melodia-views`
-Status: not started.
+Status: in progress, 10.2 next.
 
-- [ ] **10.1 The artwork and backdrop tiers**, one commit: `backdrop.rs`, `grid_prewarm.rs`, `hero_backdrop.rs`, `hero_chips.rs`, `hero_folds.rs`, `artwork_cache.rs`, `detail_artwork.rs`, `now_playing_artwork.rs`, `mosaic_hero.rs`, `cover_generation.rs`, `name_palette.rs`, and `aurora/`.
+- [x] **10.1 The artwork and backdrop tiers**, one commit: `backdrop.rs`, `grid_prewarm.rs`, `hero_backdrop.rs`, `hero_chips.rs`, `hero_folds.rs`, `artwork_cache.rs`, `detail_artwork.rs`, `now_playing_artwork.rs`, `mosaic_hero.rs`, `cover_generation.rs`, `name_palette.rs`, and `aurora/`.
   - **Furthest over:** `backdrop.rs` (175), `grid_prewarm.rs` (147).
   - **Pointed at:** `CLAUDE.md` on `blur_spec`, `grid_prewarm::cover_size` and the two artwork newtypes; `.claude/rules/ui-patterns.md`'s Covers block.
+  - **Test comment citing it:** `grid_prewarm_tests.rs` ("`widest_card` argues where that leaves the tier").
+  - **Ends above 0.25** on decision 3: `backdrop.rs` and `aurora/` are mostly tuned constants, each keeping its one reason.
 - [ ] **10.2 `ui/radio/`**, one commit.
   - **Furthest over:** `radio/detail.rs` (136).
   - **Pointed at:** `CLAUDE.md` on Radio's leave (argued in `ui/radio/mod.rs`) and `detail::reseat`; `.claude/rules/radio.md`.
