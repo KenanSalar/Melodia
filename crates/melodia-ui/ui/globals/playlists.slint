@@ -1,12 +1,9 @@
 import { LiftedRun, PlaylistRow, PlaylistGridRow, TrackListRow, TrackColumns } from "../models.slint";
 
-// The Playlist grid view, on the `Albums` / `Artists` ownership contract: Rust installs
-// `grid-rows` once and `apply-filter` reloads its ids. Sorted by most-recently-updated and staying
-// that way — the view exposes no sort UI.
+// On `Albums`' contract. Sorted by most recently updated, with no sort control.
 export global Playlists {
     in-out property <[PlaylistGridRow]> grid-rows;
-    // How many playlists there are, smart ones included, kept current from launch whatever tab
-    // the session has visited: every row menu gates its Add to Playlist entry on it.
+    // Smart ones included, kept current from launch: every row menu gates Add to Playlist on it.
     in property <int> count: 0;
     // `-1` until fetched; see `Albums.total-count`.
     in-out property <int> total-count: -1;      // pre-filter playlist count
@@ -16,18 +13,14 @@ export global Playlists {
     callback columns-changed(int);
     callback apply-filter(string);
     callback open-playlist(int /*playlist_id*/);
-    // Lazy per-card lookup against the shared grid tier, the `Albums.request-cover`
-    // contract — only on-screen cards resolve, and a miss schedules rather than decoding.
+    // The `Albums.request-cover` contract.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
     in property <int> covers-generation: 0;
-    // The row tier instead, backing the mosaic picker's small candidate tiles: no point
-    // paying for grid-size decodes at dialog-tile size.
+    // The row tier, for the mosaic picker's tiles, which a grid-size decode would oversize.
     pure callback request-row-cover(string /*artwork_path*/) -> image;
     callback section-active-changed(bool);
 
-    // Fired by the `Dialog.accepted` dispatcher on confirm. **The dialogs themselves are populated
-    // inline in Slint markup**, a synchronous `set_open(true)` inside a click handler tripping
-    // Slint's property-recursion guard.
+    // Fired by `Dialog.accepted` on confirm.
     callback create-playlist(
         string /*name*/,
         string /*description (empty ⇒ no description)*/,
@@ -39,71 +32,53 @@ export global Playlists {
         string /*description (empty ⇒ clear)*/,
     );
     callback delete-playlist(int /*id*/);
-    // The card menu's multi-select arm, through `Dialog.open-delete-playlists`. One refetch and
-    // one selection clear for the whole batch, where looping `delete-playlist` would do both per
-    // playlist.
+    // One refetch and one selection clear for the batch, where looping `delete-playlist` would do
+    // both per playlist.
     callback delete-playlists([int] /*ids*/);
 
-    // 1–4 paths from the playlist's own tracks; Rust composes the collage and persists it. An
-    // empty selection clears the custom thumbnail and reverts to auto first-track.
+    // 1–4 of the playlist's own covers, composed and persisted by Rust.
     callback apply-mosaic(int /*id*/, [string] /*paths*/);
+    // Leaves no artwork at all, an automatic cover included.
     callback clear-artwork(int /*id*/);
 
-    // Rust mutates the model through `set_row_data`, Slint having no ergonomic push/remove.
-    // `toggle-add-pick` no-ops on a fully-contained row; `set-all` flips only enabled ones.
+    // `toggle-add-pick` skips a row already holding every track, and `set-all-add-picks` touches
+    // enabled rows only.
     callback toggle-add-pick(int /*playlist_id*/);
     callback set-all-add-picks(bool /*selected*/);
 
-    // Rust reads the ticked enabled rows and adds `Dialog.pending-track-ids` into each.
     callback add-tracks-to-selected();
 
-    // Rust owns the array mutation for the same reason, capping the selection at four.
+    // Rust caps the picks at four.
     callback toggle-mosaic-candidate(string /*artwork_path*/);
 
-    // For the grid card's Rename overlay, which carries only the id — `PlaylistGridRow` has no
-    // description. Resolved from the cached `PlaylistStats`, so it is safe from a click handler.
+    // For the card's Rename, `PlaylistGridRow` carrying no description. Answered from a cache, so
+    // safe in a click handler.
     pure callback row-name(int /*playlist_id*/) -> string;
     pure callback row-description(int /*playlist_id*/) -> string;
 
-    // `PlaylistDetail.request-edit-artwork` against an explicit id, for the grid card's
-    // overlay: the detail isn't necessarily open, so `PlaylistDetail.cover` would be stale.
+    // For the card, whose playlist needn't be the open detail.
     callback request-edit-artwork-for(int /*playlist_id*/);
 
-    // Rust runs the list and the per-playlist overlap counts in parallel, fills the rows, and only
-    // then flips `Dialog.open`, so it appears already populated. `exclude-playlist-id >= 0` filters
-    // that one out, so Playlist Detail can't offer the open playlist; -1 shows all.
+    // Rust raises the dialog once the rows and their overlap counts are in. An
+    // `exclude_playlist_id` of -1 lists every playlist; Playlist Detail passes its own.
     callback request-add-to-playlist(
         [int] /*track_ids*/,
         int /*exclude_playlist_id*/,
     );
 
-    // M3U8 import / export. Both are pure Rust flows over native dialogs, so unlike
-    // create/rename they never write `Dialog.*` synchronously from a click handler.
-
-    // Picks files, imports each into a new playlist, toasts a summary.
     callback import-playlists();
 
-    // The `request-add-to-playlist` populate-then-open shape, every row starting unticked —
-    // exporting is opt-in.
     callback request-export-playlists();
 
-    // Rust reads the ticked rows, asks where to save, and writes one `.m3u8` or a zip of several.
+    // One `.m3u8`, or a zip of several.
     callback export-selected-playlists();
 
-    // Rust mutates the model, as above.
     callback toggle-export-pick(int /*playlist_id*/);
     callback set-all-export-picks(bool /*selected*/);
 }
 
-// The full Playlist Detail view: `playlist-id == -1` shows the grid, `>= 0` swaps in the detail,
-// the `Nav.now-playing-open` shape. Rust owns `tracks`; `playlist` is the header data. The table is
-// the shared `TrackList`, so the column / sort / selection shape mirrors the `Tracks` / `Browse` /
-// `AlbumDetail` globals under its own persistence key.
-//
-// **Drag-to-reorder is gated to an ascending `"position"` sort** — reordering a list sorted by
-// something else means nothing. No header cell asks for that field, so the third click on a column
-// hands it back (`ui::callbacks::next_sort_with_natural`); without one, one click on Title retires
-// reordering for the whole install.
+// `playlist-id` -1 shows the grid. **Drag-to-reorder needs an ascending `"position"` sort**,
+// which a column's third click hands back (`ui-patterns.md`'s synthetic-field entry).
 export global PlaylistDetail {
     in-out property <int> playlist-id: -1;
     // See `AlbumDetail.restoring`.
@@ -111,9 +86,7 @@ export global PlaylistDetail {
     in-out property <PlaylistRow> playlist;
     in-out property <[TrackListRow]> tracks;
 
-    // What the band's search box means while this detail is open; drag-reorder is disabled while
-    // one is active. Cleared on a fresh open, preserved across a library-changed refresh so a
-    // typed needle survives a scan finishing.
+    // As `AlbumDetail.filter`, and drag-reorder stands down while it is set.
     in-out property <string> filter;
 
     // Hydrated from `views.json` under `playlist_detail`.
@@ -125,7 +98,7 @@ export global PlaylistDetail {
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // The `AlbumDetail` dual-slot contract, so switching playlists never flashes.
+    // `AlbumDetail`'s two slots.
     in-out property <image> cover;
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
@@ -145,21 +118,16 @@ export global PlaylistDetail {
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
 
-    // A drag of one row dropped somewhere that moves it, the sort still `"position"`, ascending.
     callback reorder(int /*from*/, int /*to*/);
-    // A drag of the picks, gathering every picked row in front of row `slot`, on the same sort.
+    // Gathers every picked row in front of row `slot`.
     callback move-picks(int /*slot*/);
-    // Where the picked rows sit, asked by a press on one of them. Only Rust holds the whole list.
+    // Asked by a press on a picked row; only Rust holds the whole list.
     callback picked-run() -> LiftedRun;
 
-    // The one action needing a Rust hop before its dialog mounts, the mosaic picker having to query
-    // the playlist's track artworks first. The handler writes `Dialog` through
-    // `upgrade_in_event_loop`, landing on a fresh tick and so dodging the recursion guard.
+    // Rust queries the covers first and raises the picker from a fresh tick.
     callback request-edit-artwork();
 
-    // The row context menu passes either the right-clicked row or the whole selection.
     callback remove-track([int] /*track_ids*/);
 
-    // Rust reloads the list's ids under the new needle.
     callback filter-changed(string);
 }

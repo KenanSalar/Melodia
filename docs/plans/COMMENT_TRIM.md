@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 13.2 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 13.3 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -113,8 +113,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | 0.16 (1,287) | `1687b4db` |
 | 11 | `melodia-store` | 0.34 | 2,456 | ~666 | 0.20 (1,454) | `6d82a92b` |
 | 12 | `melodia-integrations` | 0.30 | 936 | ~147 | 0.14 (438) | `98e82bcd` |
-| 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | 0.56 (432) | |
-| 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | | |
+| 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | 0.56 (432) | `358c39f1` |
+| 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | 0.31 (337) | |
 | 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | | |
 | 13.4 | Slint `components/`, its own files | 0.47 | 1,538 | ~725 | | |
 | 13.5 | Slint `components/`'s subdirectories | 0.34 | 3,013 | ~788 | | |
@@ -271,9 +271,12 @@ The 36 `// Translators:` notes stay byte for byte: `crates/melodia/tests/transla
   - **Second copies dropped:** `Visualizer`'s header restating `visualizer.md` (the `enabled`/`set-active` split, the pushed trace and the asked-for bars) and `window-hidden` restating `wire_window_hidden`; `WindowChrome`'s frame-allowance and `frame-changed` notes restating `frame_allowance` and `desktop-shell.md`, and its header the winit-drag rule; the two-slot cross-fade on `Player.blur-*` and `Radio.blur-*`, `slint-pitfalls.md`'s; `CompositeScroll` restating the composite wheel entry; `Radio`'s one-gate, count, grid and Browse-box arguments, `Queue`'s `shown`/`floating`/`fits` and cover tier, and `SettingsPage`'s two search properties, all `ui-patterns.md`'s; `Onboarding`'s header re-arguing the root `CLAUDE.md`'s tracker rule.
   - **Stale claims removed:** `Player`'s LRM pointer at `track-list-row.slint`'s title cell (the argument is `track-title.slint`'s); `MelodiaUpdater` naming `tasks::updater_daily` as a writer (it paints through `check_painter`) and `crate::Updater`; `shell.slint`'s "two globals" keeping pointer state (one); `Radio`'s `services::radio_browser` (`services::net::`); `ListTravel`'s "two scrollers" (three); `WindowChrome.display-changed`'s account of what a maximize used to do.
   - **Ends above 0.25** on decision 3: a global is the declaration half of a contract whose other half is Rust, and nothing extracts docs from `.slint`, so what each property means to its writer is stated nowhere else.
-- [ ] **13.2 `globals/`, library and dialogs**, one commit: the other 16 files.
+- [x] **13.2 `globals/`, library and dialogs**, one commit: the other 16 files.
   - **Furthest over:** `dialog.slint` (84), `dialog-forms.slint` (55), `curated.slint` (54).
-  - **Pointed at:** `CLAUDE.md` on the two dispatchers (`dialog.slint`, `selection.slint`).
+  - **Pointed at:** `CLAUDE.md` on the two dispatchers (`dialog.slint`, `selection.slint`); `card-selection.slint`'s section-leave argument (`grid_tab.rs`, `callbacks/card_selection.rs` and three lifecycles), `MyLibrary.page-active-changed` (`my_library/callbacks.rs`), `AlbumDetail.restoring` (the three detail opens), `Albums.total-count` (`grid_tab.rs`) and `RowCovers` (`boot/ui_setup/views.rs`), each kept. The tests reading these files strip comments or read declarations, and `my_library_tests` holds the three detail globals free of `origin-tab`, comments included.
+  - **Second copies dropped:** `Dialog`'s copy of `DialogOverlay`'s always-rendered argument and the dispatcher's stays-open notes (the overlay's confirm handler and `RadioForm`'s header); the claim argument behind `request-generation` and the deferred openers, `ui-patterns.md`'s `DialogClaim` entries; `TagEditor`'s diff and batch argument, `library-data.md`'s, and `request-edit`'s copy of `open-tag-editor`'s tab argument; the unfetched sentinel kept once, at `Albums.total-count`, and the repaint token at `RowCovers`; the two-slot cross-fade, the filter and origin arguments of the other three details, each now `AlbumDetail`'s or `slint-pitfalls.md`'s; `PlaylistDetail`'s synthetic-sort argument, `CardActions.set-favorites`, `CopyActions`' order, `MyLibrary`'s filter routing and `hero-collapsed`, all `ui-patterns.md`'s or `slint-pitfalls.md`'s; `Tracks.toggle-column`, `wire_toggle_column`'s doc; `CardSelection`'s scope guard and id anchor, `ui::callbacks::card_selection`'s; Browse's folder-card reason kept once, at `Browse.play-folder`.
+  - **Stale claims removed:** `request-generation`'s "four" openers leaving `open` false and `open-tag-editor` as "the one" (six do); `open-new-smart-playlist`'s `target-id` as what `smart.rs` branches on (it reads `SmartEditor.target-id`); `Playlists`' dialogs "populated inline in Slint markup" (`Dialog`'s openers); `apply-mosaic`'s empty selection reverting to an automatic thumbnail (`clear-artwork` takes it, leaving none); `Browse.request-card-cover`'s own tier and `ArtistDetail.request-album-cover` borrowing `AlbumsUi`'s (both the shared grid tier); `ArtistDetail.open-album` flipping the nav index to Albums (a tab); `Genres`' tiles drawing the fallback glyph and its leave a no-op (a name-hashed gradient, and the `GridTab` leave); `RecentlyPlayed.section-active-changed`'s `watched-recently-active` (no such mirror); `MyLibrary` as the "second" globals file importing siblings (third).
+  - **Ends above 0.25** on 13.1's reason.
 - [ ] **13.3 The root files and `layout/`**, one commit: `app-window.slint`, `models.slint`, `theme.slint`, `settings.slint`, the four `layout/` files, and `melodia-ui`'s own Rust (`build.rs`, `src/`: 26 comment lines over 21 of code, counted in the Rust corpus).
   - **Furthest over:** `app-window.slint` (127), `models.slint` (122), `theme.slint` (102), `settings.slint` (94).
   - **Pointed at:** `CLAUDE.md`'s UI Structure (the mount sheet, the `export { }` block, `models.slint` mirroring Rust, `Theme.is-light` and `ink-on`, `resize-ring`).

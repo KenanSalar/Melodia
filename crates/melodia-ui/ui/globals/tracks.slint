@@ -1,10 +1,7 @@
 import { TrackListRow, TrackColumns, BrowseFolderRow, BrowseCardGridRow, BreadcrumbRow } from "../models.slint";
 
-// The two flat track-list views, plus the shared row-cover lookup that every
-// `TrackListRow` consumer in the tree resolves its thumbnail through.
-
-// The Tracks view. Rust owns `rows`, a paged model over the library's ids
-// (`ui::paged_rows`): `apply-filter` and `request-sort` reload the ids in SQL.
+// `rows` is a paged model (`ui::paged_rows`), so `apply-filter` and `request-sort` reload its ids
+// in SQL.
 export global Tracks {
     in-out property <[TrackListRow]> rows;
     // `-1` until fetched; see `Albums.total-count`.
@@ -27,30 +24,21 @@ export global Tracks {
     callback toggle-row-favorite([int] /*track_ids*/, bool /*new*/);
     callback set-row-rating([int] /*track_ids*/, int /*rating*/);
     callback request-refresh();
-    // Whether the section is on screen. Rust skips `library_changed` refreshes while
-    // hidden and runs one deferred re-fetch on re-enter.
+    // Rust skips library refreshes while hidden and re-fetches once on re-enter.
     callback section-active-changed(bool);
 
-    // Modifiers come off the row's pointer-event as bools; Rust does the work and walks the model
-    // to flip the per-row `selected` flags, a Slint expression not being able to iterate one.
+    // Rust stamps each row's `selected`, a Slint expression being unable to iterate a model.
     callback select-row(int /*idx*/, int /*id*/, bool /*shift*/, bool /*ctrl*/);
     callback select-all();
     callback clear-selection();
 
-    // Slint flips the matching `show_*` synchronously, then Rust persists the visible-column list.
     callback toggle-column(string /*column_id*/);
 }
 
-// The Browse view — the Slint side of three Rust-owned models; `crates/melodia-views/src/ui/browse/` documents the
-// ownership and fetch rules. `rows` renders through the shared `TrackList`, so the column / sort /
-// selection shape mirrors `Tracks`. **Disk-only files** — inside a library folder but not in the
-// DB — arrive with `id == 0` and `enabled == false`, rendering dimmed and inert.
-//
-// An empty `current-path` is the root state; `has-library-folders` going false paints the CTA
-// instead. `loading` gates the empty state so a stale "Empty folder" can't flash mid-drill, and a
-// non-empty `error-message` replaces the rows outright. **Two presentations over the same three
-// models** — the list, and a card grid whose rows are `card-rows`; `folders` and `rows` stay
-// populated in both, so only `card-rows` is mode-gated.
+// `ui::browse` owns the models. **A disk-only file**, in a library folder but not the database,
+// arrives with `id == 0` and `enabled == false` and draws dimmed and inert. `loading` gates the
+// empty state so a stale "Empty folder" can't flash mid-drill. Both presentations read `folders`
+// and `rows`; only `card-rows` is the grid's alone.
 export global Browse {
     in-out property <string> current-path;             // "" = root (library list)
     in-out property <[BrowseFolderRow]> folders;
@@ -61,7 +49,6 @@ export global Browse {
     in-out property <string> error-message;            // "" = no error
     in-out property <bool> has-library-folders;        // false → root empty-state CTA
 
-    // Separate from `Tracks` so Browse keeps its own column layout, under its own `views.json` key.
     in-out property <TrackColumns> track-columns;
 
     // Sorted in memory rather than re-queried: the list mixes disk-only and DB files, so
@@ -69,39 +56,31 @@ export global Browse {
     in-out property <string> sort-field: "title";
     in-out property <string> sort-dir: "asc";
 
-    // The `Tracks` shape. Disk-only rows are never selectable — the Rust handler ignores them.
+    // Disk-only rows are never selectable.
     in-out property <[int]> selected-ids;
     in-out property <int> selection-anchor: -1;
 
-    // Which presentation is up. Persisted as `views.json`'s `browse_view_mode`; Rust clamps it
-    // against `view-mode-count`, the sole definition of how many presentations there are — the
-    // `tab-count` contract, through the same `ui::tab_bar::clamp_tab`.
+    // Persisted as `browse_view_mode` and clamped through `clamp_tab` against `view-mode-count`,
+    // the sole definition of how many presentations there are.
     in-out property <int> view-mode: 0;
     out property <int> mode-list: 0;
     out property <int> mode-card: 1;
     out property <int> view-mode-count: 2;
 
-    // The card grid's model, chunked by Rust into rows of `columns` so the grid's
-    // `ListView` virtualizes by row. `columns` is written by `GridColumnsSync`.
     in-out property <[BrowseCardGridRow]> card-rows;
     in-out property <int> columns: 1;
-    // Bumped once a batch the cards scheduled through `request-card-cover` lands. Read for that
-    // effect and never for its value: a mode toggle has no fetch to await before the grid mounts,
-    // so the cards mount against whatever the shared tier holds and each miss schedules itself.
+    // The repaint token, read as `RowCovers.generation` is.
     in-out property <int> covers-generation: 0;
 
-    // Card mode reads the *same* `selected-ids` the list reads, so toggling the presentation keeps
-    // the selection — which is why Browse stays off the shared `CardSelection` global. A chunked
-    // card model can't carry a per-row flag cheaply, so the card asks instead, against a generation
-    // Rust bumps on every selection write. Folder and disk-only cards both hold `id == 0` and the
-    // handler's existing early return keeps them unselectable.
+    // The cards read the list's `selected-ids`, so a mode toggle keeps the selection. A chunk row
+    // can't carry a per-card flag cheaply, so a card asks, against a generation Rust bumps on every
+    // selection write.
     in-out property <int> selection-generation: 0;
     pure callback is-card-selected(int /*track_id*/, int /*generation*/) -> bool;
 
     callback open-folder(string /*path*/);
-    // A folder card's menu. Here rather than on `CardActions` because a folder is named by a path,
-    // and the shared global's callbacks all carry an id list. Recursive, unlike what the view lists
-    // for the folder it is standing in — argued at `library::browse::folder_track_ids`.
+    // A folder card's menu, here because a folder is named by a path where `CardActions` takes ids.
+    // Recursive, where the view lists a folder's own files (`library::browse::folder_track_ids`).
     callback play-folder(string /*path*/);
     callback play-folder-next(string /*path*/);
     callback queue-folder(string /*path*/);
@@ -118,26 +97,20 @@ export global Browse {
     callback clear-selection();
     callback request-sort(string /*field*/);
     callback toggle-column(string /*column_id*/);
-    // The pill flips nothing itself — Rust negates, rebuilds the card model and
-    // persists, so there is one place that knows which surface is mounted.
+    // Rust's, so one place knows which surface is mounted.
     callback toggle-view-mode();
     callback columns-changed(int /*columns*/);
-    // As `RowCovers.request`, but against Browse's own card tier and gated on the generation
-    // above. `pure` so a card binding can call it.
+    // Against the shared grid tier.
     pure callback request-card-cover(string /*artwork_path*/, int /*generation*/) -> image;
-    // As `Tracks.section-active-changed` — skip refreshes while hidden, one re-fetch on re-enter.
+    // As `Tracks.section-active-changed`.
     callback section-active-changed(bool);
 }
 
-// The lazy thumbnail lookup **every** `TrackListRowItem` in the tree resolves through — they all
-// render the same row component. One global rather than per-view forwarding, wired once to the
-// shared row-tier LRU. Rows carry only `artwork_path` and the decode happens here, per
-// *instantiated* row, so no model row pins a buffer the LRU has already evicted.
+// Every track row's cover, asked per instantiated row so no model row pins a buffer the row tier
+// has evicted (`ui-patterns.md`'s Covers).
 export global RowCovers {
-    // The lookup is cache-only and hands a miss to the decode pool, so reading `generation` is
-    // what brings the row back: it is bumped once per landed batch and re-evaluates every `pure`
-    // binding over it. Its *value* means nothing: a row that misses at any generation paints the
-    // placeholder and repaints at the next.
+    // Bumped as each scheduled batch lands, so a row's `pure` binding re-runs then. The value
+    // itself means nothing.
     in property <int> generation: 0;
     pure callback request(string /*artwork_path*/, int /*generation*/) -> image;
 }
