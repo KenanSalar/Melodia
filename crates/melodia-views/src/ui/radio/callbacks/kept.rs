@@ -1,8 +1,5 @@
-//! The kept tabs' own wiring: the sort, the add / edit form, and remove.
-//!
-//! Import and export are not here — their completion toasts need the notifications stack, which
-//! does not exist yet when a slice installs, so they wire from boot's `install_ui` through
-//! [`super::files`], the shape `ui::playlists::wire_files` already uses.
+//! The kept tabs' own wiring: the sort, the add / edit form, and remove. Import and export are
+//! [`super::files`]'s.
 
 use std::sync::Arc;
 
@@ -36,8 +33,6 @@ pub(super) fn wire(
     }
 
     {
-        // Same field flips the direction, a new field starts ascending — both through the shared
-        // `next_sort`, so the arrow and the comparator cannot disagree.
         let s = state.clone();
         let ru = radio_ui.clone();
         let weak = weak.clone();
@@ -97,11 +92,8 @@ enum RemoveFrom {
     Recent,
 }
 
-/// Drop stations out of one tab, then re-read both lists.
-///
-/// Whether a row itself survives is the facade's call — it knows what the other tab still holds
-/// — so all this has to carry is which list asked. One station failing leaves the rest to go, the
-/// confirm having been for all of them.
+/// Drops stations out of one tab, then re-reads both lists; whether a row survives is the facade's
+/// call. One failure leaves the rest to go, the confirm having been for all of them.
 fn remove(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -121,19 +113,15 @@ fn remove(
             }
         }
         let _ = weak.upgrade_in_event_loop(move |ui| {
-            // A removed id can still be sitting in the card selection, where the menu would go on
-            // counting it and the next batch action would ask for it.
+            // A removed id left in the card selection would still be counted by the menu.
             ui.global::<CardSelection>().invoke_clear();
             kept::refresh(&ui, &s, &ru);
         });
     });
 }
 
-/// Fill the form from the station behind a card and open the dialog on it.
-///
-/// **From a fresh event-loop tick**, like every other Rust-side dialog open: writing `Dialog`
-/// synchronously inside a click handler re-enters Slint's property evaluator and trips its
-/// recursion guard.
+/// Fills the form from a card's station and opens the dialog, from a fresh event-loop tick: a
+/// synchronous `Dialog` write in a click handler trips Slint's recursion guard.
 fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
     // Either tab can hold the row — the same station is in both once it has been played.
     let Some(station) = kept::resolve(radio_ui, RadioTab::Favorites, id)
@@ -143,8 +131,8 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
     };
 
     let _ = weak.upgrade_in_event_loop(move |ui| {
-        // Asked before the fields below move out of the row. Which of the four the form offers is
-        // the entity's call, not the dialog's — the rule is one misclick away from being wrong.
+        // Before the fields move out of the row; which of the four the form offers is the entity's
+        // call.
         let (can_website, can_logo) = (station.can_set_website(), station.can_set_logo());
         let (can_genre, can_country) = (station.can_set_genre(), station.can_set_country());
         // The uuid is what the directory identifies the row by, so carrying one is what makes the
@@ -154,9 +142,8 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
         form.set_edit_id(crate::ui::util::clamp_i64_to_i32(station.id));
         form.set_url(SharedString::from(&station.stream_url));
         form.set_name(SharedString::from(&station.name));
-        // The user's own answers, never the resolved ones: these fields are what they may change,
-        // and seeding from `website()` or `genre()` would offer a directory value up for editing
-        // by way of the save that follows.
+        // The user's own answers, never the resolved ones, or a save would copy a directory value
+        // into an override.
         form.set_website(opt_shared(station.local_homepage));
         form.set_logo_url(opt_shared(station.local_favicon_url));
         form.set_genre(opt_shared(station.local_tags));
@@ -185,10 +172,8 @@ fn open_editor(radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>, id: i64) {
     });
 }
 
-/// Validate and save whatever the form holds, closing the dialog only once it worked.
-///
-/// **A blank field means different things in the two modes**, hence the split guard: an empty
-/// stream URL is nothing to save, where an empty website is the user clearing the link.
+/// Validates and saves the form, closing the dialog only once it worked. An empty stream URL is
+/// nothing to save, where an empty website is the user clearing the link.
 fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak<AppWindow>) {
     let form = ui.global::<RadioForm>();
     let (url, name, edit_id) =
@@ -216,9 +201,7 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
             match outcome {
                 Ok(id) => {
                     ui.global::<Dialog>().set_open(false);
-                    // A station the user just described is worth one more look for a logo, even
-                    // where this session already gave up on it: the site they named is new
-                    // evidence, and the repair skips an id it has tried.
+                    // The site the user just named is new evidence for a logo.
                     ru.forget_heal(id);
                     kept::refresh(&ui, &s, &ru);
                 }
@@ -231,15 +214,9 @@ fn submit(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, weak: &Weak
     });
 }
 
-/// Write whatever the form is for, and the user's own fields with it. Returns the station's id.
-///
-/// **Two calls rather than a wider `update_custom_station`**, because they answer to different
-/// owners: the station's own fields are re-derived from the stream whenever its URL moves, where
-/// the four overrides are the user's and survive that. Folding them into the probe path is what
-/// would put them back in the directory's columns.
-///
-/// The overrides go **last**, so a refused URL leaves nothing half-written on a station that was
-/// otherwise saved — the form stays open on the error and the retry re-runs both.
+/// Writes whatever the form is for, then the user's own fields, returning the station's id. Two
+/// calls because the station's fields are re-derived whenever its URL moves while the overrides
+/// survive that; the overrides go last, so a refused URL leaves nothing half-written.
 async fn save_form(
     state: &AppState,
     edit_id: i32,
@@ -264,16 +241,12 @@ async fn save_form(
     Ok(id)
 }
 
-/// Which of the form's four localized lines an error deserves.
-///
-/// Resolved through the `err-*` callbacks rather than built in Rust: `@tr` folds msgids at
-/// codegen, so a sentence Rust pushed would render untranslated. The split is by stage — the
-/// address, the connection, the decode, or the write.
+/// Which of the form's four localized lines an error deserves, through the `err-*` callbacks
+/// because `@tr` resolves at codegen and a sentence Rust built would render untranslated.
 fn form_error(form: &RadioForm<'_>, error: &AppError) -> SharedString {
     match error {
-        // Either typed URL's own refusal. `ensure_editable` raises the same variant and its line
-        // would read wrong here, but it cannot reach this form: a directory-owned row submits
-        // through `set_station_overrides`, which never asks it.
+        // A typed URL's refusal. `ensure_editable`'s never reaches this form, a directory-owned
+        // row submitting through `set_station_overrides`.
         AppError::Validation { .. } => form.invoke_err_bad_url(),
         AppError::Network { .. } => form.invoke_err_unreachable(),
         AppError::Database(_) | AppError::Io(_) => form.invoke_err_save_failed(),

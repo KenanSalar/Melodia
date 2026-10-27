@@ -1,10 +1,6 @@
-//! The row actions all three tabs share.
-//!
-//! **One door per action**, because the two kinds of station identify themselves differently: a
-//! browsed one has no database row and answers to its uuid or its place in the answer, a kept one
-//! has an id and no place in the browse cache. A door over one card takes the whole row and splits
-//! on `id == 0`; a door over a selection takes `select_key`s and splits on the tab. Either split is
-//! spelled once here rather than at every mount.
+//! The row actions all three tabs share, one door per action: a door over one card splits on
+//! `id == 0`, a door over a selection on the tab, each split spelled once here rather than at
+//! every mount.
 
 use std::sync::Arc;
 
@@ -161,26 +157,16 @@ fn play_browsed(
     });
 }
 
-/// Re-read the kept lists after any action that moved a row, whichever door it came through.
-///
-/// **Every action here changes the table and none of it is derivable**: a play stamps
-/// `last_played` and bumps `play_count`, a browsed play writes the row itself first, and a star
-/// moves list membership. A tab pick paints from cache, so without this a station played from
-/// Browse is missing from Recently Played until the next section leave and return.
-///
-/// A failed play refreshes too, deliberately: the play is counted before the stream is opened,
-/// because the recents list records what the user chose rather than what the network allowed.
+/// Re-reads the kept lists after any action that moved a row, a tab pick painting from cache: a
+/// play stamps the row (a browsed one writes it first) and a star moves membership. A failed play
+/// refreshes too, the play being counted before the stream opens.
 fn refresh_lists(state: &AppState, radio_ui: &Arc<RadioUi>, weak: &slint::Weak<AppWindow>) {
     let (s, ru) = (state.clone(), radio_ui.clone());
     let _ = weak.upgrade_in_event_loop(move |ui| kept::refresh(&ui, &s, &ru));
 }
 
-/// The star over every kept station in `ids`, then one re-read of both lists. A station that fails
-/// leaves the rest to go, each being its own row.
-///
-/// Not optimistic, unlike the browsed star below: un-starring drops the row out of the Favorites
-/// list entirely, so there is nothing on screen for an optimistic flip to be right about — the
-/// refetch *is* the update.
+/// The star over every kept station in `ids`, then one re-read. Not optimistic: un-starring drops
+/// the row out of Favorites, so the refetch is the update.
 fn set_kept_favorites(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -199,9 +185,8 @@ fn set_kept_favorites(
     });
 }
 
-/// **Un-starring goes through the removal door, not the flag.** The star and the trash leave a
-/// station in the same place, so they owe the same cleanup: a row neither tab would list is one
-/// nothing can reach, and `set_favorite` alone leaves it there for good.
+/// Un-starring goes through the removal door, the star and the trash owing the same cleanup: a row
+/// neither tab lists is one nothing can reach.
 async fn set_kept_favorite(state: &AppState, id: i64, favorite: bool) -> Result<(), AppError> {
     if favorite {
         library::radio::set_favorite(&state.db, id, true).await
@@ -210,12 +195,9 @@ async fn set_kept_favorite(state: &AppState, id: i64, favorite: bool) -> Result<
     }
 }
 
-/// Keep or release directory stations, each with whatever logo this session found for it.
-///
-/// Optimistic, like every other row flag in the tree: a star is not list membership on Browse, so
-/// nothing has to be re-fetched for it to be right, and the star has to answer on the click's own
-/// frame. A station already where `wanted` puts it is left alone, so a failed write puts back
-/// exactly what was there.
+/// Keeps or releases directory stations with their session logos, optimistically, a star not being
+/// list membership on Browse. A station already where `wanted` puts it is left alone, so a failed
+/// write puts back exactly what was there.
 fn set_browsed_favorites(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -245,8 +227,7 @@ fn set_browsed_favorites(
         for (station, logo) in moving {
             if let Err(e) = set_browsed_favorite(&s, &station, logo.as_deref(), wanted).await {
                 log::warn!("radio: favorite toggle failed: {}", melodia_core::error::describe(&e));
-                // Put the star back rather than leaving it claiming a row that was never written.
-                // A routine failure, so it is a log line and not a toast.
+                // Put the star back; a routine failure, so a log line rather than a toast.
                 ru.set_local_favorite(&station.station_uuid, !wanted);
                 reverted = true;
             }
@@ -260,9 +241,8 @@ fn set_browsed_favorites(
     });
 }
 
-/// The write is unconditional so the facade has a row to resolve, and un-starring then takes the
-/// cleanup the trash takes: a station released here without a play behind it is listed by neither
-/// tab, and leaving it costs a row per browse-and-unstar forever.
+/// The write is unconditional so the facade has a row to resolve, and un-starring takes the trash's
+/// cleanup: a station released without a play behind it is listed by neither tab.
 async fn set_browsed_favorite(
     state: &AppState,
     station: &DirectoryStation,

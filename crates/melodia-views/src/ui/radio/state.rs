@@ -1,9 +1,4 @@
-//! The page's own state, in the shape every other view keeps it in.
-//!
-//! `favorites/state.rs` and `recently_played/state.rs` are the siblings, and the reason is
-//! theirs: the public `RadioUi` surface stays small while the caches behind it are
-//! documented where they live. This page skipped the split and carried its fifteen fields in the
-//! module's own front door.
+//! The page's own state, apart from the module's front door as the other tabbed pages keep theirs.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -23,57 +18,30 @@ use super::{covers, detail, facets, history, kept};
 #[derive(Default)]
 pub(super) struct KeptAnswers {
     /// The logo the row holds.
-    ///
-    /// **A row answers a question the memo cannot.** The memo is keyed on the `favicon_url` a
-    /// browse asked about, so it only ever holds what *that URL* returned this session; a station
-    /// whose favicon 404s and whose logo was found on its own site has an `artwork_path` and no
-    /// memo entry, and a page carrying it drew a monogram beside the two local tabs painting the
-    /// real thing.
     pub(super) logo: Option<String>,
     /// What an open measured the station to hold.
-    ///
-    /// **Browse would otherwise be the one page that forgets what the app measured.** A directory
-    /// row carries the container its `codec` column names and nothing else, so a station the user
-    /// has already played reads `OGG` on a Browse card while both local tabs read `OGG/VORBIS`.
-    /// Only a station with a local row contributes, which is exactly the set that has an answer.
     pub(super) format: Option<String>,
 }
 
 /// Rust-side state for the Radio page.
 pub struct RadioUi {
-    /// Whether the page is on screen. **Seeded at wire time rather than left to the gate**, which
-    /// fires on transitions only and whose `ChangeTracker` baselines silently inside
-    /// `AppWindow::new()` — a section seeded wrong has no edge left to correct it.
+    /// Whether the page is on screen, seeded at wire time because the gate fires on transitions
+    /// only and baselines silently inside `AppWindow::new()`.
     ///
-    /// The dirty flag rides with it, and describes the **hero and nothing else**. What a leave
-    /// hands back here is the logo tier and, where a station page is open, the hero's decoded
-    /// images and the colours it published into the two globals six heroes share — the three
-    /// grids and the directory page survive, which is this page's whole departure from the
-    /// tabbed-page contract. The enter re-warms the tier unconditionally and rebuilds the hero
-    /// only when the flag says it was given up.
+    /// Its dirty flag describes the hero alone: a leave hands back the logo tier and any seated
+    /// hero's images and published colours, keeping the grids and the directory page, so the enter
+    /// re-warms the tier unconditionally and rebuilds the hero only when the flag says so.
     pub(super) section: SectionState,
     /// The directory page on screen, and the query it answers.
     pub(super) browse: Mutex<BrowseState>,
-    /// The directory uuids this install has starred. Refreshed on section enter and flipped
-    /// optimistically by the toggle, which is what lets the star respond on the click's own frame.
-    ///
-    /// Derived from the same fetch that fills [`Self::kept`], since a starred station *is* a kept
-    /// one — a query of its own would be a second answer to keep true.
+    /// The directory uuids this install has starred, flipped optimistically so the star answers on
+    /// the click's own frame. Derived from the fetch that fills [`Self::kept`].
     pub(super) starred: Mutex<HashSet<String>>,
-    /// What a kept station's own row already answers about it, keyed on directory uuid.
-    ///
-    /// Both answers together rather than a map each: they come off the same fetch, describe the
-    /// same row and go stale on the same write, so a second map would be a second thing to keep
-    /// in step and neither question is asked without the other. An entry exists only where the
-    /// row answered at least one of them. Filled from the same fetch as [`Self::starred`], for
-    /// the same reason.
+    /// What a kept station's own row answers about it, keyed on directory uuid: one map for both
+    /// answers, off the same fetch and stale on the same write.
     pub(super) kept_answers: Mutex<HashMap<String, KeptAnswers>>,
-    /// The station ids the logo repair has already asked about this session.
-    ///
-    /// `kept::refresh` runs on a section enter, on every star flip — Browse's included — and on
-    /// every removal, and the repair walks every logo-less row each time. A station that failed is
-    /// a stored backoff, so the repeat buys two queries and the same answer; this is that answer
-    /// held where a click cannot spend a round trip on it.
+    /// The station ids the logo repair has asked about this session, so a refresh on every enter,
+    /// star flip and removal doesn't re-ask what a stored backoff already answered.
     pub(super) healed: Mutex<HashSet<i64>>,
     /// The Favorites tab: everything starred, plus every station typed in by hand.
     pub(super) kept: Mutex<kept::KeptState>,
@@ -81,31 +49,19 @@ pub struct RadioUi {
     pub(super) recent: Mutex<kept::KeptState>,
     /// What this session knows about station logos, keyed on the URL they came from.
     pub(super) logos: LogoMemo,
-    /// The open picker's list, whole. Kept beside the Slint model because the picker's needle
-    /// narrows it and Slint cannot filter an array, so every keystroke rebuilds the model from
-    /// here rather than re-asking the facade across the runtime.
+    /// The open picker's list, whole, which every keystroke narrows into the model.
     pub(super) facet_list: Mutex<Option<Arc<[melodia_core::entities::radio::Facet]>>>,
-    /// All four directory lists at once, filled by `facets::prime` on the first section enter.
-    ///
-    /// The sibling above is whichever list the open picker is narrowing and answers a question
-    /// about one chip; this answers a question about the *needle*, which is why it has to hold
-    /// every list and to be readable without an `.await` — the scope suggestions are recomputed on
-    /// each settled keystroke, on the UI thread.
+    /// All four directory lists, filled by `facets::prime` and readable without an `.await` for
+    /// the suggestions each settled keystroke recomputes.
     pub(super) facet_index: Mutex<facets::FacetIndex>,
-    /// A station page per tab, since one opens from all three and a tab move must not evict what
-    /// another is holding. `detail.rs` owns the shape.
+    /// A station page per tab; `detail.rs` owns the shape.
     pub(super) detail: Mutex<detail::DetailState>,
-    /// Held by the station-detail writer for the length of its `views.json` write.
-    ///
-    /// **That is the ordering** — two `spawn_blocking` tasks have none of their own, and with a
-    /// name written on every tab move a bounce queues alternating values that can land reversed,
-    /// naming the station the restored tab is *not* showing. `IndexPersist`'s shape minus the
-    /// atomic, which is what the tab index beside it takes instead: the value a writer reloads
-    /// under this is an `Option<i64>` and already lives beside the seats.
+    /// Held by the station-detail writer across its `views.json` write, the ordering two
+    /// `spawn_blocking` tasks lack, or a tab bounce lands the names reversed. `IndexPersist`'s
+    /// shape, the value it reloads living beside the seats rather than in an atomic.
     pub(super) persist_writer: Mutex<()>,
-    /// The titles the station currently playing has announced. Not the detail's, and deliberately
-    /// outside it: the ring fills whether or not anybody has the page open, which is the only way
-    /// it can be there to read when they do.
+    /// The playing station's announced titles, outside the detail because the ring fills whether
+    /// or not the page is open.
     pub(super) history: Mutex<history::StationHistory>,
     /// The grid tier the cards decode into. Released by the section leave.
     pub(super) covers: Arc<CoverThumbs>,
@@ -137,19 +93,13 @@ impl RadioUi {
         }
     }
 
-    /// Mark the hero stale. Written synchronously on the UI thread at section leave, before the
-    /// release task is spawned.
+    /// Marks the hero stale, synchronously on the leave, before the release task spawns.
     pub(super) fn mark_dirty(&self) {
         self.section.mark_dirty();
     }
 
-    /// Give the hero's decode tier back, and walk the arena after it. The Slint image slots are
-    /// the leave's own.
-    ///
-    /// **The trim is part of the job, not a caller's follow-up**, which is why the one leave that
-    /// releases no tier (`callbacks::lifecycle`) has to ask for it separately. Every caller is
-    /// already on the blocking pool, where a `malloc_trim` may run; none may call this from the
-    /// event loop.
+    /// Gives the hero's decode tier back and trims the arena; the Slint image slots are the
+    /// leave's. Blocking pool only, a `malloc_trim` having no place on the event loop.
     pub(super) fn release_detail_artwork(&self) {
         self.detail_artwork.clear();
         melodia_platform::services::platform::allocator::trim();
@@ -160,20 +110,14 @@ impl RadioUi {
         self.section.active()
     }
 
-    /// Let the logo repair ask about a station again.
-    ///
-    /// [`Self::healed`] is what stops a refresh re-asking about a station whose backoff already
-    /// answered, and a website or logo URL the user has just typed is precisely the new evidence
-    /// that claim was made without. Without this the field they filled in has no effect until the
-    /// next launch.
+    /// Lets the logo repair ask about a station again, once the user has typed a website or logo
+    /// URL that [`Self::healed`]'s answer was made without.
     pub(super) fn forget_heal(&self, id: i64) {
         self.healed.lock().remove(&id);
     }
 
-    /// Flip a station's star in the shadow the grid is built from.
-    ///
-    /// The optimistic half of the toggle, and its revert: the write is a round trip through
-    /// `SQLite` and the star has to answer on the click's own frame.
+    /// Flips a station's star in the grid's shadow: the optimistic half of the toggle, and its
+    /// revert.
     pub(super) fn set_local_favorite(&self, station_uuid: &str, favorite: bool) {
         let mut starred = self.starred.lock();
         if favorite {

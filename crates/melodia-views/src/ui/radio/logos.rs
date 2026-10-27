@@ -1,17 +1,11 @@
 //! Which station logos this session has, and what it costs to find out.
 //!
-//! A browsed station carries a `favicon_url` and nothing else, so the path a card draws from has
-//! to be fetched. Two things follow. The answer is memoized **on the URL**, which is what makes a
-//! moved logo land on a new file rather than on the one the row already had; and the fetch is a
-//! pass over a landed page rather than a per-card lookup, so a screenful of stations costs one
-//! bounded burst instead of one request per delegate the virtualization mounts.
+//! A browsed station carries only a `favicon_url`, so its logo has to be fetched. The answer is
+//! memoized **on the URL**, so a moved logo lands on a new file, and the fetch is a bounded burst
+//! over a landed page rather than one request per mounted card, each logo reported as it lands.
 //!
-//! **The burst reports as it goes.** A page's logos used to land together because the whole pass
-//! returned one answer at the end; the caller now hears about each one, so a card fills in when
-//! its own logo arrives rather than when the slowest host on the page does.
-//!
-//! The download itself is `library::radio::fetch_logo`'s, past the switch that turns Radio off.
-//! Nothing here holds a client, and nothing here logs a URL.
+//! The download is `library::radio::fetch_logo`'s, behind Radio's switch; nothing here holds a
+//! client or logs a URL.
 
 use std::collections::HashSet;
 use std::num::NonZeroUsize;
@@ -26,35 +20,23 @@ use melodia_app::state::AppState;
 use melodia_core::entities::radio::StoredLogo;
 use melodia_core::error::AppError;
 
-/// How many logo answers to remember.
-///
-/// Sized to a long session of tuning around rather than to the directory: an entry is a URL and a
-/// store path, so the whole cache is small, but a session that searches its way through tens of
-/// thousands of stations has no business keeping every one of them. Evicting an answer costs one
-/// re-request the next time that station is on screen.
+/// How many logo answers to remember: a long session of tuning around, not the directory. An
+/// eviction costs one re-request the next time that station is on screen.
 const LOGO_MEMO_CAP: NonZeroUsize = match NonZeroUsize::new(2_048) {
     Some(cap) => cap,
     None => panic!("LOGO_MEMO_CAP > 0"),
 };
 
-/// How many logos to have in flight at once.
-///
-/// One request per host rather than many to one, so there is no shared quota to pace against the
-/// way `services::artist_images` paces Deezer. What this bounds is the local cost of a page
-/// landing: sockets, and decode-pool tasks behind them.
+/// Logos in flight at once. Each goes to its own host, so there is no shared quota to pace; this
+/// bounds the local cost of a page landing, sockets and the decode tasks behind them.
 const LOGO_BATCH: usize = 6;
 
 /// How many stations a result may hold and still count as the one the user was looking for.
 ///
-/// **The backoff is about what a page brings along, not about what the user asked for.** A
-/// directory page is fifty stations nobody named, so a dead favicon host on it is worth
-/// suppressing for a day; a result this narrow *is* the station the user typed, they are looking
-/// at it, and every extra request is bounded by this. A host that was merely down when it was
-/// last asked would otherwise stay blank for up to a week of deliberate searches.
-///
-/// A count rather than a "did they type a name" flag: a country or genre filter narrow enough to
-/// return a handful is the same situation from the user's side, and the ceiling is what bounds
-/// the cost either way. Outcomes are still recorded, so a browse keeps skipping what this asks.
+/// The backoff is for what a page brings along: fifty stations nobody named are worth sparing a
+/// dead host for a day, but a result this narrow is what the user is looking at, and this bounds
+/// the extra requests. A count rather than a "typed a name" flag, a narrow country or genre filter
+/// being the same case.
 const EXPLICIT_RESULT_MAX: usize = 5;
 
 /// How hard a pass tries for the logos a page is missing.
@@ -69,28 +51,18 @@ pub enum Effort {
 }
 
 impl Effort {
-    /// Measured on the **result**, not on how much of it is still unanswered — a fifty-row page
-    /// with forty-six logos in hand is still a page nobody named.
-    ///
-    /// Only a *fresh* query qualifies. Paging on and re-warming after a section leave are the
-    /// same stations a second time, and re-asking there would spend a request per re-entry for an
-    /// answer this session already has.
+    /// Measured on the result, not on how much of it is unanswered, and only for a fresh query: an
+    /// append or a re-warm is the same stations a second time.
     pub fn for_result(fresh: bool, results: usize) -> Self {
         if fresh && results <= EXPLICIT_RESULT_MAX { Self::Explicit } else { Self::Page }
     }
 }
 
-/// One in-flight download: the URL asked, and what came back.
-///
-/// Distinct from [`LogoAnswer`], which is what the *store* already knew about a URL — this is a
-/// fetch we just made.
+/// One download's URL and outcome; [`LogoAnswer`] is what the store already knew instead.
 type FetchOutcome = (String, Result<Option<StoredLogo>, AppError>);
 
-/// The session's answers, keyed on the URL they came from.
-///
-/// `None` is "asked, nothing usable came back", and it is deliberately as durable as a hit: a
-/// station whose logo is under the floor or a dead link would otherwise be re-requested every
-/// time it appeared in a page.
+/// The session's answers, keyed on the URL. `None` is "asked, nothing usable", as durable as a hit
+/// so a dead link isn't re-requested every time it appears in a page.
 #[derive(Debug)]
 pub struct LogoMemo {
     answers: Mutex<LruCache<String, Option<String>>>,
@@ -101,22 +73,16 @@ impl LogoMemo {
         Self { answers: Mutex::new(LruCache::new(LOGO_MEMO_CAP)) }
     }
 
-    /// The stored path for a URL, if this session found one.
-    ///
-    /// Takes the lock mutably because a hit promotes, which is what keeps the logos on screen
-    /// ahead of the ones scrolled past.
+    /// The stored path for a URL, if this session found one. A hit promotes, keeping the logos on
+    /// screen ahead of those scrolled past.
     pub fn path_for(&self, favicon_url: &str) -> Option<String> {
         self.answers.lock().get(favicon_url).cloned().flatten()
     }
 
-    /// The URLs among `favicon_urls` worth asking about, deduplicated and in first-seen order so
-    /// the visible prefix is fetched first.
-    ///
-    /// **Under [`Effort::Explicit`] a remembered `None` is not an answer.** It is written by a
-    /// genuine miss, by a transport failure, and by [`seed_from_store`] carrying a stored
-    /// backoff in — so a wide keystroke on the way to a narrow one poisons every URL the two
-    /// share, and the narrow result's whole point is that the user is looking at these stations
-    /// right now.
+    /// The URLs among `favicon_urls` worth asking about, deduplicated in first-seen order so the
+    /// visible prefix goes first. Under [`Effort::Explicit`] a remembered `None` is no answer: a
+    /// transport failure or a carried-in backoff writes one too, and a wide keystroke on the way to
+    /// a narrow one would otherwise poison every URL the two share.
     fn unanswered<'a>(
         &self,
         favicon_urls: impl Iterator<Item = &'a str>,
@@ -126,9 +92,7 @@ impl LogoMemo {
         let mut seen = HashSet::new();
         let mut out: Vec<String> = Vec::new();
         for url in favicon_urls.filter(|url| !url.is_empty()) {
-            // `peek` rather than `get`: asking whether an answer exists must not reorder the
-            // cache, or a page of already-known logos would promote itself over the page the
-            // user is looking at.
+            // `peek`: asking must not promote a page of known logos over the one on screen.
             let answered = match effort {
                 Effort::Page => answers.peek(url).is_some(),
                 Effort::Explicit => answers.peek(url).is_some_and(Option::is_some),
@@ -145,15 +109,9 @@ impl LogoMemo {
     }
 }
 
-/// Fetch every logo a page needs that this session has not already answered.
-///
-/// `is_current` is asked between results and aborts the rest of the burst when the page it was
-/// started for has been superseded; `on_landed` fires once per logo that arrives, which is what
-/// lets the grid fill in a card at a time. Returns whether anything landed at all, so a caller
-/// can skip the final repaint a page of already-known stations owes nothing.
-///
-/// [`Effort::Explicit`] skips the stored backoff entirely and re-asks what this session already
-/// gave up on.
+/// Fetches every logo a page needs that this session hasn't answered. `is_current` aborts the
+/// burst once the page is superseded and `on_landed` fires per logo; returns whether any landed.
+/// [`Effort::Explicit`] skips the stored backoff and this session's misses.
 pub async fn fetch_missing<'a>(
     state: &AppState,
     memo: &LogoMemo,
@@ -171,9 +129,7 @@ pub async fn fetch_missing<'a>(
         return landed;
     }
 
-    // A rolling window rather than `chunks(LOGO_BATCH)`: a chunk drained to empty before the next
-    // one starts costs its slowest member, and one host at the request deadline holds five other
-    // stations behind it.
+    // A rolling window, not `chunks`: a chunk costs its slowest member.
     let mut pending = wanted.into_iter();
     let mut in_flight = JoinSet::new();
     for url in pending.by_ref().take(LOGO_BATCH) {
@@ -185,14 +141,12 @@ pub async fn fetch_missing<'a>(
             in_flight.abort_all();
             break;
         }
-        // Refilled ahead of the handling below, so the window never dips while a result is being
-        // recorded against the write connection.
+        // Refilled first, so the window never dips while a result is recorded.
         if let Some(url) = pending.next() {
             spawn_fetch(&mut in_flight, state, url);
         }
         let Ok((url, result)) = joined else {
-            // A panicked download task tells us nothing about the URL, so nothing is memoized and
-            // the next page carrying it asks again.
+            // A panicked task says nothing about the URL, so nothing is memoized.
             continue;
         };
         if record_answer(state, memo, url, result).await {
@@ -203,12 +157,9 @@ pub async fn fetch_missing<'a>(
     landed
 }
 
-/// Memoize one answer, persist it where it is worth persisting, and report whether it was a hit.
-///
-/// **`Ok(None)` earns a backoff and an `Err` does not.** One is the host saying it has nothing
-/// usable, the other is not reaching the host at all, and a transport failure persisted as a miss
-/// suppresses a whole page of good logos for a day over a moment offline. Both are memoized for
-/// the session either way, which is what stops the same page re-asking on every scroll back.
+/// Memoizes one answer, persists it where worth it, and reports whether it was a hit. `Ok(None)`
+/// earns a backoff and an `Err` doesn't: a moment offline must not suppress a page of good logos
+/// for a day. Both are memoized for the session.
 async fn record_answer(
     state: &AppState,
     memo: &LogoMemo,
@@ -218,8 +169,7 @@ async fn record_answer(
     let logo = match result {
         Ok(logo) => logo,
         Err(e) => {
-            // Debug rather than warn: a dead favicon is the normal condition on a directory of
-            // 60,000 community-maintained entries, and the card has a monogram to fall back to.
+            // Debug: dead favicons are routine in a community directory, and a card has a monogram.
             log::debug!("radio: logo fetch failed: {}", melodia_core::error::describe(&e));
             memo.record(url, None);
             return false;
@@ -232,14 +182,9 @@ async fn record_answer(
     hit
 }
 
-/// Read the sites of stations the directory gave no usable logo for, and memoize what each one
-/// advertises.
-///
-/// **Keyed on the origin**, which is what the station had instead of a favicon URL and what the
-/// stored backoff is already written under, so the two agree about what has been asked.
-///
-/// Only reached under [`Effort::Explicit`], so the input is bounded by [`EXPLICIT_RESULT_MAX`] and
-/// one flight covers it — there is nothing here for a rolling window to pace.
+/// Reads the sites of stations with no usable favicon and memoizes what each advertises, keyed on
+/// the origin the stored backoff is written under. Only under [`Effort::Explicit`], so the input
+/// is bounded by [`EXPLICIT_RESULT_MAX`] and one flight covers it.
 pub async fn discover_missing<'a>(
     state: &AppState,
     memo: &LogoMemo,
@@ -256,8 +201,7 @@ pub async fn discover_missing<'a>(
     for origin in wanted {
         let state = state.clone();
         in_flight.spawn(async move {
-            // Unseeded: this set is bounded by `EXPLICIT_RESULT_MAX`, so the per-origin query is
-            // already a handful rather than a page's worth.
+            // Unseeded: a set this small makes the per-origin queries a handful.
             let seed = library::radio::AnswerSeed::unseeded();
             let path = library::radio::discover_site_logo(&state, &seed, &origin).await;
             (origin.as_str().to_owned(), path)
@@ -273,8 +217,7 @@ pub async fn discover_missing<'a>(
         let Ok((origin, path)) = joined else {
             continue;
         };
-        // The miss is already recorded against the site by the facade, so this only has to
-        // remember the answer for the session.
+        // The facade already recorded a miss against the site.
         let hit = path.is_some();
         memo.record(origin, path);
         if hit {
@@ -285,11 +228,9 @@ pub async fn discover_missing<'a>(
     landed
 }
 
-/// The sites among `sites` this session has not already answered for, deduplicated.
-///
-/// **A site that answered with nothing is not re-read**, where a favicon under [`Effort::Explicit`]
-/// is: the cost here is a whole document, and nothing but this pass and the kept-station heal ever
-/// records an origin, so there is no wide page to have poisoned it.
+/// The sites this session hasn't answered for, deduplicated. Unlike a favicon under
+/// [`Effort::Explicit`], an empty answer isn't re-read: a site costs a whole document, and no wide
+/// page records origins to have poisoned it.
 fn unasked_sites<'a>(
     memo: &LogoMemo,
     sites: impl Iterator<Item = (&'a str, &'a str)>,
@@ -317,20 +258,12 @@ fn spawn_fetch(in_flight: &mut JoinSet<FetchOutcome>, state: &AppState, url: Str
     });
 }
 
-/// Answer as much of `wanted` as an earlier session already answered, and report whether any logo
-/// came back that way.
+/// Answers what an earlier session already answered for `wanted`, reporting whether a logo came
+/// back. The cold-start path: a logo's file is named by its bytes' hash, so without the answer
+/// table a re-browse would re-fetch every logo.
 ///
-/// **This is the cold-start path, and it is the whole reason the store is a cache.** A logo's file
-/// is named by a hash of its own bytes, so nothing can know a URL's path without downloading the
-/// bytes first — before the answer table there was no way to reuse a stored logo, and a re-browse
-/// re-fetched every one of them and rewrote the identical file.
-///
-/// A hit whose file is gone stays in `wanted`: the store is swept, and a path that names nothing
-/// paints an empty tile where the monogram was the honest answer. The `exists` walk is the same
-/// one `kept::forget_absent_artwork` makes over a landed list, for the same reason.
-///
-/// A failure here is not worth a line — the feature is an optimization over asking again, and
-/// asking again is what a page with no answer does.
+/// A hit whose file has been swept stays in `wanted`, as in `kept::forget_absent_artwork`. A
+/// failure isn't logged, asking again being the fallback anyway.
 async fn seed_from_store(
     state: &AppState,
     memo: &LogoMemo,

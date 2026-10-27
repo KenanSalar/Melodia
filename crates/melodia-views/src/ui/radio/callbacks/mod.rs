@@ -1,12 +1,4 @@
-//! Every `Radio.*` callback.
-//!
-//! Split by what each group answers to: the page itself here, the directory grid in [`browse`],
-//! the station page in [`detail`], the filter chips in [`facets`], the kept tabs in [`kept`], the
-//! row actions every tab shares in [`stations`], and the section's own arrivals and departures in
-//! [`lifecycle`].
-//!
-//! [`files`] is the exception and wires from boot's `install_ui`, its toasts needing a stack that
-//! does not exist at install time.
+//! Every `Radio.*` callback, split by what each group answers to; [`files`] wires from boot.
 
 mod browse;
 mod detail;
@@ -30,14 +22,8 @@ use melodia_ui::{AppWindow, Radio};
 
 use super::{RadioTab, RadioUi, filter, tab_from_index};
 
-/// Write the active tab to `views.json` on the blocking pool. The Slint property is already
-/// correct by the time any caller gets here, so this is pure catch-up.
-///
-/// Ordered through `persist`, the seat write's sibling: a bounce queues a value per pick and two
-/// blocking tasks have none of their own, so a reversed pair restores the tab the user only
-/// passed through — and the seat that tab reseats decides which station page comes back with it.
-///
-/// UI thread only, for the publish.
+/// Writes the active tab to `views.json`, ordered through `persist`: a reversed pair from a bounce
+/// would restore the tab the user only passed through, and that tab's station page with it.
 fn persist_tab(state: &AppState, persist: &Arc<IndexPersist>, tab: i32) {
     persist.publish(tab);
     let s = state.clone();
@@ -66,28 +52,18 @@ pub(super) fn wire(
         let persist = Arc::new(IndexPersist::new(g.get_tab_idx()));
         g.on_tab_changed(move |tab| {
             let Some(ui) = weak.upgrade() else { return };
-            // A tab pick moves no nav index, so `nav_history::record_current` never hears about
-            // it — the two curated pages log for the same reason. The bar has already written
-            // `tab-idx`, so the tag reads the tab being entered.
+            // A tab pick moves no nav index, so `record_current` never logs it; the bar has
+            // already written `tab-idx`, so the tag reads the tab entered.
             view_tag::log_current(&ui);
             // The needle belongs to the tab, not to the page, so the box follows the mount.
             filter::sync_box(&ui, &ru);
             let mounted = tab_from_index(&ui.global::<Radio>(), tab);
-            // **The station page belongs to the tab the same way**, and this is the one move that
-            // can leave one behind. Synchronously and on this tick: `tab-idx` has already moved,
-            // so a hop would let the view's own `changed` trackers read a `detail-open` that is
-            // briefly neither tab's answer. (`super::detail` is the slice's state module; the
-            // sibling `detail` here is its wiring.)
+            // The station page follows the mount too, on this tick. `super::detail` and
+            // `super::kept` are the slice's state modules, not the sibling wiring.
             super::detail::reseat(&ui, &ru, mounted);
-            // Which station `views.json` names follows the mount too — with a page per tab, "the
-            // last one opened" stopped being "the one the restored tab is showing".
             super::detail::persist_seat(&s, &ui, &ru);
-            // A pick paints from cache and asks for nothing: the fetch is the section enter's.
-            // Browse keeps its own rows and its own warm tier across a pick, so only the two
-            // local tabs have anything to do here.
+            // A pick paints from cache; Browse keeps its rows and tier across one.
             if mounted != RadioTab::Browse {
-                // `super::kept` is the slice's state module; the sibling `kept` here is its
-                // wiring.
                 super::kept::on_tab_entered(&ui, &s, &ru, mounted);
             }
             persist_tab(&s, &persist, tab);
@@ -95,9 +71,7 @@ pub(super) fn wire(
     }
 
     {
-        // Behind the view's `FilterThrottle`, so once per settled burst rather than per
-        // keystroke — which matters more here than anywhere else in the tree, every burst
-        // costing a directory request.
+        // Behind the view's `FilterThrottle`: every settled burst costs a directory request.
         let s = state.clone();
         let ru = radio_ui.clone();
         let weak = ui.as_weak();

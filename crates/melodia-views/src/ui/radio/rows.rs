@@ -1,15 +1,8 @@
 //! Stations projected onto the Slint boundary structs.
 //!
-//! The tree's sixteen other `to_slint_*` converters live beside the view that fills the model,
-//! and these are no different — what is different is the second input on the directory's side. A
-//! browsed card's star, its logo and the format an open measured are not facts about the station,
-//! they are facts about *this install*, so they arrive as [`LocalAnswers`] rather than being
-//! looked up here: a converter that reached for any of them would need the handle, and the caller
-//! already holds it while it walks the page. A kept station carries all three as columns and so
-//! needs none of them.
-//!
-//! They travel as one struct rather than three arguments because two of them are `Option<&str>`
-//! and nothing but their order would have told them apart.
+//! A browsed card's star, logo and measured format are facts about this install rather than the
+//! station, so they arrive as [`LocalAnswers`] from a caller already holding the handle; a kept
+//! station carries all three as columns.
 
 use slint::{Model, SharedString, VecModel};
 
@@ -19,51 +12,32 @@ use melodia_ui::{RadioFacetRow, RadioStationGridRow, RadioStationRow};
 use super::{facets, identity};
 use crate::ui::util::opt_shared;
 
-/// How many of a station's tags a card shows.
-///
-/// The directory's tag field is free-form and user-entered, so a popular station routinely
-/// carries a dozen, most of them restatements of the first two. Three is what fits the card's
-/// meta line at the narrowest column count without eliding.
+/// How many of a station's free-form tags a card shows: what fits the meta line at the narrowest
+/// column count, the tags past it mostly restating the first two.
 const TAG_DISPLAY_LIMIT: usize = 3;
 
-/// Separator between tags on the card's meta line. A middot rather than a comma, so the line
-/// reads as a set of labels and not as prose.
+/// A middot rather than a comma, so the meta line reads as labels rather than prose.
 const TAG_SEPARATOR: &str = " · ";
 
-/// Whether a station id names a database row.
-///
-/// **The one place `id == 0` is given its meaning**, and it is asked from four directions: which
-/// cache a page resolves from, whether a removal has anything to remove, whether `views.json` can
-/// name the open page for the next launch, and whether a history walk can reopen it. A browsed
-/// station is a directory answer with a shelf life and no row until the user keeps or plays it.
+/// Whether a station id names a database row: the one place `id == 0` is given its meaning, a
+/// browsed station having no row until the user keeps or plays it.
 pub fn station_has_row(id: i64) -> bool {
     id != 0
 }
 
-/// Write `cards` onto the delegates a grid already has mounted, or report that it cannot.
+/// Writes `cards` onto the delegates a grid has mounted, or returns `false` where the grid isn't
+/// the same stations in the same places and the caller owes the full write.
 ///
-/// **A model reset is what this exists to avoid**, and it costs more than a repaint. `replace_rows`
-/// is a `set_vec`: every delegate is torn down and rebuilt, and a rebuilt card carries no pointer
-/// state until the next mouse *event*. So a click that repaints the grid it was aimed at leaves
-/// the card still under the cursor drawn as though it had never been hovered — the star, the play
-/// control and the fill all drop out with nothing having moved — and a delegate destroyed
-/// mid-press takes the grab with it, so the click never lands at all. Both are reachable from an
-/// ordinary card click: playing or starring a station refetches the kept lists, and the logo
-/// sweep repaints on a timer for as long as a page takes to fill.
-///
-/// Returns `false` when the grid is not the same stations in the same places, which is a caller
-/// owing the full write instead — there is nothing to reuse, so the reset is the honest answer.
-/// It may have written some cards before deciding that; the full write behind it covers them.
-///
-/// UI thread only.
+/// A reset rebuilds every delegate, and a rebuilt card has no pointer state until the next mouse
+/// event: the card under the cursor drops its hover, and one destroyed mid-press loses the click.
+/// Playing or starring a station and the logo sweep's repaints all reach it. Cards written before
+/// a `false` are covered by the full write.
 pub fn patch_grid(
     grid: &slint::ModelRc<RadioStationGridRow>,
     cards: &[RadioStationRow],
     columns: i32,
 ) -> bool {
-    // The chunking the caller would have built, so a column change is a shape change rather than
-    // a rechunk this silently skips: the same stations in the same order fill different rows at
-    // different column counts, and every position would still agree.
+    // The caller's chunking, so a column change is a shape change rather than a skipped rechunk.
     let cols = usize::try_from(columns.max(1)).unwrap_or(1);
     let Some(chunks) = grid.as_any().downcast_ref::<VecModel<RadioStationGridRow>>() else {
         return false;
@@ -90,8 +64,7 @@ pub fn patch_grid(
             if !same_station(&current, card) {
                 return false;
             }
-            // Value-compared, so an unchanged card notifies nothing: the common repaint is a
-            // refetch that moved one row, and the rest of the page owes no work for it.
+            // Value-compared, so an unchanged card notifies nothing.
             if current != *card {
                 mounted.set_row_data(slot, card.clone());
             }
@@ -100,18 +73,14 @@ pub fn patch_grid(
     true
 }
 
-/// Whether two rows name the same station.
-///
-/// Both halves, for [`super::detail::StationRef`]'s reason: a browsed row's `id` is always `0`,
-/// and a hand-typed one carries no `uuid`.
+/// Whether two rows name the same station: both halves, as in [`super::detail::StationRef`].
 fn same_station(a: &RadioStationRow, b: &RadioStationRow) -> bool {
     a.id == b.id && a.uuid == b.uuid
 }
 
-/// What this install knows about a browsed station that the directory's answer does not carry.
-///
-/// Each field is `None` or `false` for a station this install has never met, which is the common
-/// case on a directory page and the reason none of them is a column.
+/// What this install knows about a browsed station that the directory's answer doesn't carry,
+/// unset for one it has never met. A struct because two of the fields are optional strings that
+/// only their order would tell apart.
 #[derive(Default)]
 pub struct LocalAnswers {
     pub is_favorite: bool,
@@ -119,11 +88,8 @@ pub struct LocalAnswers {
     pub format: Option<String>,
 }
 
-/// One browsed station, with those answers folded in.
-///
-/// `id` stays `0`: a directory station has no row until the user keeps or plays it, and that zero
-/// is what every call site taking a whole row branches on. So does `select_key`, which only the
-/// Browse grid can give it, knowing the station's place in the answer.
+/// One browsed station with those answers folded in. `id` stays `0`, and `select_key` too, the
+/// Browse grid being the one that knows the station's place.
 pub fn to_slint_radio_station_row(
     station: &DirectoryStation,
     local: &LocalAnswers,
@@ -136,8 +102,7 @@ pub fn to_slint_radio_station_row(
         uuid: SharedString::from(&station.station_uuid),
         name: SharedString::from(&station.name),
         homepage: opt_shared(station.homepage.as_deref()),
-        // Browse mounts the grid with `manageable: false`, so no card here draws a pencil and the
-        // question never arises; the kept tabs are where a station is edited.
+        // Browse mounts its grid with `manageable: false`; the kept tabs are where one is edited.
         editable: false,
         artwork_path: opt_shared(logo),
         tags: SharedString::from(display_tags(&station.tags)),
@@ -153,11 +118,8 @@ pub fn to_slint_radio_station_row(
     }
 }
 
-/// One kept station, as the two local tabs draw it.
-///
-/// Reads nothing but the row: the star and the logo are columns here, where a browsed station has
-/// to be told both. `uuid` stays empty for a station the user typed in, which is what the card
-/// splits its star and its Edit control on.
+/// One kept station as the local tabs draw it, off the row alone. `uuid` stays empty for a
+/// hand-typed station, which is what the card splits its star and Edit control on.
 pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
     let tile = identity::station_tile(&station.name);
     let format = station.format();
@@ -182,10 +144,7 @@ pub fn to_slint_kept_station_row(station: &RadioStation) -> RadioStationRow {
     }
 }
 
-/// One facet-list entry behind a filter chip.
-///
-/// The chip decides how the value is drawn and what rides back under it, which is
-/// [`facets::drawn_as`]'s job: for a codec the two differ.
+/// One facet-list entry behind a filter chip, drawn through [`facets::drawn_as`].
 pub fn to_slint_facet_row(chip: Option<facets::ChipFilter>, facet: &Facet) -> RadioFacetRow {
     let (label, code) = facets::drawn_as(chip, facet);
     RadioFacetRow {
@@ -195,9 +154,8 @@ pub fn to_slint_facet_row(chip: Option<facets::ChipFilter>, facet: &Facet) -> Ra
     }
 }
 
-/// The directory's tag field as the separate labels a chip strip wants, under the same cap the
-/// card's meta line takes. The hero is the one surface that can draw them as individual chips —
-/// it is mounted once, where a card is a delegate inside a virtualized list.
+/// The tag field as separate labels for the hero's chip strip, under the card's cap; the hero is
+/// mounted once, where a card is a virtualized delegate.
 pub fn split_tags(raw: &str) -> Vec<String> {
     raw.split(',')
         .map(str::trim)
@@ -207,23 +165,13 @@ pub fn split_tags(raw: &str) -> Vec<String> {
         .collect()
 }
 
-/// The format a station's own row can state, which for a segmented one is not what the directory
-/// wrote.
+/// The format a station's row states. A segmented station whose directory codec is `UNKNOWN` or
+/// blank reads [`facets::SEGMENTED_CODEC_LABEL`], the row having the `hls` flag where the chip has
+/// to generalise; one that isn't segmented keeps the directory's word.
 ///
-/// The chip generalises the whole bucket to [`facets::SEGMENTED_CODEC_LABEL`] because nearly all of
-/// it is segmented; a row does not have to guess, because it carries the `hls` flag the checker's
-/// `UNKNOWN` was missing. So the ~2% of that bucket which is *not* segmented keeps the directory's
-/// own word here, under a chip that reads `HLS`.
-///
-/// A blank codec is the same case reached from the other side: a hand-typed segmented station is
-/// described by the segments themselves, and a fragmented-MP4 one carries no elementary stream
-/// this end can name.
-///
-/// `format` is `RadioStation::format`'s answer, and `None` for a browsed station, which has never
-/// been opened and so has only the directory's word. The segmented test is deliberately asked of
-/// the directory's column rather than of that answer: once a station has played, a probed codec
-/// fills the `UNKNOWN` the test reads, and the row would start naming what is inside the segments
-/// where the useful thing to say is how they arrive.
+/// `format` is `RadioStation::format`'s answer, `None` for a browsed station. The segmented test
+/// reads the directory column rather than `format`, which a probed codec fills once the station
+/// has played: what is worth saying is how the segments arrive, not what is inside them.
 fn display_codec<'a>(format: Option<&'a str>, directory: &'a str, hls: bool) -> &'a str {
     let audio_unidentified = directory
         .split(',')
@@ -235,11 +183,8 @@ fn display_codec<'a>(format: Option<&'a str>, directory: &'a str, hls: bool) -> 
     format.unwrap_or(directory)
 }
 
-/// The directory's comma-separated tag field as one display line.
-///
-/// Joined here rather than handed over as a list, because a card cannot split a string and a
-/// per-card chip strip inside a virtualized `ListView` would put a `changed` tracker in a
-/// delegate the virtualization destroys.
+/// The tag field as one display line: a card can't split a string, and a chip strip per card would
+/// put a `changed` tracker in a delegate the virtualization destroys.
 pub fn display_tags(raw: &str) -> String {
     let mut out = String::new();
     for tag in raw.split(',').map(str::trim).filter(|tag| !tag.is_empty()).take(TAG_DISPLAY_LIMIT) {

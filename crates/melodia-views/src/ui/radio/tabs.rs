@@ -15,18 +15,13 @@ pub enum RadioTab {
 }
 
 impl RadioTab {
-    /// The variants, for the walks over per-tab state — the three station-page seats, and the
-    /// artwork each holds. **A variant added to the enum and left out of here still compiles**,
-    /// and every walk then skips that tab quietly rather than failing, so the length is pinned
-    /// against `Radio.tab-count` in `super::tests` rather than trusted to the array.
+    /// Every variant, for the walks over per-tab state. A variant left out still compiles and is
+    /// skipped quietly, so `super::tests` pins the length against `Radio.tab-count`.
     pub const ALL: [Self; 3] = [Self::Browse, Self::Favorites, Self::Recent];
 }
 
-/// Resolve a `Radio.tab-idx` value against the global's own `tab-*` constants. UI thread only —
-/// that's where the global is reachable.
-///
-/// Ends in a default arm, so a tab added to `radio.slint` without one here resolves to `Browse`
-/// and `ui::view_tag` logs that.
+/// Resolves a `Radio.tab-idx` value against the global's own `tab-*` constants, a tab with no arm
+/// here falling to `Browse`, which `ui::view_tag` logs.
 pub fn tab_from_index(g: &Radio<'_>, idx: i32) -> RadioTab {
     if idx == g.get_tab_favorites() {
         RadioTab::Favorites
@@ -37,10 +32,7 @@ pub fn tab_from_index(g: &Radio<'_>, idx: i32) -> RadioTab {
     }
 }
 
-/// The tab currently mounted, which is [`tab_from_index`] asked about the global's own index.
-///
-/// Its own function because that pairing is the question six call sites actually have, and spelled
-/// out it invites reading one global twice in the same expression — which one of them did.
+/// The tab currently mounted: [`tab_from_index`] asked about the global's own index.
 pub fn mounted_tab(g: &Radio<'_>) -> RadioTab {
     tab_from_index(g, g.get_tab_idx())
 }
@@ -51,18 +43,9 @@ pub fn section_is_up(ui: &AppWindow) -> bool {
     ui.global::<Nav>().get_selected_index() == super::NAV_RADIO
 }
 
-/// Seed the active tab from `views.json`, clamped against the Slint-declared `tab-count`
-/// (see [`crate::ui::tab_bar::clamp_tab`]).
-///
-/// **Called from `install_views` beside the nav-index hydration**, which is the one place
-/// `views.json` is in hand, and ahead of the slice's own `install` — that is where the mounted
-/// tab's model gets filled, so the tab has to be the restored one by then rather than the
-/// global's declared `0`.
-///
-/// The five-gates ordering argument is My Library's, not this page's: one gate for every tab
-/// means the section shadow reads the nav index and never the tab.
-///
-/// Stateless, like My Library's: there is no handle to seed at that point.
+/// Seeds the active tab from `views.json`, clamped against `Radio.tab-count` through
+/// [`crate::ui::tab_bar::clamp_tab`]. Called from `install_views` ahead of the slice's own
+/// `install`, which fills the mounted tab's model, so the tab is the restored one by then.
 pub fn seed_tab(ui: &AppWindow, persisted_tab: i32) {
     let g = ui.global::<Radio>();
     g.set_tab_idx(crate::ui::tab_bar::clamp_tab(persisted_tab, g.get_tab_count()));

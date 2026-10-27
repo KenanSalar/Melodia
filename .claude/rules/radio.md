@@ -65,14 +65,12 @@ is the copy to delete.
 - **Turning it off has four consequences beyond the row, and three are findable only from here.**
   `ui::radio::disable` stops a playing station, sweeps section 10 out of the nav history, closes and
   forgets every seated detail, and folds a live `Nav.selected-index` off 10. The history sweep is
-  the one the plan missed: the row and the router branch both go, but a Mouse-4 walk would still
+  the easy one to miss: the row and the router branch both go, but a Mouse-4 walk would still
   land on nav 10, and the `PlaceholderView` fall-through keeps a plain `!= 10` term — so the panel
   behind it paints *nothing at all*, not a placeholder.
-- **`fold_disabled_nav_index` is a sibling of `my_library::fold_retired_nav_index`, never an arm
-  inside it.** They answer different questions: one index was retired, which is true of a file
-  forever, where the other is unreachable *in this install* and flips with a setting.
-  `boot::ui_setup` composes them. The live move goes through the same function as the boot fold, so
-  the two cannot disagree about where 10 goes.
+- **`fold_disabled_nav_index` sits beside `my_library::fold_retired_nav_index`, never inside it**,
+  its doc saying why. `boot::ui_setup` composes the two, and the live move goes through the same
+  function as the boot fold, so the two cannot disagree about where 10 goes.
 - **The `SectionActiveGate` mount at index 10 carries no `if`.** It holds a `changed` tracker and a
   dropped tracker-bearing branch panics; with the sidebar row gone the index is simply unreachable,
   so the gate never fires true. Gate the row and the router branch, not the mount.

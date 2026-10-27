@@ -1,7 +1,4 @@
-//! The filter chips: which list a picker shows, and what a pick does to the query.
-//!
-//! A pick is a fresh query rather than a narrowing of what is loaded — the filter is part of the
-//! request, so there is nothing on screen to re-derive it from.
+//! The filter chips' wiring; a pick is a fresh query, the filter being part of the request.
 
 use std::sync::Arc;
 
@@ -26,8 +23,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     }
 
     {
-        // Not behind a `FilterThrottle`: this narrows a list already in memory, so there is no
-        // request to coalesce and the settled-value hop would only make the picker feel slow.
+        // No `FilterThrottle`: this narrows a list in memory, with no request to coalesce.
         let ru = radio_ui.clone();
         let weak = weak.clone();
         g.on_facet_filter_changed(move |needle| {
@@ -47,8 +43,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     }
 
     {
-        // Clearing is a pick of nothing rather than its own path: "no country" and "this
-        // country" are the same edit with different values.
+        // Clearing is a pick of nothing.
         let s = state.clone();
         let ru = radio_ui.clone();
         let weak = weak.clone();
@@ -59,8 +54,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     }
 
     {
-        // Deliberately *not* `facets::pick`: taking a scope also empties the box, and the two have
-        // to reach the query as one edit or the page fetches a guaranteed-empty page on the way.
+        // Not `facets::pick`: the scope and the emptied box must reach the query as one edit.
         let s = state.clone();
         let ru = radio_ui.clone();
         g.on_suggestion_picked(move |kind, name, code| {

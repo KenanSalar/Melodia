@@ -1,14 +1,9 @@
 //! The directory page on screen: what has been loaded, what is being asked for, and the one path
 //! that turns the first into the second.
 //!
-//! **Unlike the library grids there is no unfiltered list to filter against.** Albums keeps every
-//! row and re-derives the model on each keystroke; here the filter *is* the query, so a change of
-//! it is a fresh page off the network and the cache holds only what was actually fetched.
-//!
-//! **A section leave keeps that cache.** Every other grid in the tree hands its rows back on the
-//! way out and re-queries on the way in, which is free against `SQLite` and a directory round trip
-//! here. What the leave releases is the logo tier, which is where the bytes are; see
-//! [`super::covers`].
+//! **The filter is the query**, so there is no unfiltered list to narrow: a change is a fresh page
+//! off the network and the cache holds only what was fetched. **A section leave keeps it**, a
+//! re-query being a directory round trip; the leave releases the logo tier ([`super::covers`]).
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -37,8 +32,7 @@ pub struct BrowseState {
     search: StationSearch,
     stations: Vec<DirectoryStation>,
     has_more: bool,
-    /// Bumped by every fresh query. A page landing under an older one is dropped, which is what
-    /// lets a new search supersede one still in flight rather than waiting for it.
+    /// Bumped by every fresh query; a page landing under an older one is dropped.
     generation: u64,
     loading: bool,
 }
@@ -46,8 +40,7 @@ pub struct BrowseState {
 impl Default for BrowseState {
     fn default() -> Self {
         Self {
-            // `StationSearch::default()` is the first screen with nothing typed: most-clicked
-            // first, no filters. The limit is spelled because the offset advances by it.
+            // The limit is spelled because the offset advances by it.
             search: StationSearch { limit: DEFAULT_PAGE_LIMIT, ..StationSearch::default() },
             stations: Vec::new(),
             has_more: false,
@@ -63,11 +56,8 @@ impl BrowseState {
         self.stations.is_empty()
     }
 
-    /// Change the query, reporting whether it actually moved.
-    ///
-    /// The offset is excluded from the comparison because it is where the *next* page starts
-    /// rather than part of what is being asked for: a filter re-picked to the value it already
-    /// has must not reset paging, and a genuine change must.
+    /// Changes the query, reporting whether it moved. The offset is left out of the comparison, so
+    /// a filter re-picked to its current value doesn't reset paging.
     fn edit_query(&mut self, edit: impl FnOnce(&mut StationSearch)) -> bool {
         let before = self.identity();
         edit(&mut self.search);
@@ -79,10 +69,8 @@ impl BrowseState {
         StationSearch { offset: 0, ..self.search.clone() }
     }
 
-    /// Take a page's worth of request, or `None` where the request would be redundant.
-    ///
-    /// An append refuses while one is out and at the end of the results; a fresh query never
-    /// refuses, because superseding an in-flight page is exactly what it is for.
+    /// Takes a page's worth of request, or `None` where it would be redundant. Only an append
+    /// refuses: a fresh query exists to supersede one in flight.
     fn begin(&mut self, append: bool) -> Option<(StationSearch, u64)> {
         if append {
             if self.loading || !self.has_more {
@@ -111,8 +99,7 @@ impl BrowseState {
         true
     }
 
-    /// Give a failed request its offset back, so a retry asks for the page that was missed rather
-    /// than the one after it.
+    /// Gives a failed request its offset back, so a retry asks for the missed page.
     fn fail(&mut self, generation: u64, append: bool) -> bool {
         if self.generation != generation {
             return false;
@@ -130,18 +117,14 @@ pub fn query_name(radio_ui: &RadioUi) -> String {
     radio_ui.browse.lock().search.name.clone()
 }
 
-/// The whole query, for the scope suggestions — they read the needle *and* every chip already set,
-/// a scope the page is filtered by not being worth offering back. Cloned rather than borrowed
-/// because the caller holds the UI thread and must not still be under this lock when it takes the
-/// facet index.
+/// The whole query, for the scope suggestions, which skip a scope the page is filtered by. Cloned
+/// so the caller is off this lock before it takes the facet index.
 pub fn query(radio_ui: &RadioUi) -> StationSearch {
     radio_ui.browse.lock().search.clone()
 }
 
-/// The cached station behind a row, and whatever logo this session found for it.
-///
-/// A row identifies a browsed station by its uuid rather than by an index: the model is chunked
-/// and rebuilt whenever anything moves, so a position is only true for the frame it was read on.
+/// The cached station behind a row and its session logo, by uuid: the model is chunked and
+/// rebuilt whenever anything moves, so a position is only true for the frame it was read on.
 pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Option<String>)> {
     let browse = radio_ui.browse.lock();
     let station = browse.stations.iter().find(|station| station.station_uuid == uuid)?.clone();
@@ -150,12 +133,9 @@ pub fn resolve(radio_ui: &RadioUi, uuid: &str) -> Option<(DirectoryStation, Opti
     Some((station, logo))
 }
 
-/// The cached stations a set of cards' `select_key`s name, each with its logo: `resolve`'s answer
-/// by place, skipping a key that names none.
-///
-/// A place rather than a uuid because the selection is ids, and a browsed row has no id. It holds
-/// for as long as the answer does: a page appended keeps every earlier place, and a fresh search,
-/// which renumbers them, drops a Browse selection as it lands ([`paint`]).
+/// The cached stations a set of cards' `select_key`s name, each with its logo, skipping a key that
+/// names none. A key is a place in the answer, which an appended page keeps and a fresh search
+/// renumbers, dropping the selection as it lands ([`paint`]).
 pub fn resolve_keys(
     radio_ui: &RadioUi,
     keys: impl IntoIterator<Item = i32>,
@@ -177,18 +157,11 @@ fn select_key_at(place: usize) -> i32 {
     len_as_i32(place.saturating_add(1))
 }
 
-/// The logo a browsed station draws, from the three places this install can know one.
+/// The logo a browsed station draws: the `favicon_url` memo first, a moved logo being what it is
+/// for; then the kept row, which differs wherever the logo came off the station's own site or the
+/// memo is in a backoff; last, a site logo a narrow search discovered.
 ///
-/// The `favicon_url` answer comes first because a *moved* logo is exactly what the URL-keyed memo
-/// is for. **The row is the better answer wherever the two differ**, and they differ whenever the
-/// logo did not come from `favicon_url` at all — a station whose favicon 404s and whose logo was
-/// found on its own site has a row and can have no memo entry, and one inside a backoff has a memo
-/// entry of `None`. Either way the two local tabs paint it and Browse was painting a monogram.
-/// Last is what a narrow search discovered on the site of a station that has no row yet.
-///
-/// `kept` is that row's answers, looked up by the caller: every site but `resolve` walks a set of
-/// stations, and reaching for the lock in here would take it once per station rather than once per
-/// pass.
+/// `kept` is looked up by the caller, which takes that lock once per pass.
 fn logo_for(
     radio_ui: &RadioUi,
     kept: Option<&KeptAnswers>,
@@ -202,14 +175,8 @@ fn logo_for(
         .or_else(|| site_logo(radio_ui, station))
 }
 
-/// The format a browsed station is drawn with, preferring what an open measured over what the
-/// directory files it under.
-///
-/// A directory row carries the container and nothing else, so a station the user has already
-/// played would read `OGG` here while both local tabs read `OGG/VORBIS`. Only a station with a
-/// local row has an answer, which is the set the map holds.
-///
-/// [`logo_for`]'s `kept`, and the same lookup answers both.
+/// The format a browsed station is drawn with, preferring what an open measured (`OGG/VORBIS`)
+/// over the directory's container alone (`OGG`), so it matches the kept tabs.
 pub(super) fn format_for(kept: Option<&KeptAnswers>) -> Option<String> {
     kept?.format.clone()
 }
@@ -222,13 +189,8 @@ fn site_logo(radio_ui: &RadioUi, station: &DirectoryStation) -> Option<String> {
     radio_ui.logos.path_for(origin.as_str())
 }
 
-/// Rebuild the grid from the cache, this install's favorites and the logos found so far.
-///
-/// **The one write path.** A landed page, a landed logo batch, a favorite flip and a column change
-/// all come through here, which is what keeps the chunked model from needing a second, per-row
-/// patch path that would have to know where in which chunk a station sits.
-///
-/// UI thread only.
+/// Rebuilds the grid from the cache, the favorites and the logos found so far: the one write path,
+/// so nothing needs a second one knowing where in which chunk a station sits.
 pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
     let g = ui.global::<Radio>();
     let (station_rows, has_more) = {
@@ -255,15 +217,11 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
         (station_rows, browse.has_more)
     };
 
-    // Above the write, for the reason every tabbed page writes its count above its signature
-    // guard: a count that arrives late strands the empty state, and `Property::set` is
-    // value-compared so writing it unconditionally costs nothing.
+    // Above the write: a late count strands the empty state, and `set` is value-compared.
     g.set_browse_count(len_as_i32(station_rows.len()));
     g.set_browse_has_more(has_more);
 
-    // **Onto the mounted cards where the page is the same stations in the same places**, which is
-    // most repaints: a landed logo, a star flipped on another tab, a play that only stamped a
-    // row. `rows::patch_grid` says why the reset is worth dodging.
+    // Patched where the page is the same stations in the same places, which is most repaints.
     let columns = g.get_grid_columns();
     if !rows::patch_grid(&g.get_browse_rows(), &station_rows, columns) {
         let grid =
@@ -271,15 +229,12 @@ pub fn apply(ui: &AppWindow, radio_ui: &RadioUi) {
         replace_rows(&g.get_browse_rows(), grid, "radio::browse");
     }
 
-    // The station page draws the same station some card here does, off the same cache, so it is
-    // re-stamped from the write path rather than from each thing that could have moved a field.
+    // The station page draws off the same cache, so it is stamped from the write path.
     super::detail::restamp(ui, radio_ui);
 }
 
-/// Change what Browse is asking for and fetch the first page of the answer.
-///
-/// A no-op where the edit leaves the query where it was, which is what makes a filter reseat and
-/// a chip re-picked to its current value free.
+/// Changes what Browse asks for and fetches the first page; a no-op where the query didn't move,
+/// which makes a reseat or a re-picked chip free.
 pub fn edit_query(
     ui: &AppWindow,
     state: &AppState,
@@ -302,9 +257,7 @@ pub fn load_more(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     fetch(ui, state, radio_ui, true);
 }
 
-/// Load the first page if nothing has been loaded for the current query.
-///
-/// The section enter's call: an entry that already has stations paints them and asks for nothing.
+/// Loads the first page on a section enter, if nothing is loaded for the current query.
 pub fn ensure_loaded(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let needs_page = {
         let browse = radio_ui.browse.lock();
@@ -320,12 +273,8 @@ pub fn retry(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     fetch(ui, state, radio_ui, false);
 }
 
-/// Decode the retained page's logos again after a section leave dropped them.
-///
-/// The counterpart to [`ensure_loaded`], and the two are each other's guard: a re-entry either has
-/// rows to warm or has none and fetches, so calling both is what covers an enter without either
-/// having to know which case it is. Through the same pass a landed page takes, which is why it
-/// costs no traffic — every URL it asks about is already answered in the session memo.
+/// Decodes the retained page's logos again after a section leave dropped them. The counterpart of
+/// [`ensure_loaded`], each covering the other's case; it costs no traffic, the memo answering all.
 pub fn rewarm(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     let generation = {
         let browse = radio_ui.browse.lock();
@@ -336,16 +285,13 @@ pub fn rewarm(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>) {
     };
     let (s, ru, weak) = (state.clone(), radio_ui.clone(), ui.as_weak());
     state.runtime.spawn(async move {
-        // Not fresh: these are the same stations a second time, so the harder effort a narrow
-        // query earns would spend a request per re-entry on an answer already in the memo.
+        // Not fresh: the harder effort a narrow query earns would re-ask what the memo holds.
         warm_page(&s, &ru, &weak, generation, false).await;
     });
 }
 
-/// Ask the directory for a page, then paint it, its logos and their decodes.
-///
-/// Called from the UI thread, which is what lets the loading flag go up before the spawn: the
-/// pill has to be disabled on the frame the click lands, not on the frame the request returns.
+/// Asks the directory for a page, then paints it and its logos. On the UI thread, so the loading
+/// flag is up on the frame the click lands.
 fn fetch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, append: bool) {
     let Some((search, generation)) = radio_ui.browse.lock().begin(append) else {
         return;
@@ -383,19 +329,15 @@ fn fetch(ui: &AppWindow, state: &AppState, radio_ui: &Arc<RadioUi>, append: bool
     });
 }
 
-/// Push the cache onto the grid and lower the spinner.
-///
-/// `fresh` tells a new query from a page appended onto one, which only the scope adoption below
-/// cares about: an append that comes back empty is the end of the results, not a search that found
-/// nothing.
+/// Pushes the cache onto the grid and lowers the spinner. `fresh` marks a new query: an append
+/// coming back empty is the end of the results, not a search that found nothing.
 fn paint(state: &AppState, weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>, fresh: bool) {
     let (s, ru) = (state.clone(), radio_ui.clone());
     let _ = weak.upgrade_in_event_loop(move |ui| {
         ui.global::<Radio>().set_browse_loading(false);
         apply(&ui, &ru);
         if fresh {
-            // A fresh answer renumbers every place, so a set picked against the last one would
-            // name other stations now. Only Browse's own set: the kept tabs select by row id.
+            // A fresh answer renumbers every place; the kept tabs select by row id.
             let selection = ui.global::<CardSelection>();
             if selection.get_scope() == card_selection::scope::RADIO_BROWSE {
                 selection.invoke_clear();
@@ -405,16 +347,10 @@ fn paint(state: &AppState, weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>, fres
     });
 }
 
-/// Stamp the logos that have landed so far onto the page, and announce the tier with them.
-///
-/// This fires every `LOGO_REPAINT_INTERVAL` for as long as a page takes to fill, which is exactly
-/// the moment somebody is clicking a station they just searched for — so it leans on [`apply`]
-/// patching rather than resetting. A landed logo is not a fetch, so the station set cannot have
-/// moved and the patch always has the shape it needs.
-///
-/// **The announce matters as much as the paint.** At generation `0` a card asks the tier
-/// cache-only and queues no decode, which is what a released tier wants and the opposite of what a
-/// page still filling in does — the path just written into the row would never be decoded at all.
+/// Stamps the logos landed so far and announces the tier, every `LOGO_REPAINT_INTERVAL` while a
+/// page fills. A landed logo moves no station, so [`apply`] patches rather than resets. The
+/// announce matters too: at generation `0` a card asks cache-only and the new path would never be
+/// decoded.
 fn paint_landed(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     let ru = radio_ui.clone();
     let _ = weak.upgrade_in_event_loop(move |ui| {
@@ -425,12 +361,9 @@ fn paint_landed(weak: &Weak<AppWindow>, radio_ui: &Arc<RadioUi>) {
     });
 }
 
-/// Ask the sites of whatever the page still has no logo for.
-///
-/// Runs after the favicon burst, mirroring the order [`library::radio::heal_station_logo`] takes
-/// for a kept station: the field the directory carries first, the station's own site second. A
-/// third of the directory carries no logo field at all, which is why this is reached only where
-/// the result is narrow enough to be the station the user typed.
+/// Asks the sites of whatever the page still has no logo for, after the favicon burst: the order
+/// [`library::radio::heal_station_logo`] takes for a kept station. Reached only on a result narrow
+/// enough to be the station the user typed.
 async fn discover_page(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -462,22 +395,15 @@ async fn discover_page(
     .await
 }
 
-/// How often a filling page repaints while its logos land.
-///
-/// [`apply`] is a whole-model write, so one per station would spend more on rebuilds than the fill
-/// is worth. Long enough to coalesce a burst, short enough that the grid reads as filling in
-/// rather than as arriving in steps.
+/// How often a filling page repaints while its logos land: long enough to coalesce a burst of
+/// whole-model writes, short enough to read as filling in rather than arriving in steps.
 const LOGO_REPAINT_INTERVAL: Duration = Duration::from_millis(150);
 
-/// Fetch the page's missing logos, decode a screenful, and repaint as they land.
+/// Fetches the page's missing logos, decodes a screenful and repaints as they land, after the grid
+/// is on screen so the second round trip doesn't delay first paint.
 ///
-/// **After the grid is already on screen**, deliberately: the search was one network round trip
-/// and the logos are a second, so serialising them would put both in front of first paint.
-///
-/// `generation` is the page these logos belong to. A search that supersedes it stops the burst
-/// where it stands rather than paying for a page nobody is looking at any more. `fresh` is whether
-/// this page is a new query rather than a page appended or a tier re-warmed — see
-/// [`logos::Effort::for_result`].
+/// A search superseding `generation` stops the burst. `fresh` is a new query rather than an append
+/// or a re-warm ([`logos::Effort::for_result`]).
 async fn warm_page(
     state: &AppState,
     radio_ui: &Arc<RadioUi>,
@@ -485,11 +411,8 @@ async fn warm_page(
     generation: u64,
     fresh: bool,
 ) {
-    // A station whose row already holds a logo is not asked about again, which is a page of
-    // requests saved wherever the user has kept much of what they browse. **The trade is a logo
-    // that moved**: the URL-keyed memo is what would notice, and it is never asked. Worth it
-    // because the row is only written by a keep or a play, so a moved logo could not have
-    // reached it either way — nothing here regresses, it just doesn't improve.
+    // A station whose row holds a logo isn't asked about again. A moved logo goes unnoticed, but
+    // only a keep or a play writes the row, so it couldn't have reached it either way.
     let (favicon_urls, effort) = {
         let browse = radio_ui.browse.lock();
         let known = radio_ui.kept_answers.lock();
