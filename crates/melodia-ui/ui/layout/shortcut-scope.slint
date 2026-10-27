@@ -6,16 +6,11 @@ import { Queue } from "../globals/queue.slint";
 import { Selection } from "../globals/selection.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 
-// The app's global keyboard shortcuts, and the focus scope catching them. It takes the whole main
-// layout as its children, so it sits between any nested scope and the Window's key dispatch. **It
-// is the only `FocusScope` in the tree** — a second one takes focus on mouse press and steals Esc.
-// Text inputs consume their typed keys naturally, so an alphabetic shortcut never fires while the
-// user is typing. The handler runs even under `Dialog.open`, so Escape routes through to
-// `Dialog.cancelled()`; **every non-Escape shortcut early-outs there**, so a confirm-only kind with
-// no input to swallow Space doesn't leak a playback toggle.
+// The app's shortcuts, round the whole main layout. **The only `FocusScope` in the tree**
+// (`ui-patterns.md`). Escape runs under `Dialog.open` too, routing to `Dialog.cancelled()`;
+// **every other shortcut early-outs there**.
 export component ShortcutScope inherits FocusScope {
-    // **Slint doesn't return focus to an ancestor scope when the focused item is destroyed**, so a
-    // view unmounting with focus inside it leaves shortcuts dead until the next click. The host
+    // Slint doesn't hand focus back to an ancestor scope when the focused item dies, so the host
     // calls this on every content-view switch.
     public function grab-focus() {
         self.focus();
@@ -24,12 +19,9 @@ export component ShortcutScope inherits FocusScope {
     // First grab, at first show.
     init => { root.grab-focus(); }
 
-    // The debounce for the *persistence* side of a volume step, key or wheel. `Player.bump-volume`
-    // pushes the step to the backend at once, which is cheap; every step resets this, and the timer
-    // below drains it and commits once on the trailing edge, so a held arrow key or a spun wheel
-    // writes `settings.json` when it stops. Here rather than beside the step because a global holds
-    // no timer, and this scope is mounted over the miniplayer too. A slider drag has the same
-    // one-commit-per-gesture contract via its own gate.
+    // Debounces the persist of a volume step, key or wheel: the step reaches the backend at once,
+    // and this commits once on the trailing edge. Here because a global holds no timer, and this
+    // scope is mounted over the miniplayer too.
     property <int> commit-debounce-ticks: 0;
 
     // On a mirror because `changed` rejects path expressions on globals.
@@ -44,17 +36,14 @@ export component ShortcutScope inherits FocusScope {
         triggered => {
             root.commit-debounce-ticks =
                 max(0, root.commit-debounce-ticks - 1);
-            // Trailing edge only. A fresh step reuses this timer by resetting the counter.
             if (root.commit-debounce-ticks == 0) {
                 Player.commit-volume();
             }
         }
     }
 
-    // Scrubbing off the end of a track is how a track change lands mid-run, and it is the
-    // common way to reach the end rather than an exotic one. Without this the trailing edge
-    // would seek the *incoming* track to the outgoing one's target. On a mirror because
-    // `changed` rejects path expressions on globals.
+    // A scrub off the end is the common way a track changes mid-run, and the trailing edge would
+    // otherwise seek the incoming track to the outgoing one's target.
     property <int> watched-seek-track: Player.vm.track.id;
     changed watched-seek-track => {
         Player.end-seek-run();
@@ -72,38 +61,32 @@ export component ShortcutScope inherits FocusScope {
         }
     }
 
-    // 0–9 seeks to that tenth of the track, the digit row's usual job in a player. `pct`
-    // stays an integer so the arithmetic does; the rounding bias is negligible at ms scale.
+    // `pct` stays an integer; the rounding bias is negligible at ms scale.
     function seek-to-percent(pct: int) {
         if (Player.duration-ms > 0) {
             Player.seek-to(round(Player.duration-ms * pct / 100));
         }
     }
 
-    // The docked panel sits beside the page rather than over it, so its keys are live only while
-    // it is what the user last pressed. The overlay sits over the page and owns them while it is
-    // up.
+    // The docked panel's keys are live only while it was the last thing pressed; the overlay owns
+    // them while it is up.
     property <bool> queue-keys: Queue.shown && (Queue.keys-owned || Queue.floating);
 
     key-pressed(ev) => {
-        // Priority: dialog cancel, the welcome card, the queue's picks, the floating queue,
-        // closing Now Playing, then a live selection. A nested `FocusScope` can't own the panel's
-        // Esc — Slint focuses a scope on mouse press, never on mount — so owning both keys at the
-        // root is what makes the priority explicit.
+        // Priority: the dialog, the welcome card, the queue's picks, the floating queue, Now
+        // Playing, then a live selection.
         if (ev.text == Key.Escape) {
             if (Dialog.open) {
                 Dialog.cancelled();
                 Dialog.open = false;
                 return accept;
             }
-            // Below the dialog arm, matching the paint order: the welcome card sits under
-            // `DialogOverlay`, so an error dialog raised from it cancels first.
+            // Below the dialog, matching the paint order (the root `CLAUDE.md`).
             if (Onboarding.open) {
                 Onboarding.dismiss();
                 return accept;
             }
-            // Picks first: the docked panel is a place, not a popup, so Escape never closes it,
-            // and with nothing picked the press falls through to the arms below.
+            // The docked panel is a place, not a popup, so Escape only clears its picks.
             if (root.queue-keys && Queue.selected-count > 0) {
                 Queue.clear-selection();
                 return accept;
@@ -118,11 +101,8 @@ export component ShortcutScope inherits FocusScope {
                 Nav.now-playing-open = false;
                 return accept;
             }
-            // The list and card selections, which have no clear button of their own. **Last**,
-            // and that is the whole of what keeps the arm honest: `any-live()` asks ten globals
-            // and none of them knows whether its surface is the one on screen, so above the
-            // arm before it a set held by the page *under* Now Playing would swallow the press
-            // that was meant to close it. Below the queue too, which answers for its own.
+            // **Last**: `any-live()` can't tell whether its surface is on screen, so higher up a
+            // set under Now Playing would swallow the press closing it (`ui-patterns.md`).
             if (Selection.any-live()) {
                 Selection.clear-live();
                 return accept;
@@ -130,23 +110,19 @@ export component ShortcutScope inherits FocusScope {
             return reject;
         }
 
-        // A form dialog's input consumes its typed keys naturally, but a confirm-only
-        // kind has no input — so without this guard, Space still pauses playback
-        // through the backdrop. The welcome card has no input at all and owes it twice over.
+        // A confirm-only dialog has no input to consume Space, and the welcome card none at all.
         if (Dialog.open || Onboarding.open) {
             return reject;
         }
 
-        // Removes the queue's picks. Backspace too, being the key a Mac labels delete.
+        // Backspace too, being the key a Mac labels delete.
         if ((ev.text == Key.Delete || ev.text == Key.Backspace)
             && root.queue-keys && Queue.selected-count > 0) {
             Queue.remove-selected();
             return accept;
         }
 
-        // Bare seeks or steps the volume, Shift takes a bigger seek, Ctrl skips tracks
-        // or steps the volume finely. Slint maps `modifiers.control` to Cmd on macOS
-        // automatically.
+        // Slint maps `modifiers.control` to Cmd on macOS.
         if (ev.text == Key.LeftArrow) {
             if (ev.modifiers.control) {
                 Player.previous();
@@ -172,7 +148,6 @@ export component ShortcutScope inherits FocusScope {
             return accept;
         }
 
-        // The number row's percentage seek.
         if (ev.text == "0") { seek-to-percent(0);  return accept; }
         if (ev.text == "1") { seek-to-percent(10); return accept; }
         if (ev.text == "2") { seek-to-percent(20); return accept; }
@@ -184,7 +159,6 @@ export component ShortcutScope inherits FocusScope {
         if (ev.text == "8") { seek-to-percent(80); return accept; }
         if (ev.text == "9") { seek-to-percent(90); return accept; }
 
-        // Space is play/pause everywhere.
         if (ev.text == " ") {
             Player.play-pause();
             return accept;
@@ -192,8 +166,7 @@ export component ShortcutScope inherits FocusScope {
 
         // **Before the bare letters**, so Ctrl+N wins over N.
         if (ev.modifiers.control) {
-            // Every other surface rejects it, and the guard above keeps it from firing behind
-            // a modal.
+            // Only the queue takes it; the guard above keeps it off a modal.
             if (ev.text == "a" && root.queue-keys) {
                 Queue.select-all();
                 return accept;
@@ -204,25 +177,20 @@ export component ShortcutScope inherits FocusScope {
                 return accept;
             }
             if (ev.text == ",") {
-                // Settings' nav index; the `Nav` global has the map. The edge goes with it, as
-                // `sidebar.slint` does — lateral nav, and left unwritten the page inherits
-                // whichever direction the last drill or back put there.
+                // The edge goes with it as from the sidebar: unwritten, the page inherits the last
+                // drill's.
                 Nav.pending-enter-from = NavEnterFrom.above;
                 Nav.selected-index = 9;
                 Nav.persist-selected-index(9);
                 return accept;
             }
             if (ev.text == "n") {
-                // Populates the dialog exactly as the New-Playlist menu entry does —
-                // which it now does by construction rather than by having been copied
-                // from it. Spelled out here, this had drifted to its own title.
                 Dialog.open-create-playlist([]);
                 return accept;
             }
             return reject;
         }
 
-        // The bare letters.
         if (ev.text == "m") { Player.toggle-mute();     return accept; }
         if (ev.text == "l") { Player.toggle-favorite(); return accept; }
         if (ev.text == "n") { Player.next();            return accept; }
@@ -230,8 +198,7 @@ export component ShortcutScope inherits FocusScope {
         if (ev.text == "s") { Player.toggle-shuffle();  return accept; }
         if (ev.text == "r") { Player.cycle-repeat();    return accept; }
 
-        // The miniplayer has no panel to open, so Q there would flip one nobody sees. A narrow
-        // window opens the overlay.
+        // The miniplayer has no panel to open. A narrow window opens the overlay.
         if (ev.text == "q" && !MiniPlayer.active) {
             Queue.toggle();
             return accept;

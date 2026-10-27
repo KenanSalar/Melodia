@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 13.3 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 13.4 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -114,8 +114,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 11 | `melodia-store` | 0.34 | 2,456 | ~666 | 0.20 (1,454) | `6d82a92b` |
 | 12 | `melodia-integrations` | 0.30 | 936 | ~147 | 0.14 (438) | `98e82bcd` |
 | 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | 0.56 (432) | `358c39f1` |
-| 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | 0.31 (337) | |
-| 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | | |
+| 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | 0.31 (337) | `6f305ce2` |
+| 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | 0.25 (541) | |
 | 13.4 | Slint `components/`, its own files | 0.47 | 1,538 | ~725 | | |
 | 13.5 | Slint `components/`'s subdirectories | 0.34 | 3,013 | ~788 | | |
 | 13.6 | Slint `views/` | 0.29 | 2,055 | ~286 | | |
@@ -277,9 +277,12 @@ The 36 `// Translators:` notes stay byte for byte: `crates/melodia/tests/transla
   - **Second copies dropped:** `Dialog`'s copy of `DialogOverlay`'s always-rendered argument and the dispatcher's stays-open notes (the overlay's confirm handler and `RadioForm`'s header); the claim argument behind `request-generation` and the deferred openers, `ui-patterns.md`'s `DialogClaim` entries; `TagEditor`'s diff and batch argument, `library-data.md`'s, and `request-edit`'s copy of `open-tag-editor`'s tab argument; the unfetched sentinel kept once, at `Albums.total-count`, and the repaint token at `RowCovers`; the two-slot cross-fade, the filter and origin arguments of the other three details, each now `AlbumDetail`'s or `slint-pitfalls.md`'s; `PlaylistDetail`'s synthetic-sort argument, `CardActions.set-favorites`, `CopyActions`' order, `MyLibrary`'s filter routing and `hero-collapsed`, all `ui-patterns.md`'s or `slint-pitfalls.md`'s; `Tracks.toggle-column`, `wire_toggle_column`'s doc; `CardSelection`'s scope guard and id anchor, `ui::callbacks::card_selection`'s; Browse's folder-card reason kept once, at `Browse.play-folder`.
   - **Stale claims removed:** `request-generation`'s "four" openers leaving `open` false and `open-tag-editor` as "the one" (six do); `open-new-smart-playlist`'s `target-id` as what `smart.rs` branches on (it reads `SmartEditor.target-id`); `Playlists`' dialogs "populated inline in Slint markup" (`Dialog`'s openers); `apply-mosaic`'s empty selection reverting to an automatic thumbnail (`clear-artwork` takes it, leaving none); `Browse.request-card-cover`'s own tier and `ArtistDetail.request-album-cover` borrowing `AlbumsUi`'s (both the shared grid tier); `ArtistDetail.open-album` flipping the nav index to Albums (a tab); `Genres`' tiles drawing the fallback glyph and its leave a no-op (a name-hashed gradient, and the `GridTab` leave); `RecentlyPlayed.section-active-changed`'s `watched-recently-active` (no such mirror); `MyLibrary` as the "second" globals file importing siblings (third).
   - **Ends above 0.25** on 13.1's reason.
-- [ ] **13.3 The root files and `layout/`**, one commit: `app-window.slint`, `models.slint`, `theme.slint`, `settings.slint`, the four `layout/` files, and `melodia-ui`'s own Rust (`build.rs`, `src/`: 26 comment lines over 21 of code, counted in the Rust corpus).
+- [x] **13.3 The root files and `layout/`**, one commit: `app-window.slint`, `models.slint`, `theme.slint`, `settings.slint`, the four `layout/` files, and `melodia-ui`'s own Rust (`build.rs`, `src/`: 26 comment lines over 21 of code before, 14 after, counted in the Rust corpus).
   - **Furthest over:** `app-window.slint` (127), `models.slint` (122), `theme.slint` (102), `settings.slint` (94).
-  - **Pointed at:** `CLAUDE.md`'s UI Structure (the mount sheet, the `export { }` block, `models.slint` mirroring Rust, `Theme.is-light` and `ink-on`, `resize-ring`).
+  - **Pointed at:** `CLAUDE.md`'s UI Structure (the mount sheet, the `export { }` block, `models.slint` mirroring Rust, `Theme.is-light` and `ink-on`, `resize-ring`). Also `bridge.rs` at `models.slint`'s case for the position scalars (moved onto `PlayerVm`, where it belongs), `paged_rows/grid.rs` at the `*GridRow` shape, `theme_paint.rs` at `Theme.recoloring`, `desktop-shell.md` at the shell's mounts, `slint-pitfalls.md` at `nav-scroll`'s `min-width` and `bar-w`'s seed, and `tooltip_mounts.rs` at `sidebar-tip`, each kept. The tests reading these files strip comments or read code.
+  - **Second copies dropped:** the font header, `resize-border-width` and `build.rs`' catalog-basename argument, all the root `CLAUDE.md`'s; `Theme.is-light`'s polarity argument, likewise; the section gates' per-mount notes (they narrated the Rust hooks), the clipboard's `TextInput` reason, the queue keys' rising edge, the rail tooltip's `held` latch and the Escape chain's selection arm, each now `ui-patterns.md`'s with a short anchor; `models.slint`'s per-struct cover notes, kept once in the header; `RadioVm`'s and `RadioStationRow`'s log-line rule, `radio.md`'s; `LyricRow`'s offset-table argument, `lyrics::follow`'s; `Settings`' Connect-inline note, `scrobbling-section.slint`'s; the two `-1` indices under a follow switch, `ui-patterns.md`'s; `titlebar-button-style`'s tokens, kept once on `Theme`; `bar-w`'s seed story, `slint-pitfalls.md`'s.
+  - **Stale claims removed:** `theme.slint`'s header naming `themes::apply()` as the palette writer (`ui::appearance::theme_paint`); `PlaylistRow`'s `queue_music` fallback (the grid draws `playlist`); `Settings`' `library::radio::search` (`directory`), `services::toast` (`utils::toast`), `services::logging` (`platform::logging`), `main.rs` reading `resume-on-startup` (`boot::tasks::maybe_resume_on_startup`), the device-lost toast having "no device picker to send the user to" (Output has one), and restart-required as the one toast with a translated body (exclusive-refused's is too); `SidebarItem` firing `select` (it is `clicked`).
+  - **Ends at 0.25.**
 - [ ] **13.4 `components/`, its own files**, one commit (63 files).
 - [ ] **13.5 `components/`'s subdirectories**, one commit.
   - **Furthest over:** `now-playing/` (266), `hero/` (201), `grid/` (170), `track-list/` (104).

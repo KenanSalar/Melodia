@@ -17,27 +17,19 @@ import { QualityChip } from "../components/quality-chip.slint";
 import { SignalPathUi } from "../globals/signal-path.slint";
 
 export component NowPlayingBar inherits Rectangle {
-    // Pinned with min/max and no stretch so the parent always reserves this slot —
-    // without it a short window hands the height to the taller layout above and the bar
-    // disappears below the visible edge. The pair rather than `height`, which Slint
-    // won't let sit beside a `min-height`.
+    // Pinned with min/max and no stretch, or a short window hands the height to the layout above
+    // and the bar drops below the edge.
     min-height: Theme.now-playing-h;
     max-height: Theme.now-playing-h;
     vertical-stretch: 0;
     background: WindowChrome.mantle;
 
-    // Written imperatively from `changed width`, so the child intrinsic sizes derived
-    // from it — tile, button diameters, padding — don't bind to `root.width` and form a
-    // `layoutinfo-h` loop in the parent layout.
+    // Written from `changed width` rather than bound, so the sizes derived from it don't loop the
+    // parent layout's `layoutinfo-h`.
     property <length> bar-w: 1100px;
     changed width => { self.bar-w = self.width; }
 
-    // **The mount seed the mirror owes.** `changed` doesn't fire when the first layout
-    // settles directly on the final value, so a window opened at its final size never
-    // corrects the seed above. Every consumer is a `clamp` that saturates long before
-    // it, which is why this went unnoticed — at ordinary widths the stale seed and the
-    // real width agree, and only a narrow window diverges and keeps wide-window padding
-    // until something resizes it.
+    // The mount seed that mirror owes (`slint-pitfalls.md`).
     Timer {
         interval: 1ms;
         triggered => {
@@ -46,49 +38,35 @@ export component NowPlayingBar inherits Rectangle {
         }
     }
 
-    // One clamp for every standard button in the bar. Inline it lived at a dozen call
-    // sites; cached here, Slint evaluates it once per `bar-w` change rather than once
-    // per use.
+    // Every standard button's, evaluated once per `bar-w` change rather than per use.
     out property <length> btn-d: clamp(root.bar-w * 0.05, 28px, 36px);
     out property <length> btn-icon-d: clamp(root.bar-w * 0.03, 18px, 20px);
 
-    // The overflow trigger is **always** mounted: it permanently houses the
-    // playback-speed flyout, which is never shown inline, and additionally collects
-    // whatever the user routed to it through `Settings.overflow-*`.
-
-    // No divider here: the content panel's own bottom border draws the seam, so it
-    // follows the panel's rounded corners cleanly.
-
-    // The transport, seek and trailing columns each wrap in a centring `VerticalLayout`, so their
-    // content sits centred against the bar height whatever its intrinsic size.
+    // No divider: the content panel's border draws the seam, following its corners.
     HorizontalLayout {
         padding-left: clamp(root.bar-w * 0.02, 10px, 16px);
         padding-right: clamp(root.bar-w * 0.02, 10px, 16px);
         spacing: clamp(root.bar-w * 0.015, 6px, 12px);
         alignment: stretch;
 
-        // A Rectangle rather than a layout so it can clip bidi overflow, and the inner text
-        // column takes `horizontal-stretch: 1` so `overflow: elide` fires at all — the
-        // `track-list-row.slint` title-cell pattern. **The whole cell is a button**, toggling
-        // the full-screen view, so a second click closes it; its TouchArea is declared last so
-        // it sits above the artwork and text.
+        // A Rectangle so it can clip bidi overflow; the text column's stretch is what lets
+        // `elide` fire. **The whole cell is a button** toggling the full view, its TouchArea
+        // declared last to sit above the content.
         track-info-cell := Rectangle {
             width: clamp(root.bar-w * 0.25, 120px, 200px);
             // Redundant, but spelled out beside the columns below that genuinely need it.
             horizontal-stretch: 0;
             clip: true;
 
-            // A station is a source like any other here: the cell opens the full view for it too,
-            // so the affordance follows whichever half of the view model is filled.
+            // A station opens the full view too.
             property <bool> has-source: Player.vm.has_track || Player.vm.has_station;
             // What the fill and the zoom read, so the cell stays lit under its own menu.
             property <bool> hovered: (track-info-touch.has-hover || track-menu.is-open)
                 && track-info-cell.has-source;
 
-            // The `IconButton` press wobble, driving **both** the hover fill and the content
-            // wrapper so the two contract together toward the cell's centre rather than both
-            // anchoring left. **Only the factor is animated** — the cell re-clamps as `bar-w`
-            // changes, so easing the derived sizes would wobble on every resize tick.
+            // Drives the fill and the content wrapper both, so they contract toward the centre
+            // together. **Only the factor animates**: the cell re-clamps with `bar-w`, so easing
+            // the derived sizes would wobble on every resize tick.
             property <float> press-scale: track-info-touch.pressed && track-info-cell.has-source
                 ? 0.99
                 : 1.0;
@@ -97,10 +75,8 @@ export component NowPlayingBar inherits Rectangle {
                 easing: cubic-bezier(0.34, 1.56, 0.64, 1);
             }
 
-            // A low-alpha accent fill behind the content. The vertical inset keeps it
-            // off the bar's top and bottom edges, so it reads as a discrete button
-            // rather than a full-height swap; the x/y recentring is what makes it pulse
-            // in place instead of drifting toward a corner.
+            // Inset off the bar's edges so it reads as a button, and recentred so it pulses in
+            // place.
             Rectangle {
                 width: parent.width * track-info-cell.press-scale;
                 height: (parent.height - 12px) * track-info-cell.press-scale;
@@ -111,9 +87,7 @@ export component NowPlayingBar inherits Rectangle {
                 animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
 
-            // Shares `press-scale` with the fill, so the row inside contracts toward the
-            // cell's centre. Without the wrapper, scaling per element anchors each to
-            // its own left edge and the block collapses leftward instead of pulsing.
+            // Scaled as one block: per element, each would anchor to its own left edge.
             Rectangle {
                 width: parent.width * track-info-cell.press-scale;
                 height: parent.height * track-info-cell.press-scale;
@@ -121,8 +95,7 @@ export component NowPlayingBar inherits Rectangle {
                 y: (parent.height - self.height) / 2;
 
                 HorizontalLayout {
-                    // Nests the content inside the hover fill, which spans the wrapper's
-                    // full width — without it the tile sits flush against its edge.
+                    // Keeps the tile off the hover fill's edge.
                     padding-left: 8px;
                     padding-right: 8px;
                     spacing: clamp(root.bar-w * 0.015, 6px, 10px);
@@ -139,9 +112,8 @@ export component NowPlayingBar inherits Rectangle {
                         horizontal-stretch: 1;
                         spacing: 2px;
 
-                        // Both lines come off `Player`, which owns the track-or-station
-                        // ladder and the LRM that keeps elide's `…` on the right edge for
-                        // RTL scripts.
+                        // `Player` owns the track-or-station ladder and the LRM keeping elide's
+                        // `…` on the right for RTL scripts.
                         Text {
                             text: Player.source-title;
                             color: Theme.text;
@@ -158,11 +130,7 @@ export component NowPlayingBar inherits Rectangle {
                         Text {
                             // The album for a track, the station's country for a stream.
                             text: Player.source-tertiary;
-                            // All three lines are `Theme.text`; size and weight are
-                            // what separate them. Artist and album were `subtext0`
-                            // and `overlay1` — the latter isn't even a text rung —
-                            // which put the album two steps under the title in a
-                            // bar this short.
+                            // Size and weight separate the three lines, not colour.
                             color: Theme.text;
                             font-size: 11px;
                             overflow: elide;
@@ -175,11 +143,9 @@ export component NowPlayingBar inherits Rectangle {
             track-info-touch := TouchArea {
                 mouse-cursor: track-info-cell.has-source ? pointer : default;
                 enabled: track-info-cell.has-source;
-                // The edge is owed on the *close* half of this toggle: the view under
-                // Now Playing is a fresh `ViewTransition` mount, and left unwritten it
-                // enters from whatever the last drill or back put there. Set
-                // unconditionally, since opening reads nothing — that branch hard-codes
-                // `above`.
+                // Owed by the close: the view under Now Playing is a fresh `ViewTransition`
+                // mount, entering from wherever the last drill left the edge otherwise.
+                // Unconditional, the open reading nothing.
                 clicked => {
                     Nav.pending-enter-from = NavEnterFrom.above;
                     Nav.now-playing-open = !Nav.now-playing-open;
@@ -203,16 +169,13 @@ export component NowPlayingBar inherits Rectangle {
                 artist-id: Player.track-artist-id;
                 genre-id: Player.track-genre-id;
                 view-context: "now-playing";
-                // The heart's path and the overflow menu's stars', each of which also repaints
-                // every list showing this track.
+                // The bar's own heart and stars, each also repainting every list showing it.
                 toggle-favorite(ids, on) => { Player.toggle-favorite(); }
                 rate(ids, n) => { Player.set-current-rating(n); }
             }
         }
 
-        // Transport. A `VerticalLayout` defaults to stretch 1, so without the explicit 0
-        // this column absorbs a share of the bar's surplus as dead padding around the
-        // button row and starves the slider — the only section that should grow.
+        // Stretch 0, or this column takes a share of the surplus only the slider should get.
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 0;
@@ -235,9 +198,7 @@ export component NowPlayingBar inherits Rectangle {
                     held(step) => { Player.scan-step(-1, step); }
                 }
 
-                // Disc geometry, hover and press scale, tooltip, the hold ring and the
-                // optional Equalizer overlay all live inside `PlayButton`. The glyph is
-                // punched out in the bar's own fill.
+                // The glyph is punched out in the bar's own fill.
                 PlayButton {
                     wrapper-d: clamp(root.bar-w * 0.055, 30px, 38px);
                     icon-size: clamp(root.bar-w * 0.025, 14px, 20px);
@@ -265,8 +226,7 @@ export component NowPlayingBar inherits Rectangle {
             }
         }
 
-        // Elapsed, slider, total. The inner row keeps the default `alignment: stretch`,
-        // which is what lets the slider's own stretch factor expand it.
+        // The inner row keeps the default `alignment: stretch`, which lets the slider expand.
         VerticalLayout {
             alignment: center;
             min-width: 140px;
@@ -277,9 +237,8 @@ export component NowPlayingBar inherits Rectangle {
                 seam-mask-color: WindowChrome.mantle;
             }
 
-            // A stream has no timeline to seek within, so there is no slider and no total. What
-            // the position still means is how long this connection has been running, which is
-            // worth stating; the pill beside it carries the connection's own state.
+            // A stream has no timeline, but how long the connection has run is worth stating; the
+            // pill carries the connection's state.
             if Player.vm.has_station: HorizontalLayout {
                 spacing: Theme.pad-sm;
                 alignment: center;
@@ -302,8 +261,8 @@ export component NowPlayingBar inherits Rectangle {
             }
         }
 
-        // Pinned like the transport column, so a button routed into the overflow menu
-        // frees its space *to the slider* rather than into padding here.
+        // Pinned like the transport, so a button routed into the overflow menu frees its space
+        // to the slider.
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 0;
@@ -313,9 +272,8 @@ export component NowPlayingBar inherits Rectangle {
                 alignment: end;
                 cross-axis-alignment: center;
 
-                // `if` rather than `visible: false`, so a button moved into the overflow
-                // menu vacates its layout slot instead of leaving a hole. The chip's padding
-                // stands in for the gap this row's spacing is too tight to give it.
+                // `if`, so a button moved into the overflow menu vacates its slot. The chip's
+                // padding is the gap this row's spacing is too tight to give it.
                 if SignalPathUi.chip-shown && !Settings.overflow-quality: VerticalLayout {
                     padding-right: Theme.pad-sm;
                     QualityChip { }
@@ -363,7 +321,7 @@ export component NowPlayingBar inherits Rectangle {
                     tooltip-text: WindowChrome.always-on-top-active ? @tr("Unpin from Top") : @tr("Pin on Top");
                     clicked => { WindowChrome.toggle-always-on-top(); }
                 }
-                // In the overflow menu it takes no drop: the press a drag starts with shuts the menu.
+                // In the overflow menu it takes no drop: a drag's opening press shuts the menu.
                 if !Settings.overflow-queue: QueueButton {
                     diameter: root.btn-d;
                     icon-size: root.btn-icon-d;
@@ -372,6 +330,7 @@ export component NowPlayingBar inherits Rectangle {
                     diameter: root.btn-d;
                     icon-size: clamp(root.bar-w * 0.035, 22px, 22px);
                 }
+                // Always mounted: it houses the speed flyout, which is never inline.
                 OverflowMenu { bar-w: root.bar-w; }
             }
         }

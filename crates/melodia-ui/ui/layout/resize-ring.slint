@@ -42,14 +42,13 @@ component ResizeCorner {
     }
 }
 
-// The frameless window's resize grabs, and the only geometry they have: hover here sets the cursor
-// and names the zone, and the winit filter starts the OS resize from that zone, so what the cursor
-// shows is what the press does. Nothing here handles the press: a `TouchArea` that starts an OS
-// drag leaks its grab. The overlays also steal hover from what sits underneath, or aiming at the
-// band flashes the close button red and paints scrollbar hover.
+// The frameless window's resize grabs. Hover names the zone the winit filter starts the OS resize
+// from, so the cursor shows what the press does. Nothing here takes the press, a `TouchArea`
+// starting an OS drag leaking its grab; the areas do take hover, or aiming at the band lights the
+// close button and the scrollbar beneath it.
 //
-// The caller mounts it full-size and for good, switching it with `active`: an unmounted ring would
-// leave its last zone standing, and the next click anywhere would resize the window.
+// Mounted for good and switched by `active`: unmounted, its last zone would stand and the next
+// click anywhere would resize the window.
 export component ResizeRing {
     in property <bool> active;
     // The Window's own resize band, handed over by the one host that knows its kept frame margins.

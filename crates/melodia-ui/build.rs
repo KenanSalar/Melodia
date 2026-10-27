@@ -1,18 +1,13 @@
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // The `translations/<lang>/LC_MESSAGES/melodia-ui.po` catalogs bundle into the
-    // compiled UI, so `slint::select_bundled_translation` re-renders every `@tr(...)`
-    // with no system gettext dependency. That basename is not a free choice:
-    // slint-build derives the gettext domain from `CARGO_PKG_NAME` and exposes no
-    // override, so renaming the crate means renaming every one or the build fails with
-    // "No translations found". Both paths resolve against this crate's manifest dir
-    // rather than the working directory.
+    // The catalogs' basename is the gettext domain, which slint-build takes from `CARGO_PKG_NAME`
+    // with no override: renaming the crate renames every catalog, or the build fails with
+    // "No translations found".
     //
-    // `DefaultTranslationContext::None` keeps msgids context-free, so identical
-    // English across components shares one msgstr — matching extraction under
+    // Context-free msgids let identical English across components share one msgstr, matching
     // `slint-tr-extractor --no-default-translation-context`.
     //
-    // The compile goes on an explicitly-sized thread because Slint's recursive AST
-    // walk overflows Windows' 1 MiB default main-thread stack; Linux's 8 MiB hides it.
+    // Slint's recursive AST walk overflows Windows' 1 MiB main-thread stack, which Linux's 8 MiB
+    // hides.
     let join = std::thread::Builder::new().stack_size(16 * 1024 * 1024).spawn(
         || -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let cfg = slint_build::CompilerConfiguration::new()
