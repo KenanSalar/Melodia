@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 3 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 4 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -91,8 +91,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | Slice | Covers | Ratio before | Comment lines before | Over | After | Commit |
 |---|---|---|---|---|---|---|
 | 1 | `melodia-artwork` | 0.73 | 1,028 | ~674 | 0.31 (441) | `a6e10d5f` |
-| 2 | `melodia-net` | 0.59 | 1,118 | ~648 | 0.24 (448) | |
-| 3 | `melodia-platform` | 0.51 | 1,030 | ~523 | | |
+| 2 | `melodia-net` | 0.59 | 1,118 | ~648 | 0.24 (448) | `bda588b8` |
+| 3 | `melodia-platform` | 0.51 | 1,030 | ~523 | 0.26 (528) | |
 | 4 | `melodia-audio` | 0.48 | 1,414 | ~677 | | |
 | 5 | `melodia-engine` | 0.48 | 1,572 | ~756 | | |
 | 6.1 | `melodia-core`: `utils/`, `lib.rs`, `config.rs`, `error.rs` | 0.79 | 561 | ~384 | | |
@@ -140,15 +140,15 @@ Status: done.
   - **Test comment citing it:** `crates/melodia/tests/radio_facade.rs` quotes `radio_browser/mod.rs`'s module doc ("Nothing outside `library::radio` should reach here").
 
 ### Phase 3: `melodia-platform`
-Status: next.
+Status: done.
 
-- [ ] **3. The crate**, one commit (25 files).
+- [x] **3. The crate**, one commit (25 files).
   - **Furthest over:** `single_instance.rs` (85), `logging.rs` (71), `crash_report.rs` (55), `desktop_integration.rs` (42).
   - **Pointed at:** `CLAUDE.md` on `single_instance::name_is_taken`, `crash_report::prune`, `allocator`, `install_kind` and `dwm_titlebar::is_dark_from_rgb`; `.claude/rules/diagnostics.md` and `desktop-shell.md`.
   - **Test comment citing it:** `system_theme_tests.rs` ("the clamp its doc comment claims").
 
 ### Phase 4: `melodia-audio`
-Status: not started.
+Status: next.
 
 - [ ] **4. The crate**, one commit (17 files).
   - **Furthest over:** `source/stream_source.rs` (107), `file_decode.rs` (94), `decode.rs` (71), `audio.rs` (68).

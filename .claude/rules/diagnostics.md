@@ -12,22 +12,12 @@ paths:
 
 Three files answer to a bug report rather than to a subsystem, and they are read together.
 
-- **`logging.rs`** — the `flexi_logger` sink: `logs/melodia_rCURRENT.log` every run with no env var
-  set, 2 MiB × 7 rotated files, counted rather than dated so an occasional user's history isn't
-  swept at startup, and `.append()`, the one call whose absence silently erases the run that
-  crashed. `RUST_LOG` overrides the scoped default — a `warn` floor, our two targets
-  `melodia`/`Melodia` at `info`, plus a per-module `error` mute for
-  `symphonia_bundle_mp3::layer3`'s per-frame bit-reservoir underflow and `sctk_adwaita::buttons`
-  misparsing a GNOME portal key. **Mutes are scoped by module, never by crate** — a crate-wide
-  directive takes unrelated warnings with it; `SPEC_TAIL` argues each. **The spec is *built*, not
-  written down**: `spec_for(level)` folds floor + targets + tail around one level, so the
-  Settings → About → Diagnostics **Verbose logging** switch (`logging::set_verbose`, live via
-  `LoggerHandle::set_new_spec`, no relaunch) raises to `debug` without a second spelling drifting,
-  and the mutes ride along — `layer3` otherwise buries the detail the switch was flipped for. The
-  flag persists (`DiagnosticsFlags::verbose_logging`) and `install` reads it **before anything else
-  runs** so a bad boot is captured; a set `RUST_LOG` wins outright and `set_verbose` declines and
-  says so. **What belongs at which level is argued in the module's own doc** — read it before
-  adding a `log::` call.
+- **`logging.rs`** — the `flexi_logger` sink, written every run with no env var set. The rotation,
+  `.append()`, the built spec and its per-module mutes are each argued at their definitions there,
+  and **what belongs at which level is argued in the module's own doc**: read it before adding a
+  `log::` call. The Settings → About → Diagnostics **Verbose logging** switch reaches it through
+  `logging::set_verbose`, live, the flag persisting as `DiagnosticsFlags::verbose_logging`; a set
+  `RUST_LOG` wins outright.
 
 - **`crash_report.rs`** — the *chained* panic hook (it does fire under `panic = "abort"`), writing
   `crash-<stamp>.txt` with plain `fs` and never through the logger, so a panic raised inside a

@@ -1,13 +1,5 @@
-//! GNOME backend for always-on-top. GNOME Shell exposes no native
-//! always-on-top D-Bus interface; the `window-calls` extension fills the
-//! gap with `org.gnome.Shell.Extensions.Windows`. We `List`, pick the
-//! window matching our PID (preferring the one whose `wm_class` contains
-//! "melodia" so a child dialog isn't pinned by accident), then call
-//! `MakeAbove` / `UnmakeAbove`. Capability detection has already
-//! confirmed the extension is present.
-//!
-//! Same threading rules as `kwin.rs`: `zbus::blocking::*` only,
-//! everything inside `tokio::task::spawn_blocking`.
+//! GNOME backend for always-on-top, through the `window-calls` extension, GNOME Shell having no
+//! interface of its own. `zbus::blocking` inside `spawn_blocking`, as in `kwin.rs`.
 
 use melodia_core::error::AppError;
 
@@ -38,9 +30,7 @@ pub async fn set_always_on_top(pinned: bool) -> Result<(), AppError> {
             .filter(|w| w.get("pid").and_then(serde_json::Value::as_u64) == Some(u64::from(pid)))
             .collect();
 
-        // Prefer the window whose `wm_class` contains "melodia"
-        // (case-insensitive) — a process can host multiple windows and we
-        // must not pin a transient dialog.
+        // By `wm_class` where it can, so a transient dialog of ours isn't the one pinned.
         let window = pid_matches
             .iter()
             .find(|w| {

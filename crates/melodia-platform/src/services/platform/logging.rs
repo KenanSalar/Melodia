@@ -1,25 +1,23 @@
 //! The file log sink.
 //!
 //! Every run writes `logs/melodia_rCURRENT.log` with no env var set: a `.desktop`, tray or Windows
-//! GUI launch leaves no console stderr could have been captured from, and nobody re-runs under
-//! `RUST_LOG` after the crash they already had. The sink's shape — rotation, `RUST_LOG`
-//! precedence, the two mutes, the newest-first ordering — is `.claude/rules/diagnostics.md`.
+//! GUI launch leaves no console to capture stderr from, and nobody re-runs under `RUST_LOG` after
+//! the crash they already had.
 //!
 //! # Which level
 //!
-//! - **`info`** — happened once, matters at a glance. On for every user, so the rotation budget is
+//! - **`info`**: happened once, matters at a glance. On for every user, so the rotation budget is
 //!   sized against its volume.
-//! - **`warn`** — a user could notice. Expected, self-recovering and unbounded goes to `debug`
+//! - **`warn`**: a user could notice. Expected, self-recovering and unbounded goes to `debug`
 //!   with a count instead; per occurrence it only teaches the reader to skim warnings
 //!   (`player::playback::stream_health`).
-//! - **`debug`** — what the user did, as a narrative: one line per class of action at the seam
+//! - **`debug`**: what the user did, as a narrative: one line per class of action at the seam
 //!   every path funnels through, and **nothing on a timer, frame or keystroke**. The *action*,
-//!   never the widget — a play/pause line at the button misses the shortcut, the tray, the media
+//!   never the widget: a play/pause line at the button misses the shortcut, the tray, the media
 //!   keys and Now Playing. `trace` is unused, hence [`VERBOSE_LEVEL`] stopping here.
 //!
-//! **One writer, by `services::platform::single_instance`'s doing** — a second launch forwards and returns
-//! before `install` runs. Nothing here defends the file though: an unmakeable claim boots anyway,
-//! and two Melodias would interleave with a rotation able to race.
+//! One writer, `single_instance` forwarding a second launch before `install` runs. Nothing here
+//! defends the file though: an unmakeable claim boots anyway.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -31,67 +29,52 @@ use flexi_logger::{
 
 use melodia_core::config::Paths;
 
-/// What our own two targets log at with Verbose Logging off.
+/// What our own targets log at with Verbose Logging off.
 const NORMAL_LEVEL: &str = "info";
 
-/// …and with it on. Not `trace`: there are no `log::trace!` sites in the tree, so it would differ
-/// only in what the muted dependencies say.
+/// Not `trace`: no `log::trace!` site exists, so it would differ only in what the muted
+/// dependencies say.
 const VERBOSE_LEVEL: &str = "debug";
 
-/// The two dependency modules that warn about something we already know: `layer3`'s bit-reservoir
-/// underflow fires once per *frame* on any stream not opened at byte zero while the decoder
-/// compensates and plays it fine, and `sctk_adwaita::buttons` names controls on the client-side
-/// titlebar winit builds and immediately hides in custom-titlebar mode.
+/// Two dependency modules warning about what we already know: `layer3`'s bit-reservoir underflow
+/// fires per *frame* on a stream not opened at byte zero while the decoder plays it fine, and
+/// `sctk_adwaita::buttons` names controls on the titlebar winit builds and hides in
+/// custom-titlebar mode.
 ///
-/// Scoped by module, never by crate: each is the only `warn!` in its own, so the siblings still
-/// land. Directives match longest-name-first, so these outrank the floor. Shared by both specs —
+/// Scoped by module, never by crate, each being the only `warn!` in its own. Shared by both specs:
 /// a verbose spec dropping `layer3` buries the detail the switch was flipped for.
 const SPEC_TAIL: &str = "symphonia_bundle_mp3::layer3=error, sctk_adwaita::buttons=error";
 
-/// Dependency warnings, our own narrative at `level`, and nothing else. A bare `"info"` would
-/// floor every crate in the graph, spending our rotation budget on their choices. `RUST_LOG`
-/// overrides it.
+/// Dependency warnings, our own narrative at `level`, and nothing else, a bare `"info"` spending
+/// the rotation budget on every crate in the graph. `RUST_LOG` overrides it.
 ///
-/// **`melodia` is a prefix, not a target.** No crate is named that — every library member is
-/// `melodia_app`, `melodia_core`, `melodia_views` and so on — and what reaches them is that a
-/// directive matches by `writing_module.starts_with(name)`, so one token covers every member the
-/// split will ever add.
-/// The capitalised sibling is the binary, whose crate really is `Melodia`; the match is
-/// case-sensitive, so it needs its own token.
+/// **`melodia` is a prefix, not a target**: directives match by `starts_with`, so one token covers
+/// every `melodia_*` member. `Melodia` is the binary, the match being case-sensitive.
 fn spec_for(level: &str) -> String {
     format!("warn, melodia={level}, Melodia={level}, {SPEC_TAIL}")
 }
 
 /// Rotate at 2 MiB or the turn of the day; `Cleanup` never counts the live file, so the ceiling is
-/// 8 files. Counted rather than dated — `KeepForDays` drops the byte bound, and its startup sweep
+/// 8 files. Counted rather than dated: `KeepForDays` drops the byte bound, and its startup sweep
 /// wipes an occasional user's whole history before they can report anything.
 const MAX_LOG_BYTES: u64 = 2 * 1024 * 1024;
 const KEEP_LOG_FILES: usize = 7;
 
-/// Keeps the logger alive — `flexi_logger` shuts its writers down when the handle drops. A local
-/// binding would be unreachable from [`flush`] and [`log_files`].
+/// `flexi_logger` shuts its writers down when the handle drops.
 static HANDLE: OnceLock<LoggerHandle> = OnceLock::new();
 
-/// Why the file sink isn't running, so [`unavailable_reason`] can tell a diagnostics bundle that
-/// apart from an install that never wrote any logs.
+/// So a diagnostics bundle can tell a broken sink from an install that never wrote logs.
 static FILE_SINK_ERROR: OnceLock<String> = OnceLock::new();
 
-/// Whether `RUST_LOG` was **set** when [`install`] ran; if so it owns the spec and [`set_verbose`]
-/// declines. Presence, not a successful parse — a malformed value is still a developer saying
-/// which levels they want, and a GUI switch quietly taking the spec back from a typo is the
-/// surprise.
+/// Whether `RUST_LOG` was **set** at [`install`], which makes [`set_verbose`] decline. Presence,
+/// not a parse: a malformed value is still a developer saying which levels they want.
 static ENV_SPEC_WINS: OnceLock<bool> = OnceLock::new();
 
-/// Start logging. Call once, as early in `main` as a [`Paths`] exists.
+/// Starts logging, as early in `main` as a [`Paths`] exists.
 ///
-/// **Infallible on purpose** — `.claude/rules/diagnostics.md` argues it; it degrades to
-/// stderr-only rather than refusing to start Melodia over a log file.
-///
-/// `verbose` arrives as an argument because the flag lives in `settings.json`, which is the app's
-/// file, and a platform adapter that opens it names a layer sitting above this one. `main` holds
-/// the `Paths` already and does the read one line earlier, so the ordering is unchanged — and it
-/// has to happen at boot rather than being applied later from the UI, or the whole boot stays at
-/// [`NORMAL_LEVEL`] and a boot going wrong is the window the switch is worth having.
+/// **Infallible on purpose**: it degrades to stderr-only rather than refusing to start Melodia
+/// over a log file. `verbose` is an argument because the flag lives in `settings.json`, a file
+/// above this layer, and it has to apply at boot, a boot going wrong being what the switch is for.
 pub fn install(paths: &Paths, verbose: bool) {
     let _ = ENV_SPEC_WINS.set(std::env::var_os("RUST_LOG").is_some());
 
@@ -102,8 +85,8 @@ pub fn install(paths: &Paths, verbose: bool) {
             let _ = HANDLE.set(handle);
             return;
         }
-        // Not `to_string()`: `OutputIo` never interpolates its `io::Error`, so without the chain a
-        // root-owned file and a full disk read identically.
+        // `OutputIo` never interpolates its `io::Error`, so without the chain a root-owned file
+        // and a full disk read identically.
         Err(e) => melodia_core::error::describe(&e),
     };
 
@@ -118,14 +101,13 @@ pub fn install(paths: &Paths, verbose: bool) {
     );
 }
 
-/// The spec, the levels and the stderr half — everything the fallback keeps.
+/// Everything the fallback keeps.
 fn base_logger(spec: &str) -> Logger {
-    // `try_with_env_or_str` falls back to `spec` on a malformed `RUST_LOG`, so only a broken
-    // `spec_for` errors here. The `warn` floor costs the app's narrative, not the process's
-    // logger; `default()` is `off()`, which would cost both.
+    // A malformed `RUST_LOG` falls back to `spec`, so only a broken `spec_for` errors. `warn`
+    // rather than `default()`, which is `off()` and would cost the process its logger too.
     Logger::try_with_env_or_str(spec)
         .unwrap_or_else(|_| Logger::with(LogSpecification::warn()))
-        // Adaptive rather than plain coloured: piping the app somewhere shouldn't regress.
+        // Adaptive, so piping the app somewhere doesn't regress.
         .adaptive_format_for_stderr(AdaptiveFormat::Default)
 }
 
@@ -134,8 +116,8 @@ fn start_to_file(paths: &Paths, spec: &str) -> Result<LoggerHandle, FlexiLoggerE
         .log_to_file(
             FileSpec::default().directory(&paths.logs_dir).basename("melodia").suppress_timestamp(),
         )
-        // Without this a restart truncates, so the run that crashed is gone by the time the folder
-        // is opened — the one call whose absence defeats the feature silently.
+        // Without it a restart truncates, and the run that crashed is gone by the time the folder
+        // is opened.
         .append()
         .rotate(
             Criterion::AgeOrSize(Age::Day, MAX_LOG_BYTES),
@@ -143,8 +125,8 @@ fn start_to_file(paths: &Paths, spec: &str) -> Result<LoggerHandle, FlexiLoggerE
             Cleanup::KeepLogFiles(KEEP_LOG_FILES),
         )
         .cleanup_in_background_thread(false)
-        // The default, stated because it is load-bearing: `process::exit(0)` runs no destructors,
-        // and a buffered mode drops exactly the lines before a crash.
+        // The default, stated because `process::exit(0)` runs no destructors and a buffered mode
+        // drops exactly the lines before a crash.
         .write_mode(WriteMode::Direct)
         .duplicate_to_stderr(Duplicate::All)
         .format_for_files(detailed_format)
@@ -156,10 +138,8 @@ pub fn unavailable_reason() -> Option<&'static str> {
     FILE_SINK_ERROR.get().map(String::as_str)
 }
 
-/// Swap the running level, applied to the live sinks so no relaunch is needed.
-///
-/// **`RUST_LOG` wins and this declines**, out loud rather than silently: it is the developer
-/// escape hatch, and a GUI switch fighting it would make the variable mean nothing.
+/// Swaps the running level on the live sinks. **`RUST_LOG` wins** and this declines out loud: a GUI
+/// switch fighting the developer escape hatch would make the variable mean nothing.
 pub fn set_verbose(on: bool) {
     if ENV_SPEC_WINS.get().copied().unwrap_or(false) {
         log::info!("verbose logging: RUST_LOG is set and takes precedence; leaving the spec alone");
@@ -180,36 +160,31 @@ pub fn set_verbose(on: bool) {
     }
 }
 
-/// Flush before an exit path that runs no destructors. A no-op under [`WriteMode::Direct`], and
-/// what saves the tail if that ever changes.
+/// For an exit path that runs no destructors. A no-op under [`WriteMode::Direct`], and what saves
+/// the tail if that ever changes.
 pub fn flush() {
     if let Some(handle) = HANDLE.get() {
         handle.flush();
     }
 }
 
-/// The current log file and its rotated siblings, newest first. Best-effort: a bundle missing a
-/// file is worth more than one that failed to build, so an unreadable directory reads as no logs.
+/// The current log file and its rotated siblings, newest first. An unreadable directory reads as no
+/// logs, a bundle missing a file beating one that failed to build.
 pub fn log_files() -> Vec<PathBuf> {
     let Some(handle) = HANDLE.get() else {
         return Vec::new();
     };
-    // Two calls: asked together, the live file lands *after* the rotated ones and no single
-    // ordering of that list is meaningful.
+    // Two calls: asked together, the live file lands after the rotated ones.
     let current =
         handle.existing_log_files(&LogfileSelector::none().with_r_current()).unwrap_or_default();
     let rotated = handle.existing_log_files(&LogfileSelector::default()).unwrap_or_default();
     newest_first(current, rotated)
 }
 
-/// Join the live file and the rotated ones into one newest-first list.
-///
-/// The reversal is the whole of it, and reading `FileSpec` argues against it:
-/// `existing_log_files` ends in a plain `sort()` that undoes
-/// `FileSpec::read_dir_related_files`' own reverse, so the public API hands back ascending names
-/// and a higher `Naming::Numbers` index is the *newer* file. Backwards, the bundle spends its byte
-/// budget on the oldest runs and truncates the one being reported. Split out to be testable
-/// without a logger.
+/// **The reversal is the whole of it**, and `FileSpec` reads as arguing against it:
+/// `existing_log_files` ends in a plain `sort()`, so the API hands back ascending names and a
+/// higher `Naming::Numbers` index is the *newer* file. Backwards, the bundle spends its budget on
+/// the oldest runs and truncates the one being reported.
 fn newest_first(current: Vec<PathBuf>, mut rotated: Vec<PathBuf>) -> Vec<PathBuf> {
     rotated.reverse();
     let mut files = current;

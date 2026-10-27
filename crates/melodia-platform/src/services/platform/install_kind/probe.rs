@@ -1,26 +1,15 @@
-//! Directory writability probe shared by `install` (staging-path
-//! selection) and `system_install` (UI gating).
+//! Directory writability, for `install`'s staging choice and `system_install`'s UI gate.
 //!
-//! Probes by attempting to `create_new` a uniquely-named file. Avoids
-//! the `access(W_OK)` TOCTOU class of bugs (which checks the calling
-//! UID's permission bits without verifying that *this* process can
-//! actually write — wrong answer under `nosuid`, ACLs, immutable
-//! flags, full-disk, read-only mounts, …).
+//! By `create_new` rather than `access(W_OK)`, which checks permission bits and is wrong under
+//! `nosuid`, ACLs, immutable flags, a full disk or a read-only mount.
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Per-process monotonic counter for probe filenames. Combined with
-/// the PID so concurrent calls from different threads can't collide
-/// on the same `create_new` (which would otherwise return a false
-/// "not writable" for every caller after the first).
+/// With the PID, so concurrent probes can't collide on one `create_new` and read as unwritable.
 static PROBE_SEQ: AtomicU64 = AtomicU64::new(0);
 
-/// Returns `true` when the calling process can create files in `dir`.
-/// One syscall round-trip on the happy path (open + unlink); a single
-/// failed open on the negative path. `dir` is expected to exist —
-/// callers always pass `install_target().parent()` which is resolved
-/// from the binary's own location.
+/// `dir` is expected to exist, callers passing `install_target().parent()`.
 pub fn dir_is_writable(dir: &Path) -> bool {
     let seq = PROBE_SEQ.fetch_add(1, Ordering::Relaxed);
     let probe = dir.join(format!(".melodia-write-probe-{}-{seq}", std::process::id()));

@@ -252,39 +252,14 @@ The other way paths arrive from outside, and the one that can arrive before ther
   winit `focus_window`, a documented no-op on Wayland). Raised either way — an empty forward is
   someone launching Melodia to get at the window.
 
-- **"The name is taken" has two spellings and `interprocess` normalises neither.** Unix `bind`
-  says `EADDRINUSE`; a Windows named pipe is created under `FILE_FLAG_FIRST_PIPE_INSTANCE`, whose
-  second instance fails `ERROR_ACCESS_DENIED` — `PermissionDenied`, nowhere near `AddrInUse`.
-  Matching only the first left *every* Windows relaunch `Claim::Unenforced`: a second window and a
-  second writer over one database, on the platform the MSI registers associations for.
-  `name_is_taken` is the single place that decides, and **its pure half takes the platform as an
-  argument** — `utils::redact::redact_prefix`'s shape, for the same reason. A `cfg!` inside the
-  predicate is a branch the Linux gate compiles out and can never exercise, so a
-  "simplification" back to one spelling merges green; `name_is_taken_on` is what
-  `a_taken_name_is_recognised_in_both_spellings` can ask both ways. A genuine ACL denial takes the
-  same arm and fails at the connect, landing back on `Unenforced`, which is where it belonged
-  anyway.
-  **Recognising the name is only half of it — the forward has to survive the transport too.** A
-  named pipe has no settable I/O timeout, so `forward`'s deadline came back `Unsupported` and
-  propagated, landing on the same `Unenforced` arm and the same second window; `allow_missing_timeout`
-  carries that argument and is called at all three deadline sites. **What the deadline was *for*
-  doesn't go away with it, and neither site may hold a blocking read on a thread something else
-  needs**: `spawn_reader` takes each connection off the accept loop under a cap, `wait_for_close`
-  bounds the forwarder's ack the same way. Reach for a thread there, never a timeout — one
-  transport won't take one.
-
-- **The accept loop is a detached `std::thread`, not `spawn_blocking`**, as `discord/ipc.rs` runs
-  its transport: a parked blocking-pool tenant is what the 32-slot cap exists to prevent. Its
-  read-failure arm still calls `on_launch` with no paths: the connection is proof of a launch, and
-  a selection past `MAX_PAYLOAD_LEN` should cost the user their file list, not their window.
-
-- **The frame declares its length, and that is not decoration.** Reading to EOF instead means the
-  receiver waits on the sender's close while the sender waits to know the payload landed — **both
-  block to their 2 s timeouts and the paths are dropped**, which every codec test passes straight
-  through. `a_second_launch_hands_its_paths_to_the_first_and_stands_down` is why a real socket
-  earns its setup. The sender *does* wait for the close, deliberately: exiting straight after the
-  write leaves the payload in a pipe buffer with its own handle the last one open, on the platform
-  no Linux runner covers.
+- **The single-instance socket argues itself in `services::platform::single_instance`**, and the
+  Windows half is the one no Linux runner sees: "the name is taken" has two spellings
+  (`name_is_taken`, whose pure half `a_taken_name_is_recognised_in_both_spellings` asks both ways),
+  and a named pipe takes no I/O deadline (`allow_missing_timeout`), either one landing a relaunch
+  on `Claim::Unenforced` and a second writer over one database. Where a deadline would have bounded
+  a read, reach for a thread, never a timeout. **The frame declares its length**, and
+  `a_second_launch_hands_its_paths_to_the_first_and_stands_down` is why a real socket earns its
+  setup: reading to EOF hangs both sides, which every codec test passes straight through.
 
 ## Tray and media keys
 
