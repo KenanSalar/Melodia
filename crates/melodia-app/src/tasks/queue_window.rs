@@ -1,11 +1,10 @@
-//! Keeps the player's track window holding the records of the tracks around the queue's current
-//! slot, so a skip, an end of track or a gapless stage starts from a record already in hand, and
-//! runs the starts a transition owed where one wasn't.
+//! Keeps the player's window holding the records around the queue's current slot, so a skip, a
+//! track end or a gapless stage starts from one in hand, and runs the starts that waited for one.
 //!
-//! Three wakes. A queue publish fetches what the window lacks. A library tick re-reads all of it,
-//! since a retag, a star or a moved file changes the record the player would start from. And a
-//! start owed (`PlayerAction::StartWhenResolved`) fetches its track. Every pass ends by asking for
-//! that start, so one whose fetch failed is retried by the next wake.
+//! A queue publish fetches what the window lacks, a library tick re-reads all of it (a retag, a
+//! star or a moved file changes the record), and an owed start (`PlayerAction::StartWhenResolved`)
+//! fetches its track. Every pass ends by asking for that start, so a failed fetch is retried by the
+//! next wake.
 
 use crate::state::AppState;
 use crate::tasks::TaskSpawner;

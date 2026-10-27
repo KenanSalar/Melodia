@@ -1,17 +1,9 @@
-//! Scrobbling background tasks: a **detector** that turns the player's
-//! view-model + position watch channels into scrobble / now-playing decisions
-//! (via the pure
-//! [`melodia_integrations::services::integrations::scrobble::detector::DetectorState`], and
-//! its station twin `live_detector::LiveDetector`),
-//! and a **submitter** that drains the durable queue to the providers with
-//! per-provider batching, retry, and backoff.
+//! Scrobbling: a **detector** turning the view-model and position watches into scrobble and
+//! now-playing decisions through the pure [`DetectorState`] and its station twin [`LiveDetector`],
+//! and a **submitter** draining the durable queue to the providers with batching and backoff.
 //!
-//! Both run off the same seam OS media controls use, so nothing here touches the
-//! player state machine. No `ui::*` imports — a backend failure would surface via
-//! `utils::toast` if it ever needed to (routine submit failures stay silent).
-//!
-//! Neither waits for a provider to be connected, so each logs its stop at debug:
-//! at info it reads as scrobbling having been in use.
+//! Neither waits for a provider, so each logs its stop at debug: at info it reads as scrobbling
+//! having been in use.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,7 +37,6 @@ const MAX_BACKOFF: Duration = Duration::from_mins(15);
 /// budget; whatever is left is persisted and goes out on the next launch.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
 
-/// Spawn the detector + submitter loops, both tracked for graceful shutdown.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     let detector_service = state.scrobble.clone();
     let db = state.db.clone();
@@ -60,9 +51,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     spawner.spawn_cancellable(move |shutdown| run_submitter(shutdown, submitter_service));
 }
 
-/// Correlate the two watch channels through the pure detectors, performing the DB
-/// enrichment fetch + service calls each decision asks for. Do-while shaped:
-/// each receiver's primed value is processed before the first `changed()`.
+/// Do-while shaped: each receiver's primed value is processed before the first `changed()`.
 async fn run_detector(
     shutdown: CancellationToken,
     service: Arc<ScrobbleService>,
@@ -165,8 +154,7 @@ async fn process_live_effects(effects: Vec<LiveEffect>, service: &ScrobbleServic
     }
 }
 
-/// The row for `track_id`, from the single-slot cache when it matches, else
-/// fetched and cached. `None` on a missing id or a query error (logged).
+/// From the single-slot cache when it matches; `None` on a missing id or a logged query error.
 async fn fetch_row(
     db: &DbPool,
     track_id: i64,
@@ -190,10 +178,8 @@ async fn fetch_row(
     }
 }
 
-/// Drain the durable queue, backing off when a provider defers, and wake on a
-/// new scrobble. Do-while shaped: drains once on entry, then parks. A shutdown
-/// that finds it parked loops once more, so what is still queued gets a last
-/// round under the grace.
+/// Drains on entry, then parks until a new scrobble or a backoff ends. A shutdown finding it
+/// parked loops once more, giving what is queued a last round under the grace.
 async fn run_submitter(shutdown: CancellationToken, service: Arc<ScrobbleService>) {
     let mut backoff = BASE_BACKOFF;
     loop {
@@ -224,11 +210,9 @@ async fn run_submitter(shutdown: CancellationToken, service: Arc<ScrobbleService
     }
 }
 
-/// Runs a drain `round` out, unless it is still going [`SHUTDOWN_GRACE`] after shutdown;
-/// then `stop`, which the round has to be watching, is cancelled and the round awaited
-/// rather than dropped. A round is a chain of sequential requests, each allowed the HTTP
-/// client's whole read timeout, and dropping it would lose the writeback for every one
-/// that already landed.
+/// Runs a drain `round` out, cancelling `stop` once it runs [`SHUTDOWN_GRACE`] past shutdown and
+/// still awaiting it: a round is a chain of requests, and dropping it would lose the writeback
+/// for those already sent.
 async fn run_with_grace<T>(
     round: impl Future<Output = T>,
     stop: &CancellationToken,
@@ -248,18 +232,14 @@ async fn run_with_grace<T>(
     round.await
 }
 
-/// What a deferral earns: the wait to honor now, and the backoff to carry into the next one.
-///
-/// The provider's own request wins when it named a longer one, since a 429's window is a fact
-/// about the server and the local ladder is only a guess. The ladder doubles regardless, so a
-/// provider that keeps deferring without naming a wait is backed away from rather than polled
-/// at a fixed rate.
+/// The wait to honor now and the backoff to carry. A provider's longer request wins, a 429's
+/// window being a fact where the ladder is a guess; the ladder doubles regardless, so a provider
+/// that keeps deferring is backed away from.
 fn defer(requested: Duration, backoff: Duration) -> (Duration, Duration) {
     (requested.max(backoff), (backoff * 2).min(MAX_BACKOFF))
 }
 
-/// Sleep for `delay` when set, else park indefinitely (only a shutdown or a new
-/// scrobble wakes the submitter).
+/// `None` parks until a shutdown or a new scrobble wakes the submitter.
 async fn wait_for(delay: Option<Duration>) {
     match delay {
         Some(delay) => tokio::time::sleep(delay).await,

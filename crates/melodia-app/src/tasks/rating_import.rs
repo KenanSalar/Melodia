@@ -1,18 +1,9 @@
-//! Reads the ratings already sitting in this library's files into the rows that describe them,
-//! once.
+//! Reads the ratings already in this library's files into their rows, once.
 //!
-//! The scan learned to read a rating later than it learned to read everything else, and
-//! `scanner::track_is_current` skips a file whose size and mtime haven't moved — so a library
-//! scanned before that lands unrated and stays unrated however many times it is rescanned. Every
-//! star a user set in Windows, `MusicBee` or `foobar2000` before installing Melodia is sitting in
-//! those files, invisible.
-//!
-//! **Not an `SQLx` migration**, for [`super::artwork_renormalize`]'s reason: it is a slow pass
-//! over files, and a migration failure is fatal at boot.
-//!
-//! Only unrated rows are read, so the sweep can never overwrite a star set here. It is still
-//! one-shot rather than repeated, because `rating = 0` cannot tell an untouched row from one the
-//! user deliberately cleared — running it twice would resurrect the second.
+//! `scanner::track_is_current` skips an unchanged file, so a library scanned before ratings were
+//! read stays unrated however often it is rescanned, every star another player wrote sitting
+//! unread. **Not an `SQLx` migration**, for [`super::artwork_renormalize`]'s reason. Only unrated
+//! rows are read, and only once, since `rating = 0` can't tell an untouched row from a cleared one.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -27,23 +18,13 @@ use melodia_store::database::queries;
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::{metadata, rating_tags};
 
-/// Tracks whose paths are held in memory at once, and whose tags are parsed in one fan-out.
-///
-/// The predicate selects the whole library on the run that matters, so the page size is what keeps
-/// this pass off the RSS budget. Wide enough that the per-page round trip is noise beside the tag
-/// parses it feeds.
+/// Rows held and parsed per page. The whole library matches on the run that matters, so this is
+/// what keeps the pass off the RSS budget.
 const PAGE_ROWS: i64 = 2_000;
 
-/// Run the import unless this install has already had one.
-///
-/// [`one_shot::OnFailure::Retry`], which is where this parts company with
-/// [`super::artwork_renormalize`]'s otherwise identical shape. Two of the three ways this can fail
-/// write no rows at all, and the marker is the only gate there is, so recording one would put
-/// every rating in this library's files out of reach for the life of the install. A renormalize
-/// that half-ran is repaired by the next scan; this is not repaired by anything.
-///
-/// A half-imported library needs no marker either: the pass only ever reads unrated rows, so the
-/// retry picks up exactly where it stopped.
+/// [`one_shot::OnFailure::Retry`]: two of the three failures write no rows, and a marker over them
+/// would put every rating in the files out of reach, nothing else repairing it. A half-run import
+/// resumes cleanly, the pass reading only what is still unrated.
 pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
     one_shot::spawn(
         spawner,
@@ -65,21 +46,17 @@ async fn import(db: &DbPool, library_changed: &Signal) -> AppResult<()> {
         return Ok(());
     }
 
-    // Nothing else will say so. This lands minutes into a session on a real library, by which
-    // time every mounted list is painting the zero these rows carried at fetch time, and the two
-    // views that retain their rows keep it until something unrelated refetches. Once at the end
-    // rather than per page: each bump costs the mounted section a whole re-query.
+    // Nothing else repaints the zeros mounted lists fetched. Once rather than per page, each bump
+    // costing the mounted section a whole re-query.
     library_changed.bump();
 
     log::info!("Imported {imported} rating(s) from file tags");
     Ok(())
 }
 
-/// Walk the unrated rows a page at a time, answering with how many took a rating out of a file.
-///
-/// Keyset rather than offset because each page's write takes its own rows out of the predicate:
-/// a window counted from the start would step over as many rows as it had just rated. `page_rows`
-/// is a parameter so a test can reach a second page at all; the caller spells [`PAGE_ROWS`].
+/// Answers how many rows took a rating out of a file. Keyset rather than offset, each page's write
+/// taking its rows out of the predicate; `page_rows` is a parameter so a test can reach a second
+/// page.
 async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
     let mut after_id = 0;
     let mut imported = 0;
@@ -100,8 +77,7 @@ async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
             continue;
         }
 
-        // Grouped by value so a page is at most five UPDATEs, each already chunked against the
-        // bind cap by `set_rating`.
+        // Grouped by value: at most five UPDATEs a page, `set_rating` chunking each.
         let mut by_rating: HashMap<i32, Vec<i64>> = HashMap::new();
         for (id, rating) in &found {
             by_rating.entry(*rating).or_default().push(*id);
@@ -115,10 +91,8 @@ async fn import_into(db: &DbPool, page_rows: i64) -> AppResult<usize> {
     Ok(imported)
 }
 
-/// **Blocking** — one tag parse per row, fanned out the way `retroactive_hash` fans out its
-/// hashes. The rating is a text item, so this asks for neither half lofty would otherwise do on
-/// the way to it: copying the embedded pictures out, and the frame scan a headerless VBR MP3's
-/// duration costs.
+/// **Blocking**, fanned out like `retroactive_hash`. The rating is a text item, so this skips the
+/// picture copies and the VBR frame scan lofty would otherwise do on the way.
 fn read_each(unrated: &[(i64, String)]) -> Vec<(i64, i32)> {
     use rayon::prelude::*;
 

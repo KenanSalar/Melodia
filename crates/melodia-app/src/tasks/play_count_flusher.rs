@@ -1,16 +1,5 @@
-//! Batched flusher for `play_count` / `skip_count` UPDATEs.
-//!
-//! Without this, every track end / skip fires a separate write-pool round-trip
-//! (see `PlayerAction::UpdatePlayCount` / `UpdateSkipCount` in
-//! `crates/melodia-engine/src/player/engine/actions.rs`). A user rapidly
-//! skipping through a playlist can easily fire 10 UPDATEs in a few seconds,
-//! each waiting for the WAL writer.
-//!
-//! The flusher absorbs both kinds of events on an `UnboundedSender` and
-//! coalesces them into a single multi-row `CASE WHEN` UPDATE every 2 s (or on
-//! shutdown). Senders never block — the channel is unbounded — and the queue
-//! shape is `Vec<(track_id, kind)>` so duplicate events on the same track
-//! just stack into the same `play_count + N` increment.
+//! Batches `play_count` and `skip_count` increments into one write per `FLUSH_INTERVAL` and one
+//! at shutdown, so a run of skips doesn't queue an UPDATE apiece on the WAL writer.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -25,22 +14,13 @@ use melodia_core::utils::now_rfc3339;
 use melodia_core::utils::play_counts::{self, PlayCountEvent};
 use melodia_store::database::{DbPool, queries};
 
-/// How often to flush pending events. Short enough that play counts feel
-/// up-to-date in the UI on the next track change, long enough to batch a
-/// realistic burst of skips into a single write.
+/// Short enough that counts are current by the next track change, long enough to batch a burst of
+/// skips.
 const FLUSH_INTERVAL: Duration = Duration::from_secs(2);
 
-/// Spawn the flusher. Idempotent — a second call is a no-op (re-using the
-/// existing sender). Tracked by `spawner` so shutdown awaits the final
-/// flush before the runtime is dropped.
-///
-/// `stats_changed` is bumped after every successful play-count flush
-/// so subscribers (Favorites hero mosaic, future "Most Played" widgets,
-/// …) re-fetch when the ranking changes. Deliberately NOT
-/// `library_changed`: a play-count write changes a ranking, not the
-/// library's structure, and bumping the structural channel forced every
-/// view refresher + `queue_prune` to run after every played song.
-/// Skip-count flushes do not bump — no UI surface depends on skip counts.
+/// Idempotent. A play-count flush bumps `stats_changed` rather than `library_changed`, a ranking
+/// moving rather than the library's structure; a skip-count flush bumps nothing, no surface
+/// ranking by skips.
 pub fn spawn(spawner: &TaskSpawner, db: DbPool, stats_changed: Signal) {
     let Some(rx) = play_counts::install() else {
         return;
@@ -63,7 +43,6 @@ async fn run(
         tokio::select! {
             biased;
             () = shutdown.cancelled() => {
-                // Drain any remaining events without blocking.
                 while let Ok(ev) = rx.try_recv() {
                     record(&mut play_counts, &mut skip_counts, ev);
                 }
@@ -113,12 +92,6 @@ async fn flush(
             log::warn!("Failed to flush skip counts: {}", describe(&e));
         }
     }
-    // Bump only on a successful play-count flush — the Favorites hero
-    // mosaic (top-4 most-played) and any future "Most Played" widget
-    // pulls from `play_count`, so a fresh write means the ranking may
-    // have shifted. Skips are intentionally out of scope; no UI surface
-    // ranks by skip_count today, and bumping for nothing would cost a
-    // wasted re-fetch on every skip burst.
     if play_flush_ok {
         stats_changed.bump();
     }

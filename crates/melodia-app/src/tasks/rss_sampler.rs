@@ -1,32 +1,12 @@
-//! Opt-in periodic memory sampler for diagnostics.
+//! Opt-in memory sampler: with `MELODIA_RSS_SAMPLE` set to anything, logs `/proc/self/status`'s
+//! resident breakdown and the current view every 500 ms, so a memory move can be matched to what
+//! the user did. Linux only.
 //!
-//! Enabled by setting `MELODIA_RSS_SAMPLE=1` (any non-empty value) before
-//! launch. Logs the process's `/proc/self/status` resident-memory breakdown
-//! plus the current view tag (which Nav section, whether a detail page is
-//! open, whether Now Playing is overlaid or the queue panel shown) every 500 ms so
-//! leave/enter/scroll memory transitions can be correlated with user
-//! actions in the log timeline.
+//! **The loop is handed back, not spawned**: its tag reads Slint globals, so it runs on the UI
+//! thread, and this crate names no Slint.
 //!
-//! Off by default to avoid log noise; no-op on non-Linux (no `/proc`).
-//! Cheap when enabled — one ~4 KiB pseudo-file read + a handful of Slint
-//! property reads per tick.
-//!
-//! **The loop is handed back, not spawned**: its tag reads Slint globals, so
-//! it belongs on the UI thread, and this crate names no Slint. The caller runs
-//! it there under a tokio context.
-//!
-//! Sample output (INFO level):
-//!
-//! ```text
-//! [MEM view=Albums VmRSS=147924 RssAnon=98112 RssFile=46500 RssShmem=3312 VmData=120480 (KiB)]
-//! [MEM view=AlbumDetail(42)+NP VmRSS=… …]
-//! [MEM view=Tracks+QP VmRSS=… …]
-//! ```
-//!
-//! Tags after the view name: `+NP` = Now Playing full-screen open;
-//! `+QP` = queue panel shown. The breakdown fields let you see *which*
-//! metric your external monitor is tracking — system monitors often display
-//! PSS or anon-only, which can move while total `VmRSS` stays flat.
+//! The tag is the view, then `+NP` with Now Playing open and `+QP` with the queue panel shown. The
+//! breakdown says which metric an external monitor tracks, many showing PSS or anon only.
 
 #[cfg(target_os = "linux")]
 use std::time::Duration;
@@ -34,10 +14,8 @@ use std::time::Duration;
 #[cfg(target_os = "linux")]
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
 
-/// The sampler loop, or `None` outside a diagnostic session. Anything
-/// non-empty in `MELODIA_RSS_SAMPLE` enables it (`=1`, `=on`, …). `view_tag`
-/// reads the current view on the UI thread and answers `None` once the window
-/// is gone, which is what ends the loop.
+/// The loop, or `None` outside a diagnostic session. `view_tag` answers `None` once the window is
+/// gone, which ends it.
 pub fn sampler(
     view_tag: impl Fn() -> Option<String> + 'static,
 ) -> Option<impl Future<Output = ()>> {
@@ -59,14 +37,11 @@ pub fn sampler(
     }
 }
 
-/// Per-tick loop: snapshot the view tag + `/proc/self/status`, format, emit one
-/// INFO line. Exits cleanly once the tag reads `None`.
 #[cfg(target_os = "linux")]
 async fn run(view_tag: impl Fn() -> Option<String>) {
     let mut interval = tokio::time::interval(SAMPLE_INTERVAL);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    // Skip the immediate first tick — `tokio::time::interval` fires it
-    // instantly, which would log before the boot pre-fetch even started.
+    // The first tick is immediate, before the boot's own fetches have started.
     interval.tick().await;
     loop {
         interval.tick().await;
@@ -84,29 +59,23 @@ async fn run(view_tag: impl Fn() -> Option<String>) {
     }
 }
 
-/// Per-tick memory snapshot. All values in KiB.
+/// In KiB.
 #[cfg(target_os = "linux")]
 #[derive(Default)]
 struct MemSnapshot {
-    /// Total resident set size — what most "total memory" displays show.
+    /// What most "total memory" displays show.
     vm_rss: u64,
-    /// Anonymous resident (heap + stack). Closest match to "what *this
-    /// process* allocated on its own", excluding shared libs / file maps.
+    /// Heap and stack: what this process allocated itself.
     rss_anon: u64,
-    /// File-backed resident (loaded libs, mapped files). Driver-side GPU
-    /// buffers often land here on Mesa.
+    /// Libraries and mapped files; Mesa's GPU buffers often land here.
     rss_file: u64,
-    /// Shared-memory resident (`shmem`, `tmpfs`, anonymous shared). Some
-    /// graphics drivers use this for inter-process buffer sharing.
+    /// Shared memory, which some graphics drivers pass buffers through.
     rss_shmem: u64,
-    /// "Data" virtual size — anonymous + heap + private mappings. Tracks
-    /// the working-set ceiling even when pages get unmapped from RSS.
+    /// Private virtual size, the working-set ceiling even as pages leave RSS.
     vm_data: u64,
 }
 
-/// Read all the resident-memory breakdown fields from `/proc/self/status`
-/// in a single pass. Returns `None` on read failure — the sampler silently
-/// skips that tick rather than spam errors.
+/// `None` on a failed read, the tick skipped rather than logged.
 #[cfg(target_os = "linux")]
 fn read_mem_breakdown() -> Option<MemSnapshot> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;

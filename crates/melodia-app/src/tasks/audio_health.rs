@@ -1,24 +1,14 @@
 //! Drains `player::playback::stream_health` and decides what reaches the log and the user.
 //!
-//! An xrun is expected and cpal has already recovered, so it is one coalesced
-//! `debug` line per window rather than a `warn` per event. A lost device is why
-//! this task exists: nothing else notices, and the voices stop being pulled.
+//! An xrun is expected and cpal has already recovered, so it is one coalesced `debug` line per
+//! window. A lost device is why this task exists: nothing else notices, and the voices stop being
+//! pulled. cpal reports one as `DeviceNotAvailable` on every host.
 //!
 //! **A lost device is reopened, and only a lost device.** The reopen replaces the stream under the
 //! decks and nothing else, so playback carries on from the frame it stopped at, on whatever the
-//! system calls its default output now. It is polled on its own short tick rather than waiting out
-//! a drain window, which would be seconds of silence before the first attempt. Only once the whole
-//! backoff has failed does the user hear about it, because there is nothing left to play into.
-//!
-//! A lost device is one signal on all three hosts: cpal 0.18's ALSA host maps
-//! errno and POLLHUP onto `DeviceNotAvailable` and stops its worker, the way
-//! Core Audio and WASAPI already did. Until 0.18 it folded every stream-callback
-//! fault into `BackendSpecific` and retried with no backoff, so the Linux
-//! disconnect had to be inferred from that spin's rate; the counting that took
-//! is gone with the version that needed it.
-//!
-//! `tasks/` imports no `ui::*`, so the toast goes out over
-//! `state.audio_device_lost` — the `rescan_notice` shape.
+//! system calls its default output now. It is polled on its own short tick rather than a drain
+//! window's, and the user hears of it only once the whole backoff has failed, over
+//! `state.audio_device_lost`, `tasks/` naming no `ui::*`.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -38,26 +28,18 @@ const DRAIN_INTERVAL: Duration = Duration::from_secs(5);
 /// first reopen, against a swap nobody notices.
 const DEVICE_POLL: Duration = Duration::from_millis(250);
 
-/// Polls in a row with no callback block before the stream counts as stalled.
-///
-/// A second at [`DEVICE_POLL`], which is far past any period a host picks for itself, so only a
-/// callback that has stopped being called trips it. The callback runs while paused too, writing
-/// silence, so a pause is not a stall.
+/// Polls in a row with no callback block before the stream counts as stalled: a second, far past
+/// any period a host picks. The callback writes silence while paused, so a pause is no stall.
 const STALL_POLLS: u32 = 4;
 
-/// How often a device a claim fell back from for not being connected is looked for again.
-///
-/// A replug is then heard on the chosen device within about this, rather than at the next track
-/// in another format, the only track start that asks again. Windows only sometimes moves its
-/// default output to a replugged device, so the system can't be relied on to disturb the fallback
-/// either.
+/// How often a device a claim fell back from is looked for again, so a replug is heard within
+/// about this rather than at the next track in another format. Windows only sometimes moves its
+/// default to a replugged device, so the system can't be relied on to end the fallback.
 const RECLAIM_POLL: Duration = Duration::from_secs(1);
 
-/// The wait before each reopen attempt.
-///
-/// The first is immediate, because a default that moved elsewhere is there to open at once. The
-/// rest give a device being replugged, or a sound server restarting, time to come back, and
-/// together bound how long a user with nothing left to play into waits for the notice.
+/// The wait before each reopen attempt. The first is immediate, a default that moved being there
+/// at once; the rest give a replug or a restarting sound server time, and bound how long a user
+/// with nothing to play into waits for the notice.
 const REOPEN_BACKOFF: [Duration; 5] = [
     Duration::ZERO,
     Duration::from_millis(500),
@@ -66,13 +48,9 @@ const REOPEN_BACKOFF: [Duration; 5] = [
     Duration::from_secs(4),
 ];
 
-/// Whether the unclassified-error line has already been warned about.
-///
-/// An unclassified error `continue`s inside cpal's worker loop, so one that
-/// repeats would restate itself at `warn` once per window for the rest of the
-/// session — and the lead-up is what a reporter needs out of that file. The
-/// first window warns, the rest go to `debug`, and a quiet window re-arms it,
-/// which is why an empty window has to reach here too.
+/// Whether the unclassified-error line has warned. cpal's worker `continue`s past one, so a repeat
+/// would warn every window and bury the lead-up a reporter needs: the first window warns, the rest
+/// go to `debug`, and a quiet window, which has to reach here too, re-arms it.
 #[derive(Default)]
 struct WarnedOnce(bool);
 
@@ -87,11 +65,8 @@ impl WarnedOnce {
     }
 }
 
-/// Whether the data callback has stopped being called.
-///
-/// Fires on the poll that completes a stall and not on the ones after it, so an output left with
-/// no stream after a failed recovery is not reopened again every poll for the rest of the session.
-/// Any movement re-arms it.
+/// Fires on the poll that completes a stall and not after, so an output left streamless by a
+/// failed recovery isn't reopened every poll. Any movement re-arms it.
 #[derive(Default)]
 struct StallWatch {
     last: u64,
@@ -130,9 +105,7 @@ pub fn spawn(spawner: &TaskSpawner, state: &AppState) {
                 () = shutdown.cancelled() => break,
                 _ = device_ticker.tick() => {
                     let lost = health.take_device_lost();
-                    // A parked output has no stream to beat, which is the point of parking it, and
-                    // a reopen has none until it lands: a recovery queued behind one could only
-                    // redo it.
+                    // A parked output has no stream to beat, and a reopen has none until it lands.
                     let stalled = !engine.output_parked()
                         && !engine.output_reopening()
                         && stall.observe(health.blocks());
@@ -184,15 +157,13 @@ async fn recover(
     device_lost: &Signal,
     shutdown: &CancellationToken,
 ) -> bool {
-    // Info: an unplug, or the system moving its default output, recovers in a blink. What warns is
-    // a backoff that ran out, below.
+    // Info: an unplug recovers in a blink, and what warns is a backoff that ran out.
     log::info!("audio: output lost; reopening");
     let Some(reopened) = shutdown.run_until_cancelled(reopen_with_backoff(engine)).await else {
         return false;
     };
     if let Err(e) = reopened {
-        // The last attempt's reason rides on this line because it is the one a bug report
-        // carries: the attempts before it log only at debug.
+        // The last attempt's reason, the earlier ones logging only at debug.
         log::warn!(
             "audio: no output device could be reopened; playback will produce no sound: {}",
             describe(&e)
@@ -202,12 +173,8 @@ async fn recover(
     true
 }
 
-/// Reopen the output on the chosen device once it is listed again, after a claim fell back or a
-/// shared stream stood in on the default for want of it. One attempt per poll: a claim that is
-/// still refused falls back as before.
-///
-/// Asked lock-free first: outside a disconnect the tick does nothing, rather than a blocking-pool
-/// hop every second for the life of the process.
+/// Reopens on the chosen device once it is listed again, one attempt per poll. Asked lock-free
+/// first, so outside a disconnect the tick costs no blocking-pool hop.
 async fn reclaim_if_returned(engine: &Arc<PlaybackEngine>) {
     if !engine.awaiting_disconnected_device() {
         return;

@@ -1,10 +1,5 @@
-//! Long-running background tasks spawned at startup.
-//!
-//! Each task module exposes a `pub fn spawn(spawner: &TaskSpawner, …)` that
-//! takes the unified [`spawner::TaskSpawner`] (`task_tracker` + shutdown token
-//! bundle) plus whatever extra slices it needs from `AppState`. Most loops
-//! live in this directory directly; a handful still delegate into
-//! `player/` for state-machine-coupled work.
+//! Background tasks, each module's `spawn` taking a [`TaskSpawner`] and whatever slices of
+//! `AppState` it needs.
 
 pub mod artwork_renormalize;
 pub mod artwork_restore;

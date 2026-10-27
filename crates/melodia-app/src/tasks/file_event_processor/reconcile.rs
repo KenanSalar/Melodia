@@ -1,6 +1,5 @@
-//! Apply a deduplicated batch of file events to the database: extract
-//! metadata for created/modified/renamed paths, then hand the batch to
-//! [`queries::scan::apply_watch_batch`], which writes the track rows.
+//! Applies a deduplicated batch: extracts metadata for created, modified and renamed paths, then
+//! hands the batch to [`queries::scan::apply_watch_batch`].
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -16,8 +15,7 @@ use melodia_store::media::ingest::metadata::{extract_date_modified, extract_or_f
 use melodia_store::media::ingest::scan_pool::ScanPool;
 use melodia_store::media::ingest::watcher::FileEvent;
 
-/// Extract metadata for all paths that need it (Created, Modified, Renamed-to).
-/// Runs outside any DB transaction to avoid holding the write lock during I/O.
+/// Outside any transaction, so the write lock isn't held across the I/O.
 async fn extract_metadata_batch(
     paths: &Paths,
     cover_cache: &CoverCache,
@@ -49,12 +47,8 @@ async fn extract_metadata_batch(
         return HashMap::new();
     }
 
-    // One blocking task wrapping Rayon file-level parallelism — the same
-    // shape as `scan_files_parallel`. A bulk drop into a watched folder can
-    // produce thousands of Created events in one batch; fanning out one
-    // `spawn_blocking` per file would burst toward tokio's blocking-thread
-    // cap and thrash the disk with hundreds of concurrent readers, while
-    // Rayon bounds concurrency to the core count.
+    // One blocking task over Rayon, `scan_files_parallel`'s shape: a bulk drop can bring thousands
+    // of events, and a `spawn_blocking` each would flood the blocking pool and the disk.
     let cover_cache = cover_cache.clone();
     let extracted = tokio::task::spawn_blocking(move || {
         use rayon::prelude::*;
@@ -90,7 +84,6 @@ async fn extract_metadata_batch(
     }
 }
 
-/// Process a deduplicated batch of file events.
 pub(super) async fn process_batch(
     db: &DbPool,
     paths: &Paths,

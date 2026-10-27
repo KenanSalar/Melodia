@@ -1,23 +1,11 @@
-//! Two glibc heap trims after startup.
+//! Two glibc heap trims after startup: one once the boot's short-lived allocations have settled,
+//! which glibc's arena keeps rather than returns, and one after the pool closes the connections
+//! the boot opened.
 //!
-//! Init-phase work — config load, DB pool warmup, folder-scan kickoff, Slint scene
-//! build — churns short-lived allocations, and glibc's arena retains the freed pages
-//! above its internal threshold rather than releasing them via
-//! `madvise(MADV_DONTNEED)`. The first `malloc_trim(0)` hands that slack back once it
-//! has settled. The second waits for the pool to close the connections the boot
-//! opened, whose page caches and statements free a few MiB more after the first.
-//!
-//! **It must not become periodic.** A periodic trim was measured against the RSS climb
-//! over a long session with Now Playing open and produced no sawtooth at any
-//! cadence, because that growth is not reclaimable heap: `malloc_trim` releases only
-//! fully-free, page-aligned runs, and what grows is *live* — Wayland event closures
-//! piling up under a high repaint rate (`wl_closure_init` via
-//! `wl_display_read_events`). Reach for the producer, not the allocator.
-//!
-//! [`platform::allocator::trim`](melodia_platform::services::platform::allocator::trim) is still
-//! worth calling ad-hoc after a bulk free, such as clearing an artwork cache on view exit, where
-//! the memory really is free. The call itself lives beside the other glibc knob; what lives here
-//! is only the schedule.
+//! **It must not become periodic.** The RSS climb over a long session with Now Playing open is
+//! live memory, Wayland event closures piling up under a high repaint rate, which `malloc_trim`
+//! cannot release: reach for the producer. An ad-hoc
+//! [`trim`](melodia_platform::services::platform::allocator::trim) after a bulk free is still fine.
 
 use std::time::Duration;
 
