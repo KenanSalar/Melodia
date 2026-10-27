@@ -1,8 +1,8 @@
 import { Theme } from "../../theme.slint";
 
 // A list row's hover and selection fill, track and queue rows alike. Per-corner radii merge
-// contiguous selected rows into one pill. The host mounts it only while it paints, a transparent
-// rounded fill still building its paths every frame (`slint-pitfalls.md`).
+// contiguous selected rows into one pill. The host mounts it only while it paints, so an idle row
+// holds no item for the renderer to visit.
 export component SelectionPill inherits Rectangle {
     in property <bool> selected;
     in property <bool> hovered;

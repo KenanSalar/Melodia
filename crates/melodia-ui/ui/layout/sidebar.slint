@@ -133,8 +133,8 @@ export component Sidebar inherits Rectangle {
         // window. `content-width: self.width` locks the other axis against a sideways wheel.
         nav-scroll := ScrollView {
             vertical-stretch: 1;
-            // Replaces the std ScrollView's width floor, which the rail is narrower than
-            // (`slint-pitfalls.md`).
+            // Replaces the std ScrollView's width floor, which a column holds it to and the rail
+            // is narrower than.
             min-width: 0px;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;

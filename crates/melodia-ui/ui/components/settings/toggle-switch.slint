@@ -5,8 +5,7 @@ import { Theme } from "../../theme.slint";
 export component ToggleSwitch inherits Rectangle {
     in-out property <bool> checked;
     in-out property <bool> enabled <=> touch.enabled;
-    // A click leaves `checked` to the parent, for a one-way binding a self-flip would orphan
-    // (`slint-pitfalls.md`).
+    // A click leaves `checked` to the parent, for a one-way binding a self-flip would orphan.
     in property <bool> manual: false;
 
     // A card's palette by default. Now Playing's tier is written once per track, so the

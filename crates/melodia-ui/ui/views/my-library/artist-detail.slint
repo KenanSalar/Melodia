@@ -20,8 +20,8 @@ export component ArtistDetailBody inherits Rectangle {
     // The strip's scrollbar band, reserved below the cards as `HorizontalCardStrip` does.
     property <length> albums-bar-h: 8px;
 
-    // A composite view (`slint-pitfalls.md`): one outer `ScrollView` over the strip and the list,
-    // the list capped at the outer viewport so its `ListView` keeps virtualizing.
+    // A composite view: one outer `ScrollView` over the strip and the list, the list capped at
+    // the outer viewport so its `ListView` keeps virtualizing.
     below-hero := Rectangle {
         width: 100%;
         height: 100%;

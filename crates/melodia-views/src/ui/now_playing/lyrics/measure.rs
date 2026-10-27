@@ -38,8 +38,8 @@ pub(super) fn is_full_width(ch: char) -> bool {
     )
 }
 
-/// A Hangul syllable with no final consonant, which Slint 1.18 sets as two loose jamo rather than
-/// one block (`slint-pitfalls.md`). Retires when a Slint release composes the block.
+/// A Hangul syllable with no final consonant, which Slint 1.18 sets as two loose jamo from a
+/// jamo-only fallback face rather than one block. Retires when a Slint release composes the block.
 const OPEN_HANGUL_EMS: f32 = 2.0;
 
 /// The block is laid out initial-major, so a syllable's index is a multiple of the finals count

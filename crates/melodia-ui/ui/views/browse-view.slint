@@ -20,10 +20,10 @@ import { BrowseFolderRowItem } from "browse/folder-row.slint";
 // A mount sheet: what stays here is anything the scrollbars reach by id, an id being unreadable
 // across a component boundary.
 //
-// A composite view (`slint-pitfalls.md`): folders and list share one outer `ScrollView`, the list
-// capped at the outer viewport so its `ListView` still virtualizes. The card view is a second body
-// in that scroller, mounted rather than behind an `if` so its id stays readable; both bodies leave
-// the layout through a `0px` height arm, `visible` alone keeping the slot.
+// A composite view: folders and list share one outer `ScrollView`, the list capped at the outer
+// viewport so its `ListView` still virtualizes. The card view is a second body in that scroller,
+// mounted rather than behind an `if` so its id stays readable; both bodies leave the layout
+// through a `0px` height arm, `visible` alone keeping the slot.
 export component BrowseView inherits Rectangle {
     property <bool> card-mode: Browse.view-mode == Browse.mode-card;
 
@@ -49,7 +49,7 @@ export component BrowseView inherits Rectangle {
     }
 
     vl := VerticalLayout {
-        // Top only: a bottom pad is a dead strip under the list (`slint-pitfalls.md`).
+        // Top only: a bottom pad sits outside the viewport, a dead strip under the list.
         padding-top: Theme.pad-lg;
         spacing: Theme.pad-md;
 

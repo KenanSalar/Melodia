@@ -29,7 +29,7 @@ export component NowPlayingBar inherits Rectangle {
     property <length> bar-w: 1100px;
     changed width => { self.bar-w = self.width; }
 
-    // The mount seed that mirror owes (`slint-pitfalls.md`).
+    // The mount seed that mirror owes, `changed` skipping a first layout at the final width.
     Timer {
         interval: 1ms;
         triggered => {

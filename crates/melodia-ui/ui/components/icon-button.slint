@@ -49,8 +49,7 @@ export component IconButton inherits Rectangle {
     // (`EntityCard`).
     out property <bool> has-hover: touch.has-hover;
     // Never folded into the brushes that feed the two `animate`s, which a per-frame fade would
-    // stall: it lands on the childless `disc` and on `MaterialIcon`'s `fade` instead
-    // (`slint-pitfalls.md`'s `opacity` entry).
+    // stall: it lands on the childless `disc` and on `MaterialIcon`'s `fade` instead.
     in property <float> fade: 1.0;
     // Not gated on `button-enabled`: a button with nothing to click through to can still have
     // something to hold for.
@@ -102,7 +101,7 @@ export component IconButton inherits Rectangle {
     }
 
     // **Centred by hand, not by a layout**, so the animated `press-scale` doesn't fold into the
-    // root's layout info and re-solve the host's layout every frame (`slint-pitfalls.md`).
+    // root's layout info and re-solve the host's layout every frame.
     MaterialIcon {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;

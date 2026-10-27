@@ -32,8 +32,8 @@ export component HeroBlurBackdrop inherits Rectangle {
         : @linear-gradient(135deg, transparent, transparent);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // **Every animated layer is read once at mount**, so a `shown` flipped before the first paint
-    // eases in (`slint-pitfalls.md`'s `init` entry); the miniplayer's press is that flip.
+    // **Every animated layer is read once at mount**: first evaluated after a `shown` flipped
+    // before the first paint, it would land unanimated. The miniplayer's press is that flip.
     init => {
         root.background;
         slot-a.opacity;

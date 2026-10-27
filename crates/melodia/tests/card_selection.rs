@@ -268,8 +268,8 @@ fn a_card_menu_entry_is_gated_on_the_operation_and_not_the_kind() {
 }
 
 /// An animated property cannot land on the frame that dirtied it, so a tint eased beside a snapped
-/// ring opens at zero on the frame its partner has already finished. No duration closes that gap;
-/// `slint-pitfalls.md` has the mechanism.
+/// ring opens at zero on the frame its partner has already finished. No duration closes that gap,
+/// the curve's first evaluation waiting for the next render.
 #[test]
 fn the_card_selection_ring_and_tint_never_animate() {
     let sources = slint_sources();

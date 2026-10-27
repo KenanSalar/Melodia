@@ -96,8 +96,8 @@ export component TrackListRowItem inherits Rectangle {
         };
     }
 
-    // Pinned so the virtualizer can measure rows (`slint-pitfalls.md`). The pitch drops to the
-    // compact height when the artwork column is off.
+    // Pinned so the virtualizer can measure rows. The pitch drops to the compact height when the
+    // artwork column is off.
     min-height: root.pitch;
     max-height: root.pitch;
     vertical-stretch: 0;
@@ -111,7 +111,7 @@ export component TrackListRowItem inherits Rectangle {
             // Pinned, or the pill grows under the cursor as the checkbox and heart swap in.
             min-height: Theme.track-row-h(root.columns.show_artwork);
             max-height: Theme.track-row-h(root.columns.show_artwork);
-        // Radius-less, so a scissor rather than a texture (`slint-pitfalls.md`).
+        // Radius-less, so a scissor rather than a texture.
         clip: true;
 
         if root.selected || root.hovered: SelectionPill {
@@ -130,8 +130,8 @@ export component TrackListRowItem inherits Rectangle {
         // to ancestors but not cousins, and the checkbox unmounted under a pointer moving onto it.
         touch := TouchArea {
             enabled: root.enabled;
-            // On `clicked`, this row's heart and stars being `slint-pitfalls.md`'s grab-invalidation
-            // example. A drag sends a cancel, so it lands no pick.
+            // On `clicked`, which a release from the unmounting heart or stars never fires. A
+            // drag sends a cancel, so it lands no pick.
             clicked => {
                 if (root.enabled && root.selecting) {
                     root.pick(root.press-shift);

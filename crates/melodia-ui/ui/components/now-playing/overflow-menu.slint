@@ -24,8 +24,8 @@ import { ReplayGainText } from "../settings/replaygain-controls.slint";
 // button the user routed here. Always mounted, Speed living nowhere else.
 //
 // The popup is sized for the menu column and the widest flyout up front, so opening one never
-// moves its origin (`slint-pitfalls.md`). It opens upward, cut to the room above the trigger, and
-// each column scrolls what the cut takes.
+// moves its origin, which Slint moves a frame after the content. It opens upward, cut to the room
+// above the trigger, and each column scrolls what the cut takes.
 export component OverflowMenu inherits Rectangle {
     in property <length> bar-w;
 

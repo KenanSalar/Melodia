@@ -101,7 +101,7 @@ export global Radio {
     in-out property <image> cover;
     // A logo is routinely a favicon, which the hero insets at native size rather than stretching.
     in-out property <int> detail-logo-size: 0;
-    // The two-slot cross-fade (`slint-pitfalls.md`).
+    // The two-slot cross-fade: Rust fills the hidden slot and flips, so nothing flashes.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool> blur-use-a;

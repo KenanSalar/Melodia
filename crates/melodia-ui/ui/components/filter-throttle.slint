@@ -1,5 +1,6 @@
 // Paces filter-box keystrokes: the host bumps `pending` on every `edited`, and this fires while it
-// runs ahead of the last applied tick. Its two `fire()` shapes are `slint-pitfalls.md`'s.
+// runs ahead of the last applied tick. `fire()` applies the filter where Rust rebuilds a model, or
+// settles a query property where the cost is Slint re-evaluating what reads it.
 export component FilterThrottle {
     // Cadence, or the settle time under `trailing`.
     in property <duration> interval: 130ms;

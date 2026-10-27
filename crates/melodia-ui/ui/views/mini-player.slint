@@ -27,7 +27,7 @@ export component MiniPlayerView inherits Rectangle {
     // element paints in Now Playing: answered once, since one site left on the theme's ink vanishes
     // on a light palette. Each is eased here, once. The two leaves that ease their own colours,
     // `IconButton` and the scrollbar, take `on-backdrop` and `recolor` instead, a brush eased twice
-    // restarting its curve every frame (`slint-pitfalls.md`'s shared-brush entry).
+    // restarting its curve every frame.
     private property <brush> ink: root.on-backdrop ? Player.np-on-backdrop : Theme.text;
     private property <brush> ink-muted: root.on-backdrop ? Player.np-on-backdrop-muted : Theme.subtext0;
     // Off the backdrop Up Next's secondary columns take `Theme.text`, as every row list does.

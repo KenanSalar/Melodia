@@ -62,8 +62,8 @@ export component StarRating {
                         icon-color: parent.lit ? root.filled-color : root.empty-color;
                         filled: parent.lit;
                         fade: parent.level;
-                        // Safe for `IconButton`'s reason: neither host eases the pair. Read
-                        // `slint-pitfalls.md` before giving one of them a crossfade.
+                        // Safe for `IconButton`'s reason: neither host eases the pair. One that
+                        // did would restart this every frame and land it late.
                         animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
                     }
                 }

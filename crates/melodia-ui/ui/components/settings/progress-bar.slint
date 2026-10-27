@@ -33,7 +33,7 @@ export component ProgressBar inherits Rectangle {
         y: 0;
         width: root.fill-w;
         height: parent.height;
-        // Both axes, so a fill still narrower than the bar is tall stays a pill, not a lens.
+        // Both axes: a fill still narrower than the bar is tall can't carry `height / 2`.
         border-radius: min(self.width, self.height) / 2;
         background: Theme.accent;
     }

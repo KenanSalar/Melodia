@@ -77,8 +77,8 @@ export component EntityCard inherits Rectangle {
     private property <float> box-t: root.box-shown ? 1.0 : 0.0;
     animate box-t { duration: Theme.dur-fast; easing: ease-in-out; }
 
-    // Published so a host framing against the square never re-derives it (`slint-pitfalls.md`'s
-    // `@children` entry).
+    // Published for a host framing against the square: in the overlay slot `parent` is the
+    // whole card.
     out property <length> tile-size: root.card-width - 2 * Theme.pad-sm;
     // In the overlay slot's frame, for a control stacked under the box.
     out property <length> select-box-bottom: box.y + box.height - overlay.y;
@@ -95,13 +95,13 @@ export component EntityCard inherits Rectangle {
         height: 100%;
         border-radius: Theme.radius-md;
         // Hover fill and selection ring on one element, so the renderer tucks the fill under the
-        // stroke (`slint-pitfalls.md`).
+        // stroke and the corner is antialiased once.
         background: root.card-hovered ? Theme.surface0 : transparent;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
         border-width: root.selected ? 2px : 0px;
         border-color: Theme.accent;
 
-        // No `animate`, so the tint lands on the ring's frame (`slint-pitfalls.md`).
+        // No `animate`: an eased tint would start a frame after the snapped ring.
         if root.selected: Rectangle {
             x: 0;
             y: 0;
@@ -163,8 +163,8 @@ export component EntityCard inherits Rectangle {
     touch := TouchArea {
         enabled: root.enabled;
         mouse-cursor: pointer;
-        // Both arms on `clicked` (`slint-pitfalls.md`), reading `picking` once, so unpicking the
-        // last card can't open its detail on the way out.
+        // Both arms on `clicked`, which needs this area's own press, reading `picking` once, so
+        // unpicking the last card can't open its detail on the way out.
         clicked => {
             if (root.picking) {
                 root.pick(root.press-shift);

@@ -10,8 +10,8 @@ const SHORTCUT_SCOPE: &str =
 
 /// **The panel's hover sentinel takes the wheel its children leave.** Slint clears `has-hover` on
 /// a wheel event nothing under the pointer accepts and restores it only on the next move, so
-/// without the answer a click in place after a tick claims no keys (`slint-pitfalls.md`'s
-/// `has-hover` entry). It reads as redundant, the list scrolling either way.
+/// without the answer a click in place after a tick claims no keys. It reads as redundant, the
+/// list scrolling either way.
 #[test]
 fn the_hover_sentinel_accepts_the_wheel_its_children_leave() {
     let panel = code_tokens(QUEUE_PANEL);

@@ -39,8 +39,8 @@ export component CaptionButton inherits Rectangle {
     // targets meet.
     property <length> pitch: root.kde ? 24px : root.cell-width;
 
-    // Pinned rather than `height: 100%`, which collapses the sibling buttons to zero width
-    // (`slint-pitfalls.md`).
+    // Pinned rather than `height: 100%`, which leaves a layout child unbounded and collapses the
+    // sibling buttons to zero width.
     min-width: root.pitch;
     max-width: root.pitch;
     min-height: root.cell-height;
@@ -85,7 +85,7 @@ export component CaptionButton inherits Rectangle {
         commands: root.kde ? root.kde-commands : root.standard-commands;
         stroke: root.idle-fg;
         stroke-width: 1px;
-        // Square where Breeze is round: FemtoVG draws no round cap this thin (`slint-pitfalls.md`).
+        // Square where Breeze is round: at scale 1 a round cap this thin tessellates to nothing.
         stroke-line-cap: root.kde ? LineCap.square : LineCap.butt;
         stroke-line-join: round;
     }

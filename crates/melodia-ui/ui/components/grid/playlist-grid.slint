@@ -44,7 +44,7 @@ export component PlaylistGrid inherits Rectangle {
             height: 100%;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
+            // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
             for grid-row in root.rows: Rectangle {
@@ -106,7 +106,7 @@ export component PlaylistGrid inherits Rectangle {
                             }
 
                             // The hover trio, in the card's slot and framed off `tile-size`, never
-                            // `parent` (`slint-pitfalls.md`'s `@children` entry).
+                            // `parent`, which in the slot is the whole card.
                             show-overlay-actions: true;
                             overlay-hovered: delete_btn.has-hover
                                 || artwork_btn.has-hover

@@ -2,7 +2,7 @@ import { WindowRect } from "../globals/drag.slint";
 
 // Reports the window rect its host draws into, for a hit test made outside Slint. At the host's
 // full size, inside no `if` or `for` but the full-UI branch: its tracker watches layout, and a
-// branch dropped while its parent re-flows panics on it (`slint-pitfalls.md`).
+// branch dropped while its parent re-flows panics on it.
 export component WindowRectReport {
     callback moved(WindowRect);
 

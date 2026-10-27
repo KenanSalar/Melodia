@@ -4,8 +4,8 @@ import { Nav, NavEnterFrom } from "../globals/nav.slint";
 // Enter-only wrapper, replayed on every branch mount. There is no exit half: an `if` destroys the
 // outgoing view at once.
 //
-// **A one-shot Timer flips `shown`, never `init`**, and `init` reads the animated bindings once so
-// each starts from its `shown: false` value (`slint-pitfalls.md`'s `init` entry).
+// **A one-shot Timer flips `shown`, never `init`**, a flip there being the initial value, and
+// `init` reads the animated bindings once so each starts from its `shown: false` value.
 export component ViewTransition inherits Rectangle {
     in property <NavEnterFrom> enter-from: NavEnterFrom.above;
     // Off, the view is simply there: a page's tab bodies, inside its own enter, until the first

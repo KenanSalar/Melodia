@@ -20,7 +20,7 @@ export global ContextClick {
 
 // Shared by every right-click menu with a flyout. Opening rightward, a menu grows by the flyout's
 // room while it is open; leftward it holds the room from the start, growing left moving an open
-// popup's origin, which Slint moves a frame late (`slint-pitfalls.md`).
+// popup's origin, which Slint moves a frame after its content.
 export global ContextMenuMetrics {
     out property <length> item-h: 32px;
     out property <length> flyout-w: 200px;
@@ -172,9 +172,9 @@ export struct CopyField {
 // flyout beside them. The anchor and the flyout's open state stay on the host's root, where its
 // `show-at` and `dismiss()` can reset them.
 //
-// **A column taller than the shell scrolls** in its `PopupColumn`, and the popup places its own `y`
-// (`slint-pitfalls.md`'s oversized-popup entry). The flyout's rows are data rather than children
-// because the popup reserves their height before the flyout mounts, so an added row can't clip.
+// **A column taller than the shell scrolls** in its `PopupColumn`, and the popup places its own
+// `y`, Slint drawing an oversized one past the window's edge. The flyout's rows are data, the
+// popup reserving their height before the flyout mounts, so an added row can't clip.
 export component ContextMenuPopup inherits PopupWindow {
     // Where the menu was raised, in the host root's frame and in the window's, which only the host
     // can read, `absolute-position` inside a popup being the popup's.

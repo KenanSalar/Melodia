@@ -106,9 +106,8 @@ fn the_single_line_placeholder_is_bounded_and_elides() {
 }
 
 /// The multi-line placeholder takes the opposite shape on purpose: a multi-line box wants its
-/// hint bounded to the scroller and wrapped, not elided against one line. It is the exemption in
-/// `.claude/rules/slint-pitfalls.md`, and a rule is not a build failure. Without this pin it is
-/// the easiest thing in the tree to "fix" into the single-line shape.
+/// hint bounded to the scroller and wrapped, not elided against one line. Without this pin the
+/// one exemption is the easiest thing in the tree to "fix" into the single-line shape.
 #[test]
 fn the_multiline_placeholder_is_bounded_and_wraps() {
     let block = code_between(MULTILINE_INPUT, "x: sv.x;", "Rectangle {");

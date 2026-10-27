@@ -148,8 +148,8 @@ export global MiniPlayer {
     callback set-backdrop-shown(bool);
 }
 
-// The winit wheel route into a composite view (`slint-pitfalls.md`). **A page whose sections
-// become tabs needs none of this** — tabs first.
+// The winit wheel route into a composite view, whose inner list swallows the wheel at its edge.
+// **A page whose sections become tabs needs none of this**: tabs first.
 export global CompositeScroll {
     in-out property <bool> hovered: false;
     // Logical px, +y scrolling up as `flickable.rs` does. Rust **adds** the delta and then bumps the
@@ -157,8 +157,8 @@ export global CompositeScroll {
     in-out property <length> wheel-dy: 0px;
     in-out property <int> wheel-tick: 0;
 
-    // **Every content-view switch owes this call** (`slint-pitfalls.md`). A `public function`
-    // because a callback has one handler slot.
+    // **Every content-view switch owes this call**, a view destroyed under the pointer leaving
+    // `hovered` set over the next. A `public function` because a callback has one handler slot.
     public function reset() {
         root.hovered = false;
         root.wheel-dy = 0px;

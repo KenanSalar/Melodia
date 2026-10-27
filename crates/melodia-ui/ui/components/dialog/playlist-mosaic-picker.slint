@@ -182,7 +182,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
 
                     FlexboxLayout {
                         spacing: root.cand-gap;
-                        // The viewport can outgrow the tiles (`slint-pitfalls.md`'s flex entry).
+                        // A flex stretches its lines over a viewport taller than the tiles.
                         cross-axis-line-alignment: start;
 
                         for path in Dialog.mosaic-candidates: cand := Rectangle {
@@ -220,7 +220,7 @@ export component PlaylistMosaicPicker inherits Rectangle {
                                 cover-scale: cand-touch.has-hover ? 1.06 : 1.0;
                             }
 
-                            // On the eased float, so the fade-out plays (`slint-pitfalls.md`).
+                            // On the eased float, so the fade-out plays.
                             if cand.hover-t > 0: EdgeOutline {
                                 width: 100%;
                                 height: 100%;

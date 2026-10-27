@@ -94,7 +94,7 @@ export global Player {
         ? @tr("Next (hold to fast-forward)")
         : @tr("Next");
 
-    // The two-slot cross-fade (`slint-pitfalls.md`), written only on a track change.
+    // The two-slot cross-fade, filled hidden and flipped, written only on a track change.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool> blur-use-a: true;
@@ -272,7 +272,7 @@ export global Player {
     property <length> wheel-carry: 0px;
 
     // **Accepts every event, an empty one included**: a `TouchArea` that rejects the wheel drops
-    // its `has-hover` until the pointer moves (`slint-pitfalls.md`).
+    // its `has-hover` until the pointer moves.
     public function wheel-volume(event: PointerScrollEvent) -> EventResult {
         if (event.delta-y == 0px) {
             return accept;

@@ -29,8 +29,8 @@ export component MetaChipStrip inherits Rectangle {
     // No radius, so a scissor.
     clip: root.max-rows > 0;
 
-    // **Never inside an `if`**, where a flex reports its height at the wrong width
-    // (`slint-pitfalls.md`).
+    // **Never inside an `if`**, where a flex reports its height at its preferred width rather
+    // than the one it draws at.
     rows := FlexboxLayout {
         visible: root.show-rows;
         spacing-horizontal: Theme.pad-sm;

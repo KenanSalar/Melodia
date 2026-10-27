@@ -57,7 +57,7 @@ export component SearchBar inherits Rectangle {
     callback accepted();
 
     // Arms on the raw `has-hover` and releases on a latch, the flag blinking off for a frame over
-    // the Search results this floats on (`slint-pitfalls.md`'s `has-hover` entry).
+    // the Search results this floats on.
     property <bool> pointer-inside: chrome-touch.has-hover;
     property <bool> hover-held;
     property <bool> engaged:
@@ -92,8 +92,7 @@ export component SearchBar inherits Rectangle {
     }
 
     // The `min`/`preferred`/`max` split rather than a bound `width`, which would drag the window's
-    // resize floor out with a locale-sized default (`slint-pitfalls.md`). The floor gives way the
-    // moment the fold begins.
+    // resize floor out with a locale-sized default. The floor gives way once the fold begins.
     property <length> slot-w: input-width + (root.bar-height - input-width) * root.fold-t;
     min-width: root.fold-t > 0.0 ? root.bar-height : root.min-w;
     preferred-width: root.slot-w;

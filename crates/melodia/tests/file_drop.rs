@@ -21,10 +21,9 @@ fn sources() -> Vec<(String, String)> {
 }
 
 /// **A `WindowRectReport` sits inside no `if` or `for` but the full-UI branch.** Its tracker
-/// watches its own geometry, so a branch dropped while its parent re-flows panics on it
-/// (`slint-pitfalls.md`'s entry on a `changed` handler inside an `if`). Climbed rather than read per
-/// file: the queue panel's report sits in no branch of its own file, and the panel's mount is what
-/// decides.
+/// watches its own geometry, so a branch dropped while its parent re-flows panics on it. Climbed
+/// rather than read per file: the queue panel's report sits in no branch of its own file, and the
+/// panel's mount is what decides.
 #[test]
 fn every_window_rect_report_sits_in_no_branch_but_the_full_ui() {
     let tree = sources();

@@ -179,13 +179,13 @@ export component UpNextList inherits Rectangle {
         y: NowPlaying.slide-direction * (1.0 - root.slide-p) * root.row-h;
         width: parent.width - root.list-inset-right;
         // Only as tall as its rows, so the space under a short queue stays the miniplayer's window
-        // grab (`slint-pitfalls.md`'s in-window drag entry).
+        // grab, a `DragArea` taking every press none of its children does.
         height: min(parent.height, NowPlaying.up-next-rows.length * root.row-h);
 
         up-next-list := ListView {
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
+            // A row drag and a drag-pan are one gesture; pinned rather than left to the style.
             mouse-drag-pan-enabled: false;
             width: 100%;
             height: 100%;

@@ -39,7 +39,7 @@ export component AlbumGrid inherits Rectangle {
             height: 100%;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
+            // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
             for grid-row in root.rows: Rectangle {

@@ -53,7 +53,7 @@ export component StationGrid inherits Rectangle {
         horizontal-scrollbar-policy: always-off;
         // Pinned rather than left to the style, a card click and a drag-pan being one gesture:
         // where the pan is on it takes a press that drifts, which reads as "sometimes it doesn't
-        // open". The wheel scrolls either way; `slint-pitfalls.md` has the mechanism.
+        // open". The wheel scrolls either way.
         mouse-drag-pan-enabled: false;
 
         for grid-row in root.rows: Rectangle {

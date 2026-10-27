@@ -10,7 +10,7 @@ export component SectionCard inherits Rectangle {
     vertical-stretch: 0;
 
     // Never `width`, whose floor climbs out to the window's. The pinned preferred keeps every card
-    // one width; `min-width` is left alone so the card still compresses (`slint-pitfalls.md`).
+    // one width, a grid column starting at it; `min-width` is left alone so the card compresses.
     preferred-width: root.card-width;
     max-width: root.card-width;
 
@@ -22,8 +22,8 @@ export component SectionCard inherits Rectangle {
         // No `clip`: a rounded one is a layer reallocated on every frame of a resize, and nothing
         // reaches the corners.
         Rectangle {
-            // The root's pair again on a cell, the only place it reaches the card's height behind
-            // an `if` (`slint-pitfalls.md`).
+            // The root's pair again on a cell, the only place it reaches the card's height
+            // behind an `if`.
             preferred-width: root.card-width;
             max-width: root.card-width;
             background: SettingsPage.card-fill;

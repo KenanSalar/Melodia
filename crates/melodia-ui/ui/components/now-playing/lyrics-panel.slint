@@ -10,8 +10,8 @@ import { MaterialIcon } from "../material-icon.slint";
 // and palette are the station panel's, so the two sit into the backdrop alike.
 //
 // No `changed` handler and no `animate`: this is mounted behind an `if`, and a tracker re-dirtied
-// on the frame its branch goes panics (`slint-pitfalls.md`). The follow is driven from the timer
-// below and eased by arithmetic.
+// on the frame its branch goes panics. The follow is driven from the timer below and eased by
+// arithmetic.
 export component LyricsPanel inherits Rectangle {
     // Only the empty state draws at two sizes; the sheet's scale is the `Lyrics` global's.
     in property <bool> compact: false;
@@ -84,7 +84,7 @@ export component LyricsPanel inherits Rectangle {
                     : transparent;
                 border-radius: Theme.radius-md;
 
-                // Every part spells its own `y`: one with none is centred (`slint-pitfalls.md`).
+                // Every part spells its own `y`: one with none is centred.
                 Text {
                     x: Lyrics.row-pad-x;
                     y: Lyrics.row-pad-y;
@@ -151,7 +151,7 @@ export component LyricsPanel inherits Rectangle {
                             ? clamp(Lyrics.interlude-progress * 3 - k, 0.0, 1.0)
                             : 0.0;
 
-                        // Two layers, `mix()` having no brush overload (`slint-pitfalls.md`).
+                        // Two layers, `mix()` having no brush overload.
                         MaterialIcon {
                             name: "music_note";
                             icon-size: root.note-size;
@@ -211,8 +211,8 @@ export component LyricsPanel inherits Rectangle {
     property <bool> following: root.has-rows && Lyrics.synced && Player.vm.is_playing;
 
     // Whether the glide has reached the sung line. Written by the tick, never bound to the
-    // distance: `target-y` reads a layout property, which the timer's `interval` may not reach
-    // (`slint-pitfalls.md`).
+    // distance: `target-y` reads a layout property, and the timer's `interval` is evaluated
+    // inside the layout pass, where reaching one recurses.
     property <bool> settled;
 
     // Fast while following or catching up, a crawl once both are still. The slow cadence still
@@ -256,8 +256,7 @@ export component LyricsPanel inherits Rectangle {
     }
 
     // Each hint names its control in words: the bundled faces carry no `▸` or `⋮`, and a fallback
-    // glyph breaks the line box (`slint-pitfalls.md`). Silent in the miniplayer, which has no
-    // header menu to point at.
+    // glyph breaks the line box. Silent in the miniplayer, which has no header menu to point at.
     if !root.has-rows: NpEmptyState {
         glyph: Lyrics.state == LyricsState.instrumental ? "music_note"
             : Lyrics.state == LyricsState.unavailable ? "cloud_off"

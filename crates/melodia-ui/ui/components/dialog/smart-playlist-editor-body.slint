@@ -48,8 +48,8 @@ component SmartRuleRowView inherits Rectangle {
         Dropdown {
             trigger-width: 148px;
             options: root.field-names;
-            // `manual`, so the index re-reads after a field change resets the operator
-            // (`slint-pitfalls.md`).
+            // `manual`, so no self-write detaches the binding the index re-reads after a
+            // field change resets the operator.
             manual: true;
             selected-index: root.rule.field-index;
             selected(idx) => { root.set-field(idx); }

@@ -15,7 +15,7 @@ import { TabSearchHeader } from "tab-search-header.slint";
 export component LibraryTabBand inherits Rectangle {
     in property <[string]> tab-labels;
     in property <[string]> tab-icons;
-    // Two-way: the bar writes it on every pick (`slint-pitfalls.md`'s orphaned binding).
+    // Two-way: the bar writes it on every pick, which would detach a one-way binding.
     in-out property <int> tab-idx;
 
     in-out property <string> filter;
@@ -65,7 +65,7 @@ export component LibraryTabBand inherits Rectangle {
     callback hero-collapsed();
 
     // Seeded by the binding and written by the handler, a bound animation re-basing on every dirty
-    // (`slint-pitfalls.md`). The seed lands a page mounted with a detail open at hero height.
+    // input. The seed lands a page mounted with a detail open at hero height.
     property <float> hero-t: root.detail-open ? 1.0 : 0.0;
     changed detail-open => {
         self.hero-t = self.detail-open ? 1.0 : 0.0;
@@ -93,7 +93,7 @@ export component LibraryTabBand inherits Rectangle {
 
     // One frame longer at each end than `detail-open`, and at the start than `hero-t > 0`; both
     // were bugs. Only tracker-free pieces ride it: the chip strip's layout tracker is why the
-    // meta column has no `if` (`slint-pitfalls.md`).
+    // meta column has no `if`, a branch dropped mid-morph panicking on it.
     property <bool> hero-shown: root.detail-open || root.hero-t > 0;
 
     // The body slides only while this is false. Not `hero-t > 0`, which is false on a drill-in's
@@ -101,7 +101,7 @@ export component LibraryTabBand inherits Rectangle {
     out property <bool> morphing: root.hero-t != (root.detail-open ? 1.0 : 0.0);
 
     // The bar's four brushes cross from `Theme.*` to `HeroBackdrop` tiers through a `states`
-    // transition, the hero half landing late off the decode (`slint-pitfalls.md`).
+    // transition, which adopts a hero half landing late off the decode where `animate` restarts.
     property <brush> label-brush: Theme.text;
     property <brush> active-brush: Theme.accent;
     property <brush> hover-brush: Theme.surface0;
@@ -171,7 +171,8 @@ export component LibraryTabBand inherits Rectangle {
     property <length> hero-h:
         2 * Theme.pad-lg + header.row-h + Theme.pad-md + Theme.hero-artwork;
 
-    // Never a bound `height`, and clipped because of it (`slint-pitfalls.md`).
+    // Never a bound `height`, which a root reports as min and max. Clipped: drawn shorter than it
+    // asks, the hero would spill into the page.
     min-height: root.compact-h;
     preferred-height: root.compact-h + (root.hero-h - root.compact-h) * root.hero-t;
     max-height: root.hero-h;
@@ -299,7 +300,7 @@ export component LibraryTabBand inherits Rectangle {
                 // Reserved for the floating pill row, so the chip strip's two-row slack holds.
                 padding-bottom: root.pill-h + Theme.pad-xs;
 
-                // Alpha in the brushes, a faded layer cropping Arabic marks (`slint-pitfalls.md`).
+                // Alpha in the brushes, a faded layer cropping Arabic marks to its line box.
                 if root.hero-shown: VerticalLayout {
                     vertical-stretch: 0;
                     spacing: Theme.pad-xs;

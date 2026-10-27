@@ -20,7 +20,7 @@ export component SettingRow inherits Rectangle {
     animate dim { duration: Theme.dur-fast; easing: ease-in-out; }
 
     // The wrapper measures the row at the card's width, a pin on a cell reaching a row behind an
-    // `if` where one on its root can't (`slint-pitfalls.md`).
+    // `if` where one on its root can't.
     VerticalLayout {
         HorizontalLayout {
             padding: Theme.pad-lg;

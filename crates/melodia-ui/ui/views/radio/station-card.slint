@@ -100,7 +100,7 @@ export component StationCard inherits Rectangle {
 
         // Centred, the top left being the selection box's and the bottom right the play count's.
         // These frame off `card-body`'s published metrics, never `parent`, which in this slot is
-        // the whole card (`slint-pitfalls.md`, `crates/melodia/tests/entity_card_overlay.rs`).
+        // the whole card (`crates/melodia/tests/entity_card_overlay.rs`).
         play_btn := IconButton {
             x: (card-body.tile-size - self.width) / 2;
             y: (card-body.tile-size - self.height) / 2;

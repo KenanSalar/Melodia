@@ -25,7 +25,7 @@ export component EdgeResizeHandle inherits Rectangle {
     touch := TouchArea {
         mouse-cursor: ew-resize;
         // **Window-absolute**: the handle's own frame moves with the panel, so a local delta
-        // undercounts the cursor's travel and the handle lags it (`slint-pitfalls.md`).
+        // undercounts the cursor's travel and the handle lags it.
         property <length> start-w;
         property <length> press-abs-x;
         pointer-event(ev) => {

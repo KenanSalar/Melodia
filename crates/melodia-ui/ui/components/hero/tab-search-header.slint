@@ -9,7 +9,7 @@ import { TabBar } from "../tab-bar.slint";
 export component TabSearchHeader inherits HorizontalLayout {
     in property <[string]> tab-labels;
     in property <[string]> tab-icons;
-    // Two-way: the bar writes it on every pick (`slint-pitfalls.md`'s orphaned binding).
+    // Two-way: the bar writes it on every pick, which would detach a one-way binding.
     in-out property <int> tab-idx;
 
     in-out property <string> filter;
@@ -150,9 +150,9 @@ export component TabSearchHeader inherits HorizontalLayout {
 
     // Padded to the bar's divider band, so the input centres on the labels' line.
     //
-    // Collapsed through `visible`, never `clip`, which shaved the focus swell flat
-    // (`slint-pitfalls.md`). An explicit `min-width` replaces the constraint the bar's bound width
-    // would merge in. `box-w` still reserves while hidden, so the bar doesn't replay its morph.
+    // Collapsed through `visible`, never `clip`, which would shave the focus swell while open too.
+    // An explicit `min-width` replaces the constraint the bar's bound width would merge in.
+    // `box-w` still reserves while hidden, so the bar doesn't replay its morph.
     Rectangle {
         visible: root.search-shown;
         min-width: 0px;

@@ -153,10 +153,10 @@ fn only_the_shared_predicate_names_the_right_button() {
     );
 }
 
-/// An item lit by its own `has-hover` goes dark under the menu it raised (`slint-pitfalls.md`),
-/// and nothing marks what the menu is for. A host folds `is-open` into the one binding reading
-/// its raw hover, so a second raw read is a hover binding that went around it. Neither miss shows
-/// until a menu is open.
+/// An item lit by its own `has-hover` goes dark under the menu it raised, an open popup taking the
+/// hover, and nothing marks what the menu is for. A host folds `is-open` into the one binding
+/// reading its raw hover, so a second raw read is a hover binding that went around it. Neither miss
+/// shows until a menu is open.
 #[test]
 fn every_item_menu_host_reads_whether_its_menu_is_open() {
     let sources = stripped_sources(UI_DIR, "slint", MIN_SLINT_SOURCES);

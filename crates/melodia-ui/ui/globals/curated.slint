@@ -24,7 +24,8 @@ export global Favorites {
     // `-1` until fetched, as is every count on both globals; `Albums.total-count` says why.
     in-out property <int>      track-count: -1;
 
-    // The two-slot cross-fade (`slint-pitfalls.md`). `has-blur` false shows the gradient floor.
+    // The two-slot cross-fade: Rust fills the hidden slot and flips, so nothing flashes.
+    // `has-blur` false shows the gradient floor.
     in-out property <image> blur-img-a;
     in-out property <image> blur-img-b;
     in-out property <bool>  blur-use-a;

@@ -14,7 +14,7 @@ export component RoundedFrame inherits Rectangle {
     //
     // **Every path winds counter-clockwise on screen and closes along a vertical or top edge**, or
     // its arc comes out stepped, and **every number goes in through `to-string-unlocalized()`**, or
-    // a locale's decimal comma breaks the path (`slint-pitfalls.md`'s two `Path` entries).
+    // a locale's decimal comma breaks the path.
     private property <float> side: root.radius / 1px;
     private property <float> inset: root.stroke-width / 2px;
     private property <float> arc: root.side - root.inset;

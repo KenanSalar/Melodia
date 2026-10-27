@@ -60,7 +60,7 @@ export component QueuePanel inherits Rectangle {
     private property <length> body-pad-bottom: root.floating-drawn ? Theme.radius-lg : 0px;
 
     // Never a bound `width`: a component root reports that as its min and max, and an eased one
-    // drags the window's own floor along with it (`slint-pitfalls.md`).
+    // drags the window's own floor along with it.
     min-width: 0px;
     preferred-width: root.open-w * root.docked-t;
     max-width: root.open-w;
@@ -177,7 +177,7 @@ export component QueuePanel inherits Rectangle {
         height: root.body-h;
         changed has-hover => { Queue.pointer-in = self.has-hover; }
         // A wheel tick the list didn't take would clear the hover until the pointer moves, so a
-        // click in place after it wouldn't claim the keys (`slint-pitfalls.md`, `has-hover`).
+        // click in place after it wouldn't claim the keys.
         scroll-event(ev) => { return accept; }
 
         WindowRectReport {
@@ -304,7 +304,7 @@ export component QueuePanel inherits Rectangle {
                         width: 100%;
                         height: 100%;
                         // A row drag and a drag-pan are one gesture; pinned rather than left to
-                        // the style (`slint-pitfalls.md`).
+                        // the style.
                         mouse-drag-pan-enabled: false;
                         for row[idx] in Queue.rows: QueueRowItem {
                             row-data: row;

@@ -8,8 +8,7 @@ import { Theme } from "../theme.slint";
 // RGBA, so a fade to rgba(0,0,0,0) darkens the ramp instead of thinning it.
 //
 // **Both stops sit at the extents, which keeps FemtoVG on its two-stop path.** Inset either and
-// every sweep synthesizes a gradient texture, growing the driver's pool by a slab it never gives
-// back (`slint-pitfalls.md`).
+// every sweep synthesizes a gradient texture, and the driver backs it with a slab it keeps.
 component AuroraSweep inherits Rectangle {
     in property <color> tint;
     in property <angle> heading;
@@ -23,8 +22,8 @@ component AuroraSweep inherits Rectangle {
         : @linear-gradient(root.heading, root.tint.transparentize(1.0) 0%, root.tint.transparentize(1.0) 100%);
     animate background { duration: Theme.dur-med; easing: ease-in-out; }
 
-    // Read once at mount, so the first flip has something to ease from (`slint-pitfalls.md`'s
-    // `init` entry).
+    // Read once at mount: first evaluated after an early flip, the background would have nothing
+    // to ease from.
     init => {
         root.background;
     }

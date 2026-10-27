@@ -12,7 +12,7 @@ import { TabSearchHeader } from "tab-search-header.slint";
 export component MosaicTabHero inherits Rectangle {
     in property <[string]> tab-labels;
     in property <[string]> tab-icons;
-    // Two-way: the bar writes it on every pick (`slint-pitfalls.md`'s orphaned binding).
+    // Two-way: the bar writes it on every pick, which would detach a one-way binding.
     in-out property <int> tab-idx;
 
     in property <string> title;

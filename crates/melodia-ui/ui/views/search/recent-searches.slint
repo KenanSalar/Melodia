@@ -33,8 +33,8 @@ component RecentChip inherits Rectangle {
     term-text := Text {
         x: 10px;
         y: (root.height - self.height) / 2;
-        // Bound and elided, `slint-pitfalls.md`'s placeholder entry: unbounded, the label paints
-        // through the pill's edge.
+        // Bound and elided, elide alone never firing in a non-layout parent: unbounded, the
+        // label paints through the pill's edge.
         width: max(0px, root.width - root.chrome-w);
         text: root.term;
         color: Theme.text;

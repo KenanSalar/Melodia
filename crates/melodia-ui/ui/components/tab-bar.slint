@@ -24,8 +24,8 @@ component TabBarCell inherits Rectangle {
     // rather than animated, which would phase-lag.
     property <float> label-alpha: clamp(1.0 - root.compact-t * 2.0, 0.0, 1.0);
 
-    // **Eases floats, never a brush**: a host on a hero band crosses its brushes through a morph
-    // (`slint-pitfalls.md`'s shared-brush entry).
+    // **Eases floats, never a brush**: a host on a hero band crosses its brushes in a morph, and
+    // an `animate` over them would restart every frame and land late.
     property <float> hover-t: touch.has-hover ? 1.0 : 0.0;
     animate hover-t { duration: Theme.dur-fast; easing: ease-in-out; }
 
@@ -65,9 +65,9 @@ component TabBarCell inherits Rectangle {
             spacing: Theme.pad-sm * root.open;
             alignment: center;
 
-            // **Two glyphs rather than one eased brush**, the idle one at full alpha underneath
-            // (`slint-pitfalls.md`). The wrapper needs its own geometry: `MaterialIcon` binds its
-            // size, so a container merges nothing from it and reports 0×0.
+            // **Two glyphs rather than one eased brush**, the idle one at full alpha so the cross
+            // never thins. The wrapper needs its own geometry: `MaterialIcon` binds its size, so a
+            // container merges nothing from it and reports 0×0.
             Rectangle {
                 cross-axis-self-alignment: center;
                 // Scaled directly: a container shrinking 3% moves the glyph a pixel and no more.
@@ -190,8 +190,8 @@ export component TabBar inherits Rectangle {
     animate anim-index { duration: Theme.dur-med; easing: ease-in-out; }
 
     // **The binding is only a seed**: `changed compact` writes it from the first flip on, so the
-    // morph plays at one speed however slowly the window is dragged (`slint-pitfalls.md`'s
-    // structural-dirt entry). `mini-player-switch.slint`'s `fade-opacity` is the same shape.
+    // morph plays at one speed however slow the drag, a bound animation restarting on every
+    // dirty input. `mini-player-switch.slint`'s `fade-opacity` is the same shape.
     property <float> compact-t: root.compact ? 1.0 : 0.0;
     // M3's emphasized-decelerate, not `Theme.dur-spatial`, whose tail reads as lag under a resize
     // drag. Both y control points sit in [0, 1], so no width goes negative. Off until `eased`: the
@@ -224,7 +224,7 @@ export component TabBar inherits Rectangle {
     horizontal-stretch: 0;
 
     // **Three constraints, never a bound `width`**, which would put the bar's minimum on `tab-w`
-    // and ease the window's own along with it (`slint-pitfalls.md`).
+    // and ease the window's own along with it.
     min-width: root.compact-w;
     preferred-width: root.labels.length * root.tab-w;
     max-width: root.labels.length * root.tab-w;

@@ -76,8 +76,8 @@ export component QueueRowItem inherits Rectangle {
         }
 
         touch := TouchArea {
-            // On `clicked` rather than the release, per `slint-pitfalls.md`, this row's checkbox
-            // being hover-mounted too. A drag sends this area a cancel, so neither fires after one.
+            // On `clicked`, which the hover-mounted checkbox's release, handed on as it unmounts,
+            // never fires. A drag sends this area a cancel, so neither fires after one.
             clicked => {
                 if (root.selecting) {
                     root.pick(root.press-ctrl, root.press-shift);

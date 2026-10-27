@@ -126,8 +126,8 @@ export component MyLibraryView inherits Rectangle {
         if (root.detail-open) { root.latch-hero(); }
     }
 
-    // The surface under the filter box moved, so Rust reseats the box from it
-    // (`slint-pitfalls.md`'s filter entry).
+    // The surface under the filter box moved, so Rust reseats the box with that surface's own
+    // filter.
     property <int> watched-album-id: AlbumDetail.album-id;
     changed watched-album-id => { MyLibrary.detail-scope-changed(); }
     property <int> watched-artist-id: ArtistDetail.artist-id;

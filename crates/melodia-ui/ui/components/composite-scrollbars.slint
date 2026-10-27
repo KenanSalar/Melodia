@@ -5,7 +5,7 @@ import { CompositeScroll } from "../globals/shell.slint";
 // The scrollbar and wheel routing every composite view mounts: an outer `ScrollView` scrolls the
 // sections, a height-capped inner `TrackList` the rows, and **one bar spans both travels**, a drag
 // splitting at the boundary. One composite view is mounted at a time, so this is the one
-// `CompositeScroll` wheel watcher (`slint-pitfalls.md`).
+// `CompositeScroll` wheel watcher, the inner list swallowing the wheel at its scroll edge.
 //
 // Slint can't pass element handles into a component, so the host mirrors its elements through
 // properties, and a setter forwarding to the list's own clamping one.
@@ -33,8 +33,8 @@ export component CompositeScrollbars inherits Rectangle {
     property <length> v-inner-max: max(0px, root.inner-viewport-height - root.inner-visible-height);
 
     // **Pulls the outer offset back in range when content shrinks under it**: the two-way
-    // `content-y` opts these views out of Slint's own correction (`slint-pitfalls.md`), and left
-    // past the end the region paints blank.
+    // `content-y` opts these views out of Slint's own correction, which skips a bound offset, and
+    // left past the end the region paints blank.
     changed v-outer-max => {
         if (-root.outer-viewport-y > root.v-outer-max) {
             root.outer-viewport-y = -root.v-outer-max;

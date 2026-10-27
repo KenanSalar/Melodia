@@ -15,7 +15,7 @@ import { FavoritesSongsTab } from "favorites/songs-tab.slint";
 
 // A pinned `MosaicTabHero` over three tabs, only the body scrolling so the tabs stay reachable.
 // Albums are absent on purpose, the Albums tab reaching them. Each tab owns one scroller under
-// plain `OverlayScrollbar`s, which keeps the page off the composite (`slint-pitfalls.md`).
+// plain `OverlayScrollbar`s, which keeps the page off the composite.
 export component FavoritesView inherits Rectangle {
     property <int> filter-tick-pending: 0;
 

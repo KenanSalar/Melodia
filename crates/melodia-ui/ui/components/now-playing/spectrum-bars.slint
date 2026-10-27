@@ -18,7 +18,7 @@ export component SpectrumBars inherits Rectangle {
             root.height / 1px
         );
 
-        // The box Rust normalizes into (`slint-pitfalls.md`'s `Path` entry).
+        // The box Rust normalizes into; without one the path's own bounds fill the element.
         viewbox-x: 0;
         viewbox-y: 0;
         viewbox-width: 1;

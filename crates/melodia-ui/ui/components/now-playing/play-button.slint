@@ -5,7 +5,7 @@ import { HoldTouchArea } from "../hold-touch-area.slint";
 
 // The now-playing bar's play / pause button, with the ring a hold fills and the optional
 // Equalizer overlay. The overlay's four bars ride one shared phase counter rather than an
-// `animate` each (`slint-pitfalls.md`'s concurrent `animate` entry).
+// `animate` each, every running one re-evaluated per frame.
 export component PlayButton inherits Rectangle {
     in property <bool>   is-playing;
     // The one glyph showing a state rather than the click's action: a stop drawn as a play arrow
@@ -156,7 +156,7 @@ export component PlayButton inherits Rectangle {
             fit: fill;
             stroke: root.icon-color;
             stroke-width: 2px;
-            // Unlocalized (`slint-pitfalls.md`'s decimal separator).
+            // Unlocalized, or a locale's decimal comma breaks the path.
             commands: "M 50 " + (50 - self.radius).to-string-unlocalized()
                 + " A " + self.radius.to-string-unlocalized() + " "
                 + self.radius.to-string-unlocalized() + " 0 "

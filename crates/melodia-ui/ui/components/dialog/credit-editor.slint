@@ -32,8 +32,8 @@ component CreditRowView inherits HorizontalLayout {
     if !root.is-last: Dropdown {
         trigger-width: 112px;
         options: TagEditor.join-phrases;
-        // `manual`, so the binding survives a removal above shifting the indices
-        // (`slint-pitfalls.md`).
+        // `manual`, so no self-write detaches the binding a removal above re-reads as the
+        // indices shift.
         manual: true;
         selected-index: root.credit.join-index;
         selected(idx) => { root.set-join(idx); }

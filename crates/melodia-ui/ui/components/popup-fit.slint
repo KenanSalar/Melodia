@@ -1,9 +1,9 @@
 import { Theme } from "../theme.slint";
 import { WindowChrome } from "../globals/shell.slint";
 
-// How a popup stays inside the shell, Slint drawing an oversized one past the window's edge
-// (`slint-pitfalls.md`): raised at a point it slides along (`fit-y`), and hanging off a control it
-// opens on the side with room (`opens-above`, `side-h`). Its `PopupColumn` scrolls the rest.
+// How a popup stays inside the shell, Slint drawing an oversized one past the window's edge:
+// raised at a point it slides along (`fit-y`), and hanging off a control it opens on the side with
+// room (`opens-above`, `side-h`). Its `PopupColumn` scrolls the rest.
 export global PopupFit {
     // Round a popup column's rows.
     out property <length> column-inset: Theme.pad-xs;

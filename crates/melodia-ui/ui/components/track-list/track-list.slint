@@ -118,7 +118,7 @@ export component TrackList inherits Rectangle {
                 height: 100%;
                 vertical-scrollbar-policy: always-off;
                 horizontal-scrollbar-policy: always-off;
-                // A drag and a drag-pan are one gesture (`slint-pitfalls.md`).
+                // A drag and a drag-pan are one gesture.
                 mouse-drag-pan-enabled: false;
                 for r[idx] in root.rows: TrackListRowItem {
                     row-data: r;

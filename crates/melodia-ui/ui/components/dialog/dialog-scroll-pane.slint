@@ -13,7 +13,7 @@ export component DialogScrollPane inherits Rectangle {
     out property <length> content-height: column.preferred-height;
 
     // A write rather than a binding, so the `Flickable` still pulls the view back in range when
-    // the content shrinks (`slint-pitfalls.md`).
+    // the content shrinks, its correction skipping a bound offset.
     public function scroll-to-end() {
         sv.content-y = min(0px, sv.visible-height - sv.content-height);
     }

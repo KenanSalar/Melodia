@@ -2,9 +2,9 @@ import { Drag, DragItems, DragOrigin } from "../globals/drag.slint";
 import { LiftedRun } from "../models.slint";
 
 // A list's drag: a `DragArea` round its `ListView`, **never inside a row**, which can be destroyed
-// before its drag ends (`slint-pitfalls.md`). It takes the press at 8 px and sends the rows a
-// cancel, so a drag lands no click. Rows report their press through `arm` or `arm-items`
-// (`Drag.payload` argues which), and a press carrying the list's picks adds `lift-picks`.
+// before its drag ends. It takes the press at 8 px and sends the rows a cancel, so a drag lands
+// no click. Rows report their press through `arm` or `arm-items` (`Drag.payload` argues which),
+// and a press carrying the list's picks adds `lift-picks`.
 export component DragSource inherits DragArea {
     in property <DragOrigin> origin;
 

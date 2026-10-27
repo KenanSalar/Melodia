@@ -43,7 +43,7 @@ component NotificationCard inherits Rectangle {
     }
 
     // Cut along the border's middle so its curve lies under solid border. A rectangle this narrow
-    // can't carry the card's radius, which turns elliptical (`slint-pitfalls.md`).
+    // can't carry the card's radius: FemtoVG shrinks it to fit, off the card's curve.
     Path {
         property <float> r: root.radius / 1px;
         property <float> inset: root.border-w / 2px;
@@ -60,8 +60,8 @@ component NotificationCard inherits Rectangle {
         viewbox-width: self.end;
         viewbox-height: self.h;
         fill: root.look.accent;
-        // Counter-clockwise, closed up the right edge, numbers unlocalized: `slint-pitfalls.md`'s
-        // two `Path` entries.
+        // Counter-clockwise and closed up the right edge, or its antialiasing comes out stepped;
+        // numbers unlocalized, a locale's decimal comma breaking the path.
         commands: "M " + self.end.to-string-unlocalized()
             + " " + (self.r - self.reach).to-string-unlocalized()
             + " A " + self.arc.to-string-unlocalized() + " " + self.arc.to-string-unlocalized()

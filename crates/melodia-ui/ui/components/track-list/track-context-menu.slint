@@ -93,8 +93,8 @@ export component TrackContextMenu inherits Rectangle {
     callback clear-selection();
 
     // Zero-size, so it claims nothing in a row the virtualizer measures, and pinned here because a
-    // zero-size wrapper is otherwise centred (`slint-pitfalls.md`). The host reports in the row
-    // chrome's frame, and no mount would know the offset is its problem.
+    // zero-size wrapper is otherwise centred. The host reports in the row chrome's frame, and no
+    // mount would know the offset is its problem.
     x: 0px;
     y: 0px;
     width: 0px;

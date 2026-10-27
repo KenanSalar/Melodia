@@ -36,7 +36,7 @@ export global Drag {
     // drag from one of those carries nothing rather than the last row clicked.
     out property <DragPayload> payload;
 
-    // The source's `dragging`, the one end every drag reaches (`slint-pitfalls.md`). A source
+    // The source's `dragging`, the one end every drag reaches, a miss ending in no drop. A source
     // unmounted mid-drag never hears it, and the next press's disarm lowers this instead.
     in-out property <bool> live;
 

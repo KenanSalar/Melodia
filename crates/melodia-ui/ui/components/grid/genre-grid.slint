@@ -34,7 +34,7 @@ export component GenreGrid inherits Rectangle {
             height: 100%;
             vertical-scrollbar-policy: always-off;
             horizontal-scrollbar-policy: always-off;
-            // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
+            // The style's default too, pinned: a drag-pan takes any press that drifts.
             mouse-drag-pan-enabled: false;
 
             for grid-row in root.rows: Rectangle {
@@ -57,7 +57,8 @@ export component GenreGrid inherits Rectangle {
                         EntityCard {
                             card-width: root.card-width;
                             card-height: root.card-height;
-                            // A name-hashed gradient, spelled out per caller (`slint-pitfalls.md`).
+                            // A name-hashed gradient, spelled out per caller: a gradient's stops
+                            // can't read a function's arguments.
                             fallback-icon: "theater_comedy";
                             tile-bg: @linear-gradient(135deg,
                                 genre.tile_color_1,

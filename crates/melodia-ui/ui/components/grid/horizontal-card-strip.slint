@@ -53,7 +53,7 @@ export component HorizontalCardStrip inherits Rectangle {
                 height: 100%;
                 horizontal-scrollbar-policy: always-off;
                 vertical-scrollbar-policy:   always-off;
-                // A pin, not an override (`slint-pitfalls.md`'s drag-pan entry).
+                // The style's default too, pinned: a drag-pan takes any press that drifts.
                 mouse-drag-pan-enabled: false;
                 content-height: self.height;
 

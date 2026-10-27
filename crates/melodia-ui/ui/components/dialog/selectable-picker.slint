@@ -5,8 +5,7 @@ import { MaterialIcon } from "../material-icon.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
 // The selectable-list dialogs' toolkit, data-agnostic so neither picker's globals reach in.
-// Nothing holding the rows carries a rounded `clip`, whose texture softens text on a fractional
-// pixel (`slint-pitfalls.md`).
+// No rounded `clip` holds the rows, its texture softening text on a fractional pixel.
 
 // The dash is the header's some-but-not-all state.
 export component SelectIndicator inherits Rectangle {
@@ -170,7 +169,7 @@ export component SelectAllHeader inherits Rectangle {
 
 // The rounded card the rows scroll inside, the host's `for` arriving through `@children`. The
 // `ScrollView` clips its viewport with a scissor, no layer, and sits inside the border so no row
-// scrolls over it; fill and border are one shape, antialiased once (`slint-pitfalls.md`).
+// scrolls over it; fill and border are one shape, antialiased once.
 export component PickerListCard inherits Rectangle {
     in property <int> row-count;
     in property <length> list-max-height: 312px;

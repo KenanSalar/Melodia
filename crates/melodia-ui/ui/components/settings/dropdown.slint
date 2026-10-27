@@ -52,11 +52,11 @@ component DropdownOption inherits Rectangle {
 // Custom rather than `std-widgets.ComboBox`, whose styling follows the backend.
 //
 // `manual: true` leaves `selected-index` to the host's one-way binding and only fires the
-// callback (`slint-pitfalls.md`'s orphaned binding).
+// callback, a self-write detaching that binding.
 //
 // `about-to-open` lets a host refresh options nothing announces. A refresh landing later returns
-// the `options-revision` it will publish and the popup waits for it, since a list re-measured
-// while open moves a pass late (`slint-pitfalls.md`). The wait is bounded, so a refresh that
+// the `options-revision` it will publish and the popup waits for it: an open popup re-lays its
+// rows at once and moves a loop pass later. The wait is bounded, so a refresh that
 // never lands costs a stale list rather than a dead control.
 //
 // `popup-align-end` is for a trigger with no room on its right, Slint clamping an overflowing
@@ -116,7 +116,7 @@ export component Dropdown inherits Rectangle {
         border-radius: Theme.radius-md;
         background: touch.has-hover ? Theme.card-control-hover : Theme.card-control;
         // The resting fill rather than `transparent`: the renderer tucks a fill under an opaque
-        // border only (`slint-pitfalls.md`).
+        // border only.
         border-color: touch.has-hover ? Theme.accent : Theme.card-control;
         border-width: 1px;
         animate background { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }

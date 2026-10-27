@@ -3,7 +3,7 @@
 //
 // **Two fire sources, and the Timer is the one easy to leave out**: `changed` doesn't fire on the
 // first evaluation, so a window whose first layout lands on its final width would leave Rust
-// chunking against the global's default (`slint-pitfalls.md`).
+// chunking against the global's default.
 export component GridColumnsSync {
     in property <int> computed-cols;
     callback seed(int);

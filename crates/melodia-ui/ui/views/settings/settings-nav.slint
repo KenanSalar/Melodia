@@ -62,8 +62,7 @@ export component SettingsNav inherits Rectangle {
     }
 
     // Only seeded by the binding, `changed compact` owning it after: an animated binding restarts
-    // on every dirty dependency, and a resize drag rewrites `avail-w` per motion
-    // (`slint-pitfalls.md`).
+    // on every dirty dependency, and a resize drag rewrites `avail-w` per motion.
     property <float> compact-t: root.compact ? 1.0 : 0.0;
     animate compact-t { duration: Theme.dur-med; easing: ease-in-out; enabled: root.eased; }
 
