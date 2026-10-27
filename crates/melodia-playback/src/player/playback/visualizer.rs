@@ -1,8 +1,8 @@
 //! The visualizer's tap: it must see what you hear and never change it. [`VisualizerShared`] is a
 //! lock-free ring per deck the UI snapshots as a mix, and [`VisualizerTap`] wraps [`EqSource`],
 //! copying one downmixed value per frame and leaving the audio bit-identical.
-//! `.claude/rules/audio-stack.md` argues where the tap sits, the ring per deck, and
-//! [`VisualizerShared::analysis_rate`].
+//! Above the deck's speed and volume, so the slider can't flatten the bars and the analysis owes
+//! [`VisualizerShared::analysis_rate`]; a ring per deck, or a crossfade's two taps interleave.
 //!
 //! [`EqSource`]: super::equalizer::EqSource
 

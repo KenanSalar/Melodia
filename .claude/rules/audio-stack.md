@@ -7,116 +7,159 @@ paths:
 
 # The audio stack
 
-The playback state machine, the DSP chain, and the output layer under both.
+The playback state machine, the DSP chain, and the output layer under both. Each module's `//!`
+argues its own design and each constant is justified at its definition; read those first. This
+file holds what spans crates, or breaks from outside the tier that owns it.
 
-A rule rather than a nested `CLAUDE.md` because the subject is three crates now
-and no directory reaches them all. Each module's `//!` docs carry its own
-rationale, and the tuning constants are justified at their definitions — read
-those first. This file holds only what spans more than one module, or what
-breaks from outside the tier that owns it.
-
-**Three tiers, and the direction never reverses**: `source/` (the `AudioSource`
-vocabulary, one Symphonia, and the four things that can feed it), `playback/`
-(the DSP chain and `output/` under it), `engine/` (the state machine, the queue,
-the actions and the backend). `engine` reads `playback` reads `source`, and
-nothing points back up — a bare module name below is relative to whichever tier
-owns it, and every `.rs` path is spelled with its tier. The two lower tiers'
-third-party sets do not intersect: `source` names the network and never cpal,
-`playback` names cpal and never the network. That is what makes a new source
-kind a new `AudioSource` and nothing else.
+**Three tiers, and the direction never reverses**: `source/` (the `AudioSource` vocabulary, one
+Symphonia and what feeds it), `playback/` (the DSP chain and `output/` under it), `engine/` (the
+state machine, the queue, the actions and the backend). `engine` reads `playback` reads `source`,
+and nothing points back up. The lower two tiers' third-party sets don't intersect: `source` names
+the network and never cpal, `playback` names cpal and never the network, so a new kind of source
+is a new `AudioSource` and nothing else. A bare module name below belongs to the tier that owns it.
 
 ## Playback machine
 
-- **Lock discipline is repo-wide — the rule is in the root `CLAUDE.md`.** The halves live here: `with_state_emit` (`engine/state/`), `emit_and_execute` (`engine/actions.rs`), ordering `exec_lock → PlayerState → decks → output`. What it costs *this* tier is that the monitor decides under the `PlayerState` lock but acts after taking `exec_lock`, so a decision can go stale in the gap — which is why the crossfade builder re-verifies it (below).
-- **Gapless playback** — deck queue 2-deep on the **active deck** via `preload_gapless()`; transition via polling the deck's source count (single lock, avoid TOCTOU). Mutually exclusive with a crossfade *per transition*.
-- **The queue is ids, and a transition starts from a record `PlayerState::window` already holds.** The transport runs under the state lock, where nothing may wait on the database, so the app's `tasks::queue_window` fills the window ahead of it (the slots `queue::window_slots` names around the current one) and reads it again on every library tick, which is also how a retag reaches Now Playing. Where a transition lands on a track the window lacks, it moves the queue, leaves the deck empty under `Loading` so the monitor neither ticks nor ends the drained stream a second time, and owes the start as `PlayerAction::StartWhenResolved`. `execute_actions` hands that to the window task over `sinks.awaited_start`, the engine being unable to name the database, and the task fetches the record and runs `actions::start_awaited`, which starts whatever the queue's current slot holds by then, provided nothing has started or stopped since: an edit landing during the fetch moves what starts rather than stranding the player under `Loading`. The start sites that are already async (Play, a queue row's double-click, the restore, the prune's reseat) fetch their records ahead of the emit, so a deferral takes a transition outrunning the window's refill: one racing a queue edit, or a run of unplayable tracks longer than the window looks ahead. A crossfade never defers: a next with no record is no next, to the stage and the fade alike.
-- **At a gapless handover the queue wins.** The monitor keeps the record it staged, and where the queue's next moved after the stage (an edit inside the last `PRELOAD_LEAD_MS`), `PlayerState::build_gapless_advance_actions` starts the queue's track rather than seating the staged one, a cut at most a poll in. Seating it would skip a Play Next or play a track just removed, with Now Playing naming one and the deck playing another.
-- **Position polling** — 500 ms `tokio::time::interval`, reading two positions off the active deck (below). **A tick never crosses a transport op**: the monitor reads the deck and sends the tick inside one `try_lock_exec` hold, and only off a deck that has acted on everything sent to it (`query_settled_clock`), skipping the poll otherwise: a seek or a track start moves the state before the deck, so a reading across one would publish, and write back, the position it moved off. Every published position carries `PlayerState::position_stamp`, bumped by each emit and each tick, because the view model and the ticks reach the UI on two channels whose subscribers wake independently; `ui::shell::bridge::ShownPosition` shows only a newer one.
-- **There is one timeline, and keeping it that way is the reason speed lives where it does.** A deck counts the frames its source handed over and divides by that source's rate, so a position is media time at every level. Speed is a ratio inside `output::convert`, *below* the counter, which is why a change to it cannot rescale the part already played and why no re-anchoring seek follows one. rodio put its position tracker after its speed stage and needed the opposite of all of that — `compute_position`, `media_to_output_ms`, `seek_to_media` and a re-anchoring seek in `set_speed`, all deleted with it. Speed is still resampling (it shifts pitch); pitch-preserved time-stretch is intentionally not done — hence the 2× cap.
-- **A deck has two positions, and which one a reader takes is the whole contract.** The clock counts frames *pulled*, which run a device buffer ahead of the ear. The crossfade and the gapless stage time against that one (the `pulled_ms` of `BackendSnapshot::clock`, a `DeckClock`), since both act on what is pulled next. Everything published, persisted or reported outward takes `Voice::heard`: the pulled clock less the lead the open stream measures into `output::device::Lead`, never earlier than the voice's anchor (the last mount, seek or resume), so a fresh start doesn't read earlier than where it began. The cpal callbacks and both exclusive writers measure a lead, ALSA's from `snd_pcm_delay` after each write.
-- **Volume caps at unity.** `MAX_VOLUME = 100` (`engine/state/`) is the true ceiling — no boost band above it. The single conversion to backend amplitude is `state::volume_to_amplitude(volume, is_muted)` (`volume/100`, `0.0` when muted); `effective_volume()` and the MPRIS path both route through it (don't re-roll `min(100)/100.0`). Its way back is `state::amplitude_to_volume`, taken by the OS media panels and the device's own volume control alike. A deck's `set_volume` *does* accept `>1.0` and the mixer does not clamp, so lifting the ceiling later means adding clip protection, not just changing the constant.
-- **Where the volume is applied is `AudioOutput::voice_gain`'s answer, and nowhere else's.** While an exclusive claim carries it on the device's own control (`Negotiated::hardware_volume`, asked for by the Hardware Volume setting as part of the request, so a toggle reopens), the voices run at unity and the writer sets the device. The one exception is zero, which stays a silence in the voices. `PlaybackEngine::set_volume` and the three track starts hand the amplitude to the output *before* any reopen and take the gain after it, so a claim opens at the right level. **Every reopen goes through `reopen_routed`**, which holds the voices at the software gain across it, so a change of route (a fallback to shared included) dips rather than jumps. A reopen that calls `AudioOutput::reopen` bare can play a period at unity into a device nobody turned down. The system moving that control comes back through the output's `ExternalVolume` cell and `tasks::device_volume`, taking the path an OS media panel's volume takes. **How a claim takes, follows, watches and gives back that control is `output::hardware_volume`'s, once for both backends**, over a `VolumeControl` each one supplies (`endpoint_volume`, `alsa_volume`). A backend spelling its own copy of never-raise or the originals is the copy the shared module exists to prevent. `Negotiated::device_level` reports that control as the claim read it, only its switch being the system's where it carries the volume, and the verdict grades none of it.
-- **A track start that can't play skips on rather than dead-ending**: `execute_actions` pre-flights the file and turns a decode failure into the same skip, argued at `actions::start_or_skip`.
-- **A live source is the one thing here with no file behind it, and `PlayerState.source` is what says so.** `PlaybackSource::Station` means a station is on the deck and a track cannot also be, the two being one field. **Transport builders ask a capability rather than the variant** — `source_allows(PlaybackSource::advances_queue)` and its siblings — because each `is_radio()` branch was standing in for a different question, and a podcast answers them differently from both a file and a station. `is_radio` survives at five sites and every one of them is *about* a station: the pause that drops its socket, the play that cannot resume from one, the stop that forgets it, the session check, and the track that evicts it. A stream has no next, no previous, no seek, and speed is pinned to 1.0 (speed is a ratio on the deck's converter, so anything but 1.0 consumes a fixed-rate live source faster or slower than it arrives and the ring starves or overruns). It is the counterpart to the bullet above: there is no `Path` to pre-flight and a decode error is a reconnect rather than a skip, so `PlayerAction::PlayStream` is executed **outside `start_or_skip`** — nothing to auto-advance onto. **`radio_generation` is bumped by every transition that starts or ends a session**, so a connect that finishes after the user moved on is refused by the counter rather than by a flag; an open takes seconds and a click takes none. The queue underneath is left exactly as it was, which is what hands the library back on stop.
-- **Symphonia** — one version, ours, reached through `decode`, with `file_decode` and `stream_decode` differing only in what they open and the refill, shape check and end latch living on `decode::Cursor`, so neither decoder can drift. **A seek resets the decoder unconditionally**, argued at `file_decode::try_seek`. Formats: MPEG audio (Layers I–III), FLAC, M4A/M4B (AAC, ALAC), Ogg Vorbis, Opus (mono through 7.1), WAV (PCM and ADPCM), AIFF/AIFF-C, Matroska, CAF. **Opus is the one Symphonia demuxes and ships no decoder for**, which is why `CODECS` is ours (`source::opus`). **The 0.6 feature list is the union of what stations serve and what `utils::audio_ext::AUDIO_EXTENSIONS` ingests**, and `file_decode`'s fixture walk walks that list, so a new extension owes a `silence.<ext>` beside its siblings: a format the scanner offers and nothing plays looks like a broken file, not a manifest edit. **Gapless is narrower than the flag suggests**: nothing upstream takes an AAC file's encoder delay off or a Matroska file's tail, so `aac_trim` and `mkv_trim` read them (`docs/adr/`), split on codec against container, and neither may take the other's scope. Both install in `file_decode` rather than `decode`, a live mount having no container header and no gapless transition to spoil, so the shared cursor stays one. `file_decode::probe_duration` is the scan path's length for the containers lofty can't read, and the sole edge `media/` has into the stack.
-- **The sleep timer's end-of-track mode reaches in here.** `PlayerState::pause_after_current_track` is armed from `crates/melodia-views/src/ui/sleep_timer.rs` and read by the monitor under its existing locks: the late-preload gate adds `&& !pause_after_current_track` so the track drains to `EndOfStream`, and `build_end_of_stream_actions` disarms + `stop_end_of_queue` instead of advancing (can't `player_pause` from inside that lock — non-reentrant). Arming within the final `PRELOAD_LEAD_MS` can't un-stage the preload, so it degrades to pausing at the *next* track's end.
+- **Lock discipline is root `CLAUDE.md`'s.** What it costs here: the monitor decides under the
+  `PlayerState` lock and acts after `exec_lock`, so the builder a decision lands in re-verifies it.
+- **The queue is ids, and a transition starts from a record `PlayerState::window` already holds.**
+  Nothing under the state lock may wait on the database, so the app's `tasks::queue_window` fills
+  the window ahead and re-reads it on every library tick, which is how a retag reaches Now Playing.
+  A transition onto a slot it lacks leaves the deck empty under `Loading` and owes
+  `PlayerAction::StartWhenResolved`, handed to that task over `sinks.awaited_start`, the engine
+  being unable to name the database. A crossfade never defers: a next with no record is no next.
+- **Volume caps at unity** (`MAX_VOLUME`) and the mixer doesn't clamp, so lifting the ceiling owes
+  clip protection. `state::volume_to_amplitude` is the one conversion; never re-roll `/ 100`.
+- **Where the volume is applied is `AudioOutput::voice_gain`'s answer alone**: on the voices, or at
+  unity under a claim carrying it on the device's control. Every reopen goes through
+  `reopen_routed`, and a system move comes back through `ExternalVolume` and
+  `tasks::device_volume`, the path an OS media panel's volume takes.
+- **Transport builders ask `source_allows`, never `is_radio`** (`docs/adr/`), which answers only
+  questions about a station itself.
+- **Symphonia is one version, reached through `decode`.** `aac_trim` is codec-scoped and `mkv_trim`
+  container-scoped, and neither may take the other's scope; both install in `file_decode`, never
+  `decode`, a live mount having no container header and no gapless transition to spoil.
+  `file_decode::probe_duration` is the store's one edge into the stack.
+- **The sleep timer's end-of-track mode reaches in from `melodia-views`.**
+  `PlayerState::pause_after_current_track` keeps the late preload and the crossfade off, so the
+  track drains to `EndOfStream`, where `build_end_of_stream_actions` stops rather than advancing;
+  `player_pause` can't run there, the lock not being reentrant. Armed after the preload has staged,
+  it pauses at the next track's end.
 
 ## The DSP chain
 
-Fixed order, innermost first — everything up to the tap lives inside one `EqSource`:
+Innermost first; everything up to the tap is one `EqSource`:
 
 ```
-a file  → FileDecoder ────────┐
+a file  → FileDecoder ──────────────────────────────┐
 a station → StreamDecoder → ring → PrebufferSource ─┴→ EqSource:
     ReplayGain pre-gain → EQ bands → limiter → clamp → crossfade ramp → VisualizerTap
-        → [deck: rate + channel conversion (speed lives here, linear or band-limited) → pause → volume] → mixer sum
+        → [deck: rate + channel conversion (speed lives here) → pause → volume] → mixer sum
             → dither, where a block the chain changed is narrowed to 16 or 24 bits
                 → cpal's shared stream, or encode → an exclusive claim (ALSA hw:, WASAPI)
 ```
 
-- **Everything right of the tap is `playback/output/`**, and each piece argues itself there: `convert` for the ratio, `voice` for pause, volume and the clock, `mixer` for the sum, `device` for the shared stream, a backend per platform for an exclusive one (below). What spans them and this chain is that the tap sits *above* the conversion, so it sees media-rate samples while the ear hears them scaled — the reason `analysis_rate()` exists.
-- **A reopen replaces the stream and reshapes the puller, and touches nothing above it.** That holds only because nothing loaded depends on the device: `Converter` takes the device shape per `fill`, and its buffers and interpolation state are the source's, handed on to a gapless successor of the same shape rather than restarted. So the decks, their ramps, a staged gapless source, the visualizer slots and the clock all carry on into the next stream, and a mid-track reopen continues from the same frame. **Don't give a converter, a `Loaded` or anything built on the control thread a device field again**; that is the append-against-the-old-shape race this layout deletes. `PlaybackEngine::reopen_output` holds the decks lock across it, so a transport op waits rather than timing out a `clear` against no stream. The pins are `crates/melodia/tests/crossfade.rs`'s two `…through_an_output_reopen` cases.
-- **The two heads are why `build_source` is generic over its `AudioSource`, not over a reader**, and why there is no parallel `build_stream_source`. The *openings* stay two functions because they answer different questions — file open, extension hint, byte length and seekable, against mime type off the response and never seekable — while everything from the codec inward is `decode`'s and shared. Everything from `EqSource` rightward is shared, so EQ, the limiter and the visualizer work for a station for free; crossfade, gapless and ReplayGain are off, all three being per-track transitions or per-track tags a live stream has neither of.
-- **The ring is there for the network, not for the decoder.** What it buys is keeping a blocking socket read off the audio callback thread, and a file needs none of that and gets none: `FileDecoder` is pulled inline, exactly as rodio's own decoder was.
-
-- **Graphic equalizer** (`playback/equalizer.rs` argues the filter, the bypass and the limiter), wrapped by `PlaybackEngine` around every source it builds. EQ is **orthogonal to `PlayerState`** (infallible `library::playback::player_set_eq_*`, no `with_state_emit`); persists via `EqualizerFlags`; `Equalizer` global (`crates/melodia-views/src/ui/equalizer.rs`) → the Equalizer card on Settings ▸ Effects and the dialog the bar's overflow row opens, both mounting `components/settings/equalizer-controls.slint`. **`PRESETS` order is load-bearing** — `EqPresetPicker`'s inline `@tr` names + trailing "Custom" mirror it; the persisted sentinel `CUSTOM_PRESET` is absent from `PRESETS`.
-- **ReplayGain rides in the same `EqSource`** (`playback/replaygain.rs` argues the per-track and master split, and why it is independent of the EQ toggle). **RG rides on `TrackSummary`** (4 `f32` cols) so the sync `play_track_inner` bakes it without an async fetch — threaded via `PlayMedia { replaygain }` and, for gapless, captured in `engine/handlers.rs` from the window's record of `queue.peek_next()` into `preload_gapless(path, baked_rg)` (**not** `PlayerAction::PreloadGapless`, which only *clears*). Orthogonal to `PlayerState`; persists via `ReplayGainFlags`; its card sits under the EQ's on Settings ▸ Effects and the overflow menu opens it as a dialog too, both mounting `components/settings/replaygain-controls.slint`.
-- **`EqSource::next` polls all three generations (EQ/RG/fade) only at `frame_phase == 0`** — else a mid-frame `fade_ended` ends the source on a half frame and flips that deck's mixer channel parity permanently.
+- **A reopen replaces the stream and reshapes the puller, and touches nothing above it**, because
+  nothing loaded depends on the device: `Converter` takes the device shape per `fill`, and its
+  state is the source's, handed on to a same-shape gapless successor. Decks, ramps, a staged
+  source, the visualizer slots and the clock carry on, a mid-track reopen resuming on the same
+  frame. **Never give a converter, a `Loaded` or anything built on the control thread a device
+  field**, which is an append against the old shape. Pinned by `crates/melodia/tests/crossfade.rs`.
+- **The ring is there for the network, not the decoder**: it keeps a blocking socket read off the
+  audio callback thread, so a `FileDecoder` is pulled inline. A station shares everything from
+  `EqSource` on, and gets no crossfade, gapless or ReplayGain, having no track boundaries or tags.
+- **EQ and ReplayGain are orthogonal to `PlayerState`**: no `with_state_emit`, persisted through
+  `EqualizerFlags` and `ReplayGainFlags`. A track's gain rides on `TrackSummary`, so the
+  synchronous `play_track_inner` bakes it with no fetch, and a gapless stage takes it from the
+  window's record into `preload_gapless`, never `PlayerAction::PreloadGapless`, which only clears.
+- **`equalizer::PRESETS` order is load-bearing**: `EqPresetPicker` mirrors it in inline `@tr`
+  names plus a trailing "Custom", and the persisted `CUSTOM_PRESET` is absent from `PRESETS`.
+- **Nothing in the chain ends, starves or re-polls mid-frame**, half a frame flipping that deck's
+  channel parity for everything after it: `EqSource::next` and `PrebufferSource` both decide at
+  `frame_phase == 0`.
 
 ## Crossfade & decks
 
-- **Two deck voices on one mixer + a ramp folded into `EqSource`** (`playback/decks.rs`; a voice *sequences* its sources, so overlap needs two summed by the mixer). Each `Deck { voice, fade: Arc<FadeShared> }` takes a reference-counted `output::voice::Voice` off the mixer at boot; both exist for the mixer's life and an idle one contributes nothing rather than being fed silence to stay attached. **The ramp lives in `EqSource`, not the deck's `set_volume`**: innermost, sample-accurate, counting **media** samples, landing after the `clamp(-1,1)`. **Curve is complementary linear** (`g_out + g_in ≡ 1`) and the mixer sums with **no clamping**, which is what stops clipping. **That identity only holds while both ramps advance together**, and they advance as their own decks are pulled: render a whole device period per deck and a fade armed between the two renders leaves the outgoing one at full gain for that period, pushing the sum past unity by the period over the fade. `output::mixer::LOCKSTEP_FRAMES` is what bounds it, and `crates/melodia/tests/crossfade.rs` derives its tolerance from that constant under a `const` assert rather than guessing one. `FadeShared` (`playback/crossfade.rs`) is **deck-scoped** (exactly two); `EqSource::try_seek` **must not touch the fade fields**; the bypass path applies the ramp **per frame** (`frame_phase`) or a stereo frame shears. **Which deck a source lands on, and its ramp cell, are decided under the *same* lock acquisition as its `append`** (only `decode_file` is hoisted out) — `Decks::{cut_to, crossfade_to}` take a *builder* handed the target deck so the cell can only be the right one. `preload_gapless` snapshots `deck_epoch` before decode (every deck-replacing op bumps it) and **also refuses to stage behind an *empty* active deck** (`stop()`/deferred `ClearAll` empty without bumping the epoch, else a phantom `GaplessTransition`). A deck's `clear()` **blocks until the audio callback services it** (bounded, `output::voice::SERVICE_TIMEOUT`) — a test pulling the mixer *is* that callback and must run it on another thread. It is the only op that does: a seek is a `Voice::replace` carrying a source the control thread has already positioned, so it waits on nothing, and what keeps it honest over that gap is `Voice::handovers`' ticket rather than a lock (a gapless successor takes the deck over *in* the callback, under neither `exec_lock` nor `deck_epoch`). **The ticket counts those handovers and nothing else** (`VoiceShared::handovers` argues why). A handover the state has yet to advance onto refuses the seek outright, and `gapless_pending` stays up until the monitor's advance claims it under the emit (`claim_gapless_handover`), so a track start landing first leaves the advance nothing to step past. `cut_to` clears both decks and then starts a source on one, so a clear that had not landed would take the incoming source with it; that is the contract, not an implementation detail.
-- **The crossfade decision is two pure predicates, and the split is load-bearing** (`playback/crossfade.rs`). `crossfade_eligible(...)` is **timing-independent**; `should_crossfade(...)` adds the timing + liveness terms and returns the fade length. Gate the monitor's late gapless preload on `!crossfade_eligible`, **not** `should_crossfade` — for a crossfade shorter than `PRELOAD_LEAD_MS` the latter would fire the preload first, set `gapless_pending`, and permanently block the crossfade via its own `!gapless_pending` gate. `should_crossfade` returns the **real remaining** media (never clamped up), so the ramp lands exactly on the track end. `same_album` requires `album.is_some()` — else two `None` albums compare equal and an untagged library never crossfades. **⚠ `MIN_CROSSFADE_MS = 1000` is bounded from below by the monitor's poll interval**: the trigger window is sampled once per `POLL_INTERVAL_MS` (500 ms), so a narrower window can be *stepped over* and degrade to a hard cut. Pinned by a `const` assert in `engine/handlers.rs` (`MIN_CROSSFADE_MS >= MIN_FADE_MS + POLL_INTERVAL_MS`) + a sweep test. **A staged gapless source shares its deck's fade cell**, so `crossfade::manual_fade_ms` refuses to fade while `gapless_pending`, `start_track` re-checks it under the deck lock for both track starts (the monitor's preload isn't under the `exec_lock`, so it can land mid-decision), and `begin_crossfade` `debug_assert!`s it.
-- **`PlayerAction::BeginCrossfade` + `Pause { fade_ms }` + `Stop { fade_ms }`.** State advances at fade *start*, so Now Playing switches as the overlap begins, and the monitor's decision is re-verified under the emit lock (`build_crossfade_actions`). **Both `Pause` and `Stop` carry `fade_ms` from the caller** (`transport_fade_ms`); everything the machine does for its own reasons passes `0`, the re-pause after a track change included (`restore_paused`). A fade defers the real pause or clear behind `deck_epoch`, through the gate `can_fade_out` argues (`engine/backend/mod.rs`). Persists via `CrossfadeFlags`; **UI** is the one audio feature in **Settings → Playback** (four sub-rows under `if Settings.crossfade-enabled`, never `visible: false` — slint#7377).
+- **Two decks on one mixer, the ramp folded into `EqSource`** (`docs/adr/`). The complementary
+  ramps keep the unclamped sum inside ±1 only while both advance together, which
+  `output::mixer::LOCKSTEP_FRAMES` bounds; `crates/melodia/tests/crossfade.rs` derives its
+  tolerance from that constant.
+- **A deck's `clear()` blocks until the audio callback services it**, so a test pulling the mixer
+  is that callback and has to run it on another thread.
+- **`fade_ms` on `Pause` and `Stop` comes from the caller** (`library::playback`'s
+  `transport_fade_ms`); everything the machine does for its own reasons passes `0`.
 
 ## Exclusive output and the verdict
 
-`output/`'s modules, `engine/backend/output.rs` and `engine/signal_path.rs` each argue their own
-half. What lives here is what crosses them.
-
-- **One exclusive backend per platform behind one seam, and nothing above it names a platform.** `output/mod.rs`'s `cfg_select!` binds `alsa`, `wasapi` or `unsupported` as `exclusive`, each answering the names listed above it, and `library::playback`'s `*_SUPPORTED` constants read those rather than spelling a platform list of their own. A backend that offers or measures nothing for a name reports nothing rather than a guess. The cost is that each backend compiles on its own platform only (`alsa-sys` rules out a cross check), so a change to the seam is checked by CI's `clippy-windows` and `test-windows` or on the other machine, never assumed.
-- **Samples become device bytes in one place.** `MixerPull::fill` produces them for every backend, and for an owned one `encode` is the only conversion to bytes, which is what makes the claim checkable against one function (`crates/melodia/tests/bit_perfect.rs`). ALSA's `S24_LE` and WASAPI's 24-in-32 are different layouts (`S24Low`, `S24High`), and each backend skips the rung it has no way to declare.
-- **Every place a block is narrowed calls `Dither::quantize` first**: the two exclusive writers through `encode::BlockEncoder`, the only way to reach `encode`, and the shared `output_stream` ahead of cpal's own conversion. A block already on the format's grid passes untouched, so a bit-perfect path stays one, and a block the chain changed is dithered rather than rounded. A narrowing site without it plays correlated distortion at low levels and still passes every bit-perfect check, a bit-perfect block being the one the dither leaves alone.
-- **A format change is decided at the boundary, and every path asks one question: whether the stream open now plays the next track (`plays_without_reopen`).** `reopen_for_track` reopens before the append wherever it doesn't. `preload_gapless` refuses to stage such a track, and the transition goes through `EndOfStream → PlayMedia` instead. The monitor asks it of the queued-next track before deciding a crossfade (`reopens_for`), so a track that needs a reopen drains to `EndOfStream` rather than fading, since no fade can cross one. Those two read one record of what opening the file found (`EngineOutput.probed`), kept as the format rather than the answer so a reopen or a new output choice answers it afresh, and the file is opened once rather than every tick. `start_track` asks once more under the decks lock, so a crossfade decided against a queue or an output that has since moved is cut to rather than faded into in the old format. A fade never reopens. Loosening any of these lets a track play a period in the old format.
-- **The open claim plays a track at another source rate wherever a fresh claim would run the device where it runs now** (`claim_serves`), so a mixed-rate album stays gapless across rates the device doesn't see. It has three answers: the open request's rate, the device's own rate (a fresh claim tries the source's first), and `Negotiated.offered`, read through `rates::claim_rate`. What a backend owes when it fills that set is argued on the field, and one leaving it `None` gets the first two answers alone.
-- **What a source is comes from the decoder, never the database.** `AudioSource::format` and `dsp_engaged` are required, so a new source kind has to answer both. The request a track start builds reads the decoded source before the append, and the verdict reads the same answer back through `Voice::playing`, which a gapless handover updates in the callback. The `bit_depth` column feeds neither.
-- **The one saved device answers for both modes where the backend's ids can name a shared stream's target** (`SHARED_DEVICE`: WASAPI's endpoint ids are the ones cpal opens by, where an ALSA `hw:` name would go round the sound server). `OutputChoice::shared_request` is the only place an `OutputRequest::Shared` gains a `device`, and `AudioOutput::fall_back` the only other place a shared open is handed one; both drop it where the backend says no, so a Linux card's id never reaches a shared open; on Linux the sound server routes shared output and remembers a move made in its own mixer. `AudioOutput::open_shared` opens the named device, the default where it refuses, and the default as a stand-in where it isn't connected, which raises `awaiting_device` exactly as a `NotConnected` claim does, so one reclaim poll serves both. `device::named_target` answers `None` only for a device that isn't listed: one listed but unable to name its config is an error, and so is a miss beside a device whose id can't be read, or the poll would find it and reopen it forever.
-- **A refused claim costs the claim, never the audio.** `AudioOutput::fall_back` opens shared, on the claim's own device where `SHARED_DEVICE` allows and the default otherwise or where that device isn't connected, and carries a `Fallback { reason, device }` on `Negotiated`, which the panel, the quality chip and the toast all read. The rest is split by who can act on it:
-  - whether a track start asks again is `FallbackReason::retry_at_track_start`'s, since retrying a format the device lacks tears the shared stream down and reopens it at every skip, and a device that wasn't connected is the poll's below;
-  - a device that wasn't connected, a claim's or a shared stand-in's, is looked for between tracks, by `tasks::audio_health` through `PlaybackEngine::disconnected_device_returned` and the lock-free `OutputStatus`, never the output's mutex, which a reopen holds for as long as a device takes to open. Retrying a busy device there would keep taking it from its holder;
-  - the warning and `ToastKind::ExclusiveRefused` fire once per distinct reason and device, and the toast's Details action is `NotificationKind::ExclusiveRefused`, routed by `ui::shell::notifications::run_action`.
-- **A long pause can give the claim back, and play is what takes it again; no flag says so.** Where the user asks (`output_paused_device`), the monitor's `PauseWatch` counts paused ticks while `PlaybackEngine::holds_releasable_claim` holds, and `build_release_actions` re-verifies what it saw, writes the position and returns `Stop { fade_ms: 0 }`, which clears the decks and parks with the state left Paused. Play and toggle ask `holds_source()` under the state lock, and a paused track its deck no longer holds takes `build_replay_actions`, reclaiming through `reopen_for_track` from that position. The predicate is the deck rather than a field on `PlayerState`, so any path that leaves a paused track unseated is answered the same way.
-- **On Linux a claim goes through the sound server's reservation, and the hand-back is the fragile half.** `reserve` asks for the card before `alsa` opens it and closes it before granting `RequestRelease`. A reopen on the same card carries the reservation across through `AudioOutput::close_for`, since a take and a hand-back milliseconds apart race the session manager's rebuild of the card. The writer's real-time priority is `realtime`'s, through rtkit. At quit, `PlaybackEngine::close_output` is what gives the card and the device's own volume back (`desktop-shell.md`'s Shutdown).
-- **`signal_path::evaluate` decides every verdict, and the UI owns only its words.** The monitor evaluates it on its tick from `Negotiated`, `Voice::playing` and the transport, and publishes on `AppState::signal_path_tx` with `send_if_modified`: `None` on stop, the last path kept through a pause. A new stage that can change the samples is a field on `SignalInputs` and a row in `evaluate`, never a grade worked out in Slint. **A lossy source is the headline after a fallback** (`Verdict::Lossy`): `SourceFormat::lossy` is set once, in `decode::open`, from the codec, and the claim ladder, `carries` and `claim_serves` ignore it, so naming a lossy file costs no reopen; the Device row keeps its own fact beside it. `SignalPathUi` carries the verdict's words once (`verdict-text`, `verdict-label`) for both the Output card and the player bar's quality chip, and the chip shows only under exclusive output (`chip-shown`), shared output grading Converted whatever it plays.
+- **One exclusive backend per platform behind one seam.** `output/mod.rs`'s `cfg_select!` binds
+  `alsa`, `wasapi` or `unsupported` as `exclusive`, and `library::playback`'s `*_SUPPORTED`
+  constants read those rather than spelling a platform list. Each compiles on its own platform only
+  (`alsa-sys` probes pkg-config, which refuses a cross build), so a change to the seam is checked
+  by CI's `clippy-windows` and `test-windows` or on the other machine, never assumed.
+- **Samples become device bytes in one place, dithered first**: `encode`, reached only through
+  `encode::BlockEncoder` (`crates/melodia/tests/bit_perfect.rs`). The shared `output_stream` calls
+  `Dither::quantize` ahead of cpal's conversion; a narrowing without it plays correlated distortion
+  at low levels and still passes every bit-perfect check.
+- **A format change is decided at the boundary, and every path asks `plays_without_reopen`**:
+  `reopen_for_track` before the append, `preload_gapless` refusing to stage, the monitor's
+  `reopens_for` before a crossfade (the track drains to `EndOfStream` instead), and `start_track`
+  again under the decks lock. A fade never reopens.
+- **What a source is comes from the decoder, never the database.** `AudioSource::format` and
+  `dsp_engaged` are required, a track start's request reads them before the append, and the verdict
+  reads them back through `Voice::playing`. The `bit_depth` column feeds neither.
+- **One saved device serves both modes where the backend's ids name a shared target**
+  (`SHARED_DEVICE`): WASAPI's endpoint ids are the ones cpal opens by, where an ALSA `hw:` name
+  would go round the sound server. `OutputChoice::shared_request` and `AudioOutput::fall_back` are
+  the only places a shared open is handed a device.
+- **A refused claim costs the claim, never the audio.** `AudioOutput::fall_back` opens shared and
+  carries `Fallback { reason, device }` on `Negotiated` for the panel, the quality chip and the
+  toast, whose Details action is `NotificationKind::ExclusiveRefused`, routed by
+  `ui::shell::notifications::run_action`. A device that wasn't connected is looked for by
+  `tasks::audio_health` through the lock-free `OutputStatus`, never the output's mutex, which a
+  reopen holds.
+- **A long pause can give the claim back, and play takes it again; no flag says so.** Play asks the
+  deck (`holds_source()`), so any path leaving a paused track unseated is answered the same way.
+- **At quit `PlaybackEngine::close_output` gives the card and its volume back**, `process::exit`
+  running no destructor (`desktop-shell.md`'s Shutdown).
+- **`signal_path::evaluate` decides every verdict, and the UI owns only its words.** A new stage
+  that can change the samples is a field on `SignalInputs` and a row in `evaluate`, never a grade
+  worked out in Slint; `SignalPathUi` words it once for the Output card and the quality chip.
 
 ## The live source and its reconnect
 
-`source/stream_source.rs` and `source/prebuffer.rs` argue their own designs; what lives here is what crosses
-modules. The half outside the stack — the facade, the off switch, the station tables — is
-`.claude/rules/radio.md`.
+`stream_source`'s and `prebuffer`'s `//!` argue their designs; the facade, the off switch and the
+station tables are `radio.md`'s.
 
-- **The network may never touch the audio callback thread** (`docs/adr/`), which is what `prebuffer`'s ring is for, and a dry ring **yields silence rather than ending** — `Some(0.0)`, never `None`, since ending the source would tear the deck down on a stall the connection is about to recover from.
-- **A deck converts each source from the rate *it* reports, which only a *second* station can show wrong.** `crates/melodia/tests/stream_rate.rs` plays two `PrebufferSource`s at different rates through one deck on a device-free mixer and reads the rate back off a square wave. It has to be read there: below the mixer every sample a source hands over is correct and in order, so no test on the source could see it.
-- **A partial frame is never split across the ring and silence.** The pop is whole-frame gated, or a stereo frame shears at the starvation boundary and that deck's mixer channel parity flips permanently — the same hazard `EqSource::next`'s `frame_phase == 0` gate exists for.
-- **Reconnect lives in the feed thread, not in the monitor** (`docs/adr/`, and `stream_source`'s `//!`). The monitor's end-of-stream arm only ever sees a station that has already spent its budget, and it **stops rather than advancing the queue** — a station going off air must not start playing a library track.
-- **For a station, `Loading` means the initial connect and nothing else.** (Its one other use is a track start waiting on its record, with nothing on the deck; the queue bullet above.) Every gap after the first audio — starvation or reconnect — stays `Playing` with `radio.buffering` raised, which is what keeps a rebuffer from flipping MPRIS to Stopped or clearing Discord presence. Neither reporting site needed an arm for it, and that is the point. `buffering` lives on `RadioNowPlaying` rather than on `PlayerState` because it means nothing without a station.
-- **Pausing a station drops its connection.** `stream-download`'s bounded storage back-pressures the server when the reader falls behind, so a held-open socket resumes on stale audio. Pause keeps the station on screen with a play button that re-opens it; `library::playback::needs_station_reopen` is the pure predicate routing that, shared with `player_play` so the two can't disagree.
+- **The network never touches the audio callback thread** (`docs/adr/`), which is what
+  `prebuffer`'s ring is for, and a dry ring yields `Some(0.0)`, never `None`: ending the source
+  would tear the deck down on a stall the connection is about to recover from.
+- **Reconnect lives in the feed thread, not the monitor** (`docs/adr/`). The monitor's
+  end-of-stream arm sees only a station that has spent its budget, and stops rather than advancing:
+  a station going off air must not start a library track.
+- **A deck converts each source from the rate it reports, which only a second station shows
+  wrong**, every sample below the mixer being correct. `crates/melodia/tests/stream_rate.rs` plays
+  two at different rates through one deck and reads the rate off the mix.
+- **For a station, `Loading` is the initial connect alone.** Every later gap stays `Playing` with
+  `RadioNowPlaying.buffering` raised, since MPRIS reports `Loading` as Stopped.
+- **Pausing a station drops its connection**: stream-download's bounded storage pauses the download
+  when the reader falls behind, so a held-open socket resumes on stale audio.
+  `library::playback::needs_station_reopen` routes the next play, shared with `player_play`.
 
 ## Visualizer — audio side
 
-`playback/visualizer.rs` and `playback/spectrum.rs` argue the design in their `//!` docs and justify
-every tuning constant at its definition; `playback/waveform.rs` does the same for the trace.
-The UI half — arming, window-visibility gating, styles — is `.claude/rules/visualizer.md`,
-which spans `crates/melodia-views/src/ui/visualizer/` and the strip's `.slint` under
-`crates/melodia-ui/ui/`.
-What lives here is what crosses modules:
+`visualizer.rs`, `spectrum.rs` and `waveform.rs` argue the design and every constant; the UI half
+is `visualizer.md`.
 
-- **The tap is read-only and bit-identical.** `VisualizerTap<S>` wraps `EqSource` — after the bands, ReplayGain, the limiter's clamp and the crossfade ramp, but *before* the deck's conversion, pause and volume, so the volume slider can't flatten the bars. Wrapping rather than living inside `EqSource` is what keeps that module's `frame_phase == 0` poll gate and bypass path clear of a change with nothing to do with them.
-- **One ring per deck; `snapshot` sums the live ones.** A crossfade has two taps writing at once, and the mixer pulls from every live voice over the same block — a shared ring would interleave the two tracks rather than sum them (each at half rate plus a square wave at Nyquist, for the whole overlap). Summed, the window *is* the mixer's output: each tap sees its own deck's already-**ramped** signal, and the ramp is complementary linear over sources that have already clamped, so the sum stays inside ±1.
-- **Which rings are live is drop-scoped, not a heuristic** — a tap holds a `DeckRun` claiming its deck for the life of the source. A cursor-delta "did it advance since last tick?" would read a live deck as dead, since CPAL pulls a whole period at a time. Opening a run on an **idle** deck also stamps `valid_from`, so an incoming crossfade can't mix in the tail of what that deck played two tracks ago; a gapless successor staged behind a still-live source keeps the history, which is correct — that audio is continuous.
-- **A deck gives up a spent source's claim on the audio thread and frees it elsewhere, and the split is what makes the second half legal.** Handing whole sources to a control thread — to keep the decoder's 64 KiB buffer off the callback's allocator — was tried once and reverted, because the claim went with them and a dead deck's ring stayed in the analysis window until someone collected; `crates/melodia/tests/crossfade.rs::the_visualizer_tap_reads_the_mix_not_the_two_decks_interleaved` is what caught it. `AudioSource::release_claims` is the seam that separates them: `VoicePull::retire` calls it on the callback, where a claim is a counter decrement, and only the free is queued (`PlaybackEngine::collect_spent` drains it on the monitor's tick; a full queue falls back to freeing in place). A live stream implements it too — its socket is the same kind of claim — so a stopped station releases its connection when it stops rather than when it is collected. `clear()` still returns only after the callback has retired what it removed, so a hard cut cannot find the outgoing claim standing.
-- **Analyse against `analysis_rate()` (rate × speed), never `sample_rate()`.** The tap sits above the deck's converter, so the ring holds media-rate samples while speed is applied below it: analysing against the media rate plots the *file's* pitch, and at 2× a 1 kHz tone is heard an octave up while the 1 kHz bar lights. `PlaybackEngine::set_speed` is that cell's only writer — boot hydration goes through it, and `play_media`/`begin_crossfade` only re-apply what it published.
-- **Mixed sample *rates* across an overlap stay approximate.** One `sample_rate` cell is analysed against (the incoming track's, published by its tap on its first frame), so the outgoing track's contribution is time-scaled by the rate ratio for the length of the fade — under a semitone, on a decoration.
-- **`RING_CAP` is sized for the *waveform's* span** at the highest rate a file plausibly carries — *not* 2× `FFT_SIZE`, which would silently narrow the trace. The trace's span is a fixed number of **milliseconds** resolved against `analysis_rate()`.
-- **`spectrum::NUM_BANDS` is the sole bar count, and the figure cannot fall out of step with it.** `spectrum::write_bar_path` lays out whatever slice `SpectrumAnalyzer` hands it, so the bands reach Slint as one path string rather than as a model with a length to keep in lockstep. The count itself crosses only as `Visualizer.band-count`, which exists for the one thing the figure can't answer: the strip's width ceiling in `now-playing-view.slint`. A `.slint` literal in place of that read is the regression to watch for.
-- **Retuning is measured, and the number to read is p90 per band** — a mean is dragged to zero by every track with nothing in that band, where p90 asks how tall the bar gets when there *is* something to show. The harness is a throwaway: decode a couple of dozen real tracks through the actual `SpectrumAnalyzer` at the real tick, reporting per-band mean / p50 / p90 / pinned% / dead%. `TILT_DB_PER_OCTAVE` reads low against the ~5 dB/octave a spectrum display usually applies, because RSS already tilts broadband ~3 dB/octave for free — the *total* is what has to land near 5, and double-counting inverts the fault into a dead bass end.
+- **The tap wraps `EqSource`, read-only and bit-identical**, so `EqSource`'s frame gate and bypass
+  stay clear of it. It sits above the deck's conversion, so analyse against `analysis_rate()`,
+  never `sample_rate()`; `PlaybackEngine::set_speed` is that cell's only writer.
+- **Which rings are live is drop-scoped** (`DeckRun`), never a cursor delta, which reads a live
+  deck as dead between cpal's period-sized pulls. A source's claims go on the audio thread through
+  `AudioSource::release_claims` and only the free is queued, so a finished track leaves the window
+  before it is collected (`crates/melodia/tests/crossfade.rs`).
+- **`spectrum::NUM_BANDS` is the sole bar count**, crossing into Slint only as
+  `Visualizer.band-count`, for the strip's width ceiling in `now-playing-view.slint`; a `.slint`
+  literal in its place is the regression.
+- **Retune against p90 per band**, never the mean, which every track with nothing in a band drags
+  to zero: decode a couple of dozen real tracks through `SpectrumAnalyzer` at the real tick, in a
+  throwaway harness.

@@ -42,7 +42,7 @@ text run to its own bounds -- and it is exactly why nothing may. Two things
 in Slint do it by default and neither is visible on a Latin locale: a
 sub-unit `opacity`, which rasterizes into a texture sized to child geometry,
 and a `Text` left on the default `overflow: clip`, which scissors itself.
-Both rules, and the fixes, are in `.claude/rules/slint-pitfalls.md`.
+The cures are the alpha in the brush (`with-alpha`) and `overflow: elide`.
 
   typoAsc=1650, typoDesc=-500  (~1.05x line ratio at UPM=2048)
 

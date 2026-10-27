@@ -5,7 +5,7 @@
 //! everything below that — the cpal stream, the two voices, rate and channel conversion, the
 //! clock — and [`decks`] is what `engine` takes off it.
 //!
-//! `.claude/rules/audio-stack.md` argues the chain; each module argues its own numbers.
+//! Each module argues its own place in that order and its own numbers.
 
 pub mod crossfade;
 pub mod decks;

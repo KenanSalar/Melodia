@@ -1,7 +1,7 @@
 //! The crossfade's ramp cell the audio thread reads, the settings cell the control layer writes,
 //! and the two pure predicates deciding when a transition becomes a crossfade.
-//! `.claude/rules/audio-stack.md` argues why the ramp lives in [`EqSource`] and why the curve is
-//! complementary linear.
+//! The ramp lives in [`EqSource`], counting media samples after the clamp, so it lands on the
+//! track's end; the curve is complementary linear, so two decks sum inside ±1 unclamped.
 //!
 //! [`EqSource`]: super::equalizer::EqSource
 
@@ -255,9 +255,9 @@ impl CrossfadeShared {
     }
 }
 
-/// Timing-independent, the monitor gating its late gapless preload on the negation
-/// (`audio-stack.md`). `drains_to_end` is a track that must reach `EndOfStream`: the sleep timer
-/// catches it only there, and no fade can cross a reopen.
+/// Timing-independent, so the monitor gates its late gapless preload on the negation: a fade
+/// shorter than the lead would lose to a preload it let through. `drains_to_end` is a track that
+/// must reach `EndOfStream`: the sleep timer catches it only there, and no fade can cross a reopen.
 #[must_use]
 pub fn crossfade_eligible(
     xf: CrossfadeSettings,

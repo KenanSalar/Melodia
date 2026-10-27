@@ -81,8 +81,8 @@ impl StreamShared {
         })
     }
 
-    /// Emitting silence because the ring ran dry. `.claude/rules/audio-stack.md` says why it is not
-    /// `PlaybackStatus::Loading`.
+    /// Emitting silence because the ring ran dry. A flag beside `Playing` rather than
+    /// `PlaybackStatus::Loading`, which MPRIS reports as Stopped, so a rebuffer can't read as one.
     pub fn is_buffering(&self) -> bool {
         self.buffering.load(Ordering::Relaxed)
     }

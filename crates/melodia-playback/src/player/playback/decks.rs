@@ -3,7 +3,7 @@
 //!
 //! Nothing lands on a deck except through the three primitives taking a builder ([`Decks::cut_to`],
 //! [`Decks::crossfade_to`], [`Deck::stage`]), so a source's [`FadeShared`] cell and ring slot can
-//! only be the deck's it lands on (`.claude/rules/audio-stack.md`).
+//! only be the deck's it lands on.
 
 use std::sync::Arc;
 use std::sync::{Mutex, MutexGuard};

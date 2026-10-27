@@ -36,7 +36,7 @@ const FLOOR_DB: f32 = -75.0;
 const CEILING_DB: f32 = -15.0;
 
 /// Music is roughly pink, so an untilted display leans bass. Small because [`band_magnitude`]'s
-/// RSS already tilts ~3 dB/octave, and the total is what has to land (`audio-stack.md`).
+/// RSS already tilts ~3 dB/octave, and the sum is what has to land near 5 dB/octave.
 const TILT_DB_PER_OCTAVE: f32 = 2.0;
 
 /// The one frequency the tilt leaves alone.
