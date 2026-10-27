@@ -1,16 +1,12 @@
-//! What a tag edit *is*, independent of writing one.
-//!
-//! The Edit-Tags dialog builds these out of its form and hands them to `library::tags`; the writer
-//! in `media::ingest::tag_writer` consumes them. Neither end owns the vocabulary, which is why it sits
-//! here — and why the dialog can name it without naming the writer.
+//! What a tag edit is, independent of writing one: the dialog builds it and
+//! `media::ingest::tag_writer` consumes it, so the dialog names it without naming the writer.
 
 use super::artist::ArtistCredit;
 use super::credits::{CreditRole, ROLES, RoleCredits};
 use super::genre::GenreList;
 
-/// A per-field tri-state. The dialog reports what the user *did*, not just the value they left
-/// behind, because empty is not clear: `extract_metadata` filters whitespace-only tags to `None`,
-/// so writing `""` leaves a ghost tag our own reader ignores and other players happily display.
+/// What the user did rather than what they left, because empty is not clear: writing `""` leaves
+/// a tag our reader takes as `None` and other players display.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum FieldEdit<T> {
     /// Never touched — leave the file's tag exactly as it is.
@@ -31,18 +27,9 @@ pub enum ArtworkEdit {
     Replace,
 }
 
-/// Role credits to write, and the roles the form behind them could answer for.
-///
-/// The writer clears every role it is handed before writing, which is what makes an emptied box
-/// actually leave the file. That only holds where the form spoke for all ten, and a batch
-/// selection whose tracks disagree about a role shows nothing for it — so the set rebuilt from
-/// such a form names nobody in that role, and clearing it would take a credit the user was never
-/// shown from every file at once.
-///
-/// The scope is what the form could answer for: every role on one track, and on a selection the
-/// roles it agreed on plus any the user has since filled in. The writer touches nothing outside
-/// it. Kept beside the credits so the scope travels with the form it describes, where the writer
-/// used to assume all ten.
+/// Role credits and the roles the form could answer for, the only ones the writer clears. A batch
+/// whose tracks disagree about a role shows nothing for it, and clearing that role would take a
+/// credit the user was never shown from every file at once.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RoleCreditEdit {
     credits: RoleCredits,
@@ -88,12 +75,10 @@ pub struct TagEdit {
     pub artist: FieldEdit<ArtistCredit>,
     pub album_artist: FieldEdit<ArtistCredit>,
     pub album: FieldEdit<String>,
-    /// The whole list, for [`Self::artist`]'s reason: the `genre` column is the rendered form of
-    /// these and `track_genres` the rows, and a writer handed only the string could not produce
-    /// the repeated tag that carries more than one.
+    /// The whole list, for [`Self::artist`]'s reason: the rendered string can't produce the
+    /// repeated tag.
     pub genres: FieldEdit<GenreList>,
-    /// Composer, conductor, producer and the rest — the roles of
-    /// [`super::credits::ROLES`], as one set, plus the roles the writer may touch.
+    /// Composer, conductor, producer and the rest of [`super::credits::ROLES`].
     pub credits: FieldEdit<RoleCreditEdit>,
     /// lofty's `Timestamp.year` is `u16`, so the form's year is parsed to `u16`.
     pub year: FieldEdit<u16>,
@@ -133,24 +118,19 @@ pub struct TagEdit {
 }
 
 impl TagEdit {
-    /// True when the user changed nothing at all; `library::tags`' writer short-circuits on it.
-    /// lofty rewrites the tag whether or not anything differs, so a reflexive open-then-Save on a
-    /// 200-track album would otherwise rewrite 200 files, and through the watcher risk
-    /// re-ingesting them.
+    /// lofty rewrites a tag whether or not anything differs, so an open-then-Save would otherwise
+    /// rewrite every file it covers.
     pub fn is_noop(&self) -> bool {
         self.rating == FieldEdit::Keep && self.no_field_but_rating()
     }
 
-    /// True when the rating is the only thing being written, which is the whole of what
-    /// `library::ratings`'s write-back sends. Such an edit can neither re-home the track
-    /// nor touch its artwork, so the commit skips the work that answers to both.
+    /// The rating write-back's whole edit, which can neither re-home the track nor touch its
+    /// artwork.
     pub fn is_rating_only(&self) -> bool {
         self.rating != FieldEdit::Keep && self.no_field_but_rating()
     }
 
-    /// Whether this edit can move the track to a different album, artist or genre. These five are
-    /// the FK-resolution key `library::tags`'s commit is built from, minus the folder, which comes
-    /// off the path and so no tag edit can move.
+    /// The FK-resolution key the commit builds from, less the folder, which no tag edit moves.
     pub fn moves_between_parents(&self) -> bool {
         self.artist != FieldEdit::Keep
             || self.album_artist != FieldEdit::Keep
@@ -159,15 +139,8 @@ impl TagEdit {
             || self.year != FieldEdit::Keep
     }
 
-    /// The release-level fields this edit **emptied**.
-    ///
-    /// They live on `albums`, which every track of a release writes through a
-    /// `COALESCE(excluded.x, albums.x)` upsert: a cleared field arrives as the NULL that coalesce
-    /// discards, so the stored value would otherwise survive the tag leaving the file and the
-    /// release would go on showing a label nothing carries. The compilation flag is worse still,
-    /// its upsert being an `OR` that no re-ingest can ever bring back down.
-    ///
-    /// `library::tags`' commit answers this once and nulls what it names, after the upserts.
+    /// The release-level fields this edit emptied, which the commit nulls after its upserts, since
+    /// `upsert_album` can raise one and never lower it (`.claude/rules/library-data.md`).
     pub fn cleared_release_tags(&self) -> ClearedReleaseTags {
         ClearedReleaseTags {
             label: self.label == FieldEdit::Clear,
@@ -182,24 +155,16 @@ impl TagEdit {
         }
     }
 
-    /// Whether this edit moves any tag a lyrics directory identifies a recording by.
-    ///
-    /// Its signature takes four fields and duration is the one no tag edit can reach, so the album
-    /// counts alongside the two that name the song. `library::tags`' commit drops the stored sheet
-    /// on a true answer: a cached miss was earned under tags the file no longer carries, and it
-    /// stands for a month.
+    /// Whether a tag a lyrics directory identifies a recording by moved (duration being out of an
+    /// edit's reach), so the commit drops a stored miss earned under the old ones.
     pub fn renames_recording(&self) -> bool {
         self.title != FieldEdit::Keep
             || self.artist != FieldEdit::Keep
             || self.album != FieldEdit::Keep
     }
 
-    /// Every field except `rating` left at [`FieldEdit::Keep`].
-    ///
-    /// A comparison against the default rather than a term per field, because the failure mode of
-    /// the chain this replaced is silent and costly: a field missing from it makes
-    /// [`Self::is_noop`] answer true for a real edit, and the commit then skips the write with no
-    /// error anywhere. Every field defaults to `Keep`, so one `==` covers the ones added next.
+    /// Against the default rather than a term per field, so a field added later can't make
+    /// [`Self::is_noop`] silently skip a real edit.
     fn no_field_but_rating(&self) -> bool {
         Self { rating: FieldEdit::Keep, ..self.clone() } == Self::default()
     }
@@ -230,14 +195,8 @@ impl ClearedReleaseTags {
     }
 }
 
-/// A field a write can fail on, and the vocabulary the report shares with the toast.
-///
-/// A type rather than the `&'static str` the writer used to push, because the value crosses two
-/// boundaries wanting different things of it: a log wants a stable name that never moves, and the
-/// user wants a word their own language has. A string can be one or the other.
-///
-/// [`Self::Credit`] carries the role rather than spelling ten more variants, since
-/// [`CreditRole`] is already the typed form of exactly that question.
+/// A field a write can fail on: a stable name for the log and a translated word for the toast,
+/// which no one string can be. [`Self::Credit`] carries the role rather than ten more variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TagField {
     Title,

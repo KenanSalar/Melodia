@@ -1,25 +1,6 @@
-//! Pluggable theme registry. Each theme is a static `ThemeDef` owning its
-//! variants (palette + semantic colours) and accent definitions (one hex per
-//! variant).
-//!
-//! Palette data is hand-kept hex, except Material 3's variants, generated
-//! from the colour spec as [`material3`] describes. No heap allocation, no
-//! `lazy_static` — themes are zero-cost static data referenced by
-//! `&'static ThemeDef`.
-//!
-//! **Nothing under this directory names a Slint type.** The half that does is
-//! `ui::appearance::theme_apply`, which resolves a triple against this registry
-//! and writes the brushes into the `Theme` global; keeping it there is what
-//! stops every crate wanting a palette from carrying `melodia-ui`.
-//!
-//! Module layout:
-//! - [`palette`]: the data structures (`Palette`, `Variant`, `AccentDef`,
-//!   `ThemeDef`), the synthetic `SYSTEM_VARIANT_ID` / `MATERIAL_YOU_ACCENT_ID`
-//!   constants, and the luminance split `on_accent_hex` reads off a colour.
-//! - [`system_color_state`]: bundled OS appearance signals (`SystemColorState`).
-//! - Per-theme modules ([`catppuccin`], [`gnome`], [`kde`], [`macos`],
-//!   [`material3`], [`windows`]): the static palette data. [`kde`] carries a
-//!   second, dynamic derivation off the live `kdeglobals`.
+//! Pluggable theme registry of static `ThemeDef`s, hand-kept hex except Material 3's variants,
+//! generated as [`material3`] describes. Nothing here names a Slint type: `ui::appearance` writes
+//! the brushes, so a crate wanting a palette needn't carry `melodia-ui`.
 
 pub mod catppuccin;
 pub mod gnome;
@@ -57,8 +38,7 @@ pub fn get(id: &str) -> &'static ThemeDef {
     registry().iter().copied().find(|t| t.id == id).unwrap_or(&catppuccin::CATPPUCCIN)
 }
 
-/// Index of `theme_id` in [`registry`], or 0 (Catppuccin) on miss. Used by
-/// `ui::appearance` to seed `Settings.theme-idx` from `SettingsData.theme_id`.
+/// Index of `theme_id` in [`registry`], or 0 (Catppuccin) on miss.
 pub fn theme_index(theme_id: &str) -> usize {
     registry().iter().position(|t| t.id == theme_id).unwrap_or(0)
 }

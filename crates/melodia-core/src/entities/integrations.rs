@@ -1,9 +1,5 @@
-//! The scrobbling and Discord toggles, which live one layer below everything that reads them.
-//!
-//! Declared here rather than beside the rest of `settings.json`'s data model because their
-//! readers are the integration services and the Settings page, and the file they are part of
-//! belongs to neither. Plain data shared across tiers is what this directory is for; the
-//! on-disk shape is unaffected, the settings root being what flattens them.
+//! The scrobbling and Discord toggles, here because the integration services and the Settings page
+//! both read them and `settings.json`'s model belongs to neither; the settings root flattens them.
 
 use serde::{Deserialize, Serialize};
 

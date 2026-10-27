@@ -3,11 +3,8 @@ use std::borrow::Cow;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-/// A stored radio station.
-///
-/// Favorites, hand-typed URLs and play history are the same row at different
-/// points in its life, so the flags below are what tell them apart rather than
-/// the table a row sits in.
+/// A stored station. Favorites, hand-typed URLs and history are one row at different points in
+/// its life, told apart by its flags.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct RadioStation {
     pub id: i64,
@@ -17,55 +14,36 @@ pub struct RadioStation {
     pub stream_url: String,
     /// The directory's, and rewritten in full on every re-import.
     pub homepage: Option<String>,
-    /// The user's own, for a directory entry that carries no homepage — roughly
-    /// one in fifteen, and nothing can be derived from a stream URL that is
-    /// usually a shared host. Its own column so each has exactly one writer:
-    /// folded into [`Self::homepage`] it would either be blanked by the next
-    /// re-import or block the directory from ever correcting a site that moved.
-    /// Read through [`Self::website`], never directly.
+    /// The user's own, for a directory entry with none, in its own column so each has one writer
+    /// (`.claude/rules/radio.md`). Read through [`Self::website`].
     pub local_homepage: Option<String>,
-    /// Where the logo came from, kept so a re-download can be retried after the
-    /// stored file is swept.
+    /// Kept so a re-download can be retried after the stored file is swept.
     pub favicon_url: Option<String>,
-    /// The user's own logo URL, for the third of the directory that ships none.
-    /// [`Self::local_homepage`]'s twin in every respect — read through
-    /// [`Self::logo_source`].
+    /// [`Self::local_homepage`]'s twin, read through [`Self::logo_source`].
     pub local_favicon_url: Option<String>,
-    /// The user's own genre, read through [`Self::genre`].
+    /// Read through [`Self::genre`].
     pub local_tags: Option<String>,
-    /// The user's own country, read through [`Self::country_name`]. A hand-typed
-    /// station has none of its own: a stream announces no country, and guessing
-    /// one from the host would be wrong more often than blank is.
+    /// Read through [`Self::country_name`]. A hand-typed station starts with none, a guess from
+    /// the host being wrong more often than blank is.
     pub local_country: Option<String>,
-    /// The logo in the radio-logo store, which is its own directory precisely
-    /// because this is the one artwork column whose file cannot be re-derived
-    /// from the user's own library. Still one of the six the sweep reads
-    /// through — the reference set spans every store.
+    /// In the radio-logo store, apart because this file can't be re-derived, and still one of the
+    /// sweep's six columns.
     pub artwork_path: Option<String>,
     /// The directory's free-form comma-separated tags, stored verbatim.
     pub tags: String,
-    /// The country's full name, which is what a card shows. Stored beside
-    /// [`Self::country_code`] rather than derived from it: the directory hands
-    /// both over, and deriving would mean shipping an ISO table.
+    /// The full name a card shows, stored rather than derived so no ISO table ships.
     pub country: String,
     pub country_code: String,
     pub language: String,
-    /// The directory's, and it names the *container*: every Ogg mount is filed
-    /// under `OGG` whichever codec is inside it.
+    /// The directory's, naming the container: every Ogg mount is `OGG`.
     pub codec: String,
-    /// What the stream turned out to hold, recorded the first time it played and
-    /// `None` until then. Its own column for [`Self::local_homepage`]'s reason
-    /// pointed the other way: the re-import that rewrites [`Self::codec`]
-    /// wholesale must not be able to take this with it. Never read alone —
-    /// [`Self::format`] is what folds the two together.
+    /// What the stream held when it first played, `None` until then. Its own column so a re-import
+    /// rewriting [`Self::codec`] can't take it; read through [`Self::format`].
     pub probed_codec: Option<String>,
-    /// Advertised kbps, `0` where the directory does not know. A display hint
-    /// only: it is zero on a large share of live stations, so nothing may divide
-    /// by it without a fallback.
+    /// Advertised kbps, `0` on a large share of live stations, so never a divisor without a
+    /// fallback.
     pub bitrate: i32,
-    /// Segmented stream, played through `player::source::hls`. Stored because a
-    /// favorited station has left the directory behind, and because the one
-    /// setting still keyed to it filters directory pages by it.
+    /// Stored because a favorite has left the directory behind, and a setting filters pages by it.
     pub hls: bool,
     pub is_favorite: bool,
     pub sort_key: String,
@@ -74,38 +52,21 @@ pub struct RadioStation {
     pub play_count: i32,
 }
 
-/// A value that is empty rather than absent reads as absent: the directory serves `""` about as
-/// readily as it omits a field, and a caller asking "is there one" means the same by both.
-///
-/// **Not [`crate::utils::text::filled`], which trims first.** The two differ on a field that is
-/// whitespace and nothing else, and [`RadioStation::can_override`] is where that is observable:
-/// it offers an editor exactly where the directory said nothing, so trimming here would open one
-/// over a value the directory did send.
+/// Empty reads as absent, the directory serving `""` as readily as it omits a field. Not
+/// [`crate::utils::text::filled`], which trims: [`RadioStation::can_override`] offers an editor
+/// only where the directory said nothing, and a run of spaces is something.
 fn filled(value: Option<&str>) -> Option<&str> {
     value.filter(|text| !text.is_empty())
 }
 
-/// Between the container a station is filed under and the codec inside it.
-///
-/// A slash rather than a space or a dot: a card's meta line already joins country, format and
-/// bitrate with ` · `, so a dot here would read as a fourth field, and a space would read as one
-/// two-word name at exactly the moment the point is that there are two answers.
+/// A slash: a card's meta line joins fields with ` · `, so a dot would read as a fourth field and
+/// a space as one two-word name.
 const FORMAT_SEPARATOR: &str = "/";
 
-/// One display string for a station's format, from what the directory filed it under and what an
-/// open measured it to hold.
-///
-/// **Both are kept where they differ, the directory's first.** Its `codec` column names the
-/// *container*, so every Ogg mount is filed under `OGG` whichever codec is inside it, and that is
-/// also the value its codec filter matches on. A user who filtered on `OGG` and landed on a page
-/// reading `VORBIS` alone has nothing to tell them those are the same station.
-///
-/// Nothing is composed where one answer already implies the other. `UNKNOWN` and a blank name
-/// nothing, so the measurement stands alone; and where one contains the other the more specific
-/// wins, which is what keeps a station the directory calls `AAC+` from reading `AAC+/AAC`.
-///
-/// Borrowed wherever one answer stands alone, which is every station the user has not played:
-/// only the join has a string to build, and a row draws far more of the former than the latter.
+/// A station's format from what the directory filed it under and what an open measured, both kept
+/// where they differ, the directory's first: it names the container, which is what its filter
+/// matches, so `OGG` beside `VORBIS` says they are one station. Where one answer implies the other
+/// (`UNKNOWN`, a blank, one containing the other) it stands alone, borrowed.
 pub fn compose_format<'a>(directory: &'a str, probed: Option<&'a str>) -> Option<Cow<'a, str>> {
     let (named, measured) = (filled(Some(directory)), filled(probed));
     let (Some(directory), Some(probed)) = (named, measured) else {
@@ -123,22 +84,15 @@ pub fn compose_format<'a>(directory: &'a str, probed: Option<&'a str>) -> Option
     Some(Cow::Owned(format!("{directory}{FORMAT_SEPARATOR}{probed}")))
 }
 
-/// [`compose_format`] over a value that already carries a measurement, which is what a
-/// Now-Playing surface holds rather than either column.
-///
-/// The containment arms fold a repeat of the same answer back onto itself, so only a station that
-/// changed what it serves between two plays reaches this: composed a second time it would name
-/// both codecs, and it holds exactly one.
+/// [`compose_format`] over a value already carrying a measurement, as a Now Playing surface holds.
+/// Composing it a second time would name both codecs where a station that changed what it serves
+/// holds one.
 pub fn recompose_format<'a>(current: &'a str, probed: &'a str) -> Option<Cow<'a, str>> {
     let directory = current.split_once(FORMAT_SEPARATOR).map_or(current, |(named, _)| named);
     compose_format(directory, Some(probed))
 }
 
-/// Substring test that ignores case without allocating an upper-cased copy of either side.
-///
-/// Both sides are short display tokens compared once per station row, and the directory's are not
-/// reliably upper-cased the way ours are. An empty `needle` is refused here rather than left to
-/// the callers, `windows(0)` being a panic rather than a `false`.
+/// An empty `needle` is refused, `windows(0)` panicking.
 fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
     !needle.is_empty()
         && haystack.len() >= needle.len()
@@ -149,11 +103,8 @@ fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
 }
 
 impl RadioStation {
-    /// The site this station links out to, whoever supplied it.
-    ///
-    /// **The user's answer wins**, since it is only ever written where they went and found what
-    /// the directory had no entry for. Every surface that draws or opens a station website reads
-    /// this rather than either column, so a card and the browser launch behind it cannot disagree.
+    /// The user's answer wins, written only where the directory had none. Every surface drawing or
+    /// opening a station's site reads this, so a card and its launch agree.
     pub fn website(&self) -> Option<&str> {
         filled(self.local_homepage.as_deref()).or_else(|| filled(self.homepage.as_deref()))
     }
@@ -173,23 +124,14 @@ impl RadioStation {
         filled(self.local_country.as_deref()).or_else(|| filled(Some(self.country.as_str())))
     }
 
-    /// The format a card shows, which unlike [`Self::website`]'s rule keeps *both* answers where
-    /// they differ. [`compose_format`] argues why.
+    /// Unlike [`Self::website`]'s rule, keeps both answers where they differ ([`compose_format`]).
     pub fn format(&self) -> Option<Cow<'_, str>> {
         compose_format(&self.codec, self.probed_codec.as_deref())
     }
 
-    /// Whether one field is the user's to fill in.
-    ///
-    /// **The one case that answers `false` is a directory value the user has not overridden.**
-    /// That value is not theirs to overwrite and an editor over it is one misclick from replacing
-    /// something correct with a typo, which is the whole reason these are gated rather than always
-    /// offered.
-    ///
-    /// The two cases it answers `true` for are both the user's own: a hand-typed station has no
-    /// directory behind it to disagree with, and anything they already set has to stay
-    /// correctable — closing the field the moment it holds a value would make a typo permanent and
-    /// would take back the "leave it blank to remove" the dialog offers.
+    /// `false` only over a directory value the user hasn't overridden, where an editor is one
+    /// misclick from replacing something correct with a typo. A hand-typed station and a field
+    /// already set stay open, or a typo would be permanent.
     fn can_override(&self, from_directory: Option<&str>, local: Option<&str>) -> bool {
         self.station_uuid.is_none() || filled(from_directory).is_none() || local.is_some()
     }
@@ -210,12 +152,8 @@ impl RadioStation {
         self.can_override(Some(self.country.as_str()), self.local_country.as_deref())
     }
 
-    /// The user's own answer for one field, and never the directory's.
-    ///
-    /// **Deliberately not [`Self::website`]'s ladder.** That one resolves what a *surface* should
-    /// draw; this one answers what the user set, which is what an export writes back. Folding the
-    /// directory's value in would spell one station out of both halves and re-import it as an
-    /// override of something nobody overrode.
+    /// What the user set, never the directory's, for an export: folding the directory's value in
+    /// would re-import as an override nobody made.
     pub fn local_override(&self, field: OverrideField) -> Option<&str> {
         match field {
             OverrideField::Website => self.local_homepage.as_deref(),
@@ -234,15 +172,10 @@ impl RadioStation {
             || self.can_set_country()
     }
 
-    /// This row as the save input that would recreate it, for an export that has to survive as
-    /// the station it is rather than as a name and a URL.
-    ///
-    /// **`station_uuid` is the field the whole projection is for**: it is what separates a station
-    /// the directory owns from a hand-typed lookalike, and everything the card gates on that
-    /// follows from it. Nothing derived crosses — no id, no `sort_key`, no play stats — and
-    /// deliberately **not `artwork_path`**, which names a file in this install's logo store and
-    /// means nothing anywhere else; the logo is re-fetched from `favicon_url` wherever the row
-    /// lands. The four `local_*` columns stay out too, being [`StationOverrides`]'s to carry.
+    /// The save input that recreates this row, for an export. `station_uuid` is the point, telling
+    /// a directory station from a hand-typed lookalike. Nothing derived crosses, nor `artwork_path`
+    /// (a file in this install's store), nor the `local_*` columns, which [`StationOverrides`]
+    /// carries.
     pub fn to_new_station(&self) -> NewRadioStation {
         NewRadioStation {
             station_uuid: self.station_uuid.clone(),
@@ -261,12 +194,7 @@ impl RadioStation {
     }
 }
 
-/// Which of the four a caller means.
-///
-/// An enum rather than four named call sites because the set is *walked* rather than read one at
-/// a time: `radio_files` had the four spelled once for its reader and again for its writer, so
-/// what its own doc asks for — "a fifth is a row in the table rather than a fifth arm to keep
-/// parallel" — was two rows in two tables. One table needs one name per field.
+/// An enum because `radio_files` walks the set, so one table names each field once.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OverrideField {
     Website,
@@ -275,11 +203,8 @@ pub enum OverrideField {
     Country,
 }
 
-/// The four fields a user may fill in where the directory left a blank.
-///
-/// A struct rather than four parameters for [`RadioStation`]'s own reason: they are all
-/// `Option<String>` and a positional list of those is a bind-order bug waiting to happen. `None`
-/// clears the column, which is how a value is removed again.
+/// The four fields a user may fill where the directory left a blank, a struct so four
+/// `Option<String>`s can't swap places. `None` clears the column.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StationOverrides {
     pub website: Option<String>,
@@ -300,18 +225,8 @@ impl StationOverrides {
     }
 }
 
-/// What a caller supplies when saving a station.
-///
-/// The rest of [`RadioStation`] is the table's own: the id, the derived
-/// `sort_key`, `date_added`, and the play stats a save must never reset. A
-/// struct rather than a dozen parameters because most of them are `String` and
-/// a positional list of those is a bind-order bug waiting to happen.
-///
-/// **`#[serde(default)]` because this shape travels between builds.**
-/// `radio_files` writes it into an exported station list, so a file from a build
-/// carrying one more column still has to import here, and one written here still
-/// has to import there. Unknown fields are already ignored; this is the other
-/// direction.
+/// What a save supplies; the id, `sort_key`, `date_added` and play stats are the table's own.
+/// `#[serde(default)]` because an exported station list travels between builds both ways.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NewRadioStation {
@@ -329,12 +244,8 @@ pub struct NewRadioStation {
     pub hls: bool,
 }
 
-/// What the station editor rewrites.
-///
-/// A struct rather than seven positional parameters for [`NewRadioStation`]'s reason. Everything
-/// but `name` is the stream's own account of itself, so a URL that moved replaces all of it at
-/// once: a station repointed at a new mount that kept the old one's logo, homepage or tags is the
-/// same wrong `keep_station` already refuses on the directory's side.
+/// What the station editor rewrites. Everything but `name` is the stream's account of itself, so a
+/// moved URL replaces all of it rather than keeping the old mount's logo or tags.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StationEdit {
     pub name: String,
@@ -347,10 +258,6 @@ pub struct StationEdit {
 }
 
 /// What an earlier session's attempt at one logo URL left behind.
-///
-/// Here rather than beside the query that reads it, for the reason every other row type is: it
-/// crosses `library::radio`'s public signature and is read in `melodia-views`' `ui/radio`, and a boundary type
-/// spelled `queries::radio::…` at those call sites is the UI naming the database layer.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct StoredLogoAnswer {
     pub favicon_url: String,
@@ -360,44 +267,31 @@ pub struct StoredLogoAnswer {
     pub retry_after: Option<String>,
 }
 
-/// What the directory's checker writes into [`DirectoryStation::codec`] when it could not identify
-/// a stream at all.
-///
-/// Here rather than beside either reader because both layers name it and neither may name the
-/// other: `library::radio` drops the facet, `ui::radio` draws what is left of it under a word a
-/// user would recognise, and the two agreeing is what keeps a filter from hiding a bucket the chip
-/// still offers.
+/// What the directory's checker writes for a stream it couldn't identify. Shared because
+/// `library::radio` drops the facet and `ui::radio` draws it, and the two agreeing keeps a filter
+/// from hiding a bucket the chip still offers.
 pub const UNKNOWN_CODEC: &str = "UNKNOWN";
 
-/// A station as the directory describes it, before it is anybody's row.
-///
-/// Separate from [`RadioStation`] rather than a half-filled one because the two
-/// know different things. The directory knows how popular a station is and
-/// whether its own last check reached it, none of which the table has a column
-/// for; the table's id, stored logo, sort key and play stats mean nothing until
-/// the user keeps the station. Keeping the wire shape out of `melodia-views`' `ui/` is the
-/// other half of it: a callback names this and never `services::net::radio_browser`.
+/// A station as the directory describes it, before it is anybody's row: it knows popularity and
+/// reachability the table has no column for, and the table's id and stats mean nothing until a
+/// station is kept.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DirectoryStation {
     pub station_uuid: String,
     pub name: String,
-    /// Already followed past any `.pls`/`.m3u` indirection — the directory
-    /// resolves its own stations, so this is playable as it stands.
+    /// Already resolved past any `.pls`/`.m3u`, so playable as it stands.
     pub stream_url: String,
     pub homepage: Option<String>,
     pub favicon_url: Option<String>,
     pub tags: String,
-    /// The country's full name. The code is what filters; this is what a card
-    /// shows.
+    /// The full name; the code is what filters.
     pub country: String,
     pub country_code: String,
     /// The country subdivision, in the directory's own spelling.
     pub state: String,
     pub language: String,
     pub codec: String,
-    /// Advertised kbps, `0` where the directory does not know. The same display
-    /// hint as [`RadioStation::bitrate`], and zero on enough live stations that
-    /// nothing may divide by it without a fallback.
+    /// As [`RadioStation::bitrate`], never a divisor.
     pub bitrate: i32,
     pub hls: bool,
     pub votes: i64,
@@ -407,23 +301,14 @@ pub struct DirectoryStation {
 }
 
 impl DirectoryStation {
-    /// Whether the station is worth handing on: it can be played, and it can be
-    /// told apart from every other row once it is one.
-    ///
-    /// Both fields default to empty under the wire structs' `#[serde(default)]`,
-    /// and the uuid is the worse half. [`Self::to_new_station`] passes it as
-    /// `Some("")`, which the `UNIQUE` column reads as a value rather than a
-    /// gap, so every station missing one would upsert onto a single row.
+    /// Playable, and distinguishable once it is a row: an empty uuid crosses as `Some("")`, which
+    /// the `UNIQUE` column takes as a value, so every station missing one would upsert onto one row.
     pub fn is_usable(&self) -> bool {
         !self.station_uuid.is_empty() && !self.stream_url.is_empty()
     }
 
-    /// Project onto the save input, dropping the popularity figures the table
-    /// does not keep.
-    ///
-    /// The uuid crosses unconditionally because anything reaching a caller
-    /// passed [`Self::is_usable`]; the `None` case is a hand-typed station,
-    /// which never comes through here.
+    /// Drops the popularity figures. The uuid crosses unconditionally, anything here having passed
+    /// [`Self::is_usable`].
     pub fn to_new_station(&self) -> NewRadioStation {
         NewRadioStation {
             station_uuid: Some(self.station_uuid.clone()),
@@ -442,14 +327,8 @@ impl DirectoryStation {
     }
 }
 
-/// One page of directory results, and whether asking again would return more.
-///
-/// The two travel together because `has_more` cannot be recovered from
-/// `stations` once the page has been filtered: rows are dropped on the way out
-/// of the client ([`DirectoryStation::is_usable`]) and again at the facade (the
-/// segmented filter), so a short page is as often a filtered full one as a genuine
-/// end. Read off the kept length, paging stops on the first page a filter
-/// thinned.
+/// `has_more` travels with the page because rows are filtered on the way out, so a short page is
+/// as often a thinned full one as the end.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StationPage {
     pub stations: Vec<DirectoryStation>,
@@ -460,10 +339,8 @@ pub struct StationPage {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Facet {
     pub name: String,
-    /// The ISO code where the list has one, which only the countries list can
-    /// actually filter by: `countrycode` is the search endpoint's sole
-    /// code-keyed parameter. Languages carry an `iso_639` and still filter by
-    /// `name`, the way tags and codecs do with no code at all.
+    /// The ISO code where the list has one. Only countries filter by it, `countrycode` being the
+    /// search endpoint's sole code-keyed parameter.
     pub code: Option<String>,
     pub station_count: i64,
 }
@@ -490,52 +367,32 @@ pub enum SearchOrder {
     Random,
 }
 
-/// Stations per page, and the fallback whenever a caller leaves
-/// [`StationSearch::limit`] at zero.
-///
-/// There is no "unlimited" option to offer instead: the API's own default is the
-/// entire directory, tens of thousands of rows.
-///
-/// Here rather than beside the request builder that sends it because the pager on
-/// screen needs it too — an offset advances by exactly the limit the request
-/// carried, and the two coming from one definition is what stops paging skipping
-/// or repeating a page. `melodia-views` cannot name `melodia-net`, so the shared
-/// number belongs in the crate both of them do name.
+/// Stations per page, and the fallback for a zero [`StationSearch::limit`], the API's own default
+/// being the whole directory. Shared with the pager, whose offset advances by exactly the limit a
+/// request carried, which `melodia-views` can't read from `melodia-net`.
 pub const DEFAULT_PAGE_LIMIT: u32 = 50;
 
-/// A directory query, filled in by the caller and turned into request parameters
-/// by `services::net::radio_browser`.
-///
-/// `Default` is the first screen with nothing typed: most-clicked first, one
-/// page, no filters.
+/// `Default` is the first screen with nothing typed: most-clicked first, one page, no filters.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StationSearch {
     /// Substring match on the station name. Empty is no name filter.
     pub name: String,
     pub country_code: String,
-    /// The language's *name*, not its code, which is where this parts company
-    /// with `country_code` above: the search endpoint has no code-keyed
-    /// language parameter to pair a [`Facet::code`] with.
+    /// The name, not a code: the endpoint has no code-keyed language parameter.
     pub language: String,
     /// Every tag has to match, not any.
     pub tags: Vec<String>,
     pub codec: String,
-    /// Advertised kbps floor. `0` is no floor, which is not the same as asking
-    /// for zero: a large share of live stations advertise exactly that.
+    /// `0` is no floor, not a request for the many stations advertising zero.
     pub bitrate_min: u32,
     /// Direction is the order's own, so there is no flag for it here.
     pub order: SearchOrder,
     pub offset: u32,
-    /// `0` takes the client's page size. Never sent absent — the API's own
-    /// default is the entire directory.
+    /// `0` takes the page size; never sent absent.
     pub limit: u32,
 }
 
-/// One station logo that landed: where it is, and what it cost the store.
-///
-/// The size is read back off the file rather than taken from the bytes handed to `store_image` —
-/// that re-encodes anything over its own bounds, so the two differ exactly where the number
-/// matters most.
+/// The size is read off the file, `store_image` re-encoding anything over its bounds.
 #[derive(Debug, Clone)]
 pub struct StoredLogo {
     pub path: String,

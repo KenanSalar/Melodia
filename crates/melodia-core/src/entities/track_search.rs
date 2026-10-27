@@ -8,10 +8,9 @@
 use crate::entities::track::TrackListRow;
 use crate::utils::fold::push_folded;
 
-/// Between two packed fields, here and in the card grids' `search_name`. A filter box is one line,
-/// and Slint turns a pasted newline into a space, so no needle carries one and a match cannot span
-/// two fields. The in-memory key this replaced joined on NUL, which `SQLite` leaves undefined
-/// inside TEXT.
+/// Between two packed fields, here and in the card grids' `search_name`. A filter box is one line
+/// and Slint turns a pasted newline into a space, so no match can span two fields; a NUL would be
+/// undefined inside `SQLite` TEXT.
 pub const FIELD_SEPARATOR: char = '\n';
 
 /// The searchable text of a track, in the order `tracks_fts` lists its columns. `year` joins

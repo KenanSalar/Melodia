@@ -17,17 +17,9 @@ pub struct DirectoryTrack {
     pub row: TrackListRow,
 }
 
-/// One audio file in a browsed directory. The Browse view renders these
-/// through the shared `TrackList` component, so every file — whether or not
-/// it is in the library — carries a full [`TrackListRow`].
-///
-/// * In-library files (`in_library == true`) carry the real DB row.
-/// * Disk-only files (`in_library == false`) carry a *synthesized* sparse
-///   `TrackListRow` with `id == 0`, `title` taken from the file name and
-///   every other field empty/`None`/`0`. They render dimmed and
-///   non-interactive (the UI keys interactivity off `id == 0`).
-///
-/// `file_name` comes from disk for both, and breaks the view's sort ties.
+/// One audio file in a browsed directory, carrying a full [`TrackListRow`] so `TrackList` renders
+/// it. A disk-only file's row is synthesized with `id == 0` and the file name as its title, which
+/// the UI dims and disables. `file_name` comes from disk and breaks the sort's ties.
 #[derive(Clone, Debug)]
 pub struct BrowseFile {
     pub row: TrackListRow,

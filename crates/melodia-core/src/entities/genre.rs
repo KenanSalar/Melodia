@@ -1,12 +1,8 @@
 use sqlx::FromRow;
 
-/// A track's genres, in the two shapes the rest of the tree needs: the line every display surface
-/// and the FTS index read, and the ordered names the `track_genres` rows are built on.
-///
-/// Private fields for [`super::artist::ArtistCredit`]'s reason, and the same invariant — `line` is
-/// always [`Self::names`] rendered, `None` exactly when there are none. What it deliberately does
-/// *not* borrow from `ArtistCredit` is the join phrases: a release prints its artists the way it
-/// chooses, and nothing prints genres at all, so they join with one separator and need no picker.
+/// A track's genres as the line displays and the FTS index read, and as the ordered names the
+/// `track_genres` rows are built on. Private fields for [`super::artist::ArtistCredit`]'s
+/// invariant: `line` is always [`Self::names`] rendered, `None` exactly when there are none.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct GenreList {
     line: Option<String>,
@@ -18,11 +14,9 @@ pub struct GenreList {
 const GENRE_JOIN: &str = ", ";
 
 impl GenreList {
-    /// **Each name once.** `genres.name` is `UNIQUE COLLATE NOCASE`, so `"Rock; rock"` and a
-    /// repeated `GENRE` frame both resolve to one `genres` row and would write two `track_genres`
-    /// rows for one track. The primary key is `(track_id, position)`, so nothing downstream
-    /// rejects that, and the stats triggers *and* `recalculate_all_stats` would agree on a count
-    /// that is twice what it should be. Kept first-seen, which is the order the tag wrote.
+    /// Each name once, first-seen: `genres.name` is `UNIQUE COLLATE NOCASE`, so `"Rock; rock"`
+    /// would write two `track_genres` rows for one genre, which nothing rejects and every count
+    /// then doubles.
     #[must_use]
     pub fn new(names: Vec<String>) -> Self {
         let mut kept: Vec<String> = Vec::with_capacity(names.len());
@@ -67,14 +61,9 @@ impl GenreList {
         self.names.is_empty()
     }
 
-    /// Split a line [`Self::line`] rendered back into its names, for a caller holding the column
-    /// rather than the rows.
-    ///
-    /// **Display only.** A genre whose own name contains the separator ("Chanson, Francaise") is
-    /// indistinguishable from two once rendered, so this can hand back a name nobody tagged. That
-    /// costs a wrong label on a chip and nothing else, which is why anything that *persists* a
-    /// genre reads the rows through `queries::track::get_track_genres_by_ids` instead. Lives here
-    /// so the split and `GENRE_JOIN` cannot drift apart.
+    /// Display only: a name containing the separator ("Chanson, Francaise") splits in two, so
+    /// anything persisting a genre reads the rows instead. Here so the split and `GENRE_JOIN`
+    /// can't drift.
     pub fn names_in_line(line: &str) -> impl Iterator<Item = &str> {
         line.split(GENRE_JOIN).map(str::trim).filter(|name| !name.is_empty())
     }
