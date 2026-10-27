@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 7.2 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 8.1 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -97,8 +97,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 5 | `melodia-engine` | 0.48 | 1,572 | ~756 | 0.23 (746) | `c6dc0322` |
 | 6.1 | `melodia-core`: `utils/`, `lib.rs`, `config.rs`, `error.rs` | 0.79 | 561 | ~384 | 0.31 (228) | `670f9ad5` |
 | 6.2 | `melodia-core`: `entities/`, `themes/` | 0.39 | 1,094 | ~394 | 0.22 (623) | `a7787e38` |
-| 7.1 | `melodia-playback`: the files directly under `player/playback/`, plus `lib.rs` | 0.54 | 1,075 | ~574 | 0.25 (496) | |
-| 7.2 | `melodia-playback`: `output/` | 0.41 | 1,662 | ~647 | | |
+| 7.1 | `melodia-playback`: the files directly under `player/playback/`, plus `lib.rs` | 0.54 | 1,075 | ~574 | 0.25 (496) | `1ba22f47` |
+| 7.2 | `melodia-playback`: `output/` | 0.41 | 1,662 | ~647 | 0.27 (1,084) | |
 | 8.1 | `melodia-app`: `library/radio/`, `library/lyrics/` | 0.64 | 912 | ~555 | | |
 | 8.2 | `melodia-app`: `state/`, `lib.rs` | 0.54 | 282 | ~153 | | |
 | 8.3 | `melodia-app`: `services/` | 0.44 | 1,233 | ~539 | | |
@@ -172,17 +172,17 @@ Status: done.
   - **Pointed at:** `CLAUDE.md`'s `themes/` bullet (`Palette`'s three semantic slots, `material3.rs` being generated).
 
 ### Phase 7: `melodia-playback`
-Status: in progress, 7.2 next.
+Status: done.
 
 - [x] **7.1 The DSP chain**: the files directly under `player/playback/`, plus `lib.rs`. One commit.
   - **Furthest over:** `spectrum.rs` (136), `equalizer.rs` (85).
   - **Pointed at:** `CLAUDE.md` on `stream_health.rs` and `dsp.rs`; `.claude/rules/audio-stack.md` and `visualizer.md`.
-- [ ] **7.2 `output/`**, one commit.
+- [x] **7.2 `output/`**, one commit.
   - **Furthest over:** `output/voice.rs` (156), `output/device.rs` (102).
   - **Pointed at:** `CLAUDE.md` on `output::device::open` and `AudioOutput`; `.claude/rules/audio-stack.md`.
 
 ### Phase 8: `melodia-app`
-Status: not started.
+Status: in progress, 8.1 next.
 
 - [ ] **8.1 `library/radio/` and `library/lyrics/`**, the two doors, one commit.
   - **Furthest over:** `library/radio/logos.rs` (113), `library/lyrics/mod.rs` (91).

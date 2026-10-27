@@ -1,24 +1,12 @@
-//! The device's own volume control, carrying the level while an exclusive claim hands it the
-//! voices' samples at unity. What the control is, and the curve its level is read on, is each
-//! backend's; how a claim takes it, follows the slider, watches it and gives it back is here, once.
+//! The device's own volume control, carrying the level while an exclusive claim plays the voices at
+//! unity: how a claim takes, follows, watches and gives it back, once for both backends. Each
+//! supplies a [`VolumeControl`] speaking the percentage the system shows, so both sliders agree.
 //!
-//! **The level is the percentage the system shows for the control**, so Melodia's slider and the
-//! system's read the same number. Each backend's [`VolumeControl`] speaks that fraction and does
-//! its own conversion to whatever the hardware counts in.
-//!
-//! **A claim never turns the device up past what the system chose.** Where the system had it
-//! quieter than Melodia's slider, it stays there and the slider follows it down. Otherwise a device
-//! the system keeps low would jump to a slider left at full the moment the control was taken. A
-//! device still at the level a release put back is resuming rather than chosen: every reopen
-//! releases first, and capping there would drag the slider down at each rate change. Only a release
-//! in this run counts, so the first claim after a launch caps again.
-//!
-//! **The control stays the system's own** for as long as the claim holds it, so the system's
-//! slider and volume keys move it too. Those moves are watched for and handed back, so Melodia's
-//! slider follows them. A release puts back what the device had before the claim regardless. That
-//! original outlives the claim until a release has put it back: a device unplugged mid-claim can't
-//! be restored, and replugged it can report Melodia's level as its own. A crash still leaves it
-//! there.
+//! A claim never turns the device up past what the system chose; the slider follows it down
+//! instead. A level a release in this run put back is resuming rather than chosen, or every reopen
+//! would drag the slider down. The control stays the system's own, so its moves are watched and
+//! handed back. A release restores the original, which outlives a claim on a device unplugged
+//! mid-claim until a release can put it back.
 
 use std::time::{Duration, Instant};
 
@@ -78,10 +66,6 @@ pub(super) struct HardwareVolume<C: VolumeControl> {
 
 impl<C: VolumeControl> HardwareVolume<C> {
     /// `control`, the device `id`'s own, set to `volume` unless the system had it quieter.
-    ///
-    /// # Errors
-    ///
-    /// What the device answered when asked for its level or a new one.
     pub(super) fn take(control: C, id: &str, volume: f64) -> Result<Self, C::Error> {
         let current = control.level()?;
         remember_original(id, current);
@@ -113,11 +97,6 @@ impl<C: VolumeControl> HardwareVolume<C> {
 
     /// A writer's turn, once per period after its write, where the period's slack is: follow the
     /// slider, then hand back a move made outside Melodia.
-    ///
-    /// # Errors
-    ///
-    /// The device refusing to take or report the level, which the writer treats like a write it
-    /// refused.
     pub(super) fn sync(&mut self, feed: &Feed) -> Result<(), C::Error> {
         self.follow(feed.volume.load())?;
         if let Some(level) = self.take_move()? {
@@ -126,12 +105,9 @@ impl<C: VolumeControl> HardwareVolume<C> {
         Ok(())
     }
 
-    /// Set the device to `volume` where it has moved, at most once per [`FOLLOW_INTERVAL`]. A move
-    /// held back lands on a later call, so it only ever arrives late.
-    ///
-    /// **A level the device already sits at is not written.** A system move handed back returns as
-    /// the slider's rounding of it, and writing that would undo any move the system made meanwhile,
-    /// which the read-back would then take as Melodia's own and never report.
+    /// At most once per [`FOLLOW_INTERVAL`], a held-back move landing later. A level the device
+    /// already sits at isn't written: a handed-back system move returns rounded, and writing it
+    /// would undo a move the system made meanwhile.
     fn follow(&mut self, volume: f64) -> Result<(), C::Error> {
         self.follow_at(volume, Instant::now())
     }

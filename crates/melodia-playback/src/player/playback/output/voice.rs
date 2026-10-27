@@ -1,17 +1,10 @@
-//! One voice: the source playing on it, the one staged behind, and the transport state the mixer
-//! reads while it pulls.
+//! One voice: the source playing, the one staged behind, and the transport state the mixer reads.
+//! [`Voice`] is the control side the rest of the tree sees; [`VoicePull`] is the mixer's, touched
+//! only from the audio callback, with a command channel and counters between them.
 //!
-//! Split in two because the two halves live on different threads. [`Voice`] is the control side and
-//! is all the rest of the tree ever sees; [`VoicePull`] is owned by the mixer and touched only from
-//! the audio callback. Between them sit a command channel and a pair of counters.
-//!
-//! **`clear` blocks until the callback has serviced it**, which is not an accident of the
-//! implementation but the contract the layer above rests on: `Decks::cut_to` clears both decks and
-//! then starts a source on one, and a clear that had not landed yet would take the new source with
-//! it. `crates/melodia/tests/crossfade.rs` is the audio thread while it pulls, which is why a
-//! control op that blocks has to be driven from another thread there. It is the only one: a seek
-//! is a `replace`, which carries a source the caller has already positioned and so has nothing to
-//! wait for.
+//! `clear` blocks until the callback has serviced it, the contract `Decks::cut_to` rests on: a
+//! clear not yet landed would take the new source with it. It is the only op that blocks; a seek is
+//! a `replace` carrying a source already positioned.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -40,82 +33,46 @@ pub struct PlayingSource {
     pub dsp_engaged: bool,
 }
 
-/// How long a control op waits for the callback before giving up.
-///
-/// Long enough to cover any plausible device period, short enough that a stream which has stopped
-/// being serviced — a device pulled mid-track — stalls the transport for an eyeblink rather than
-/// wedging the UI thread behind it. rodio waited forever here, which is only safe while the stream
-/// is guaranteed to be running.
+/// Long enough for any device period, short enough that a stream no longer serviced (a device
+/// pulled mid-track) stalls the transport for an eyeblink rather than wedging the UI thread.
 const SERVICE_TIMEOUT: Duration = Duration::from_millis(500);
 
-/// How long the waiter sleeps between checks. Below one device period, so the wait ends on the
-/// callback that services it rather than on the next tick of a coarser timer.
+/// Below one device period, so the wait ends on the callback that services it.
 const SERVICE_POLL: Duration = Duration::from_millis(1);
 
-/// How many control ops can be in flight before the sender gives up on the callback.
-///
-/// Bounded so the queue is allocated once rather than per send. Nothing issues ops faster than the
-/// transport can be clicked, so reaching this means the callback has stopped draining.
-///
-/// It is also what [`VoicePull::staged`] is sized against. The layer above stages one source
-/// behind the playing one and no more, but a `clear` too full to send never reaches the callback,
-/// so the append behind it lands on a source that should already have gone. Sized to cover one
-/// drain, an allocation being the one thing that thread must not do.
+/// Bounded so the queue is allocated once; reaching it means the callback has stopped draining.
+/// [`VoicePull::staged`] is sized against it too, a `clear` too full to send leaving appends to
+/// land behind sources that should have gone, and an allocation being what that thread must not do.
 const COMMAND_SLOTS: usize = 8;
 
-/// How many spent sources may await collection before the callback frees one itself.
-///
-/// A clear retires the playing source and the staged one together, so two per voice covers the
-/// widest single op; the rest is slack for a collector that has not run yet. Full means falling
-/// back to the drop this exists to avoid, which is a worse tick rather than a broken one.
+/// A clear retires two sources per voice; the rest is slack for a collector that hasn't run. Full
+/// falls back to freeing on the callback, a worse tick rather than a broken one.
 const SPENT_SLOTS: usize = 8;
 
-/// A source and the converter that brings it to the device.
-///
-/// Built on the control thread, because [`Converter::new`] allocates and the thread it would
-/// otherwise be built on is the one that must not.
-///
-/// **Freed off the audio thread too**, through [`VoicePull::retire`]: dropping one here frees a
-/// decoder's 64 KiB read buffer, too big for glibc's per-thread cache, so it takes the arena lock
-/// this process shares with the UI and tokio threads.
-///
-/// Deferring the whole drop was tried once and reverted, because the visualizer scopes a deck's
-/// liveness to its source's *drop*, so a spent source awaiting collection kept a dead deck's ring
-/// in the analysis window. What makes it work now is that the two halves are separable:
-/// [`AudioSource::release_claims`] gives up the claim on the callback, where it is a counter
-/// decrement, and only the free is handed back.
+/// A source and its converter, built on the control thread because [`Converter::new`] allocates.
+/// Freed off the audio thread through [`VoicePull::retire`], a decoder's read buffer being too big
+/// for glibc's per-thread cache; only its claims ([`AudioSource::release_claims`]) are given up on
+/// the callback, so the visualizer stops mixing a dead deck at once.
 struct Loaded {
     source: Box<dyn AudioSource>,
     converter: Converter,
 }
 
 enum Command {
-    /// Queue a source, anchoring the clock at `frames` of it if it mounts straight away.
-    ///
-    /// `frames` is non-zero for a resume, whose source the control thread positioned before
-    /// handing it over — the same reason [`Command::Replace`] carries one. A source that lands
-    /// behind something still playing starts from its own top whenever the current one drains, so
-    /// the anchor only applies to an immediate mount.
+    /// `frames` anchors the clock for a source mounting at once (a resume's, already positioned);
+    /// one landing behind a playing source starts from its own top.
     Append {
         loaded: Loaded,
         frames: u64,
     },
-    /// Queue a gapless successor behind the playing source.
-    ///
-    /// Not an [`Command::Append`], because every mount it makes is a handover, including one onto a
-    /// voice that ran dry before it landed. See [`VoiceShared::handovers`].
+    /// Every mount it makes is a handover, onto a voice already dry included
+    /// ([`VoiceShared::handovers`]).
     Stage {
         loaded: Loaded,
     },
     Clear,
-    /// Swap the playing source for one the control thread has already positioned, anchoring the
-    /// clock at `frames` of it.
-    ///
-    /// This is what a seek is. Moving a *mounted* source meant running the demuxer's scan inside
-    /// the callback, on a thread that may not read a file, and blocking the caller on the result;
-    /// building the sought source first leaves this side a pointer swap. `frames` comes with it
-    /// because the clock is re-anchored by whoever knows where the source now is, and `handovers`
-    /// because the swap has to be refused if a staged successor has since taken the deck.
+    /// A seek: the control thread positions the source, leaving this side a pointer swap rather
+    /// than a demuxer scan. `handovers` refuses it once a successor has taken the deck.
     Replace {
         loaded: Loaded,
         frames: u64,
@@ -126,67 +83,45 @@ enum Command {
 /// What both sides read without going through the channel.
 struct VoiceShared {
     paused: AtomicBool,
-    /// Both `f64` because the ratio is: [`Converter::fill`] takes `speed` at that width, and a
-    /// narrowing here would round it before the step it scales. Volume rides the same width for
-    /// the pair's sake and narrows at its one use, where the multiply is in [`Sample`].
+    /// `f64` because [`Converter::fill`] takes `speed` at that width; volume matches and narrows
+    /// at its one use.
     volume: AtomicF64,
     speed: AtomicF64,
-    /// Whether the converter interpolates through the band-limited kernel rather than linearly.
-    /// Stored `Release` after the kernel is prepared and loaded `Acquire`, so a callback that sees
-    /// it set finds the table built.
+    /// Stored `Release` after the kernel is prepared, so a callback seeing it finds the table built.
     band_limited: AtomicBool,
-    /// Sources sent and not yet finished. Bumped by `Voice::send_counted` before the callback can
-    /// see the source, so a just-fed voice never reads as empty.
+    /// Bumped before the callback can see a source, so a just-fed voice never reads as empty.
     sources: AtomicUsize,
-    /// Frames the current source has been pulled for, on its own timeline, and that source's rate.
-    /// The pair is the clock: media position is one divided by the other.
-    ///
-    /// **`rate` is the published half and carries the pair's ordering.** Both are written when a
-    /// source takes over, and a reader that saw the new rate against the old source's frame count
-    /// would report the previous track's end as this one's start. `rate` is stored last under
-    /// `Release` and loaded first under `Acquire`, so seeing it means seeing the zeroed count
-    /// behind it; the reverse pairing only ever mis-scales a count near zero.
+    /// The clock, media position being `frames / rate`. `rate` is stored last under `Release` and
+    /// loaded first under `Acquire`, so a reader seeing a new rate sees the zeroed count behind it
+    /// rather than reporting the last track's end as this one's start.
     frames: AtomicU64,
     rate: AtomicU32,
-    /// Where the clock last started counting from: a mount, a seek, or a resume. Nothing before it
-    /// can still be in the device, so [`Voice::heard`] never reads earlier. Written with `frames`,
-    /// ahead of `rate`.
+    /// Where the clock last started (a mount, seek or resume), so [`Voice::heard`] never reads
+    /// earlier. Written with `frames`, ahead of `rate`.
     anchor: AtomicU64,
-    /// Frames the playing source's converter has pulled past the one it is writing, which the ear
-    /// trails the clock by as well as the device's lead. Written once per render.
+    /// What the converter pulled past the frame it writes, which the ear trails by as well.
     converter_ahead: AtomicU64,
-    /// The rest of what [`Voice::playing`] reports. The source's own four are written with the
-    /// clock at takeover, ahead of `rate`; `dsp_engaged` once per render. A read that straddles a
+    /// The rest of [`Voice::playing`], written with the clock at takeover; a read straddling a
     /// handover can pair two tracks' answers, which the next read puts right.
     source_channels: AtomicU16,
     source_bits: AtomicU8,
     source_float: AtomicBool,
     source_lossy: AtomicBool,
     dsp_engaged: AtomicBool,
-    /// Commands sent, and commands the callback has drained. A control op that must land before it
-    /// returns waits for the second to reach the first.
+    /// An op that must land before returning waits for `serviced` to reach `issued`.
     issued: AtomicU64,
     serviced: AtomicU64,
-    /// A ticket per staged successor that has taken the deck over, so a control op prepared
-    /// against the playing source can be refused if a handover has since replaced it.
-    ///
-    /// The seek is why it exists: it reads the file on its own thread, and the source under it can
-    /// be replaced meanwhile by a *gapless* handover, which happens in this callback and so is
-    /// under neither `exec_lock` nor `deck_epoch`. **Only that mount counts**, including a stage
-    /// that lands on a voice already dry, since the monitor stages outside `exec_lock`. Every other
-    /// mount is an append or a replace sent under `exec_lock`, which the seek holds too, so the
-    /// channel already orders it ahead of the swap, and a seek sent before the callback has taken
-    /// the track it targets has to land on that track. Written by the callback alone.
+    /// A ticket per staged successor that has taken the deck, so a seek prepared against the
+    /// playing source is refused once one has. Only that mount counts: it happens in the callback,
+    /// under neither `exec_lock` nor `deck_epoch`, where every other mount is sent under the
+    /// `exec_lock` the seek holds, so the channel already orders it. Written by the callback alone.
     handovers: AtomicU64,
 }
 
-/// The control side of one voice.
 pub struct Voice {
     shared: Arc<VoiceShared>,
     commands: SyncSender<Command>,
-    /// Spent sources the callback handed back, freed by whoever calls [`Self::collect_spent`].
-    /// Behind a lock because a `Receiver` is not `Sync` and this side is shared; nothing contends
-    /// it, the collector being one task.
+    /// Behind a lock only because a `Receiver` isn't `Sync`; the one collector never contends it.
     spent: Mutex<Receiver<Loaded>>,
 }
 
@@ -203,53 +138,34 @@ impl Voice {
         self.send_counted(Command::Stage { loaded });
     }
 
-    /// Put `source` on this voice with the clock anchored at `position` of it when it mounts: a
-    /// track start.
-    ///
-    /// A resume hands over a source the control thread has already seeked, so the frames it will
-    /// hand out start part way in — and the clock counts what it hands out. Without the anchor the
-    /// deck reports a position of zero for audio that is minutes deep, which is what the restored
-    /// position turned into on the first tick after mounting.
-    ///
-    /// **The anchor lands on the callback**, so [`Self::position`] still reads zero for up to one
-    /// device period after this returns, which is why [`Self::is_settled`] stays false until it
-    /// has. [`Self::clear`] zeroes its half of the clock on this side too, which this cannot copy:
-    /// the anchor is a pair with the rate, and the callback owns the ordering between them.
+    /// A track start, the clock anchored at `position`: a resume's source arrives already seeked,
+    /// and the clock counts what it hands out. The anchor lands on the callback, so
+    /// [`Self::is_settled`] stays false until it has.
     pub fn append_at<S: AudioSource + 'static>(&self, source: S, position: Duration) {
         let frames = frames_in(position, source.sample_rate());
         let loaded = Self::load(source);
         self.send_counted(Command::Append { loaded, frames });
     }
 
-    /// Put `source` on this voice in place of the playing one, with the clock anchored at
-    /// `position` of it.
-    ///
-    /// How a seek is spelled: `source` is already positioned, so the callback does a pointer swap
-    /// rather than a demuxer scan, and nothing here waits on it. The ticket is what makes that
-    /// safe over the gap — see [`VoiceShared::handovers`] — and a voice that has handed over, or
-    /// run dry, takes no source from this.
+    /// How a seek is spelled: `source` is already positioned, so nothing waits on it. A voice that
+    /// has handed over or run dry takes nothing ([`VoiceShared::handovers`]).
     pub fn replace<S: AudioSource + 'static>(&self, source: S, position: Duration, handovers: u64) {
         let frames = frames_in(position, source.sample_rate());
         let loaded = Self::load(source);
         self.send_counted(Command::Replace { loaded, frames, handovers });
     }
 
-    /// How many staged successors have taken this voice over, for a later [`Self::replace`] to be
-    /// matched against. Read it against the same observation of the deck the seek is decided on.
+    /// Read against the same observation of the deck the seek is decided on.
     pub fn handovers(&self) -> u64 {
         self.shared.handovers.load(Ordering::Acquire)
     }
 
-    /// Pair `source` with the converter that brings it to whatever device is open when it plays.
     fn load<S: AudioSource + 'static>(source: S) -> Loaded {
         Loaded { converter: Converter::new(source.shape()), source: Box::new(source) }
     }
 
-    /// Send a command carrying a source, counting it before the callback can see it.
-    ///
-    /// The bump leads the send so the count is never behind what the callback can already act on.
-    /// Both carriers pay it back the same way: `Append` when its source finishes, `Replace` when
-    /// the callback drops whichever source the swap leaves over.
+    /// Counts the source before the callback can see it; `Append` pays it back when its source
+    /// finishes, `Replace` when the swap drops one.
     fn send_counted(&self, command: Command) {
         self.shared.sources.fetch_add(1, Ordering::SeqCst);
         if !self.send(command) {
@@ -257,16 +173,9 @@ impl Voice {
         }
     }
 
-    /// Drop everything on this voice, pause it, and rewind its clock.
-    ///
-    /// The clock is zeroed on this side too, not only by the callback: a voice whose source drained
-    /// on its own is empty *and* still reporting that source's final position, so a clear that only
-    /// asked the callback would leave `Decks::{cut_to,crossfade_to}` starting a track whose
-    /// position reads as the previous one's end until the append is picked up.
-    ///
-    /// Zeroed **last**, where the voice is quiet either way. Ahead of the count it races the
-    /// callback's own final `fetch_add`, which lands before the `sources` decrement that makes an
-    /// empty voice look empty; ahead of the send it can rewind a source still playing.
+    /// The clock is zeroed here too, a voice that drained on its own still reporting its last
+    /// source's end, and zeroed last: earlier it races the callback's final count or rewinds a
+    /// source still playing.
     pub fn clear(&self) {
         self.pause();
         if self.shared.sources.load(Ordering::SeqCst) != 0 && self.send(Command::Clear) {
@@ -276,21 +185,15 @@ impl Voice {
         self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
-    /// Free whatever the callback has finished with, here rather than there.
-    ///
-    /// Cheap and idempotent, so it belongs on a timer the app already runs. Skipping it costs
-    /// nothing but a few spent sources held until the next call, and once the queue fills the
-    /// callback goes back to freeing its own.
+    /// Cheap and idempotent; skipping it holds a few spent sources, and a full queue sends the
+    /// callback back to freeing its own.
     pub fn collect_spent(&self) {
         let spent = self.spent.lock();
         while spent.try_recv().is_ok() {}
     }
 
-    /// Start pulling again, from where the clock stopped.
-    ///
-    /// A resume re-anchors there first: through the pause the device played out everything the
-    /// voice had handed it, so the ear caught up with the clock and the lead starts over from
-    /// nothing. A voice already playing keeps its anchor, the ear still being a lead behind.
+    /// A resume re-anchors where the clock stopped, the device having played out everything
+    /// through the pause.
     pub fn play(&self) {
         if self.is_paused() {
             let paused_at = self.shared.frames.load(Ordering::Relaxed);
@@ -307,10 +210,7 @@ impl Voice {
         self.shared.paused.load(Ordering::SeqCst)
     }
 
-    /// Sources appended and not yet finished.
-    ///
-    /// `SeqCst` to match every write: this is what the transport reads to decide a voice has run
-    /// dry, and `Decks::busy` pairs it with `paused`, which is already `SeqCst`.
+    /// `SeqCst` like every write: the transport reads it as running dry, beside `paused`.
     pub fn len(&self) -> usize {
         self.shared.sources.load(Ordering::SeqCst)
     }
@@ -327,7 +227,7 @@ impl Voice {
         self.shared.speed.store(speed);
     }
 
-    /// Interpolate with `resampler` from the next block on, mid-source included.
+    /// From the next block on, mid-source included.
     pub fn set_resampler(&self, resampler: Resampler) {
         let band_limited = resampler == Resampler::BandLimited;
         if band_limited {
@@ -336,10 +236,7 @@ impl Voice {
         self.shared.band_limited.store(band_limited, Ordering::Release);
     }
 
-    /// Where the playing source has been pulled to, on its own timeline.
-    ///
-    /// Media time directly: the frames counted are the source's, and playback speed is applied
-    /// below this by the converter rather than by inflating the rate reported upward.
+    /// Media time: speed is applied below this, by the converter.
     pub fn position(&self) -> Duration {
         let Some(rate) = SampleRate::new(self.shared.rate.load(Ordering::Acquire)) else {
             return Duration::ZERO;
@@ -354,14 +251,9 @@ impl Voice {
         self.shared.serviced.load(Ordering::Acquire) >= issued
     }
 
-    /// Where the ear is in the playing source: [`Self::position`] less the `lead` the device still
-    /// holds and the frames the converter pulled ahead of the one it is writing, never earlier
-    /// than the clock's anchor.
-    ///
-    /// The lead is device time, and at a speed other than one the device plays media faster or
-    /// slower than that, so it is scaled into the source's time first. The anchor is what keeps a
-    /// fresh start, a seek or a resume from reading before the point it began at while the device
-    /// is still playing out what came before it.
+    /// [`Self::position`] less the device's `lead`, scaled into media time, and what the converter
+    /// pulled ahead; never earlier than the anchor, so a start, seek or resume doesn't read before
+    /// where it began while the device plays out what came before.
     pub fn heard(&self, lead: Duration) -> Duration {
         let Some(rate) = SampleRate::new(self.shared.rate.load(Ordering::Acquire)) else {
             return Duration::ZERO;
@@ -374,7 +266,6 @@ impl Voice {
         frames_to_duration(pulled.saturating_sub(behind).max(anchor), rate)
     }
 
-    /// What the playing source is and whether anything above the deck altered its samples, or
     /// `None` while nothing has mounted.
     pub fn playing(&self) -> Option<PlayingSource> {
         if self.is_empty() {
@@ -394,17 +285,12 @@ impl Voice {
         })
     }
 
-    /// Whether the callback will see `command`.
-    ///
-    /// The bump lands *after* the send, so a ticket the callback can observe is one whose command
-    /// it will also find on the channel.
+    /// The ticket is bumped after the send, so one the callback sees has its command on the
+    /// channel.
     fn send(&self, command: Command) -> bool {
-        // Full means the callback has stopped draining, which a bounded wait is about to report
-        // anyway; blocking here would do it while holding the transport instead. Dropped rather
-        // than returned because there is no answer worth giving: the only thing that fills this
-        // queue is a device that has stopped asking for samples, and a lost `Append` leaves the
-        // voice empty, which the monitor reads as end-of-stream and advances on regardless. What
-        // tells the user is `tasks::audio_health`, off the fault counters, not this line.
+        // Full means the callback stopped draining. Dropped rather than blocked on while holding
+        // the transport: a lost `Append` reads as end-of-stream and advances regardless, and
+        // `tasks::audio_health` is what tells the user.
         if self.commands.try_send(command).is_err() {
             log::warn!(
                 "audio callback is not draining its control channel; a transport op was lost"
@@ -415,7 +301,6 @@ impl Voice {
         true
     }
 
-    /// Wait for the callback to drain what has been sent so far.
     fn await_service(&self) {
         let ticket = self.shared.issued.load(Ordering::Acquire);
         let deadline = Instant::now() + SERVICE_TIMEOUT;
@@ -437,29 +322,22 @@ pub struct VoicePull {
     commands: Receiver<Command>,
     current: Option<Loaded>,
     staged: VecDeque<Loaded>,
-    /// Where a spent source goes instead of being freed here. See [`Loaded`].
+    /// Where a spent source goes instead of being freed here ([`Loaded`]).
     spent: SyncSender<Loaded>,
     device: Shape,
 }
 
 impl VoicePull {
-    /// Write this voice's output into `block`, already sized to whole device frames, and say how
-    /// far it reached.
-    ///
-    /// Volume is applied here rather than by the mixer so that **unity is a short circuit**: a voice
-    /// at full volume hands its samples over untouched, which is what makes a lone voice through the
-    /// whole chain bit-identical to what the decoder produced.
-    ///
-    /// Servicing the control channel comes first and happens even while paused, or a voice could not
-    /// be loaded or cleared without being played.
+    /// Writes into whole device frames and says how far it reached. Volume is applied here so unity
+    /// is a short circuit, a lone voice staying bit-identical to the decoder. Commands are serviced
+    /// first, even paused, or a voice couldn't be loaded or cleared without playing.
     #[expect(
         clippy::cast_possible_truncation,
         reason = "volume is an f64 the transport caps at unity, and even the boost band a voice would otherwise accept narrows to f32 with nothing audible lost"
     )]
     pub fn render(&mut self, block: &mut [Sample]) -> usize {
-        // Not decoration: a block ending mid-frame leaves `Converter::fill` no whole chunk to
-        // write, so it returns nothing without ending the source and the loop below never advances
-        // — on the one thread that must not stall. The invariant is the mixer's, three frames up.
+        // A block ending mid-frame gives `Converter::fill` no whole chunk, and the loop below
+        // never advances, on the one thread that must not stall.
         debug_assert!(
             block.len().is_multiple_of(usize::from(self.device.channels.get())),
             "a voice is only ever handed whole device frames"
@@ -476,9 +354,7 @@ impl VoicePull {
         };
         let conversion =
             Conversion { device: self.device, speed: self.shared.speed.load(), resampler };
-        // Read once, so the whole block renders against one observation, and compared as a bit
-        // pattern because the short circuit above has to be exact: an epsilon would take it a shade
-        // off unity.
+        // One read per block, compared bitwise because the short circuit has to be exact.
         let volume = self.shared.volume.load();
         let at_unity = volume.to_bits() == 1.0_f64.to_bits();
 
@@ -511,26 +387,17 @@ impl VoicePull {
         written
     }
 
-    /// Render at `device` from here on, mid-source included.
-    ///
-    /// Only while no stream is pulling, which is what `output::AudioOutput::reopen` guarantees by
-    /// dropping the old stream first.
+    /// Only while no stream pulls, which `AudioOutput::reopen` guarantees by dropping it first.
     pub fn reshape(&mut self, device: Shape) {
         self.device = device;
     }
 
-    /// Drain the control side's commands.
-    ///
-    /// First thing in every render, which the mixer runs once per lockstep step rather than once
-    /// per callback — so an op lands at the head of the next *step*, part way through a block. That
-    /// is the cheap direction: a waiting control thread is released a step early instead of a block
-    /// late, and one step of skew between the voices is what `LOCKSTEP_FRAMES` already bounds.
+    /// Run per lockstep step rather than per callback, so an op lands part way through a block,
+    /// releasing a waiter a step early; `LOCKSTEP_FRAMES` already bounds that skew.
     pub(super) fn service(&mut self) {
         let seen = self.shared.issued.load(Ordering::Acquire);
-        // Nothing issued since the last drain, which is every step of every block but the ones
-        // carrying a transport op. Answering that from the counter keeps the channel, and the
-        // fence its `try_recv` issues even when empty, off the path the mixer runs dozens of
-        // times per callback. Only this thread writes `serviced`, so the load needs no ordering.
+        // Most steps carry no op, and the counter keeps the channel's fence off them. Only this
+        // thread writes `serviced`, so the load needs no ordering.
         if seen == self.shared.serviced.load(Ordering::Relaxed) {
             return;
         }
@@ -558,8 +425,8 @@ impl VoicePull {
         }
     }
 
-    /// Queue a gapless successor, or mount it at once where the playing source has already
-    /// drained. The state is behind the deck either way.
+    /// Mounts at once where the playing source has drained; the state is behind the deck either
+    /// way.
     fn stage(&mut self, loaded: Loaded) {
         if self.current.is_some() {
             self.staged.push_back(loaded);
@@ -568,9 +435,7 @@ impl VoicePull {
         }
     }
 
-    /// Make `loaded` the playing source, with the clock anchored `frames` into it.
-    ///
-    /// Count first, rate last — the pair's ordering is argued on [`VoiceShared::frames`].
+    /// Count first, rate last ([`VoiceShared::frames`]).
     fn start_at(&mut self, loaded: Loaded, frames: u64) {
         let source = &loaded.source;
         let format = source.format();
@@ -584,25 +449,18 @@ impl VoicePull {
         self.current = Some(loaded);
     }
 
-    /// [`Self::start_at`] from the top, which is where a staged successor begins, counting the
-    /// handover a seek's ticket is matched against.
+    /// From the top, counting the handover a seek's ticket is matched against.
     fn mount_successor(&mut self, next: Loaded) {
         self.start_at(next, 0);
         self.shared.handovers.fetch_add(1, Ordering::Release);
     }
 
-    /// Swap the playing source for `loaded`, which the control thread has already positioned.
-    ///
-    /// **A deck that moved on takes nothing.** It drained, or a staged gapless successor took it
-    /// over from under the caller — and a swap there would restart a track that is either already
-    /// over or not the one the caller was looking at. The empty slot catches the first and the
-    /// ticket the second, where the in-place seek this replaced silently moved whatever it found.
-    /// Either way one source is dropped, which is the count `Voice::send_counted` added for.
+    /// A deck that moved on takes nothing: an empty slot means it drained, a moved ticket that a
+    /// successor took it, and a swap would restart the wrong track. One source is dropped either
+    /// way, paying back `Voice::send_counted`.
     fn replace(&mut self, loaded: Loaded, frames: u64, handovers: u64) {
         let moved_on = self.shared.handovers.load(Ordering::Relaxed) != handovers;
         let taken = if moved_on { None } else { self.current.take() };
-        // Whichever source the swap leaves over: the one it displaces, or `loaded` itself where
-        // there is nothing left to displace it against.
         let spent = match taken {
             Some(displaced) => {
                 self.start_at(loaded, frames);
@@ -614,11 +472,8 @@ impl VoicePull {
         self.shared.sources.fetch_sub(1, Ordering::SeqCst);
     }
 
-    /// The playing source ran dry with its converter still owed frames.
-    ///
-    /// A staged successor of the same shape takes that converter over, so the frames the window
-    /// still holds play out against the successor's first ones and the seam is converted as one
-    /// stream. Anything else lets the window drain, and the successor starts on its own.
+    /// A successor of the same shape takes the starved converter, so the seam converts as one
+    /// stream; otherwise the window drains first.
     fn hand_over_or_drain(&mut self) {
         let Some(current) = self.current.as_mut() else {
             return;
@@ -635,10 +490,7 @@ impl VoicePull {
         self.finish_current();
     }
 
-    /// The playing source ran out: retire it and take the staged one, if any.
-    ///
-    /// Retiring rather than dropping is what keeps the free off this thread while the visualizer's
-    /// claim is still given up on it — see [`Loaded`].
+    /// Retires rather than drops ([`Loaded`]).
     fn finish_current(&mut self) {
         if let Some(spent) = self.current.take() {
             self.retire(spent);
@@ -662,10 +514,7 @@ impl VoicePull {
         self.shared.anchor.store(0, Ordering::Relaxed);
     }
 
-    /// Give up `spent`'s claims here and hand the rest back to be freed elsewhere.
-    ///
-    /// The send is the whole point and the fallback is the status quo: a full queue frees it right
-    /// here, which is what every retirement used to do. See [`Loaded`].
+    /// Gives up the claims here and hands the free back; a full queue frees it here instead.
     fn retire(&mut self, mut spent: Loaded) {
         spent.source.release_claims();
         drop(self.spent.try_send(spent));

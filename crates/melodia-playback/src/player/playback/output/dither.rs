@@ -1,14 +1,10 @@
-//! TPDF dither for a block narrowed to 16 or 24 bits after the chain changed it.
+//! TPDF dither for a block narrowed to 16 or 24 bits after the chain changed it. Rounding alone
+//! leaves an error that follows the signal, distortion at low levels; triangular noise one step
+//! either side makes it independent for a small rise in the floor.
 //!
-//! Rounding a changed sample to the device's width leaves an error that follows the signal, which
-//! at low levels is distortion rather than noise: the tail of a fade turns gritty instead of
-//! sinking into hiss. Triangular noise one step either side, added before the rounding, makes the
-//! error independent of the signal for a small rise in the noise floor.
-//!
-//! **A block the format holds exactly is left alone**, so a bit-perfect path stays one: a file's own
-//! samples at unity sit on the grid already. The test is per block rather than per sample because
-//! the samples of a changed signal that happen to land on the grid are not a separate signal, and
-//! leaving just those undithered ties the error back to the music.
+//! A block the format holds exactly is left alone, so a bit-perfect path stays one. Per block
+//! rather than per sample: a changed signal's samples that land on the grid aren't a separate
+//! signal, and leaving those undithered ties the error back to the music.
 
 use melodia_audio::player::source::audio::Sample;
 
@@ -38,12 +34,9 @@ impl Default for Dither {
 }
 
 impl Dither {
-    /// Put `block` on `format`'s grid where the chain moved it off, or past full scale: each sample
-    /// rounded after the noise, then held inside the range. A block the format already holds
-    /// exactly, or a format too wide to need it, is left as it is.
-    ///
-    /// Every result is an integer over a power of two, which an `f32` holds exactly, so whatever
-    /// rounds or truncates it next lands on the integer meant.
+    /// Each sample rounded after the noise and held inside the range. Every result is an integer
+    /// over a power of two, which an `f32` holds exactly, so whatever rounds or truncates it next
+    /// lands on the integer meant.
     pub fn quantize(&mut self, block: &mut [Sample], format: DeviceFormat) {
         let Some(bits) = format.integer_bits().filter(|&bits| bits <= WIDEST_DITHERED_BITS) else {
             return;

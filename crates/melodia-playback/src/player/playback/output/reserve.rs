@@ -1,20 +1,14 @@
 //! Asking the sound server for a card before opening it, over `org.freedesktop.ReserveDevice1`.
+//! The session manager holds every card it drives at a negative priority, so priority 0 outranks
+//! it; without the ask the open meets a card the server still has and fails `EBUSY`.
 //!
-//! The session manager holds every card it drives under `…ReserveDevice1.Audio<N>` at a negative
-//! priority, so an application at priority 0 outranks it: it asks the holder to let go, the holder
-//! closes the card and hands the name over, and the card opens. Without it the open meets a card
-//! the server still has and fails `EBUSY`.
-//!
-//! **The protocol is two-way.** Holding the name means answering `RequestRelease` too: an
-//! application above us asks, and we close the card before saying yes, or it meets the same
-//! `EBUSY` we just avoided. What closing means is the caller's, handed in as `release`.
+//! **The protocol is two-way.** Holding the name means answering `RequestRelease` too, closing the
+//! card (the caller's `release`) before saying yes, or the asker meets the same `EBUSY`.
 //!
 //! **A name taken from a holder goes back only once the holder has asked for it.** A holder that
-//! loses the name asks for it back at once, and the session manager's cleanup of the card hangs on
-//! getting that answer. A claim that fails a millisecond later and drops the name first leaves the
-//! ask unanswered: the manager gives up on the card, which vanishes from the system until it
-//! restarts, and strands the card's node name, so the card returns under a numbered one that no
-//! rename or saved default output matches.
+//! loses the name asks at once, and the session manager's cleanup of the card hangs on the answer.
+//! Dropping the name first leaves the ask unanswered: the card vanishes until the manager restarts
+//! and returns under a numbered node name no rename or saved default output matches.
 //!
 //! Blocking D-Bus, on `zbus::blocking` only; see the root manifest for why never its `tokio`.
 
@@ -65,16 +59,8 @@ impl Drop for Reservation {
     }
 }
 
-/// Take card `card`'s reservation, asking whoever holds it to let go.
-///
-/// `Ok(None)` where there is no session bus: nothing is running that could hold the card, so
-/// there is nobody to coordinate with and the open goes ahead. Only a holder that says no is a
-/// refusal.
-///
-/// # Errors
-///
-/// [`ClaimError::Reserved`] when the holder outranks us, [`ClaimError::Io`] when the bus fails
-/// part way through.
+/// Takes card `card`'s reservation, asking whoever holds it to let go. `Ok(None)` where there is
+/// no session bus, as nothing could then hold the card.
 pub(super) fn acquire(
     card: i32,
     device_name: String,

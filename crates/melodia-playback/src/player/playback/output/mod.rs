@@ -1,15 +1,10 @@
-//! Everything below the DSP chain: the device stream, the voices, the sum, and the clock.
+//! Everything below the DSP chain, each part arguing itself: [`convert`] the rate, channel map
+//! and speed, [`voice`] pause, volume and the clock, [`mixer`] the unclamped sum, [`device`] the
+//! shared stream and its ladder. An exclusive claim is a backend per platform, fed through
+//! [`dither`] and [`encode`], falling back to [`device`] when refused.
 //!
-//! The chain above is untouched by any of it — the ordering, the ramp, the tap and the limiter read
-//! the same samples either way. What this tree owns is the four things underneath, and each argues
-//! itself where it lives: [`convert`] for the rate, the channel map and the speed ratio, [`voice`]
-//! for pause, volume and the clock, [`mixer`] for the unclamped sum, [`device`] for the shared
-//! stream and the ladder that opens it. An exclusive claim is its own backend per platform, fed
-//! through [`dither`] and [`encode`], and falls back to [`device`] whenever it is refused.
-//!
-//! [`AudioOutput`] is the whole public surface: build it, hand [`Mixer`] to the decks, reopen it
-//! when the device goes away. `crates/melodia/tests/crossfade.rs` skips it and drives
-//! [`mixer::pair`] directly, which is what lets the full chain be tested with no sound card.
+//! [`AudioOutput`] is the public surface; `crates/melodia/tests/crossfade.rs` drives
+//! [`mixer::pair`] directly, testing the full chain with no sound card.
 
 pub mod claim;
 pub mod convert;
@@ -70,13 +65,9 @@ use self::exclusive::{Claim, ExclusiveStream};
 use self::mixer::Mixer;
 use super::stream_health::AudioStreamHealth;
 
-/// Silence written after a reopen lands on a new rate, before any voice plays, until the user sets
-/// their own.
-///
-/// A DAC that mutes while its clock relocks would otherwise clip the head of the track that asked
-/// for the rate. Not every one does, so this is sized for the ones that do: the silence falls only
-/// at a rate boundary, which is never gapless anyway, while too little clips on the DACs it exists
-/// for.
+/// The silence after a reopen onto a new rate, until the user sets their own: a DAC muting while
+/// its clock relocks would clip the track's head. Sized for those, since it falls only at a rate
+/// boundary, which is never gapless anyway.
 pub const DEFAULT_RESYNC_HOLD: Duration = Duration::from_millis(200);
 
 /// The longest hold a user may set. The slowest DACs relock well inside it, and past it the
@@ -108,28 +99,19 @@ pub fn devices() -> Vec<OutputDevice> {
     exclusive::devices()
 }
 
-/// The open device and the voices feeding it.
-///
-/// **A reopen replaces the stream and nothing else.** The puller lives here rather than inside the
-/// stream's callback, so dropping a stream hands nothing back and loses nothing: the decks, what
-/// they hold, their ramps and their clocks all carry on into the next stream, reshaped to whatever
-/// it negotiated.
-///
-/// The stream goes first, which is what stops the callback: a control op issued against a stopped
-/// callback waits out its whole timeout, so the order stays.
+/// The open device and the voices feeding it. A reopen replaces the stream and nothing else: the
+/// puller lives here, so the decks, their ramps and their clocks carry on into the next stream. The
+/// stream is the first field and drops first, stopping the callback, against which a control op
+/// would wait out its whole timeout.
 pub struct AudioOutput {
     /// `None` once a reopen has failed, until one succeeds, and while parked.
     stream: Option<Stream>,
-    /// What the open stream was asked for, which is what a device-loss reopen asks for again.
+    /// What a device-loss reopen asks for again.
     request: OutputRequest,
-    /// Closed on purpose, or standing in for a device that went away, where a reader without the
-    /// lock can see it.
     status: Arc<OutputStatus>,
-    /// The refusal last reported, so a claim refused the same way at a later track start is
-    /// reported once rather than per track. A claim that takes in between leaves it standing, or
-    /// a mixed queue on a 16-bit card warns at every 24-bit track. Going shared clears it, as do a
-    /// new output choice and a claim taking after a disconnect: each is news, where a format
-    /// refused again is not.
+    /// So the same refusal at a later track start is reported once; a claim taking in between
+    /// leaves it, or a mixed queue on a 16-bit card warns per 24-bit track. Going shared, a new
+    /// output choice and a claim taking after a disconnect clear it, each being news.
     reported: Option<Fallback>,
     /// The silence a reopen onto a new rate writes first. Not part of the request: changing it
     /// reopens nothing, and only the next rate change hears it.
@@ -151,20 +133,18 @@ pub struct OutputStatus {
 }
 
 impl OutputStatus {
-    /// Whether the output was closed on purpose, so nothing should read the missing stream as a
-    /// fault.
+    /// Closed on purpose, so nothing reads the missing stream as a fault.
     pub fn parked(&self) -> bool {
         self.parked.load(Ordering::Relaxed)
     }
 
-    /// Whether the open stream stands in for a chosen device that wasn't connected, a claim's or a
-    /// shared stream's, so the device is worth looking for again.
+    /// Standing in for a chosen device that wasn't connected, so it is worth looking for again.
     pub fn awaiting_device(&self) -> bool {
         self.awaiting_device.load(Ordering::Relaxed)
     }
 
-    /// Whether a reopen is under way. No stream beats meanwhile, and anything else touching the
-    /// output waits out the device open behind the locks it holds, so a poll skips the round.
+    /// No stream beats meanwhile and everything else waits behind the reopen's locks, so a poll
+    /// skips the round.
     pub fn reopening(&self) -> bool {
         self.reopening.load(Ordering::Relaxed)
     }
@@ -212,34 +192,22 @@ impl Stream {
 }
 
 impl AudioOutput {
-    /// Open the default device and build `voices` many against whatever it negotiated, reporting
+    /// Opens the default device and builds `voices` many against whatever it negotiated, reporting
     /// stream faults into `health`.
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Player`] when there is no device, and [`device::open`]'s failure when no config
-    /// it offers can be opened.
     pub fn open(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
         let (mut output, target) = Self::unopened(voices, health)?;
         output.stream = Some(Stream::Shared(device::open(&target, &output.feed, None)?));
         Ok(output)
     }
 
-    /// Build `voices` many against the default device without opening it, parked until the first
-    /// [`Self::reopen`]. For a start under exclusive output, which would otherwise open the device
-    /// shared only to close it again before anything plays.
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Player`] when there is no device, or it cannot name its own default config.
+    /// Parked until the first [`Self::reopen`], so a start under exclusive output doesn't open the
+    /// device shared only to close it again.
     pub fn open_parked(voices: usize, health: Arc<AudioStreamHealth>) -> Result<Self, AppError> {
         let (mut output, _) = Self::unopened(voices, health)?;
         output.park();
         Ok(output)
     }
 
-    /// An output mixing `voices` voices for the default device, returned beside that device for the
-    /// caller to open.
     fn unopened(voices: usize, health: Arc<AudioStreamHealth>) -> Result<(Self, Target), AppError> {
         let host = cpal::default_host();
         let target = device::default_target(&host)?;
@@ -268,7 +236,6 @@ impl AudioOutput {
         self.feed.volume.store(volume);
     }
 
-    /// The user's volume, as an amplitude.
     pub fn volume(&self) -> f64 {
         self.feed.volume.load()
     }
@@ -279,18 +246,9 @@ impl AudioOutput {
         voice_gain(volume, on_device)
     }
 
-    /// Replace the stream with one opened for `request`: an exclusive claim, or a shared stream on
-    /// the named device or the default.
-    ///
-    /// An exclusive claim that is refused opens shared instead and says why on the answer, so the
-    /// mode never costs the audio. A request that cannot be opened at all falls back to the one
-    /// the last stream was opened with. A failure of both leaves the output with no stream rather
-    /// than the dead one, so the next attempt starts clean.
-    ///
-    /// # Errors
-    ///
-    /// [`AppError::Player`] when there is no device to open, and [`device::open`]'s failure when it
-    /// refuses every config. Where the fallback also failed, the error is the request's own.
+    /// A refused claim opens shared and says why, so the mode never costs the audio. A request that
+    /// can't open at all falls back to the last one's, and both failing leaves no stream rather
+    /// than the dead one, and returns the request's own error.
     pub fn reopen(&mut self, request: OutputRequest) -> Result<Negotiated, AppError> {
         self.status.reopening.store(true, Ordering::Relaxed);
         let reopened = self.replace_stream(request);
@@ -301,9 +259,8 @@ impl AudioOutput {
     fn replace_stream(&mut self, request: OutputRequest) -> Result<Negotiated, AppError> {
         let previous_rate = self.negotiated().map(|negotiated| negotiated.shape.rate);
         let held = self.close_for(&request);
-        // After the drop and before the open, which is the one window where no stream can report:
-        // a loss still flagged here belongs to the stream just dropped, and left standing it would
-        // reopen the new one for nothing. Its lead is that stream's too.
+        // The one window no stream reports in: a loss still flagged, and the lead, are the dropped
+        // stream's, and left standing would reopen the new one for nothing.
         self.feed.health.take_device_lost();
         self.feed.lead.clear();
 
@@ -415,9 +372,8 @@ impl AudioOutput {
         self.open_target(&target, rate)
     }
 
-    /// Open `target` shared, logging which device that was where it won't open: the error alone
-    /// can't say, and the default is whatever the system named at the time. At debug, since a
-    /// caller retrying a lost device reports the outcome once it gives up.
+    /// Logs which device would not open, which the error can't say; at debug, a caller retrying a
+    /// lost device reporting the outcome once it gives up.
     fn open_target(
         &self,
         target: &Target,
@@ -436,14 +392,9 @@ impl AudioOutput {
         exclusive::open(request, &self.feed, held).map(Stream::Exclusive)
     }
 
-    /// Open shared in place of a refused claim, carrying why and which device refused.
-    ///
-    /// The refusing device is looked up rather than carried on the error, so no backend has to
-    /// thread its name through every way a claim can fail.
-    ///
-    /// **A refusal is a warning and a toast once, not per track.** A busy device is retried at
-    /// every track start, and a 16-bit card refuses each 24-bit file that follows a 16-bit one, so
-    /// the same answer again goes to debug and says nothing to the user.
+    /// Opens shared in place of a refused claim, the refusing device looked up rather than threaded
+    /// through every backend's errors. A warning and a toast once: the same refusal at a later track
+    /// start goes to debug.
     fn fall_back(
         &mut self,
         request: &ExclusiveRequest,
@@ -502,22 +453,18 @@ impl AudioOutput {
         self.status.parked()
     }
 
-    /// Where a reader that can't wait out a reopen asks whether the output is parked or waiting on
-    /// a disconnected device.
+    /// For a reader that can't wait out a reopen.
     pub fn status(&self) -> Arc<OutputStatus> {
         Arc::clone(&self.status)
     }
 
-    /// What the open stream was asked for, as opposed to what it negotiated.
     pub fn request(&self) -> &OutputRequest {
         &self.request
     }
 
-    /// Whether the stream open now plays what `wanted` asks for, so no reopen is owed: the request
-    /// it was opened for, or a claim differing from it only in the source's format and rate, where
-    /// the device already runs a format on the new source's ladder at a rate a fresh claim would
-    /// take. A shared stream standing in for a refused claim serves only its own request, and no
-    /// stream, parked or lost, serves anything.
+    /// Whether the open stream plays `wanted` with no reopen: its own request, or a claim differing
+    /// only in the source where [`claim_serves`] says the device already runs right. A stand-in for
+    /// a refused claim serves only its own request, and no stream serves anything.
     pub fn serves(&self, wanted: &OutputRequest) -> bool {
         if self.stream.is_none() {
             return false;
@@ -554,8 +501,7 @@ impl AudioOutput {
         Arc::clone(&self.feed.external_volume)
     }
 
-    /// What the device agreed to, as opposed to what it was asked for, or `None` while no stream
-    /// is open.
+    /// What the device agreed to, or `None` while no stream is open.
     pub fn negotiated(&self) -> Option<Negotiated> {
         self.stream.as_ref().map(Stream::negotiated)
     }

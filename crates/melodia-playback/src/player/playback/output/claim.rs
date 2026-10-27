@@ -1,10 +1,6 @@
-//! Why an exclusive claim on a device did not go through, and whether one that did plays the next
-//! track.
-//!
-//! Two types because two readers want different things. [`ClaimError`] keeps the typed cause for
-//! the log line the fallback writes; [`FallbackReason`] is what [`super::Negotiated`] carries to
-//! the panel, which only ever needs to name the cause, and which has to compare equal across
-//! ticks for the watch it rides on to stay quiet.
+//! Why an exclusive claim did not go through, and whether one that did plays the next track.
+//! [`ClaimError`] keeps the typed cause for the log; [`FallbackReason`] names it for the panel and
+//! compares equal across ticks, so the watch it rides stays quiet.
 
 use melodia_audio::player::source::audio::{Shape, SourceFormat};
 
@@ -105,20 +101,11 @@ impl FallbackReason {
     }
 }
 
-/// Whether a claim opened for `open`, which negotiated `running`, plays a source `next` asks for.
-///
-/// Everything but the source's format and rate has to match. The rate has to be the open
-/// request's, or one a fresh claim would run the device at where it runs now: its own rate, which
-/// a fresh claim tries first, or one the device lacks that the claim's offered rates convert to
-/// the device's. So a 48 kHz track after a 96 kHz one the device converts to 48 kHz plays gapless
-/// on the same claim, and so does a 96 kHz track after a 48 kHz one.
-///
-/// The device's format has to be on the source format's ladder. For an integer source that means a
-/// container holding every bit of it, so a 16-bit track after a 24-bit one keeps the 24-bit claim
-/// and plays gapless. A float source is carried only by F32 and converted by every other rung, so a
-/// lossy track keeps whatever integer claim the track before it opened and plays gapless, even
-/// where a fresh claim would have found F32 and carried it exactly: a lossy decode isn't worth a
-/// reopen.
+/// Whether a claim opened for `open`, negotiating `running`, plays what `next` asks for. All but the
+/// source's format and rate must match; the rate must be the open request's, or one a fresh claim
+/// would run the device at where it runs now. The device's format must be on the source's ladder,
+/// so a 16-bit track keeps a 24-bit claim, and a lossy float track keeps an integer one rather
+/// than reopening for F32.
 pub(super) fn claim_serves(
     open: &ExclusiveRequest,
     running: &Negotiated,

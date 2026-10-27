@@ -1,14 +1,8 @@
-//! Summing the voices into one block of device frames.
+//! Summing the voices into one block of device frames, unclamped: a crossfade's complementary
+//! ramps over already-clamped sources sum inside ±1, and a ceiling would only ever flatten a fade.
 //!
-//! The sum is **unclamped**, and that is load-bearing rather than an omission. A crossfade runs
-//! complementary linear ramps on two decks (`g_out + g_in ≡ 1`) over sources that have each already
-//! been clamped to ±1 by the limiter, so the sum is inside ±1 by construction. A ceiling here would
-//! do nothing in the ordinary case and flatten the fade in the one case it fired.
-//!
-//! [`pair`] builds the two halves with no device between them, which is what lets
-//! `crates/melodia/tests/crossfade.rs` and `crates/melodia/tests/stream_rate.rs` drive the whole
-//! chain — decoder, EQ, ramp, tap, sum — by pulling [`MixerPull`] on the test thread. Anything that
-//! stops being reachable that way stops being testable without a sound card.
+//! [`pair`] builds the two halves with no device between them, which is how `crossfade.rs` and
+//! `stream_rate.rs` drive the whole chain on the test thread with no sound card.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -17,50 +11,31 @@ use melodia_audio::player::source::audio::{Sample, SampleRate, Shape, frames_in}
 
 use super::voice::{Voice, VoicePull};
 
-/// Device frames every voice advances before any voice advances again.
-///
-/// **This is what bounds a crossfade's overshoot.** The two ramps are armed together on the control
-/// thread but each advances as *its own* source is pulled, so a voice that has already been
-/// rendered for this block picks the arm up a block late. Render a whole device period per voice and
-/// outgoing track stays at full gain for that whole period while the incoming one ramps up, and the
-/// sum — which nothing clamps, deliberately — goes past unity by the period over the fade length.
-/// Stepping every voice through the block together bounds that to this many frames instead, which
-/// against the shortest crossfade the settings allow is a fraction of a percent. An outgoing voice
-/// whose converter interpolates adds its lookahead to that: those frames were pulled before the
-/// arm, so they play out at full gain. rodio's mixer
-/// pulled one sample from every voice in turn, so this is the same property at a coarser grain,
-/// chosen so the loop costs a few dozen iterations per callback rather than a few thousand.
+/// Frames every voice advances before any advances again, which bounds a crossfade's overshoot:
+/// each ramp moves as its own voice is pulled, so a whole period per voice would hold the outgoing
+/// track at full gain for that period. An interpolating converter's lookahead adds to it. Coarse
+/// enough that the loop runs a few dozen times per callback rather than thousands.
 pub const LOCKSTEP_FRAMES: usize = 64;
 
-/// The control side: the voices everything is summed from.
-///
-/// The voices are shared rather than lent out, so `player::playback::decks` can hold them for as long as it
-/// needs without borrowing from this. Reference counting is what replaces the `Box::leak` rodio's
-/// arrangement needed: a leaked handle outlives everything by never being dropped, and so never
-/// releases the device either. The negotiated shape is not repeated here —
-/// [`super::AudioOutput::negotiated`] is where it is asked for, and it carries the format too.
+/// The voices, reference-counted so the decks hold them without borrowing from this.
 pub struct Mixer {
     voices: Box<[Arc<Voice>]>,
 }
 
 impl Mixer {
-    /// The voice at `index`, or `None` past the count this mixer was built with.
     pub fn voice(&self, index: usize) -> Option<Arc<Voice>> {
         self.voices.get(index).map(Arc::clone)
     }
 }
 
-/// The audio side: pulled by the output callback, or by a test standing in for one.
+/// Pulled by the output callback, or by a test standing in for one.
 pub struct MixerPull {
     voices: Box<[VoicePull]>,
     device: Shape,
-    /// One voice's contribution before it is summed. Sized for a single [`LOCKSTEP_FRAMES`] step,
-    /// which is the longest slice a voice is ever handed, so the audio thread never grows it.
+    /// One [`LOCKSTEP_FRAMES`] step, the longest slice a voice is handed, so it never grows.
     scratch: Vec<Sample>,
-    /// Device frames still to be written as silence before any voice plays. See [`Self::hold`].
+    /// Silence still owed before any voice plays ([`Self::hold`]).
     held: usize,
-    /// The silence a reopen owes a rate change, while it is trying streams. See
-    /// [`Self::arm_resync`].
     resync: Option<Resync>,
 }
 
@@ -75,16 +50,10 @@ struct Resync {
 }
 
 impl MixerPull {
-    /// Write one block of interleaved device frames.
-    ///
-    /// A partial trailing frame is zeroed but never written into: half a frame would shear the
-    /// channel layout for the rest of the stream. No host asks for one, and the zero is what makes
-    /// that survivable anyway — cpal 0.18 pre-fills its own block with silence, but
-    /// `device::output_stream` reuses one staging buffer and hands it over holding the last block.
-    ///
-    /// **The first voice with anything to say writes; the rest add.** Summing into a zeroed block
-    /// would be simpler and would cost the sign of zero — `0.0 + -0.0` is `0.0` — so a lone voice at
-    /// unity would not be the passthrough the bit-perfect claim rests on.
+    /// A partial trailing frame is zeroed and never written, or it would shear the channel layout;
+    /// the zero matters, the staging buffer arriving holding the last block. The first voice with
+    /// anything writes and the rest add: summing into zeros would lose `-0.0`, and with it the
+    /// bit-perfect passthrough.
     pub fn fill(&mut self, out: &mut [Sample]) {
         let width = usize::from(self.device.channels.get());
 
@@ -120,10 +89,8 @@ impl MixerPull {
         }
     }
 
-    /// Bring every voice to `device` for the next stream, leaving what they hold where it is.
-    ///
-    /// Nothing loaded depends on the device, so a source part way through carries on from the
-    /// same frame; only the output width and the step change. Only while no stream is pulling.
+    /// Nothing loaded depends on the device, so a source carries on from the same frame. Only
+    /// while no stream pulls.
     pub fn reshape(&mut self, device: Shape) {
         self.device = device;
         for voice in &mut self.voices {
@@ -140,20 +107,14 @@ impl MixerPull {
         }
     }
 
-    /// Write `frames` of silence before any voice plays again.
-    ///
-    /// A DAC mutes while its clock relocks to a new rate, so whatever plays first after a rate
-    /// change is lost; held back, it is the silence that gets lost instead. Rounded up to whole
-    /// [`LOCKSTEP_FRAMES`] steps.
+    /// A DAC mutes while its clock relocks, so the silence is what gets lost rather than the
+    /// track's head. Rounded up to whole [`LOCKSTEP_FRAMES`] steps.
     fn hold(&mut self, frames: usize) {
         self.held = frames;
     }
 
-    /// Have every [`Self::reshape`] until [`Self::disarm_resync`] hold `hold` of silence where the
-    /// new rate differs from `from`, the one the device ran at before.
-    ///
-    /// Settled at the reshape because that is the last step before a stream starts pulling, and
-    /// per reshape because a reopen can try several rates before one opens.
+    /// Settled at each [`Self::reshape`], the last step before a stream pulls, since a reopen can
+    /// try several rates before one opens.
     pub fn arm_resync(&mut self, from: Option<SampleRate>, hold: Duration) {
         self.resync = Some(Resync { from, hold, held: self.held });
     }

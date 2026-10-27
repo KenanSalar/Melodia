@@ -1,16 +1,10 @@
-//! Bringing one source's samples to the device's rate and channel count.
+//! Bringing one source's samples to the device's rate and channel count, pull-driven like the
+//! chain above. Where the rates differ or the speed isn't one, each output frame is interpolated,
+//! linearly or through [`super::resample`]'s kernel; where they match, the source's own frames
+//! pass untouched, which bit-perfect output rests on.
 //!
-//! Pull-driven, because the whole chain above it is: the voice asks for a block and this reaches
-//! back through the source for however many frames that takes. Where the rates differ, or the
-//! speed isn't one, each output frame is interpolated, between two frames or through
-//! [`super::resample`]'s band-limited kernel as the [`Resampler`] asks. Where they match exactly,
-//! the source's own frames are handed over untouched, which is what bit-perfect output rests on.
-//!
-//! **Playback speed lives here.** rodio expressed it by reporting a multiplied `sample_rate()`
-//! upward and letting its mixer resample the difference, which is why a position had to be read on
-//! one timeline and reported on another. Folding it into the ratio instead leaves
-//! [`AudioSource::sample_rate`] meaning the source's own rate at every level, so frames pulled are
-//! media frames and the clock needs no conversion.
+//! Playback speed lives here, in the ratio, so [`AudioSource::sample_rate`] means the source's own
+//! rate at every level and the clock counts media frames with no conversion.
 
 use melodia_audio::player::source::audio::{AudioSource, Sample, Shape};
 
@@ -49,10 +43,8 @@ pub struct Conversion {
     pub resampler: Resampler,
 }
 
-/// What one [`Converter::fill`] did.
-///
-/// A struct rather than a pair: both halves are counts, they are never equal once a rate or a
-/// channel count differs, and swapping them would run the clock at the device's rate.
+/// A struct so the two counts, unequal once a rate or channel count differs, can't swap and run the
+/// clock at the device's rate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Filled {
     /// Samples written to the output block, interleaved at the device's channel count.
@@ -61,15 +53,11 @@ pub struct Filled {
     pub source_frames: u64,
 }
 
-/// The device is not held here but handed to every [`Self::fill`], because nothing below depends
-/// on it between calls: the buffers are sized by the source and the interpolation state lives on
-/// the source's timeline. That is what lets an output reopen at another shape under a source that
-/// is part way through, with no rebuild and nothing built on the control thread to go stale.
+/// The device is handed to every [`Self::fill`] rather than held, nothing here depending on it
+/// between calls, so an output can reopen at another shape under a source part way through.
 ///
-/// **Running out is not the end.** A source that runs dry leaves the converter [starved], still
-/// owed frames, and whoever holds it decides what follows: a successor of the same shape takes
-/// this converter over and pays them, so a gapless seam is converted as one stream, or
-/// [`Self::drain`] ends it where nothing follows.
+/// A source running dry leaves the converter [starved], owed frames: a successor of the same shape
+/// takes it over, converting a gapless seam as one stream, or [`Self::drain`] ends it.
 ///
 /// [starved]: Self::is_starved
 pub struct Converter {
@@ -236,11 +224,8 @@ impl Converter {
         self.state == State::Done
     }
 
-    /// Nothing follows the source this converter starved on: what the window still holds of it
-    /// plays out against silence, and the converter is done once the centre reaches that.
-    ///
-    /// The silence the position has already crossed into is taken here rather than at the next
-    /// fill, so a source whose last frame has been written is done as soon as it is drained.
+    /// Nothing follows: the window plays out against silence. The silence already crossed into is
+    /// taken here rather than at the next fill, so a finished source is done once drained.
     pub fn drain(&mut self) {
         if self.state == State::Done {
             return;
@@ -284,12 +269,9 @@ impl Converter {
         }
     }
 
-    /// Take in what the next output frame needs: the frames the position has crossed, then
-    /// lookahead up to `reach`. False where the window can't be brought there.
-    ///
-    /// A lookahead pushed while the output is copying stays and drains away as the centre moves
-    /// through it, rather than being thrown out: the output never skips a frame, and a bit-perfect
-    /// path is back to running no later than the source once it has.
+    /// The frames the position crossed, then lookahead up to `reach`; false where the window can't
+    /// get there. A lookahead pushed while copying drains as the centre moves through it rather
+    /// than being dropped, so the output never skips a frame.
     fn settle(&mut self, src: &mut dyn AudioSource, reach: usize, taken: &mut u64) -> bool {
         loop {
             if self.pads > self.ahead {
@@ -337,15 +319,9 @@ impl Converter {
         self.pads += 1;
     }
 
-    /// Write the frame as it is `made` from the window, and map it onto the device's channels.
-    ///
-    /// A mono device is the ladder's *second* rung — cpal ranks stereo, then mono, ahead of every
-    /// wider count — so its fold is the one that has to be right, and dropping to channel 0 would
-    /// play the left half of every stereo file. The mean is what makes that fold safe: [`Shape`]
-    /// counts channels without naming them, so what goes into the sum is unknown, and at `1/n` an
-    /// unknown channel costs a wide source some level in its mains rather than routing LFE and
-    /// surrounds there at full scale. A device wider than mono has no such divisor to hide behind,
-    /// so it keeps the first `min(from, to)` channels and folds nothing.
+    /// A mono device is the ladder's second rung, so its fold has to be right: the mean, since
+    /// [`Shape`] names no channels and at `1/n` an unknown one costs some level rather than routing
+    /// LFE in at full scale. A wider device keeps the first `min(from, to)` channels, folding none.
     fn write_frame(&self, frame: &mut [Sample], made: &Made) {
         let from = usize::from(self.source.channels.get());
         let source = |channel: usize| match made {
@@ -363,9 +339,8 @@ impl Converter {
         }
 
         if from == 1 {
-            // Duplicated at unity, not attenuated: this is the path every mono file on an
-            // ordinary stereo device takes, so a pan-law trim here would quietly restage the
-            // whole library, and each channel would stop being the source's own sample.
+            // At unity: a pan-law trim would restage every mono file on a stereo device, and each
+            // channel would stop being the source's own sample.
             let sample = source(0);
             for (channel, slot) in frame.iter_mut().enumerate() {
                 *slot = if channel < 2 { sample } else { 0.0 };
