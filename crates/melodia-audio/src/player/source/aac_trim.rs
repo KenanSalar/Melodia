@@ -1,27 +1,11 @@
-//! The encoder delay an AAC file states, and that nothing between the container and the decoder
-//! acts on.
+//! The encoder delay an AAC file states and nothing between the container and the decoder acts on
+//! (`docs/adr/0011-aac-trim-read-from-the-file.md`): the MP4 demuxer fills no trim and the AAC
+//! decoder ignores the gapless option.
 //!
-//! Symphonia 0.6 does gapless at the decoder, under `AudioDecoderOptions::gapless`, and only its
-//! MP3 and Vorbis decoders act on it. `symphonia-format-isomp4` parses the edit list into an atom
-//! it never reads back, fills neither `Track::delay` nor `Track::padding`, and builds packets
-//! through a constructor that zeroes both trims; `symphonia-codec-aac` takes the options and
-//! ignores them. So the numbers reach nothing, and reading them back is ours to do. Neither
-//! reference player does it either.
-//!
-//! Two places state them and a file carries one or both. iTunes, qaac and Apple Music write an
-//! `iTunSMPB` tag, which Symphonia does surface: a freeform key it has no mapping for survives as a
-//! raw tag, so that half is a string to parse rather than a box to find. ffmpeg and most other
-//! muxers write an edit list instead, and nothing exposes that, which is what the walk below is
-//! for. `iTunSMPB` wins where both are present: it names the original sample count outright, where
-//! an edit list only offsets a duration the container states elsewhere.
-//!
-//! Scope is AAC. FLAC and ALAC are lossless and pad nothing, and Vorbis and Opus come off their
-//! own decoders instead: upstream's Vorbis reads the packet trims, and [`super::opus`] argues why
-//! ours takes the priming there rather than here. The [`Trim`](super::file_decode::Trim) this
-//! resolves is the reader's rather than this module's, three sources filling one: Opus gets its own
-//! head off the offset the decoder leaves on the demuxer's timeline, and [`super::mkv_trim`]
-//! answers a tail that belongs to the container rather than to any codec. Neither is anything to do
-//! with AAC.
+//! An `iTunSMPB` tag survives as a raw tag and is parsed; an edit list nothing exposes, so it is
+//! walked for here. `iTunSMPB` wins where both are present, naming the original sample count
+//! outright. Scope is AAC: the [`Trim`](super::file_decode::Trim) this resolves takes an Opus head
+//! and a Matroska tail from elsewhere.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -34,11 +18,8 @@ use symphonia::core::units::{Duration as SymphoniaDuration, TimeBase};
 use super::audio::SampleRate;
 use super::file_decode::Trim;
 
-/// Box headers the walk will read before giving up.
-///
-/// It descends four levels into boxes a muxer writes once each, so the real count is in the dozens.
-/// The budget only bounds a file claiming a million empty ones, which would otherwise cost a seek
-/// and a read per eight bytes of it.
+/// The walk descends four levels into boxes a muxer writes once each, so the real count is dozens;
+/// this only bounds a file claiming a million empty ones.
 const MAX_BOX_HEADERS: u32 = 4096;
 
 /// Edit list entries examined for the one that starts partway into the media.
@@ -52,11 +33,8 @@ const ELST_HEADER: usize = 8;
 /// Enough of a `tkhd`, `mvhd` or `mdhd` to reach the field after its two timestamps.
 const HEADER_BOX_PREFIX: usize = 24;
 
-/// The longest priming worth believing, in seconds.
-///
-/// Apple's default is 2112 frames and no encoder states anything near a second. A larger number is
-/// a misread, or a muxer using the edit list for something other than encoder delay, and acting on
-/// it would cut real audio off the front of the track.
+/// Apple's default is 2112 frames and no encoder states anything near a second, so a larger head
+/// is a misread, and acting on it would cut real audio off the front.
 const HEAD_CEILING_SECS: u64 = 1;
 
 /// What one track's edit list says, in that track's own media timescale.
@@ -64,15 +42,13 @@ pub(super) struct Edit {
     pub track_id: u32,
     /// Media ticks of encoder priming ahead of where the presentation starts.
     pub delay: u64,
-    /// Media ticks the presentation runs for, where the edit list's own timescale converts to this
-    /// one exactly. See [`exact_media_ticks`] for why an inexact one is dropped rather than rounded.
+    /// Media ticks the presentation runs for, where its timescale converts exactly
+    /// ([`exact_media_ticks`]).
     pub playable: Option<u64>,
 }
 
-/// What a track's own timeline is measured in.
-///
-/// Taken by value because reaching the reader's metadata borrows it mutably, and the track is
-/// borrowed from that same reader.
+/// By value, reaching the reader's metadata borrowing it mutably while the track is borrowed from
+/// that same reader.
 pub(super) struct Timing {
     id: u32,
     time_base: TimeBase,
@@ -88,7 +64,7 @@ pub(super) fn aac_timing(track: &Track) -> Option<Timing> {
     Some(Timing {
         id: track.id,
         time_base: track.time_base?,
-        // A stated zero is the reader saying it doesn't know, as it is everywhere else this asks.
+        // A stated zero is the reader saying it doesn't know.
         duration: track.duration.map(SymphoniaDuration::get).filter(|ticks| *ticks > 0),
     })
 }
@@ -104,9 +80,8 @@ pub(super) fn resolve(
         (smpb.priming, Some(smpb.frames))
     } else {
         let edit = edits.iter().find(|edit| edit.track_id == timing.id)?;
-        // The edit list's own length is the presentation, so it excludes the trailing padding the
-        // track duration can still carry; the duration is the backstop where it converts inexactly,
-        // and the ceiling where it doesn't, since no edit may present audio the track doesn't hold.
+        // The edit's own length excludes the trailing padding the track duration can still carry;
+        // the derived length is the fallback where it converts inexactly and the ceiling where not.
         let derived = timing.duration.map(|total| total.saturating_sub(edit.delay));
         let playable = match (edit.playable, derived) {
             (Some(stated), Some(derived)) => Some(stated.min(derived)),
@@ -124,24 +99,14 @@ pub(super) fn resolve(
     if head > u64::from(rate.get()) * HEAD_CEILING_SECS || playable == Some(0) {
         return None;
     }
-    // The tail is the container's answer rather than an AAC file's, so it is filled in beside this.
+    // The tail is the container's answer, filled in beside this.
     (head > 0 || playable.is_some()).then_some(Trim { head, playable, tail: 0 })
 }
 
-/// Converts a count stated against the container's timescale into decoded frames.
-///
-/// `rate` is the **decoder's**, and the two agree for almost every AAC file. The one case where
-/// they don't is the one this cannot skip: [`super::aac_config`] rewrites an HE-AAC config to its
-/// LC core, so the decoder runs at half the rate the container declares, while the edit list is
-/// written against the declared one.
-///
-/// `iTunSMPB` counts PCM samples rather than ticks, and takes this same conversion because the
-/// encoder writing the tag writes the media timescale as the sample rate. Reading it off
-/// `AudioCodecParameters::sample_rate` instead would not be safer: that field is the `stsd` entry's
-/// 16.16 rate, which for HE-AAC names the core layer about as often as the doubled one.
-///
-/// Rounded **down**, both ends: a head that overshoots cuts the first frame of real audio off, and
-/// a length that overshoots leaves the padding it exists to remove.
+/// `rate` is the **decoder's**: [`super::aac_config`] demotes HE-AAC to a core at half the declared
+/// rate the edit list is written against, and `iTunSMPB` counts samples at that declared rate too.
+/// Rounded **down**, since a head that overshoots cuts real audio and a length that overshoots
+/// keeps the padding.
 fn to_frames(ticks: u64, time_base: TimeBase, rate: SampleRate) -> Option<u64> {
     super::decode::ticks_to_frames(ticks, time_base, rate, super::decode::Rounding::Down)
 }
@@ -152,10 +117,8 @@ struct Smpb {
     frames: u64,
 }
 
-/// Reads `iTunSMPB` off the tags the demuxer collected.
-///
-/// The key arrives as its mean and name joined by a colon, so the name is the last segment. Matched
-/// case-insensitively, the spelling being a convention rather than a registered identifier.
+/// The key arrives as its mean and name joined by a colon, matched case-insensitively, the
+/// spelling being a convention rather than a registered identifier.
 fn smpb(metadata: &Metadata<'_>) -> Option<Smpb> {
     let tag = metadata.current()?.media.tags.iter().find(|tag| {
         tag.raw.key.rsplit(':').next().is_some_and(|name| name.eq_ignore_ascii_case("iTunSMPB"))
@@ -166,11 +129,8 @@ fn smpb(metadata: &Metadata<'_>) -> Option<Smpb> {
     parse_smpb(value)
 }
 
-/// Parses the hex fields of an `iTunSMPB` value.
-///
-/// Ten to twelve whitespace-separated hex numbers, of which three carry anything: the priming, the
-/// remainder, and the original sample count. The remainder is skipped because the count already
-/// bounds the tail, and the trailing fields have never carried a meaning.
+/// Ten to twelve hex fields, of which the priming, the remainder and the original sample count
+/// carry anything; the remainder is skipped, the count already bounding the tail.
 fn parse_smpb(value: &str) -> Option<Smpb> {
     let mut fields = value.split_ascii_whitespace().skip(1);
     let priming = u64::from_str_radix(fields.next()?, 16).ok()?;
@@ -178,15 +138,8 @@ fn parse_smpb(value: &str) -> Option<Smpb> {
     (frames > 0).then_some(Smpb { priming, frames })
 }
 
-/// Every edit list in the file, keyed by the track it belongs to.
-///
-/// Keyed rather than taken as the file's one answer because an MP4 may hold more than one track: an
-/// audiobook carries a chapter track beside the audio, and a `.m4v` a video one, neither of whose
-/// edit list means anything to the track being decoded. Cover art is not one of them, being an
-/// `ilst` atom rather than a track, so no fixture here states the case and
-/// `an_edit_list_belonging_to_another_track_is_not_taken_for_this_ones` builds it.
-///
-/// The handle is rewound before this returns, the caller handing the same one to the demuxer.
+/// Every edit list in the file, keyed by track: an audiobook's chapter track or a `.m4v`'s video
+/// one has its own. Rewinds the handle, which the caller hands on to the demuxer.
 pub(super) fn edit_lists(file: &mut File) -> Vec<Edit> {
     let mut edits = Vec::new();
     let Ok(end) = file.metadata().map(|meta| meta.len()) else {
@@ -198,8 +151,8 @@ pub(super) fn edit_lists(file: &mut File) -> Vec<Edit> {
         if moov.kind != *b"moov" {
             return;
         }
-        // Taken in a pass of its own rather than as it comes: an edit list states its length
-        // against this timescale, and box order is not something a file owes us.
+        // A pass of its own, an edit length being stated against this and box order not being
+        // something a file owes us.
         let mut movie_timescale = None;
         walk(file, moov.payload, moov.end, budget, |file, mvhd, _| {
             if mvhd.kind == *b"mvhd" {
@@ -227,10 +180,8 @@ struct BoxHeader {
     end: u64,
 }
 
-/// Hands `visit` each box between `pos` and `end`, stopping at the first one that doesn't parse.
-///
-/// A short read means a truncated or malformed file rather than something to recover from, and
-/// everything this walk is after sits in the header the demuxer is about to reject anyway.
+/// Hands `visit` each box between `pos` and `end`, stopping at the first that doesn't parse: a
+/// short read is a malformed file the demuxer is about to reject anyway.
 fn walk(
     file: &mut File,
     mut pos: u64,
@@ -266,16 +217,13 @@ fn read_header(file: &mut File, pos: u64, end: u64) -> Option<BoxHeader> {
     };
 
     let box_end = pos.checked_add(size)?;
-    // The two bounds keep the walk moving forward and inside its parent, so a size field of the
-    // file's own choosing can neither loop it nor send it reading past the end.
+    // Forward and inside its parent, so a size of the file's own choosing can neither loop the walk
+    // nor send it past the end.
     (box_end <= end && payload <= box_end).then_some(BoxHeader { kind, payload, end: box_end })
 }
 
-/// The edit `trak` states, paired with the track it identifies itself as.
-///
-/// Both halves are required: an edit list belonging to no named track cannot be matched against the
-/// one being decoded, and a track stating no edit has nothing to contribute. The presentation
-/// length is not: a file may state one this cannot convert, and the delay is still worth having.
+/// The edit `trak` states, paired with its track id; both are required, the presentation length
+/// not, a delay being worth having without one.
 fn trak_edit(
     file: &mut File,
     trak: &BoxHeader,
@@ -309,13 +257,9 @@ fn trak_edit(
     Some(Edit { track_id: track_id?, delay: first.media_time, playable })
 }
 
-/// Restates a movie-timescale count in media ticks, or `None` where the conversion would round.
-///
-/// The rule is divisibility rather than equal timescales. A movie timescale is routinely coarser
-/// than the media one, 1000 against 44100 being ffmpeg's pairing, so most segment durations do not
-/// divide and the derived length answers for them instead. One that does still carries whatever the
-/// muxer rounded away writing it, and is taken anyway: it is the only statement of the presentation
-/// length that excludes the trailing padding, and [`resolve`] caps it at the derived one.
+/// A movie-timescale count in media ticks, or `None` where it would round. Divisibility rather
+/// than equal timescales: ffmpeg's 1000 against 44100 rarely divides, and one that does is still
+/// the only length excluding the trailing padding, [`resolve`] capping it at the derived one.
 fn exact_media_ticks(ticks: u64, movie_timescale: u32, media_timescale: u32) -> Option<u64> {
     let scaled = u128::from(ticks) * u128::from(media_timescale);
     let movie = u128::from(movie_timescale);
@@ -325,8 +269,8 @@ fn exact_media_ticks(ticks: u64, movie_timescale: u32, media_timescale: u32) -> 
     u64::try_from(scaled / movie).ok()
 }
 
-/// The `u32` a header box states after its two timestamps: the track id in a `tkhd`, the timescale
-/// in an `mvhd` or `mdhd`. All three sit at the same offset, under the same version rule.
+/// The `u32` after a header box's two timestamps: a `tkhd`'s track id, an `mvhd` or `mdhd`'s
+/// timescale.
 fn header_u32(file: &mut File, header: &BoxHeader) -> Option<u32> {
     let stated = usize::try_from(header.end.checked_sub(header.payload)?).unwrap_or(usize::MAX);
     if stated < HEADER_BOX_PREFIX {
@@ -353,11 +297,8 @@ struct ElstEntry {
     segment_duration: u64,
 }
 
-/// The first edit that presents media, which is where a muxer writes the priming.
-///
-/// Scanned rather than taken from entry zero: an empty edit, spelled with a media time of -1, can
-/// sit ahead of the real one to delay the presentation. A media time of zero is not empty, and its
-/// segment duration still bounds the tail.
+/// The first edit that presents media, which is where a muxer writes the priming. Scanned, an
+/// empty edit (media time -1) being able to sit ahead of the real one.
 fn first_edit(file: &mut File, elst: &BoxHeader) -> Option<ElstEntry> {
     let mut buf = [0u8; ELST_HEADER + MAX_EDIT_ENTRIES * ELST_ENTRY_V1];
     let stated = usize::try_from(elst.end.checked_sub(elst.payload)?).unwrap_or(buf.len());

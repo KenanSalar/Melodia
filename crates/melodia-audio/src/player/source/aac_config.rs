@@ -1,22 +1,13 @@
-//! Demoting an HE-AAC audio specific config to the AAC-LC core layer it already describes.
+//! Demoting an HE-AAC config to the AAC-LC core layer it already describes.
 //!
-//! Symphonia 0.6 refuses an AAC track whose config declares SBR, on the reasonable grounds that
-//! a loud "unsupported" beats silently handing back a worse version of the track. 0.5, which
-//! rodio pinned, never consulted that flag: the same complexity gate passed, the AAC-LC core
-//! decoded, and SBR and PS were thrown away — so an HE-AAC v2 file came out as a half rate mono
-//! core. Rewriting the config restores exactly that and nothing better. It is what kept such a
-//! file playing when local decode moved onto 0.6, not a fix, and it retires itself if upstream's
-//! real HE-AAC support lands.
+//! Symphonia 0.6 refuses an AAC track whose config declares SBR, where 0.5 decoded the LC core and
+//! dropped SBR and PS, so an HE-AAC v2 file came out a half-rate mono core. Rewriting the config
+//! keeps such a file playing at exactly that and nothing better, and retires itself if upstream
+//! gains HE-AAC.
 //!
-//! The trigger is narrow deliberately, and it is exactly as narrow as the gate. 0.6 raises
-//! `sbr_present` only from a config that *opens* at object type 5 or 29; the backward compatible
-//! signalling that hides an SBR extension in the config's tail is read only once that branch has
-//! run, so those files pass the gate untouched and are none of this module's business.
-//!
-//! Only containers carrying a real config reach here, so MP4 and Matroska. ADTS synthesises one
-//! with SBR clear, which is why the radio work never turned this up — though a station serving
-//! fragmented MP4 reaches it all the same, which is why it is applied once in
-//! [`super::decode::make_decoder`] rather than at either decoder.
+//! As narrow as the gate: only a config *opening* at object type 5 or 29 raises it. ADTS
+//! synthesises a config with SBR clear, but fragmented MP4 reaches here off a station as well as a
+//! file, hence one call in [`super::decode::make_decoder`].
 
 use symphonia::core::codecs::audio::AudioCodecParameters;
 use symphonia::core::codecs::audio::well_known::CODEC_ID_AAC;
@@ -44,11 +35,7 @@ enum SamplingFrequency {
     Explicit(u32),
 }
 
-/// Replaces an HE-AAC config on `params` with the AAC-LC core layer it describes.
-///
 /// Every other codec, and every AAC config with nothing to demote, is left exactly as it was.
-/// Call it on a track's parameters ahead of building a decoder from them — either decoder can be
-/// handed the config 0.6 refuses.
 pub(super) fn demote_he_aac(params: &mut AudioCodecParameters) {
     if params.codec != CODEC_ID_AAC {
         return;
@@ -61,8 +48,7 @@ pub(super) fn demote_he_aac(params: &mut AudioCodecParameters) {
     }
 }
 
-/// Rewrites an audio specific config that declares SBR into the plain AAC-LC config its own core
-/// layer describes, or `None` when there is nothing to demote.
+/// `None` when there is nothing to demote.
 fn core_layer_config(asc: &[u8]) -> Option<Box<[u8]>> {
     let mut bits = BitReader::new(asc);
 
@@ -83,11 +69,9 @@ fn core_layer_config(asc: &[u8]) -> Option<Box<[u8]>> {
         return None;
     }
 
-    // The GASpecificConfig. Only frameLengthFlag is consulted, 0.5 having rejected a 960-frame
-    // core as well, so demoting one would start a file playing rather than keep it playing, and
-    // play it wrong. The other two go back as zero, the only shape an AAC-LC core has. All three
-    // must be *present* though: a config too short to hold them is one Symphonia's reader refuses
-    // ahead of the gate this exists to get past.
+    // The GASpecificConfig. A 960-frame core stays refused, 0.5 refusing it too; the other two
+    // flags go back as zero, the only shape an AAC-LC core has. All three must be *present*, a
+    // config too short for them being one Symphonia refuses ahead of the gate.
     if bits.read(3)? & FRAME_LENGTH_960 != 0 {
         return None;
     }

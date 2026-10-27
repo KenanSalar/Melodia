@@ -1,22 +1,10 @@
-//! The trailing padding a Matroska file states, and that nothing between the container and the
-//! decoder acts on.
+//! The trailing padding a Matroska file states and nothing acts on: `symphonia-format-mkv` parses
+//! `DiscardPadding` onto a struct it reads nowhere and zeroes both packet trims, the gap
+//! [`super::aac_trim`] fills for an MP4 edit list.
 //!
-//! `symphonia-format-mkv` parses `DiscardPadding` into a field on its own block group struct, marks
-//! that struct `#[allow(dead_code)]`, and reads it nowhere: the block is destructured for its data
-//! and its duration, and the packet is built through the constructor that zeroes both trims. So
-//! `Packet::trim_end` arrives as zero however the gapless option is set, so a decoder that honours
-//! it is told nothing. Ours does, which is why the same file in Ogg comes out exact. Reading the
-//! element back is ours to do, the same way [`super::aac_trim`] reads an MP4 edit list the demuxer
-//! also keeps to itself.
-//!
-//! Container-scoped rather than codec-scoped. `DiscardPadding` is Matroska's statement about its own
-//! block, so it applies to whatever codec the track carries, and the reader fills neither packet
-//! trim for any of them. `CodecDelay` is the half that does work, subtracted from the block
-//! timestamps, which is why only the tail leaks.
-//!
-//! The walk answers in Matroska ticks, which are nanoseconds and are *not* scaled by
-//! `TimestampScale`. Converting them needs the decoder's sample rate, so [`resolve`] is the second
-//! half and runs once the decoder is built.
+//! Container-scoped, applying to whatever codec the track carries; `CodecDelay` already comes off
+//! the timestamps, so only the tail leaks. The walk answers in Matroska ticks, nanoseconds unscaled
+//! by `TimestampScale`, and [`resolve`] converts them once the decoder's rate is known.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
@@ -42,20 +30,12 @@ const MAX_VINT_LEN: usize = 8;
 /// Enough for the widest id and the widest size beside it.
 const ELEMENT_HEADER_LEN: usize = MAX_ID_LEN + MAX_VINT_LEN;
 
-/// Element headers the walk will read before giving up.
-///
-/// It reads one per top-level element, one per cluster, and one per element inside the last cluster
-/// alone. A cluster holds a few seconds, so the real count is in the hundreds. The budget only
-/// bounds a file claiming a million empty elements, which would otherwise cost a seek and a read
-/// per two bytes of it.
+/// The real count is in the hundreds, one per top-level element and cluster and one per element in
+/// the last cluster; this only bounds a file claiming a million empty ones.
 const MAX_ELEMENT_HEADERS: u32 = 8192;
 
-/// The longest trailing padding worth believing, in seconds.
-///
-/// The sibling of [`super::aac_trim`]'s ceiling on a head, and it does the same job at the other
-/// end: no encoder pads anything near a second, so a larger number is a misread or a muxer using
-/// the element for something other than encoder padding, and acting on it would cut real audio off
-/// the end. It is also what bounds the window that holds those frames back.
+/// [`super::aac_trim`]'s head ceiling at the other end: no encoder pads near a second, so more is a
+/// misread that would cut real audio. Also what bounds the window holding the frames back.
 const TAIL_CEILING_SECS: u64 = 1;
 
 /// The trailing padding one track's last stating block declares, in Matroska ticks.
@@ -64,14 +44,9 @@ pub(super) struct Discard {
     pub ticks: u64,
 }
 
-/// What each track's last stating block declares, keyed by the track it belongs to.
-///
-/// Keyed rather than taken as the file's one answer because an `.mka` may hold more than one track,
-/// and a padding stated for a second audio or a subtitle track means nothing to the one being
-/// decoded. The ids line up: the reader builds every track from the Matroska `TrackNumber`, which is
-/// what a block names itself with.
-///
-/// The handle is rewound before this returns, the caller handing the same one to the demuxer.
+/// Keyed by track, a padding stated for a second audio or a subtitle track meaning nothing to the
+/// one decoded; the reader's track ids are the `TrackNumber` a block names. Rewinds the handle for
+/// the demuxer.
 pub(super) fn discard_padding(file: &mut File) -> Vec<Discard> {
     let discards = read_discards(file).unwrap_or_default();
     let _ = file.seek(SeekFrom::Start(0));
@@ -85,16 +60,15 @@ pub(super) fn resolve(discards: &[Discard], track_num: u32, rate: SampleRate) ->
     (frames > 0 && frames <= u64::from(rate.get()) * TAIL_CEILING_SECS).then_some(frames)
 }
 
-/// Converts a tick count into decoded frames, rounded **down**: a tail that overshoots takes real
-/// audio off the end with it.
+/// Rounded **down**: a tail that overshoots takes real audio off the end with it.
 fn ticks_to_frames(ticks: u64, rate: SampleRate) -> Option<u64> {
     let time_base = TimeBase::try_new(1, TICKS_PER_SEC)?;
     super::decode::ticks_to_frames(ticks, time_base, rate, super::decode::Rounding::Down)
 }
 
-/// `None` where the file is not Matroska, states no segment, or ends in a cluster this cannot reach.
+/// `None` where the file isn't Matroska, states no segment, or ends in a cluster out of reach.
 fn read_discards(file: &mut File) -> Option<Vec<Discard>> {
-    // Ahead of everything else, so a file of any other container costs one read and nothing more.
+    // First, so any other container costs one read.
     if !is_matroska(file) {
         return None;
     }
@@ -117,11 +91,10 @@ struct Element {
     id: u32,
     payload: u64,
     end: u64,
-    /// True where the element stated no size, so `end` is its parent's rather than its own.
+    /// The element stated no size, so `end` is its parent's rather than its own.
     open_ended: bool,
 }
 
-/// The segment, which everything below sits inside.
 fn find_segment(file: &mut File, end: u64, budget: &mut u32) -> Option<Element> {
     let mut pos = 0;
     while pos < end && *budget > 0 {
@@ -135,11 +108,8 @@ fn find_segment(file: &mut File, end: u64, budget: &mut u32) -> Option<Element> 
     None
 }
 
-/// The last cluster in `segment`, which is where a file's trailing padding sits.
-///
-/// `None` where any cluster states an unknown size, which a walk stepping over payloads by size
-/// cannot get past: a muxer writing to a pipe leaves them that way, and answering out of the cluster
-/// before it would read some other block's padding.
+/// The last cluster, where a file's trailing padding sits. `None` where a cluster states no size,
+/// as a muxer writing to a pipe leaves them, which a walk stepping by size cannot get past.
 fn last_cluster(file: &mut File, segment: &Element, budget: &mut u32) -> Option<Element> {
     let mut last = None;
     let mut pos = segment.payload;
@@ -157,11 +127,8 @@ fn last_cluster(file: &mut File, segment: &Element, budget: &mut u32) -> Option<
     last
 }
 
-/// The padding each track's last stating block group declares inside `cluster`.
-///
-/// A group earlier in the cluster can state one too, so the last for each track wins rather than the
-/// first. A group with no padding is not a statement of zero and leaves whatever came before it
-/// standing.
+/// The last stating block group per track wins, and a group with no padding is not a statement of
+/// zero, leaving what came before standing.
 fn cluster_discards(file: &mut File, cluster: &Element, budget: &mut u32) -> Vec<Discard> {
     let mut discards: Vec<Discard> = Vec::new();
     let mut pos = cluster.payload;
@@ -187,10 +154,7 @@ fn cluster_discards(file: &mut File, cluster: &Element, budget: &mut u32) -> Vec
     discards
 }
 
-/// The track and the padding one block group states, where it states both.
-///
-/// Both halves are required: a padding naming no track cannot be matched against the one being
-/// decoded, and a block stating none has nothing to contribute.
+/// The track and the padding one block group states, both required.
 fn block_group_discard(file: &mut File, group: &Element, budget: &mut u32) -> Option<Discard> {
     let mut track_num = None;
     let mut ticks = None;
@@ -204,8 +168,8 @@ fn block_group_discard(file: &mut File, group: &Element, budget: &mut u32) -> Op
         pos = child.end;
         match child.id {
             BLOCK => track_num = block_track(file, &child),
-            // A negative value states padding at the *start* of the block, which is a splice rather
-            // than the encoder's tail and not what is left in the samples here.
+            // Negative states padding at the block's *start*, a splice rather than the encoder's
+            // tail.
             DISCARD_PADDING => {
                 ticks = signed(file, &child).and_then(|stated| u64::try_from(stated).ok());
             }
@@ -245,11 +209,8 @@ fn signed(file: &mut File, element: &Element) -> Option<i64> {
     Some(i64::from_be_bytes(bytes))
 }
 
-/// Reads the id and size sitting at `pos`, bounded by its parent's `end`.
-///
-/// The two bounds at the bottom keep the walk moving forward and inside its parent, so a size field
-/// of the file's own choosing can neither loop it nor send it reading past the end. A short read is
-/// nothing to recover from: where the next element starts is whatever this one's size said.
+/// The id and size at `pos`, kept forward and inside its parent's `end`, so a size of the file's
+/// own choosing can neither loop the walk nor send it past the end.
 fn read_element(file: &mut File, pos: u64, end: u64) -> Option<Element> {
     let mut head = [0u8; ELEMENT_HEADER_LEN];
     let available = usize::try_from(end.checked_sub(pos)?).unwrap_or(head.len());
@@ -260,8 +221,7 @@ fn read_element(file: &mut File, pos: u64, end: u64) -> Option<Element> {
     let (size, size_len) = vint(head.get(id_len..read)?)?;
     let payload = pos.checked_add(u64::try_from(id_len + size_len).ok()?)?;
 
-    // An unknown size runs to the end of the parent, which is what a muxer writing to a pipe leaves
-    // on the segment. Only the cluster's caller acts on the distinction.
+    // An unknown size runs to the end of the parent; only the cluster's caller acts on it.
     let element_end = match size {
         Some(size) => payload.checked_add(size)?,
         None => end,
@@ -275,8 +235,7 @@ fn read_element(file: &mut File, pos: u64, end: u64) -> Option<Element> {
     })
 }
 
-/// An element id and the bytes it occupied, marker bits kept: ids are written with them everywhere,
-/// the constants above included.
+/// An element id and its length, marker bits kept, ids being written with them everywhere.
 fn element_id(bytes: &[u8]) -> Option<(u32, usize)> {
     let len = vint_len(bytes.first())?;
     if len > MAX_ID_LEN {
@@ -287,10 +246,8 @@ fn element_id(bytes: &[u8]) -> Option<(u32, usize)> {
     Some((u32::from_be_bytes(id), len))
 }
 
-/// A variable-length integer and the bytes it occupied, with the marker bits taken off.
-///
-/// The value is `None` where every payload bit is set, which is the spec's way of stating an unknown
-/// size.
+/// A variable-length integer and its length, marker bits off. The value is `None` where every
+/// payload bit is set, the spec's spelling of an unknown size.
 fn vint(bytes: &[u8]) -> Option<(Option<u64>, usize)> {
     let len = vint_len(bytes.first())?;
     if len > MAX_VINT_LEN {
@@ -299,8 +256,8 @@ fn vint(bytes: &[u8]) -> Option<(Option<u64>, usize)> {
 
     let mut value = [0u8; MAX_VINT_LEN];
     value.get_mut(MAX_VINT_LEN - len..)?.copy_from_slice(bytes.get(..len)?);
-    // The leading one-bit marks the width and is not part of the value. A one-byte marker leaves
-    // seven payload bits, an eight-byte one leaves none in its first byte at all.
+    // The leading one-bit marks the width: a one-byte vint keeps seven payload bits, an eight-byte
+    // one none in its first byte.
     let marker = MAX_VINT_LEN - len;
     *value.get_mut(marker)? &= 0xFFu8.checked_shr(u32::try_from(len).ok()?).unwrap_or(0);
 
@@ -312,8 +269,7 @@ fn vint(bytes: &[u8]) -> Option<(Option<u64>, usize)> {
 /// How many bytes a vint or an id occupies, which its leading one-bit states.
 fn vint_len(first: Option<&u8>) -> Option<usize> {
     let leading_zeros = usize::try_from(first?.leading_zeros()).ok()?;
-    // An all-zero first byte states a width wider than EBML allows, and would otherwise read as one
-    // byte longer than the longest legal vint.
+    // An all-zero first byte states a width wider than EBML allows.
     (leading_zeros < MAX_VINT_LEN).then_some(leading_zeros + 1)
 }
 

@@ -1,15 +1,9 @@
 //! Getting the audio out of a segment, whichever of the three shapes it arrives in.
 //!
-//! **For two of them this is a depacketiser, not a demuxer.** Audio-only MPEG-TS carries one
-//! elementary stream that is already ADTS AAC or MPEG audio, so recovering it is a matter of
-//! dropping the transport and PES framing around it, and packed audio is that stream already,
-//! behind a tag or two. What comes out is a container Symphonia reads today, which is why HLS
-//! needs no demuxer nobody has written. The third, ISO-BMFF, is handed on untouched: a fragment is
-//! already the framing its own demuxer wants.
-//!
-//! Segment boundaries are not smoothed over here and do not need to be. `AdtsReader` scans for its
-//! sync word on every packet, so a splice there costs at most the frame it lands in, and a
-//! fragment splices on a box boundary, which is where the reader behind it looks for the next one.
+//! **For two of them a depacketiser, not a demuxer**: audio-only MPEG-TS carries one ADTS AAC or
+//! MPEG audio stream inside transport and PES framing, and packed audio is that stream behind a tag
+//! or two. ISO-BMFF passes untouched, a fragment already being its demuxer's framing. Boundaries
+//! need no smoothing: ADTS resyncs on every packet, and a fragment splices on a box boundary.
 
 /// Transport packets are a fixed 188 bytes and each begins with this byte.
 const TS_PACKET_LEN: usize = 188;
@@ -26,10 +20,8 @@ const PSI_CRC_LEN: usize = 4;
 /// Below this a section cannot hold its own header and CRC, so its length field is nonsense.
 const PSI_MIN_LENGTH: usize = PSI_HEADER_LEN - 3 + PSI_CRC_LEN;
 
-/// Stream types worth selecting: ADTS AAC and the two MPEG audio layers.
-///
-/// LATM (`0x11`) is deliberately absent. Symphonia cannot decode it, and pointing the probe at its
-/// pid would feed it bytes it can only fail on, where selecting nothing fails saying so.
+/// ADTS AAC and the two MPEG audio layers. LATM (`0x11`) is absent, Symphonia being unable to
+/// decode it, so selecting nothing fails saying so where selecting it would fail on its bytes.
 const AUDIO_STREAM_TYPES: [u8; 3] = [0x03, 0x04, 0x0F];
 
 const PES_START_CODE: &[u8] = &[0x00, 0x00, 0x01];
@@ -38,10 +30,7 @@ const PES_AUDIO_IDS: std::ops::RangeInclusive<u8> = 0xC0..=0xDF;
 /// Prefix, stream id, packet length, two flag bytes, then the header length itself.
 const PES_HEADER_LEN_OFFSET: usize = 8;
 
-/// Unwraps segments into one continuous elementary stream.
-///
-/// Stateful only to hold the elementary pid: the tables naming it repeat in every segment, but a
-/// server that omits them from one still has to be read.
+/// Stateful only to hold the elementary pid, a server sometimes omitting the tables that name it.
 #[derive(Default)]
 pub struct SegmentReader {
     audio_pid: Option<u16>,
@@ -49,19 +38,14 @@ pub struct SegmentReader {
 }
 
 impl SegmentReader {
-    /// Append the audio inside `segment` to `out`.
-    ///
-    /// A segment that names no audio contributes nothing rather than failing: one bad segment in a
-    /// live stream is a gap, and the next one usually plays.
+    /// A segment naming no audio contributes nothing rather than failing: one bad segment in a live
+    /// stream is a gap, and the next one usually plays.
     pub fn append(&mut self, segment: &[u8], out: &mut Vec<u8>) {
         let start = out.len();
-        // Exact: every arm below is bounded above by the input, two copying it whole and the
-        // transport one stripping headers. Worth reserving because that arm appends per packet,
-        // so a segment lands in hundreds of pushes rather than one.
+        // Every arm is bounded by the input, and the transport one appends per packet.
         out.reserve(segment.len());
-        // ISO-BMFF is asked about first, and by its box type rather than by elimination: a
-        // fragment is already the framing its demuxer wants, so unwrapping it is exactly wrong,
-        // and three sync bytes 188 apart are not impossible inside one.
+        // ISO-BMFF first, by its box type: three sync bytes 188 apart aren't impossible inside a
+        // fragment, and unwrapping one is exactly wrong.
         if is_iso_bmff(segment) {
             out.extend_from_slice(segment);
         } else {
@@ -103,20 +87,15 @@ impl SegmentReader {
     }
 }
 
-/// The box types a segment of a fragmented MP4 stream can open with.
-///
-/// `ftyp`/`moov` is the init segment; the media segments open with one of the rest. The type sits
-/// at offset 4, behind the box's own length.
+/// What a fragmented MP4 segment can open with, `ftyp`/`moov` being the init segment's. The type
+/// sits at offset 4, behind the box's length.
 const ISO_BMFF_BOXES: [&[u8; 4]; 6] = [b"ftyp", b"styp", b"moof", b"moov", b"sidx", b"emsg"];
 
 fn is_iso_bmff(segment: &[u8]) -> bool {
     segment.get(4..8).is_some_and(|kind| ISO_BMFF_BOXES.iter().any(|known| *known == kind))
 }
 
-/// Where the packet grid starts, or `None` for a segment that is not transport-stream framed.
-///
-/// Searched rather than assumed at zero: a few servers pad the front, and every misaligned offset
-/// reads as plausible garbage.
+/// Searched rather than assumed at zero, a few servers padding the front.
 fn packet_offset(segment: &[u8]) -> Option<usize> {
     (0..TS_PACKET_LEN).find(|offset| {
         (0..TS_SYNC_CONFIRMATIONS)
@@ -157,10 +136,8 @@ fn psi_section(packet: &[u8]) -> Option<&[u8]> {
     payload.get(1 + usize::from(*payload.first()?)..)
 }
 
-/// The elementary pid carrying audio, read off the program tables.
-///
-/// Sections spanning more than one packet are not reassembled: a radio station's tables are a few
-/// dozen bytes and fit with room to spare, and a server that split one falls back to the PES scan.
+/// Off the program tables, unreassembled: a station's tables fit one packet, and a server splitting
+/// one falls back to the PES scan.
 fn find_audio_pid(segment: &[u8]) -> Option<u16> {
     let program_pids = program_map_pids(segment);
     let mut maps = packets(segment)
@@ -169,9 +146,8 @@ fn find_audio_pid(segment: &[u8]) -> Option<u16> {
         .filter_map(|section| section_body(section, TABLE_ID_PMT))
         .peekable();
 
-    // Keyed on a map having *arrived*, not on one having named something: the scan is for tables
-    // that never came, and letting it override a readable map is how a stream whose only audio is
-    // a type [`AUDIO_STREAM_TYPES`] leaves out reaches a probe that can only fail on it.
+    // On a map having *arrived*, not on one naming something: the scan is for tables that never
+    // came, and overriding a readable map would feed the probe a type it can only fail on.
     if maps.peek().is_none() {
         return first_audio_pes_pid(segment);
     }
@@ -193,8 +169,7 @@ fn program_map_pids(segment: &[u8]) -> Vec<u16> {
         .unwrap_or_default()
 }
 
-/// The first elementary pid a program map names with a stream type we have a decoder for. Takes
-/// the section's body, [`find_audio_pid`] having read the header off to recognise the table at all.
+/// The first elementary pid of a stream type we can decode, off the section's body.
 fn audio_pid_from_pmt(body: &[u8]) -> Option<u16> {
     // Clock reference pid, then a descriptor block sized by its own 12-bit length.
     let program_info_len = (usize::from(body.get(2)? & 0x0F) << 8) | usize::from(*body.get(3)?);
@@ -248,10 +223,8 @@ fn pes_body(payload: &[u8]) -> Option<&[u8]> {
     payload.get(PES_HEADER_LEN_OFFSET + 1 + header_len..)
 }
 
-/// Drop the timestamp tags a packed-audio segment is required to open with.
-///
-/// Looped because servers write more than one, and stripped rather than left to the demuxer's own
-/// resync: a tag's payload can carry bytes that read as a sync word.
+/// Drops the timestamp tags packed audio opens with, looped since servers write several, and
+/// stripped rather than resynced past, a tag's payload able to read as a sync word.
 fn strip_id3(mut segment: &[u8]) -> &[u8] {
     while let Some(len) = id3_len(segment) {
         match segment.get(len..) {
@@ -275,9 +248,7 @@ fn id3_len(segment: &[u8]) -> Option<usize> {
     Some(10 + size + if has_footer { 10 } else { 0 })
 }
 
-/// What the elementary stream turned out to be, in the spelling the directory uses.
-///
-/// ADTS is checked first because its sync word also satisfies the looser MPEG audio one.
+/// ADTS first, its sync word also satisfying the looser MPEG audio one.
 fn codec_of(stream: &[u8]) -> &'static str {
     match stream {
         [0xFF, second, ..] if second & 0xF6 == 0xF0 => "AAC",

@@ -15,46 +15,31 @@ use melodia_core::error::describe;
 use super::playlist::{self, MediaPlaylist, Playlist};
 use super::segment::SegmentReader;
 
-/// How far back from the live edge to start.
-///
-/// Three is what the spec recommends a client hold, and it is the whole latency budget: fewer and
-/// a stall reaches the ring before the network recovers, more and the station starts audibly late.
+/// How far back from the live edge to start, the spec's recommended hold and the whole latency
+/// budget: fewer and a stall reaches the ring before the network recovers, more and the station
+/// starts audibly late.
 const LIVE_EDGE_SEGMENTS: usize = 3;
 
-/// Segments buffered ahead of the decoder.
-///
-/// This is the network cushion, the counterpart to `stream_source`'s byte-sized one, and the
-/// sender blocking on a full queue is what paces fetching to playback.
+/// The network cushion, `stream_source`'s byte-sized one's counterpart: the sender blocking on a
+/// full queue is what paces fetching to playback.
 const SEGMENT_QUEUE_DEPTH: usize = 4;
 
-/// Ceiling on one segment. Generous next to the few seconds of audio a station sends, because the
-/// point is to refuse a mount serving something else entirely rather than to size a buffer.
+/// Generous, its point being to refuse a mount serving something else rather than to size a buffer.
 const SEGMENT_MAX_BYTES: u64 = 4 * 1024 * 1024;
 const SEGMENT_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// Ceiling on one manifest, and how long we wait for it.
-///
-/// **Deliberately its own cap rather than `stream_source`'s**, which bounds a `.pls` or `.m3u`
-/// *pointer* — a few hundred bytes naming one mount. A media playlist is a live document listing
-/// every segment still in the window and re-fetched twice a target duration, so the two answer
-/// different questions and only looked like one number. The wait beside it lands on the same
-/// figure, a manifest and a pointer being one request over one connection either way.
+/// Its own cap rather than `stream_source`'s, which bounds a pointer of a few hundred bytes: a
+/// media playlist lists every segment in the window and is re-fetched twice a target duration.
 const MANIFEST_MAX_BYTES: u64 = 256 * 1024;
 const MANIFEST_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// Consecutive playlist failures before the stream is given up on.
-///
-/// Ending here rather than retrying forever hands the station to the feed thread's own reconnect,
-/// which has the backoff and the budget that decide when to tell the user.
+/// Ending hands the station to the feed thread's reconnect, which owns the backoff and decides when
+/// to tell the user.
 const PLAYLIST_FAILURE_BUDGET: u32 = 5;
 
-/// Consecutive reloads bringing nothing new before the stream is given up on.
-///
-/// A playlist that answers but stops advancing is invisible to [`PLAYLIST_FAILURE_BUDGET`], and it
-/// costs more than a dead one: the reader parks on an empty queue, the ring dries, and nothing ends
-/// the source, so the reconnect that would recover it never runs. Counted in the half-period
-/// reloads a caught-up client is already making, which puts this at six target durations with
-/// nothing new; [`LIVE_EDGE_SEGMENTS`] is still playing through the first of them.
+/// Reloads bringing nothing new before giving up. A playlist that answers but stops advancing is
+/// invisible to [`PLAYLIST_FAILURE_BUDGET`] and worse than a dead one, nothing ending the source so
+/// the reconnect never runs. In half-period reloads, so six target durations.
 const SEGMENT_STALL_BUDGET: u32 = 12;
 
 /// An opened HLS stream, and what its playlist said about itself.
@@ -66,18 +51,15 @@ pub struct HlsStream {
     pub bitrate_kbps: i32,
 }
 
-/// One unbroken byte stream, assembled from segments the scheduler fetches behind it.
-///
-/// Blocking by design: it is read from the feed thread, which already parks on a full ring, and
-/// never from a runtime worker.
+/// One unbroken byte stream from the segments the scheduler fetches. Blocking by design, read only
+/// from the feed thread, never a runtime worker.
 pub struct HlsReader {
     chunks: mpsc::Receiver<Vec<u8>>,
     held: Vec<u8>,
     offset: usize,
     position: u64,
-    /// Read only to end the wait below. The scheduler cannot do it: it learns the listener is gone
-    /// from `chunks.closed()`, which fires when this receiver drops, which needs this read to
-    /// return, so parking here unconditionally leaves the two waiting on each other.
+    /// Read only to end the wait below. The scheduler learns the listener left when this receiver
+    /// drops, which needs this read to return, so parking unconditionally deadlocks the two.
     shared: Arc<StreamShared>,
 }
 
@@ -93,10 +75,8 @@ impl Read for HlsReader {
                     self.offset = 0;
                 }
                 Err(mpsc::error::TryRecvError::Disconnected) => return Ok(0),
-                // Polled rather than parked, so a stopped station releases this thread, the
-                // decoder and the ring at once instead of after the scheduler has spent its
-                // stall budget, which on a playlist that answers but has stopped advancing runs to
-                // a couple of minutes. Costs a wake-up granularity the segment cadence cannot feel.
+                // Polled, so a stopped station lets go at once rather than after the scheduler
+                // spends its stall budget, at a granularity the segment cadence can't feel.
                 Err(mpsc::error::TryRecvError::Empty) => {
                     if self.shared.is_abandoned() {
                         return Ok(0);
@@ -116,8 +96,7 @@ impl Read for HlsReader {
 }
 
 impl Seek for HlsReader {
-    /// The source wrapping this reports itself unseekable, so the only call that arrives is the
-    /// no-op asking where the reader has got to.
+    /// Its source reports itself unseekable, so only the no-op asking the position arrives.
     fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
         if matches!(pos, SeekFrom::Current(0)) {
             return Ok(self.position);
@@ -126,12 +105,8 @@ impl Seek for HlsReader {
     }
 }
 
-/// Open the stream `body` describes, priming it with a segment so the caller learns the codec and
-/// a dead station fails here rather than at the first read.
-///
-/// `body` is the already-fetched playlist at `url`, which the caller read to recognise it as HLS.
-///
-/// `shared` is taken for one field of it, and [`HlsReader::shared`] says which and why.
+/// Opens the stream the already-fetched `body` describes, priming it with a segment so the caller
+/// learns the codec and a dead station fails here rather than at the first read.
 pub async fn open(
     client: &reqwest::Client,
     url: &Url,
@@ -140,8 +115,7 @@ pub async fn open(
 ) -> Result<HlsStream, AppError> {
     let resolved = resolve(client, url, body).await?;
 
-    // The live edge, minus the cushion. Anything older is history nobody tuning in wants to hear
-    // before today's audio.
+    // The live edge minus the cushion; anything older is history nobody tuning in wants.
     let skipped = resolved.playlist.segments.len().saturating_sub(LIVE_EDGE_SEGMENTS);
     let first = resolved
         .playlist
@@ -151,10 +125,9 @@ pub async fn open(
 
     let mut segments = SegmentReader::default();
     let mut primed = Vec::new();
-    // Ahead of the first segment and only here: a fragmented stream's `ftyp`/`moov` is what the
-    // demuxer probes, and the fragments behind it are unreadable on their own. A reconnect runs
-    // this same path, so it arrives again with the fresh scheduler that needs it, which is also
-    // the only thing that would recover a station rotating its `EXT-X-MAP` mid-stream.
+    // Ahead of the first segment and only here: the demuxer probes a fragmented stream's
+    // `ftyp`/`moov`, the fragments being unreadable alone. A reconnect runs this path again, which
+    // is also what would recover a station rotating its `EXT-X-MAP`.
     if let Some(init) = &resolved.playlist.init_segment {
         segments.append(&fetch_segment(client, init).await?, &mut primed);
     }
@@ -238,8 +211,7 @@ struct Scheduler {
     client: reqwest::Client,
     playlist_url: Url,
     segments: SegmentReader,
-    /// The sequence number of the next segment worth fetching. A playlist that has moved past it
-    /// is a stream we fell behind, and the gap is skipped rather than caught up on.
+    /// A playlist moved past this is a stream we fell behind, and the gap is skipped.
     next_sequence: u64,
     refresh: Duration,
     /// Reloads since the last one that brought audio, against [`SEGMENT_STALL_BUDGET`].
@@ -248,7 +220,7 @@ struct Scheduler {
 }
 
 impl Scheduler {
-    /// Reload the playlist, fetch what is new, and hand it on until nobody is listening.
+    /// Reloads the playlist, fetches what is new and hands it on until nobody is listening.
     async fn run(mut self) {
         let mut failures: u32 = 0;
         loop {
@@ -292,8 +264,7 @@ impl Scheduler {
         }
     }
 
-    /// Fetch and forward everything in `playlist` we have not already played. `false` means the
-    /// listener went away.
+    /// `false` means the listener went away.
     async fn drain(&mut self, playlist: &MediaPlaylist) -> bool {
         let mut appended = false;
         let mut sequence = playlist.media_sequence;
@@ -326,15 +297,13 @@ impl Scheduler {
             self.refresh = playlist.target_duration;
         } else {
             self.stalled += 1;
-            // Half a period, which is what the spec asks of a client that has caught up with a
-            // playlist still being written.
+            // Half a period, what the spec asks of a client caught up with a live playlist.
             self.refresh = playlist.target_duration / 2;
         }
         true
     }
 }
 
-/// Read at most [`MANIFEST_MAX_BYTES`] of one playlist, as text.
 async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, AppError> {
     melodia_net::services::net::get_capped_text(
         client,
@@ -346,7 +315,6 @@ async fn fetch_manifest(client: &reqwest::Client, url: &Url) -> Result<String, A
     .await
 }
 
-/// Read at most [`SEGMENT_MAX_BYTES`] of one segment.
 async fn fetch_segment(client: &reqwest::Client, url: &Url) -> Result<Vec<u8>, AppError> {
     melodia_net::services::net::get_capped(
         client,

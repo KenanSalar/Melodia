@@ -1,12 +1,8 @@
-//! What a decoded stream of samples can come out of, and the vocabulary above it.
-//!
-//! [`audio`] is the interface the rest of the chain is written against, and it imports nothing.
-//! [`decode`] is the one Symphonia: the probe, the track pick, the decoder build and the packet
-//! cursor, with [`file_decode`] and [`stream_decode`] differing only in the `MediaSource` and
-//! `Hint` they hand it. [`opus`] is the one codec that registry carries itself, Symphonia
-//! shipping none. The live trio ([`stream_source`], [`prebuffer`], [`hls`]) is the network's
-//! end, the ring keeping a blocking socket read off the audio callback thread and `stall_watch`
-//! ending a connection that has gone quiet.
+//! [`audio`] is the interface the chain is written against, and imports nothing. [`decode`] is the
+//! one Symphonia, [`file_decode`] and [`stream_decode`] handing it only a different `MediaSource`
+//! and `Hint`, and [`opus`] the one codec its registry carries itself. [`stream_source`],
+//! [`prebuffer`] and [`hls`] are the network's end, the ring keeping a blocking socket read off the
+//! audio callback thread.
 
 pub mod aac_config;
 pub mod aac_trim;
