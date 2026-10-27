@@ -54,12 +54,7 @@ fn write_rows(model: &ModelRc<SharedString>, names: impl Iterator<Item = SharedS
     with_name_model(model, |vm| vm.set_vec(rows));
 }
 
-// ---- Genres ----
-
-/// The genre list's three callbacks.
-///
-/// A model of `SharedString` rather than a row struct: a genre is a name and nothing else, where
-/// an `ArtistCreditRow` exists to carry the phrase beside it.
+/// The genre list's three callbacks, over bare names: a genre carries no join phrase.
 pub(super) fn wire_genres(te: &TagEditor, ui: &AppWindow) {
     // Installed once and never replaced: a default-constructed `ModelRc` is a no-op model that
     // silently ignores `set_vec`, so `populate` needs a real one to be waiting for it.
@@ -88,7 +83,6 @@ fn genre_model(ui: &AppWindow) -> ModelRc<SharedString> {
     ui.global::<TagEditor>().get_genres()
 }
 
-/// Fill the genre rows.
 pub(super) fn write_genre_rows(te: &TagEditor, genres: &GenreList) {
     write_rows(&te.get_genres(), genres.names().iter().map(|n| SharedString::from(n.as_str())));
 }
@@ -105,12 +99,8 @@ pub(super) fn genres_from_model(ui: &AppWindow) -> GenreList {
     GenreList::new(names)
 }
 
-// ---- Role credits ----
-
-/// The role lists' three callbacks — [`wire_genres`] once more, indexed by role.
-///
-/// One outer model of ten inner ones, so a role is a position rather than a property name and the
-/// ten editors are one mount. `ROLES` is that position's meaning on both sides.
+/// [`wire_genres`] indexed by role: one outer model of ten inner ones, so the ten editors are one
+/// mount and a role is a position, which `ROLES` gives its meaning on both sides.
 pub(super) fn wire_roles(te: &TagEditor, ui: &AppWindow) {
     let rows: Vec<ModelRc<SharedString>> = ROLES.iter().map(|_| blank_rows()).collect();
     te.set_role_names(ModelRc::new(VecModel::from(rows)));
@@ -146,7 +136,6 @@ fn with_role_model(ui: &AppWindow, role: i32, f: impl FnOnce(&VecModel<SharedStr
     with_name_model(&inner, f);
 }
 
-/// Fill every role's rows.
 pub(super) fn write_role_rows(ui: &AppWindow, credits: &RoleCredits) {
     let outer = ui.global::<TagEditor>().get_role_names();
     for (index, role) in ROLES.into_iter().enumerate() {
@@ -157,17 +146,13 @@ pub(super) fn write_role_rows(ui: &AppWindow, credits: &RoleCredits) {
     }
 }
 
-/// The role credit set the form currently shows, blanks dropped, scoped to what it can answer for.
-///
-/// Rebuilt in `ROLES` order, which is also the order the rows are mounted in, so the rendered
+/// The role credits the form shows, blanks dropped, rebuilt in `ROLES` order so the rendered
 /// `credits` line is stable across a save that changed one name.
 ///
-/// **The scope grows by what the user typed.** It opens as the roles the selection agreed on, and
-/// a role it disagreed about joins once its box holds a name — that being the only way a batch
-/// form can say anything about one. Left blank it stays out, so the credit each file carries
-/// survives an edit to the role beside it. The consequence, and it is the same one every
-/// ‹multiple values› field already has: a role the selection disagrees about cannot be *emptied*
-/// across it, a blank box there meaning "leave this alone".
+/// **The scope grows by what the user typed**: a role the selection disagreed about joins once
+/// its box holds a name, and left blank stays out, so each file's credit survives an edit to the
+/// role beside it. As with every ‹multiple values› field, such a role can't be emptied across
+/// the selection.
 pub(super) fn roles_from_model(ui: &AppWindow, original: &RoleCreditEdit) -> RoleCreditEdit {
     let outer = ui.global::<TagEditor>().get_role_names();
     let mut credits = Vec::new();
@@ -192,14 +177,10 @@ pub(super) fn roles_from_model(ui: &AppWindow, original: &RoleCreditEdit) -> Rol
     RoleCreditEdit::new(RoleCredits::new(credits), answered)
 }
 
-/// The instrument or voice `name` was credited with in `role`, carried across from what the file
-/// said.
-///
-/// The editor has no field for it — only [`CreditRole::Performer`] has one at all, and a second
-/// column on every row would be ten empty boxes to explain one. Without this the round trip is
-/// *lossy in both directions*: the read-back would differ from the baseline for any track carrying
-/// one, so the diff would answer `Set` on a form nobody touched and write the credit back with the
-/// instrument stripped. Matched on the name, which is the only handle a row still has.
+/// The instrument or voice `name` was credited with in `role`, carried over from the file. The
+/// editor has no field for it, only [`CreditRole::Performer`] having one at all, and without it
+/// the read-back would differ from the baseline, so an untouched form would write the credit back
+/// stripped. Matched on the name, the only handle a row still has.
 fn detail_for(original: &RoleCredits, role: CreditRole, name: &str) -> String {
     original
         .for_role(role)
@@ -208,15 +189,9 @@ fn detail_for(original: &RoleCredits, role: CreditRole, name: &str) -> String {
         .unwrap_or_default()
 }
 
-/// The role credits a selection agrees on, scoped to the roles it agreed about.
-///
-/// Per role rather than for the set as a whole: a batch that shares a composer and differs on the
-/// producer should still show the composer, the way `common_str` shows every other field the
-/// selection agrees on.
-///
-/// The scope is what makes that safe to save. A disagreeing role shows nothing, so the form cannot
-/// speak for it and the writer must not clear it — [`RoleCreditEdit`] carries that, and the
-/// placeholder row reads the same answer back off it.
+/// The role credits a selection agrees on, per role, so a batch sharing a composer and differing
+/// on the producer still shows the composer. A disagreeing role shows nothing, and the scope
+/// [`RoleCreditEdit`] carries keeps the writer from clearing it.
 pub(super) fn common_roles(sets: &[RoleCredits]) -> RoleCreditEdit {
     let mut agreed = Vec::new();
     let mut answered = [true; ROLES.len()];

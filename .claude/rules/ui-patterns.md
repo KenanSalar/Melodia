@@ -642,9 +642,8 @@ three components that answer it, and each argues its geometry at its own file.
   from the track-list projection, as a list row does.
   **"Go to" calls `Nav.go-to-*` straight, as Open Containing Folder calls `Nav`**, with no host
   forwarding: the origin a drill records is read off where the user stands, so there was nothing
-  per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands by closing
-  Now Playing, the bar staying reachable over it, and the floating queue with it. The docked queue
-  panel stays open, sitting beside the page rather than over it.
+  per host to say. `cross_tab_nav::land` uncovers the content panel as the drill lands, and says
+  what it closes.
 
 - **The five right-click menus share one shape**: the row menu, `CardContextMenu`,
   `StationContextMenu`, the radio history list's and `TextEditMenu`, every single-line field's.
@@ -876,14 +875,10 @@ three components that answer it, and each argues its geometry at its own file.
   `Some(0)` — exactly what activating the first row does — and are gone; don't reintroduce one.
   Appending without wiping is the *context menu's* job.
 
-- **The pill that remains is Shuffle**, through `spawn_play_then_shuffle`: play from a **random**
-  slot, then `queue_set_shuffle(state, true)`. Random because the shuffle anchors the current
-  track at the front, so a head start opens every press on the same song; a set rather than a
-  read-then-toggle because the pill means "on", and a toggle racing the transport's button would
-  turn it off.
+- **The pill that remains is Shuffle**, through `spawn_play_then_shuffle`, whose doc argues the
+  random start and the set rather than a toggle.
 
-- **The start slot is `play_row_start(&ids, id, idx)`** — trust the index Slint passes when it
-  lines up, otherwise look up by id, Browse's disk-only rows making its two index spaces differ.
+- **The start slot is `play_row_start(&ids, id, idx)`**, which argues Browse's two index spaces.
   `player_play_tracks` re-resolves by **track id** against what the DB returned, the fetch dropping
   ids that no longer exist. A new list view wires `play-row` to its own `*_track_ids()` helper; the
   two Most Played grid tabs have no row index and resolve by id against the grid's own keyset

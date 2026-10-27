@@ -46,18 +46,15 @@ macro_rules! impl_hero_slots {
 
 impl_hero_slots!(AlbumDetail, ArtistDetail, PlaylistDetail, Favorites, RecentlyPlayed, Radio);
 
-/// Push a decoded `(cover, blur)` pair into a hero global from the UI thread: the cover slot
-/// directly, the blur through `write_crossfade_slot` so switching entities fades rather than
-/// flashes. `animate: true` is the fresh-open path, `false` the watcher-driven refresh. The
-/// colour set comes off the measurement the decode took beside these two buffers, so the scrim
-/// can't fall out of step with the blur it is darkening.
+/// Pushes a decoded `(cover, blur)` pair into a hero global from the UI thread, the blur through
+/// `write_crossfade_slot` so switching entities fades rather than flashes. `animate: true` is the
+/// fresh open, `false` the watcher's refresh.
 ///
-/// **`section_active` gates the `HeroBackdrop` write and nothing else.** The per-view properties
-/// either side of it are this view's own, and writing them while hidden is what leaves the page
-/// ready to paint — but `HeroBackdrop` is one global for six heroes, so publishing into it from a
-/// view that isn't on screen paints this entity's colours under whichever hero is. Pass the
-/// section's synchronous shadow, never a literal: the boot path fetches every persisted detail id
-/// whichever section is restored.
+/// **`section_active` gates the `HeroBackdrop` write and nothing else**: the per-view slots are
+/// this view's own and leave a hidden page ready to paint, but `HeroBackdrop` is one global for
+/// six heroes, and a hidden view publishing into it paints its colours under whichever hero is on
+/// screen. Pass the section's synchronous shadow, never a literal: the boot fetches every
+/// persisted detail whichever section it restores.
 pub(crate) fn apply_detail_artwork(
     ui: &AppWindow,
     g: &impl HeroSlots,
@@ -81,11 +78,8 @@ pub(crate) fn apply_detail_artwork(
 }
 
 /// Reset one hero global's image slots and clear `has-blur`, so the backing `SharedPixelBuffer`
-/// Arcs release and `FemtoVG` can reclaim the GPU textures.
-///
-/// Reach for [`release_detail_hero_images`] unless you are handing back several globals at once
-/// and want the two shared resets run once — My Library's deferred hero teardown is the only such
-/// caller.
+/// Arcs release and `FemtoVG` can reclaim the GPU textures. Reach for
+/// [`release_detail_hero_images`] unless the caller runs the shared resets on its own terms.
 pub fn release_hero_slots(g: &impl HeroSlots) {
     g.write_cover(Image::default());
     g.write_blur_a(Image::default());
@@ -93,24 +87,16 @@ pub fn release_hero_slots(g: &impl HeroSlots) {
     g.write_has_blur(false);
 }
 
-/// The two shared resets every hero teardown owes, on their own.
+/// The two shared resets every hero teardown owes: six heroes share one `HeroBackdrop` solve and
+/// one `HeroChips` row, so a teardown leaving either paints the departing hero's colours and
+/// counts under the next. On its own for the heroes with no slots to hand back, Genre Detail's
+/// gradient and the two mosaic pages.
 ///
-/// Six heroes share one `HeroBackdrop` solve and one `HeroChips` row, so a teardown leaving either
-/// behind paints the departing hero's colours and counts under the *next* one.
-/// [`release_detail_hero_images`] is this plus the image slots; this bare pair is for the heroes
-/// with none to hand back — Genre Detail's hashed gradient, and the two mosaic pages whose tiles
-/// belong to their own tier.
-///
-/// **On My Library a section leave is not a teardown, and the two halves stop short of one at
-/// different points.** The *colour set* belongs to the page rather than a tab, so
-/// [`crate::ui::my_library::the_band_is_up`] holds it until the page itself is left — the same
-/// question [`apply_detail_artwork`] asks on the way in, covering the two cases a hand-off gate
-/// missed: the band *collapsing* over a hero whose colours it is still painting, and a tab
-/// re-entered onto a detail whose banner comes back with it.
-///
-/// The *chip row* stops one step earlier, at [`crate::ui::hero_chips::clear_if_stale`], and the
-/// asymmetry is the point: a colour held across a hand-off is the outgoing hero's *tone*, where a
-/// count held across it is its *facts* under the incoming title.
+/// **On My Library a section leave is not a teardown, and the two halves stop at different
+/// points.** The colour set is the page's, so [`crate::ui::my_library::the_band_is_up`] holds it
+/// until the page is left, the question [`apply_detail_artwork`] asks on the way in. The chip row
+/// clears earlier, at [`crate::ui::hero_chips::clear_if_stale`]: a colour held across a hand-off
+/// is the outgoing hero's tone, a count held across it its facts under the incoming title.
 pub fn release_shared_hero(ui: &AppWindow) {
     if !crate::ui::my_library::the_band_is_up(ui) {
         crate::ui::hero_backdrop::reset(ui);
@@ -120,12 +106,10 @@ pub fn release_shared_hero(ui: &AppWindow) {
 
 /// [`release_hero_slots`] for one detail global, plus [`release_shared_hero`].
 ///
-/// **The slots ride the same page-level gate the colour set does**, for the reason the detail id
-/// gives: nothing clears one on a tab leave, so `AlbumDetail.album-id >= 0` still means "this
-/// banner is in the globals" and picking that tab again morphs it back open ahead of the re-fetch —
-/// emptying `cover` here leaves that morph painting `ArtworkImage`'s fallback glyph. Every path
-/// that genuinely closes a detail writes `-1` first, and `release_collapsed_hero` hands the slots
-/// back once the band has shrunk.
+/// **The slots ride the page-level gate the colour set does.** Nothing clears a detail id on a
+/// tab leave, so picking that tab again morphs the banner back open ahead of the re-fetch, and an
+/// emptied `cover` would paint `ArtworkImage`'s fallback glyph through it. Every real close
+/// writes `-1` first, and `release_collapsed_hero` hands the slots back once the band has shrunk.
 pub fn release_detail_hero_images(ui: &AppWindow, g: &impl HeroSlots) {
     if !crate::ui::my_library::the_band_is_up(ui) {
         release_hero_slots(g);
@@ -133,19 +117,16 @@ pub fn release_detail_hero_images(ui: &AppWindow, g: &impl HeroSlots) {
     release_shared_hero(ui);
 }
 
-/// Generate a curated page's banner publish.
-///
-/// A macro because the body reaches into the page's own `$Ui` handle (its section shadow and its
-/// mosaic guard), which no trait between the two pages carries.
+/// Generate a curated page's banner publish. A macro because the body reaches into the page's
+/// own `$Ui` handle (its section shadow and its mosaic guard), which no shared trait carries.
 macro_rules! impl_curated_hero_helpers {
     ($Global:ty, $Ui:ty) => {
         /// Publish a composed banner and claim it as the one on screen.
         ///
-        /// **Gated whole, where a detail view fills its own slots even while hidden.** A curated
-        /// page's leave wipes its models and forgets the guard, so slots written behind it have
-        /// nothing to be ready for and their claim would suppress the re-enter's recompose. What
-        /// the gate mainly protects is `HeroBackdrop`, shared by all six heroes: a compose finishing
-        /// after a nav away would paint this page's solve under whichever hero mounted next.
+        /// **Gated whole, where a detail view fills its slots even while hidden**: a curated
+        /// page's leave wipes its models and forgets the guard, so a claim made behind it would
+        /// suppress the re-enter's recompose, and a compose finishing after a nav away would
+        /// paint this page's solve under whichever hero mounted next.
         fn publish_hero_artwork(
             view: &std::sync::Arc<$Ui>,
             weak: &slint::Weak<melodia_ui::AppWindow>,
@@ -174,11 +155,10 @@ macro_rules! impl_curated_hero_helpers {
 
 pub(crate) use impl_curated_hero_helpers;
 
-/// A view's sort as `(field, dir)` display strings from the persisted
-/// `view_sort[view_id]`, falling back to `default_field` ascending on a fresh install.
-/// Every detail `open_*` uses it, so reopening any entity restores the last sort picked for that
-/// view type. It reads the file each call, which is what those want and what a boot-time seed
-/// does not: reach for [`crate::ui::callbacks::persisted_sort`] there instead.
+/// A view's persisted sort as `(field, dir)`, else `default_field` ascending. Every detail
+/// `open_*` reads it, so reopening an entity restores the last sort picked for its view type. It
+/// reads the file each call, which a boot-time seed shouldn't:
+/// [`crate::ui::callbacks::persisted_sort`] is that one.
 pub fn resolve_view_sort(
     state: &melodia_app::state::AppState,
     view_id: &str,

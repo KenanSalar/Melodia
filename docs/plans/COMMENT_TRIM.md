@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 10.5 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 10.6 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -108,8 +108,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 10.1 | `melodia-views`: the artwork and backdrop tiers | 0.73 | 1,009 | ~665 | 0.33 (457) | `a9f55daf` |
 | 10.2 | `melodia-views`: `ui/radio/` | 0.51 | 1,607 | ~817 | 0.24 (757) | `a657f0e1` |
 | 10.3 | `melodia-views`: the tabbed pages, Browse and Search | 0.44 | 1,783 | ~773 | 0.17 (681) | `2154ecf4` |
-| 10.4 | `melodia-views`: the shell and the player | 0.42 | 1,755 | ~704 | 0.23 (973) | |
-| 10.5 | `melodia-views`: the rest of the shared layer | 0.33 | 2,334 | ~591 | | |
+| 10.4 | `melodia-views`: the shell and the player | 0.42 | 1,755 | ~704 | 0.23 (973) | `89a76e73` |
+| 10.5 | `melodia-views`: the rest of the shared layer | 0.33 | 2,334 | ~591 | 0.23 (1,632) | |
 | 10.6 | `melodia-views`: details, lists and settings | 0.29 | 2,284 | ~289 | | |
 | 11 | `melodia-store` | 0.34 | 2,456 | ~666 | | |
 | 12 | `melodia-integrations` | 0.30 | 936 | ~147 | | |
@@ -208,7 +208,7 @@ Status: done.
   - **Pointed at:** `CLAUDE.md` on the `--version` and `--logs` branches, the order in `main()` and `respawn_if_requested`. `main_order_tests` reads `main`'s body.
 
 ### Phase 10: `melodia-views`
-Status: in progress, 10.5 next.
+Status: in progress, 10.6 next.
 
 - [x] **10.1 The artwork and backdrop tiers**, one commit: `backdrop.rs`, `grid_prewarm.rs`, `hero_backdrop.rs`, `hero_chips.rs`, `hero_folds.rs`, `artwork_cache.rs`, `detail_artwork.rs`, `now_playing_artwork.rs`, `mosaic_hero.rs`, `cover_generation.rs`, `name_palette.rs`, and `aurora/`.
   - **Furthest over:** `backdrop.rs` (175), `grid_prewarm.rs` (147).
@@ -229,9 +229,11 @@ Status: in progress, 10.5 next.
   - **Pointed at:** `CLAUDE.md` on the bridge, `file_drop` and `respawn_target`; `.claude/rules/desktop-shell.md` and `visualizer.md`.
   - **Second copies dropped:** `desktop-shell.md`'s restatements of `frame_allowance`'s Wayland argument, `request_respawn_and_quit`'s doc and `parked_loop`'s heartbeat, each now a pointer; `bridge.rs`'s three copies of `models.slint`'s case for the position scalars, and its inline copy of `reuse_or_warm`'s identity argument; `measure.rs`'s Hangul story, `slint-pitfalls.md`'s to tell; the gap-floor argument kept once in `lyrics/rows.rs`.
   - **Stale claims removed:** `shell/mod.rs`' "lets `tasks/` reach" `event_sink` (its callers are the tray bridge and `boot::tasks`), `request_respawn_and_quit`'s "all three restart paths" (four), and `desktop-shell.md`'s "retired the platform split `with_returning_frame` used to carry".
-- [ ] **10.5 The rest of the shared layer**: the other 32 files directly under `ui/`, plus `callbacks/` and `paged_rows/`. One commit.
+- [x] **10.5 The rest of the shared layer**: the other 32 files directly under `ui/`, plus `callbacks/` and `paged_rows/`. One commit.
+  - **Furthest over:** `nav_history.rs` (74), `section_state.rs` (45), `callbacks/mod.rs` (43).
   - **Pointed at:** `CLAUDE.md` on `file_dialog::parented`, `launcher.rs`, `index_persist`, `CALLBACK_HOMES` and `PagedRows`.
-  - **Check:** `detail_view::release_hero_slots`' doc calls My Library its only multi-global caller; Favorites' and Recently Played's leaves call it too, beside `release_shared_hero`.
+  - **Second copies dropped:** `slint-pitfalls.md`'s sleep-timer entry, a restatement of the module doc that was no pitfall; `ui-patterns.md`'s reasons for the Shuffle pill, `play_row_start`'s two index spaces and what `cross_tab_nav::land` closes, each now a pointer; `macros.rs`' runtime-or-blocking-pool argument kept once, at `spawn_blocking_logged!`; `ui/mod.rs`' per-test narration over the source pins; the `nav_history` stutter argument kept once, on `NavHistory::record`.
+  - **Stale claims removed:** `release_hero_slots`' "My Library its only such caller" (Favorites, Recently Played and Radio call it too), `wire_all`'s "all three surfaces" holding a row's `is_favorite` (seven), `pending_hook`'s "four `open_*_with` calls" (five, Radio's included), `TagSession`'s "`sleep_timer` pattern", and `macros.rs`' `use super::macros::*;`.
 - [ ] **10.6 Details, lists and settings**: `albums/`, `artists/`, `genres/`, `playlists/`, `track_detail/`, `tracks/`, `queue_panel/`, `settings/`, `appearance/`, `onboarding/`, `lib.rs`. One commit. Already near the target, so mostly the register pass (decision 4).
   - **Pointed at:** `CLAUDE.md` on `theme_paint` and the system theme watcher; `.claude/rules/ui-patterns.md`'s Settings page.
   - **Second copy to drop:** the `// const _ … no #[allow] is owed` line over each handle's `Send + Sync` assertion, `CLAUDE.md`'s to argue. Gone from 10.3's handles; still on `albums`, `artists`, `genres` and `playlists`.

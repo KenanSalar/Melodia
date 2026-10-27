@@ -1,12 +1,8 @@
-//! Shared spawn / wire macros for every per-view `wire_*` module. Re-exported at the
-//! bottom; sibling files bring them in with `use super::macros::*;`.
+//! The spawn and wire macros every `wire_*` module shares.
 
-/// Spawn `$fut` on `$state`'s runtime, logging any error with `$label`. The caller must
-/// already have a local binding `$state` (typically `let s = s.clone();` at closure entry)
-/// so `$fut`'s `&s` token resolves to the moved-in clone.
-///
-/// `$label` is any `Display` expression, evaluated only on failure, so a generic caller can
-/// pass a `format_args!` naming its view.
+/// Spawn `$fut` on `$state`'s runtime, logging any error with `$label`. `$state` is a local the
+/// future moves in, so `$fut`'s `&s` resolves to that clone. `$label` is any `Display`, evaluated
+/// only on failure, so a generic caller can pass a `format_args!` naming its view.
 macro_rules! spawn_logged {
     ($state:ident, $label:expr, $fut:expr) => {{
         $state.runtime.clone().spawn(async move {
@@ -17,11 +13,8 @@ macro_rules! spawn_logged {
     }};
 }
 
-/// Sync variant of `spawn_logged!` for `library::*` functions that are not `async`
-/// **and do no file I/O** — the transport calls, which take a `parking_lot::Mutex` and
-/// reach the playback engine. Onto the runtime, so the UI thread isn't blocked. A `views.json` /
-/// `settings.json` write wants [`spawn_blocking_logged!`]; the pool is the difference
-/// and the two are not interchangeable.
+/// [`spawn_logged!`] for a sync `library::*` call **doing no file I/O**, the transport's, onto
+/// the runtime so the UI thread isn't blocked. A file write is [`spawn_blocking_logged!`]'s.
 macro_rules! spawn_logged_sync {
     ($state:ident, $label:literal, $expr:expr) => {{
         $state.runtime.clone().spawn(async move {
@@ -32,17 +25,12 @@ macro_rules! spawn_logged_sync {
     }};
 }
 
-/// The persist-and-forget shape: a synchronous `library::settings::*` write on the
-/// **blocking** pool, warning on failure. Separate from `spawn_logged_sync!` because the
-/// pool is the whole difference — these bodies open, rewrite and fsync a JSON file, which
-/// an async worker must not be parked on.
+/// A synchronous `views.json` write on the **blocking** pool, warning on failure. The pool is the
+/// whole difference from [`spawn_logged_sync!`]: these bodies rewrite and fsync a file, which an
+/// async worker must not be parked on. `AppState::persist_blocking` is the `settings.json` half.
 ///
-/// **The label is a literal, which is the one reason a site legitimately stays
-/// hand-rolled**: `Nav.persist-selected-index` interpolates the index it failed to store.
-///
-/// Every site writes `views.json`, which is what the `debug` line can call it — column
-/// toggles and widths, sort, browse path and view mode leave no other trace.
-/// `AppState::persist_blocking` is the `settings.json` half of the same idea.
+/// The label is a literal, the one reason a site stays hand-rolled: `Nav.persist-selected-index`
+/// names the index it failed to store. The `debug` line is the only trace these writes leave.
 macro_rules! spawn_blocking_logged {
     ($state:ident, $label:literal, $expr:expr) => {{
         // Before the spawn, so a write that hangs still says what it was.
@@ -71,9 +59,8 @@ macro_rules! wire_sync {
     }};
 }
 
-/// Playback-context async wire. The wrapped `library::playback::*` function takes
-/// `&PlaybackContext`, snapshotted inside the spawned future and passed by reference so
-/// the future doesn't hold a borrow across `.await`.
+/// Async wire for a `library::playback::*` function, its `&PlaybackContext` snapshotted inside
+/// the spawned future so no borrow is held across `.await`.
 macro_rules! wire_pb {
     ($target:expr, $method:ident, $state:expr, $label:literal, $libfn:path) => {{
         let s = $state.clone();

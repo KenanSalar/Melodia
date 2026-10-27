@@ -61,12 +61,9 @@ pub(in crate::ui) trait GridTab: TrackDetail {
     fn restore(ui: &AppWindow, state: &AppState, view: &Arc<Self>, id: i64);
 }
 
-/// Wires `view`'s section gate and its `library_changed` subscriber.
-///
-/// The shadow is seeded from the mounted tab because the gate's tracker baselines inside
-/// `AppWindow::new()` and fires only on a later change: a tab the launch doesn't land on gets no
-/// edge at all, and the one it does gets its edge a frame after boot has read the shadow. See the
-/// `SectionActiveGate` entry in `ui-patterns.md`.
+/// Wires `view`'s section gate and its `library_changed` subscriber. The shadow is seeded from
+/// the mounted tab, the gate firing only on a later change (`ui-patterns.md`'s
+/// `SectionActiveGate` entry).
 pub(in crate::ui) fn wire<V: GridTab>(ui: &AppWindow, state: &AppState, view: &Arc<V>) {
     view.section().set_active(tab_is_mounted(ui, V::TAB));
     wire_section_gate(ui, state, view);

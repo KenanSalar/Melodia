@@ -66,29 +66,8 @@ pub mod window_chrome;
 #[cfg(test)]
 pub(crate) mod fixtures;
 
-// Source pins for shared components with no Rust module of their own — the
-// faked-placeholder inputs and the tooltip pill, the two pinned bands (the one
-// both mosaic pages wear and My Library's own), the blur stack under both of them, the
-// header row all three of those plus the Settings page share, and `IconButton`, whose
-// glyph sits outside the disc and places itself — nested it costs a layer per frame of a
-// band morph, centred by a layout it folds an animated press into every host's layout
-// cache. Each reads the one component it is about, by name.
-// `startup_motion_tests` pins two components across a second seam: what the shell and the
-// view mounted inside it do on the frame the window opens, and on the miniplayer swap's
-// crossfade. `titlebar_tests` reaches a third
-// tree — it holds the brand mark's theme brush to the asset it is painted over, the only
-// thing here a dark-palette reviewer cannot see going wrong, and `caption_tests` reaches it
-// for the decoration buttons, whose fill answers to the OS decoration beside the window and
-// to a backdrop that is off by default. `frameless_tests` holds the
-// shell's frame bindings and the miniplayer's exit edge to one another, a pairing only a Win32
-// or macOS frame shows breaking. `mount_fade_tests` holds every fade flipped right after its
-// mount to reading its layers first, a race that snaps on some runs and fades on the rest.
-// `slider_pointer_tests` holds the pointer every value slider shares to the left button, and to
-// committing only what a press moved.
-//
-// What used to sit among them and no longer does is the set that walked the *tree* rather
-// than reading a component: those are `crates/melodia/tests/`, on the rule that a check
-// enumerating a corpus does not belong in a crate the corpus contains.
+// Source pins for shared components with no Rust module of their own, each reading the one
+// component it is about by name; a walk over the whole tree is `crates/melodia/tests/`'s.
 #[cfg(test)]
 #[path = "tests/aurora_backdrop_tests.rs"]
 mod aurora_backdrop_tests;

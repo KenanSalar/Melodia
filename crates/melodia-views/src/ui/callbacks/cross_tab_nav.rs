@@ -1,21 +1,10 @@
-//! Single-home wiring for `Nav.go-to-album` / `go-to-artist` / `go-to-genre`, which every
-//! right-click menu's "Go to …" calls straight. Its own module because each per-view
-//! callback file would otherwise need all three target UI handles; instead this runs after
-//! every `wire_*`, so the handles are guaranteed to exist.
+//! `Nav.go-to-album` / `go-to-artist` / `go-to-genre`, which every right-click menu's "Go to …"
+//! calls straight. Wired after every `wire_*`, so all three target handles exist.
 //!
-//! Four steps, mirroring the older cross-tab hand-offs: stamp
-//! `*Detail.origin-nav-index` synchronously from where the user is standing, mark the
-//! drill-in slide, spawn `open_*_with` and move the nav index and tab inside its
-//! completion closure, and persist `last_detail_ids[target_view]` so a restart reopens
-//! the same detail.
-//!
-//! **An origin is a section, not a position.** The four destinations are all tabs of My
-//! Library, so a drill starting *inside* that page ends inside it: the tab bar names the
-//! detail's own tab for the whole visit, and an arrow restoring the tab it came from
-//! contradicts the bar beside it. Such a drill stamps `-1`. The **`tab` half of
-//! [`Origin`] survives** for the other question it answers — "did the user navigate away
-//! mid-fetch", which the nav index alone stopped being able to tell once the four
-//! destinations became tabs of one page.
+//! A drill stamps `*Detail.origin-nav-index` synchronously from where the user stands
+//! ([`origin_stamp`]), marks the slide, spawns `open_*_with` and moves the nav index and tab in
+//! its completion closure, then persists `last_detail_ids[target_view]` so a restart reopens the
+//! same detail.
 
 use std::sync::Arc;
 
@@ -34,10 +23,8 @@ use melodia_ui::{
     AlbumDetail, AppWindow, ArtistDetail, GenreDetail, MyLibrary, Nav, NavEnterFrom, Queue,
 };
 
-/// Where the user is standing when a "Go to …" fires: the nav index, plus the My Library
-/// tab when that index *is* My Library. Both halves are read synchronously, before any
-/// await — the tab half guards the mid-fetch flip, and [`Origin::stamp`] decides what
-/// the destination's back arrow records.
+/// Where the user stands when a "Go to …" fires: the nav index, plus the My Library tab when
+/// that index *is* My Library. Read synchronously, before any await.
 #[derive(Clone, Copy)]
 pub(in crate::ui) struct Origin {
     nav: i32,
@@ -61,10 +48,8 @@ impl Origin {
         origin_stamp(self.nav)
     }
 
-    /// Whether the user is still where the drill started. Guards the destination flip
-    /// inside the fetch's completion closure — moving them after they navigated away
-    /// mid-fetch is exactly what this exists to prevent, and the nav index alone stopped
-    /// being able to tell once the four destinations became tabs of one page.
+    /// Whether the user is still where the drill started, so the fetch's completion doesn't
+    /// move them after they navigated away. The tab half is what tells within My Library.
     fn still_current(self, ui: &AppWindow) -> bool {
         ui.global::<Nav>().get_selected_index() == self.nav
             && (self.nav != NAV_MY_LIBRARY || ui.global::<MyLibrary>().get_tab_idx() == self.tab)
@@ -74,11 +59,11 @@ impl Origin {
 /// The `origin-nav-index` a drill starting at section `nav` records: `-1` when that
 /// section *is* My Library, the index itself otherwise.
 ///
-/// **An origin means "another section".** The four destinations are all tabs of one
-/// page, so a drill that starts there ends there — the tab bar names the detail's own
-/// tab for the whole visit, and a back arrow restoring the tab it came from contradicts
-/// the bar beside it. The arrow means "close this detail"; Mouse-4/5 walks the real
-/// history. A free fn as well as a method, so the rule is testable without an `AppWindow`.
+/// **An origin means "another section".** The four destinations are all tabs of one page, so a
+/// drill that starts there ends there: the tab bar names the detail's own tab for the whole
+/// visit, and a back arrow restoring the tab it came from would contradict it. The arrow means
+/// "close this detail"; Mouse-4/5 walks the real history. A free fn so it tests without an
+/// `AppWindow`.
 pub(in crate::ui) fn origin_stamp(nav: i32) -> i32 {
     if nav == NAV_MY_LIBRARY { -1 } else { nav }
 }
@@ -99,10 +84,9 @@ pub fn wire_cross_tab_nav(
     nav.on_go_to_genre(make_go_to_genre(state, genres_ui, weak));
 }
 
-/// Moves to the drill's tab once it has landed, uncovering the content panel first: the
-/// player bar stays reachable over Now Playing, and a detail opened under it is one nobody
-/// sees. The floating queue closes for the same reason. The docked panel stays as it is,
-/// beside the page rather than over it.
+/// Moves to the drill's tab once it has landed, uncovering the content panel first: the bar
+/// stays reachable over Now Playing and the floating queue, and a detail opened under either is
+/// one nobody sees. The docked panel stays, beside the page rather than over it.
 fn land(ui: &AppWindow, tab: i32) {
     ui.global::<Nav>().set_now_playing_open(false);
     let queue = ui.global::<Queue>();
@@ -144,15 +128,11 @@ fn make_go_to_artist(
     }
 }
 
-/// The shared "open Album Detail under the Albums tab" hand-off, for every track-list
-/// "Go to Album" and the Search-result album card: stamp `origin-nav-index` so the back
-/// arrow returns to the section the user came from, spawn `open_album_with` and move to
-/// the Albums tab inside its completion closure — guarded, so a nav or tab switch
-/// mid-fetch doesn't yank the user away — then persist the detail id.
+/// The shared "open Album Detail under the Albums tab" hand-off, for every "Go to Album" and the
+/// Search result's album card.
 ///
-/// The view-transition direction is deliberately **not** set here; `open_album_with`
-/// marks it from its argument. A caller that also wants an early `nav_transition::mark`,
-/// as the track-list menus do for the same-tab case, calls it before this.
+/// Sets no transition direction, `open_album_with` marking it from its argument; a caller that
+/// wants an early `nav_transition::mark` for the same-tab case calls it first.
 pub(in crate::ui) fn open_album_cross_tab(
     state: &AppState,
     albums_ui: &Arc<AlbumsUi>,
@@ -258,9 +238,6 @@ fn make_go_to_genre(
         let Some(ui) = weak.upgrade() else { return };
 
         let origin = Origin::read(&ui);
-        // Stamp the origin synchronously so `genres::on_close_detail` can restore
-        // the originating *section* on back-press — `-1`, and no restore at all,
-        // for a drill that started on another tab of this same page.
         ui.global::<GenreDetail>().set_origin_nav_index(origin.stamp());
         let target_tab = ui.global::<MyLibrary>().get_tab_genres();
         nav_transition::mark(&ui, NavEnterFrom::Right);

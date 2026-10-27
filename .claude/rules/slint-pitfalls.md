@@ -597,15 +597,6 @@ this file is what builds, looks right, and is wrong.
   popup's origin (the entry above) and the menu stays pinned under its trigger; a transparent
   full-popup `TouchArea` **declared first** closes on stray clicks.
 
-- **Sleep timer = a session-only cancel-and-replace tokio countdown + a `PlayerState`
-  end-of-track flag.** In `crates/melodia-views/src/ui/sleep_timer.rs` — a **UI-layer** module, because `tasks/` may
-  not import `ui::*` and the countdown writes a Slint property. **Duration is
-  playback-linked**: each 1 s tick decrements only while `status_atomic == Playing` (lock-free),
-  so pausing holds the timer and it never expires on a paused player. Never persisted; bounds
-  `[30 s, 2 h]`; `Player.set-sleep-timer(minutes)` takes 0 off / `>0` duration / `-1`
-  End-of-track, the last arming `PlayerState::pause_after_current_track` (monitor half in
-  `.claude/rules/audio-stack.md`).
-
 - **Flash-free image cross-fade = two slots, never cleared under a fade.** Two stacked `Image`s +
   `use-a` bool; Rust writes the new image into the *inactive* slot then flips the bool so both
   `opacity` animate. A write never resets the outgoing slot, which stays painted for the fade. A

@@ -1,20 +1,10 @@
-//! Where the user is, as one compact string.
+//! Where the user is, as one compact string, for the two diagnostics that ask:
+//! `tasks::rss_sampler` tags every memory sample with it, and the verbose log names each
+//! navigation by it.
 //!
-//! Shared by the two diagnostics that ask it: `tasks::rss_sampler` tags every
-//! memory sample, and the verbose log names each navigation destination. Here
-//! rather than beside either, because the sampler's copy was
-//! `#[cfg(target_os = "linux")]` — one platform, for a question with nothing to
-//! do with `/proc`.
-//!
-//! Index mapping matches `crates/melodia-ui/ui/globals/nav.slint::Nav` (`0=search
-//! 1=browse 2=favorites 3=my-library 8=recently-played 9=settings 10=radio`;
-//! 4–7 retired). A new section owes an arm; a missing one degrades to `Nav(n)`
-//! rather than to a wrong name.
-//!
-//! **Every tabbed page names its tab** — a page that logs as one name is a page
-//! the diagnostic can't distinguish. All four resolve the live index against the
-//! Slint-declared `tab-*` constants rather than restating the numbering, so
-//! there is nothing here to drift.
+//! The index arms follow `crates/melodia-ui/ui/globals/nav.slint`; a section without one
+//! degrades to `Nav(n)` rather than to a wrong name. Every tabbed page names its tab, resolved
+//! against the Slint-declared `tab-*` constants rather than a restated numbering.
 
 use slint::{ComponentHandle, SharedString};
 
@@ -28,12 +18,9 @@ use melodia_ui::{
     Queue, Radio, RecentlyPlayed, SettingsPage,
 };
 
-/// `Kind(id "Name")` for an open detail, or `None` when the tab shows its grid.
-///
-/// Carries both because they answer different questions: the name is what a
-/// reader recognises, the id is what correlates with `views.json`. The name is
-/// empty for the frame between the id landing and the row arriving, so it
-/// degrades to the id alone rather than to an empty pair of quotes.
+/// `Kind(id "Name")` for an open detail, or `None` when the tab shows its grid: the name is what
+/// a reader recognises, the id what correlates with `views.json`. The name is empty between the
+/// id landing and the row arriving, so it degrades to the id alone.
 fn detail_tag(kind: &str, id: i32, name: &SharedString) -> Option<String> {
     if id < 0 {
         return None;
@@ -85,9 +72,8 @@ fn radio_tag(ui: &AppWindow) -> String {
     format!("Radio/{tab:?}/Station({} {:?})", station.id, station.name)
 }
 
-/// Emit the verbose log's `nav:` line. One spelling for all three callers —
-/// the history's own record, and the two curated pages' tab picks, which move
-/// no nav index and so never reach it.
+/// Emit the verbose log's `nav:` line, for the history's record and the two curated pages' tab
+/// picks, which move no nav index and so never reach it.
 pub fn log_current(ui: &AppWindow) {
     log::debug!("nav: {}", format_view(ui));
 }

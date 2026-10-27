@@ -1,14 +1,11 @@
-//! Multi-selection for the card grids, shared by all ten of them.
+//! Multi-selection for the ten card grids: one `(scope, set)` pair rather than a copy per view.
+//! Every callback carries the asking grid's scope, so a grid that doesn't hold the set reads back
+//! an empty selection and replaces it on its first pick, which keeps a stale set from bleeding
+//! onto another grid whatever a mount forgets. The section leaves still hand it back, for the
+//! question `card-selection.slint` argues: a set no grid is showing.
 //!
-//! One `(scope, set)` pair rather than a copy of the state per view. Every callback carries the
-//! asking grid's scope, so a grid that is not the one holding the set reads back an empty
-//! selection and replaces it on its first pick, which is what stops a stale set bleeding from one
-//! grid onto another whatever any mount forgets. The section leaves still hand it back, for the
-//! different question `card-selection.slint` argues: a set no grid is showing.
-//!
-//! The click itself is [`compute_click_selection`]'s, anchored on an id as the track lists are.
-//! What a grid adds is the scope, and a card order read off its model (a library grid's ids, or
-//! Radio's chunked rows flattened), a card having no flat position to offer.
+//! The click is [`compute_click_selection`]'s, anchored on an id; a grid adds the scope and a
+//! card order read off its model, a card having no flat position.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -22,15 +19,10 @@ use melodia_ui::{
     Albums, AppWindow, Artists, CardSelection, Favorites, Genres, Playlists, Radio, RecentlyPlayed,
 };
 
-/// The scope token each grid passes. The `.slint` mounts spell the same literals; a mount that
-/// spells something else selects nothing rather than selecting the wrong grid's cards.
-///
-/// **A typo degrades to a single card; the empty string used to select normally.** Only the
-/// second needs stating. `EntityCardGrid.selection-scope` has no default, so a forgotten binding
-/// arrives as `""`, which is also what an untouched [`Selection`] holds, and comparing equal is
-/// exactly what a scope guard must not do: a grid that never named itself got a working-looking
-/// set, and two of them would have shared one. [`unnamed_scope`] is the guard, asked by the two
-/// callbacks that can seat a scope.
+/// The scope token each grid passes, spelled the same in the `.slint` mounts; a mount spelling
+/// anything else selects nothing. **Except `""`**: `EntityCardGrid.selection-scope` has no
+/// default, and a forgotten binding compares equal to an untouched [`Selection`], so two such
+/// grids would share one. [`unnamed_scope`] guards the two callbacks that can seat a scope.
 pub mod scope {
     pub const ALBUMS: &str = "albums";
     pub const ARTISTS: &str = "artists";
@@ -55,16 +47,12 @@ fn unnamed_scope(asking_scope: &str) -> bool {
 /// latch, and a re-entrant borrow should fail loudly rather than park the UI thread.
 struct Selection {
     scope: String,
-    /// **Pick order, and never sorted — it is what the batch actions queue in.**
-    /// `library::entity_tracks` flattens the ids in the order it is handed them, so a set sorted
-    /// anywhere on the way out plays albums by database id under a grid the user sorted by year. A
-    /// shift range lands in displayed order and a ctrl-click appends, which is the same `Vec` and
-    /// the same reason [`crate::ui::list_selection`] has one for the track lists.
+    /// **Pick order, never sorted, being what the batch actions queue in**:
+    /// `library::entity_tracks` flattens the ids in the order handed over, so a sorted set would
+    /// play albums by database id under a grid sorted by year.
     ids: Vec<i32>,
-    /// `ids` as a set, because the membership question is asked far more often than it is
-    /// answered: every mounted card re-runs `selected` on each generation bump, so a scan of
-    /// `ids` makes one publish cost mounted cards times selected ids. Built beside the `ids` it
-    /// mirrors, in [`Selection::new`].
+    /// `ids` as a set: every mounted card asks `selected` on each generation bump, so a scan
+    /// would cost mounted cards times picks.
     members: HashSet<i32>,
     /// The id a shift-range measures from, or [`NO_ANCHOR`].
     anchor: i32,
@@ -128,12 +116,9 @@ pub fn wire(ui: &AppWindow) {
             if ids.is_empty() {
                 return;
             }
-            // The anchor is left where the last pick put it, so a shift-pick after Select All
-            // still ranges from what the user chose; `list_selection::select_all_rows` argues
-            // it for the track lists. **Only within the scope that set it**: `pick` drops the
-            // anchor on a scope change and this is the one writer that could carry one across,
-            // where entity ids all start at 1 and the next shift-range would measure from
-            // whichever card happens to share the number.
+            // The anchor stays where the last pick put it (`list_selection::select_all_rows`),
+            // **within its own scope only**: entity ids all start at 1, so one carried across
+            // would range from whichever card shares the number.
             let anchor = {
                 let current = selection.borrow();
                 if current.scope == scope { current.anchor } else { NO_ANCHOR }
@@ -155,11 +140,9 @@ pub fn wire(ui: &AppWindow) {
 /// finds the clicked card by its id.
 const NO_POSITION: i32 = -1;
 
-/// The new selection for a click, or `None` where there is nothing to change.
-///
-/// [`compute_click_selection`]'s click within the live scope, `visible` walked only for a range. A
-/// click in a scope that isn't the live one starts that scope's selection fresh, whatever the
-/// modifiers say, the set and anchor held naming another grid's cards.
+/// The new selection for a click, or `None` where there is nothing to change. A click in a scope
+/// that isn't the live one starts fresh whatever the modifiers say, the set and anchor held
+/// naming another grid's cards.
 fn pick(
     current: &Selection,
     asking_scope: &str,
@@ -204,11 +187,9 @@ fn publish(ui: &AppWindow, selection: &RefCell<Selection>, next: Selection) {
     global.set_generation(global.get_generation().wrapping_add(1));
 }
 
-/// The ids a scope's grid is currently drawing, in card order.
-///
-/// Read off the Slint model rather than any slice's own cache. The model *is* what is on screen,
-/// so a range can't disagree with it mid-debounce, and this names no view's internals. A library
-/// grid's model holds its ids, where flattening it would read every card; Radio's are flattened.
+/// The ids a scope's grid is drawing, in card order, off the Slint model rather than a slice's
+/// cache, so a range can't disagree with the screen mid-debounce. A library grid's model holds
+/// its ids, flattening it reading every card; Radio's are flattened.
 fn visible_ids(ui: &AppWindow, asking_scope: &str) -> Vec<i32> {
     match asking_scope {
         scope::ALBUMS => card_ids(&ui.global::<Albums>().get_grid_rows(), asking_scope),

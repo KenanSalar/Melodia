@@ -6,9 +6,8 @@ use melodia_core::entities::tags::ArtworkEdit;
 
 use super::form::{FormState, ListFields};
 
-/// Snapshot of one dialog open, shared across the UI-thread handlers via `Rc<RefCell<_>>` (the
-/// `sleep_timer` pattern). `request-edit` overwrites the whole thing, so nothing leaks across
-/// opens.
+/// Snapshot of one dialog open, shared across the UI-thread handlers. `request-edit` overwrites
+/// the whole thing, so nothing leaks across opens.
 #[derive(Default)]
 pub(super) struct TagSession {
     pub ids: Vec<i64>,

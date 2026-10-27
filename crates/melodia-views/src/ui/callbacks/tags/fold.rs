@@ -2,10 +2,8 @@
 //!
 //! Pure, and the only part of the dialog that neither reads nor writes a Slint property.
 
-/// Common value across the selection for a string field: `(value, disagrees)`.
-/// All rows agree ⇒ that value; they differ ⇒ empty + the multi-value flag.
-/// Borrows each row (`&str`) to compare and clones only the winner — vs cloning
-/// every row's value just to test agreement.
+/// The value a string field agrees on across the selection, as `(value, disagrees)`: empty and
+/// `true` where the rows differ. Only the winner is cloned.
 pub(super) fn common_str<'a>(mut values: impl Iterator<Item = &'a str>) -> (String, bool) {
     let Some(first) = values.next() else {
         return (String::new(), false);
@@ -13,11 +11,8 @@ pub(super) fn common_str<'a>(mut values: impl Iterator<Item = &'a str>) -> (Stri
     if values.any(|v| v != first) { (String::new(), true) } else { (first.to_owned(), false) }
 }
 
-/// [`common_str`] for a field compared as a whole value rather than as a string.
-///
-/// Which is what the multi-value fields need: comparing the lists themselves is what lets a genre
-/// contain the separator its column happens to render with, and what keeps two credits that render
-/// alike from folding together.
+/// [`common_str`] for a field compared as a whole value, as the multi-value fields are (`form`'s
+/// `ListFields` says why).
 pub(super) fn common_value<'a, T>(mut values: impl Iterator<Item = &'a T>) -> (T, bool)
 where
     T: Clone + Default + PartialEq + 'a,
@@ -28,11 +23,9 @@ where
     if values.all(|other| other == first) { (first.clone(), false) } else { (T::default(), true) }
 }
 
-/// Common value across the selection for a formatted (numeric) field. Compares a
-/// cheap `Copy + Eq` key so no per-row string is allocated to test agreement,
-/// and formats only the single winning value. The key must collapse together
-/// every value that *renders* identically (e.g. a `Some(0)` and a `None` year
-/// both display empty ⇒ same key), so key equality matches display equality.
+/// [`common_str`] for a formatted numeric field, compared on a `Copy + Eq` key and formatting
+/// only the winner. The key must collapse every value that *renders* alike (a `Some(0)` year and
+/// a `None` both display empty), so key equality is display equality.
 pub(super) fn common_by<T: Copy, K: Eq>(
     mut values: impl Iterator<Item = T>,
     key: impl Fn(T) -> K,

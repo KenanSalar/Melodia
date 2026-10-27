@@ -1,17 +1,12 @@
-//! Re-render what a language switch cannot reach.
+//! Re-render what a language switch cannot reach: a live `@tr` binding re-resolves on the next
+//! paint, but a string Rust rendered through a `pure callback` and stored in a model is read by
+//! nothing again.
 //!
-//! `slint::select_bundled_translation` dirties one property that every live `@tr` binding
-//! reads, so the markup re-resolves itself on the next paint. What it cannot touch is a
-//! string Rust rendered through one of the `pure callback` trampolines and stored in a model
-//! or property: nothing re-reads those.
-//!
-//! Almost everything so stored is behind a section that hands its models back on the way to
-//! the Settings page, and comes back through the enter's own fetch. **The notification stack
-//! is the exception, and the reason this seam exists**: it is on screen during the switch,
-//! its rows outlive every navigation, and one of them is raised by the Settings page itself.
-//! It cannot be reached inline from [`crate::ui::settings::locale`] either — `install_locale`
-//! runs well ahead of the `Rc<NotificationsUi>`, and `Settings.language-changed` has a single
-//! handler slot a second registration would clobber.
+//! Almost everything so stored sits behind a section whose leave hands it back. **The
+//! notification stack is the exception this seam exists for**: on screen during the switch, its
+//! rows outliving every navigation. [`crate::ui::settings::locale`] can't reach it inline,
+//! `install_locale` running ahead of the `Rc<NotificationsUi>` and `Settings.language-changed`
+//! having a single handler slot.
 
 use slint::Weak;
 

@@ -19,24 +19,17 @@ use super::paint::{
     hand_install_back, paint_install_started, paint_restart_needed, report_failure,
 };
 
-/// True iff a `download_and_install` future is currently in flight on
-/// this process. The Slint UI gates the Install button via
-/// `is-installing`, but a programmatic double-invoke (toast tap +
-/// Settings button in the same tick, or an event subscriber re-firing)
-/// could double-spawn. Held through [`InstallGuard`]. Same pattern as
-/// `ui::window_chrome::RESPAWN_AFTER_EXIT`.
+/// Whether a `download_and_install` is in flight. The UI gates the Install button on
+/// `is-installing`, but a toast tap and the Settings button in one tick could still
+/// double-spawn. Held through [`InstallGuard`].
 static INSTALL_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
-/// [`INSTALL_IN_PROGRESS`], released on drop in every exit path of the
-/// install future (early-return, error, success) — and a panic still cleans
-/// up.
+/// [`INSTALL_IN_PROGRESS`], released on drop on every exit, a panic included.
 struct InstallGuard;
 
 impl InstallGuard {
-    /// `None` while another install is in flight. CAS-acquire prevents a
-    /// double-spawn from racing two downloads against the same `.new`
-    /// sibling path — both would `File::create(dest)` and clobber each
-    /// other's bytes.
+    /// `None` while another install is in flight, whose download would clobber the same `.new`
+    /// sibling.
     fn acquire() -> Option<Self> {
         INSTALL_IN_PROGRESS
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
@@ -65,23 +58,16 @@ pub(super) fn spawn_install(
     runtime.spawn(async move {
         let _guard = guard;
 
-        // Capture the install target *before* `download_and_install`
-        // swaps the binary on disk. The atomic swap *renames* the running
-        // binary to `<target>.old`, and nothing recovers that after the
-        // fact — the OS reports the stale path with a straight face — so
-        // the post-exit respawn in `shutdown::respawn_if_requested` must
-        // use this captured path. See `ui::window_chrome::set_respawn_exe`
-        // for why the unlinking installs need no such capture.
+        // Captured *before* `download_and_install` renames the running binary to
+        // `<target>.old`, after which the OS reports the stale path; the respawn in
+        // `shutdown::respawn_if_requested` uses this one. `window_chrome::set_respawn_exe`
+        // says why the unlinking installs need no capture.
         let install_target = install_target();
 
         let Some(cached) = resolve_asset(&state, &weak, &event_tx).await else { return };
 
-        // The version threads into `verify_stream` for the trusted-comment
-        // cross-check: signature must carry `version=<cached.version>`.
-        // Pinning to the *observed* version (not whatever the install-time
-        // re-fetch happens to show) means a manifest that flipped to a
-        // different release between Available-toast and Install-click is
-        // caught by the signature mismatch, not silently installed.
+        // The signature must carry `version=<cached.version>`, so a manifest that flipped
+        // release between the Available toast and the click fails rather than installs.
         match updater::download_and_install(
             state.http_client(),
             &cached.asset,
@@ -102,15 +88,9 @@ pub(super) fn spawn_install(
     });
 }
 
-/// The asset to download, or `None` once the reason it can't be has been
-/// reported.
-///
-/// Happy path: re-read the manifest and use the fresh asset — picks up any
-/// URL/signature changes between check and install. Sad path: re-fetch fails
-/// (offline, captive portal), fall back to the asset cached at last
-/// `Available` observation. The signature check downstream catches any drift
-/// between cache and on-disk artifact, so the fallback can't compromise
-/// safety.
+/// The asset to download, or `None` once the reason it can't be is reported. A fresh manifest
+/// read picks up any URL or signature change since the check; where it fails, the asset cached at
+/// the last `Available` stands in, the downstream signature check catching any drift.
 async fn resolve_asset(
     state: &AppState,
     weak: &Weak<AppWindow>,
@@ -139,11 +119,7 @@ async fn resolve_asset(
             None
         }
         Ok(Checked { manifest, verdict: Verdict::UnsupportedSchema, .. }) => {
-            // Server bumped the manifest schema between the user's
-            // last Available observation and the Install click.
-            // Same outcome as UpToDate from the install path's POV
-            // — can't proceed, surface a short error so they know
-            // why the click didn't act.
+            // The schema moved between the last Available and the click.
             let reason = format!(
                 "manifest schema {} is newer than this binary supports",
                 manifest.manifest_schema_version
@@ -159,10 +135,7 @@ async fn resolve_asset(
             None
         }
         Err(e) => {
-            // Re-fetch failed (network / DNS / TLS / server 5xx).
-            // Fall back to the cached asset if any — the user
-            // already saw an Available toast, so they expect this
-            // click to act on whatever they were told about.
+            // The user saw an Available toast, so the click acts on what it told them about.
             let Some(cached) = asset_cache::snapshot() else {
                 log::warn!(
                     "updater: re-fetch before install failed ({:?}) and \
@@ -200,9 +173,6 @@ fn finish_installed(
     install_target: &AppResult<PathBuf>,
 ) {
     asset_cache::clear();
-    // Record the pre-swap binary path so the "Restart Now"
-    // respawn relaunches the freshly-installed binary, not
-    // the pre-swap path the OS still reports after a rename.
     match install_target {
         Ok(target) => {
             crate::ui::window_chrome::set_respawn_exe(target.clone());

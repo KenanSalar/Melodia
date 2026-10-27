@@ -1,17 +1,12 @@
 //! Per-view persistence of track-list column state.
 //!
-//! Every consumer of the reusable `TrackList` component owns a per-view Slint global holding one
-//! `TrackColumns` value, and the hydrate-on-startup / snapshot-on-shutdown body is identical across
-//! all of them. What varies is the global type, the view-id, the columns a first launch hides and,
-//! for a detail view, the one column the UI can no longer toggle. `track_list_views!` takes one row
-//! of those per view and generates each `TrackListColumnState` impl plus [`hydrate_all`] and
-//! [`snapshot_all`], so a new view is a global, a `view_id::*` const and one row.
-//!
-//! Persistence rides on `views.json`'s `view_column_widths`, `view_columns` and `view_marks`, all
-//! keyed by an arbitrary view-id, so a new view needs no schema change. **The defaults are
-//! Rust's**, each view's visible set here and the widths in `ColumnWidths::default()`: the globals
-//! declare none, so a view left out of [`hydrate_all`] would have no columns at all. One table
-//! feeding both passes is what keeps that from happening.
+//! `track_list_views!` takes one row per view (its global, its view-id, the columns a first
+//! launch hides and a detail's locked column) and generates each `TrackListColumnState` impl
+//! plus [`hydrate_all`] and [`snapshot_all`], so a new view is a global, a `view_id::*` const
+//! and one row, with no `views.json` schema change. **The defaults are Rust's**, the visible
+//! set here and the widths in `ColumnWidths::default()`: the globals declare none, so a view
+//! left out of [`hydrate_all`] would have no columns at all, which one table feeding both
+//! passes prevents.
 
 use std::collections::{BTreeMap, HashSet};
 
@@ -33,15 +28,12 @@ use melodia_ui::{AppWindow, TrackColumns};
 /// the `show_*` fields in this order.
 const TOGGLEABLE: [&str; 6] = ["number", "artwork", "artist", "album", "genre", "year"];
 
-/// The row marks the popup toggles beside the columns, by the id `view_marks` stores: the heart
-/// beside a favourite's title, the one its duration gives way to on hover, and the hover star
-/// strip. Their own map rather than more `view_columns` ids, which `ViewStateData::view_marks`
-/// argues. [`columns_from`] and [`TrackListColumnState::snapshot_marks`] walk them in this order.
+/// The row marks the popup toggles beside the columns, by the id `view_marks` stores (a map of
+/// their own, which `ViewStateData::view_marks` argues). [`columns_from`] and
+/// [`TrackListColumnState::snapshot_marks`] walk them in this order.
 const MARKS: [&str; 3] = ["favorite_mark", "favorite_button", "rating_strip"];
 
-/// The Slint-side surface of a per-view track-list global, so the hydrate, snapshot and toggle
-/// paths drive any number of views down one path. Each generated global gets its own `impl` from
-/// `track_list_views!`, routing through the accessors.
+/// The Slint-side surface of a per-view track-list global, implemented by `track_list_views!`.
 pub trait TrackListColumnState {
     /// The key every `views.json` map holds this view under.
     const VIEW_ID: &'static str;
@@ -53,10 +45,8 @@ pub trait TrackListColumnState {
     fn read_columns(&self) -> TrackColumns;
     fn write_columns(&self, columns: TrackColumns);
 
-    /// The user-toggleable column ids currently visible, in display order.
-    /// Always-visible columns are excluded by design — they aren't in the toggle popup,
-    /// and the lock policy differs per view. Both writers into `view_columns[view_id]`
-    /// go through this, so the on-disk shape stays consistent within a view.
+    /// The toggleable column ids shown, in display order, less the locked one. Both writers
+    /// into `view_columns[view_id]` go through it, so the stored shape stays one.
     fn snapshot_visible(&self) -> Vec<String> {
         let columns = self.read_columns();
         let shown = [
@@ -185,9 +175,7 @@ fn widths_from(columns: &TrackColumns) -> ColumnWidths {
     }
 }
 
-/// View-id constants. Centralised so the spelling stays consistent between
-/// the hydrate path, the shutdown snapshot path, and the per-feature
-/// callbacks (e.g. `Tracks.toggle-column` writing `view_columns["tracks"]`).
+/// The keys every `views.json` map holds a view under.
 pub mod view_id {
     pub const TRACKS: &str = "tracks";
     pub const BROWSE: &str = "browse";
@@ -198,8 +186,7 @@ pub mod view_id {
     pub const FAVORITES: &str = "favorites";
     pub const RECENTLY_PLAYED: &str = "recently_played";
     pub const SEARCH: &str = "search";
-    // Entity grids — `view_columns` doesn't apply (no track-list columns),
-    // but `view_sort` does: the grid header's sort is persisted per grid.
+    // The grids: no columns, but a persisted sort.
     pub const ALBUMS: &str = "albums";
     pub const ARTISTS: &str = "artists";
     pub const GENRES: &str = "genres";
@@ -289,8 +276,6 @@ track_list_views! {
     Search => SEARCH, hidden = [genre, year];
 }
 
-/// Narrow a persisted f64 column width (`views.json`) to the f32 Slint uses.
-/// Column widths are tens-to-hundreds of pixels; f32 has ample precision.
 #[allow(
     clippy::cast_possible_truncation,
     reason = "column widths are small pixel counts; f32 mantissa is sufficient"

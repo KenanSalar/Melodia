@@ -1,10 +1,6 @@
-//! Running a closure on the UI thread every time a [`Signal`] moves.
-//!
-//! The subscribe-and-spawn loop is the whole of what its subscribers share and none of what they
-//! differ on, so what each does with the tick is all that stays at the call site.
-//!
-//! `changed()` marks the value seen on its own, so there is deliberately no `borrow_and_update`
-//! here: the counter is a tick, not a payload, and nothing downstream reads it.
+//! Running a closure on the UI thread every time a [`Signal`] moves. There is deliberately no
+//! `borrow_and_update`: `changed()` marks the value seen itself, and the counter is a tick
+//! nothing reads.
 
 use slint::Weak;
 
@@ -13,12 +9,8 @@ use melodia_core::error::{AppError, AppResult};
 use melodia_ui::AppWindow;
 
 /// Run `on_tick` on the UI thread after every bump of `signal`, until the window goes away.
-///
-/// `label` names the subscriber in the one error this can raise, which is `spawn_local` refusing
-/// off the event loop.
-///
-/// The closure takes no `Send` bound on purpose: `spawn_local` runs it on the UI thread, so a
-/// subscriber may capture the `Rc` handles the shell owns.
+/// `label` names the subscriber in the one error this raises, `spawn_local` refusing off the
+/// event loop. No `Send` bound, so a subscriber may capture the shell's `Rc` handles.
 pub fn on_signal<F>(
     signal: &Signal,
     weak: Weak<AppWindow>,
