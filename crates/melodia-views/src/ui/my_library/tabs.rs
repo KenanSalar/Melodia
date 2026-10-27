@@ -153,7 +153,7 @@ pub fn go_to_tab(ui: &AppWindow, tab: i32) {
 
 /// Returns to the section a drill started from. Called before the detail clears its own id, so
 /// Slint reroutes in one frame rather than flashing the grid; only a drill from another section
-/// records an origin (`ui-patterns.md`'s My Library delta).
+/// records an origin, the band's back arrow otherwise meaning "close this detail".
 pub fn return_to_section(ui: &AppWindow, origin_nav: i32) {
     let nav = ui.global::<Nav>();
     nav.set_selected_index(origin_nav);

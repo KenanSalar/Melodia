@@ -208,8 +208,9 @@ export global Theme {
     in-out property <bool> window-focused: true;
 
     // On `Theme` because both colour tiers ask, and `ui::backdrop::kind` is its only Rust reader.
-    // `in` so `boot::ui_setup::chrome::apply_backdrop_style` stays the one writer, the setting
-    // being restart-gated (`ui-patterns.md`). The default matches the setting's.
+    // `in` so `boot::ui_setup::chrome::apply_backdrop_style` stays the one writer: the artwork
+    // tiers decide at construction whether to build a blur, so the setting is restart-gated. The
+    // default matches the setting's.
     in property <bool> aurora-backdrop: true;
 
     // Anything ≤ 0 is "0:00", so the bar can format a mid-transition position.

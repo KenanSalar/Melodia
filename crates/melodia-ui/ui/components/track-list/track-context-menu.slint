@@ -10,9 +10,9 @@ import { ContextMenuMetrics, ContextMenuPopup, FavoriteMenuItem, MenuItem,
 import { RatingMenuRow } from "../rating-menu-row.slint";
 import { TrackCopyFields } from "../track-copy-items.slint";
 
-// The right-click menu every track row raises, and the only place its entries are mounted
-// (`ui-patterns.md`). The host says where through `show-at`, which stores it: an open popup follows
-// its `x`/`y`, so an anchor bound to the pointer would drag the menu along.
+// The right-click menu every track row raises, and the only place its entries are mounted. The
+// host says where through `show-at`, which stores it: an open popup follows its `x`/`y`, so an
+// anchor bound to the pointer would drag the menu along.
 //
 // Anything a host reads back sits on this root, a host being unable to read into a `PopupWindow`.
 export component TrackContextMenu inherits Rectangle {
@@ -73,7 +73,8 @@ export component TrackContextMenu inherits Rectangle {
         pop.show();
     }
 
-    // Called by every entry but the rating row, after it acts (`ui-patterns.md`).
+    // Called by every entry but the rating row, after it acts, `effective-ids` going with the
+    // popup. A star leaves the menu up so a pick can be corrected.
     function dismiss() {
         root.copy-open = false;
         pop.close();
@@ -273,8 +274,8 @@ export component TrackContextMenu inherits Rectangle {
         }
 
         // Clear is offered wherever the host holds a set, this row in it or not: the picks can
-        // sit far out of view on a long list (`ui-patterns.md`). Both go through the host, ten
-        // globals keeping their own sets.
+        // sit far out of view on a long list. Both go through the host, ten globals keeping their
+        // own sets.
         if root.show-selection-actions: MenuSeparator {}
         if root.show-selection-actions: MenuItem {
             label: @tr("Select all");

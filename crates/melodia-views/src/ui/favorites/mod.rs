@@ -3,8 +3,6 @@
 //!
 //! The mosaic is the first four distinct covers of Most Played's own ranking, so the two can't
 //! disagree about a tie, topped up from the favourites that tab excludes.
-//!
-//! The shared contract is `.claude/rules/ui-patterns.md`'s "three tabbed pages" block.
 
 mod callbacks;
 mod grids;

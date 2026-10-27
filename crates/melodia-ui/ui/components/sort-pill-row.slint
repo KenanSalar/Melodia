@@ -3,8 +3,8 @@ import { ActionPill, PillButton, PillDivider } from "action-pill.slint";
 
 // A row of sort pills, **the `TabBar` shape**: the sortable globals are distinct generated types,
 // so no component can be parameterised over which one it sorts. It makes the per-pill arrow slot
-// and its binding unspellable (`ui-patterns.md`). **`labels` stays an inline `[@tr("Name"), …]`
-// literal at the mount.**
+// and its binding unspellable. **`labels` stays an inline `[@tr("Name"), …]` literal at the
+// mount**, an array from Rust rendering untranslated.
 export component SortPillRow inherits ActionPill {
     in property <[string]> labels;
     // The bare tokens Rust's comparator matches on: a typo sorts by the default arm while the arrow

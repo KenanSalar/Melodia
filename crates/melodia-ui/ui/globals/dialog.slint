@@ -41,7 +41,7 @@ export enum DialogKind {
 export global Dialog {
     in-out property <bool> open;
     // Bumped by every opener through `claim-request()`: `open` can't say which intent is live
-    // while a deferred raise fetches (`ui-patterns.md`'s `DialogClaim` entry).
+    // while a deferred raise fetches, so Rust's `DialogClaim` compares this past the await.
     in-out property <int> request-generation;
     in-out property <string> title;
     in-out property <string> message;

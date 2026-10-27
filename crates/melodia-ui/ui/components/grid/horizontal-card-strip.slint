@@ -5,7 +5,8 @@ import { EntityCard } from "entity-card.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
 // A horizontally scrolling row of `EntityCard`s under a heading. Every card is built and every
-// cover requested, which is affordable only for a capped carousel (`ui-patterns.md`).
+// cover requested, which is affordable only for a capped carousel; an uncapped set takes
+// `EntityCardGrid`.
 export component HorizontalCardStrip inherits Rectangle {
     in property <string>             heading;
     in property <[EntityStripRow]>   rows;

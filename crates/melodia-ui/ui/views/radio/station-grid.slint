@@ -14,7 +14,7 @@ export component StationGrid inherits Rectangle {
     in property <length> gap: 20px;
 
     // The repaint token; at `0` Rust answers cache-only, the logo tier being released on a leave
-    // (`ui-patterns.md`'s Covers).
+    // because the card lays out off the decoded logo's size.
     in property <int> covers-generation: 0;
     pure callback request-logo(string /*artwork_path*/, int /*generation*/) -> image;
 

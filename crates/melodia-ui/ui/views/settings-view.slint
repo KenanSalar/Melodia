@@ -9,8 +9,8 @@ import { FilterThrottle } from "../components/filter-throttle.slint";
 import { SettingsNav } from "settings/settings-nav.slint";
 import { SettingsRouter } from "settings/settings-router.slint";
 
-// Page chrome only (`ui-patterns.md`'s Settings page): the panel's behaviour is
-// `settings/settings-nav.slint`'s, and which cards live where `settings/settings-router.slint`'s.
+// Page chrome only: the panel's behaviour is `settings/settings-nav.slint`'s, and which cards live
+// where `settings/settings-router.slint`'s.
 export component SettingsView inherits Rectangle {
     TouchArea {
         clicked => { SettingsPage.blur-search-tick += 1; }

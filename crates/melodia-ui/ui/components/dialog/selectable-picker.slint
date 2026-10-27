@@ -4,9 +4,9 @@ import { ArtworkImage } from "../artwork-image.slint";
 import { MaterialIcon } from "../material-icon.slint";
 import { OverlayScrollbar } from "../overlay-scrollbar.slint";
 
-// The selectable-list dialogs' toolkit, data-agnostic so neither picker's globals reach in
-// (`ui-patterns.md`). Nothing holding the rows carries a rounded `clip`, whose texture softens
-// text on a fractional pixel (`slint-pitfalls.md`).
+// The selectable-list dialogs' toolkit, data-agnostic so neither picker's globals reach in.
+// Nothing holding the rows carries a rounded `clip`, whose texture softens text on a fractional
+// pixel (`slint-pitfalls.md`).
 
 // The dash is the header's some-but-not-all state.
 export component SelectIndicator inherits Rectangle {
@@ -189,7 +189,7 @@ export component PickerListCard inherits Rectangle {
     background: Theme.surface0;
     border-radius: Theme.radius-md;
     border-width: root.border-w;
-    // `surface2`, `Theme.border` being `surface0` itself (`ui-patterns.md`).
+    // `surface2`, `Theme.border` being `surface0` itself and so invisible on this fill.
     border-color: Theme.surface2;
 
     // The border comes out of `pad` and the viewport alike, so a list that fits gains no travel.

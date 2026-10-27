@@ -40,8 +40,8 @@ export component MosaicTabHero inherits Rectangle {
     callback tab-selected(int);
     callback search-edited(string);
 
-    // Mirrored, seeded at the header row's floor and re-read by the mount `Timer`
-    // (`ui-patterns.md`'s `TabBar`).
+    // Mirrored, seeded at the header row's floor, as a wider seed draws tabs the panel can't seat,
+    // and re-read by the mount `Timer`, `changed` not firing when the first layout lands on it.
     property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
     changed width => { self.page-w = self.width; }
 
@@ -98,8 +98,8 @@ export component MosaicTabHero inherits Rectangle {
         padding: Theme.pad-lg;
         spacing: Theme.pad-md;
 
-        // Hero tiers through the mirrors, never `Theme.*`, `active-color` included
-        // (`ui-patterns.md`'s `TabBar`).
+        // Hero tiers through the mirrors, the bar being unable to ease a brush, and never
+        // `Theme.*`: the accent has no contrast floor on a pinned band, where `chrome` clears 3:1.
         header := TabSearchHeader {
             tab-labels: root.tab-labels;
             tab-icons: root.tab-icons;

@@ -1,9 +1,9 @@
 //! The logo tier the station cards draw from, and its lifecycle.
 //!
-//! **The one card tier that is not `ui::grid_prewarm::tier()`**, `station-card.slint` reading the
-//! decoded extent for its layout (`.claude/rules/ui-patterns.md`'s Covers): released outright on
-//! leave, generation rewound to `0`, decode size retuned only while empty. It is the only thing the
-//! leave frees, so this file is the whole of Radio's `release_section_state`.
+//! **The one card tier that is not `ui::grid_prewarm::tier()`**: `station-card.slint` reads the
+//! decoded extent for its layout, so a proxy would draw every logo small and then pop. Released
+//! outright on leave, generation rewound to `0`, decode size retuned only while empty. It is the
+//! only thing the leave frees, so this file is the whole of Radio's `release_section_state`.
 
 use slint::ComponentHandle;
 

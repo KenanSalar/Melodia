@@ -6,7 +6,7 @@ import { CardContextMenu } from "card-context-menu.slint";
 import { StationContextMenu } from "station-context-menu.slint";
 
 // The wrapper per card that owns what a card owes its selection, so a mount states its scope and
-// nothing else (`ui-patterns.md`). The menu has to be the card's sibling in its frame, and the card
+// nothing else. The menu has to be the card's sibling in its frame, and the card
 // arrives through `@children`, Slint having no generics over each grid's row struct.
 //
 // Both menus are mounted and one opens by kind; a `PopupWindow`'s body is built by its `show()`.

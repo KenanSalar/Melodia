@@ -15,7 +15,7 @@ export component CardContextMenu inherits Rectangle {
     in property <string> card-kind;
     in property <int> card-id;
     in property <string> card-path;
-    // Gates Edit Rules alone (`ui-patterns.md`: gate on the operation, not the kind).
+    // Gates Edit Rules alone: Rename and Edit Artwork work on any playlist, as its buttons do.
     in property <bool> card-is-smart: false;
     // 0 hides the entry.
     in property <int> card-artist-id: 0;
@@ -182,8 +182,8 @@ export component CardContextMenu inherits Rectangle {
         }
 
         if !root.is-folder: MenuSeparator {}
-        // A toggle where the card's state is known, both directions where it isn't
-        // (`ui-patterns.md`).
+        // A toggle where the card's state is known, both directions where it isn't: a set of
+        // tracks can be half favourited.
         if root.favorite-known: FavoriteMenuItem {
             is-favorite: root.card-is-favorite;
             multi-active: root.multi-active;

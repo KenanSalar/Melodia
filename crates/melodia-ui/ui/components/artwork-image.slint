@@ -7,7 +7,7 @@ export component ArtworkImage inherits Rectangle {
     in property <string> artwork-path;
     in property <image> cover;
     // **Suppresses a `cover` the host can't withhold**: with no empty-`image` literal, a host
-    // choosing between globals' covers binds one even on an arm that owns none (`ui-patterns.md`).
+    // choosing between globals' covers binds one even on an arm that owns none.
     in property <bool> has-cover: true;
     in property <length> tile-size: 56px;
     in property <length> tile-radius: Theme.radius-md;

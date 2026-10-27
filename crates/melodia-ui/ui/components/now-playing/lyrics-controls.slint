@@ -21,8 +21,8 @@ export component LyricsControls inherits Rectangle {
     property <brush> off-fg: Player.np-accent-bright.transparentize(0.3);
     property <brush> off-track: Player.np-accent-bright.transparentize(0.76);
 
-    // Tucked, the border being translucent (`ui-patterns.md`'s `TuckedFill`). `x`/`y` keep it out
-    // of the root's size.
+    // Tucked by hand: the renderer tucks a fill only under an opaque border, and this one is
+    // translucent. `x`/`y` keep it out of the root's size.
     TuckedFill {
         x: 0;
         y: 0;

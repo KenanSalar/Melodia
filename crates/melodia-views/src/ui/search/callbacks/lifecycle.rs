@@ -13,8 +13,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
     let g = ui.global::<Search>();
     let weak = ui.as_weak();
 
-    // Seeded here, the gate firing only on a later difference (`ui-patterns.md`'s
-    // `SectionActiveGate` bullet).
+    // Seeded here, the gate firing only on a later difference.
     search_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_SEARCH);
     {
         let su = search_ui.clone();

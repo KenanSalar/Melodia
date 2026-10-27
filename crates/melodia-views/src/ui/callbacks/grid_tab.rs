@@ -62,8 +62,7 @@ pub(in crate::ui) trait GridTab: TrackDetail {
 }
 
 /// Wires `view`'s section gate and its `library_changed` subscriber. The shadow is seeded from
-/// the mounted tab, the gate firing only on a later change (`ui-patterns.md`'s
-/// `SectionActiveGate` entry).
+/// the mounted tab, the gate firing only on a later change.
 pub(in crate::ui) fn wire<V: GridTab>(ui: &AppWindow, state: &AppState, view: &Arc<V>) {
     view.section().set_active(tab_is_mounted(ui, V::TAB));
     wire_section_gate(ui, state, view);

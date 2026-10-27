@@ -21,8 +21,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, rp_ui: &Arc<RecentlyPlayedU
     let g = ui.global::<RecentlyPlayed>();
     let weak = ui.as_weak();
 
-    // Seeded here, the gate firing only on a later difference (`ui-patterns.md`'s
-    // `SectionActiveGate` bullet).
+    // Seeded here, the gate firing only on a later difference.
     rp_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_RECENTLY_PLAYED);
     {
         let ru = rp_ui.clone();

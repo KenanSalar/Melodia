@@ -12,7 +12,7 @@ export global CardActions {
     callback play-next(string, [int]);
     callback add-to-queue(string, [int]);
     // Takes the state to write rather than toggling: a card is a set, which may be half
-    // favourited (`ui-patterns.md`).
+    // favourited.
     callback set-favorites(string /*kind*/, [int] /*entity_ids*/, bool /*favorite*/);
 
     // The menu writes the dialog's chrome first, where `@tr` reaches it; Rust adds the resolved

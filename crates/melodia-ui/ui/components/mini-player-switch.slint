@@ -71,8 +71,8 @@ export component MiniPlayerSwitch {
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
         }
-        // The first settle out of the 0×0 construction pass looks like a swap and isn't one
-        // (`ui-patterns.md`'s section-gate block).
+        // The first settle out of the 0×0 construction pass looks like a swap and isn't one. By
+        // then the seed `Timer` has settled `render-active`, so only a real swap differs here.
         if (root.render-active != root.watched-active) {
             root.fade-opacity = 0.0;
             swap-timer.running = true;

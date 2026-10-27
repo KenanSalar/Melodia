@@ -9,8 +9,9 @@ import { HeroBackdropStack } from "hero-backdrop-stack.slint";
 import { TabSearchHeader } from "tab-search-header.slint";
 
 // My Library's pinned band: a flat pane carrying the tabs, the filter box and the tab's count,
-// which morphs into a detail's hero while one is open. `MosaicTabHero`'s sibling
-// (`ui-patterns.md`); what is the band's own is the morph, the palette it drives and the back slot.
+// which morphs into a detail's hero while one is open. `MosaicTabHero`'s sibling, not one
+// component with it: Slint can't abstract over their artwork squares or a fixed height against a
+// morph. What is the band's own is the morph, the palette it drives and the back slot.
 export component LibraryTabBand inherits Rectangle {
     in property <[string]> tab-labels;
     in property <[string]> tab-icons;
@@ -96,7 +97,7 @@ export component LibraryTabBand inherits Rectangle {
     property <bool> hero-shown: root.detail-open || root.hero-t > 0;
 
     // The body slides only while this is false. Not `hero-t > 0`, which is false on a drill-in's
-    // first frame (`ui-patterns.md`).
+    // first frame and lets the body slide against the morph.
     out property <bool> morphing: root.hero-t != (root.detail-open ? 1.0 : 0.0);
 
     // The bar's four brushes cross from `Theme.*` to `HeroBackdrop` tiers through a `states`
@@ -107,7 +108,7 @@ export component LibraryTabBand inherits Rectangle {
     property <brush> divider-brush: Theme.surface1;
 
     // Mirrored so a late solve eases. Each falls back on `detail-open`, not `hero-shown`, so none
-    // eases out of a held tier (`ui-patterns.md`).
+    // settles on a hero the globals still hold after the band stopped painting it.
     property <brush> hero-label: root.detail-open ? HeroBackdrop.on-backdrop : Theme.text;
     property <brush> hero-active: root.detail-open ? HeroBackdrop.chrome : Theme.accent;
     property <brush> hero-hover:
@@ -142,8 +143,8 @@ export component LibraryTabBand inherits Rectangle {
         }
     ]
 
-    // Mirrored, seeded at the header row's floor and re-read by the mount `Timer`
-    // (`ui-patterns.md`'s `TabBar`).
+    // Mirrored, seeded at the header row's floor, as a wider seed draws tabs the panel can't seat,
+    // and re-read by the mount `Timer`, `changed` not firing when the first layout lands on it.
     property <length> page-w: 2 * Theme.pad-lg + header.row-floor;
     changed width => { self.page-w = self.width; }
 
@@ -273,7 +274,7 @@ export component LibraryTabBand inherits Rectangle {
                 ArtworkImage {
                     artwork-path: root.artwork-path;
                     cover: root.cover;
-                    // The host can't withhold `cover` (`ui-patterns.md`'s `has-cover`).
+                    // `cover` binds some global on every arm, Slint having no empty image.
                     has-cover: root.artwork-path != "";
                     tile-size: Theme.hero-artwork;
                     tile-radius: root.circular-artwork

@@ -21,8 +21,9 @@ export global Settings {
     in property <[string]> accent-names;
     in-out property <int> accent-idx;
 
-    // Material You's accent, `accent-idx` being -1 while it holds (`ui-patterns.md`). Shown with a
-    // Color Style set, playing or not, so the choice doesn't vanish with the artwork.
+    // Material You's accent, a switch above the swatches rather than one of them, `accent-idx`
+    // being -1 while it holds. Shown with a Color Style set, playing or not, so the choice doesn't
+    // vanish with the artwork.
     in-out property <bool> accent-follows-artwork;
 
     // KDE Breeze's System variant over a parsed `kdeglobals`, where the OS already picked the
@@ -254,7 +255,7 @@ export global Settings {
     in-out property <bool> window-border-shown: true;
     callback window-border-shown-changed(bool);
 
-    // The OS's own colour, `window-border-color-idx` being -1 while it holds (`ui-patterns.md`).
+    // The OS's own colour, `window-border-color-idx` being -1 while it holds.
     in-out property <bool> window-border-system: true;
     callback window-border-system-changed(bool);
     // Under Material You, System mixes from the artwork's palette rather than the theme's own.

@@ -14,7 +14,7 @@ export global Queue {
     // Session-only, so a narrow launch with the panel saved open shows nothing until asked.
     in-out property <bool> overlay-open;
     // `shown`, `floating` and `fits` are written by `AppWindow` alone, a global being unable to
-    // watch its own properties; `ui-patterns.md` has what each answers.
+    // watch its own properties and only the root seeing the shell's row and the miniplayer swap.
     in-out property <bool> shown;
     in-out property <bool> floating;
     in-out property <bool> fits;
@@ -27,7 +27,8 @@ export global Queue {
     // closes, its popup having hidden that press from `pointer-in`.
     in-out property <bool> keys-owned;
 
-    // Against the panel's own tier, backed by the row tier (`ui-patterns.md`'s `QueueRow` entry).
+    // Against the panel's own tier, so hiding the panel frees only its buffers, backed by the row
+    // tier so a cover both draw is one allocation.
     pure callback request-cover(/* artwork-path */ string, /* generation */ int) -> image;
     in property <int> covers-generation: 0;
 

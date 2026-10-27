@@ -7,8 +7,8 @@ import { WindowChrome } from "../globals/shell.slint";
 export enum TooltipSide { above, below, left, right }
 
 // Slint has no native tooltip. A pill drawn inside the host rather than a `PopupWindow`, so it
-// takes no input and no focus (`ui-patterns.md`). **The reveal delay lives here**, so a quick pass
-// flashes nothing anywhere.
+// takes no input and no focus, the host keeping its hover. **The reveal delay lives here**, so a
+// quick pass flashes nothing anywhere.
 export component Tooltip {
     in property <string> text;
     in property <bool>  hovered;

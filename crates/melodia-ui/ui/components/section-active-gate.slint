@@ -2,13 +2,13 @@ import { Nav } from "../globals/nav.slint";
 
 // Whether a sidebar section is the one on screen: its index selected, and neither Now Playing nor
 // the miniplayer over it. **Mounted by the host, never watched by the view**: the leaving edge is
-// the one that matters, and a view can't observe its own (`ui-patterns.md`).
+// the one that matters, and a view can't observe its own.
 export component SectionActiveGate {
     in property <int> index;
     // Not read off the `MiniPlayer` global, which the host's derivation leads by a beat.
     in property <bool> mini-active;
     // Lets a tab leave be a section leave. `-1` on both is "no tabs", which every other mount takes
-    // by omission; whether a tabbed page owes a gate per tab is `ui-patterns.md`'s question.
+    // by omission. A tabbed page owes a gate per tab only if a tab leave must hand something back.
     in property <int> tab-index: -1;
     in property <int> current-tab: -1;
 

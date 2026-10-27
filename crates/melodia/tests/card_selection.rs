@@ -2,7 +2,7 @@
 //!
 //! Every rule here is violable from a file that builds and looks right, and every one of them
 //! fails the same way: a set the user cannot see, on a grid where the next click picks instead of
-//! opening. `.claude/rules/ui-patterns.md` argues each; this is what holds them.
+//! opening.
 
 use std::collections::BTreeSet;
 

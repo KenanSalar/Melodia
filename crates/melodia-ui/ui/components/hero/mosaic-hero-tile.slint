@@ -2,9 +2,10 @@ import { Theme } from "../../theme.slint";
 import { HeroBackdrop } from "../../globals/hero-backdrop.slint";
 import { MaterialIcon } from "../material-icon.slint";
 
-// The curated heroes' artwork square, drawing one composed collage (`ui-patterns.md`). Every brush
-// is a `HeroBackdrop` tier, never `Theme.*`: with no collage the tile sits on the dark floor, where
-// a light theme's accent lands dark-on-dark.
+// The curated heroes' artwork square, drawing one composed collage rather than a live mosaic, so
+// it matches the banner blur laid out from the same image. Every brush is a `HeroBackdrop` tier,
+// never `Theme.*`: with no collage the tile sits on the dark floor, where a light theme's accent
+// lands dark-on-dark.
 export component MosaicHeroTile inherits Rectangle {
     // Zero is an empty set; a positive count with no cover is a set without artwork, and the two
     // draw different glyphs.

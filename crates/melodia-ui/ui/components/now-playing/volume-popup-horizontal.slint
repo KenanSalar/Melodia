@@ -100,7 +100,7 @@ export component VolumePopupHorizontal inherits Rectangle {
             }
         }
 
-        // A zero-size anchor over the live thumb (`ui-patterns.md`).
+        // A zero-size anchor over the live thumb, so the readout hangs off the value it shows.
         Rectangle {
             x: chrome.x + slider.x + slider.thumb-cx;
             y: chrome.y;

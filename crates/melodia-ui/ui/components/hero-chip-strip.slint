@@ -3,8 +3,8 @@ import { HeroBackdrop } from "../globals/hero-backdrop.slint";
 import { HeroChips } from "../globals/hero-chips.slint";
 import { MetaChipStrip } from "meta-chip-strip.slint";
 
-// Where a hero mounts `MetaChipStrip`, so the wrong mount is unspellable rather than tested
-// against (`ui-patterns.md`).
+// Where a hero mounts `MetaChipStrip`, fixing its brushes, chips and row cap so the wrong mount is
+// unspellable rather than tested against.
 export component HeroChipStrip inherits MetaChipStrip {
     // How much of a morphing band's hero is on screen, multiplied into both brushes: an `opacity`
     // under 1 would cost a layer every frame.

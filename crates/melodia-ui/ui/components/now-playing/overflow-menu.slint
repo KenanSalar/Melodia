@@ -225,8 +225,8 @@ export component OverflowMenu inherits Rectangle {
                     }
                 }
 
-                // A star applies and leaves the menu up (`ui-patterns.md`). Not an
-                // `OverflowRow`, so it takes that row's height and icon treatment itself.
+                // A star applies and leaves the menu up, so a pick can be corrected in place.
+                // Not an `OverflowRow`, so it takes that row's height and icon treatment itself.
                 RatingMenuRow {
                     row-height: FlyoutMetrics.menu-row-h;
                     icon-size: 20px;

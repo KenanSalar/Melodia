@@ -3,7 +3,7 @@ import { NpBackdropStack } from "../now-playing/np-backdrop-stack.slint";
 
 // The miniplayer's artwork backdrop, unmounted once drained rather than left transparent: a
 // gradient is never `is_transparent()`, so a hidden stack still fills the surface every frame, and
-// this one is hidden on every install leaving the button off (`ui-patterns.md`).
+// this one is hidden on every install leaving the button off.
 export component MiniBackdrop inherits Rectangle {
     in property <duration> fade-duration;
 

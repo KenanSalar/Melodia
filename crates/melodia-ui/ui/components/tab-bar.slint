@@ -136,7 +136,7 @@ component TabBarCell inherits Rectangle {
 // inline `[@tr("…"), …]` literal**, an array from Rust rendering untranslated.
 //
 // Equal-width cells, sized to the widest tab, keep the underline arithmetic: a `for` exposes no
-// per-tab element to read a position off (`ui-patterns.md`'s `TabBar`).
+// per-tab element to read a position off.
 export component TabBar inherits Rectangle {
     in property <[string]> labels;
     in property <[string]> icons;

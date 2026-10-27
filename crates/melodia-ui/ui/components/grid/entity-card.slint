@@ -28,7 +28,7 @@ export component EntityCard inherits Rectangle {
     in property <float> cover-scale-hover: 1.04;
 
     // Opens the `@children` overlay slot and gates nothing else: the card draws no controls of
-    // its own (`ui-patterns.md`).
+    // its own, so a host raising it never gets buttons it has no callbacks for.
     in property <bool> show-overlay-actions: false;
 
     // Hover on any control the host owns, in the slot or beside the card. A component can't read

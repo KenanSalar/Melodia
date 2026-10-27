@@ -5,8 +5,9 @@ import { GradeDot } from "grade-dot.slint";
 import { Tooltip } from "tooltip.slint";
 
 // The signal path's verdict in the player bar, opening the Output card that explains it, and
-// outlined so the dot is the only colour it carries (`ui-patterns.md`). The host gates the mount on
-// `SignalPathUi.chip-shown`, so the `if` there vacates the slot.
+// outlined so the dot is the only colour it carries: an accent fill would read as a toggle left on
+// beside repeat and shuffle. The host gates the mount on `SignalPathUi.chip-shown`, so the `if`
+// there vacates the slot.
 export component QualityChip inherits Rectangle {
     property <float> hover-t: touch.has-hover ? 1.0 : 0.0;
     animate hover-t { duration: Theme.dur-fast; easing: ease-in-out; }

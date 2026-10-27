@@ -19,8 +19,8 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, fav_ui: &Arc<FavoritesUi>) 
     let g = ui.global::<Favorites>();
     let weak = ui.as_weak();
 
-    // Seeded here, the gate firing only on a later difference (`ui-patterns.md`'s
-    // `SectionActiveGate` bullet); `install_views` hydrates the nav index before any `wire_*` runs.
+    // Seeded here, the gate firing only on a later difference; `install_views` hydrates the nav
+    // index before any `wire_*` runs.
     fav_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_FAVORITES);
     {
         let fu = fav_ui.clone();

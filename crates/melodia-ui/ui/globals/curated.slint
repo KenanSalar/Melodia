@@ -6,7 +6,7 @@ import { TrackListRow, TrackColumns, EntityStripRow, EntityGridRow } from "../mo
 // No Favorite Albums tab, albums being reachable through My Library's. One filter for all three
 // tabs; Most Played has no sort, being ranked by play count.
 export global Favorites {
-    // **`tab-count` is the sole definition of how many tabs there are** (`ui-patterns.md`).
+    // **`tab-count` is the sole definition of how many tabs there are**; Rust clamps against it.
     out property <int> tab-songs: 0;
     out property <int> tab-most-played: 1;
     out property <int> tab-artists: 2;
@@ -89,9 +89,9 @@ export global Favorites {
     }
 }
 
-// **Neither tab sorts**, recency and play count being the page (`ui-patterns.md`).
+// **Neither tab sorts**, recency and play count being the page, so there is no sort state at all.
 export global RecentlyPlayed {
-    // **`tab-count` is the sole definition of how many tabs there are** (`ui-patterns.md`).
+    // **`tab-count` is the sole definition of how many tabs there are**; Rust clamps against it.
     out property <int> tab-songs: 0;
     out property <int> tab-most-played: 1;
     out property <int> tab-count: 2;

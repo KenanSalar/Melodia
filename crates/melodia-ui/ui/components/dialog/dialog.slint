@@ -101,7 +101,7 @@ export component DialogOverlay inherits Rectangle {
                 ? @tr("{n} track" | "{n} tracks" % SmartEditor.match-count)
                 : "";
         background: Theme.surface0;
-        // `surface2`, never `Theme.border`, which is `surface0` itself (`ui-patterns.md`).
+        // `surface2`, never `Theme.border`, which is `surface0` itself and so invisible here.
         border-color: Theme.surface2;
         border-width: 1px;
         border-radius: Theme.radius-lg;

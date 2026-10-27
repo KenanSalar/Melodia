@@ -103,8 +103,8 @@ pub fn apply_filtered_tracks(rp_ui: &Arc<RecentlyPlayedUi>, weak: &Weak<AppWindo
     });
 }
 
-/// [`apply_filtered_tracks`] without the event-loop hop, for a tab pick (`ui-patterns.md`'s
-/// tabbed pages).
+/// [`apply_filtered_tracks`] without the event-loop hop, for a tab pick: a hop lets a redraw
+/// paint the list's headers over the emptied model first.
 pub fn apply_filtered_tracks_now(ui: &AppWindow, rp_ui: &RecentlyPlayedUi) {
     if let Some(rows) = build_filtered_tracks(rp_ui) {
         write_filtered_tracks(ui, rp_ui, rows);

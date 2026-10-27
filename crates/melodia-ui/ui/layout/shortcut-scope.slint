@@ -6,9 +6,10 @@ import { Queue } from "../globals/queue.slint";
 import { Selection } from "../globals/selection.slint";
 import { MiniPlayer, WindowChrome } from "../globals/shell.slint";
 
-// The app's shortcuts, round the whole main layout. **The only `FocusScope` in the tree**
-// (`ui-patterns.md`). Escape runs under `Dialog.open` too, routing to `Dialog.cancelled()`;
-// **every other shortcut early-outs there**.
+// The app's shortcuts, round the whole main layout. **The only `FocusScope` in the tree**: a
+// scope takes focus on a press, never on mount, so a nested one leaves keys dead on a sheet
+// opened from the keyboard. Escape runs under `Dialog.open` too, routing to
+// `Dialog.cancelled()`; **every other shortcut early-outs there**.
 export component ShortcutScope inherits FocusScope {
     // Slint doesn't hand focus back to an ancestor scope when the focused item dies, so the host
     // calls this on every content-view switch.
@@ -102,7 +103,7 @@ export component ShortcutScope inherits FocusScope {
                 return accept;
             }
             // **Last**: `any-live()` can't tell whether its surface is on screen, so higher up a
-            // set under Now Playing would swallow the press closing it (`ui-patterns.md`).
+            // set under Now Playing would swallow the press closing it.
             if (Selection.any-live()) {
                 Selection.clear-live();
                 return accept;

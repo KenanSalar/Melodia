@@ -2,7 +2,7 @@ import { Theme } from "../../theme.slint";
 import { SettingsPage } from "../../globals/settings-page.slint";
 
 // The chrome around every settings section, its title inside the fill so the card's top starts
-// level with the category panel's (`ui-patterns.md`'s Settings page).
+// level with the category panel's.
 export component SectionCard inherits Rectangle {
     in property <string> title;
     in property <length> card-width: SettingsPage.card-w;

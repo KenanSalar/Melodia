@@ -14,7 +14,7 @@ import { UpdatesPage } from "pages/updates-page.slint";
 import { AboutPage } from "pages/about-page.slint";
 
 // One category, or every page at once while a search runs: search escapes the categories, so a
-// query never answers "no matching settings" for a row a category over (`ui-patterns.md`).
+// query never answers "no matching settings" for a row a category over.
 export component SettingsRouter inherits Rectangle {
     in property <int> category-index;
     in property <bool> searching;

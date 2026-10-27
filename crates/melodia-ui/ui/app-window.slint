@@ -165,7 +165,8 @@ export component AppWindow inherits Window {
         if (self.watched-nav-idx != 9) {
             SettingsPage.clear-search();
         }
-        // No gate can see this edge (`ui-patterns.md`'s section gates).
+        // No gate can see this edge: Now Playing already made the predicate false, and the
+        // sidebar moves both in one handler, so the page's own leave goes false to false.
         MyLibrary.page-active-changed(self.watched-nav-idx == 3);
         // Synchronous, so SearchView's autofocus wins.
         shortcut-scope.grab-focus();
@@ -340,7 +341,8 @@ export component AppWindow inherits Window {
         mini-switch.resize-released();
     }
 
-    // Why a `TextInput` is the clipboard is `ui-patterns.md`'s. Disabled so a Tab walk can't focus
+    // A `TextInput` reaches the clipboard Slint's backend owns, which on Wayland is our own
+    // connection where a clipboard crate would land on XWayland. Disabled so a Tab walk can't focus
     // it, and pinned, a child with no `x`/`y` here being centred.
     clipboard-sink := TextInput {
         x: 0px;
@@ -359,7 +361,7 @@ export component AppWindow inherits Window {
     }
 
     // One gate per section in nav-index order, plus one per tab where a tab leave has to be a
-    // section leave (`ui-patterns.md`).
+    // section leave. On the root because a view can't observe its own leave.
     SectionActiveGate {
         index: 0;
         mini-active: mini-switch.active;

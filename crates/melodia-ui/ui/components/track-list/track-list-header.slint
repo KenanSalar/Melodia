@@ -148,7 +148,7 @@ export component TrackListHeader inherits Rectangle {
     in property <string> sort-field;
     in property <string> sort-dir;
 
-    // For a list whose order isn't the user's to pick (`ui-patterns.md`'s Recently Played).
+    // Off for a list whose order is the page rather than the user's pick (Recently Played).
     in property <bool> sortable: true;
 
     callback sort-clicked(string /*field*/);

@@ -78,7 +78,7 @@ export global Playlists {
 }
 
 // `playlist-id` -1 shows the grid. **Drag-to-reorder needs an ascending `"position"` sort**,
-// which a column's third click hands back (`ui-patterns.md`'s synthetic-field entry).
+// which a column's third click hands back, no header cell asking for it.
 export global PlaylistDetail {
     in-out property <int> playlist-id: -1;
     // See `AlbumDetail.restoring`.

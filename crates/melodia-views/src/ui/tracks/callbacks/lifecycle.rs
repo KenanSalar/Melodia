@@ -11,9 +11,8 @@ use melodia_app::state::AppState;
 use melodia_ui::{AppWindow, Tracks};
 
 /// Mirrors visibility into the synchronous shadow and runs the deferred refresh on re-enter. The
-/// tab has its own gate, so the shadow is seeded off the mounted tab rather than the nav index
-/// (`ui-patterns.md`'s `SectionActiveGate` entry). `_state` keeps the siblings' shape; the
-/// deferred path goes back through `request-refresh`.
+/// tab has its own gate, so the shadow is seeded off the mounted tab rather than the nav index.
+/// `_state` keeps the siblings' shape; the deferred path goes back through `request-refresh`.
 pub(super) fn wire(ui: &AppWindow, _state: &AppState, tracks_ui: &Arc<TracksUi>) {
     let tracks = ui.global::<Tracks>();
     let weak = ui.as_weak();
@@ -26,8 +25,8 @@ pub(super) fn wire(ui: &AppWindow, _state: &AppState, tracks_ui: &Arc<TracksUi>)
         // The leave keeps the model, so it rewinds no count and owes no `mark_dirty`; a library
         // change while hidden dirties the flag through the `library_changed` refresher.
         if !active {
-            // Only the selection goes back, guarded, the unstamp walking a library-sized model
-            // (`ui-patterns.md`'s Escape entry).
+            // Only the selection goes back, a set on a page nobody sees being one nothing can
+            // clear. Guarded, the unstamp walking a library-sized model.
             if let Some(ui) = weak.upgrade()
                 && ui.global::<Tracks>().get_selected_ids().row_count() > 0
             {

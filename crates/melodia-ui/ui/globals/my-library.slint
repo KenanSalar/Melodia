@@ -1,7 +1,7 @@
 // Only what the page owns, each tab keeping its own global. **No `detail-open` here**: it would make
 // this a third globals file importing siblings, so `views/my-library-view.slint` derives it.
 export global MyLibrary {
-    // **`tab-count` is the sole definition of how many tabs there are** (`ui-patterns.md`).
+    // **`tab-count` is the sole definition of how many tabs there are**; Rust clamps against it.
     out property <int> tab-songs: 0;
     out property <int> tab-albums: 1;
     out property <int> tab-artists: 2;

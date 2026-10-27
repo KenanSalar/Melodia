@@ -4,9 +4,8 @@ import { HeroBlurBackdrop } from "../hero-blur-backdrop.slint";
 import { AuroraBackdrop } from "../aurora-backdrop.slint";
 
 // The two backdrop stacks bound to the `HeroBackdrop` tier, with only the live arm mounted; the
-// leaves take their colours as inputs so `NpBackdropStack` can bind them to `Player.np-*`
-// (`ui-patterns.md`'s Hero bands). `shown` is the host's question, and the mounted stack drains
-// to its idle colours through it.
+// leaves take their colours as inputs so `NpBackdropStack` can bind them to `Player.np-*`.
+// `shown` is the host's question, and the mounted stack drains to its idle colours through it.
 export component HeroBackdropStack inherits Rectangle {
     in property <image> blur-a;
     in property <image> blur-b;

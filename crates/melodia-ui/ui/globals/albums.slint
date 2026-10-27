@@ -21,7 +21,7 @@ export global Albums {
     // repaints on the `covers-generation` bump.
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
     in property <int> covers-generation: 0;
-    // A leave shrinks the grid tier to proxies (`ui-patterns.md`'s Covers).
+    // A leave shrinks the grid tier to proxies, so a re-entry paints the right cover at once.
     callback section-active-changed(bool);
 }
 

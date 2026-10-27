@@ -1,8 +1,6 @@
 //! The Recently Played page: a hero over two tabs. Songs is the capped recency list, fetched once
 //! per refresh and filtered in memory, in an order that is the page and so never sorts; Most
 //! Played is a paged grid of the library's played tracks, filtered in SQL.
-//!
-//! The shared contract is `.claude/rules/ui-patterns.md`'s "three tabbed pages" block.
 
 mod callbacks;
 mod grid;

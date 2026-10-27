@@ -23,7 +23,7 @@ export component PlaylistGrid inherits Rectangle {
     // Menu-only, having no room on the card.
     callback delete-playlists([int] /*playlist_ids*/);
     callback edit-playlist-rules(int /*playlist_id*/);
-    // The repaint token (`ui-patterns.md`'s Covers).
+    // The repaint token: bumped as decodes land, so the `pure` cover lookup re-runs.
     in property <int> covers-generation: 0;
     pure callback request-cover(string /*artwork_path*/, int /*generation*/) -> image;
 

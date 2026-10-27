@@ -7,7 +7,7 @@ import { CardFavoriteButton } from "card-favorite-button.slint";
 import { DragSource } from "../drag-source.slint";
 
 // The virtualized counterpart to `HorizontalCardStrip` over the same row struct, a strip's plain
-// `for` building every card of an uncapped page (`ui-patterns.md`).
+// `for` building every card of an uncapped page.
 export component EntityCardGrid inherits Rectangle {
     in property <[EntityGridRow]> rows;
     in property <length> card-width: 180px;
@@ -29,7 +29,7 @@ export component EntityCardGrid inherits Rectangle {
     in property <string> card-kind;
     in property <string> selection-scope;
 
-    // The repaint token (`ui-patterns.md`'s Covers).
+    // The repaint token: bumped as decodes land, so the `pure` cover lookup re-runs.
     in property <int> covers-generation: 0;
 
     callback row-clicked(int /*entity_id*/);

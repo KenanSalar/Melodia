@@ -102,7 +102,7 @@ export component MyLibraryView inherits Rectangle {
 
     // Whether a mounting body may animate, the page's own entrance still being in flight when its
     // first body mounts. The bar arms it for a pick, `DetailArrival` for a drill or close, and
-    // `watched-tab-idx` for a tab move that isn't a pick (`ui-patterns.md`'s view transitions).
+    // `watched-tab-idx` for a tab move that isn't a pick.
     property <bool> body-anim-armed: band.tab-anim-armed;
     DetailArrival {
         open: root.detail-open;

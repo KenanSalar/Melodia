@@ -4,8 +4,8 @@ import { SearchBar } from "../search-bar.slint";
 import { TabBar } from "../tab-bar.slint";
 
 // The tab bar and the filter box sharing one row: the width budget dividing it, the slide
-// direction and the tooltip anchor, held once for every page with tabs (`ui-patterns.md`'s
-// `TabBar`). No string is spelled here.
+// direction and the tooltip anchor, held once for every page with tabs. No string is spelled
+// here.
 export component TabSearchHeader inherits HorizontalLayout {
     in property <[string]> tab-labels;
     in property <[string]> tab-icons;

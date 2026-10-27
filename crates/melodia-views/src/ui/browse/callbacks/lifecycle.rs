@@ -15,8 +15,7 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, browse_ui: &Arc<BrowseUi>) 
     let g = ui.global::<Browse>();
     let weak = ui.as_weak();
 
-    // Seeded here, the gate firing only on a later difference (`ui-patterns.md`'s
-    // `SectionActiveGate` bullet).
+    // Seeded here, the gate firing only on a later difference.
     browse_ui.set_section_active(ui.global::<Nav>().get_selected_index() == NAV_BROWSE);
     // The boot seed fetches wherever the launch lands but warms no covers off screen, so a
     // Browse it didn't land on re-fetches once on its first visit.

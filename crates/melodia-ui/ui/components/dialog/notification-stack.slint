@@ -30,7 +30,8 @@ component NotificationCard inherits Rectangle {
     // From the card's outer edge.
     private property <length> bar-end: root.border-w + 4px;
 
-    // Three elements so the bar sits between fill and border (`ui-patterns.md`'s `TuckedFill`).
+    // Three elements so the bar sits between fill and border. A fill split off its border isn't
+    // tucked under the stroke, so `TuckedFill` insets it.
     TuckedFill {
         x: 0;
         y: 0;
@@ -126,7 +127,7 @@ component NotificationCard inherits Rectangle {
         }
     }
 
-    // Last, so it strokes over the bar. `surface2`, a floating surface's edge (`ui-patterns.md`).
+    // Last, so it strokes over the bar. `surface2`, `Theme.border` being `surface0` itself.
     Rectangle {
         x: 0;
         y: 0;
