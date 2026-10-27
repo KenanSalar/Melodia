@@ -45,134 +45,86 @@ pub struct AppState {
     pub cover_cache: CoverCache,
     pub player_state: Arc<PlayerStateHandle>,
     pub engine: Arc<PlaybackEngine>,
-    /// Fault counters the output device's error callback writes into, on the
-    /// audio thread. Drained by `tasks::audio_health`, the output's reopen being the
-    /// one other reader.
+    /// Fault counters the output's error callback writes on the audio thread, drained by
+    /// `tasks::audio_health` and read by the output's reopen.
     pub audio_health: Arc<AudioStreamHealth>,
     pub sinks: Arc<PlayerSinks>,
     pub position_tx: watch::Sender<Option<PositionTick>>,
     /// What the playing source goes through on its way to the device, `None` while stopped.
     pub signal_path_tx: watch::Sender<Option<SignalPath>>,
-    /// Bumped after a write that changes what a library list shows: a scan or watcher batch,
-    /// a user edit, a fetched artist image. Each subscriber re-fetches what it shows, so a
-    /// write that changes nothing on screen doesn't bump it.
+    /// Bumped after a write that changes what a library list shows. Each subscriber re-fetches
+    /// what it shows, so a write that changes nothing on screen doesn't bump it.
     pub library_changed: Signal,
-    /// Bumped after every play-count flush. Split from `library_changed`
-    /// so the per-song flush (every track completion) doesn't imply
-    /// "library structure changed" — the only views that depend on
-    /// play-driven data subscribe here: Favorites (hero mosaic + Most Played
-    /// strip, ranked by `play_count`) and Recently-Played (ordered by
-    /// `last_played`, written on the same flush). Everything else
-    /// (Tracks/Browse refreshers, `queue_prune`, the folder list) stays on
-    /// `library_changed` and no longer fires per played song.
+    /// Bumped after every play-count flush, apart from `library_changed` so a played song wakes
+    /// only the views that read play stats.
     pub stats_changed: Signal,
-    /// Bumped after the UI language changes. A locale switch re-resolves every live `@tr`
-    /// binding on its own, so this exists only for the strings Rust renders through a
-    /// trampoline and stores in a model, which nothing re-reads. One subscriber: the
-    /// notification stack, whose rows outlive every navigation. Everything else so stored
-    /// sits behind a section that hands its models back on the way to Settings.
+    /// Bumped after the UI language changes, for the strings Rust renders through a trampoline into
+    /// a model, which no `@tr` re-resolves. One subscriber, the notification stack, whose rows
+    /// outlive every navigation.
     pub locale_changed: Signal,
-    /// Bumped whenever the watcher reports a kernel-queue overflow (notify
-    /// `Flag::Rescan`). A UI-thread subscriber pushes a transient
-    /// "library re-syncing" toast through the notifications stack so the
-    /// user knows why Tracks/Browse paused refreshing while the
-    /// reconcile runs. Coalescing semantics: a burst of overflows that
-    /// land in the same `watch` slot only paints one toast — which is
-    /// also what the reconcile's own coalescing does to its spawn.
+    /// Bumped when the watcher reports a kernel-queue overflow (notify `Flag::Rescan`), for the
+    /// "library re-syncing" toast. A burst coalesces into one.
     pub rescan_notice: Signal,
-    /// Bumped after the auto-update switch reaches disk. `tasks::updater_daily` sleeps for hours
-    /// at a stretch and up to a week under the failure backoff, so without this the switch is a
-    /// control whose effect lands whenever the loop happens to wake. The tick only wakes it early;
-    /// what it does on waking is still decided by the file, which is what keeps a hand-edited
-    /// `settings.json` working.
+    /// Bumped after the auto-update switch reaches disk, waking `tasks::updater_daily` from a sleep
+    /// of hours or a week's backoff. Only a wake: what it then does is still the file's, so a
+    /// hand-edited `settings.json` works.
     pub auto_check_changed: Signal,
-    /// Bumped by `tasks::audio_health` when the output device goes away. A
-    /// UI-thread subscriber pushes a sticky warning toast — nothing else
-    /// notices, so playback runs on with the position ticking and no sound.
-    /// Coalesces like `rescan_notice`: a burst paints one toast.
+    /// Bumped by `tasks::audio_health` when the output device goes away, for the sticky toast that
+    /// is the only notice: playback otherwise runs on in silence.
     pub audio_device_lost: Signal,
-    /// How many scans are restoring cover art whose stored file went missing, for the notice
-    /// that says so. A count rather than a [`Signal`] because the boot scan can start restoring
-    /// before the notice's subscriber exists, and a payload is still there when it attaches.
+    /// How many scans are restoring cover art whose stored file went missing, for the notice. A
+    /// count rather than a [`Signal`], since the boot scan can start before the notice subscribes.
     pub artwork_restoring: watch::Sender<u32>,
     /// The folder scan in flight: its progress for the Library settings bar, and its cancel.
     pub scan: Arc<ScanControl>,
     pub watcher: Arc<parking_lot::Mutex<FolderWatcher>>,
-    /// Files this process wrote itself (tag edits), so the watcher can drop the
-    /// `Modified` events its own writes generate instead of paying for a full
-    /// re-ingest of a file it just retagged. See [`SelfWrites`].
+    /// Files this process just wrote (tag edits), so the watcher drops the `Modified` events of
+    /// its own writes. See [`SelfWrites`].
     pub self_writes: Arc<SelfWrites>,
     pub always_on_top: AlwaysOnTopCapability,
     pub search_history: Arc<SearchHistoryState>,
-    /// Scrobbling service: credential/enabled shadow + durable offline queue.
-    /// Loaded at boot; the detector/submitter tasks that drive it wire in later.
+    /// Scrobbling's credential and enabled shadow, and its durable offline queue.
     pub scrobble: Arc<ScrobbleService>,
-    /// Discord Rich Presence: enable-flags shadow + connection-status watch,
-    /// lazily spawning a blocking IPC worker thread. Stateless (no on-disk
-    /// state); the detector task in `tasks::discord_presence` drives it.
+    /// Discord Rich Presence, whose blocking IPC worker is spawned lazily;
+    /// `tasks::discord_presence` drives it.
     pub discord: Arc<DiscordPresenceService>,
-    /// The Radio master switch, mirrored off `settings.json` at boot. A shadow
-    /// rather than a read at the decision point because every reader is on a
-    /// path a file read has no business being on: `library::radio`'s guard runs
-    /// on a tokio worker per directory call, and `boot::ui_setup` asks before
-    /// the window is shown. Every writer moves it *before* spawning the persist — the rule
-    /// [`SharedFlag`] carries — so a directory call racing the disk write sees the new answer.
+    /// The Radio master switch, mirrored off `settings.json` at boot because no reader may read a
+    /// file: `library::radio`'s guard runs per directory call on a worker, and `boot::ui_setup`
+    /// asks before the window shows.
     pub radio_enabled: SharedFlag,
-    /// Whether directory results drop segmented stations, on the same terms as
-    /// [`Self::radio_enabled`]: `library::radio::search` reads it per page, on a
-    /// worker.
+    /// Whether directory results drop segmented stations, read per page by
+    /// `library::radio::search`.
     pub radio_hide_segmented: SharedFlag,
-    /// Whether playing a station reports a click back to the directory. Read on
-    /// the play path, which is already on a worker.
+    /// Whether playing a station reports a click back to the directory.
     pub radio_send_clicks: SharedFlag,
     /// Whether a song heard on a station is scrobbled, read by `tasks::scrobble`'s detector on
     /// every title change.
     pub radio_scrobble: SharedFlag,
-    /// Whether lyrics run at all, on [`Self::radio_enabled`]'s terms: `library::lyrics`
-    /// refuses on it from a worker, and the Now Playing switch and the Settings card
-    /// both write it.
+    /// Whether lyrics run at all: `library::lyrics` refuses on it from a worker, and the Now
+    /// Playing switch and the Settings card both write it.
     pub lyrics_enabled: SharedFlag,
-    /// Whether the lyrics panel may look a sheet up online, on the same terms as
-    /// [`Self::radio_enabled`]: `library::lyrics`'s guard runs on a worker once per
-    /// track change, where a `settings.json` read would be a file read on the path a
-    /// track change already pays for.
+    /// Whether the lyrics panel may look a sheet up online, read once per track change.
     pub lyrics_online_enabled: SharedFlag,
-    /// Whether the panel draws the romanization it already holds. Here for a different
-    /// reason from its neighbours: no worker reads it, but the Settings card and the
-    /// Now Playing menu both write it, and two callbacks reaching one field through
-    /// disk is the race the mirror exists to close.
+    /// Whether the panel draws the romanization it holds. No worker reads it: it is mirrored
+    /// because the Settings card and the Now Playing menu both write it, and two writers through
+    /// disk race.
     pub lyrics_romanization_shown: SharedFlag,
-    /// How often the lyrics directory may be asked, and the stop it can impose.
-    ///
-    /// Owned here rather than kept as a `static` beside the client, so it is one instance a test
-    /// can construct fresh and the pacing is state rather than process-global. Shared by every
-    /// clone of `AppState`, which is the point: the floor is per host, not per caller.
+    /// How often the lyrics directory may be asked, and the stop it can impose. State rather than a
+    /// `static`, so a test builds one fresh; shared by every clone, the floor being per host.
     pub lyrics_pacer: Arc<RequestPacer>,
-    /// Whether a star rating is also written into the file's own tag, on the same
-    /// terms as [`Self::radio_enabled`]: `tasks::rating_writeback` asks once per
-    /// coalesced burst, and a `settings.json` read there would be a file read on
-    /// the path a rating click already paid for.
+    /// Whether a star rating is also written into the file's own tag, asked by
+    /// `tasks::rating_writeback` once per coalesced burst.
     pub write_ratings_to_tags: SharedFlag,
     pub media_controls: Option<Arc<MediaControlsHandle>>,
-    /// Shared `reqwest::Client`, built lazily on first use via
-    /// [`AppState::http_client`]. Only the updater and the post-scan Deezer
-    /// artist-image fetch ever need it, so deferring construction keeps the
-    /// rustls TLS stack and connection pool off the boot/idle footprint.
-    /// `Arc<OnceLock<…>>` so every cloned `AppState` shares one client and one
-    /// initialization (`reqwest::Client` itself wraps an internal pool in
-    /// `Arc`). Future remote calls should reuse the accessor rather than
-    /// constructing a new client per call.
+    /// Built on first use by [`AppState::http_client`], one client for every clone.
     http_client: Arc<OnceLock<reqwest::Client>>,
-    /// Tracks every spawned background task so shutdown can wait for them
-    /// to finish their current write before the runtime is dropped.
+    /// Every spawned background task, so shutdown can wait for their current writes.
     pub task_tracker: TaskTracker,
-    /// Broadcast cancel signal — long-running loops listen via `cancelled().await`.
     pub shutdown_token: CancellationToken,
 }
 
-/// Receivers handed back from `AppState::init` for `boot::tasks` to consume.
-/// Holding them on `AppState` would force a `Mutex<Option<…>>` shape nothing
-/// needs; returning them keeps the struct stable.
+/// Receivers handed back from `AppState::init` for `boot::tasks` to consume, rather than held on
+/// the state in a `Mutex<Option<…>>` nothing needs.
 pub struct StartupChannels {
     pub media_control_rx: Option<mpsc::Receiver<PlayerEvent>>,
     pub file_event_rx: mpsc::Receiver<FileEvent>,
@@ -186,12 +138,8 @@ impl AppState {
             settings::SettingsData::default()
         });
 
-        // The error callback records into counters rather than logging, because cpal calls it on
-        // the output worker thread; `player::playback::stream_health` argues that.
         let audio_health = Arc::new(AudioStreamHealth::default());
         let audio_output = open_output(&settings, audio_health.clone())?;
-        // The runtime handle is only used to schedule the deferred half of a
-        // faded pause / stop (arm the ramp now, pause the decks once it lands).
         let engine = Arc::new(PlaybackEngine::with_output(audio_output, runtime.clone())?);
 
         let db = database::init_database(&paths).await?;
@@ -248,15 +196,10 @@ impl AppState {
         );
 
         let search_history = Arc::new(SearchHistoryState::init(&paths).await);
-        // Shared lazy client: one `OnceLock` seeds both `http_client()` and the
-        // scrobble service, so the app has a single connection pool built on
-        // first actual request.
+        // One cell behind `http_client()`, scrobbling and Discord, so the app has one pool.
         let http_client = Arc::new(OnceLock::new());
         let scrobble =
             Arc::new(ScrobbleService::init(&paths, &settings.scrobble, http_client.clone()));
-        // Persists nothing (the application id is a compile-time constant, not a
-        // secret), so unlike scrobble it needs no `&paths` — but it shares the
-        // one `http_client` pool for the album-cover lookup.
         let discord =
             Arc::new(DiscordPresenceService::init(&settings.discord, http_client.clone()));
 
@@ -305,20 +248,16 @@ impl AppState {
         Ok((state, channels))
     }
 
-    /// Persist a settings mutation on the blocking pool, logging (never
-    /// surfacing) a failure under `label`. This is the write half of the
-    /// two-phase "apply live, then persist" shape used by the EQ / `ReplayGain`
-    /// / playback-settings installers: the caller has already applied the value
-    /// to the running player, so a failed disk write must not undo it — the
-    /// warn is the only report.
+    /// Persist a settings mutation on the blocking pool, logging a failure under `label`.
+    ///
+    /// The write half of "apply live, then persist": the caller has already applied the value to
+    /// the running player, so a failed write must not undo it and the warn is the only report.
     pub fn persist_blocking(
         &self,
         label: &'static str,
         f: impl FnOnce(&Paths) -> Result<(), AppError> + Send + 'static,
     ) {
-        // `label` already names the setting, so one line here covers every
-        // caller — including the three settings-row helpers that pass one
-        // through. On the way in, so a write that hangs still says what it was.
+        // On the way in, so a write that hangs still says what it was.
         log::debug!("settings: {label}");
         let paths = Arc::clone(&self.paths);
         self.runtime.spawn_blocking(move || {
@@ -328,22 +267,16 @@ impl AppState {
         });
     }
 
-    /// The shared `reqwest::Client`, built on first call and reused for the
-    /// process lifetime. Construction is deferred out of `init` (see
-    /// [`melodia_net::services::net::build_http_client`]) so the rustls TLS stack and
-    /// connection pool never load at boot/idle — only the updater, the post-scan
-    /// Deezer artist-image fetch, and scrobbling pull them in. reqwest's
-    /// connection pool lives on the client, so callers reuse this accessor (and
-    /// `ScrobbleService`, which shares the same `OnceLock`) rather than
-    /// constructing a new client per request.
+    /// The shared `reqwest::Client`, built on first call so rustls and the connection pool never
+    /// load at boot or idle. The pool lives on the client, so every remote call reuses this rather
+    /// than building one.
     pub fn http_client(&self) -> &reqwest::Client {
         self.http_client.get_or_init(melodia_net::services::net::build_http_client)
     }
 
-    /// The still-unbuilt cell behind [`Self::http_client`], for the one consumer that has to carry
-    /// the client somewhere `AppState` doesn't reach: `PlaybackContext`, whose transport commands
-    /// re-open a paused radio station. Handing over the `OnceLock` rather than the client keeps
-    /// the construction lazy — a player that never tunes to a station still never loads rustls.
+    /// The still-unbuilt cell behind [`Self::http_client`], for `PlaybackContext`, whose transport
+    /// commands re-open a paused station. The cell rather than the client keeps construction lazy:
+    /// a player that never tunes in never loads rustls.
     pub fn http_client_cell(&self) -> Arc<OnceLock<reqwest::Client>> {
         self.http_client.clone()
     }
@@ -370,22 +303,14 @@ fn open_output(
     Ok(output)
 }
 
-/// Seed the playback engine's lock-free cells (graphic EQ, `ReplayGain`,
-/// crossfade, following the file's rate) from persisted settings before
-/// playback starts, so the first track is already processed when any of them
-/// is enabled. All of them live on the engine (not `PlayerState`). Ordering is deliberate: values first,
-/// `enabled` last, so the enable's generation bump publishes a fully-seeded
-/// state to the audio thread.
+/// Seed the engine's lock-free DSP cells from persisted settings before playback starts, so the
+/// first track is already processed. Values first and each `enabled` last, the enable's generation
+/// bump publishing a fully seeded state to the audio thread.
 fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData) {
-    // `set_eq_gains` clamps and length-normalises the (possibly hand-edited)
-    // gain list; the EQ ships off by default.
     engine.set_eq_gains(&settings.equalizer.eq_band_gains);
     engine.set_eq_preamp(settings.equalizer.eq_preamp);
     engine.set_eq_enabled(settings.equalizer.eq_enabled);
 
-    // ReplayGain master state seeds the same way — per-track gain is baked per
-    // source at play time. Ships off by default; the mode string falls back to
-    // Album on an unknown value.
     engine.set_replaygain_preamp(settings.replaygain.rg_preamp);
     engine.set_replaygain_mode(
         melodia_playback::player::playback::replaygain::RgMode::from_settings_str(
@@ -395,7 +320,6 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     engine.set_replaygain_prevent_clipping(settings.replaygain.rg_prevent_clipping);
     engine.set_replaygain_enabled(settings.replaygain.rg_enabled);
 
-    // Crossfade ships off; `set_crossfade_duration_ms` clamps a hand-edited value.
     engine.set_crossfade_duration_ms(settings.crossfade.crossfade_duration_ms);
     engine.set_crossfade_manual(settings.crossfade.crossfade_manual);
     engine.set_crossfade_skip_same_album(settings.crossfade.crossfade_skip_same_album);
@@ -409,8 +333,6 @@ fn hydrate_audio_dsp(engine: &PlaybackEngine, settings: &settings::SettingsData)
     // it, and claims the card at the first play. A shared one opens its chosen device here.
     engine.set_output_choice(settings.output.output_choice());
 
-    // The visualizer is deliberately absent: its tap is armed by the
-    // Now-Playing view being on screen, not by a persisted flag, so it must
-    // stay disarmed until `Visualizer.set-active` fires. See
-    // `melodia-views`' `ui/visualizer/`.
+    // No visualizer: its tap is armed by Now Playing being on screen (`melodia-views`'
+    // `ui/visualizer/`), never by a persisted flag.
 }

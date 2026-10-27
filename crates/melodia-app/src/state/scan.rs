@@ -41,10 +41,9 @@ pub struct ScanProgressTick {
 /// The scan-progress channel and the switch every scan stops on.
 ///
 /// A cancel goes through an epoch: each scan takes a child of the current one, and
-/// [`cancel`](Self::cancel) cancels it and installs a fresh one. So it stops every scan running
-/// at that moment, a boot reconcile and a rescan alike, while one started a moment later starts
-/// clean. The epoch descends from the shutdown token, which is how quitting stops a scan at the
-/// same checkpoints.
+/// [`cancel`](Self::cancel) cancels it and installs a fresh one, stopping every scan running at
+/// that moment while one started a moment later starts clean. The epoch descends from the shutdown
+/// token, which is how quitting stops a scan at the same checkpoints.
 pub struct ScanControl {
     progress: watch::Sender<Option<ScanProgressTick>>,
     epoch: Mutex<CancellationToken>,

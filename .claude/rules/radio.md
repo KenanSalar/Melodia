@@ -129,9 +129,6 @@ is the copy to delete.
   defaults pull `reqwest/default-tls`, which is OpenSSL on Linux and changes what `cargo-deb`'s
   `$auto` resolves to. `default-features = false` plus the single `reqwest-rustls` entry is what
   keeps `cargo tree -i native-tls` and `-i openssl-sys` empty and `reqwest` on one version.
-- **`PlaybackContext.http` is the cell, not the client.** A transport command re-opening a paused
-  station needs a pool and must not build a second; handing over the `Arc<OnceLock<…>>` means a
-  player that never tunes in still never loads rustls.
 - **A station is not a queue entry** (D9) and pausing one drops its connection. The queue is
   track-id-based end to end and a station has no track id, so starting one stops queue playback and
   leaves the queue seated underneath — which is what hands the library back on stop. `queue.json`

@@ -1,8 +1,4 @@
-//! The two shared cells [`super::AppState`] hands out by the handful.
-//!
-//! Both replaced a shape that was written once per field and drifting: four `Arc<AtomicBool>`
-//! mirrors each with their own getter and setter, and a change counter whose `wrapping_add`
-//! incantation was spelled out at every one of its bump sites.
+//! The two shared cells [`super::AppState`] hands out by the handful, so no field hand-rolls one.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,9 +7,8 @@ use tokio::sync::watch;
 
 /// A settings toggle mirrored where a worker can read it without touching the disk.
 ///
-/// `settings.json` is the durable answer; this is the one a hot path asks. The UI writes the
-/// mirror **synchronously before** spawning the persist, so a task that fires in the gap sees the
-/// new value rather than the old — `Relaxed` because nothing is published alongside it.
+/// The UI writes the mirror **synchronously before** spawning the persist, so a task that fires in
+/// the gap sees the new value. `Relaxed`, nothing being published alongside it.
 #[derive(Clone)]
 pub struct SharedFlag(Arc<AtomicBool>);
 
@@ -33,12 +28,9 @@ impl SharedFlag {
 
 /// A "something changed, go and look" broadcast, with no payload but a counter.
 ///
-/// A `watch` rather than an `mpsc` because only the latest matters: a burst of scans or of play
-/// counts collapses into one wake-up, which is the whole point. Subscribers do the do-while walk
-/// (`changed().await`, then read) — `changed()` marks the value seen on its own, so nothing after
-/// it owes a `borrow_and_update`.
-///
-/// Wrapping, because the count means nothing: only that it moved.
+/// A `watch` rather than an `mpsc` because only the latest matters: a burst collapses into one
+/// wake-up. The UI subscribes through `ui::signal::on_signal`. Wrapping, because the count means
+/// nothing but that it moved.
 #[derive(Clone)]
 pub struct Signal(watch::Sender<u64>);
 
