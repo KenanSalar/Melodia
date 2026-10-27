@@ -9,16 +9,13 @@ pub enum PlayerAction {
         volume: f64,
         speed: f64,
         start_position_ms: Option<u64>,
-        /// This track's baked `ReplayGain` tag values, applied by the audio source.
         replaygain: TrackReplayGain,
     },
-    /// Overlap the next track with the one still playing, fading between them
-    /// over `fade_ms` **media** milliseconds. Unlike `PlayMedia` this leaves the
-    /// current track audible; the backend runs the two on separate decks.
+    /// Fades over `fade_ms` media milliseconds into the next track on the other deck, the current
+    /// one staying audible.
     BeginCrossfade {
         file_path: String,
-        /// The *incoming* track's baked `ReplayGain` values. Baked per source —
-        /// the outgoing track has its own, already applied.
+        /// The incoming track's own.
         replaygain: TrackReplayGain,
         fade_ms: u64,
         volume: f64,
@@ -35,12 +32,8 @@ pub enum PlayerAction {
     Stop {
         fade_ms: u64,
     },
-    /// Move the playing track's position.
-    ///
-    /// Carries the file and its gain for the same reason [`Self::PlayMedia`] does: the backend
-    /// seeks by building a source already at the target, so a seek rebuilds what the deck holds
-    /// and the new source needs its own baked values. Only ever emitted for a track, a live
-    /// source having no timeline to land on.
+    /// Carries the file and its gain because the backend seeks by building a source already at
+    /// the target. Only ever for a track.
     Seek {
         position_ms: u64,
         file_path: String,
@@ -49,11 +42,8 @@ pub enum PlayerAction {
     SetVolume(f64),
     SetSpeed(f64),
     PreloadGapless(Option<String>),
-    /// Start the live stream the backend already has staged for this station session.
-    ///
-    /// Carries neither a URL nor a reader: opening a stream is a network round trip and belongs on
-    /// the async task that started the station, not on the executor thread. `generation` is what
-    /// the backend checks the stage against, so an action that outlived its session plays nothing.
+    /// Starts the stream the backend staged for session `generation`; the open, a network round
+    /// trip, belongs to the async task that started the station.
     PlayStream {
         generation: u64,
         volume: f64,
@@ -65,28 +55,20 @@ pub enum PlayerAction {
     StartWhenResolved(AwaitedStart),
 }
 
-/// A track start a transition owes, left waiting on the record the window lacked.
-///
-/// The start runs on whatever the queue's current slot holds once its record lands, not on the
-/// slot the transition chose: an edit landing during the fetch moves what starts rather than
-/// stranding the player under `Loading` (`PlayerState::resume_awaited`).
+/// A track start a transition owes, waiting on a record the window lacked. It runs on whatever the
+/// queue's current slot holds once the record lands, so an edit during the fetch moves what starts
+/// rather than stranding the player under `Loading`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AwaitedStart {
     /// The track the transition moved onto, which is what the log names.
     pub id: i64,
-    /// Put the track back on pause once it starts, for a skip made while paused.
     pub re_pause: bool,
-    /// Unplayable tracks the batch had already skipped, so a queue with nothing playable in it
-    /// still stops after one lap however many fetches the lap took.
+    /// So a lap of unplayable tracks still stops however many fetches it took.
     pub skipped: usize,
 }
 
-/// The verbose log's playback narrative, one action per line.
-///
-/// Terse where the derived `Debug` is exhaustive — `PlayMedia` alone would print
-/// a whole `TrackReplayGain`. On the enum rather than in `execute_actions` so a
-/// new variant is a non-exhaustive-match failure here, where a `_ =>` arm in the
-/// executor would have logged it as nothing at all.
+/// The verbose log's narrative: terser than `Debug`, and on the enum so a new variant fails to
+/// match here rather than logging as nothing.
 impl std::fmt::Display for PlayerAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

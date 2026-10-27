@@ -1,8 +1,6 @@
-//! Library edits reaching the track records the live state holds, so a retag or a star lands on
-//! Now Playing and on the next track without a restart.
-//!
-//! Two paths: a list-row edit patches the playing track at once, and the app's window task
-//! re-reads every record the state holds after each queue move and library change.
+//! Library edits reaching the track records the live state holds: a list-row edit patches the
+//! playing track at once, and the app's window task re-reads every record after each queue move
+//! and library change.
 
 use std::sync::Arc;
 
@@ -10,11 +8,8 @@ use super::{PlayerAction, PlayerStateHandle, lock_state, with_state_emit};
 use crate::player::engine::event_sink::PlayerSinks;
 use melodia_core::entities::track::TrackSummary;
 
-/// If `current_track` is one of `ids`, apply `apply` to its cached
-/// [`TrackSummary`] and emit so the Now-Playing surfaces reflect a per-track
-/// field edited from a list row (favorite heart, rating stars). Skips the emit
-/// entirely when the playing track isn't in the set (the common case) to avoid
-/// a spurious view-model publish.
+/// Applies a list-row edit (a heart, the stars) to the playing track where it is one of `ids`,
+/// skipping the emit in the common case where it isn't.
 pub fn sync_current_track_if_in(
     state: &PlayerStateHandle,
     sinks: &PlayerSinks,
@@ -29,8 +24,7 @@ pub fn sync_current_track_if_in(
         return;
     }
     with_state_emit(state, sinks, |s| {
-        // Re-check the id under the emit lock — the track may have advanced
-        // between the pre-check and here.
+        // Re-checked under the emit lock: the track may have advanced since.
         if let Some(track) = s.current_track_mut()
             && ids.contains(&track.id)
         {
@@ -49,10 +43,8 @@ pub enum WindowFill {
     All,
 }
 
-/// The ids whose records the window task should fetch for the queue as it stands.
-///
-/// `All` adds the playing track where the window doesn't name it, a queue cleared under a playing
-/// track leaving it on the deck with no slot.
+/// `All` adds the playing track where the window doesn't name it, as a queue cleared under it
+/// leaves it.
 pub fn window_wanted(state: &PlayerStateHandle, fill: WindowFill) -> Vec<i64> {
     let s = lock_state(state);
     let wanted = s.queue.window_ids();
@@ -70,12 +62,8 @@ pub fn window_wanted(state: &PlayerStateHandle, fill: WindowFill) -> Vec<i64> {
     }
 }
 
-/// Seat what the window task fetched: the records the window still wants, against the queue as it
-/// stands now rather than when the fetch was asked for, and the playing track's own where it
-/// changed.
-///
-/// The window is no view model's, so filling it publishes nothing. Only a changed playing track
-/// emits, which is how a retag reaches Now Playing.
+/// Seats what the window task fetched against the queue as it stands now. Only a changed playing
+/// track emits, which is how a retag reaches Now Playing.
 pub fn seat_window_records(
     state: &PlayerStateHandle,
     sinks: &PlayerSinks,

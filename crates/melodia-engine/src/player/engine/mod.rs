@@ -1,9 +1,6 @@
-//! The state machine and what runs its decisions.
-//!
-//! [`state`] mutates under one lock and publishes a view model; [`actions`] is the side-effect
-//! list executed after that lock drops; [`handlers`] is the monitor deciding when to advance,
-//! preload or crossfade; [`backend`] is what all three drive. The pairing rule between the first
-//! two is repo-wide and lives in the root `CLAUDE.md`.
+//! The state machine and what runs its decisions: [`state`] mutates and publishes, [`actions`]
+//! runs the side effects once its lock drops, [`handlers`] is the monitor, and [`backend`] is what
+//! all three drive.
 
 pub mod actions;
 pub mod backend;

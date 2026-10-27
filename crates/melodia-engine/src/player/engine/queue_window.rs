@@ -1,10 +1,6 @@
-//! The full records behind the few queue slots a transition can move onto.
-//!
-//! The queue holds ids, and a transition runs under the state lock where nothing can wait on the
-//! database, so the records it starts from are fetched ahead of it: the app's window task fills
-//! this as the queue moves, against [`QueueState::window_ids`](super::queue::QueueState::window_ids).
-//! A transition onto a track it doesn't hold owes its start rather than blocking
-//! (`PlayerState::start_queued`).
+//! The records behind the queue slots a transition can move onto. A transition runs under the
+//! state lock, where nothing waits on the database, so the app's window task fetches them ahead
+//! against [`QueueState::window_ids`](super::queue::QueueState::window_ids).
 
 use std::sync::Arc;
 
@@ -22,7 +18,6 @@ impl TrackWindow {
         self.records.iter().find(|record| record.id == id)
     }
 
-    /// The ids in `wanted` it holds no record for.
     pub fn missing(&self, wanted: &[i64]) -> Vec<i64> {
         wanted.iter().copied().filter(|&id| self.get(id).is_none()).collect()
     }

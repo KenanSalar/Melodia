@@ -1,10 +1,5 @@
-//! Fixtures for the transport suites, built out of this crate's own published types.
-//!
-//! `#[doc(hidden)] pub` rather than `#[cfg(test)]`, and not by preference: suites in other crates
-//! read these, and a `cfg(test)` item cannot cross a crate boundary. `DbPool::test_pool` is the
-//! same shape for the same reason. The cheaper fixtures each tier can spell for itself stayed
-//! `cfg(test)` beside their tests; these three could not, `RadioNowPlaying` having thirteen
-//! fields and `PlayerViewModelLight` fifteen.
+//! Fixtures for the transport suites. `#[doc(hidden)] pub` rather than `#[cfg(test)]` because
+//! suites in other crates read them, as `DbPool::test_pool` is.
 
 use std::sync::Arc;
 
@@ -12,12 +7,8 @@ use crate::player::engine::state::PlayerViewModelLight;
 use crate::player::engine::types::{RadioNowPlaying, RepeatMode};
 use melodia_core::entities::track::TrackSummary;
 
-/// A station for the transport tests, with only what they assert on filled in.
-///
-/// Four suites were spelling this out — three under `player/` and one under `library/` — so a
-/// field added to `RadioNowPlaying` broke all four the same way. The display facts are left empty
-/// deliberately: nothing below the UI layer reads them, so a fixture carrying them would suggest
-/// the transport cares.
+/// A station with only what the transport tests assert on. The display facts stay empty, nothing
+/// below the UI reading them.
 pub fn test_station(name: &str) -> Arc<RadioNowPlaying> {
     Arc::new(RadioNowPlaying {
         station_id: 42,
@@ -36,9 +27,7 @@ pub fn test_station(name: &str) -> Arc<RadioNowPlaying> {
     })
 }
 
-/// A track for the suites that need one on the deck rather than a decodable file, with only the
-/// tagged fields varying. Shares [`test_station`]'s reason for existing: `TrackSummary` has
-/// seventeen columns and the two suites reading this one care about four.
+/// A track for suites needing one on the deck rather than a decodable file.
 pub fn test_track(title: &str, artist: Option<&str>, album: Option<&str>) -> Arc<TrackSummary> {
     Arc::new(TrackSummary {
         id: 7,
@@ -61,10 +50,8 @@ pub fn test_track(title: &str, artist: Option<&str>, album: Option<&str>) -> Arc
     })
 }
 
-/// A published view model carrying `current_track`, `radio` and the player's own `duration_ms`,
-/// which is the trio anything asking what is on the deck reads. Everything else is left at a
-/// resting value: a test that wants one sets it on the returned struct, so a field added to
-/// `PlayerViewModelLight` lands here rather than in every suite that builds one.
+/// A view model carrying the trio that says what is on the deck, the rest at rest, so a new field
+/// lands here rather than in every suite.
 pub fn test_view_model(
     current_track: Option<Arc<TrackSummary>>,
     radio: Option<Arc<RadioNowPlaying>>,

@@ -12,15 +12,9 @@ use super::state::{
 };
 use melodia_playback::player::playback::replaygain::TrackReplayGain;
 
-/// Execute a list of `PlayerActions` against the audio backend and database.
-/// Called after releasing the `PlayerState` lock.
-///
-/// `PlayMedia` is pre-flighted with `Path::exists()` and any decode failure
-/// also auto-skips: the queue's `build_next_actions` is computed inline and
-/// appended to the pending action set so a single stale double-click within
-/// the watcher debounce window doesn't dead-end playback. The bad track
-/// stays in the queue until the watcher catches up and `tasks::queue_prune`
-/// removes it, which for a file outside the watched folders is never.
+/// Runs `actions` after the state lock drops. A start that fails auto-skips, so a stale
+/// double-click inside the watcher's debounce doesn't dead-end playback; the track stays queued
+/// until `tasks::queue_prune` removes it.
 pub fn execute_actions<B: PlayerBackend>(
     actions: Vec<PlayerAction>,
     engine: &B,
@@ -38,9 +32,7 @@ fn run<B: PlayerBackend>(
     sinks: &PlayerSinks,
 ) {
     while let Some(action) = pending.actions.pop_front() {
-        // Safe per action because nothing periodic reaches here: the position
-        // tick decides in `evaluate_playing_tick` and the 30 s queue save writes
-        // its file directly.
+        // Per action is fine: nothing periodic reaches here.
         log::debug!("player: {action}");
         match action {
             PlayerAction::PlayMedia { file_path, volume, speed, start_position_ms, replaygain } => {
@@ -55,10 +47,8 @@ fn run<B: PlayerBackend>(
                 );
             }
             PlayerAction::BeginCrossfade { file_path, replaygain, fade_ms, volume, speed } => {
-                // `build_crossfade_actions` already advanced onto this track, so
-                // the `advance_skip` a failure triggers correctly lands on the one
-                // after it. In `RepeatMode::One` that also steps off the repeated
-                // track — rare enough (the file vanished mid-play) to accept.
+                // Already advanced onto this track, so a failure's skip lands on the one after,
+                // stepping off a `RepeatMode::One` track too.
                 start_or_skip(
                     &mut pending,
                     engine,
@@ -81,33 +71,26 @@ fn run<B: PlayerBackend>(
             PlayerAction::SetVolume(v) => engine.set_volume(v),
             PlayerAction::SetSpeed(s) => engine.set_speed(s),
             PlayerAction::PreloadGapless(path) => {
-                // This action only ever *clears* a stale preload (`path` is
-                // `None`); the real gapless preload with baked ReplayGain happens
-                // directly in `spawn_playback_monitor`. A default (unity) RG here
-                // is harmless — the `None` path never builds an audio source.
+                // Only ever clears a stale preload; the monitor stages the real one.
                 engine.preload_gapless(path.as_deref(), TrackReplayGain::default());
             }
             PlayerAction::PlayStream { generation, volume } => {
-                // Deliberately not through `start_or_skip`: there is no file to pre-flight with
-                // `Path::exists`, and nothing to auto-skip onto — a station is one source, not a
-                // position in a queue.
+                // Not `start_or_skip`: no file to pre-flight, and a station has no next.
                 if let Err(e) = engine.play_stream(generation, volume) {
                     log::error!("Failed to start the radio stream: {}", describe(&e));
                     engine.stop();
                     enqueue_station_failure(&mut pending, player_state, sinks, generation);
                 }
             }
-            // Both no-op until `boot::tasks` installs the flusher, which it does before playback
-            // can start. Nothing here writes the row itself: a `DbPool` on this side is what pins
-            // the engine to sqlx.
+            // No-ops until `boot::tasks` installs the flusher; a `DbPool` here would pin the
+            // engine to sqlx.
             PlayerAction::UpdatePlayCount(track_id) => {
                 try_send(PlayCountEvent::Play(track_id));
             }
             PlayerAction::UpdateSkipCount(track_id) => {
                 try_send(PlayCountEvent::Skip(track_id));
             }
-            // Replaced rather than sent: a watch with no subscriber keeps nothing on `send`, and
-            // the window task is what resolves it.
+            // Replaced rather than sent: a watch with no subscriber keeps nothing on `send`.
             PlayerAction::StartWhenResolved(awaited) => {
                 sinks.awaited_start.send_replace(Some(awaited));
             }
@@ -115,14 +98,9 @@ fn run<B: PlayerBackend>(
     }
 }
 
-/// Run the start `awaited` owes, now that the window task has fetched a record, unless something
-/// has started or stopped since the transition that owed it.
-///
-/// Probed before the exec lock and asked again under it. The window task asks after every fetch
-/// for the rest of the session once anything has deferred, so the probe is what keeps that a state
-/// read rather than a wait on whichever transport op holds exec. The batch carries on the
-/// deferral's skip count, which is what still stops a queue with nothing playable in it after one
-/// lap.
+/// Runs the start `awaited` owes once the window task has its record, unless something started
+/// or stopped since. Probed before the exec lock, since the task asks after every fetch, and again
+/// under it. The deferral's skip count carries on, so the lap guard still holds.
 pub fn start_awaited<B: PlayerBackend>(
     engine: &B,
     player_state: &PlayerStateHandle,
@@ -140,22 +118,10 @@ pub fn start_awaited<B: PlayerBackend>(
     run(Pending { actions: actions.into(), skipped: awaited.skipped }, engine, player_state, sinks);
 }
 
-/// Mutate state, publish the `ViewModel`, then execute the resulting side
-/// effects — all while holding the per-`PlayerStateHandle` execution lock so
-/// mutation order equals side-effect order across tokio workers.
-///
-/// This is the serialized replacement for the bare `with_state_emit(...)` +
-/// `execute_actions(...)` pair. `with_state_emit` alone keeps each *mutation*
-/// atomic, but the `execute_actions` that follows runs on whatever worker the
-/// caller is on; two batches from different tasks (e.g. the playback monitor's
-/// EOS-advance and a UI `Stop`) could otherwise interleave their side effects
-/// and leave state and backend disagreeing (a rare TOCTOU). Holding `exec_lock`
-/// across both halves closes that window.
-///
-/// The lock spans only synchronous work (no `.await`), so a blocking mutex is
-/// correct. `enqueue_auto_skip`'s nested `with_state_emit` inside
-/// `execute_actions` takes the *state* mutex, never `exec_lock`, so there is no
-/// re-entrancy.
+/// Mutates, publishes and runs the side effects under the exec lock, so mutation order is
+/// side-effect order across workers: two batches from different tasks would otherwise interleave
+/// and leave state and backend disagreeing. An auto-skip's nested `with_state_emit` takes the
+/// state mutex, never `exec_lock`, so nothing re-enters.
 pub fn emit_and_execute<B, F>(
     engine: &B,
     player_state: &PlayerStateHandle,
@@ -173,14 +139,13 @@ pub fn emit_and_execute<B, F>(
 /// What is left to run of one [`execute_actions`] call.
 struct Pending {
     actions: VecDeque<PlayerAction>,
-    /// Tracks this call has skipped as unplayable. A repeating queue wraps on a skip, so without
-    /// a bound a queue with nothing playable in it skips forever, holding the lock every
-    /// transport control waits on.
+    /// A repeating queue wraps on a skip, so without a bound one with nothing playable skips
+    /// forever, holding the lock every control waits on.
     skipped: usize,
 }
 
 impl Pending {
-    /// Run `actions` next, in their order, ahead of anything still queued from the batch.
+    /// Runs `actions` next, ahead of anything still queued from the batch.
     fn prepend(&mut self, actions: Vec<PlayerAction>) {
         for (i, a) in actions.into_iter().enumerate() {
             self.actions.insert(i, a);
@@ -188,20 +153,12 @@ impl Pending {
     }
 }
 
-/// How a track is being started — the only thing that differs between the
-/// [`PlayerAction::PlayMedia`] and [`PlayerAction::BeginCrossfade`] arms of
-/// [`execute_actions`].
 #[derive(Copy, Clone)]
 enum StartMode {
-    /// Takes over the decks outright. A failure leaves them half-set, so stop
-    /// before skipping on.
+    /// Takes over the decks; a failure leaves them half-set, so it stops before skipping on.
     Fresh,
-    /// Overlaps the track still playing on the other deck. Deliberately does
-    /// **not** stop on failure: the outgoing track is still audible, and the
-    /// `play_media` that the auto-skip produces takes over from it cleanly either
-    /// way — hard-cutting (which clears both decks) or, with `crossfade_manual`
-    /// on, fading out of it. Stopping here would only insert a gap of silence
-    /// ahead of that.
+    /// Overlaps the outgoing track, which stays audible on a failure: the skip's `play_media`
+    /// takes over from it either way, and a stop would only add silence.
     Crossfade,
 }
 
@@ -210,8 +167,6 @@ impl StartMode {
         matches!(self, Self::Fresh)
     }
 
-    /// The verb for the decode-failure log: "Failed to *play* …" / "Failed to
-    /// *crossfade into* …".
     fn verb(self) -> &'static str {
         match self {
             Self::Fresh => "play",
@@ -219,7 +174,6 @@ impl StartMode {
         }
     }
 
-    /// The transition the skip happened at, for the vanished-file log.
     fn at(self) -> &'static str {
         match self {
             Self::Fresh => "playback",
@@ -228,13 +182,9 @@ impl StartMode {
     }
 }
 
-/// Start a track on the backend, auto-skipping past it if it can't be played.
-///
-/// Shared by the two start actions. A file that has vanished is skipped
-/// *silently* while the skip lands on something playable — the usual cause is a
-/// stale double-click inside the watcher's debounce window — and toasts only
-/// when nothing in the queue plays. A decode failure is louder: the music
-/// silently stopping is otherwise invisible, so it always toasts.
+/// Starts a track, auto-skipping one that can't play. A vanished file skips silently while the
+/// skip finds something playable; a decode failure always toasts, or the music stopping goes
+/// unexplained.
 fn start_or_skip<B: PlayerBackend>(
     pending: &mut Pending,
     engine: &B,
@@ -271,20 +221,15 @@ fn toast_playback_failed(file_path: &str) {
     );
 }
 
-/// The file name alone, for the failure toast — the full path is too long to
-/// read in a toast. Falls back to the whole path when there is no file name.
+/// The file name alone, the full path being too long to read in a toast.
 fn toast_track_name(file_path: &str) -> String {
     Path::new(file_path)
         .file_name()
         .map_or_else(|| file_path.to_owned(), |n| n.to_string_lossy().into_owned())
 }
 
-/// Clear a station whose staged stream could not be started, so the transport doesn't sit on a
-/// `Loading` that will never resolve.
-///
-/// No toast: the only ways this fires are a stage that was never made and one made for a station
-/// the user has already moved off, neither of which is theirs to act on. A stream that failed to
-/// *open* is the user-visible case, and `library::radio` says so there.
+/// Clears a station whose stage couldn't start, so the transport doesn't sit on `Loading`. No
+/// toast: only a stage never made, or one for a station already left, gets here.
 fn enqueue_station_failure(
     pending: &mut Pending,
     player_state: &PlayerStateHandle,
@@ -296,14 +241,8 @@ fn enqueue_station_failure(
     }));
 }
 
-/// Advance past a track that turned out to be unplayable (missing or
-/// undecodable) and run whatever that produces next. Returns whether it gave up
-/// instead.
-///
-/// It gives up once the batch has skipped a whole lap of the queue, since
-/// nothing left in it will play. On an empty queue this emits `Stop` only.
-/// Either way the `with_state_emit` call took the lock to do it, so the state
-/// machine and `ViewModel` both reflect the end-of-queue state.
+/// Advances past an unplayable track, or gives up (`true`) once the batch has skipped a whole lap
+/// of the queue.
 fn enqueue_auto_skip(
     pending: &mut Pending,
     player_state: &PlayerStateHandle,

@@ -30,10 +30,7 @@ impl EventSink for NoopEventSink {
     fn handle(&self, _: PlayerEvent) {}
 }
 
-/// Push direction of OS media controls — `with_state_emit` calls `sync` after
-/// every state mutation so MPRIS / SMTC stay in lockstep with the player.
-/// Implemented by `MediaControlsHandle`; `PlayerSinks` holds `None` on platforms
-/// where no handle could be created.
+/// The OS media controls' push direction, synced by `with_state_emit` after every mutation.
 pub trait MediaControlsSync: Send + Sync + 'static {
     fn sync(&self, vm: &PlayerViewModelLight, status: PlaybackStatus);
 
@@ -46,11 +43,8 @@ pub trait MediaControlsSync: Send + Sync + 'static {
     fn seeked(&self, _position_ms: u64) {}
 }
 
-/// Sinks consumed by `with_state_emit`. The two watch senders carry the
-/// reactive view-model updates the Slint bridge subscribes to;
-/// `media_controls` is the optional push-direction hook for OS media
-/// controls. The watch payloads are `Option` because `watch::channel` needs
-/// an initial value and there is no meaningful default at startup.
+/// What `with_state_emit` publishes into, `Option` payloads because there is no meaningful view
+/// model at startup.
 pub struct PlayerSinks {
     pub view_model: watch::Sender<Option<PlayerViewModelLight>>,
     pub queue: watch::Sender<Option<QueueViewModel>>,

@@ -10,11 +10,9 @@ pub enum PlaybackStatus {
     Stopped,
     Playing,
     Paused,
-    /// Nothing is audible yet: a station is being connected to. Deliberately **not** what a
-    /// rebuffer or a reconnect reports — those keep `Playing` and raise
-    /// [`melodia_audio::player::source::prebuffer::StreamShared::is_buffering`] instead, because
-    /// the two OS reporting sites map this to "stopped" and a station dipping its buffer has not
-    /// stopped.
+    /// Nothing audible yet: a station connecting, or a track start waiting on its record. Never a
+    /// rebuffer, which stays `Playing` and raises `StreamShared::is_buffering`, since the OS
+    /// reporting sites map this one to stopped.
     Loading,
 }
 
@@ -52,44 +50,31 @@ impl RepeatMode {
     }
 }
 
-/// The station the player is tuned to, which is the whole of what a live source has where a track
-/// has a [`melodia_core::entities::track::TrackSummary`].
+/// The station the player is tuned to: its own type rather than a `TrackSummary` with empty
+/// fields, which every surface would have to learn to disbelieve. `station_id` is `0` for a
+/// station only browsed to.
 ///
-/// Deliberately not a `TrackSummary` with empty fields: a station has no duration, no album and no
-/// id in `tracks`, and every surface that reads one would have to learn which of its fields to
-/// disbelieve. `station_id` is `0` for a station the user has only browsed to, matching what
-/// `views.json` can and cannot persist a detail id for.
-///
-/// **Held behind an `Arc`**, for `current_track`'s reason: it is cloned into the view model on
-/// every state emit, and a volume drag emits per pointer move. That is also what makes the facts
-/// below free to carry — the two writers that mutate it in place go through `Arc::make_mut` and
-/// pay one clone a song rather than one an emit.
+/// Behind an `Arc` for `current_track`'s reason, cloned into the view model on every emit; its
+/// two in-place writers pay one clone a song through `Arc::make_mut`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RadioNowPlaying {
     pub station_id: i64,
-    /// radio-browser.info's id, or `None` for a station the user typed in — which is what decides
-    /// whether the directory can be told anything about it, a vote included.
+    /// radio-browser.info's id, `None` for a station typed in, which the directory can't be told
+    /// about.
     pub station_uuid: Option<String>,
     pub name: String,
     pub stream_url: String,
     pub artwork_path: Option<String>,
-    /// The current track as the stream itself announces it, in whatever shape the station sends.
-    /// `None` until the first metadata block arrives, which for some stations is never.
+    /// As the stream announces it, `None` until its first metadata block.
     pub live_title: Option<String>,
-    /// Whether the stream is currently running on empty. It lives here rather than on
-    /// `PlayerState` because it means nothing without a station: reconciled by the playback
-    /// monitor off [`melodia_audio::player::source::prebuffer::StreamShared`], and gone the
-    /// moment this is.
+    /// Reconciled by the monitor; here rather than on `PlayerState`, meaning nothing without a
+    /// station.
     pub buffering: bool,
 
-    // What the Now-Playing surfaces *state* about the station, as against what the machine needs
-    // to play it. Carried here rather than looked up per surface because the row they come from
-    // is already in hand at the tune, and a second published description of the playing station
-    // would be two answers to keep in step. Each is read through `RadioStation`'s override
-    // accessor, so what the bar draws and what the station's own page draws cannot disagree.
+    // What the Now Playing surfaces state about the station, carried from the row in hand at the
+    // tune and read through `RadioStation`'s accessors, so the bar and the station's page agree.
     pub country: Option<String>,
-    /// The directory's free-form comma-separated list, verbatim. The UI layer is what trims and
-    /// joins it into a line, through the same helper a station card uses.
+    /// The directory's comma-separated list, verbatim; the UI trims and joins it.
     pub tags: Option<String>,
     pub homepage: Option<String>,
     pub codec: Option<String>,
@@ -99,8 +84,6 @@ pub struct RadioNowPlaying {
 }
 
 impl From<&melodia_core::entities::radio::RadioStation> for RadioNowPlaying {
-    /// What a stored station looks like to the player: everything a Now-Playing surface draws, and
-    /// none of the popularity, codec or favourite bookkeeping that belongs to the library views.
     fn from(station: &melodia_core::entities::radio::RadioStation) -> Self {
         Self {
             station_id: station.id,
@@ -122,20 +105,9 @@ impl From<&melodia_core::entities::radio::RadioStation> for RadioNowPlaying {
 
 /// What is on the deck, and what may be done with it.
 ///
-/// It replaces a pair of `Option`s — a track and a station — that were mutually exclusive by an
-/// invariant nothing enforced, and that only one function ever restored. Making the exclusion
-/// structural is the smaller half of what this buys.
-///
-/// The larger half is the accessors below. Source kind used to be a boolean, and a dozen branches
-/// asked it as a stand-in for a dozen different questions: whether there is a next item, whether a
-/// position can be asked for, whether a length is known, whether the speed may be varied. Podcasts
-/// and streaming turn each of those into a three or four way question, and every site left as a
-/// boolean silently answers it the way a local file would. Asking the capability instead means a
-/// third variant states its own answers once rather than being audited into a dozen branches.
-///
-/// So the variants are not a taxonomy of where bytes come from. A podcast episode is far closer to
-/// a local file than to a station — finite, seekable, with a position worth resuming — and it is
-/// radio that is the odd one out.
+/// Callers ask a capability rather than the variant, so a third kind of source (a podcast sits far
+/// closer to a file than to a station) states its answers once instead of being audited into
+/// every branch.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlaybackSource {
     Track(Arc<TrackSummary>),
@@ -143,7 +115,6 @@ pub enum PlaybackSource {
 }
 
 impl PlaybackSource {
-    /// The track, when this is one. `None` for every live source.
     pub fn track(&self) -> Option<&Arc<TrackSummary>> {
         match self {
             Self::Track(track) => Some(track),
@@ -151,7 +122,6 @@ impl PlaybackSource {
         }
     }
 
-    /// The track for in-place mutation, which is how a rating or a favourite reaches the deck.
     pub fn track_mut(&mut self) -> Option<&mut Arc<TrackSummary>> {
         match self {
             Self::Track(track) => Some(track),
@@ -159,7 +129,6 @@ impl PlaybackSource {
         }
     }
 
-    /// The station, when this is one.
     pub fn station(&self) -> Option<&Arc<RadioNowPlaying>> {
         match self {
             Self::Station(station) => Some(station),
@@ -167,7 +136,6 @@ impl PlaybackSource {
         }
     }
 
-    /// The station for in-place mutation, which is how a live title and the buffering flag arrive.
     pub fn station_mut(&mut self) -> Option<&mut Arc<RadioNowPlaying>> {
         match self {
             Self::Station(station) => Some(station),
@@ -175,31 +143,23 @@ impl PlaybackSource {
         }
     }
 
-    /// Whether the queue is what says which item follows this one.
-    ///
-    /// False for a station, whose queue is left seated underneath rather than played from: skipping
-    /// into it would be a silent change of source, and a station going off air stops rather than
-    /// advancing.
+    /// Whether the queue says what follows. A station's queue stays seated underneath, and one
+    /// going off air stops rather than advancing into it.
     pub fn advances_queue(&self) -> bool {
         matches!(self, Self::Track(_))
     }
 
-    /// Whether a position within the source can be asked for.
     pub fn is_seekable(&self) -> bool {
         matches!(self, Self::Track(_))
     }
 
-    /// Whether the source knows how long it runs for, which is what a progress bar, a crossfade and
-    /// an end-of-track sleep timer each need before they mean anything.
+    /// What a progress bar, a crossfade and an end-of-track sleep timer each need.
     pub fn has_known_duration(&self) -> bool {
         matches!(self, Self::Track(_))
     }
 
-    /// Whether playback speed may be varied.
-    ///
-    /// Speed is a ratio on the deck's converter, so anything but 1.0 consumes a source faster or
-    /// slower than real time. A live mount arrives at exactly real time, so the ring either starves
-    /// or overruns — a station is pinned to 1.0 rather than merely discouraged from moving.
+    /// A live mount arrives at exactly real time, so a station is pinned to 1.0 or its ring
+    /// starves or overruns.
     pub fn has_variable_speed(&self) -> bool {
         matches!(self, Self::Track(_))
     }
@@ -211,20 +171,14 @@ pub struct PersistableQueue {
     pub current_index: i32,
 }
 
-/// What `queue.json` holds: the queue, and the station tuned over it.
-///
-/// The two are not alternatives. A station leaves the queue untouched underneath it (D9), so a
-/// restart puts back both and a stop hands the library back exactly as one mid-session does.
-///
-/// **Flattened, so the file keeps the shape it has already shipped** — a `queue.json` written
-/// before the station rode along still parses, and restores no station.
+/// What `queue.json` holds: the queue and the station tuned over it, which leaves the queue
+/// untouched, so a restart puts back both. Flattened, so a file from before the station rode
+/// along still parses.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersistedPlayback {
     #[serde(flatten)]
     pub queue: PersistableQueue,
-    /// The station on the deck, by row id, which is what the restore looks back up. `None` for a
-    /// track, and for a station with no row of its own — [`RadioNowPlaying::station_id`] is `0`
-    /// there, and nothing could be fetched with it.
+    /// `None` for a track, and for a station with no row of its own.
     #[serde(default)]
     pub station_id: Option<i64>,
 }

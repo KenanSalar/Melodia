@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 5 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 6 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -93,8 +93,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 1 | `melodia-artwork` | 0.73 | 1,028 | ~674 | 0.31 (441) | `a6e10d5f` |
 | 2 | `melodia-net` | 0.59 | 1,118 | ~648 | 0.24 (448) | `bda588b8` |
 | 3 | `melodia-platform` | 0.51 | 1,030 | ~523 | 0.26 (528) | `d58d95b2` |
-| 4 | `melodia-audio` | 0.48 | 1,414 | ~677 | 0.25 (729) | |
-| 5 | `melodia-engine` | 0.48 | 1,572 | ~756 | | |
+| 4 | `melodia-audio` | 0.48 | 1,414 | ~677 | 0.25 (729) | `fa210378` |
+| 5 | `melodia-engine` | 0.48 | 1,572 | ~756 | 0.23 (746) | |
 | 6.1 | `melodia-core`: `utils/`, `lib.rs`, `config.rs`, `error.rs` | 0.79 | 561 | ~384 | | |
 | 6.2 | `melodia-core`: `entities/`, `themes/` | 0.39 | 1,094 | ~394 | | |
 | 7.1 | `melodia-playback`: the files directly under `player/playback/`, plus `lib.rs` | 0.54 | 1,075 | ~574 | | |
@@ -155,14 +155,14 @@ Status: done.
   - **Pointed at:** `CLAUDE.md` on `source::decode` and `source/audio.rs`'s vocabulary; `.claude/rules/audio-stack.md` and `radio.md` (the stream path's ring).
 
 ### Phase 5: `melodia-engine`
-Status: next.
+Status: done.
 
-- [ ] **5. The crate**, one commit (23 files).
+- [x] **5. The crate**, one commit (23 files).
   - **Furthest over:** `engine/backend/mod.rs` (211), `state/transport.rs` (101), `handlers.rs` (74), `backend/output.rs` (73).
   - **Pointed at:** `CLAUDE.md` on `with_state_emit`, `emit_and_execute` and the lock order; `.claude/rules/audio-stack.md`.
 
 ### Phase 6: `melodia-core`
-Status: not started.
+Status: next.
 
 - [ ] **6.1 `utils/` and the three root files** (`lib.rs`, `config.rs`, `error.rs`), one commit.
   - **Furthest over:** `utils/self_writes.rs` (57), `utils/atomic_file.rs` (53).

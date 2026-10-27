@@ -11,10 +11,7 @@ use crate::player::engine::types::{
 use melodia_core::entities::track::TrackSummary;
 
 impl PlayerState {
-    /// The snapshot `queue.json` holds, for the two save sites to write.
-    ///
-    /// Takes the whole state rather than the queue alone because a station rides beside the
-    /// queue rather than in it, and both come back together at boot.
+    /// Takes the whole state, a station riding beside the queue rather than in it.
     pub fn to_persisted(&self) -> PersistedPlayback {
         PersistedPlayback {
             queue: self.queue.to_persistable(),
@@ -24,10 +21,8 @@ impl PlayerState {
     }
 }
 
-/// Seat a restored queue and the records of its window, with the current track on the deck where
-/// it was left. Called at startup via `library::queue::restore_persisted_playback`, which has
-/// already settled the queue's shuffle and repeat against `settings.json` and dropped the ids
-/// whose rows are gone.
+/// Seats a restored queue and its window's records, the current track where it was left.
+/// `library::queue::restore_persisted_playback` has already dropped the ids whose rows are gone.
 pub fn restore_queue(state: &mut PlayerState, queue: QueueState, records: Vec<Arc<TrackSummary>>) {
     state.queue = queue;
     state.window.seat(&state.queue.window_ids(), records);
@@ -39,16 +34,9 @@ pub fn restore_queue(state: &mut PlayerState, queue: QueueState, records: Vec<Ar
     }
 }
 
-/// Put the station the last session was tuned to back on the deck, over the queue
-/// [`restore_queue`] has already restored. Called from the same startup path.
-///
-/// `Paused` because that is already the one status holding a station with no connection —
-/// pausing one drops its socket, so a restart is the same shape, and
-/// `library::playback::player_play` re-opens from it. Seating the station is what evicts whatever
-/// [`restore_queue`] just put on the deck, the two being one field.
-///
-/// Returns actions, so the caller owes an `emit_and_execute`: the speed pin is a backend write,
-/// and boot is the one place a station can arrive over a rate `settings.json` restored.
+/// Puts the last session's station back over the queue [`restore_queue`] seated, `Paused`: the
+/// one status holding a station with no connection, which `player_play` reopens from. The caller
+/// owes an `emit_and_execute` for the speed pin, boot restoring a rate from `settings.json`.
 pub fn restore_station(
     state: &mut PlayerState,
     station: Arc<RadioNowPlaying>,

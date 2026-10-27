@@ -1,17 +1,9 @@
-//! What the samples go through between the file and the device, and whether any of it changed them.
+//! What the samples go through between the file and the device, and whether any of it changed
+//! them. [`evaluate`] is the one place the verdict is decided; the panel only renders it.
 //!
-//! [`evaluate`] is the one place the verdict is decided. It is pure, the monitor runs it on its
-//! tick, and the panel only ever renders what it answered.
-//!
-//! **Shared output never reads Bit-perfect.** The system mixer sits between the stream and the
-//! card and may convert or mix, and nothing here can see past it. Only an exclusive claim, in a
-//! format that holds the source, grades the output clean.
-//!
-//! **A fallback is the headline whatever the stages say**, since the user asked for exclusive and
-//! didn't get it, and that is the one thing they need to hear first.
-//!
-//! **A lossy source is the headline after it.** No setting puts a lossy file right, so whatever
-//! the later stages do, the answer that matters is that the device gets a reconstruction.
+//! Shared output never reads Bit-perfect, the system mixer being past what we can see. A fallback
+//! is the headline whatever the stages say, the user having asked for exclusive, and a lossy
+//! source the headline after it, since no setting puts one right.
 
 use melodia_playback::player::playback::output::Negotiated;
 use melodia_playback::player::playback::output::voice::PlayingSource;
