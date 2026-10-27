@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **proposed**, Phase 1 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 2 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -90,7 +90,7 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 
 | Slice | Covers | Ratio before | Comment lines before | Over | After | Commit |
 |---|---|---|---|---|---|---|
-| 1 | `melodia-artwork` | 0.73 | 1,028 | ~674 | | |
+| 1 | `melodia-artwork` | 0.73 | 1,028 | ~674 | 0.31 (441) | |
 | 2 | `melodia-net` | 0.59 | 1,118 | ~648 | | |
 | 3 | `melodia-platform` | 0.51 | 1,030 | ~523 | | |
 | 4 | `melodia-audio` | 0.48 | 1,414 | ~677 | | |
@@ -125,14 +125,14 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 ## Phases
 
 ### Phase 1: `melodia-artwork`
-Status: next.
+Status: done.
 
-- [ ] **1. The crate**, one commit (10 files).
+- [x] **1. The crate**, one commit (10 files).
   - **Furthest over:** `media/image/cover_thumbs.rs` (153), `image_decode.rs` (136), `material_you.rs` (102), `artwork/mod.rs` (101).
   - **Pointed at:** `CLAUDE.md`'s `media/` bullet names `image_decode`'s primitives, `material_you`'s resampler, the artwork store, `cover_thumbs`' tiers and `logo_tile`'s floor. `crates/melodia/tests/bounded_decode.rs` walks for the decode exceptions.
 
 ### Phase 2: `melodia-net`
-Status: not started.
+Status: next.
 
 - [ ] **2. The crate**, one commit (17 files).
   - **Furthest over:** `lyrics_directory/lrclib.rs` (129), `lyrics_directory/recording.rs` (84), `radio_browser/mod.rs` (61), `net/mod.rs` (49).

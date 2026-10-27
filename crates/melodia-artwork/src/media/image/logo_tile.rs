@@ -1,16 +1,10 @@
 //! A fetched station logo, composed into the square opaque tile a card draws and filed in the
 //! radio-logo store.
 //!
-//! **A directory's logo field is a favicon field**, so what arrives is whatever a browser tab
-//! wanted, and only one of the three shapes it comes in survives the card unchanged. A wide
-//! wordmark is stretched: `cover_thumbs` resizes into a square buffer aspect-blind, and the
-//! `image-fit: cover` over it has nothing left to correct. A transparent mark is worse than
-//! stretched — every tier below is RGB8, so the channel is dropped rather than composited and
-//! the mark lands on whatever bytes sat under the transparency, black about as often as white.
-//!
-//! Both are answered **once, at fetch**, so the store holds a square the rest of the app can
-//! treat as ordinary artwork and no tier needs a mode. That is also what the directories whose
-//! logos look deliberate do: they serve a pre-composed square, not the station's own icon.
+//! A directory's logo field is a favicon field, and two of the shapes it serves don't survive a
+//! card. A wide wordmark is stretched, the tiers resizing aspect-blind into a square. A transparent
+//! mark loses its alpha, every tier being RGB8, and lands on whatever bytes sat beneath it. Both
+//! are fixed once, at fetch, so the store holds ordinary square artwork and no tier needs a mode.
 
 use std::path::Path;
 
@@ -20,70 +14,45 @@ use melodia_core::entities::radio::StoredLogo;
 use crate::media::image::artwork::{self, STORE_MAX_DIM};
 use crate::media::image::image_decode::{self, FilterType, fit_within, resize_rgb8};
 
-/// Shortest edge a source may have and still be worth storing.
-///
-/// Set at favicon size rather than at what the surfaces would like. A grid card and a hero tile
-/// are both hundreds of logical pixels wide and `FemtoVG` magnifies bilinear with no mipmaps, so a
-/// source down here is visibly soft. But a station's logo field *is* a favicon field, and holding
-/// out for something drawable mostly bought the glyph instead. What it still keeps out is the 1×1
-/// pixel that turns up where the field was filled in by a tracker. One gate at the writer rather
-/// than one per surface, so nothing this small enters the store for a later tier to reject.
+/// Shortest edge worth storing. Favicon-sized rather than what the surfaces would like: the field
+/// *is* a favicon field, and holding out for more mostly bought the monogram. What it still keeps
+/// out is a tracker's 1×1 pixel, gated once at the writer so no tier has to reject one.
 const MIN_LOGO_DIM: u32 = 32;
 
-/// Alpha at or below which a pixel counts as transparent rather than faint. Above zero because an
-/// exporter's fully-clear pixels are not always exactly clear, and a mark's own soft edge is the
-/// thing that must not read as ground.
-///
-/// Answers where the *ground* comes from, never whether to composite at all — [`is_opaque`] owns
-/// that, and it has to be exact.
+/// Alpha at or below which a pixel is ground rather than faint: an exporter's clear pixels aren't
+/// always exactly zero, and a mark's soft edge must not read as ground. Decides the ground only;
+/// whether to composite at all is [`is_opaque`]'s, and that one is exact.
 const TRANSPARENT_ALPHA: u8 = 8;
 
-/// How much of the border ring must be opaque before the ring is taken to name the source's own
-/// ground. Short of 1.0 so a rounded-corner icon still answers with its fill rather than falling
-/// through to a neutral.
+/// How much of the border ring must be opaque for it to name the source's own ground. Short of 1.0
+/// so a rounded-corner icon still answers with its fill.
 const OPAQUE_RING_FRACTION: f64 = 0.75;
 
-/// Mark luma past which white stops working and the dark ground is taken instead: the grey of
-/// this byte is where WCAG's 3:1 non-text ratio against white runs out. **White is the default and
-/// the threshold is deliberately high** — a mark drawn for transparency was drawn for a web page,
-/// so it is a light mark that needs rescuing, not a mid-tone one. A midpoint would send half of
-/// them to a ground they were never designed for.
-///
-/// Rec. 709 luma stands in for that grey's relative luminance rather than deriving it: this
-/// chooses between two constants, where `ui::backdrop` solves a scrim against a target and does
-/// the transfer function properly.
+/// Mark luma past which the dark ground wins: where WCAG's 3:1 non-text contrast against white
+/// runs out, Rec. 709 luma standing in for luminance. Deliberately high, a mark drawn for
+/// transparency having been drawn for a web page and so usually a light one needing rescue.
 const WHITE_GROUND_MAX_LUMA: f64 = 149.0;
 
-/// The two grounds a floating mark is laid on. Neutral rather than drawn from the mark: a ground
-/// carrying its own hue argues with every colour in a multi-colour logo, and the one directory
-/// worth copying pads white far more often than it pads with a brand colour.
+/// Neutral rather than taken from the mark, which would argue with every colour in a logo.
 const GROUND_LIGHT: Rgb<u8> = Rgb([0xff, 0xff, 0xff]);
 const GROUND_DARK: Rgb<u8> = Rgb([0x1a, 0x1a, 0x1a]);
 
-/// `bytes` filed in the store under `dir` as `compose` leaves them, or `None` where nothing
-/// drawable arrived.
-///
-/// The floor is asked first and off the header alone, so a source too small to draw costs no
-/// decode at all. `extension` names the source's own bytes; a composed tile is always PNG.
-///
-/// **Blocking**, like `compose`.
+/// `bytes` filed in the store under `dir`, composed where they need it, or `None` where nothing
+/// drawable arrived. The floor is read off the header, so a source too small costs no decode.
+/// **Blocking.**
 pub fn store(bytes: &[u8], extension: &str, dir: &Path) -> Option<StoredLogo> {
     let (width, height) = image_decode::memory_dimensions(bytes, image_decode::MAX_SOURCE_DIM)?;
     if width < MIN_LOGO_DIM || height < MIN_LOGO_DIM {
         return None;
     }
-    // Held to the end rather than around the decode: `compose` flattens at full source resolution
-    // before it downscales, and the store decodes again to bound an oversized source. The
-    // download's byte cap is no substitute: it bounds the *compressed* size, which a flat-colour
-    // icon stays under at any dimension, and the fetch window runs several at once.
+    // Held to the end: `compose` flattens at full resolution, and the store decodes again to bound
+    // an oversized source. The download's byte cap bounds only the compressed size, which a flat
+    // icon stays under at any dimension.
     let _oversized = image_decode::large_decode_guard(u64::from(width) * u64::from(height));
-    // `None` is "store the source's own bytes": it is already a square opaque icon, or the tile
-    // it wanted would not encode and the source is the better of the two.
+    // `None` stores the source's own bytes: already fine, or its tile wouldn't encode.
     let tile = match tile_for(bytes) {
         Tile::Composed(tile) => encoded_png(tile),
         Tile::SourceIsFine => None,
-        // Refused rather than stored untreated. The caller reads `None` as "nothing usable came
-        // back" and the card falls back to its monogram, where the source paints an empty square.
         Tile::Undrawable => return None,
     };
 
@@ -91,17 +60,13 @@ pub fn store(bytes: &[u8], extension: &str, dir: &Path) -> Option<StoredLogo> {
         Some(tile) => artwork::store_image(tile, "png", dir),
         None => artwork::store_image(bytes, extension, dir),
     }?;
-    // A file the store just wrote or already had; a stat that fails says nothing about whether it
-    // is drawable, so the answer stands and the size falls back to what arrived.
+    // A failed stat says nothing about whether the file is drawable, so report what arrived.
     let stored = std::fs::metadata(&path).map_or(bytes.len() as u64, |meta| meta.len());
     Some(StoredLogo { path, bytes: stored })
 }
 
-/// What [`compose`] makes of the source, past the decode it needs.
-///
-/// A source the decoder refuses is [`Tile::SourceIsFine`] rather than [`Tile::Undrawable`]: the
-/// header read in [`store`] already says the store can hold it, and with no decode there is no
-/// evidence it wanted a tile at all.
+/// A source the decoder refuses is [`Tile::SourceIsFine`]: the header read already showed the
+/// store can hold it, and without a decode there's no evidence it wanted a tile.
 fn tile_for(bytes: &[u8]) -> Tile {
     match image_decode::decode_memory_capped(bytes, image_decode::MAX_SOURCE_DIM) {
         Some(decoded) => compose(decoded),
@@ -109,11 +74,8 @@ fn tile_for(bytes: &[u8]) -> Tile {
     }
 }
 
-/// A composed tile as PNG rather than the store's JPEG.
-///
-/// A tile is flat ground behind a hard-edged mark, which is what JPEG rings around and what PNG
-/// holds in a few kilobytes; `store_image` re-encodes anyway for the rare composite that lands
-/// over its byte bound.
+/// PNG rather than the store's JPEG: a tile is flat ground behind a hard-edged mark, which JPEG
+/// rings around and PNG holds in a few kilobytes.
 fn encoded_png(tile: RgbImage) -> Option<Vec<u8>> {
     let mut encoded = Vec::new();
     let encoder = image::codecs::png::PngEncoder::new(&mut encoded);
@@ -121,34 +83,19 @@ fn encoded_png(tile: RgbImage) -> Option<Vec<u8>> {
     Some(encoded)
 }
 
-/// What [`compose`] decided about a source.
-///
-/// **Three answers, not two.** "Already fine" and "nothing worth storing" both come back from
-/// [`compose`] with no tile in hand and mean opposite things to the caller: one keeps the source's
-/// own bytes, the other has to refuse the logo entirely so the card draws its monogram. Folded into
-/// one `None` they were indistinguishable, and a fully transparent source went into the store to be
-/// painted as an empty tile.
+/// What [`compose`] decided. "Already fine" and "nothing worth storing" both come back without a
+/// tile and mean opposite things to the caller, hence three answers.
 enum Tile {
-    /// Composed into a square opaque tile.
     Composed(RgbImage),
-    /// Already a square opaque source. Keep its bytes, which is what preserves
-    /// `artwork::store_image`'s byte-identical path.
+    /// Already square and opaque. Storing its own bytes keeps `store_image`'s byte-identical path.
     SourceIsFine,
-    /// The source needs a tile and none could be built from it — no opaque pixel to take a ground
-    /// from, so it would be flat ground and nothing else. Refuse it: storing the untreated source
-    /// paints exactly the empty square this module exists to prevent.
+    /// Needs a tile and has no opaque pixel to take a ground from. Refused, the untreated source
+    /// painting the empty square this module exists to prevent, so the card draws its monogram.
     Undrawable,
 }
 
-/// `decoded` as a square, fully opaque tile, or the reason there isn't one.
-///
-/// [`Tile::SourceIsFine`] is the common answer and the reason this is cheap: most of what a
-/// directory serves is already a square opaque icon.
-///
-/// **Blocking** — same contract as the resize behind it.
-///
-/// Takes the decode by value: it is the caller's last use of it, and `into_rgba8` then costs
-/// nothing on a source that already is one, where `to_rgba8` copies the whole buffer.
+/// `decoded` as a square opaque tile, or why there isn't one. By value so `into_rgba8` is free on a
+/// source that already is one, where `to_rgba8` copies.
 fn compose(decoded: DynamicImage) -> Tile {
     let (width, height) = (decoded.width(), decoded.height());
     let square = width == height;
@@ -157,10 +104,8 @@ fn compose(decoded: DynamicImage) -> Tile {
     }
 
     let source = decoded.into_rgba8();
-    // A channel is not transparency: over half of what carries alpha never uses it, and those want
-    // the untouched-bytes path as much as a plain JPEG does. Exact rather than
-    // `TRANSPARENT_ALPHA`'s fudge — a tier below drops the channel instead of compositing it, so
-    // anything short of fully opaque still has to be flattened here.
+    // Plenty of sources carry an alpha channel they never use. Exact rather than
+    // `TRANSPARENT_ALPHA`: the tiers drop the channel, so anything short of opaque is flattened.
     if square && source.pixels().copied().all(is_opaque) {
         return Tile::SourceIsFine;
     }
@@ -168,14 +113,13 @@ fn compose(decoded: DynamicImage) -> Tile {
     let Some(ground) = ground_colour(&source) else {
         return Tile::Undrawable;
     };
-    // Flattened before the downscale rather than after: resampling straight alpha against
-    // undefined colour is where the halo around a mark's edge comes from.
+    // Before the downscale: resampling straight alpha against undefined colour is where the halo
+    // around a mark's edge comes from.
     let Some(flattened) = flatten(&source, ground).map(DynamicImage::ImageRgb8) else {
         return Tile::Undrawable;
     };
 
-    // The store would cap anything larger on the way in, so composing above it only builds a
-    // buffer to throw away.
+    // The store caps anything larger on the way in.
     let side = width.max(height).min(STORE_MAX_DIM);
     let (mark_w, mark_h) = fit_within(width, height, side, side);
     let Some(mark) = resize_rgb8(&flattened, mark_w, mark_h, FilterType::Lanczos3) else {
@@ -200,12 +144,8 @@ fn is_opaque(pixel: Rgba<u8>) -> bool {
     pixel.0[3] == u8::MAX
 }
 
-/// The colour the tile is padded and flattened with, or `None` where the source has no opaque
-/// pixel to take one from.
-///
-/// A source that came with its own ground keeps it, which is what makes a branded rectangle read
-/// as the same tile it was: the ring is that ground wherever the logo is a rectangle rather than a
-/// floating mark. Only when the ring is mostly clear is a neutral chosen instead.
+/// The ring's own colour where it has one, so a branded rectangle stays the tile it was, otherwise
+/// a neutral picked against the mark. `None` with no opaque pixel.
 fn ground_colour(source: &RgbaImage) -> Option<Rgb<u8>> {
     if let Some(ring) = modal_opaque_ring(source) {
         return Some(ring);
@@ -214,13 +154,9 @@ fn ground_colour(source: &RgbaImage) -> Option<Rgb<u8>> {
     Some(if luma > WHITE_GROUND_MAX_LUMA { GROUND_DARK } else { GROUND_LIGHT })
 }
 
-/// The most common opaque colour around the source's outermost pixels, or `None` when too few of
-/// them are opaque for the ring to be a ground at all.
-///
-/// Ties break on the colour itself. `HashMap` iteration order varies per process, so a ring of all
-/// distinct colours — a photo behind the byte cap — would otherwise pad differently on every fetch,
-/// and the store being content-addressed on the composed bytes means that lands as a new file each
-/// time rather than deduplicating.
+/// The most common opaque colour on the source's border, or `None` when too little of it is opaque
+/// to be a ground. Ties break on the colour: `HashMap` order varies per process, and an unstable
+/// pick would store a new content-addressed file on every fetch of the same logo.
 fn modal_opaque_ring(source: &RgbaImage) -> Option<Rgb<u8>> {
     let (width, height) = source.dimensions();
     let mut tally: std::collections::HashMap<[u8; 3], u32> = std::collections::HashMap::new();
@@ -236,8 +172,6 @@ fn modal_opaque_ring(source: &RgbaImage) -> Option<Rgb<u8>> {
         *tally.entry([pixel.0[0], pixel.0[1], pixel.0[2]]).or_default() += 1;
     };
 
-    // The border alone, rather than every pixel with the interior skipped: the ring is O(w + h) of
-    // an O(w · h) buffer, and this runs on the decode pool once per composed logo.
     for x in 0..width {
         tally_pixel(source.get_pixel(x, 0));
         if height > 1 {
@@ -257,8 +191,8 @@ fn modal_opaque_ring(source: &RgbaImage) -> Option<Rgb<u8>> {
     tally.into_iter().max_by_key(|(rgb, count)| (*count, *rgb)).map(|(rgb, _)| Rgb(rgb))
 }
 
-/// Rec. 709 luma of the mark alone, or `None` where there is no mark. The clear field carries no
-/// colour, and averaging it in as black is how a light mark ends up asking for a light ground.
+/// Rec. 709 luma of the mark alone. Averaging the clear field in as black is how a light mark ends
+/// up asking for a light ground.
 fn mark_luma(source: &RgbaImage) -> Option<f64> {
     let mut sum = 0f64;
     let mut counted = 0u32;
@@ -285,8 +219,7 @@ fn flatten(source: &RgbaImage, ground: Rgb<u8>) -> Option<RgbImage> {
     RgbImage::from_raw(source.width(), source.height(), out)
 }
 
-/// One channel of `top` at `alpha` over `under`. Rounded half-up rather than truncated, so a fully
-/// opaque pixel comes back as itself.
+/// One channel of `top` at `alpha` over `under`, rounded to the nearest byte.
 fn over(top: u8, alpha: u8, under: u8) -> u8 {
     let alpha = u32::from(alpha);
     let blended = u32::from(top) * alpha + u32::from(under) * (255 - alpha);

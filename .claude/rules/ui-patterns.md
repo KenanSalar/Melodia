@@ -364,17 +364,10 @@ three components that answer it, and each argues its geometry at its own file.
 - **`MosaicHeroTile`** is the 140 px artwork square both curated heroes draw, and it draws **one
   composed collage, never a live `CoverMosaic`** — `media::image::artwork`'s `COMPOSITE_LAYOUTS` owns the
   1/2/3/4 arrangement, so the square, the banner blur and a playlist thumbnail are all laid out the
-  same. **What they do not share is what an unreadable source costs**, and the asymmetry is
-  deliberate: the heroes go through `compose_cover`, which drops that source and picks the layout
-  from what survives, because they recompose from whatever the database's top four currently are
-  and a cover deleted underneath should cost its slot rather than the banner; a playlist thumbnail
-  goes through `compose_artwork`, which refuses, because the mosaic picker previewed that file slot
-  for slot and `CoverMosaic` is a promise. Collapsing the two onto one function for DRY persists a
-  collage nobody chose. **They differ on cost as well as on strictness**, and the layout table is
-  in half-canvas units so one set of rects serves both: the persisted thumbnail composes at
-  `COMPOSITE_SIZE` through Lanczos3, where a hero takes its side from the caller — `COVER_SIZE`,
-  the tile `pair_from_image` reduces it to on the next line — through Triangle. A hero canvas any
-  larger is resized twice and drawn once. **Every brush in it is a `HeroBackdrop` tier and none may
+  same. The heroes compose through `compose_cover` and a playlist thumbnail through
+  `compose_artwork`, which differ in what an unreadable source costs. `media::image::artwork::composite`
+  argues the asymmetry; collapsing the two onto one function persists a collage nobody chose.
+  **Every brush in it is a `HeroBackdrop` tier and none may
   become a `Theme.*` token** — with no collage the hero is the dark gradient floor where a light
   theme's accent lands dark-on-dark.
   **What decides the arm is the cover, not the count**: a set whose every entry lacks
@@ -1056,12 +1049,8 @@ three components that answer it, and each argues its geometry at its own file.
 
 - **A leave hands the pixels back and keeps the picture.** `grid_prewarm::hand_back_covers` shrinks
   every entry to `PROXY_COVER_DIM` square in place rather than calling `clear`, so a re-entry paints
-  the right cover on frame one and the prewarm already on its way sharpens it behind.
-  `get_or_schedule_opt` needed nothing new for it: serving an entry whose recorded size isn't the
-  one being drawn *and* re-queueing it is the retune case, already argued there. The shrink clears
-  `settled` for the reason `set_thumb_size` does — every path the last burst handed to the pool is
-  worth handing over again, and left standing a card scrolled to past the next prewarm keeps the
-  proxy — and bumps no epoch, there being no released memory for an in-flight batch to land in.
+  the right cover on frame one and the prewarm already on its way sharpens it behind
+  (`CoverThumbs::shrink_to_proxy`).
   - **The guard sits ahead of the decode, where it used to sit after one.** A prewarm for an
     off-screen section was answered by decoding and then releasing; against a tier nothing clears,
     that leaves a screenful resident for a page nobody opened. Browse is where it bit, being the
@@ -1085,34 +1074,11 @@ three components that answer it, and each argues its geometry at its own file.
   `ui::cover_generation::notify_on_decode` bumps the counter on the UI thread. Prewarm still covers
   the common case; this is for the misses it structurally can't reach. A prewarm is capped at the
   tier's own `CACHE_CAP` and walks **in display order**, so a library with more unique covers than
-  that keeps its visible prefix and nothing else — and every row scrolled to past it used to decode
-  inline, one at a time, on the event loop.
-  - **Per batch, not per cover, and per batch *drained* rather than per batch landed.** A
-    screenful of misses coalesces into one pass over the mounted bindings, and a miss arriving
-    mid-drain joins it rather than spawning a second. A batch another writer already cached, and
-    one a release discarded, announce too: every binding that took a placeholder when it queued
-    has nothing else to re-run it, so a drain that stays silent leaves those cards on the glyph
-    until the next model rebuild, which on a grid is the next resize.
-  - **A cached failure is a hit**, so a broken cover re-queues nothing and can't spin against its
-    own notifier. A retune re-asks it once, the failure being remembered against the size it was
-    attempted at.
-  - **The notifier is a feedback loop, and two things stop it running away.** The queue is capped
-    at the tier's own capacity, newest-wins, so a scroll can't queue more than the cache holds and
-    then evict the visible prefix with the tail of its own batch. And a path the burst already
-    handed to the pool is refused — a grid drawing more cards than its tier holds would otherwise
-    re-queue whatever the last batch evicted, forever, at frame rate. A miss the burst hasn't seen
-    clears that state, which is what tells a moved visible set apart from a thrashing one; so does
-    a retune, the burst's knowledge being about the size it was gathered at.
-  - **A release invalidates whatever is mid-decode. A retune and a shrink do not, and that
-    asymmetry is the point.** `clear` bumps a tier epoch and a batch that captured the old one
-    drops its buffers rather than landing behind the section leave that released them. **The bump
-    belongs under the *cache* lock**, that being the one a finished batch takes to insert: emptying
-    the tier and invalidating the batch have to be one step, or a batch reading the epoch between
-    them lands in the tier the release just emptied. `set_thumb_size` and `shrink_to_proxy` are
-    outside all of it: each moves what a lookup asks for, not whether there is still a tier to ask,
-    so the mounted cards keep painting what they had while the replacements decode. Emptying it
-    instead strands every card whose binding runs in the gap on a placeholder, and on a grid the
-    next thing to re-run that binding is the next column change.
+  that keeps its visible prefix and nothing else.
+  - **The tier's half of that loop is argued in `media::image::cover_thumbs`**: one announce per
+    drained batch, landed or not; failures cached as hits; a queue capped newest-wins that refuses
+    what the burst already handed over; and an epoch a release bumps and a retune or shrink
+    deliberately doesn't, so mounted cards keep painting while their replacements decode.
   - **A surface with no generation to come back on takes `grid_prewarm::grid_cover_blocking`
     instead** — Artist Detail's Albums strip, whose callback carries no counter, and the Edit
     Artwork dialog's cover slot, which is a one-shot property write with no binding to re-run.

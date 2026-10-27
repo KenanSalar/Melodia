@@ -234,7 +234,7 @@ fn extract_source_rgb_from_rgb8_rejects_empty_buffer() {
 )]
 #[test]
 fn extract_source_rgb_from_rgb8_produces_seed_for_uniform_colour() {
-    // 72×72 mirrors `cover_thumbs::THUMB_SIZE` — the actual buffer the
+    // 72×72 mirrors `cover_thumbs::ROW_THUMB_SIZE_HIDPI` — the actual buffer the
     // production path consumes. Filling with a vibrant orange exercises
     // the full quantize+score pipeline and confirms the seed is in the
     // expected hue family (R-dominant for orange).

@@ -69,8 +69,7 @@ shape, `lofty.md` for tag access, `blake3.md` for hashing, `rayon.md` for the pa
   **Mid-session the trigger is a cover cache**, in either of two crates that may not name the
   library: a decode that finds the file missing reports over `utils::missing_artwork`, and
   `tasks::artwork_restore` starts the same reconcile. `media::image::decoded` is what lets the
-  restored cover paint without a restart, a cached *missing* answer lapsing once the file is back
-  where a *broken* one stays settled.
+  restored cover paint without a restart.
 
 - **`stats_changed` vs `library_changed`.** Play-count flushes bump the stats channel only;
   its three subscribers are Favorites (hero mosaic + Most Played rank by `play_count`),
