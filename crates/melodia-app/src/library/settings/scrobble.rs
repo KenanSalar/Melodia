@@ -1,35 +1,29 @@
-//! Scrobbling-section setters. These persist the per-service enable toggles to
-//! `settings.json`; the in-memory shadow on `ScrobbleService` is refreshed
-//! separately by the UI callback once the write commits, mirroring the
-//! kick-after-persist ordering the appearance/EQ setters use. Shaped like
-//! [`super::replaygain`].
+//! Scrobbling-section setters.
 
 use crate::services;
 use melodia_core::config::Paths;
 use melodia_core::error::AppError;
 
-/// Persist the Last.fm scrobbling toggle. Defaults to `false` on first launch.
 pub fn set_scrobble_lastfm_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.scrobble.lastfm_enabled = enabled;
     })
 }
 
-/// Persist the `ListenBrainz` scrobbling toggle. Defaults to `false` on first launch.
 pub fn set_scrobble_listenbrainz_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.scrobble.listenbrainz_enabled = enabled;
     })
 }
 
-/// Persist the Last.fm love↔favorite sync toggle. Defaults to `false`.
+/// The love↔favorite sync.
 pub fn set_scrobble_lastfm_love_enabled(paths: &Paths, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(paths, move |settings| {
         settings.scrobble.lastfm_love_enabled = enabled;
     })
 }
 
-/// Persist the `ListenBrainz` love↔favorite sync toggle. Defaults to `false`.
+/// The love↔favorite sync.
 pub fn set_scrobble_listenbrainz_love_enabled(
     paths: &Paths,
     enabled: bool,

@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 8.5 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 9 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -102,8 +102,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 8.1 | `melodia-app`: `library/radio/`, `library/lyrics/` | 0.64 | 912 | ~555 | 0.29 (416) | `a5383164` |
 | 8.2 | `melodia-app`: `state/`, `lib.rs` | 0.54 | 282 | ~153 | 0.31 (161) | `ed91cdfe` |
 | 8.3 | `melodia-app`: `services/` | 0.44 | 1,233 | ~539 | 0.20 (564) | `e6e13337` |
-| 8.4 | `melodia-app`: `tasks/` | 0.42 | 939 | ~377 | 0.19 (417) | |
-| 8.5 | `melodia-app`: the rest of `library/` | 0.40 | 1,712 | ~636 | | |
+| 8.4 | `melodia-app`: `tasks/` | 0.42 | 939 | ~377 | 0.19 (417) | `26f281f3` |
+| 8.5 | `melodia-app`: the rest of `library/` | 0.40 | 1,712 | ~636 | 0.22 (949) | |
 | 9 | `melodia` (the binary) | 0.42 | 533 | ~216 | | |
 | 10.1 | `melodia-views`: the artwork and backdrop tiers | 0.73 | 1,009 | ~665 | | |
 | 10.2 | `melodia-views`: `ui/radio/` | 0.51 | 1,607 | ~817 | | |
@@ -182,7 +182,7 @@ Status: done.
   - **Pointed at:** `CLAUDE.md` on `output::device::open` and `AudioOutput`; `.claude/rules/audio-stack.md`.
 
 ### Phase 8: `melodia-app`
-Status: in progress, 8.5 next.
+Status: done.
 
 - [x] **8.1 `library/radio/` and `library/lyrics/`**, the two doors, one commit.
   - **Furthest over:** `library/radio/logos.rs` (113), `library/lyrics/mod.rs` (91).
@@ -195,7 +195,7 @@ Status: in progress, 8.5 next.
 - [x] **8.4 `tasks/`**, one commit.
   - **Pointed at:** `CLAUDE.md`'s `tasks/` bullet (`one_shot`, `spawner`, `rss_sampler`, `audio_health`).
   - **Test comment citing it:** `radio_logo_cache_tests.rs` ("the module doc argues it in prose").
-- [ ] **8.5 The rest of `library/`**, one commit.
+- [x] **8.5 The rest of `library/`**, one commit.
   - **Furthest over:** `library/tags.rs` (94), `library/playback.rs` (92).
   - **Pointed at:** `CLAUDE.md` on `PlaybackContext` and `reveal_in_file_manager`; `.claude/rules/library-data.md`.
   - **Test comments citing it:** `tags_tests.rs` ("the module doc's warning"), `support_tests.rs` (`library/settings/support.rs`' two docs), `view_tests.rs` (`snap_to_preset`'s doc).

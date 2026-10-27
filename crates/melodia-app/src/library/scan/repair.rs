@@ -1,14 +1,11 @@
-//! What a scan does first: clear every reference to cover art whose stored file is gone.
+//! What a scan does first: clear every reference to cover art whose stored file is gone, the
+//! inverse of `tasks::artwork_sweep`. Every refill fills an empty column and leaves a set one
+//! alone, and the size and mtime gate never re-reads an unchanged track, so a path to a deleted
+//! file stops them all.
 //!
-//! The inverse of `tasks::artwork_sweep`, which deletes files no row names. Every refill the
-//! library has fills an empty column and leaves a set one alone, so a path to a deleted file
-//! stopped all of them, and the scan's size and mtime gate never re-reads an unchanged track to
-//! notice. Clearing the reference hands each column back to its own refill, the track's being the
-//! scan that follows.
-//!
-//! A row naming a data root that has since moved is re-pointed rather than cleared: its file is in
-//! the current store under the same content-addressed name, and clearing it would cost a re-parse,
-//! an artist-image refetch and a custom playlist mosaic outright.
+//! A row naming a data root that has since moved is re-pointed instead: the current store holds
+//! the file under the same content-addressed name, and clearing would cost a re-parse, an
+//! artist-image refetch and a custom playlist mosaic outright.
 
 use std::path::{Path, PathBuf};
 
@@ -65,10 +62,9 @@ pub(super) async fn forget_missing(
     Ok(Some(RestoreNotice::raise(restoring)))
 }
 
-/// Starts a library reconcile when a stored cover the library names is gone, for a cache that
-/// found one missing while the app runs. The reconcile's own repair does the work; this only
-/// keeps a report about a file outside the library's columns, a station logo, from starting a
-/// walk that would find nothing to do.
+/// Starts a library reconcile when a cover the library names is gone, for a cache that found one
+/// missing mid-session. Checked first, so a missing station logo, outside the library's columns,
+/// doesn't start a walk with nothing to do.
 pub async fn restore_missing_artwork(state: &AppState) -> Result<(), AppError> {
     if !missing_references(&state.db, &state.paths).await?.is_empty() {
         super::reconcile_watched_folders(state);

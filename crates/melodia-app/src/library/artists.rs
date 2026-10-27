@@ -1,7 +1,4 @@
-//! Artist library API — thin wrappers over the `queries::artist` /
-//! `queries::album` / `queries::track` layer, mirroring `library/albums.rs`.
-//! Each function takes the pool and returns `Result<_, AppError>`. The grid's
-//! ids and cards are `library::keyset`'s.
+//! Artist reads. The grid's ids and cards are `library::keyset`'s.
 
 use melodia_core::entities::{album, artist};
 use melodia_core::error::AppError;
@@ -12,9 +9,7 @@ pub async fn get_artist_detail(db: &DbPool, id: i64) -> Result<artist::ArtistSta
     queries::artist::get_artist_by_id(db, id).await
 }
 
-/// All albums by the given artist, in the same `AlbumStats` shape the
-/// Albums grid uses — feeds the "Albums" sub-section in the Artist Detail
-/// view's header.
+/// In the Albums grid's `AlbumStats` shape, for the Artist Detail header's Albums section.
 pub async fn get_artist_albums(
     db: &DbPool,
     artist_id: i64,

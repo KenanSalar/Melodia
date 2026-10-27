@@ -8,16 +8,13 @@ use melodia_core::error::AppError;
 use melodia_core::utils::audio_ext::is_audio_extension;
 use melodia_store::database::{DbPool, queries};
 
-/// Result of the blocking filesystem scan, returned from `spawn_blocking`.
 struct DirScanResult {
     canonical: PathBuf,
     folders: Vec<BrowseFolder>,
     audio_paths: Vec<PathBuf>,
 }
 
-/// Classify one directory's entries into its visible sub-folders (name-sorted)
-/// and its audio files. Dot-entries and anything whose type can't be read are
-/// skipped; audio is decided by the one shared [`is_audio_extension`] predicate.
+/// Dot-entries and anything whose type can't be read are skipped.
 fn classify_dir_entries(
     dir: &std::path::Path,
 ) -> Result<(Vec<BrowseFolder>, Vec<PathBuf>), AppError> {
@@ -57,10 +54,8 @@ fn classify_dir_entries(
     Ok((folders, audio_paths))
 }
 
-/// Scan `path` for subfolders + audio files. `library_folders` is the
-/// caller's already-fetched library-folder list — passed in (rather than
-/// re-queried here) so a navigation does a single `folders` read shared
-/// with the caller's `build_breadcrumbs`.
+/// `library_folders` is passed in, so a navigation shares one read with the caller's
+/// `build_breadcrumbs`.
 pub async fn browse_directory(
     db: &DbPool,
     path: String,
@@ -106,10 +101,8 @@ pub async fn browse_directory(
         if let Some(row) = track_map.remove(path_str.as_ref()) {
             files.push(BrowseFile { row, file_name, in_library: true });
         } else {
-            // Disk-only file: present on disk inside a library folder but
-            // not (yet) in the DB (just copied, or scanner-rejected).
-            // Synthesize a sparse `TrackListRow` with `id == 0` so the
-            // shared `TrackList` can render it dimmed and non-interactive.
+            // On disk but not in the database, just copied or refused by the scanner: an `id == 0`
+            // row the shared `TrackList` renders dimmed and inert.
             files.push(BrowseFile {
                 row: TrackListRow {
                     id: 0,

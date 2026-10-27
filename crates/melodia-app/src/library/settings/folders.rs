@@ -1,8 +1,4 @@
-//! Folder-management API: add / remove / list / watch the library's
-//! source directories. Lives alongside the settings setters because
-//! folders are settings-adjacent (the `Folder` table backs
-//! `Settings → Library → Music Folders`) and shares the same
-//! validation-then-persist cadence. Scanning one is `library::scan`'s.
+//! The library's source folders: add, remove, list and watch. Scanning one is `library::scan`'s.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -97,11 +93,8 @@ pub async fn add_folder(state: &AppState, path: String) -> Result<folder::Folder
     Ok(folder)
 }
 
-/// [`add_folder`]'s body, narrowed to the pool it reaches.
-///
-/// Deletes nothing, even where the new folder is around folders already in the library: they keep
-/// their tracks until its first completed scan absorbs them, so cancelling that scan leaves them as
-/// they were.
+/// Deletes nothing, even around folders already in the library: they keep their tracks until its
+/// first completed scan absorbs them, so cancelling that scan leaves them as they were.
 async fn insert_validated(db: &DbPool, path: &str) -> Result<folder::Folder, AppError> {
     let existing_folders = queries::folder::get_all_folders(db).await?;
     let canonical = validate_folder_path(Path::new(path), &existing_folders)?;
@@ -112,8 +105,6 @@ pub async fn remove_folder(state: &AppState, id: i64) -> Result<(), AppError> {
     // Read ahead of the delete: the covers it releases are the ones named here and not after it.
     let referenced_before = queries::artwork::referenced_filenames(&state.db).await?;
     queries::folder::delete_folder(&state.db, id).await?;
-    // Cascade-delete removes every track in this folder; subscribers (Tracks
-    // view + folder list) need to re-fetch or the UI keeps the stale rows.
     state.library_changed.bump();
     tasks::artwork_sweep::retire_released(
         &TaskSpawner::from_state(state),
@@ -142,8 +133,6 @@ pub async fn suggested_music_folder(db: &DbPool) -> Result<Option<PathBuf>, AppE
 pub async fn toggle_folder_watching(state: &AppState, enabled: bool) -> Result<(), AppError> {
     if enabled {
         start_watcher(state).await?;
-        // Catch files added / removed while the watcher was off — the
-        // watcher itself only reports live events.
         scan::reconcile_watched_folders(state);
     } else {
         with_watcher(state, FolderWatcher::stop).await?;
@@ -193,11 +182,8 @@ async fn with_watcher<R: Send + 'static>(
         .map_err(|e| AppError::watcher("Folder watcher task failed", e))
 }
 
-/// Persist the `folder_watching_enabled` flag *first*, then flip the watcher.
-/// Persist-first means a `start()` failure leaves disk consistent with the
-/// user's intent — `tasks::resume_watching::run` will retry on next launch
-/// from the persisted flag. The reverse order would leave a running watcher
-/// that doesn't restart next session if `mutate_settings` failed.
+/// Persisted first, so a failed `start()` still leaves the user's intent on disk for
+/// `tasks::resume_watching::run` to retry next launch.
 pub async fn set_folder_watching_enabled(state: &AppState, enabled: bool) -> Result<(), AppError> {
     services::settings::mutate_settings(&state.paths, move |s| {
         s.library.folder_watching_enabled = enabled;

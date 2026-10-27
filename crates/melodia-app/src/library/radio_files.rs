@@ -1,18 +1,12 @@
-//! Moving a station list between Melodia and everything else.
+//! Moving a station list between Melodia and everything else. Export writes Extended-M3U8, the one
+//! format every player reads; import takes `.m3u`, `.m3u8` and `.pls`.
 //!
-//! **Not `playlist_files`, and not a reach into it.** That module is track-and-database shaped
-//! end to end — file paths re-matched by BLAKE3, `#EXTINF` durations, a playlist row created per
-//! import — and it knows only Extended-M3U8. A station list shares the file extension and nothing
-//! else: the entries are URLs, there is no library to match them against, and the format most
-//! stations arrive in is `.pls`.
+//! Not `playlist_files`, which is track-and-database shaped (BLAKE3 re-matching, a playlist row per
+//! import), and not `stream_source::first_stream_url`, which wants one URL off a live response and
+//! no names.
 //!
-//! **Not `player::source::stream_source::first_stream_url` either**, though the overlap looks total. That
-//! one answers "which single URL is behind this pointer" against a byte-capped live response on
-//! the playback path, and deliberately carries no names. This one wants every entry *and* what it
-//! is called, off a file the user picked.
-//!
-//! Export writes Extended-M3U8, the one format every player reads. Import takes `.m3u`, `.m3u8`
-//! and `.pls`, because that is what the user will have been handed.
+//! **The one module besides `library::radio` that may name `queries::radio`**: an import writes
+//! station rows without passing the facade.
 
 use std::path::{Path, PathBuf};
 
@@ -23,37 +17,30 @@ use melodia_store::database::{DbPool, queries};
 const HEADER: &str = "#EXTM3U";
 const EXTINF_TAG: &str = "#EXTINF:";
 
-/// The four things about a station that are the user's rather than the directory's or the
-/// stream's, so a list survives the round trip with their own edits on it.
-///
-/// **Comments, in `playlist_files`'s `#MELODIA-HASH:` shape and for its reason.** Every player
-/// skips a `#` line it does not know, and so does [`parse`] below, so a file written by this build
-/// still imports into an older one and into everything else — it simply arrives without them,
-/// which is what a file that never had them arrives as anyway. Same of [`STATION_TAG`].
+/// The four fields that are the user's rather than the directory's or the stream's, so a list
+/// survives the round trip with their edits on it. Comments, in `playlist_files`' `#MELODIA-HASH:`
+/// shape: every player, [`parse`] included, skips a `#` line it doesn't know, so an older build or
+/// another player imports the file without them. Same of [`STATION_TAG`].
 const WEBSITE_TAG: &str = "#MELODIA-WEBSITE:";
 const LOGO_TAG: &str = "#MELODIA-LOGO:";
 const GENRE_TAG: &str = "#MELODIA-GENRE:";
 const COUNTRY_TAG: &str = "#MELODIA-COUNTRY:";
 
-/// The row as the directory or the probe described it, so an import restores what a station *is*
-/// rather than a name and a URL — `station_uuid` above all, which is what separates a station the
-/// directory owns from a hand-typed lookalike wearing the same title.
+/// The row as the directory or the probe described it, `station_uuid` above all, which separates a
+/// directory station from a hand-typed lookalike with the same title.
 ///
-/// **One JSON blob rather than a tag per column.** [`radio::NewRadioStation`] already carries the
-/// set and already derives serde, so a new column travels for free and cannot fall out of step
-/// with a parallel tag table. The four above stay tags because they are the half a user hand-edits
-/// and the half that must never be spelled twice for one station.
+/// **One JSON blob of [`radio::NewRadioStation`] rather than a tag per column**, so a new column
+/// travels for free. The four above stay tags as the half a user hand-edits.
 const STATION_TAG: &str = "#MELODIA-STATION:";
 
 /// What an import did, for the toast that reports it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ImportStationsResult {
-    /// Entries the kept list gained, which is what the toast calls "added" — a station the import
-    /// had to star again counts, whether or not its row already existed. The Favorites tab is what
-    /// the user checks against.
+    /// Entries the kept list gained, a station starred again counting whether or not its row
+    /// existed: the Favorites tab is what the user checks against.
     pub imported: u32,
-    /// Entries already starred, so the import had nothing to do for them. Skipped rather than
-    /// refused, so re-importing a file the user has grown since is the obvious thing to do.
+    /// Entries already starred. Skipped rather than refused, so a file the user has grown since
+    /// re-imports cleanly.
     pub skipped: u32,
 }
 
@@ -70,17 +57,15 @@ pub struct ImportStationFiles {
 pub struct StationEntry {
     pub name: Option<String>,
     pub url: String,
-    /// All `None` from any file that is not a Melodia export, which is most of them.
+    /// All `None` from any file that is not a Melodia export.
     pub overrides: radio::StationOverrides,
     /// `None` from the same files, and from one of ours whose blob was hand-edited past reading.
     pub snapshot: Option<radio::NewRadioStation>,
 }
 
 impl StationEntry {
-    /// The save input this entry describes, which is what decides the kind it arrives as.
-    ///
-    /// **The name and the URL still come off their own lines**, which outrank the blob beside
-    /// them: those two are what every other player reads and what a hand-edit changes.
+    /// The name and URL lines outrank the blob: they are what every other player reads and what a
+    /// hand-edit changes.
     fn to_new_station(&self) -> radio::NewRadioStation {
         let mut station = self.snapshot.clone().unwrap_or_default();
         let from_blob = std::mem::take(&mut station.name);
@@ -90,19 +75,15 @@ impl StationEntry {
             &self.url,
         );
         station.stream_url.clone_from(&self.url);
-        // `Some("")` is the shape a hand-edited blob arrives in, and `SQLite` reads it as a value
-        // rather than a gap under `UNIQUE` — every station carrying one would upsert onto a single
-        // row. The guard `DirectoryStation::is_usable` already makes on the directory's side.
+        // `UNIQUE` reads a hand-edited `Some("")` as a value, so every station carrying one would
+        // upsert onto a single row; `DirectoryStation::is_usable` guards the directory's side.
         station.station_uuid = station.station_uuid.filter(|uuid| !uuid.is_empty());
         station
     }
 
-    /// What the store writes for this entry, or `None` for a station the blocklist refuses.
-    ///
-    /// A file is the one door into the table that never passed the directory, so without the check
-    /// a blocked station is one export away from a row. The caller counts it as skipped rather than
-    /// reporting it: it has no vocabulary for the difference, and giving it one would describe the
-    /// blocklist to whoever read the toast.
+    /// `None` for a station the blocklist refuses, a file being the one door into the table that
+    /// never passed the directory. The caller counts it as skipped, since saying more would
+    /// describe the blocklist to whoever reads the toast.
     fn to_import(&self) -> Option<queries::radio::ImportedStation> {
         let station = self.to_new_station();
         if melodia_net::services::net::radio_blocklist::blocks(&station) {
@@ -115,11 +96,8 @@ impl StationEntry {
     }
 }
 
-/// The tags read since the last URL line, waiting for the entry that claims them.
-///
-/// Grouped so the two push sites in [`parse`] hand over everything pending in one move rather than
-/// each remembering the current list of fields — a fifth tag is otherwise a fifth chance to leak
-/// one station's value onto the next.
+/// The tags read since the last URL line, grouped so both push sites in [`parse`] hand over
+/// everything in one move and a new tag can't leak one station's value onto the next.
 #[derive(Default)]
 struct Pending {
     name: Option<String>,
@@ -139,10 +117,8 @@ impl Pending {
     }
 }
 
-/// Write every kept station to one Extended-M3U8 file.
-///
-/// Returns how many were written. `#EXTINF:-1` throughout — a live stream has no duration, and
-/// `-1` is the tag's own spelling for that.
+/// Write every kept station to one Extended-M3U8 file, returning how many. `#EXTINF:-1`
+/// throughout, the tag's own spelling for a live stream's missing duration.
 pub async fn export_stations(db: &DbPool, dest: &Path) -> Result<u32, AppError> {
     let stations = queries::radio::get_favorite_stations(db).await?;
     let text = serialize(&stations);
@@ -171,16 +147,12 @@ pub async fn import_stations_from_files(db: &DbPool, paths: &[PathBuf]) -> Impor
     total
 }
 
-/// Read a station playlist and put everything in it back in the kept list.
+/// Read a station playlist back into the kept list.
 ///
-/// **A merge rather than an insert, which is what makes an export a backup.** `is_listed` keeps a
-/// played *directory* station's row alive after its star goes, so a row an entry lands on may be
-/// one Recently Played is holding for it — putting the star back is what an import is for.
-/// [`super::radio::add_custom_station`] gives the same answer at the other door.
-///
-/// Deliberately **not** probed: a file of fifty stations would mean fifty connects, and the user
-/// asked to import a list rather than to audition one. A dead entry reports at the click, like a
-/// directory station that went off air.
+/// **A merge rather than an insert, which is what makes an export a backup**: `is_listed` keeps a
+/// played directory station's row after its star goes, so an entry can land on a row Recently
+/// Played holds, and putting the star back is the point. **Not probed**: fifty stations would be
+/// fifty connects, and a dead entry reports at the click like a station gone off air.
 pub async fn import_stations_from_file(
     db: &DbPool,
     src: &Path,
@@ -197,17 +169,11 @@ pub async fn import_stations_from_file(
     Ok(ImportStationsResult { imported, skipped: listed.saturating_sub(imported) })
 }
 
-/// The four fields the file carried, validated for storing, or `None` where there is nothing to
-/// write.
+/// The file's four fields validated for storing, or `None` with nothing to write.
 ///
-/// Validated here rather than put through `radio::set_station_overrides`, which would download a
-/// logo per entry — the fifty connects the import already refuses to spend on probing. The repair
-/// behind the completion toast fetches them in batches instead, and the store writes these only to
-/// a row the import just created, so all of them qualify.
-///
-/// A field that will not validate drops the entry's overrides rather than the entry: one
-/// hand-edited line is not worth refusing a file of fifty stations over, and every field is
-/// editable on the card.
+/// Not through `radio::set_station_overrides`, which downloads a logo per entry; the repair behind
+/// the completion toast fetches them in batches. A field that won't validate drops the entry's
+/// overrides rather than the entry, every one being editable on the card.
 fn stored_overrides(overrides: &radio::StationOverrides) -> Option<radio::StationOverrides> {
     if *overrides == radio::StationOverrides::default() {
         return None;
@@ -219,13 +185,8 @@ fn stored_overrides(overrides: &radio::StationOverrides) -> Option<radio::Statio
         .ok()
 }
 
-/// The four `#MELODIA-*:` tags and the field each carries, **read and written off this one
-/// table**.
-///
-/// It used to be two — a list of `&mut` slots for the reader, a list of `local_*` reads for the
-/// writer — so the "a fifth is a row in the table" this file already claimed was a fifth row in
-/// two tables, either of which could be the one that forgets it. `radio::OverrideField` exists to
-/// give the two halves a single name per field.
+/// The four `#MELODIA-*:` tags and their fields, **read and written off this one table**, so a
+/// fifth is one row.
 const OVERRIDE_TAGS: [(&str, radio::OverrideField); 4] = [
     (WEBSITE_TAG, radio::OverrideField::Website),
     (LOGO_TAG, radio::OverrideField::LogoUrl),
@@ -245,11 +206,9 @@ fn take_override_tag(line: &str, pending: &mut radio::StationOverrides) -> bool 
     false
 }
 
-/// Read a `#MELODIA-STATION:` line into `pending`, answering whether the line was one.
-///
-/// A blob that will not parse is dropped rather than failing the file: everything it carries is a
-/// refinement of the name and URL lines the entry already has, so the station still arrives — as a
-/// hand-typed one, which is what a list from anywhere else arrives as anyway.
+/// Read a `#MELODIA-STATION:` line into `pending`, answering whether the line was one. A blob that
+/// won't parse is dropped, not fatal: the station still arrives off its name and URL lines, as a
+/// hand-typed one.
 fn take_station_tag(line: &str, pending: &mut Option<radio::NewRadioStation>) -> bool {
     let Some(rest) = line.strip_prefix(STATION_TAG) else {
         return false;
@@ -275,7 +234,7 @@ fn one_line(s: &str) -> std::borrow::Cow<'_, str> {
 
 /// Stations as Extended-M3U8 text: `\n` endings, trailing newline, UTF-8 with no BOM.
 fn serialize(stations: &[radio::RadioStation]) -> String {
-    // Most of a station's line count is its station block, the tags and the URL being short.
+    // Mostly the station block; the tags and the URL are short.
     let mut out = String::with_capacity(HEADER.len() + stations.len() * 384);
     out.push_str(HEADER);
     out.push('\n');
@@ -284,17 +243,15 @@ fn serialize(stations: &[radio::RadioStation]) -> String {
         out.push_str("-1,");
         out.push_str(&one_line(&station.name));
         out.push('\n');
-        // Cannot fail for a struct of strings and numbers, and a station is not worth refusing an
-        // export over if it somehow did.
+        // Can't fail for strings and numbers, and one station isn't worth refusing the export over.
         if let Ok(snapshot) = serde_json::to_string(&station.to_new_station()) {
             out.push_str(STATION_TAG);
             out.push_str(&snapshot);
             out.push('\n');
         }
-        // The user's own columns, and only ever from the `local_*` half — which is what
-        // `local_override` answers and `website()` and its siblings deliberately do not: the block
-        // above is the directory's account of the station and this is the user's answer to what it
-        // left blank, so folding the resolved value into either would spell one station out of both.
+        // Only the `local_*` half, which `local_override` answers and `website()` and its siblings
+        // don't: the block above is the directory's account, these the user's answer to what it
+        // left blank, and a resolved value would spell one station out of both.
         for (tag, field) in OVERRIDE_TAGS {
             if let Some(value) = station.local_override(field).filter(|text| !text.is_empty()) {
                 out.push_str(tag);
@@ -308,22 +265,15 @@ fn serialize(stations: &[radio::RadioStation]) -> String {
     out
 }
 
-/// Every station a playlist body names, across the two formats a station list arrives in.
-///
-/// One pass rather than two parsers, on the same reading `stream_source` uses: an `.m3u` carries
-/// the URL on a line of its own with `#EXTINF` above it, and a `.pls` carries `FileN=` with an
-/// optional `TitleN=` anywhere in the same section. A `key=value` line whose key is not `FileN` or
-/// `TitleN` is a `.pls` field we have no use for; anything else that parses as an absolute HTTP
-/// URL is an `.m3u` entry.
-///
-/// `.pls` pairs by index rather than by order — the spec does not require `TitleN` to follow its
-/// `FileN`, and real files put every title after every file.
+/// Every station a playlist body names, `.m3u` and `.pls` in one pass, read as `stream_source` reads
+/// them. `.pls` pairs `TitleN` with `FileN` by index, real files putting every title after every
+/// file.
 fn parse(body: &str) -> Vec<StationEntry> {
     let mut entries: Vec<StationEntry> = Vec::new();
-    // `FileN`'s index against where its entry landed, so a later `TitleN` can find it.
+    // `FileN`'s index against where its entry landed, for a later `TitleN`.
     let mut pls_slots: Vec<(u32, usize)> = Vec::new();
-    // Every tag sits between the `#EXTINF:` and the URL that [`serialize`] writes them between, so
-    // the entry the URL opens is the one that takes them.
+    // [`serialize`] writes every tag between the `#EXTINF:` and its URL, so the URL's entry takes
+    // them.
     let mut pending = Pending::default();
 
     for line in body.lines() {
@@ -376,11 +326,8 @@ fn parse(body: &str) -> Vec<StationEntry> {
     entries
 }
 
-/// The display title out of an `#EXTINF:` payload — everything past the first comma.
-///
-/// The *first*, so a title carrying commas survives round-tripping through [`serialize`]. It also
-/// means an HLS-style attribute list (`-1 tvg-name="A,B",Title`) truncates at the attribute's own
-/// comma — not worth a parser for, station lists being the one dialect that doesn't use them.
+/// Everything past the *first* comma, so a title with commas round-trips through [`serialize`]. An
+/// HLS attribute list (`tvg-name="A,B"`) truncates at its own comma, which station lists don't use.
 fn extinf_title(payload: &str) -> Option<String> {
     let (_duration, title) = payload.split_once(',')?;
     let title = title.trim();

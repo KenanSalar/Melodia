@@ -1,7 +1,5 @@
-//! What the one-time Ko-fi prompt persists.
-//!
-//! The decision is split from the disk write so the sequence can be tested without a
-//! settings file — the [`crate::tasks::audio_health`] shape.
+//! What the one-time Ko-fi prompt persists, the decision split from the disk write so it is
+//! testable without a settings file.
 
 use crate::services;
 use crate::services::settings::SupportFlags;
@@ -12,11 +10,8 @@ use melodia_core::error::AppError;
 /// has nothing to decide about supporting it yet.
 pub const PROMPT_AT_LAUNCH: u32 = 5;
 
-/// Count this launch and answer whether it is the one that asks.
-///
-/// Saturating rather than wrapping, though neither is reachable — counting stops the
-/// moment the prompt has been shown, so a settled install stops rewriting
-/// `settings.json` at boot instead of climbing forever.
+/// Count this launch and answer whether it is the one that asks. Counting stops once the prompt
+/// has been shown, so a settled install stops rewriting `settings.json` at boot.
 pub fn count_launch(flags: &mut SupportFlags) -> bool {
     if flags.support_prompt_seen {
         return false;
@@ -27,16 +22,11 @@ pub fn count_launch(flags: &mut SupportFlags) -> bool {
 
 /// Record this launch, and say whether the prompt is due.
 ///
-/// The read ahead of the mutate is what keeps the claim above true:
-/// `mutate_settings_with` writes unconditionally, so without it a settled install
-/// would rewrite `settings.json` on every boot to store a counter it had stopped
-/// advancing. It sits outside `MUTATE_LOCK` and doesn't need to be inside it —
-/// `count_launch` re-checks the flag against the copy `mutate_settings_with` re-reads
-/// from disk, so a stale `false` costs a redundant write and can never re-raise a spent
-/// prompt. That re-read is what carries it rather than the lock:
-/// `mark_support_prompt_seen` lands `PROMPT_DELAY` later in this process, so the only
-/// writer that can race the read below is a second one, which a process-local `static`
-/// doesn't reach either way.
+/// The read ahead of the mutate is what keeps [`count_launch`]'s claim true: `mutate_settings_with`
+/// writes unconditionally, so without it a settled install would rewrite `settings.json` every
+/// boot. It needn't sit under `MUTATE_LOCK`: `count_launch` re-checks the copy
+/// `mutate_settings_with` re-reads, so a stale `false` costs a redundant write and never re-raises
+/// a spent prompt.
 pub fn record_launch(paths: &Paths) -> Result<bool, AppError> {
     if services::settings::read_settings(paths)?.support.support_prompt_seen {
         return Ok(false);

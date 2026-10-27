@@ -1,10 +1,6 @@
-//! Favorite reads and writes, and the one place a favorite becomes a love.
-//!
-//! `set_favorite` and `toggle_current_favorite` are the two write entry points
-//! and both end in `sync_love`, so provider arming, batching and the
-//! best-effort policy are argued once rather than at each caller.
-//! `backfill_loves` covers the library already favorited before the love toggle
-//! was ever turned on.
+//! Favorite reads and writes, and the one place a favorite becomes a love: both write entry points
+//! end in `sync_love`, so provider arming, batching and the best-effort policy are argued once.
+//! `backfill_loves` covers what was favorited before the love toggle was on.
 
 use std::sync::Arc;
 
@@ -48,9 +44,6 @@ impl FavoriteWrite {
         queries::track::set_favorite(&self.db, ids, favorite).await?;
         // After the write, so the line means it landed rather than was attempted.
         log::debug!("favorite: {} track(s) → {favorite}", ids.len());
-        // If the currently-playing track was one of the toggled ids, mirror the new
-        // flag onto `current_track` so the Now-Playing heart updates without waiting
-        // for the next track load (parity with `toggle_current`).
         sync_current_track_if_in(&self.player_state, &self.sinks, ids, |t| {
             t.is_favorite = favorite;
         });
@@ -71,8 +64,7 @@ impl FavoriteWrite {
         log::debug!("favorite: playing track {id} → {new_fav}");
 
         with_state_emit(&self.player_state, &self.sinks, |s| {
-            // Guard against a track change between the id read above and here: only
-            // flip the cached flag if `current_track` is still the track we wrote.
+            // The track can have changed since the id was read.
             if let Some(track) = s.current_track_mut()
                 && track.id == id
             {
@@ -88,12 +80,9 @@ impl FavoriteWrite {
         Ok(Some((id, new_fav)))
     }
 
-    /// Mirror a favorite change to the scrobble services: Last.fm Loved Tracks plus
-    /// best-effort `ListenBrainz` feedback. Best-effort, so a lookup or enqueue failure
-    /// is logged, never propagated, and can't fail the favorite write. Skips all DB work
-    /// when love-sync is off or no provider is connected. Fetches the whole id set in one
-    /// bulk query and queues it under a single lock + save + wake (via `enqueue_loves`),
-    /// so a multi-select toggle is O(1) round-trips and disk writes, not O(N).
+    /// Mirror a favorite change to the scrobble services, best-effort: a failure is logged and
+    /// can't fail the favorite write. One bulk fetch and one enqueue for the whole id set, so a
+    /// multi-select toggle costs one round trip and one save.
     async fn sync_love(&self, ids: &[i64], loved: bool) {
         if !self.scrobble.love_sync_active() {
             return;
@@ -115,21 +104,15 @@ pub async fn set_favorite(state: &AppState, ids: Vec<i64>, favorite: bool) -> Re
     FavoriteWrite::from_state(state).set(&ids, favorite).await
 }
 
-/// Toggle the favorite flag on the currently playing track. Persists to DB,
-/// flips `is_favorite` on `PlayerState.current_track` (so the next emit
-/// rebuilds the view-model with the new value), and returns the affected
-/// `(id, new_fav)` so callers can mirror the change into other UI surfaces
-/// (e.g. the tracks list) without re-locking.
+/// Toggle the playing track's favorite, answering `(id, new_fav)` so callers can mirror it into
+/// the other surfaces without re-locking.
 pub async fn toggle_current_favorite(state: &AppState) -> Result<Option<(i64, bool)>, AppError> {
     FavoriteWrite::from_state(state).toggle_current().await
 }
 
-/// Retroactively push every existing favorite to `target`'s loved tracks — run
-/// when a user turns on a provider's love toggle or connects that service while
-/// its love toggle is already on, so they don't have to re-toggle each heart.
-/// Best-effort and idempotent (loves coalesce and re-loving is a no-op on both
-/// services); every failure is logged, never propagated. Reports the result as
-/// an info toast. A no-op when `target` isn't armed or there are no favorites.
+/// Push every existing favorite to `target`'s loved tracks, for a love toggle turned on or a
+/// service connected with it on, so nobody re-toggles each heart. Best-effort and idempotent,
+/// re-loving being a no-op on both services.
 pub async fn backfill_loves(state: &AppState, target: LoveTarget) {
     let Some(queued) = queue_favorite_loves(&state.db, &state.scrobble, target).await else {
         return;
