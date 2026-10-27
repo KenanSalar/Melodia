@@ -1,16 +1,14 @@
 import { Theme } from "../theme.slint";
 import { WindowChrome } from "../globals/shell.slint";
 
-// How a popup stays inside the shell. Slint slides an oversized popup into the window at its full
-// height and draws the rest past the edge (`slint-pitfalls.md`), so a popup places itself by one of
-// two rules: raised at a point it slides along to stay inside (`fit-y`), and hanging off a control
-// it opens on the side with room rather than over the control (`opens-above`, `side-h`). Its
-// `PopupColumn` scrolls what the box can't hold.
+// How a popup stays inside the shell, Slint drawing an oversized one past the window's edge
+// (`slint-pitfalls.md`): raised at a point it slides along (`fit-y`), and hanging off a control it
+// opens on the side with room (`opens-above`, `side-h`). Its `PopupColumn` scrolls the rest.
 export global PopupFit {
-    // The padding a popup's column puts round its rows.
+    // Round a popup column's rows.
     out property <length> column-inset: Theme.pad-xs;
-    // What a scrolling column adds beside its rows: the bar's slot, inset from the border as the
-    // rows are. Here rather than on the column, for a host reserving it before its column mounts.
+    // The bar's slot, inset from the border as the rows are. Here rather than on the column, for a
+    // host reserving it before its column mounts.
     out property <length> scroll-gutter: Theme.scrollbar-slot + root.column-inset;
     // The tallest a popup can be and still sit inside the shell.
     out property <length> max-h: WindowChrome.shell-height - 2 * WindowChrome.edge-clearance;
@@ -21,7 +19,6 @@ export global PopupFit {
             WindowChrome.shell-height - WindowChrome.edge-clearance - popup-h);
     }
 
-    // The room between a window `y` and the shell's bottom or top edge.
     pure public function room-below(window-y: length) -> length {
         return WindowChrome.shell-height - WindowChrome.edge-clearance - window-y;
     }
@@ -30,9 +27,9 @@ export global PopupFit {
         return window-y - WindowChrome.edge-clearance;
     }
 
-    // `below-y` is where a popup hanging off a control would start below it, and `above-y` where
-    // one above it would end, the host's gap taken. Below unless it doesn't fit there and above
-    // has more room, so a short window never puts a popup over the control that opened it.
+    // `below-y` is where a popup below the control would start and `above-y` where one above would
+    // end. Below unless it doesn't fit and above has more room, so a short window never puts a
+    // popup over the control that opened it.
     pure public function opens-above(above-y: length, below-y: length, popup-h: length) -> bool {
         return root.room-below(below-y) < popup-h
             && root.room-above(above-y) > root.room-below(below-y);

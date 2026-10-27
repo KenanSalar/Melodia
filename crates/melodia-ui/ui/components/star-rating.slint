@@ -1,49 +1,38 @@
 import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 
-// Inline 0–5 rating: five glyphs under one `TouchArea`, the pointer's x deciding which star it is
-// over. Clicking the current top star clears the rating, the heart's click-again-to-toggle-off
-// affordance.
+// A 0–5 rating. Clicking the current top star clears it, the heart's toggle-off.
 //
-// **One area rather than one per star, because a click sets the whole run below the pointer.**
-// A run is a question about one coordinate, where five areas could only answer it by agreeing
-// through a property none of them owns. A press-drag across the strip is one gesture besides,
-// which the star that took the grab would own alone while the rest never saw the pointer move.
+// **One `TouchArea` rather than one per star**: a click sets the whole run below the pointer, a
+// question about one coordinate, and a press-drag across the strip is one gesture.
 //
-// Inside a track row this must stay a *descendant* of the row's own `touch`, so hovering a star
-// keeps `has-hover` true and the strip stays mounted — the reason the favorite and checkbox
-// TouchAreas live there too.
+// In a track row it stays a *descendant* of the row's `touch`, so hovering a star keeps the row's
+// `has-hover` and the strip mounted.
 export component StarRating {
     in property <int> rating;              // 0–5 (values outside are clamped by callers)
     in property <bool> enabled: true;
     in property <length> star-size: 18px;
-    // The track-list treatment. Now Playing overrides them, tinting the whole
-    // star / heart group with the per-artwork accent.
+    // Now Playing tints both with the per-artwork accent.
     in property <brush> filled-color: Theme.yellow;
     in property <brush> empty-color: Theme.subtext0;
-    // `IconButton`'s, set by that override.
+    // `IconButton`'s.
     in property <bool> on-backdrop: false;
-    // Draw the rating a click would set while the pointer is over the strip, the run coming up from
-    // `Theme.lit-rest` to full the way the heart beside it does in Now Playing. Off in a track row,
-    // where the stars already sit inside the row's own hover treatment.
+    // Draws the rating a click would set, the run rising from `Theme.lit-rest` as the heart beside
+    // it does. Off in a track row, inside the row's own hover treatment.
     in property <bool> hover-preview: false;
 
     callback rated(int /*new_rating*/);
 
-    // Between glyphs. Both the strip's width and the pointer's star are measured against it, so it
-    // is not a literal on the layout.
+    // The strip's width and the pointed star are both measured against it.
     property <length> gap: 1px;
-    // Only where the star can be clicked: a preview under a dead pointer promises an act it can't
-    // make.
+    // A preview under a dead pointer promises an act it can't make.
     property <bool> previewing: root.hover-preview && root.enabled;
-    // 1–5 under the pointer, 0 when it is elsewhere.
+    // 1–5 under the pointer, 0 elsewhere.
     property <int> pointed: touch.has-hover
         ? clamp(Math.floor(touch.mouse-x / (root.star-size + root.gap)) + 1, 1, 5)
         : 0;
-    // What the strip draws: the prospective rating under the pointer, the current one at rest.
-    // **The run rather than the star being pointed at** — a third star lighting alone says nothing
-    // about the two a click would light with it, which is the whole question a rating strip is
-    // asked on the way to a click.
+    // **The run, not the star pointed at**: a lone third star says nothing about the two a click
+    // would light with it.
     property <int> shown: root.previewing && root.pointed > 0 ? root.pointed : root.rating;
 
     HorizontalLayout {
@@ -61,8 +50,7 @@ export component StarRating {
                     width: root.star-size;
                     height: root.star-size;
 
-                    // A float rather than a third brush, so nothing the host hands over can dirty
-                    // it and restart the colour ease below.
+                    // A float rather than a third brush, so the host can't restart the colour ease.
                     property <float> level: root.previewing && self.lit && root.pointed == 0
                         ? Theme.lit-rest
                         : 1.0;
@@ -74,9 +62,7 @@ export component StarRating {
                         icon-color: parent.lit ? root.filled-color : root.empty-color;
                         filled: parent.lit;
                         fade: parent.level;
-                        // Animating a brush a host hands over is safe here for `IconButton`'s
-                        // reason: neither host eases the pair, writing both discretely on an
-                        // artwork change, and a palette fade raises `Theme.recoloring`. Read
+                        // Safe for `IconButton`'s reason: neither host eases the pair. Read
                         // `slint-pitfalls.md` before giving one of them a crossfade.
                         animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: root.on-backdrop || !Theme.recoloring; }
                     }

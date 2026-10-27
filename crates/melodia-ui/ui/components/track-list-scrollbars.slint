@@ -1,21 +1,15 @@
 import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 
-// The vertical `OverlayScrollbar` every plain `TrackList` page mounts; `CompositeScrollbars` is the
-// sibling for a list nested *under* another scroller. There is no horizontal bar: the columns
-// always fit the list.
+// The bar every plain `TrackList` page mounts; `CompositeScrollbars` is for a list nested under
+// another scroller. No horizontal bar: the columns always fit the list.
 //
-// **Mount contract**: a child of the view root, after its list, at
-// `x: 0; y: 0; width: 100%; height: 100%`, so `parent` inside resolves to the page. Everything else
-// the host mirrors off its `TrackList`, Slint having no way to hand an element over.
-//
-// **`list-y` is the reason this is a component rather than a snippet** — the bar is placed in the
-// *page's* coordinates, and the six copies had drifted into two spellings, each right only at its
-// own nesting depth.
+// **Mount contract**: a child of the view root after its list, at
+// `x: 0; y: 0; width: 100%; height: 100%`. The host mirrors the rest off its `TrackList`, Slint
+// having no way to hand an element over.
 export component TrackListScrollbars inherits Rectangle {
-    // The list's top in the *page's* coordinates. Pass
-    // `tl.absolute-position.y - root.absolute-position.y` — correct at every depth, unlike a
-    // bare `tl.y`.
+    // **In the page's coordinates**: `tl.absolute-position.y - root.absolute-position.y`, right at
+    // every nesting depth where a bare `tl.y` is right at one.
     in property <length> list-y;
 
     // The scrolling region inside the list, below its column headers.
@@ -26,16 +20,12 @@ export component TrackListScrollbars inherits Rectangle {
     in property <length> v-viewport-height;
     in property <length> v-offset;
 
-    // The host forwards this to its list's own clamping setter. A callback rather than a
-    // two-way binding for `OverlayScrollbar`'s documented reason — the sign flip blocks
-    // `<=>`, and the host stays the source of truth.
+    // Forwarded to the list's own clamping setter, the host staying the source of truth.
     callback set-v-offset(length);
 
     OverlayScrollbar {
         horizontal: false;
         x: parent.width - self.width;
-        // Aligned with the inner ListView, so the bar stays clear of the header band.
-        // `body-y` carries that offset; the list's own origin makes it page-relative.
         y: root.list-y + root.body-y;
         width: Theme.scrollbar-slot;
         height: root.body-height;

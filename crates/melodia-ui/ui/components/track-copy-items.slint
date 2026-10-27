@@ -1,8 +1,7 @@
 import { CopyField } from "context-menu.slint";
 
-// What a track's Copy flyout offers, on its row's menu and on its card's. `ContextMenuPopup`
-// reserves the flyout's height off this list's length, so a field added here can't clip the popup.
-// `token` travels to Rust as the field `TrackField::from_token` parses.
+// What a track's Copy flyout offers, on its row's menu and on its card's. `token` is what
+// `TrackField::from_token` parses.
 export global TrackCopyFields {
     out property <[CopyField]> list: [
         { token: "title", label: @tr("Title"), icon: "title" },

@@ -7,22 +7,18 @@ import { IconButton } from "./icon-button.slint";
 import { PopupSurface } from "./popup-surface.slint";
 import { TooltipSide } from "./tooltip.slint";
 
-// What a station states about itself, drawn the same way wherever it appears: on its own page
-// under the band that morphed into its hero, and in the Now Playing view's right column, which
+// What a station states about itself, on its own page and in Now Playing's right column, which
 // holds the queue for a track and has nothing to say about one for a stream.
 //
-// **Palette is every brush input's job.** The station page paints on ordinary chrome and takes the
-// defaults; Now Playing paints on the artwork backdrop and hands over its solved tier, where a
-// fixed theme brush lands light-on-light under a light variant. `MetaChip`'s idiom, and the same
-// reason: one component, two surfaces that solve their foreground differently.
+// **Every brush is an input**, `MetaChip`'s idiom: the station page takes the defaults, and Now
+// Playing hands over the tier it solves against the artwork.
 
 // One labelled fact, with an optional control on the value. Local rather than `SettingRow`, which
 // reads `SettingsPage.row-icon-w` and is Settings chrome.
 //
-// **Pinned to the list's row height, not sized from what it holds.** Two of these carry a 28 px
-// control and the rest carry one line box, so left to their content they stand at two different
-// heights and the column's rhythm breaks on exactly the rows the eye is drawn to. Every list in
-// the tree pins the pair instead (`components/track-list/track-list-row.slint`).
+// **Pinned to the list's row height, not sized from what it holds**: two rows carry a 28 px control
+// and the rest one line box, and left to their content the column's rhythm breaks on exactly the
+// rows the eye is drawn to (`components/track-list/track-list-row.slint` pins the same pair).
 component DetailRow inherits HorizontalLayout {
     in property <string> label;
     in property <string> value;
@@ -60,11 +56,9 @@ component DetailRow inherits HorizontalLayout {
         font-size: Theme.font-size-md;
         overflow: elide;
     }
-    // **Left, where every other tooltip in the tree clears above.** The button is the row's
-    // trailing cell, so a pill centred on it runs past the scroller's right edge; and the first
-    // row sits at the scroller's *top* edge on a station carrying neither a format warning nor a
-    // directory verdict, which cuts an above-pill off entirely. The left arm centres vertically
-    // and clears inward, so both edges stop mattering.
+    // **Left, where every other tooltip clears above**: the button trails the row, so a centred pill
+    // runs past the scroller's right edge, and the first row can sit at the scroller's top edge,
+    // which cuts an above-pill off. The left arm clears inward and centres vertically.
     if root.action-icon != "": IconButton {
         icon: root.action-icon;
         icon-size: 16px;
@@ -106,9 +100,8 @@ export component StationFacts inherits VerticalLayout {
 
     callback open-homepage(string);
 
-    // **A list, so it takes a row pitch and no gap between rows.** A host's section spacing
-    // handed to the rows as well spaces a labelled list like a set of unrelated blocks, and does
-    // it on top of heights that differ by whether a row happens to carry a control.
+    // **A list, so a row pitch and no gap between rows**: a host's section spacing would set a
+    // labelled list out like unrelated blocks.
     vertical-stretch: 0;
 
     DetailRow {
@@ -172,14 +165,14 @@ export component StationFacts inherits VerticalLayout {
 // The titles the station has announced this session, newest first, each copyable from a
 // right-click.
 //
-// **The heading takes a row at the same pitch rather than a margin of its own**, so it sits in the
-// rhythm of what it labels — `TrackListHeader`'s shape. One row is one line as the station sent it;
-// the title and artist a row's menu also offers are Rust's split, the player bar's own.
+// **The heading takes a row at the same pitch rather than a margin**, so it sits in the rhythm of
+// what it labels, `TrackListHeader`'s shape. A row is one line as the station sent it; the title
+// and artist its menu also offers are Rust's split, the player bar's own.
 //
-// **One menu for the list, holding a copy of the row it was raised on**, not one per row: Rust
-// replaces the whole model whenever a title arrives, which rebuilds every row and would take a
-// row's own menu down with it, or leave it copying the line that slid into its place. A
-// `Rectangle` round the layout so the menu can be placed in this component's own frame.
+// **One menu for the list, holding a copy of the row it was raised on**: Rust replaces the model
+// whenever a title arrives, which would take a row's own menu down with it, or leave it copying
+// the line that slid into its place. A `Rectangle` round the layout places the menu in this
+// component's own frame.
 export component StationHistory inherits Rectangle {
     in property <[StationHistoryRow]> rows;
     in property <brush> heading-color: Theme.subtext0;

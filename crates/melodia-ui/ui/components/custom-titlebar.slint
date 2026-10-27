@@ -5,16 +5,12 @@ import { CaptionStyle, MinimizeCaption, MaximizeCaption, CloseCaption } from "ca
 
 // The brand on one side, a drag region in the middle, the decoration cluster opposite.
 //
-// **Drag handling is split**: Slint tracks only *hover* over the drag region, and Rust intercepts
-// the press at the winit layer, where a double press toggles maximize too. Dragging from a
-// `TouchArea` strands its mouse grab. The maximize icon reads `WindowChrome.is-maximized`, fed from
-// winit's `Resized`, so tiling shortcuts update it too. Style and side come from
-// `Theme.titlebar-button-{style,side}`, and the four conditional branches mount the right cluster
-// on the right side. **The buttons are inlined into the outer layout rather than wrapped in a
-// sub-component**: a Rectangle-inheriting wrapper with conditional layout children reports 0 × 0.
+// **Slint tracks only the drag region's hover**; Rust takes the press at the winit layer, where a
+// double press toggles maximize too (`desktop-shell.md`). **The buttons are the outer layout's own
+// children, not a wrapper's**: a Rectangle-rooted wrapper of conditional layout children reports
+// 0 × 0.
 export component CustomTitleBar inherits Rectangle {
-    // Pinned as a fixed slot. A plain `height` is ignored by the layout — the height-on-a-layout-
-    // child cycle — and the bar then claims the window's whole vertical space.
+    // A fixed slot: a plain `height` on a layout child claims the window's whole height.
     min-height: 32px;
     max-height: 32px;
     vertical-stretch: 0;
@@ -25,8 +21,8 @@ export component CustomTitleBar inherits Rectangle {
     property <CaptionStyle> caption-style: Theme.titlebar-button-style == 2
         ? CaptionStyle.kde
         : CaptionStyle.standard;
-    // The pad lies under the resize band, which a maximized window doesn't have, so there it goes
-    // and a throw at the screen corner still lands on close.
+    // The pad lies under the resize band, which a maximized window lacks, so a throw at the screen
+    // corner still lands on close.
     property <length> caption-edge-pad:
         root.caption-style == CaptionStyle.kde && !WindowChrome.is-maximized
             ? Theme.kde-caption-edge-pad
@@ -35,26 +31,20 @@ export component CustomTitleBar inherits Rectangle {
     HorizontalLayout {
         spacing: 0;
         alignment: stretch;
-        // Inset on the brand side so the logo doesn't kiss the window edge. The cluster side is
-        // flush, so close sits at the corner, but for the gap Breeze keeps.
+        // The cluster side is flush, so close sits at the corner, but for the gap Breeze keeps.
         padding-left: root.captions-left ? root.caption-edge-pad : 12px;
         padding-right: root.captions-left ? 12px : root.caption-edge-pad;
 
-        // Left cluster: traffic lights.
         if root.captions-left && root.mac-style: MacOsTitleBarCluster {
             maximize => { WindowChrome.toggle-maximize(); }
         }
 
-        // Drawn captions on the left, close at the *corner* so "click corner = close"
-        // still holds. Three siblings rather than a wrapper, per the header.
+        // Close at the corner, so clicking the corner still closes.
         if root.captions-left && !root.mac-style: CloseCaption { style: root.caption-style; }
         if root.captions-left && !root.mac-style: MaximizeCaption { style: root.caption-style; }
         if root.captions-left && !root.mac-style: MinimizeCaption { style: root.caption-style; }
 
-        // Wraps the brand plus the middle stretch, so everything but the cluster is draggable. The
-        // TouchArea tracks only `has-hover`, and no `double-clicked` here can fire: Rust takes
-        // every press at the winit layer, the double press included. A stretch spacer before or
-        // after the brand pins it to its side.
+        // The brand and the middle stretch, so everything but the cluster drags.
         drag-region := TouchArea {
             horizontal-stretch: 1;
             mouse-cursor: default;
@@ -68,23 +58,22 @@ export component CustomTitleBar inherits Rectangle {
                 alignment: stretch;
                 cross-axis-alignment: center;
 
-                // Buttons left ⇒ leading spacer ⇒ brand pins right.
+                // The spacer before or after the brand pins it to its side.
                 if root.captions-left: Rectangle { horizontal-stretch: 1; }
 
                 Image {
                     horizontal-stretch: 0;
                     source: @image-url("../assets/icons/logo-without-background.svg");
-                    // The asset's gradient is Mocha's, so the mark is the one thing in the
-                    // bar not tracking the palette. A brush rather than a second asset:
-                    // `colorize` composites it through the alpha, so the ramp survives.
+                    // The asset's gradient is Mocha's. `colorize` composites a brush through its
+                    // alpha, so the mark tracks the palette and the ramp survives.
                     colorize: Theme.brand-mark;
                     width: 18px;
                     height: 18px;
                     image-fit: contain;
                 }
 
-                // Regular weight, as an OS caption sets its title: Medium beside the
-                // native caption's Segoe UI reads as bold once focus darkens the ink.
+                // Regular weight, as an OS sets its caption: Medium beside the native caption's
+                // Segoe UI reads as bold once focus darkens the ink.
                 Text {
                     horizontal-stretch: 0;
                     text: "Melodia";
@@ -92,23 +81,17 @@ export component CustomTitleBar inherits Rectangle {
                     font-size: 12px;
                 }
 
-                // Buttons right ⇒ trailing spacer ⇒ brand pins left.
                 if !root.captions-left: Rectangle { horizontal-stretch: 1; }
             }
         }
 
-        // Right cluster: traffic lights.
         if !root.captions-left && root.mac-style: MacOsTitleBarCluster {
             maximize => { WindowChrome.toggle-maximize(); }
         }
 
-        // Drawn captions in Windows / KDE order, close at the corner.
+        // Windows and KDE order, close at the corner.
         if !root.captions-left && !root.mac-style: MinimizeCaption { style: root.caption-style; }
         if !root.captions-left && !root.mac-style: MaximizeCaption { style: root.caption-style; }
         if !root.captions-left && !root.mac-style: CloseCaption { style: root.caption-style; }
     }
-
-    // **No resize affordance here.** The whole-window ring lives in `app-window.slint`,
-    // so it can suppress hover on the scrollbar at the right edge and the now-playing
-    // bar at the bottom as well as on these buttons.
 }

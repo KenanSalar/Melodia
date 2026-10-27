@@ -2,67 +2,49 @@ import { Theme } from "../theme.slint";
 import { MaterialIcon } from "material-icon.slint";
 import { SingleLineInput } from "single-line-input.slint";
 
-// The reusable compact filter input: an `ActionPill`-matching outline over a fill that
-// **solidifies the moment the bar is engaged** — half its mounts sit over a detail hero, so at rest
-// it lets a little blur through like the pill beside it. The outer slot asks for `input-width` and
-// never stretches past it; the visible chrome is an inner Rectangle scaling from its own centre, so
-// neighbours don't shift on focus.
+// The compact filter input. Its fill **solidifies once the bar is engaged**: half its mounts sit
+// over a detail hero, so at rest it lets some blur through like the `ActionPill` beside it.
 //
-// A named instance exposes `clear-input-focus()` for a backdrop or pill. **`blur-trigger` is for
-// the case that can't reach the instance**: a descendant in another file bumps an int on the view's
-// global. Omit it when nothing outside the view file triggers a blur.
+// A named instance exposes `clear-input-focus()`; **`blur-trigger` is for a caller that can't reach
+// the instance**, a descendant in another file bumping an int on the view's global.
 export component SearchBar inherits Rectangle {
     in-out property <string> text;
     in property <string> placeholder: @tr("Search…");
 
-    // **The default fits the placeholder the bar was actually handed**, a flat number being unable
-    // to: several catalogues need noticeably more room than English. Capped so a verbose locale
-    // can't take a whole header row; past the cap the placeholder elides.
+    // **Sized off the placeholder it was handed**, several catalogues needing more room than
+    // English. Capped so a verbose locale can't take a header row; past the cap it elides.
     in property <length> input-width:
         clamp(root.natural-width, 220px, 320px);
 
-    // Published so a host budgeting its row reserves against it rather than restating the number —
-    // the `TabBar.compact-w` contract. What the host leaves behind is exactly what this shrinks to.
+    // Published so a host budgeting its row reserves against it, the `TabBar.compact-w` contract.
     out property <length> min-w: 140px;
 
     // For a host with two boxes on one filter, handing the focus across when it swaps them.
     out property <bool> has-focus: input.has-focus;
 
-    // 0 the bar, 1 the glyph alone in a `bar-height` square, for a host short of room. A scalar so
-    // the host can ease the fold, as a compact tab closes onto its icon. The input stays mounted at
-    // zero width, so a click on the square focuses it like any other and the host unfolds the bar
-    // on that focus.
+    // 0 the bar, 1 the glyph alone in a `bar-height` square, eased by a host short of room. The
+    // input stays mounted at zero width, so a click on the square still focuses it.
     in property <float> fold-t: 0.0;
 
-    // Named because `chrome-overhead` has to add the same number the layout does.
     property <length> icon-size: 16px;
-    // Everything in the pill that isn't the text. The clear button stays out: it only mounts
-    // once there's text, by which point the placeholder is gone.
+    // The clear button stays out: it mounts only once there's text, and the placeholder is gone.
     property <length> chrome-overhead:
         Theme.pad-sm + root.icon-size + 2 * Theme.pad-xs;
-    // Measured off the Text the bar actually draws, so measured and drawn can't drift. A Text's
-    // *horizontal* layout info is intrinsic to the string, so this is a derivation and not a cycle.
     property <length> natural-width:
         input.placeholder-width + root.chrome-overhead;
 
-    // Recessed into a surface rather than floating over content: the host's corner instead of a
-    // stadium, and no swell — inside a popup there is nothing to be above. Fills, border
-    // tint, placeholder and icon are unchanged, so both shapes read as one control.
+    // Recessed into a surface rather than floating: the host's corner and no swell, inside a popup
+    // there being nothing to be above.
     in property <bool> inset: false;
-    // The swell says "above the content". Its own knob for a stadium that sits *in* a column of
-    // rows rather than over one, where growing would crowd its neighbours.
+    // Its own knob for a stadium sitting in a column of rows, where growing would crowd them.
     in property <bool> focus-swell: !root.inset;
-    // At rest; the swell scales it, so the stadium stays one. A host whose cards aren't stadiums
-    // hands in their corner, where a pill would look out of place among them.
     in property <length> corner-radius: root.inset ? Theme.radius-md : root.height / 2;
-    // For a bar that has to line up with the rows it sits among.
     in property <length> bar-height: 32px;
-    // On a card the floating fill composites to the card itself and leaves only the ring, so the
-    // bar takes the card-control pair and rests its rim on the fill, as `FieldFrame` does.
+    // On a card the floating fill composites to the card and leaves only the ring, so the bar takes
+    // the card-control pair, as `FieldFrame` does.
     in property <bool> on-card: false;
 
-    // Slint has no click-outside behaviour for `TextInput`, so each increment fires
-    // `clear-focus()` on the inner input.
+    // Slint has no click-outside for a `TextInput`, so each increment clears the input's focus.
     in property <int> blur-trigger: 0;
     changed blur-trigger => { input.clear-input-focus(); }
 
@@ -70,17 +52,12 @@ export component SearchBar inherits Rectangle {
     // The ✕ alone, where `edited("")` also follows a backspace to empty.
     callback cleared();
 
-    // Most consumers don't wire this, their `edited` already refiltering per keystroke. **The
-    // Search view does**: it skips the debounce and commits synchronously, so a user can re-trigger
-    // the same query after navigating away and back — the leave released the results, not the query.
+    // **The Search view wires it** to commit without the debounce, so the same query can be run
+    // again after a leave released its results.
     callback accepted();
 
-    // **`has-hover` is not continuous, so the fill can't read it raw.** Slint drops the flag on a
-    // wheel event the bar doesn't handle, and its exit dispatch compares an item's stack *position*
-    // rather than its membership. Either way it blinks off for a frame, invisible over a flat panel
-    // and a visible flicker over the Search results this floats on. So `engaged` arms on the raw
-    // flag and releases only once the pointer has stayed gone, the rail tooltip's `held` shape —
-    // **beside the raw flag, not replacing it**, `changed` not firing on a first evaluation.
+    // Arms on the raw `has-hover` and releases on a latch, the flag blinking off for a frame over
+    // the Search results this floats on (`slint-pitfalls.md`'s `has-hover` entry).
     property <bool> pointer-inside: chrome-touch.has-hover;
     property <bool> hover-held;
     property <bool> engaged:
@@ -95,8 +72,7 @@ export component SearchBar inherits Rectangle {
         }
     }
 
-    // Long enough to swallow a blink, short enough that a real leave still reads as
-    // immediate against the fade that follows it.
+    // Long enough to swallow a blink, short enough that a real leave still reads as immediate.
     hover-grace := Timer {
         interval: 120ms;
         running: false;
@@ -106,22 +82,17 @@ export component SearchBar inherits Rectangle {
         }
     }
 
-    // The simple case: a same-file caller with an id skips the `blur-trigger` plumbing.
     public function clear-input-focus() {
         input.clear-input-focus();
     }
 
-    // For a view auto-focusing its bar on mount. Named `focus-input` because `focus`
-    // collides with the built-in element method.
+    // `focus` collides with the built-in element method.
     public function focus-input() {
         input.focus-input();
     }
 
-    // The slot still doesn't stretch — `preferred` and `max` are the same number, so the bar is
-    // handed exactly `input-width` and the focus swell happens *inside* it. **What the split buys
-    // over a bound `width` is the other end**: Slint reports a root's bound `width` as both `min`
-    // and `max`, so a locale-sized default would drag the window's own resize floor out with it.
-    // The slot narrows onto the glyph's square as the fold closes, and gives up its floor the
+    // The `min`/`preferred`/`max` split rather than a bound `width`, which would drag the window's
+    // resize floor out with a locale-sized default (`slint-pitfalls.md`). The floor gives way the
     // moment the fold begins.
     property <length> slot-w: input-width + (root.bar-height - input-width) * root.fold-t;
     min-width: root.fold-t > 0.0 ? root.bar-height : root.min-w;
@@ -130,59 +101,48 @@ export component SearchBar inherits Rectangle {
     height: root.bar-height;
     background: transparent;
 
-    // Holds all the visible styling and scales from the *centre* by binding `x`/`y` to a half-delta
-    // against the outer slot — Slint Rectangles have no scale transform.
+    // Scales from its centre inside the fixed slot, so neighbours don't shift on focus.
     chrome := Rectangle {
         property <float> focus-scale: input.has-focus && root.focus-swell ? 1.015 : 1.0;
+        // **The ease is on the scale, never the dimensions**: those derive from it, and `width`
+        // also reads the host's mirrored page width, which a resize drag dirties on every event.
         animate focus-scale { duration: Theme.dur-fast; easing: ease-in-out; }
 
         width: root.width * focus-scale;
         height: root.height * focus-scale;
-        // The half-delta keeps the chrome centred against the slot as it scales.
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
 
-        // Floating, rest matches the `ActionPill` chip's fill, so adjacent bars and pills read as
-        // one family; engagement closes it to opaque, as a hovered `PillButton` does.
+        // Floating, the `ActionPill` chip's fill at rest, closing to opaque as a hovered
+        // `PillButton` does.
         property <brush> fill: root.on-card
             ? (root.engaged ? Theme.card-control-hover : Theme.card-control)
             : (root.engaged ? Theme.surface0 : Theme.floating-chrome-bg);
         background: self.fill;
         border-radius: root.corner-radius * self.focus-scale;
         border-width: 1px;
-        // Floating, the `ActionPill` outline, which focus tints faintly toward the accent. On a
-        // card the rim is the fill rather than `transparent`, a translucent border restacking the
-        // corner's antialiasing.
+        // On a card the rim is the fill rather than `transparent`, a translucent border restacking
+        // the corner's antialiasing.
         border-color: input.has-focus
             ? (root.on-card ? Theme.accent : Theme.accent.with-alpha(0.18))
             : (root.on-card ? self.fill : Theme.surface2);
-        // **The ease belongs on the scale, not on the dimensions.** Animating a binding derived
-        // from another animating property phase-lags, and `width`/`height` derive from this while
-        // `x`/`y` derive from those. Second reason: `width` also multiplies `root.width`, which a
-        // host drives off its mirrored page width, and Slint restarts an animated binding on
-        // dependency *dirtiness* — so an eased `width` re-based on every event of a resize drag.
-        // `focus-scale` reads the focus flag and a mount-constant variant, so it only ever sees
-        // the toggle.
         animate background, border-color {
             duration: Theme.dur-fast;
             easing: ease-in-out;
             enabled: !Theme.recoloring;
         }
 
-        // **Wraps the content rather than sitting beside it.** As a sibling its `has-hover` only
-        // reported the padding and border: `TextInput` consumes the hit test, so the pointer
-        // vanished the moment it crossed into the text. An ancestor TouchArea gets `has-hover` on
-        // the top-down filter pass and still forwards the event, so the clear button and the
-        // `TextInput` keep their clicks — the same fix as `touch` in `track-list-row.slint`.
+        // **Wraps the content rather than sitting beside it**: `TextInput` consumes the hit test, so
+        // a sibling lost its hover the moment the pointer crossed into the text. An ancestor gets
+        // `has-hover` on the way down and still forwards the event (`track-list-row.slint`'s
+        // `touch`).
         chrome-touch := TouchArea {
             width: 100%;
             height: 100%;
-            // Forwards focus so the whole pill is the target, not just the input.
             clicked => { input.focus-input(); }
 
         HorizontalLayout {
-            // Folded, the glyph is centred with nothing left over for the input. Padding and
-            // spacing travel with the fold, so the glyph glides to the middle rather than jumping.
+            // Padding and spacing travel with the fold, so the glyph glides to the middle.
             property <length> fold-inset: (root.bar-height - root.icon-size) / 2;
             padding-left: Theme.pad-sm + (self.fold-inset - Theme.pad-sm) * root.fold-t;
             padding-right: Theme.pad-xs + (self.fold-inset - Theme.pad-xs) * root.fold-t;
@@ -193,23 +153,21 @@ export component SearchBar inherits Rectangle {
                 cross-axis-self-alignment: center;
                 name: "search";
                 icon-size: root.icon-size;
-                // Rest matches the placeholder beside it, so the two halves of
-                // an empty bar sit on one rung.
+                // At rest the placeholder's brush, so an empty bar's two halves sit on one rung.
                 icon-color: input.has-focus
                     ? Theme.accent
                     : Theme.text.transparentize(0.3);
                 animate icon-color { duration: Theme.dur-fast; easing: ease-in-out; enabled: !Theme.recoloring; }
             }
 
-            // The bar's full height rather than a line-sized box centred in it: the same centre,
-            // and the clip around the text then leaves room for marks that reach past its line.
+            // The bar's full height rather than a line box: the same centre, and the clip around
+            // the text leaves room for marks that reach past its line.
             input := SingleLineInput {
                 horizontal-stretch: 1;
                 text <=> root.text;
                 placeholder: root.placeholder;
-                // `PillButton`'s label brush, so a bar and the pills beside it read as one family,
-                // dimmed just enough to stay a hint rather than typed text. Gone by the time the
-                // fold is half closed, as a compact pill's label is.
+                // `PillButton`'s label brush, dimmed to stay a hint, and gone by the time the fold
+                // is half closed, as a compact pill's label is.
                 placeholder-color: Theme.text.transparentize(0.3)
                     .transparentize(1.0 - clamp(1.0 - root.fold-t * 2.0, 0.0, 1.0));
                 edited(t) => { root.edited(t); }

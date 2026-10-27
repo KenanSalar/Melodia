@@ -1,16 +1,13 @@
-// Transparent catcher over a PopupWindow's empty regions. `close-on-click-outside` only fires for
-// clicks truly *outside* the popup rect, so a click on an empty region inside it — the room held
-// for a flyout, the gap beside it, the space above the shorter column — would otherwise do nothing.
-// Declare it **first** inside the popup, so the real rows drawn over it win their own clicks; the
-// host sizes it, a root binding not being able to read `parent`.
+// A popup's empty regions: `close-on-click-outside` fires only *outside* the popup's rect, so the
+// room held for a flyout would otherwise take a click and do nothing. Declared **first**, so the
+// rows over it win their own clicks; the host sizes it.
 //
 // **Any other button closes on its press**, so the catcher is gone with its popup by the release
-// and Slint hands that release to whatever lies beneath: a right-click there raises its own menu
-// (`ContextClick`). A left click keeps closing on its release, which would otherwise land on the
-// item beneath as a stray one.
+// and Slint hands that release to whatever lies beneath, a right-click there raising its own menu.
+// A left click closes on its release, which would otherwise land beneath as a stray click.
 //
-// A `Rectangle` round the area, so a mount can spell only `close-requested`: a `clicked` or
-// `pointer-event` of its own would silently replace the handler carrying the close.
+// A `Rectangle` round the area, so a mount can spell only `close-requested`: its own `clicked` or
+// `pointer-event` would replace the handler carrying the close.
 export component PopupDismissCatcher inherits Rectangle {
     callback close-requested();
 

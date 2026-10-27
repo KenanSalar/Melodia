@@ -1,20 +1,16 @@
 import { Nav, NavEnterFrom } from "../globals/nav.slint";
 import { MiniPlayer, MiniLayout } from "../globals/shell.slint";
 
-// The responsive full-UI ↔ miniplayer swap, as a non-visual state machine: both `Timer`s are
-// pseudo-elements, so it occupies no layout space and can be mounted anywhere. Compact when the
-// window is either narrow *or* short, and which of the miniplayer's layouts fits the window once it
-// is. The host passes its size in, a component's root binding not reaching `parent`.
+// The full-UI ↔ miniplayer swap, and which miniplayer layout fits the window. Non-visual, so it
+// mounts anywhere; the host passes its size in.
 //
-// **The swap is two-phase on purpose**: `render-active` lags `active` by the fade, so only *one*
-// branch is ever mounted — overlapping them holds the sidebar's grid covers and the mini's up-next
-// subscriber alive at once, which is a memory regression.
+// **The swap is two-phase on purpose**: `render-active` lags `active` by the fade, so only one
+// branch is ever mounted. Overlapping them holds the sidebar's grid covers and the miniplayer's
+// up-next subscriber alive at once.
 export component MiniPlayerSwitch {
-    // The host window's live size.
     in property <length> host-width;
     in property <length> host-height;
-    // The rect the miniplayer lays out in: the window, less the invisible borders a native
-    // miniplayer keeps transparent on Win32.
+    // The window less the invisible borders a native miniplayer keeps transparent on Win32.
     in property <length> view-width;
     in property <length> view-height;
 
@@ -27,12 +23,11 @@ export component MiniPlayerSwitch {
     // Absorbs physical-to-logical rounding, so a frame toggle can't land the size exactly on an edge.
     private property <length> exit-slack: 4px;
 
-    // Flips the instant the threshold is crossed. **`render-active` is what a host
-    // branches on**; this is only the decision.
+    // The decision alone; **a host branches on `render-active`**.
     out property <bool> active: root.fits-mini(root.host-width, root.host-height);
 
     // Leaving takes more room than entering: dropping the frame grows the client area by the
-    // allowance, so one shared edge would bounce a window parked just inside it straight back out.
+    // allowance, so one shared edge would bounce a window parked inside it straight back out.
     // Keyed on `render-active`, which no binding writes, so `active` can't loop on itself.
     pure function fits-mini(width: length, height: length) -> bool {
         return root.render-active
@@ -41,34 +36,23 @@ export component MiniPlayerSwitch {
             : (width < root.enter-w || height < root.enter-h);
     }
 
-    // Which branch is mounted right now: `active`, delayed by one fade so the
-    // outgoing layout can reach opacity 0 before it is destroyed.
+    // `active`, delayed by one fade so the outgoing layout reaches 0 before it is destroyed.
     out property <bool> render-active: false;
 
-    // Named around the builtin property of that name.
     out property <float> fade-opacity: 1.0;
     animate fade-opacity { duration: 100ms; easing: ease-in-out; }
 
-    // **The column once the card's captions row is all the way open above its artwork and the panel
-    // has room under it, the card below that, and the strip once the artwork is down to its floor,
-    // the controls all the way up on the title's line.** The column is the one layout Rust looks a
-    // lyrics sheet up for, so it starts where the panel mounts, not where a released resize settles
-    // the captions row. The artwork comes off the width as well as the cap: a narrow window's stops
-    // short of the cap, the controls taking the width, and keyed on the cap alone its panel held off
-    // long after there was room.
+    // **The column once the captions row is fully open above the artwork and the panel has room
+    // under it, the card below that, the strip once the artwork is at its floor.** The column is
+    // the one layout Rust looks a lyrics sheet up for, so it starts where the panel mounts. The
+    // artwork comes off the width as well as the cap, a narrow window's stopping short of it.
     //
-    // The thresholds themselves are `MiniPlayer`'s, restating what the view lays out rather than
-    // measuring it. Being off moves where a swap lands, the artwork giving ground before a row
-    // clips, and leaves a settled captions row that far short of closed or open.
-    //
-    // Everything in the column but the artwork and the panel: the card's rows with the captions
-    // row all the way open above them.
+    // The thresholds are `MiniPlayer`'s, restating what the view lays out rather than measuring it.
     private property <length> column-rows: MiniPlayer.art-rows + MiniPlayer.captions-height;
 
     private property <length> card-art: min(MiniPlayer.art-cap,
         root.view-width - MiniPlayer.art-row-insets - MiniPlayer.controls-min-width);
 
-    // Internal: nothing outside needs the layout, it only feeds the global.
     private property <MiniLayout> layout:
         root.view-height > root.column-rows + root.card-art + MiniPlayer.panel-gap
             ? MiniLayout.column
@@ -76,26 +60,19 @@ export component MiniPlayerSwitch {
                 ? MiniLayout.card
                 : MiniLayout.strip);
 
-    // Mirrored locally because a `changed` handler can't watch a global's property. It publishes to
-    // the global so children see the new value, schedules fade-out → swap → fade-in, closes any
-    // open Now Playing view so its artwork release runs, and notifies Rust for the up-next gate.
-    // **`MiniPlayer.layout` is `watched-layout`'s to own** — Rust re-reads it from the global on
-    // entry, so no redundant write belongs here.
+    // Closes Now Playing so its artwork release runs. **`MiniPlayer.layout` is `watched-layout`'s
+    // to write**, Rust re-reading it on entry.
     private property <bool> watched-active: root.active;
     changed watched-active => {
         MiniPlayer.active = root.watched-active;
-        // **Lateral.** The line below closes Now Playing, which remounts the branch underneath it.
-        // Written in both directions anyway: the way back mounts under the swap timer's suppression
-        // and never reads it, but an unwritten edge is whatever the last drill or back left behind.
+        // Both ways: the way back mounts under the swap timer's suppression and never reads it,
+        // but an unwritten edge is whatever the last drill left behind.
         Nav.pending-enter-from = NavEnterFrom.above;
         if (root.watched-active && Nav.now-playing-open) {
             Nav.now-playing-open = false;
         }
-        // The host has no size at construction, so `active` reads `true` for a window about to lay
-        // out full-size, and the first settle arrives here looking like a swap. It isn't one while
-        // `render-active` already agrees, and a fade with no incoming branch to cross to is the
-        // whole-shell flicker that used to open every launch. `active` itself keeps its 0×0
-        // answer: `SectionActiveGate` baselines on it.
+        // The first settle out of the 0×0 construction pass looks like a swap and isn't one
+        // (`ui-patterns.md`'s section-gate block).
         if (root.render-active != root.watched-active) {
             root.fade-opacity = 0.0;
             swap-timer.running = true;
@@ -103,23 +80,19 @@ export component MiniPlayerSwitch {
         MiniPlayer.active-changed(root.watched-active);
     }
 
-    // **A layout change inside mini deliberately doesn't fade**: it is an in-place re-layout of the
-    // same component, and a flash at every threshold crossed through a drag would be jarring. The
-    // callback drives the high-res cover cache — seeded for the two layouts that draw it large,
-    // released on the way back to the strip.
+    // **A layout change inside the miniplayer doesn't fade**: it re-lays the same component, and a
+    // flash at every threshold a drag crosses would be jarring.
     private property <MiniLayout> watched-layout: root.layout;
     changed watched-layout => {
         MiniPlayer.layout = root.watched-layout;
         MiniPlayer.layout-changed(root.watched-layout);
     }
 
-    // How far the card's captions row is open: into what the artwork and the rows under it leave.
     private property <length> captions-shown: clamp(
         root.view-height - MiniPlayer.art-rows - root.card-art, 0px, MiniPlayer.captions-height);
 
-    // How far the row was open when the resize began, which the drag's direction is read against
-    // rather than its last step: a drag that overshoots and comes back a little still settles the
-    // way it was going.
+    // The drag's direction is read against where it began rather than its last step, so a drag
+    // that overshoots and comes back a little still settles the way it was going.
     private property <length> captions-at-resize;
     private property <length> captions-open-height:
         root.host-height + MiniPlayer.captions-height - root.captions-shown;
@@ -129,11 +102,9 @@ export component MiniPlayerSwitch {
         root.captions-at-resize = root.captions-shown;
     }
 
-    // **A resize never lets go of the captions row part of the way open**, its buttons shrunk and
-    // faded on their way in or out. The window takes the height that finishes the move: open if the
-    // row has opened since the resize began, closed if it has closed, and closed wherever opening
-    // would carry a wide window past the exit edge. On the release rather than on a pause, so the
-    // window never moves under a pointer still holding its edge.
+    // **A resize never lets go of the captions row part way open.** Closed wherever opening would
+    // carry the window past the exit edge, and on the release so the window never moves under a
+    // pointer still holding its edge.
     public function resize-released() {
         if (!root.active || root.captions-shown <= 0px
             || root.captions-shown >= MiniPlayer.captions-height) {
@@ -145,16 +116,15 @@ export component MiniPlayerSwitch {
             : root.captions-closed-height);
     }
 
-    // Mounts the branch a restored size calls for before the window exists, which the seed below is
-    // too late for: the window is created with the frame it had at `show()`, and on Win32 dropping
-    // it afterwards keeps the outer size, so a miniplayer relaunched under the native titlebar would
-    // grow by the frame on every launch. The seed still owes the global and the callback.
+    // Mounts the branch a restored size calls for before the window exists, which the seed is too
+    // late for: on Win32 a frame dropped after `show()` keeps the outer size, so a miniplayer
+    // relaunched under the native titlebar would grow by the frame every launch.
     public function adopt-restored-size() {
         root.render-active = root.active;
     }
 
-    // The mount seed: `changed` doesn't fire when the first settle lands directly on the final
-    // value, so without it a window mapped straight at a mini size paints the full UI first.
+    // `changed` doesn't fire when the first settle lands on the final value, so without the seed a
+    // window mapped at a miniplayer size paints the full UI first.
     seed-timer := Timer {
         interval: 1ms;
         triggered => {
@@ -166,16 +136,14 @@ export component MiniPlayerSwitch {
         }
     }
 
-    // Flips the render shadow and eases the opacity back. Single-shot, armed only by a crossing the
-    // guard above let through — a wiggle back inside the 100 ms needn't re-arm it, the body landing
-    // on whichever branch `active` ended on.
+    // A wiggle back inside the 100 ms needn't re-arm it: the body lands on whichever branch
+    // `active` ended on.
     swap-timer := Timer {
         interval: 100ms;
         running: false;
         triggered => {
-            // The page returning under the crossfade skips its own entrance, as the launch mount
-            // does: a slide played over a whole rebuilt UI is a second full-window layer at the
-            // moment that UI is most expensive. The mounted `ViewTransition` hands the flag back.
+            // A slide under the crossfade is a second full-window layer over the swap's most
+            // expensive frames. The mounted `ViewTransition` hands the flag back.
             if (!root.active) {
                 Nav.suppress-enter-animation = true;
             }

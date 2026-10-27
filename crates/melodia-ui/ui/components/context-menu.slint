@@ -7,12 +7,9 @@ import { PopupDismissCatcher } from "popup-dismiss-catcher.slint";
 import { PopupFit } from "popup-fit.slint";
 import { PopupSurface } from "popup-surface.slint";
 
-// The one answer to whether a pointer event raises a right-click menu, read by every surface that
-// raises one.
-//
-// **On the button's release, never its press.** Slint closes an open popup on a press outside it
-// and swallows that press, so a right-click on another row reaches the row only as a release.
-// Inside the area, so a press dragged off it before the release raises nothing.
+// **A menu opens on the right button's release, never its press**: Slint closes an open popup on a
+// press outside it and swallows that press, so a right-click on another row reaches it only as a
+// release. Inside the area, so a press dragged off before the release raises nothing.
 export global ContextClick {
     pure public function raises-menu(
         ev: PointerEvent, x: length, y: length, width: length, height: length) -> bool {
@@ -21,23 +18,19 @@ export global ContextClick {
     }
 }
 
-// What every right-click menu with a flyout shares, so the flyout's room and the edge test are
-// stated once rather than per menu. A menu opening its flyout rightward grows by that room while
-// the flyout is open; one opening it leftward holds the room from the start, because growing left
-// moves the popup's origin and Slint moves an open popup a loop pass after re-laying its content,
-// which would draw the column a frame out of place.
+// Shared by every right-click menu with a flyout. Opening rightward, a menu grows by the flyout's
+// room while it is open; leftward it holds the room from the start, growing left moving an open
+// popup's origin, which Slint moves a frame late (`slint-pitfalls.md`).
 export global ContextMenuMetrics {
     out property <length> item-h: 32px;
     out property <length> flyout-w: 200px;
     out property <length> gap: Theme.pad-xs;
     // The padding a menu column puts round its rows, which the flyout's rows line up with.
     out property <length> inset: PopupFit.column-inset;
-    // A menu column is as wide as its widest row, between these: the floor keeps a short menu
-    // reading as one, the ceiling keeps a long translation from crossing the window, and a row
-    // past it elides rather than running off the surface.
+    // The floor keeps a short menu reading as one, the ceiling a long translation inside the
+    // window, a row past it eliding.
     out property <length> menu-min-w: 220px;
     out property <length> menu-max-w: 400px;
-    // The width a flyout adds beside its menu's column, on whichever side has room.
     out property <length> flyout-room: root.gap + root.flyout-w;
 
     // Off the rows' `preferred-width`, which only the popup holding them can read.
@@ -56,22 +49,20 @@ export global ContextMenuMetrics {
         return left ? 0px : menu-w + root.gap;
     }
 
-    // Level with the row that opens it, and lifted where that row sits too low for the whole
-    // column to fit in the popup.
+    // Level with its row, lifted where the column wouldn't fit below it.
     pure public function flyout-y(row-y: length, popup-h: length, flyout-h: length) -> length {
         return max(0px, min(row-y - root.inset, popup-h - flyout-h));
     }
 
-    // Whether a flyout beside a menu opened at `anchor-x` would run past the shell's right edge.
-    // In window coordinates, so a host passes its menu root's `absolute-position`: the root sits
-    // outside the popup, where the position still means the window.
+    // In window coordinates: a host passes its menu root's `absolute-position`, the root sitting
+    // outside the popup.
     pure public function opens-left(anchor-x: length, menu-w: length) -> bool {
         return anchor-x + menu-w + root.flyout-room > WindowChrome.shell-x + WindowChrome.shell-width;
     }
 }
 
-// One row inside a context menu. The host closes the menu from its handler, where the menu has a
-// flyout to keep open; a menu without one leaves it to its popup's close policy.
+// A menu with a flyout to keep open closes from the row's handler; one without leaves it to its
+// popup's close policy.
 export component MenuItem inherits Rectangle {
     in property <string> label;
     in property <string> icon;
@@ -132,9 +123,8 @@ export component MenuItem inherits Rectangle {
     }
 }
 
-// The favorite entry wherever the clicked item's own state is known. It names the direction away
-// from that item and the host applies it to the whole set, so a selection of favorites is only
-// ever offered their removal.
+// Names the direction away from the clicked item and applies it to the whole set, so a selection
+// of favorites is only ever offered their removal.
 export component FavoriteMenuItem inherits MenuItem {
     in property <bool> is-favorite;
     in property <bool> multi-active;
@@ -150,7 +140,6 @@ export component FavoriteMenuItem inherits MenuItem {
     icon: root.is-favorite ? "heart_minus" : "favorite";
 }
 
-// The column a submenu row opens: the menu's own chrome round the rows the host passes in.
 export component MenuFlyout inherits PopupSurface {
     width: ContextMenuMetrics.flyout-w;
 
@@ -161,7 +150,6 @@ export component MenuFlyout inherits PopupSurface {
     }
 }
 
-// Visual separator between menu sections.
 export component MenuSeparator inherits Rectangle {
     height: 7px;
     Rectangle {
@@ -173,30 +161,23 @@ export component MenuSeparator inherits Rectangle {
     }
 }
 
-// One field a Copy flyout offers. `token` travels to Rust as the field the copy action parses.
+// `token` is the field Rust's copy action parses.
 export struct CopyField {
     token: string,
     label: string,
     icon: string,
 }
 
-// The popup the track, card and station menus open: the column of entries each passes in as
-// children, and the Copy flyout beside it. The anchor and the flyout's open state stay on the
-// host's root, outside the popup, where its `show-at` and `dismiss()` can reset them.
+// The popup the track, card and station menus open: their entries as children, and the Copy
+// flyout beside them. The anchor and the flyout's open state stay on the host's root, where its
+// `show-at` and `dismiss()` can reset them.
 //
-// **Grows by the flyout while it is open, on whichever side has room**, the left side holding its
-// room from the start (`ContextMenuMetrics` says why). The column stays under the pointer either
-// way: opening leftward, the popup opens that much further left.
-//
-// **A column taller than the shell scrolls.** Slint keeps an oversized popup's height and draws
-// it past the window's edge, so the column caps at `PopupFit.max-h` and scrolls in its
-// `PopupColumn`, and the popup places its own `y`.
-//
-// The flyout's rows are data rather than children because the popup reserves their height before
-// the flyout mounts: counted off a list's length, a row added to it can't be clipped.
+// **A column taller than the shell scrolls** in its `PopupColumn`, and the popup places its own `y`
+// (`slint-pitfalls.md`'s oversized-popup entry). The flyout's rows are data rather than children
+// because the popup reserves their height before the flyout mounts, so an added row can't clip.
 export component ContextMenuPopup inherits PopupWindow {
-    // Where the menu was raised, in the host root's frame, and the same point in the window's,
-    // which only the host can read, `absolute-position` inside a popup being the popup's.
+    // Where the menu was raised, in the host root's frame and in the window's, which only the host
+    // can read, `absolute-position` inside a popup being the popup's.
     in property <length> anchor-x;
     in property <length> anchor-y;
     in property <length> anchor-window-x;
@@ -206,7 +187,6 @@ export component ContextMenuPopup inherits PopupWindow {
     in property <bool> has-copy-flyout: true;
     in property <bool> copy-open;
     in property <[CopyField]> copy-fields;
-    // The Copy entry's `y` in the column, which the flyout lines up against.
     in property <length> copy-row-y;
 
     // Wider by a gutter while it scrolls, which keeps the bar off the stars and the chevron without
@@ -231,14 +211,12 @@ export component ContextMenuPopup inherits PopupWindow {
     height: max(root.menu-h, root.copy-open ? root.flyout-h : 0px);
     close-policy: close-on-click-outside;
 
-    // Ungated: `show()` builds the popup's body and `close()` drops it, so only the open menu
-    // watches, however many rows or cards mount one.
+    // Ungated: the body exists only while the popup is open, however many rows mount one.
     FocusLossWatcher {
         close => { root.dismiss-requested(); }
     }
 
-    // First, so every row drawn over it wins its own click and a click beside the column, or on
-    // the room held for the flyout, still closes the menu.
+    // First, so every row drawn over it wins its click and one beside the column still closes.
     PopupDismissCatcher {
         width: parent.width;
         height: parent.height;
@@ -258,8 +236,7 @@ export component ContextMenuPopup inherits PopupWindow {
         }
     }
 
-    // Mounted only while open, so its rows aren't built for every menu. Lined up with the Copy row
-    // as drawn, scroll included.
+    // Lined up with the Copy row as drawn, scroll included.
     if root.copy-open: MenuFlyout {
         x: ContextMenuMetrics.flyout-x(root.flyout-left, root.menu-w);
         y: ContextMenuMetrics.flyout-y(root.copy-row-y - col.scroll-y, root.height, root.flyout-h);

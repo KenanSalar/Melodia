@@ -1,20 +1,18 @@
 import { Theme } from "../theme.slint";
 
-// One metadata chip — a codec under the Now Playing cover, a count on a hero band. Purely
-// decorative: no TouchArea, no hover, no selected state. The interactive pill is `FilledChip`, and
-// the two are deliberately not one component: one states a fact, the other configures something.
+// One metadata chip, a codec under the Now Playing cover or a count on a hero band. Decorative:
+// `FilledChip` is the interactive pill, kept apart because one states a fact and the other
+// configures something.
 //
-// Both brushes are inputs so the same chip can sit on a blurred cover *and* on a blurred banner —
-// those surfaces are solved per artwork, where a fixed theme brush lands light-on-light under a
-// light variant. The defaults are what a chip on a plain panel would want and no mount takes them;
-// keeping them theme-shaped leaves this file free of `Player` and `HeroBackdrop` imports.
+// Both brushes are inputs, so one chip sits on a blurred cover *and* a blurred banner, each solved
+// per artwork. No mount takes the defaults; they keep this file free of `Player` and
+// `HeroBackdrop` imports.
 export component MetaChip inherits Rectangle {
     in property <string> text;
     in property <brush> fill: Theme.surface1;
     in property <brush> label-color: Theme.text;
 
     height: Theme.meta-chip-h;
-    // Keeps the ends circular at any height.
     border-radius: self.height / 2;
     background: root.fill;
 
@@ -23,14 +21,11 @@ export component MetaChip inherits Rectangle {
         padding-right: Theme.pad-md;
         Text {
             text: root.text;
-            // Solid, unlike the pill behind it — the label is the part
-            // that has to stay readable on a dark cover.
             color: root.label-color;
             font-size: Theme.font-size-sm;
             vertical-alignment: center;
-            // **About ink, not elision** — a chip sizes to its label, so nothing can
-            // overflow. The default `clip` scissors a `Text` at its own line box, and
-            // these labels carry names: a genre whose marks leave the box loses them.
+            // **About ink, not elision**: a chip sizes to its label, but the default `clip` cuts a
+            // `Text` at its line box, and these labels carry names whose marks leave it.
             overflow: elide;
         }
     }

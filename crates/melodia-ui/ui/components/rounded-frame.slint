@@ -1,8 +1,7 @@
-// A rounded edge for a panel over an opaque ground, drawn without a rounded clip: a stroke, and
-// the corners outside it painted in the ground's colour. A rounded clip holds everything under it
-// as a texture and renders it again whenever anything beneath changes, which for a whole content
-// panel is every scroll and visualizer frame. Mount it last, at full size, over a `clip: true`
-// with no radius, and only where `ground` is exactly what shows around the panel.
+// A rounded edge for a panel over an opaque ground without a rounded clip, which would render the
+// whole panel into a texture on every scroll and visualizer frame: a stroke, and the corners
+// outside it painted in the ground's colour. Mounted last, at full size, over a radius-less
+// `clip: true`, and only where `ground` is exactly what shows around the panel.
 export component RoundedFrame inherits Rectangle {
     in property <length> radius;
     in property <length> stroke-width;
@@ -13,13 +12,9 @@ export component RoundedFrame inherits Rectangle {
     // stroke, the way the renderer tucks a bordered rectangle's own fill. Path units are logical
     // pixels: the viewbox matches the box, and a fill-only path isn't inset by a stroke.
     //
-    // **Every path winds counter-clockwise on screen and closes along a vertical or top edge.**
-    // Slint marks a path a hole when its signed area is negative, summing every segment but the
-    // closing one. FemtoVG reverses a hole's winding, so its antialiased fringe lands inside the
-    // fill, where a concave fill discards it: the arc comes out stepped with no error anywhere.
-    //
-    // **Every number goes in through `to-string-unlocalized()`.** A bare `+` writes the
-    // translation's decimal separator, and a path holding `5,5` fails to parse and draws nothing.
+    // **Every path winds counter-clockwise on screen and closes along a vertical or top edge**, or
+    // its arc comes out stepped, and **every number goes in through `to-string-unlocalized()`**, or
+    // a locale's decimal comma breaks the path (`slint-pitfalls.md`'s two `Path` entries).
     private property <float> side: root.radius / 1px;
     private property <float> inset: root.stroke-width / 2px;
     private property <float> arc: root.side - root.inset;

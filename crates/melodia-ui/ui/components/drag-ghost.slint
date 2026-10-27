@@ -36,7 +36,6 @@ export component DragGhost inherits Rectangle {
                 tile-size: 20px;
                 tile-radius: Theme.radius-sm;
             }
-            // Bounded by the chip and elided, so a long title stops at the chip's edge.
             Text {
                 text: Drag.payload.items.title;
                 color: Theme.text;

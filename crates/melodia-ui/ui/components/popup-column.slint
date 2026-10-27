@@ -3,12 +3,11 @@ import { Theme } from "../theme.slint";
 import { OverlayScrollbar } from "overlay-scrollbar.slint";
 import { PopupFit } from "popup-fit.slint";
 
-// A popup's column of rows, scrolling whatever its own box can't hold. It goes inside the popup's
-// surface, which keeps the chrome, and the host sizes it off `rows-w` and `rows-h`, which only this
-// component can read off the rows' layout. `PopupFit` decides the box.
+// A popup's column of rows, inside its surface, scrolling what its box can't hold. The host sizes it
+// off `rows-w` and `rows-h`, which only this component can read off the rows.
 //
-// **A row's height may not follow its width.** The gutter is decided off the rows' height and
-// taken from their width, so a wrapping row would be a binding loop.
+// **A row's height may not follow its width**: the gutter is decided off the rows' height and taken
+// from their width, so a wrapping row would be a binding loop.
 export component PopupColumn inherits Rectangle {
     // A row to open scrolled to, centred where the list allows: a picker's current choice.
     in property <length> reveal-y;
@@ -30,8 +29,7 @@ export component PopupColumn inherits Rectangle {
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-off;
         content-width: sv.visible-width - root.gutter;
-        // A binding only until the first wheel or bar write replaces it, so it sets where the
-        // column opens and nothing after.
+        // Only where the column opens: the first wheel or bar write replaces the binding.
         content-y: -clamp(root.reveal-y + root.reveal-h / 2 - sv.visible-height / 2, 0px,
             max(0px, sv.content-height - sv.visible-height));
         // An entry click acts, so a press may not start a pan.

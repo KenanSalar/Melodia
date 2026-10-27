@@ -493,8 +493,8 @@ fn every_chip_strip_takes_its_brushes_from_its_backdrop() {
     // global-free, which is what lets one component sit on a blurred cover
     // *and* on a blurred banner.
     for (src, name) in [(STRIP, "meta-chip-strip.slint"), (CHIP, "meta-chip.slint")] {
-        // Import lines only — both files *mention* `HeroBackdrop` in the prose
-        // arguing why they don't reach for it.
+        // Import lines only — `meta-chip.slint` *mentions* `HeroBackdrop` in the
+        // prose arguing why it doesn't reach for it.
         let imports = src.lines().filter(|l| l.trim_start().starts_with("import "));
         for line in imports {
             assert!(

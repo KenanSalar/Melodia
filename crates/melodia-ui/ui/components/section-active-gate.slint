@@ -1,30 +1,17 @@
 import { Nav } from "../globals/nav.slint";
 
-// "Is this sidebar section the one on screen?", as a reusable gate driving each section's Rust
-// hook. The predicate is identical every time: this nav index is selected, and neither of the two
-// things that mount *over* a section — Now Playing and the miniplayer — is up.
-//
-// **The host mounts this rather than each view watching itself**: the leaving edge is the one that
-// matters and a view cannot observe its own, Slint destroying it with no unmount callback.
+// Whether a sidebar section is the one on screen: its index selected, and neither Now Playing nor
+// the miniplayer over it. **Mounted by the host, never watched by the view**: the leaving edge is
+// the one that matters, and a view can't observe its own (`ui-patterns.md`).
 export component SectionActiveGate {
-    // The section's `Nav.selected-index` value.
     in property <int> index;
-    // Passed in rather than read off the `MiniPlayer` global: the host derives it from the window
-    // size a beat before the global is written, and the gate must not lag that.
+    // Not read off the `MiniPlayer` global, which the host's derivation leads by a beat.
     in property <bool> mini-active;
-    // A section built out of tabs may answer a second question — is *this* tab mounted — so that
-    // leaving a tab is the same event as leaving the section. `-1` on both is "no tabs", which
-    // every other mount takes by omission.
-    //
-    // **Per-tab is My Library's shape, not the rule for a tabbed section.** Its five were five
-    // sidebar sections with five hooks, and it mounts five gates because that history is what a
-    // sixth would have to undo. Favorites, Recently Played and Radio each mount one for all their
-    // tabs, sharing a Rust handle. Radio has to: a tab leave there hands back a directory answer
-    // the session paid a network round trip for.
+    // Lets a tab leave be a section leave. `-1` on both is "no tabs", which every other mount takes
+    // by omission; whether a tabbed page owes a gate per tab is `ui-patterns.md`'s question.
     in property <int> tab-index: -1;
     in property <int> current-tab: -1;
 
-    // Fires on every transition, with the new value.
     callback active-changed(bool);
 
     private property <bool> watched:

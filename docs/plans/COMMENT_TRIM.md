@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 13.4 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 13.5 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -115,8 +115,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 12 | `melodia-integrations` | 0.30 | 936 | ~147 | 0.14 (438) | `98e82bcd` |
 | 13.1 | Slint `globals/`: playback, shell and radio | 1.15 | 892 | ~698 | 0.56 (432) | `358c39f1` |
 | 13.2 | Slint `globals/`: library and dialogs | 0.63 | 682 | ~410 | 0.31 (337) | `6f305ce2` |
-| 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | 0.25 (541) | |
-| 13.4 | Slint `components/`, its own files | 0.47 | 1,538 | ~725 | | |
+| 13.3 | Slint root files and `layout/`, plus `melodia-ui`'s Rust | 0.48 | 1,024 | ~489 | 0.25 (541) | `b5cc583f` |
+| 13.4 | Slint `components/`, its own files | 0.47 | 1,538 | ~725 | 0.30 (961) | |
 | 13.5 | Slint `components/`'s subdirectories | 0.34 | 3,013 | ~788 | | |
 | 13.6 | Slint `views/` | 0.29 | 2,055 | ~286 | | |
 | **Rust** | production Rust, tree-wide | **0.42** | **30,355** | **~12,400** | | |
@@ -283,7 +283,13 @@ The 36 `// Translators:` notes stay byte for byte: `crates/melodia/tests/transla
   - **Second copies dropped:** the font header, `resize-border-width` and `build.rs`' catalog-basename argument, all the root `CLAUDE.md`'s; `Theme.is-light`'s polarity argument, likewise; the section gates' per-mount notes (they narrated the Rust hooks), the clipboard's `TextInput` reason, the queue keys' rising edge, the rail tooltip's `held` latch and the Escape chain's selection arm, each now `ui-patterns.md`'s with a short anchor; `models.slint`'s per-struct cover notes, kept once in the header; `RadioVm`'s and `RadioStationRow`'s log-line rule, `radio.md`'s; `LyricRow`'s offset-table argument, `lyrics::follow`'s; `Settings`' Connect-inline note, `scrobbling-section.slint`'s; the two `-1` indices under a follow switch, `ui-patterns.md`'s; `titlebar-button-style`'s tokens, kept once on `Theme`; `bar-w`'s seed story, `slint-pitfalls.md`'s.
   - **Stale claims removed:** `theme.slint`'s header naming `themes::apply()` as the palette writer (`ui::appearance::theme_paint`); `PlaylistRow`'s `queue_music` fallback (the grid draws `playlist`); `Settings`' `library::radio::search` (`directory`), `services::toast` (`utils::toast`), `services::logging` (`platform::logging`), `main.rs` reading `resume-on-startup` (`boot::tasks::maybe_resume_on_startup`), the device-lost toast having "no device picker to send the user to" (Output has one), and restart-required as the one toast with a translated body (exclusive-refused's is too); `SidebarItem` firing `select` (it is `clicked`).
   - **Ends at 0.25.**
-- [ ] **13.4 `components/`, its own files**, one commit (63 files).
+- [x] **13.4 `components/`, its own files**, one commit (63 files).
+  - **Furthest over:** `tab-bar.slint` (68), `search-bar.slint` (54), `mini-player-switch.slint` (50), `icon-button.slint` and `action-pill.slint` (41 each).
+  - **Pointed at:** the root `CLAUDE.md` on `overlay-scrollbar.slint`, `track-list-scrollbars.slint`, `section-active-gate.slint`, `popup-column.slint` and `CompositeScrollbars`' mount contract; `ui-patterns.md` at `Tooltip`, `PillButton`, `PopupFit`, the rounded-edge trio, `ContextClick`'s release, `ContextMenuPopup`'s header, `PopupDismissCatcher`, `SliderPointer`'s header, `FilledChip`'s header, `DetailArrival` and `TabBar`'s internals; `slint-pitfalls.md` at `tab-bar.slint`'s `compact-t`, `icon-button.slint`'s two `animate`s, the aurora's stops, `rounded-frame.slint`'s paths, the KDE captions' cap, `filter-throttle.slint`, `drag-source.slint`, `edge-resize-handle.slint`, `meta-chip.slint`, `view-transition.slint` and both placeholders; `desktop-shell.md` at the caption styles; `library-data.md` and `rating_tags.rs` at `star-rating.slint`; `radio.md` at `station-facts.slint`. Each kept. The tests reading these files strip comments or read code.
+  - **Test comment citing it:** `hero_chips_tests.rs` said both chip files mention `HeroBackdrop` in prose; only `meta-chip.slint` does.
+  - **Second copies dropped:** `TabBar`'s equal-width, brush-easing, two-layer and `compact-t` seed arguments and its three-constraint split, `IconButton`'s layer and layout-fold arguments, `SearchBar`'s `has-hover` latch and slot split, `CompositeScrollbars`' re-clamp, `ViewTransition`'s Timer-over-`init`, `FilterThrottle`'s two `fire()` shapes, `DragSource`'s never-in-a-row, `RoundedFrame`'s winding and decimal-separator arguments, `GridColumnsSync`'s mount Timer, `MetaChipStrip`'s flex-in-an-`if` and `EdgeResizeHandle`'s absolute coordinates, each now a pointer to `slint-pitfalls.md`; `MiniPlayerSwitch`'s 0×0 construction pass, `SectionActiveGate`'s per-tab history, `Tooltip`'s not-a-popup reason, `TooltipFrame`'s `sidebar-tip` exception, and `HeroChipStrip`'s, `SortPillRow`'s, `QualityChip`'s and `PillButton`'s alignment arguments, all `ui-patterns.md`'s; `OverlayScrollbar`'s header, the root `CLAUDE.md`'s Scrollbars bullet; `ContextMenuPopup`'s grows-by-the-flyout paragraph, kept once at `ContextMenuMetrics`.
+  - **Stale claims removed:** `MultilineInput`'s placeholder taking `search-bar.slint`'s rung (the bar paints `Theme.text` at 0.3; the shared rung is `SingleLineInput`'s `overlay2`), and `Checkbox`'s header centring its own glyph in an em box (`MaterialIcon` does).
+  - **Ends above 0.25** on decision 3: what is left is mostly the arguments the rules name these files as the anchor for, `TabBar`'s internals, the caption geometry and the aurora's stops among them.
 - [ ] **13.5 `components/`'s subdirectories**, one commit.
   - **Furthest over:** `now-playing/` (266), `hero/` (201), `grid/` (170), `track-list/` (104).
   - **Pointed at:** `CLAUDE.md` on `components/onboarding/` (no `changed` handler) and `section-active-gate`; `.claude/rules/ui-patterns.md` and `slint-pitfalls.md`.
