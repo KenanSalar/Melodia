@@ -1,8 +1,4 @@
-/// Boxed underlying cause for the variants that carry one. `Option` because some
-/// of these errors are constructed from a plain message with no wrapped error
-/// (e.g. an HTTP status check that "fails" without an underlying transport
-/// error). thiserror's `#[source]` returns `None` for a `None` here, so the
-/// error chain is preserved when a cause exists and absent otherwise.
+/// `None` on a variant built from a message alone, such as a failed HTTP status check.
 type BoxedSource = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Debug, thiserror::Error)]
@@ -162,20 +158,10 @@ constructor_pairs! {
 
 pub type AppResult<T> = Result<T, AppError>;
 
-/// Flatten an error and its causes onto one line.
-///
-/// A great many `Display` impls in and under this tree are a context sentence with the cause
-/// reachable only through `.source()`, so a bare `{e}` reports a root-owned file and a full disk
-/// in the same words.
-///
-/// **The other kind is what the skip is for, and why this is safe to reach for without knowing
-/// which variant you hold.** [`AppError`]'s three `#[from]` variants spell `#[error("…: {0}")]`
-/// over the field `#[from]` also makes the source, and sqlx does the same one level down, so an
-/// unconditional walk prints a constraint failure three times. A caller can't tell the two shapes
-/// apart, but the error can: a message already ending in its cause has nothing left to add.
-///
-/// Reach for this in any `log::` call taking an error; `crates/melodia/tests/logged_errors.rs`
-/// fails on one that doesn't.
+/// Flattens an error and its causes onto one line, for every `log::` call taking an error
+/// (`crates/melodia/tests/logged_errors.rs`). A cause the message already ends in is skipped: the
+/// `#[from]` variants and sqlx print theirs in `Display`, so a plain walk would repeat it, and the
+/// skip is what makes this safe whichever variant a caller holds.
 pub fn describe(error: &dyn std::error::Error) -> String {
     let mut text = error.to_string();
     let mut cause = error.source();

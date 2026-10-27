@@ -14,74 +14,45 @@ pub struct Paths {
     pub scrobble_queue_path: PathBuf,
     pub artwork_dir: PathBuf,
     pub artists_dir: PathBuf,
-    /// Station logos, deliberately **not** in [`Self::artwork_dir`].
-    ///
-    /// Everything in the artwork store is derived from the user's own files and can be rebuilt by
-    /// re-scanning; a station logo came off a third-party host and cannot. Sharing one directory
-    /// made that asymmetry a hazard rather than a note — a second install sweeping the same root
-    /// against a database with no `radio_stations` table reads every logo as an orphan, which is
-    /// how two of them were deleted out from under their rows.
+    /// Apart from [`Self::artwork_dir`], whose contents a re-scan rebuilds: a logo came off a
+    /// third-party host and can't be.
     pub radio_logos_dir: PathBuf,
-    /// Sheets `library::lyrics` fetched, and markers for the tracks it asked about and got
-    /// nothing for.
-    ///
-    /// Its own directory rather than a table: nothing else in the tree names these files, so the
-    /// filesystem is the whole index and the retention sweep needs no reference set, which is the
-    /// half of the artwork store that costs the most to get right.
+    /// Fetched sheets and no-answer markers. A directory rather than a table, so the filesystem is
+    /// the whole index and the sweep needs no reference set.
     pub lyrics_dir: PathBuf,
-    /// Pre-migration copies of [`Self::db_path`], written by
-    /// `database::backup`. Its own directory so the retention sweep runs
-    /// somewhere the live database and its `-wal`/`-shm` sidecars aren't.
+    /// Its own directory, so the retention sweep runs away from the live database's sidecars.
     pub backups_dir: PathBuf,
-    /// The rolling log files `services::platform::logging` writes and the crash reports
-    /// `services::platform::crash_report` drops beside them. One directory rather than
-    /// two, so "Open log folder" shows a reporter everything at once — the two
-    /// naming schemes don't overlap and each sweep is gated on its own.
+    /// Logs and crash reports together, so "Open log folder" shows a reporter everything; each
+    /// sweep is gated on its own naming scheme.
     pub logs_dir: PathBuf,
 }
 
-/// The folder an installed Melodia owns under the platform's data directory.
 const DATA_DIR_NAME: &str = "Melodia";
 
-/// Its sibling for a build run out of the source tree.
-///
-/// A migration is applied on the first boot that carries it and is not reversible, so a
-/// branch-local one leaves the *installed* Melodia unable to open its own database until that
-/// branch ships. Separate roots is the only fix that doesn't ask the developer to remember
-/// anything: a dev build has its own database, settings, queue and artwork store, and the
-/// single-instance claim keys on the root, so the two can run side by side.
+/// A dev build's own root: a migration is irreversible, so a branch-local one would leave the
+/// installed Melodia unable to open its database.
 const DEV_DATA_DIR_NAME: &str = "Melodia-dev";
 
-/// Overrides the whole choice above, for the cases the build shape can't answer: pointing a dev
-/// build at real data to reproduce something, or an installed one at a copy.
-///
-/// Normalized before anything reads it, because `single_instance` hashes the root *as spelled* and
-/// two spellings of one directory are two writers on one database: absolute, since a relative value
-/// moves with the working directory a `.desktop` and a terminal launch disagree about, and
-/// component-collected, since `absolute` keeps a trailing separator on purpose. `..` and symlinks
-/// survive both, `canonicalize` being the only answer and not worth the disk touch.
+/// Overrides the choice. Made absolute and component-collected because `single_instance` hashes
+/// the root as spelled, and two spellings of one directory are two writers on one database; `..`
+/// and symlinks survive, `canonicalize` not being worth the disk touch.
 pub const DATA_DIR_ENV: &str = "MELODIA_DATA_DIR";
 
 impl Paths {
-    /// Resolves every path Melodia owns under the user's data directory,
-    /// creating the directories it names.
+    /// Resolves every path Melodia owns, creating the directories it names.
     pub fn resolve() -> AppResult<Self> {
         let paths = Self::rooted_at(Self::data_root()?);
         paths.create_dirs()?;
         Ok(paths)
     }
 
-    /// The root [`resolve`](Self::resolve) hands to [`rooted_at`](Self::rooted_at).
     fn data_root() -> AppResult<PathBuf> {
         Self::data_root_for(crate::utils::exe::is_dev_build())
     }
 
-    /// The half a test can drive, with the one answer it cannot steer passed in: a test binary
-    /// carries `debug_assertions`, so [`is_dev_build`](crate::utils::exe::is_dev_build) is pinned to
-    /// `true` there and the installed branch below would otherwise never run.
-    ///
-    /// The environment read stays here rather than being lifted with it, so a test still proves
-    /// [`DATA_DIR_ENV`] is the variable actually consulted rather than only the mapping.
+    /// The half a test drives, [`is_dev_build`](crate::utils::exe::is_dev_build) being pinned to
+    /// `true` in a test binary. The environment read stays inside, so a test still proves
+    /// [`DATA_DIR_ENV`] is the variable consulted.
     fn data_root_for(is_dev: bool) -> AppResult<PathBuf> {
         if let Some(root) = std::env::var_os(DATA_DIR_ENV).filter(|root| !root.is_empty()) {
             return Ok(std::path::absolute(root)?.components().collect());
@@ -92,12 +63,8 @@ impl Paths {
             .join(name))
     }
 
-    /// Derives every path Melodia owns from `data_dir`, touching no disk —
-    /// [`create_dirs`](Self::create_dirs) is the half that does.
-    ///
-    /// Split out so a test can root the tree in a `TempDir` directly. Steering
-    /// `dirs::data_dir()` through `XDG_DATA_HOME` instead is a process-global
-    /// mutation, which an integration test can only reach through `unsafe`.
+    /// Touches no disk, so a test can root the tree in a `TempDir` rather than steer
+    /// `XDG_DATA_HOME`, a process-global mutation.
     #[must_use]
     pub fn rooted_at(data_dir: PathBuf) -> Self {
         Self {

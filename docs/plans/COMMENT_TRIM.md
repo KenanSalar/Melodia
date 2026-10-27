@@ -1,6 +1,6 @@
 # Plan: Comments down to about a quarter of the code
 
-Status: **in progress**, Phase 6 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
+Status: **in progress**, Phase 6.2 next · Owner: Kenan · Created: 2026-10-25 · Issue #125, branch `docs/trim-comments`
 
 > **Measured 2026-10-25** against `32a188b1` (`main`), with the `cloc` commands under Verification. Every figure below comes from that run. Each phase measures its slice again before it starts, since `main` can move under the branch.
 
@@ -94,8 +94,8 @@ Working doc. Delete when every phase has landed and the target is in `.claude/ru
 | 2 | `melodia-net` | 0.59 | 1,118 | ~648 | 0.24 (448) | `bda588b8` |
 | 3 | `melodia-platform` | 0.51 | 1,030 | ~523 | 0.26 (528) | `d58d95b2` |
 | 4 | `melodia-audio` | 0.48 | 1,414 | ~677 | 0.25 (729) | `fa210378` |
-| 5 | `melodia-engine` | 0.48 | 1,572 | ~756 | 0.23 (746) | |
-| 6.1 | `melodia-core`: `utils/`, `lib.rs`, `config.rs`, `error.rs` | 0.79 | 561 | ~384 | | |
+| 5 | `melodia-engine` | 0.48 | 1,572 | ~756 | 0.23 (746) | `c6dc0322` |
+| 6.1 | `melodia-core`: `utils/`, `lib.rs`, `config.rs`, `error.rs` | 0.79 | 561 | ~384 | 0.31 (228) | |
 | 6.2 | `melodia-core`: `entities/`, `themes/` | 0.39 | 1,094 | ~394 | | |
 | 7.1 | `melodia-playback`: the files directly under `player/playback/`, plus `lib.rs` | 0.54 | 1,075 | ~574 | | |
 | 7.2 | `melodia-playback`: `output/` | 0.41 | 1,662 | ~647 | | |
@@ -162,9 +162,9 @@ Status: done.
   - **Pointed at:** `CLAUDE.md` on `with_state_emit`, `emit_and_execute` and the lock order; `.claude/rules/audio-stack.md`.
 
 ### Phase 6: `melodia-core`
-Status: next.
+Status: in progress, 6.2 next.
 
-- [ ] **6.1 `utils/` and the three root files** (`lib.rs`, `config.rs`, `error.rs`), one commit.
+- [x] **6.1 `utils/` and the three root files** (`lib.rs`, `config.rs`, `error.rs`), one commit.
   - **Furthest over:** `utils/self_writes.rs` (57), `utils/atomic_file.rs` (53).
   - **Pointed at:** `CLAUDE.md`'s `utils/` bullet (`fold`, `needle`, the three `event_bridge` producers, `exe`, `redact`), `config::Paths::data_root`, and the `AppError` conventions.
 - [ ] **6.2 `entities/` and `themes/`**, one commit.

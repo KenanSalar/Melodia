@@ -1,12 +1,6 @@
-//! The producer half of the artwork restore: a cover cache saying a stored file it was asked for
-//! is gone.
-//!
-//! Here because the caches that notice sit in `melodia-artwork` and `melodia-views`, and what
-//! answers is a library scan neither may name. What crosses is a bare `report`; the consumer
-//! re-reads the reference set rather than trusting which path was asked for, so nothing rides on
-//! the event.
-//!
-//! `tasks::artwork_restore` is the consumer.
+//! The producer half of the artwork restore, for the cover caches in `melodia-artwork` and
+//! `melodia-views`, which may not name the library. Nothing rides on the event:
+//! `tasks::artwork_restore` re-reads the reference set.
 
 use tokio::sync::mpsc::UnboundedReceiver;
 

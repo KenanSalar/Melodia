@@ -1,88 +1,52 @@
-//! Process-wide bridge for surfacing backend failures as UI toasts.
-//!
-//! Backend code runs on tokio workers and can't touch the Slint notification stack
-//! directly, `NotificationsUi` being `Rc`. So this owns a `OnceLock`
-//! [`UnboundedSender`](tokio::sync::mpsc::UnboundedSender) any thread can push a
-//! [`ToastRequest`] onto, drained by the UI-thread consumer
-//! `boot::ui_setup::subscribers::install_toast_bridge` installs.
-//!
-//! It holds no `ui::*` types, which is what preserves the layering rule that `tasks`
-//! never imports `ui` — the producer side is UI-free and localization happens entirely
-//! on the consumer. The sender itself is [`crate::utils::event_bridge`], shared with
-//! `tasks::play_count_flusher`; what stays here is the consumer, which in this
-//! case is somebody else's.
+//! Backend failures surfaced as UI toasts from any thread. It holds no `ui` type, so `tasks` and
+//! `player` raise one without naming the UI; the UI-thread consumer drains and localizes.
 
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::utils::event_bridge::EventBridge;
 
-/// Which localized template the UI consumer titles a toast with. A plain enum with no
-/// `ui` dependency, so `player` / `library` / `tasks` classify a failure without
-/// importing UI types and the consumer maps each kind to a translated string.
+/// Which localized title the consumer gives a toast.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ToastKind {
-    /// A track failed to decode or open, or a radio station could not be reached or stopped
-    /// broadcasting. The music stopping is otherwise invisible, so this is always surfaced.
+    /// A track or station failed; the music stopping is otherwise invisible.
     PlaybackFailed,
-    /// A user-initiated backend operation failed — folder scan, file import, settings
-    /// save.
+    /// A user-initiated operation failed: a scan, an import, a settings save.
     OperationFailed,
-    /// A vote for a radio station did not reach the directory, most often because it was
-    /// cast again inside the ten minutes the server deduplicates over. Surfaced rather
-    /// than logged because a vote happens only when somebody presses a button that says
-    /// so, and a control that quietly does nothing is worse than one that says why.
+    /// A vote didn't reach the directory, usually a repeat inside its dedup window. Said because a
+    /// pressed button that quietly does nothing is worse than one that says why.
     RadioVote,
-    /// A sheet the panel resolved was written into the track's own lyrics tag. Informational and
-    /// auto-dismissing, and surfaced rather than logged for the reason the radio vote is: it
-    /// happens only when somebody presses a control that says so, and this one rewrites a file.
+    /// A resolved sheet was written into the track's tag, a file rewrite the user asked for.
     LyricsSaved,
-    /// A Copy entry put its text on the clipboard. The copy itself is invisible, so this is the
-    /// only sign it landed; auto-dismissing, and carrying no detail so the copied text is never
-    /// shown or kept anywhere else.
+    /// The only sign a copy landed. No detail, so the copied text is kept nowhere else.
     Copied,
-    /// A Copy entry found the field empty on every item it was handed: a track with no album, an
-    /// album with no artist. Said rather than skipped, the menu having closed on a click that
-    /// otherwise did nothing visible.
+    /// A Copy entry found the field empty on every item, the menu having closed on a click that
+    /// did nothing visible.
     NothingToCopy,
-    /// The retroactive loved-tracks backfill queued existing favorites after a love
-    /// toggle or a connect. Informational, auto-dismissing.
+    /// The loved-tracks backfill queued existing favorites.
     LoveSync,
-    /// A restart the user asked for couldn't relaunch the app, so it stayed up instead
-    /// of exiting into nothing. The setting is already persisted, so this is an
-    /// instruction rather than a failure report: it sticks, and it is the one kind
-    /// carrying **no** detail — there being no path or error worth showing.
+    /// A requested restart couldn't relaunch, so the app stayed up. Sticks, with no detail.
     RestartRequired,
-    /// An exclusive claim was refused and the audio went to the shared output instead. Raised once
-    /// per distinct refusal rather than at every track start that retries it. The detail is the
-    /// refusing device's name, or empty where it couldn't be found; the reason stays in the
-    /// Output settings, whose words for it are translated where this detail is not.
+    /// An exclusive claim fell back to shared, once per distinct refusal. The detail is the
+    /// device's name; the reason stays in the Output settings, translated there.
     ExclusiveRefused,
 }
 
-/// A queued toast. [`kind`](Self::kind) picks the localized title on the UI side;
-/// [`detail`](Self::detail) is the dynamic, untranslated body — a path or an error.
+/// `detail` is the untranslated body: a path or an error.
 #[derive(Debug, Clone)]
 pub struct ToastRequest {
     pub kind: ToastKind,
     pub detail: String,
 }
 
-/// Process-wide sender, claimed by [`init`]. Read by [`fn@notify`] so producers don't have to
-/// carry a channel handle. (Disambiguated: the `notify` crate is a dependency of this build.)
 static BRIDGE: EventBridge<ToastRequest> = EventBridge::new();
 
-/// Register the process-wide sender and hand back the receiver for the UI-thread
-/// consumer to drain. `None` if the bridge was already initialized — the first
-/// receiver owns delivery, so the caller treats that as a no-op.
+/// `None` if already installed, the first receiver owning delivery.
 pub fn init() -> Option<UnboundedReceiver<ToastRequest>> {
     BRIDGE.install()
 }
 
-/// Queue a toast from any thread. No-op when the bridge isn't installed or after the
-/// consumer has shut down.
-///
-/// Returns nothing, unlike its sibling in `tasks::play_count_flusher`: a failure worth toasting
-/// has no second way to reach the user, so there is nothing for a caller to branch on.
+/// A no-op without a consumer. Returns nothing: a failure worth toasting has no second way to
+/// reach the user.
 pub fn notify(kind: ToastKind, detail: impl Into<String>) {
     BRIDGE.send(ToastRequest { kind, detail: detail.into() });
 }
