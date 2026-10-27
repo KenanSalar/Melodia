@@ -122,10 +122,7 @@ pub fn schedule_history_add(
             return;
         }
         match library::search::add_search_history(&s, query).await {
-            Ok(rows) => {
-                (*su.state().recent.lock()).clone_from(&rows);
-                push_recent_rows_to_slint(&weak, rows);
-            }
+            Ok(rows) => push_recent_rows_to_slint(&weak, rows),
             Err(e) => log::warn!("search::add_history: {}", describe(&e)),
         }
     });

@@ -1,16 +1,14 @@
 //! The recent searches' callbacks.
 
-use std::sync::Arc;
-
 use slint::ComponentHandle;
 
-use crate::ui::search::{SearchUi, fetch::push_recent_rows_to_slint};
+use crate::ui::search::fetch::push_recent_rows_to_slint;
 use melodia_app::library;
 use melodia_app::state::AppState;
 use melodia_core::error::describe;
 use melodia_ui::{AppWindow, Search};
 
-pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) {
+pub(super) fn wire(ui: &AppWindow, state: &AppState) {
     let g = ui.global::<Search>();
     let weak = ui.as_weak();
 
@@ -27,19 +25,14 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
     }
     {
         let s = state.clone();
-        let su = search_ui.clone();
         let weak = weak.clone();
         g.on_recent_remove(move |term| {
             let s = s.clone();
-            let su = su.clone();
             let weak = weak.clone();
             let term = term.to_string();
             s.runtime.clone().spawn(async move {
                 match library::search::remove_search_history(&s, term).await {
-                    Ok(rows) => {
-                        (*su.state().recent.lock()).clone_from(&rows);
-                        push_recent_rows_to_slint(&weak, rows);
-                    }
+                    Ok(rows) => push_recent_rows_to_slint(&weak, rows),
                     Err(e) => log::warn!("search::remove_history: {}", describe(&e)),
                 }
             });
@@ -47,18 +40,13 @@ pub(super) fn wire(ui: &AppWindow, state: &AppState, search_ui: &Arc<SearchUi>) 
     }
     {
         let s = state.clone();
-        let su = search_ui.clone();
         let weak = weak.clone();
         g.on_recent_clear(move || {
             let s = s.clone();
-            let su = su.clone();
             let weak = weak.clone();
             s.runtime.clone().spawn(async move {
                 match library::search::clear_search_history(&s).await {
-                    Ok(rows) => {
-                        (*su.state().recent.lock()).clone_from(&rows);
-                        push_recent_rows_to_slint(&weak, rows);
-                    }
+                    Ok(rows) => push_recent_rows_to_slint(&weak, rows),
                     Err(e) => log::warn!("search::clear_history: {}", describe(&e)),
                 }
             });

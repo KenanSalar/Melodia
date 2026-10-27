@@ -36,11 +36,11 @@ pub(super) fn wire(
     let weak = ui.as_weak();
 
     hydrate_sort_from_settings(view_state, search_ui, &ui.global::<Search>());
-    hydrate_recent_on_install(state, search_ui, &weak);
+    hydrate_recent_on_install(state, &weak);
 
     covers::wire(ui, search_ui);
     query::wire(ui, state, search_ui);
-    recent::wire(ui, state, search_ui);
+    recent::wire(ui, state);
     results::wire(ui, state, search_ui, albums_ui, artists_ui);
     lifecycle::wire(ui, state, search_ui);
 }
@@ -61,16 +61,9 @@ fn hydrate_sort_from_settings(
 }
 
 /// Loads the recent searches on the UI thread, `get_search_history` being a lock and a clone.
-fn hydrate_recent_on_install(
-    state: &AppState,
-    search_ui: &SearchUi,
-    weak: &slint::Weak<AppWindow>,
-) {
+fn hydrate_recent_on_install(state: &AppState, weak: &slint::Weak<AppWindow>) {
     match library::search::get_search_history(state) {
-        Ok(rows) => {
-            (*search_ui.state().recent.lock()).clone_from(&rows);
-            push_recent_rows_to_slint(weak, rows);
-        }
+        Ok(rows) => push_recent_rows_to_slint(weak, rows),
         Err(e) => log::warn!("search::hydrate_recent: {}", describe(&e)),
     }
 }

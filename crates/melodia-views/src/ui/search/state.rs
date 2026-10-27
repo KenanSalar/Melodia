@@ -14,8 +14,6 @@ pub(crate) struct SearchUiState {
     /// The query that produced `last_results`, as committed rather than as typed.
     pub last_query: Mutex<String>,
     pub last_results: Mutex<Option<SearchResults>>,
-    /// Mirror of the persisted history.
-    pub recent: Mutex<Vec<String>>,
     /// The Songs list's sort, applied in memory over the rank order the query returns.
     pub sort: Mutex<ViewSort>,
 }
@@ -25,7 +23,6 @@ impl SearchUiState {
         Self {
             last_query: Mutex::new(String::new()),
             last_results: Mutex::new(None),
-            recent: Mutex::new(Vec::new()),
             // `rank` is synthetic, the order the query already returns.
             sort: Mutex::new(ViewSort { field: "rank".to_owned(), dir: SortDir::Asc }),
         }
