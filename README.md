@@ -1,4 +1,4 @@
-# <img src="assets/icons/logo-with-background.svg" width="48" align="center" alt=""> Melodia
+# <img src="assets/icons/logo-with-background.svg" width="48" align="absmiddle" alt=""> Melodia
 
 **A fast, lightweight cross-platform desktop music player built with [Slint](https://slint.dev/) and pure Rust.**
 
