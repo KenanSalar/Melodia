@@ -1,6 +1,6 @@
 # Plan: Compress the root CLAUDE.md, and take its citations out of the code
 
-Status: **Phases 1 to 3 done**, Phase 4 next · Owner: Kenan · Created: 2026-10-28 · branch
+Status: **Phases 1 to 4 done**, Phase 5 next · Owner: Kenan · Created: 2026-10-28 · branch
 `docs/trim-comments`
 
 > **Measured 2026-10-28** against `c05b7574`. Every figure below comes from a command run that
@@ -105,7 +105,7 @@ Working doc. Delete when every phase has landed (Phase 5).
 | 1 | Fix the contradictions outside `CLAUDE.md` | 4 files wrong | done, plus 2 stale lines found on the way |
 | 2 | Move what has no other home | 7 moves | done, and 3 of Phase 3's pointers dropped in the same edits |
 | 3 | Sweep the 21 citations | 21 lines in 17 files | 0 left (3 went in Phase 2) |
-| 4 | Rewrite `CLAUDE.md` | 921 lines / 76,197 bytes, 160 bold | |
+| 4 | Rewrite `CLAUDE.md` | 921 lines / 76,197 bytes, 160 bold | 195 lines / 13,466 bytes, 62 bold |
 | 5 | Retire the plan | | |
 
 ## Phases
@@ -216,14 +216,18 @@ first: `git grep -n 'CLAUDE\.md' -- . ':!docs' ':!.claude' ':!CLAUDE.md' ':!READ
 | `crates/melodia/tests/view_model_strings.rs:9` | the criterion itself: a check holding two trees against each other lives here |
 
 ### Phase 4: Rewrite `CLAUDE.md`
-Status: not started. One commit. Markdown only.
+Status: done 2026-10-28. One commit. Markdown only. 195 lines rather than about 180: the first
+draft ran to 236, so Styling folded into Slint, Testing into CI, and the thread and CLI lines
+into State. The arena cap line says "before the logger and the runtime start a thread", the cap
+not being the first call in `prepare_process`. `ci-packaging.md:45` now points at
+`output::device` and `headless.rs`.
 
 Write it top to bottom in this shape, about 180 lines. Each kept prohibition is one or two lines
 and names what holds it. Before writing, re-grep every citation into `CLAUDE.md` (Verification).
 
-- [ ] **Intro** (2 lines): what the app is, Slint and pure Rust, no IPC but the single-instance
+- [x] **Intro** (2 lines): what the app is, Slint and pure Rust, no IPC but the single-instance
   socket.
-- [ ] **Where things go** (about 15):
+- [x] **Where things go** (about 15):
   - the rules table, kept: a rule loads only when Claude reads a matching file, so the index is
     how Claude learns one exists;
   - the criterion in four lines: a fact goes at its anchor, a coupling across trees in a rule, a
@@ -235,10 +239,10 @@ and names what holds it. Before writing, re-grep every citation into `CLAUDE.md`
   - a shipped plan doc owes no ADR by itself (Decision 4);
   - cut: the nested-`CLAUDE.md` tier (none exist), "that test" (no antecedent), the long ADR
     definition (Phase 2 moved it).
-- [ ] **Commands** (about 10): the current block; the toolchain pin, the four things a bump moves
+- [x] **Commands** (about 10): the current block; the toolchain pin, the four things a bump moves
   being argued at `rust-toolchain.toml` after Phase 3; prerequisites as a pointer to `README.md`,
   whose list is the correct one.
-- [ ] **Prohibitions violable from anywhere** (about 70), grouped by concern, each naming what
+- [x] **Prohibitions violable from anywhere** (about 70), grouped by concern, each naming what
   holds it:
   - **Crates and layering:**
     - no crate re-exports another member's items, every member carries `[lints] workspace = true`
@@ -284,7 +288,7 @@ and names what holds it. Before writing, re-grep every citation into `CLAUDE.md`
   - **Threads:** a thread name fits in 15 bytes (`packaging.rs`).
   - **Process and CLI:** `--version` and `--logs` are literal-first branches, `--version` a
     contract older clients' updaters depend on (`cli_contract.rs`; `updater.md` cites this lead).
-- [ ] **Slint** (about 15):
+- [x] **Slint** (about 15):
   - three rules share the UI globs, `slint-pitfalls.md` being what builds and is wrong;
   - no `slint::slint!`;
   - scrollbars only through `OverlayScrollbar`, both policies `always-off` (`scrollbars.rs`);
@@ -297,14 +301,14 @@ and names what holds it. Before writing, re-grep every citation into `CLAUDE.md`
   - `globals/nav.slint` holds the nav map;
   - `ui-patterns.md` cites "Native dialogs go through `ui::file_dialog::parented`" here: keep
     that lead in the prohibitions.
-- [ ] **Styling** (about 6):
+- [x] **Styling** (about 6):
   - a new icon ligature owes `scripts/icons.txt`, a re-subset by glyph id and
     `scripts/check-icons.py`;
   - **Fonts** and **Icons** keep those leads (`slint.md` cites both): coverage goes into the
     Vazirmatn merge, never a second `import`; a face owes an attribution (`packaging.rs`);
   - first-launch theme and system dark/light: cut, argued at `settings` and
     `system_watcher.rs`.
-- [ ] **i18n** (about 15):
+- [x] **i18n** (about 15):
   - `@tr` translates literals only, so a Rust-populated `[string]` takes an inline literal list;
   - don't translate ligatures, asset paths, tokens, debug logs, brand chips, `"OK"`;
   - a changed `@tr` string means `scripts/update-translations.py` and finishing every catalog,
@@ -315,20 +319,20 @@ and names what holds it. Before writing, re-grep every citation into `CLAUDE.md`
   - the catalog basename tracks the package name;
   - RTL is deferred;
   - cut: the plural-forms prose per language, which restates the `.po` headers.
-- [ ] **Testing** (about 5): unit tests in per-module `tests/` subdirectories via `#[path]`,
+- [x] **Testing** (about 5): unit tests in per-module `tests/` subdirectories via `#[path]`,
   never inline (this overrides `testing.md`); a corpus walk lives in `crates/melodia/tests/`, a
   pin on one file beside it; the LF checkout through `.gitattributes`; cut the rest (Phase 2
   moved the walk obligations, `testing.md` holds paths joined).
-- [ ] **CI and release** (about 6): `ci-packaging.md` before anything under `.github/` or
+- [x] **CI and release** (about 6): `ci-packaging.md` before anything under `.github/` or
   `packaging/`; a release is a pushed `v*.*.*` tag, never a merge; never write a closing keyword,
   the sidebar link closes the issue.
-- [ ] **Memory** (about 6): `/usr/bin/time -v` after notable changes, 20 MB idle RSS means
+- [x] **Memory** (about 6): `/usr/bin/time -v` after notable changes, 20 MB idle RSS means
   heaptrack before merging; `MELODIA_RSS_SAMPLE=1`; the arena cap first in `prepare_process`,
   never lowered to 1.
-- [ ] **Known gaps** (about 4): the zbus `tokio` feature panics at startup, and `ksni` pinned for
+- [x] **Known gaps** (about 4): the zbus `tokio` feature panics at startup, and `ksni` pinned for
   the same reason; the vendored winit fork, a pointer to `winit/README.md`. Keep the "Known
   Gaps" heading: `desktop-shell.md` cites it.
-- [ ] **User Conventions**, last and verbatim (Decision 5).
+- [x] **User Conventions**, last and verbatim (Decision 5).
 
 **Must not survive the rewrite** (each verified wrong on 2026-10-28):
 - `view_model_tx` and `queue_tx`: now `PlayerSinks::view_model` and `PlayerSinks::queue`, and the

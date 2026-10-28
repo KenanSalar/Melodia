@@ -42,8 +42,9 @@ another job's result. No coverage on this path.
   the release workflows and `CODEOWNERS`: nothing exercises them before a tag, and a control of
   that reach failing closed is worth one wasted run. `LICENSE` stays in because the licence pins
   read it; compiling nothing is not being unexercised.
-- **Headless audio.** `.github/actions/headless-audio` is the whole shim, and root `CLAUDE.md` says
-  what in the Rust tree it leans on. `test-windows` is the one job that can't have it, so it skips
+- **Headless audio.** `.github/actions/headless-audio` is the whole shim, and `output::device`'s
+  module doc says what in the Rust tree leans on it, `crates/melodia/tests/headless.rs` being what
+  fails without it. `test-windows` is the one job that can't have it, so it skips
   `headless_scan` by name rather than by target, and a new integration test still runs there.
 - **The Windows jobs are the only place a `cfg(windows)` test runs or clippy meets a
   `cfg(windows)` arm.** `release-build.yml` builds the Windows lib and bin only on a tag, with
