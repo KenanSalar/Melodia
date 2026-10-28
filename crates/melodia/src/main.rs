@@ -34,8 +34,9 @@ fn main() -> AppResult<()> {
     }
 
     // Ahead of anything that can fail: the rest of diagnostics sits behind Settings, out of reach
-    // when Melodia won't open. Linux and macOS only, a Windows release build having no console,
-    // so `README.md` and the issue template point Windows at `%APPDATA%\Melodia\logs\`.
+    // when Melodia won't open. Linux and macOS only, a Windows release build having no console and
+    // one diagnostic not being worth the Win32 FFI that attaches the parent's, so `README.md` and
+    // the issue template point Windows at `%APPDATA%\Melodia\logs\`.
     if std::env::args().nth(1).as_deref() == Some("--logs") {
         use std::io::Write;
         let paths = Paths::resolve()?;

@@ -1,6 +1,6 @@
 # Plan: Compress the subsystem rules, and take their citations out of the code
 
-Status: **in progress**, Phase 7 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
+Status: **in progress**, Phase 8 next · Owner: Kenan · Created: 2026-10-27 · branch `docs/trim-comments`
 
 > **Measured 2026-10-27** against `a3963bb3` plus Phase 1's changes. Every figure below comes from
 > a command run that day. Each phase measures its rule again before it starts (Every rule, step 1),
@@ -35,7 +35,8 @@ Working doc. Delete when every phase has landed (Phase 10).
 | `radio.md` | `3cb8af76` | 181 / 13,308 | 107 / 6,492 (49%) |
 | `visualizer.md` | `ac2b1b69` | 159 / 11,280 | 51 / 2,745 (24%) |
 | `updater.md` | `62386f54` | 160 / 11,471 | 71 / 4,287 (37%) |
-| `symphonia.md` | Phase 6 | 112 / 7,296 | 52 / 2,899 (40%) |
+| `symphonia.md` | `09da3fd3` | 112 / 7,296 | 52 / 2,899 (40%) |
+| `diagnostics.md` | Phase 7 | 52 / 3,006 | deleted |
 
 Read the first two commits before Phase 2: `git show <sha> --stat`, then the rule as it landed, then
 a few of the comment diffs.
@@ -154,7 +155,7 @@ a few of the comment diffs.
 | 5.2 | `visualizer.md` | 159 / 11,280, 1 over 100 | 7 in 6 files | 51 / 2,745 (24%), 0 over 100, 0 citations |
 | 5.3 | `updater.md` | 160 / 11,471, 5 over 100 | 1 | 71 / 4,287 (37%), 0 over 100, 0 citations |
 | 6 | `symphonia.md` | 112 / 7,296, 5 over 100 | 0 | 52 / 2,899 (40%), 0 over 100, 0 citations |
-| 7 | `diagnostics.md` (deleted) | 52 / 3,006 | 0 | |
+| 7 | `diagnostics.md` (deleted) | 52 / 3,006 | 0 | deleted; `rules_globs.rs` sees 176 paths |
 | 8 | `testing.md`, `unsafe-rust.md`, `sqlx.md`, `slint.md` (citations only) | | 2, 1, 1, 0 | |
 | 9 | `slint.md`'s font bullet | | | |
 
@@ -506,13 +507,18 @@ Status: done.
     Its claim that the mapper leaves `absgp_to_ts` at identity is still unchecked.
 
 ### Phase 7: Delete `diagnostics.md`
-Status: not started.
+Status: done.
 
-- [ ] **7. Move its one decision, then delete it**, one commit.
-  - [ ] **Move the declined decision.** Write the declined Windows console-attach into the comment
+- [x] **7. Move its one decision, then delete it**, one commit.
+  - **Result:** the declined console-attach now sits in the `--logs` comment, one line longer
+    (2 comment lines out, 3 in). Every other part was found at its anchor on recheck, including
+    what the 2026-10-27 list didn't name: `set_verbose`'s `RUST_LOG` precedence, the level guide
+    in `logging`'s module doc, `install_hook`'s chaining, the plain-`fs` write in the hook, and
+    `take_unseen`'s once-per-crash gate. `rules_globs.rs` passes at 176 paths against 182.
+  - [x] **Move the declined decision.** Write the declined Windows console-attach into the comment
     on the `--logs` branch in `crates/melodia/src/main.rs` (lines 36 to 38). Its reason: one
     diagnostic is not worth another Win32 FFI site. Comment lines only.
-  - [ ] **Confirm the rest is carried.** Checked 2026-10-27:
+  - [x] **Confirm the rest is carried.** Checked 2026-10-27:
     - the local timestamps: `crash_report.rs`'s `//!` (lines 11 and 12) and `diagnostics.rs:34`;
     - the four decisions, each at its definition: `logging::install`, `log_files` and
       `newest_first`, `head_of` and `tail_of`, and `error::describe` in `CLAUDE.md`;
@@ -521,9 +527,9 @@ Status: not started.
     - `--logs`: `CLAUDE.md`'s `--version` bullet and `main.rs`.
 
     Recheck before deleting.
-  - [ ] **Delete `.claude/rules/diagnostics.md`.** `rules_globs.rs` then sees 176 paths, against 182
+  - [x] **Delete `.claude/rules/diagnostics.md`.** `rules_globs.rs` then sees 176 paths, against 182
     and its floor of 100 (`MIN_PATHS`).
-  - [ ] **Remove `CLAUDE.md`'s two pointers:**
+  - [x] **Remove `CLAUDE.md`'s two pointers:**
     - the table row (line 19);
     - the end of the `services/` bullet (line 85): "The diagnostics trio (...) answers to a bug
       report and has its own rule: `.claude/rules/diagnostics.md`."
