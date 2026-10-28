@@ -6,7 +6,8 @@ direct calls and tokio channels. No WebView, and the only IPC is the single-inst
 ## Where things go
 
 Subsystem contracts live in rules that load only when Claude *reads* a file their `paths:` glob
-matches, so a grep hit or a clippy failure won't pull one in. This table is how you find them.
+matches, so a grep hit or a clippy failure won't pull one in. This table is how you find them, and
+a rule missing where it was needed gets a wider glob, never a copy here.
 
 | file | covers |
 |------|--------|
@@ -70,7 +71,9 @@ moves. System packages are `README.md`'s prerequisites.
 - **Nothing outside `library::radio` names `radio_browser`** (`radio_facade.rs`), and nothing
   outside `library::lyrics` names `lyrics_directory` (`lyrics_switch.rs`).
 - **Every fetch parses its URL with `http_url` and reads its body through `read_capped`**, never
-  `bytes()` or `.json::<T>()`, the updater's download to a file excepted (`net_primitives.rs`).
+  `bytes()` or `.json::<T>()`, the updater's download to a file excepted. `net_primitives.rs`
+  walks the scheme test and the streamed read; `bytes()` and `.json()` are review's,
+  `str::bytes()` and `RequestBuilder::json` sharing their spellings.
 - **An image decodes, resizes and encodes through `image_decode`'s primitives**; `resampler.rs`
   and `bounded_decode.rs` hold the two exceptions.
 - **Only `services::platform::allocator` names `libc`.**
@@ -156,7 +159,8 @@ Three rules share the UI globs: `slint.md` general, `slint-pitfalls.md` what bui
 - **A new locale's catalog** starts from `crates/melodia-ui` with
   `msginit --no-translator -l <code> -i translations/melodia-ui.pot -o translations/<code>/LC_MESSAGES/melodia-ui.po`,
   the script merging only into catalogs that exist. Fill its header as the siblings' are, keeping
-  the plural rule `msginit` wrote. `SUPPORTED_LOCALES` lists the rest it owes.
+  the plural rule `msginit` wrote: a sibling's copied in passes `msgfmt -c` and `translations.rs`
+  alike. `SUPPORTED_LOCALES` lists the rest it owes.
 - **The catalog basename tracks the package name**: slint-build derives the gettext domain from
   `CARGO_PKG_NAME`, so renaming `melodia-ui` renames every catalog.
 - **RTL is deferred**, and there is no Rust-callable `tr()`.

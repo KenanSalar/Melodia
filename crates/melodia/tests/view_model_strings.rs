@@ -7,7 +7,8 @@
 //! in every state, because the sheet asks `!= "off"`.
 //!
 //! Here rather than beside either tree because the claim is about two trees at once, so neither
-//! the enum's own suite nor a `.slint` pin can hold it. The enums' Rust halves stay where they are, in `engine/tests/types_tests.rs`.
+//! the enum's own suite nor a `.slint` pin can hold it. The enums' Rust halves stay where they
+//! are, in `engine/tests/types_tests.rs`.
 //!
 //! The direction is deliberate. **Every literal the sheet compares against must be one the enum
 //! can produce**, not the reverse: `RepeatMode::All` is legitimately never named in a comparison,

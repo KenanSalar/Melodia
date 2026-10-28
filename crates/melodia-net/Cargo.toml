@@ -11,6 +11,9 @@ publish = false
 [lib]
 doctest = false
 
+# `melodia-core` and nothing else. A second workspace member here is the regression:
+# `melodia-audio` and the audio crates above it build on this one, so `melodia-artwork` here would
+# carry Slint into all of them. A fetcher hands its download up to `melodia-app` to store instead.
 [dependencies]
 melodia-core = { path = "../melodia-core" }
 

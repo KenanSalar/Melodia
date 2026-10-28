@@ -47,12 +47,13 @@ paths:
 ## Mutex & Locking
 
 - **Never hold a synchronous guard across `.await` points**: a `std` or `parking_lot` guard makes
-  the future `!Send`, so `tokio::spawn` rejects it, and where it still compiles (`spawn_local`,
-  `block_on`) a second task locking the same mutex blocks the one thread that could release it
+  the future `!Send`, so `tokio::spawn` rejects it, and where it still compiles (`spawn_local`, a
+  current-thread `block_on`) a second task locking the same mutex blocks the one thread that could
+  release it
 - Prefer a synchronous mutex over `tokio::sync::Mutex`: it's faster and sufficient when the lock is
-  not held across `.await`. That is `parking_lot::Mutex` in every crate that carries it, and
-  `std::sync::Mutex` in the crates that don't and where a lock recovers from poison with a logged
-  error (`PlayerState`, `exec_lock`, the decks)
+  not held across `.await`. Reach for `parking_lot::Mutex` where the crate carries it, and
+  `std::sync::Mutex` where it doesn't or where a lock recovers from poison with a logged error
+  (`PlayerState`, `exec_lock`, the decks)
 - Use `tokio::sync::Mutex` only when you must hold the lock across an `.await`
 - Drop RAII guards explicitly before `.await` points:
   `{ let guard = lock.lock(); /* use */ } // dropped here`

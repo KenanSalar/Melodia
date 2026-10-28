@@ -169,7 +169,8 @@ paths:
   (`import "assets/fonts/vazirmatn/Vazirmatn-Regular.ttf";`), which embeds it at build time.
   `app-window.slint` imports the text faces and names them in `default-font-family`,
   `material-icon.slint` the two icon faces. Slint 1.18 has no public registration API to reach
-  for instead. Root `CLAUDE.md`'s Fonts and Icons bullets argue the faces and their patching.
+  for instead. `scripts/patch_vazirmatn.py` argues the text faces and their patching, and
+  `scripts/subset-icon-fonts.py` the icon subsets.
 
 ## Animations & Performance
 

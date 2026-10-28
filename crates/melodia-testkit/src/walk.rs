@@ -266,8 +266,8 @@ pub fn raw_rust_sources() -> Vec<(String, String)> {
 /// into a sanctioned file is itself the regression.
 ///
 /// Shared rather than per-pin because the walks standing on it live in different modules, and a
-/// copy apiece is a copy that can drift on the exemption semantics —
-/// which is the half a reviewer cannot check by reading one of them.
+/// copy apiece is a copy that can drift on the exemption semantics, the half a reviewer cannot
+/// check by reading one of them.
 ///
 /// Two seams it does not cover, both shared with the tree's other corpus pins:
 /// `strip_line_comments` handles `//` and not `/* */`, and the needle is a substring rather

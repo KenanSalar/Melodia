@@ -122,8 +122,7 @@ strip = "debuginfo"   # Drop DWARF but keep symbols — end-user panic backtrace
 - `core::hint::cold_path()` (1.95) marks a branch as unlikely — use in hot loops where the
   error/edge arm is rare
 - `std::sync::LazyLock` / `LazyCell` (1.80) for lazy statics — no `once_cell` dependency;
-  `get`/`get_mut`/`force_mut` (1.94) inspect without forcing initialization. Pairs with "construct
-  heavy clients lazily"
+  `get`/`get_mut`/`force_mut` (1.94) inspect without forcing initialization
 
 ## Type-Level Optimizations
 

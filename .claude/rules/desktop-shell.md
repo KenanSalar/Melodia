@@ -102,7 +102,7 @@ frame it lost, and a missing link bounces a window parked near the threshold in 
 ## File drops
 
 - **OS file drops ride the vendored winit fork and are routed in Rust**, Slint having no pointer
-  during one (`winit/README.md`; root `CLAUDE.md`'s Known Gaps for what retires it). Each target's
+  during one (`winit/README.md`, which also says what retires it). Each target's
   `WindowRectReport` publishes its rect on `FileDrag`, and `window_chrome::file_drop` writes
   `FileDrag.target`, the one thing both banners read. **A report sits in no `if` but the full-UI
   branch**, any other being the `changed`-in-`if` panic (`slint-pitfalls.md`), so the playlist's
